@@ -473,3 +473,21 @@ harness (GLM / Kimi / DeepSeek) still degrades to a provider model for inline st
 these steps in a **prewarmed container** with the leased subscription credential (so the
 host CLI need not be installed) is a planned follow-up — see
 `docs/initiatives/inline-harness-and-preset-satisfiability.md`.
+
+#### If an inline step dies with a timeout
+
+A host-CLI inline run is supervised by two budgets, and the failure message names which one
+ended it — they want opposite reactions:
+
+| Failure says                              | Meaning                                               | Do                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `timed out after 300000ms with no output` | The CLI went **silent** that long — presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
+| `hit its 3600000ms ceiling`               | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
+
+The idle budget is measured from the **last byte**, not from the spawn, so a step that keeps
+streaming is never killed for taking long — only for going quiet. That distinction matters
+because a killed run is also an **unrecorded** one: usage reaches `token_usage` from a call that
+COMPLETED, so a step that dies on every attempt leaves no spend behind, however much it burned.
+The failure message carries what its partial stream had already accounted for (`burned 897k
+tokens across 16 model calls`), and the CLI's own session log under
+`~/.claude/projects/<cwd-slug>/*.jsonl` has the full record.

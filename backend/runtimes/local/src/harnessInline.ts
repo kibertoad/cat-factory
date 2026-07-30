@@ -39,7 +39,18 @@ import { sanitizedChildEnv } from './childEnv.js'
 /** How the caller wants a CLI run supervised, and how it wants the output delivered. */
 export interface CliExecOptions {
   signal?: AbortSignal
-  timeoutMs?: number
+  /**
+   * Kill the run once it has produced NOTHING on either stream for this long. Re-armed by every
+   * chunk, so it bounds how long the CLI may be STUCK rather than how long it may work.
+   * Default {@link DEFAULT_CLI_IDLE_TIMEOUT_MS}.
+   */
+  idleTimeoutMs?: number
+  /**
+   * Kill the run once its total wall-clock exceeds this, however busy it looks — the backstop for a
+   * run that narrates forever and therefore never trips the idle budget.
+   * Default {@link DEFAULT_CLI_MAX_TIMEOUT_MS}.
+   */
+  maxTimeoutMs?: number
   /**
    * Consume stdout LINE BY LINE as it arrives, INSTEAD of buffering the body — the two are
    * mutually exclusive, and supplying this is what keeps a streaming vendor's output out of the
@@ -71,10 +82,31 @@ export type CliExec = (
   opts?: CliExecOptions,
 ) => Promise<string>
 
-// A hung ambient CLI (network stall, an approval prompt not covered by the bypass flags, a
-// subprocess blocked on stdin) emits neither `close` nor `error`, so without a watchdog the
-// inline step would park forever — the callers pass no AbortSignal. Kill it after this budget.
-const DEFAULT_CLI_TIMEOUT_MS = 300_000
+/**
+ * How long a run may go with NOTHING on either stream before it is presumed hung and killed.
+ *
+ * A hung ambient CLI (network stall, an approval prompt not covered by the bypass flags, a
+ * subprocess blocked on stdin) emits neither `close` nor `error`, so without a watchdog the inline
+ * step would park forever — the callers pass no AbortSignal.
+ *
+ * Measured from the LAST byte, not from the spawn: this budget used to be the whole run's, which
+ * killed a step for being SLOW rather than for being stuck. `stream-json` narrates a healthy
+ * `claude` continuously (one envelope per assistant turn, per `tool_use`, per tool result), so
+ * silence this long is a real symptom, while total elapsed time is not — a legitimate research step
+ * runs many minutes and hundreds of events. The observed regression was a `doc-researcher` killed
+ * at exactly 5 minutes having made 53 model calls and burned 2.9M tokens, mid-turn.
+ */
+const DEFAULT_CLI_IDLE_TIMEOUT_MS = 300_000
+/**
+ * The absolute wall-clock ceiling, whatever the run is doing.
+ *
+ * An idle budget alone cannot bound a run that keeps NARRATING forever (a tool loop that never
+ * converges still prints an envelope per iteration, so it never looks idle), and these callers pass
+ * no AbortSignal — so something has to end it. Deliberately far above any legitimate inline step:
+ * this is the backstop that keeps a pathological run from owning the process for a day, not a
+ * latency budget, and a run that hits it is reported as having hit a ceiling rather than as hung.
+ */
+const DEFAULT_CLI_MAX_TIMEOUT_MS = 3_600_000
 // A CLI that ignores SIGTERM is escalated to SIGKILL after this grace period.
 const KILL_GRACE_MS = 2_000
 /** How much of the CLI's output a failure message carries. Tail-biased: the error is at the end. */
@@ -186,7 +218,12 @@ function retainTail(buffer: string): string {
  * Exported for its own tests (the sanitized-env contract); callers use the runner builders. */
 export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
   new Promise((resolve, reject) => {
-    const { signal, timeoutMs = DEFAULT_CLI_TIMEOUT_MS, onLine } = opts
+    const {
+      signal,
+      idleTimeoutMs = DEFAULT_CLI_IDLE_TIMEOUT_MS,
+      maxTimeoutMs = DEFAULT_CLI_MAX_TIMEOUT_MS,
+      onLine,
+    } = opts
     if (signal?.aborted) {
       // Deliberately a plain Error, not a {@link CliExecFailure}: nothing ran, so there is no
       // stream to account for and no silence to measure. The message already says as much, and the
@@ -222,10 +259,13 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     // one that never produced anything at all.
     const startedAt = Date.now()
     let lastOutputAt: number | undefined
-    let killedReason: 'aborted' | 'timeout' | undefined
+    // WHY it was killed, kept apart from the reported `reason` (both kills are a `timeout` to a
+    // caller): only this distinguishes "stuck" from "ran past the ceiling", and the two want
+    // opposite reactions from whoever reads the failure — restart it vs give it more room.
+    let killedReason: 'aborted' | 'idle' | 'ceiling' | undefined
     let killTimer: ReturnType<typeof setTimeout> | undefined
     // Terminate the child (SIGTERM), escalating to SIGKILL if it doesn't exit promptly.
-    const terminate = (reason: 'aborted' | 'timeout'): void => {
+    const terminate = (reason: 'aborted' | 'idle' | 'ceiling'): void => {
       killedReason = reason
       child.kill('SIGTERM')
       killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
@@ -233,15 +273,36 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     }
     const onAbort = (): void => terminate('aborted')
     signal?.addEventListener('abort', onAbort, { once: true })
-    const watchdog = setTimeout(() => terminate('timeout'), timeoutMs)
-    watchdog.unref?.()
+    // The idle watchdog is RE-ARMED by every chunk (see `noteOutput`), so it measures the gap
+    // between bytes; the ceiling is armed once and never touched, so it measures the whole run.
+    let idleWatchdog = setTimeout(() => terminate('idle'), idleTimeoutMs)
+    idleWatchdog.unref?.()
+    const ceiling = setTimeout(() => terminate('ceiling'), maxTimeoutMs)
+    ceiling.unref?.()
     const cleanup = (): void => {
       signal?.removeEventListener('abort', onAbort)
-      clearTimeout(watchdog)
+      clearTimeout(idleWatchdog)
+      clearTimeout(ceiling)
       if (killTimer) clearTimeout(killTimer)
     }
-    child.stdout.on('data', (chunk: string) => {
+    /**
+     * Record that the child spoke: stamp the time the failure message measures silence from, and
+     * push the idle deadline out. Called from BOTH stream handlers — stderr counts as liveness too
+     * (a CLI narrating progress to stderr is not stuck), which is also why `lastOutputAt` has
+     * always been stamped on both.
+     */
+    const noteOutput = (): void => {
       lastOutputAt = Date.now()
+      // Nothing to re-arm once the kill is already in flight: the child is dying, and a fresh timer
+      // would only fire against a settled promise (and hold the loop for another whole budget on a
+      // process that ignores SIGTERM until the SIGKILL escalation lands).
+      if (killedReason) return
+      clearTimeout(idleWatchdog)
+      idleWatchdog = setTimeout(() => terminate('idle'), idleTimeoutMs)
+      idleWatchdog.unref?.()
+    }
+    child.stdout.on('data', (chunk: string) => {
+      noteOutput()
       stdoutTail = retainTail(stdoutTail + chunk)
       if (!onLine) {
         body += chunk
@@ -257,7 +318,7 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       }
     })
     child.stderr.on('data', (chunk: string) => {
-      lastOutputAt = Date.now()
+      noteOutput()
       stderr = retainTail(stderr + chunk)
     })
     child.on('error', (err) => {
@@ -282,12 +343,26 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       // elapsed — no timing, nothing about what the run had already done — which made a run that
       // burned through a poll budget indistinguishable from one that never reached the model. What
       // it consumed is added by the vendor runner, off the observer it fed.
-      const failed = (reason: CliExecFailureReason, base: string): void => {
-        const silence = silenceClause(startedAt, lastOutputAt, Date.now())
-        reject(new CliExecFailure(silence ? `${base}; ${silence}` : base, reason))
+      const failed = (reason: CliExecFailureReason, base: string, silence = true): void => {
+        const clause = silence ? silenceClause(startedAt, lastOutputAt, Date.now()) : ''
+        reject(new CliExecFailure(clause ? `${base}; ${clause}` : base, reason))
       }
-      if (killedReason === 'timeout') {
-        failed('timeout', `${command} timed out after ${timeoutMs}ms`)
+      // Both watchdogs report `timeout` — what a caller switches on is unchanged — but they say
+      // DIFFERENT things, because the fix is different: an idle kill means the CLI stopped talking
+      // (retry it), a ceiling kill means it was still working and the ceiling is too low (raise it).
+      if (killedReason === 'idle') {
+        // No silence clause here: this message IS the silence statement, and appending "silent for
+        // 300s" to "no output for 300000ms" would just say it twice with rounding drift between them.
+        failed('timeout', `${command} timed out after ${idleTimeoutMs}ms with no output`, false)
+        return
+      }
+      if (killedReason === 'ceiling') {
+        // The clause EARNS its place on this path: it is what separates a run killed while actively
+        // streaming from one that had also gone quiet inside the final idle window.
+        failed(
+          'timeout',
+          `${command} hit its ${maxTimeoutMs}ms ceiling (raise LOCAL_INLINE_CLI_MAX_TIMEOUT_MS)`,
+        )
         return
       }
       if (killedReason === 'aborted') {
@@ -470,6 +545,89 @@ function claudeBurnClause(calls: number, usage: InlineCliResult['usage']): strin
 }
 
 /**
+ * How long a host-CLI inline run may stall, and how long it may run at all — the deployment-level
+ * supervision budget, resolved once at wiring time and handed to every runner.
+ *
+ * A partial bag rather than two required numbers so a caller can set one knob and inherit the other
+ * default, which is how both env vars are documented to behave.
+ */
+export interface InlineCliBudget {
+  idleTimeoutMs?: number
+  maxTimeoutMs?: number
+}
+
+/**
+ * A whole POSITIVE number of milliseconds, or `undefined` when the value is unusable.
+ *
+ * Deliberately NOT `parseNumericEnv` from `@cat-factory/server`, which this would otherwise reuse:
+ * that helper accepts any FINITE number, so `0`, `-1` and `1.5` all come back as legitimate values.
+ * As a `setTimeout` budget those are worse than the typo they came from — a zero or negative delay
+ * fires on the next tick, so the deployment would kill every inline step the instant it started,
+ * which is the exact failure this change exists to stop. (`Number.isInteger` also rejects `NaN` and
+ * both infinities, so a separate finiteness check would be redundant.)
+ */
+function parsePositiveMs(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined
+  const value = Number(raw.trim())
+  if (!Number.isInteger(value) || value <= 0) return undefined
+  return value
+}
+
+/**
+ * Read the inline host-CLI supervision budget from the environment.
+ *
+ * Both knobs exist because the defaults cannot fit every machine: an inline `doc-researcher` on a
+ * slow link legitimately stalls longer than {@link DEFAULT_CLI_IDLE_TIMEOUT_MS} inside one long
+ * model turn, and a deployment that runs deliberately large inline steps wants a ceiling above
+ * {@link DEFAULT_CLI_MAX_TIMEOUT_MS}. Before them the 5-minute budget was a hard-coded constant with
+ * no seam at all, so a deployment whose steps outgrew it had no way to say so.
+ *
+ * A malformed value WARNS and falls back to the default rather than throwing or silently coercing:
+ * `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS=5m` is a typo whose author should hear about it, but it is not
+ * worth refusing to boot the whole deployment over — and `Number('5m')` is `NaN`, which as a timer
+ * budget fires immediately and would kill every inline step at once.
+ */
+export function inlineCliBudgetFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  onWarn?: (message: string) => void,
+): InlineCliBudget {
+  const read = (name: string, fallback: number): number | undefined => {
+    const raw = env[name]
+    if (raw === undefined || raw.trim() === '') return undefined
+    const parsed = parsePositiveMs(raw)
+    if (parsed === undefined) {
+      onWarn?.(
+        `local mode: ${name}="${raw}" is not a whole number of milliseconds — ` +
+          `using the default ${fallback}ms.`,
+      )
+      return undefined
+    }
+    return parsed
+  }
+  const idleTimeoutMs = read('LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS', DEFAULT_CLI_IDLE_TIMEOUT_MS)
+  const maxTimeoutMs = read('LOCAL_INLINE_CLI_MAX_TIMEOUT_MS', DEFAULT_CLI_MAX_TIMEOUT_MS)
+  // A ceiling below the idle budget would make the idle watchdog unreachable — the run would always
+  // die of the ceiling first, and its failure would blame the wrong thing. Report it and keep the
+  // pair coherent by letting the explicit idle budget stand.
+  if (
+    idleTimeoutMs !== undefined &&
+    maxTimeoutMs !== undefined &&
+    maxTimeoutMs < idleTimeoutMs &&
+    onWarn
+  ) {
+    onWarn(
+      `local mode: LOCAL_INLINE_CLI_MAX_TIMEOUT_MS (${maxTimeoutMs}ms) is below ` +
+        `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS (${idleTimeoutMs}ms), so every stalled inline run will be ` +
+        'reported as hitting the ceiling rather than as stuck.',
+    )
+  }
+  return {
+    ...(idleTimeoutMs !== undefined ? { idleTimeoutMs } : {}),
+    ...(maxTimeoutMs !== undefined ? { maxTimeoutMs } : {}),
+  }
+}
+
+/**
  * A runner for the ambient `claude` CLI. The role rides `--append-system-prompt`; the prompt goes
  * over stdin. Bypass permissions so the headless run never blocks on an approval prompt (an inline
  * text task uses no tools anyway).
@@ -487,7 +645,7 @@ function claudeBurnClause(calls: number, usage: InlineCliResult['usage']): strin
  * this exists to diagnose. The fold is declared OUTSIDE the try so it is still readable when the
  * run is killed, which is the whole mechanism.
  */
-function makeClaudeRunner(exec: CliExec): InlineCliRunner {
+function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCliRunner {
   return async (req: InlineCliRequest): Promise<InlineCliResult> => {
     const args = [
       '-p',
@@ -504,6 +662,7 @@ function makeClaudeRunner(exec: CliExec): InlineCliRunner {
     try {
       await exec('claude', args, req.prompt, {
         onLine: (line) => fold.line(line),
+        ...budget,
         ...(req.signal ? { signal: req.signal } : {}),
       })
     } catch (error) {
@@ -552,7 +711,7 @@ function withBurnClause(failure: CliExecFailure, fold: ClaudeStreamFold): CliExe
  * prepended to the prompt (as the harness does), and `codex exec` prints the final assistant
  * message to stdout. Sandbox/approvals are bypassed (the developer's own machine).
  */
-function makeCodexRunner(exec: CliExec): InlineCliRunner {
+function makeCodexRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCliRunner {
   return async (req: InlineCliRequest): Promise<InlineCliResult> => {
     const prompt = req.system.trim() ? `${req.system}\n\n---\n\n${req.prompt}` : req.prompt
     const args = [
@@ -563,7 +722,14 @@ function makeCodexRunner(exec: CliExec): InlineCliRunner {
       req.model,
       '-',
     ]
-    const stdout = await exec('codex', args, prompt, req.signal ? { signal: req.signal } : {})
+    // Codex is supervised on the same budget as claude. It prints only its final message rather
+    // than a narrated stream, so the idle window is the ONLY thing standing between a wedged
+    // `codex exec` and a parked step — and equally the only thing that must not fire while a long
+    // one is still thinking.
+    const stdout = await exec('codex', args, prompt, {
+      ...budget,
+      ...(req.signal ? { signal: req.signal } : {}),
+    })
     return { text: stdout.trim(), finishReason: 'stop' }
   }
 }
@@ -572,8 +738,9 @@ function makeCodexRunner(exec: CliExec): InlineCliRunner {
 export function runnerForVendor(
   vendor: SubscriptionVendor,
   exec: CliExec = spawnCliExec,
+  budget: InlineCliBudget = {},
 ): InlineCliRunner {
-  return vendor === 'codex' ? makeCodexRunner(exec) : makeClaudeRunner(exec)
+  return vendor === 'codex' ? makeCodexRunner(exec, budget) : makeClaudeRunner(exec, budget)
 }
 
 /**
@@ -660,6 +827,12 @@ export interface InlineHarnessResolverDeps extends InlineLeaseDeps {
   runInline?: RunInlineInContainer
   /** Injectable host-CLI exec seam (defaults to a real spawn); tests pass a fake. */
   exec?: CliExec
+  /**
+   * How long a host-CLI run may stall / run in total ({@link inlineCliBudgetFromEnv}). Absent ⇒ the
+   * built-in defaults. Only the HOST-CLI path reads it: a container inline job is already bounded by
+   * the transport's own `requestTimeoutMs`.
+   */
+  cliBudget?: InlineCliBudget
 }
 
 /**
@@ -774,7 +947,7 @@ class SubscriptionInlineModelProvider implements ModelProvider {
       return new CliInlineLanguageModel(
         ref.provider,
         ref.model,
-        runnerForVendor(nativeVendor, this.deps.exec ?? spawnCliExec),
+        runnerForVendor(nativeVendor, this.deps.exec ?? spawnCliExec, this.deps.cliBudget ?? {}),
       )
     }
     // Otherwise run it in a warm container on a leased credential (the compatibility path — no
