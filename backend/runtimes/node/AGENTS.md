@@ -17,8 +17,11 @@ transport, and Node model provisioning.
   `docs/refactoring-candidates.md` #1).
 - `db/schema.ts` + `db/tables/*` + `drizzle/` (generated migrations) — the Postgres schema.
   `schema.ts` is the single entry point every repo imports; the VCS/projection tables live in
-  `db/tables/vcs.ts` and are re-exported from it (a size-budget split, so drizzle-kit and every
-  importer still see one module). `migrate()`
+  `db/tables/vcs.ts` and the tenancy & identity ones (the `workspaces`/`users` roots, login
+  identities, the account + membership graph, invitations / password resets and the per-account
+  rows) in `db/tables/identity.ts`, both re-exported from it (a size-budget split, so drizzle-kit
+  and every importer still see one module). `identity.ts` is also where the schema's only two FK
+  targets live, so the referencing credential tables import FROM it and the graph stays acyclic. `migrate()`
   (`db/migrate.ts`) bootstraps it idempotently on boot, failing fast with an actionable error on
   a ledger↔schema desync and wrapping apply failures with a recovery hint. `scripts/db-reset.mjs`
   (`pnpm db:reset`) is the destructive clean-slate recovery. Schemas are configurable for a shared

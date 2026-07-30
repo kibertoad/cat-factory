@@ -338,12 +338,12 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-statements` — 157 → 30
 
-| Step       | `max` | Offenders to split first                                                          | Status    |
-| ---------- | ----: | --------------------------------------------------------------------------------- | --------- |
-| baseline   |   157 | —                                                                                 | ✅ landed |
-| 1 + 2      |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass           | ✅ landed |
-| free floor |    49 | — (no refactor; taken alongside the twelfth pass's `max-lines` slice)             | ✅ landed |
-| 3 (final)  |    30 | (~104) — the long tail                                                            | ☐ todo    |
+| Step       | `max` | Offenders to split first                                                | Status    |
+| ---------- | ----: | ----------------------------------------------------------------------- | --------- |
+| baseline   |   157 | —                                                                       | ✅ landed |
+| 1 + 2      |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
+| free floor |    49 | — (no refactor; taken alongside the twelfth pass's `max-lines` slice)   | ✅ landed |
+| 3 (final)  |    30 | (~104) — the long tail                                                  | ☐ todo    |
 
 ### `max-lines-per-function` — 3103 → 150
 
@@ -371,13 +371,13 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-lines` — 3119 → 1500
 
-| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                              | Status    |
-| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| baseline   |  3119 | —                                                                                                                                                                                                                                                                                                     | ✅ landed |
-| free floor |  2802 | — (no refactor; #1266 split the old 3119 `suites/execution.ts` + `node/container.ts` offenders)                                                                                                                                                                                                       | ✅ landed |
-| free floor |  2648 | — (no refactor; two eleventh-pass function splits were sibling-file moves out of this rule's own god-files)                                                                                                                                                                                            | ✅ landed |
+| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                            | Status    |
+| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline   |  3119 | —                                                                                                                                                                                                                                                                                                                   | ✅ landed |
+| free floor |  2802 | — (no refactor; #1266 split the old 3119 `suites/execution.ts` + `node/container.ts` offenders)                                                                                                                                                                                                                     | ✅ landed |
+| free floor |  2648 | — (no refactor; two eleventh-pass function splits were sibling-file moves out of this rule's own god-files)                                                                                                                                                                                                         | ✅ landed |
 | 1 (→ 1956) |  2000 | (6) `persistenceRpc.spec.ts` 2445 → harness + surfaces spec, `RunDispatcher.ts` 2390 → `PollRunningController` + `OneShotStepController`, `ExecutionService.ts` 2277 → `StepDecisionController`, `provision-detect.logic.ts` 2234, Worker `container.ts` 2214 (3 ways), `node/db/schema.ts` 2078 — see twelfth pass | ✅ landed |
-| 2 (final)  |  1500 | (7) `ExecutionService.ts` 1956, `node/db/schema.ts` 1894, `RunDispatcher.ts` 1880, `provision-detect.logic.ts` 1826, `provision-detect.logic.test.ts` 1620, Worker `container.ts` 1598 — aligns with `check-file-size.mjs`                                                                             | ☐ todo    |
+| 2 (final)  |  1500 | (7) `ExecutionService.ts` 1956, `node/db/schema.ts` 1894, `RunDispatcher.ts` 1880, `provision-detect.logic.ts` 1826, `provision-detect.logic.test.ts` 1620, Worker `container.ts` 1598 — aligns with `check-file-size.mjs`                                                                                          | ☐ todo    |
 
 ### `max-params` — 20 → 6
 
