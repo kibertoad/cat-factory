@@ -1275,8 +1275,15 @@ placeholder/format constraints, or plural-form requirements beyond English's two
 
 **Backend strings**: the backend does not localize prose. A localizable condition emits a machine-readable
 `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
-pattern); the raw `message` is an untranslated last resort. The wire vocabulary lives in
-`@cat-factory/contracts`, so the SPA imports the SAME source of truth.
+pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
+truth — `ApiErrorCode` (the status class on `error.code`) as well as the per-surface `reason` unions.
+
+**Raw backend prose is DETAIL, never the description.** Even with no `reason` to key off, a failure is
+described from its STATUS CLASS through an exhaustive `Record<ApiErrorCode, …>` of translated copy, and
+the untranslated `message` (plus a validation 400's `issues` and the envelope's `requestId`) is reached
+through a "Show details" disclosure that reveals it in place. So a non-English user is never handed
+English as the primary explanation, and the elaborate operator remedies the backend does write stay one
+click away rather than being dropped. A new failure-presenting surface copies that split.
 
 **Drift guards** (oxlint has no `no-raw-text` rule, so these replace it):
 

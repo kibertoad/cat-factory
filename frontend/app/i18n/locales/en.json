@@ -507,6 +507,31 @@
     "importsOnAdd": "imports on add"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Show details",
+      "@showDetail": {
+        "description": "Button label on an error toast that swaps the generic explanation for the raw technical detail (the server message, validation issues, request id). An imperative verb phrase, not a heading."
+      },
+      "requestId": "Request ID {id}",
+      "@requestId": {
+        "description": "Keep the {id} placeholder. \"Request ID\" is the correlation id an operator greps for in the server logs, so keep it recognizable as a technical identifier rather than translating it as prose."
+      },
+      "description": {
+        "not_found": "What this action refers to no longer exists. Reload the page to see the current state.",
+        "validation": "The server rejected this request as invalid. Check the values you entered, then try again.",
+        "credential_required": "This action needs a personal credential that is not unlocked. Unlock or reconnect your subscription, then try again.",
+        "forbidden": "Your role in this workspace does not allow this action. Ask a workspace admin to do it, or to raise your role.",
+        "unavailable": "This deployment has not configured the capability this action needs. Ask your deployment operator to set it up.",
+        "unauthorized": "Your session is no longer valid. Sign in again, then retry.",
+        "rate_limited": "Too many requests in a short time. Wait a moment, then try again.",
+        "internal": "Something went wrong on the server. Try again, and share the details with your deployment operator if it keeps happening.",
+        "network": "The server could not be reached. Check your connection, then try again.",
+        "unexpected": "The server returned an unexpected response. Try again, and share the details with your deployment operator if it keeps happening.",
+        "@unexpected": {
+          "description": "Shown when the response was NOT one of our own error shapes at all (a gateway or proxy page, an unrecognised status code). Deliberately distinct from \"internal\", which is our own server reporting its own fault: word this one as an unexpected or unrecognised RESPONSE, not as a server error."
+        }
+      }
+    },
     "action": {
       "retryFailed": "Retry failed",
       "startFailed": "Failed to start",

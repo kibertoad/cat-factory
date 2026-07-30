@@ -11,10 +11,21 @@
  * locale missing the key) and stays untranslated — the contract is "if a server message must be
  * localizable, the backend emits a code and the frontend maps it", not "translate arbitrary server
  * prose on the client".
+ *
+ * G2 closes the same gap for everything that is NOT a 409: this composable is the funnel every
+ * other failure drains into, and it used to show the backend's prose verbatim as the description —
+ * so a non-English user read English, and an internal 500's fixed `Internal server error` was the
+ * whole of what they were told. Those now resolve translated copy from the envelope's STATUS CLASS
+ * (`error.code`, the `ApiErrorCode` union) and keep the untranslated detail — the prose, a
+ * validation 400's `issues`, and the `requestId` an operator can grep — one click away behind
+ * "Show details". Two rules follow from that split: the description says what a user can act on,
+ * the disclosure carries what a user quotes to someone else; and a raw string is never the FIRST
+ * thing shown, however good it is (many of them are — the elaborate remedies this initiative
+ * added — which is exactly why the detail stays reachable rather than being dropped).
  */
 
-import type { ConflictReason } from '@cat-factory/contracts'
-import { apiErrorEnvelope } from './api/errors'
+import type { ApiErrorCode, ConflictReason } from '@cat-factory/contracts'
+import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
 interface ConflictDetails {
@@ -235,6 +246,87 @@ export function parseConflict(
 /** The non-null parsed shape of a backend conflict, as returned by {@link parseConflict}. */
 type ParsedConflict = NonNullable<ReturnType<typeof parseConflict>>
 
+/**
+ * Generic translated description per STATUS CLASS, for a failure no `reason` code narrows.
+ *
+ * Exhaustive over the wire union (minus `conflict`, which structurally cannot arrive here —
+ * {@link parseConflict} intercepts every envelope carrying that code, so a mapping for it would be
+ * dead copy in ten locales), which makes the `Record` the drift guard: a new `ApiErrorCode` fails
+ * this typecheck until it has wording. The copy is deliberately about the STATUS CLASS and nothing
+ * else — it is what we can say truthfully without having read the specific failure, so it names
+ * the shape of the remedy ("sign in again", "your deployment hasn't wired this", "wait and retry")
+ * and leaves the specifics to the detail disclosure.
+ */
+const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string> = {
+  not_found: 'errors.generic.description.not_found',
+  validation: 'errors.generic.description.validation',
+  credential_required: 'errors.generic.description.credential_required',
+  forbidden: 'errors.generic.description.forbidden',
+  unavailable: 'errors.generic.description.unavailable',
+  unauthorized: 'errors.generic.description.unauthorized',
+  rate_limited: 'errors.generic.description.rate_limited',
+  internal: 'errors.generic.description.internal',
+}
+
+/**
+ * The request never reached a server that answered in our envelope shape — offline, DNS, a dropped
+ * connection, CORS. Distinct from {@link UNEXPECTED_DESCRIPTION_KEY} on purpose: this one's remedy
+ * is on the USER's side (check the connection), which is the opposite of "the server is broken".
+ */
+const NETWORK_DESCRIPTION_KEY = 'errors.generic.description.network'
+
+/**
+ * Something answered with an HTTP status but not one of our envelopes (an edge/proxy 502 page, a
+ * gateway timeout), or answered with a `code` this build doesn't know. Reported as an unexpected
+ * SERVER-side failure rather than folded into the network case.
+ */
+const UNEXPECTED_DESCRIPTION_KEY = 'errors.generic.description.unexpected'
+
+/**
+ * A non-conflict failure, split into the part that gets TRANSLATED and the parts that stay raw.
+ * Pure (no i18n, no store) so the classification is unit-testable on its own; the composable
+ * turns it into a toast.
+ */
+export interface GenericFailure {
+  /** i18n key for the translated description shown up front. */
+  descriptionKey: string
+  /** The backend's untranslated prose, when it sent any (absent for a bare network fault). */
+  message: string | null
+  /** `path: message` entries from a request-validation 400, in wire order. */
+  issues: string[]
+  /** The envelope's correlation id, so the user can quote it at whoever reads the logs. */
+  requestId: string | null
+}
+
+/**
+ * Classify a NON-conflict failure for presentation. Never throws and never returns an empty
+ * `descriptionKey`: an error this function cannot recognise at all still gets the network or
+ * unexpected-failure wording, because a toast with no description reads as a successful action.
+ */
+export function describeGenericFailure(error: unknown): GenericFailure {
+  const envelope = apiErrorEnvelope(error)
+  // Read through a widened alias rather than casting the wire string to the union: a `code` we
+  // don't know must resolve to `undefined`, which is exactly what the alias's index signature
+  // says and what a cast would have hidden. The narrow Record above stays the drift guard.
+  const byCode: Readonly<Record<string, string | undefined>> = GENERIC_DESCRIPTION_KEYS
+  const mapped = envelope?.code ? byCode[envelope.code] : undefined
+  // No envelope at all AND no status ⇒ nothing answered; with a status, something did.
+  const unrecognised =
+    !envelope && apiErrorStatus(error) === undefined
+      ? NETWORK_DESCRIPTION_KEY
+      : UNEXPECTED_DESCRIPTION_KEY
+  return {
+    descriptionKey: mapped ?? unrecognised,
+    // `ApiError.message` is the envelope's prose, or a synthesised `Request failed (HTTP n)`; for
+    // a non-API throw it is the JS error text. Either way it is detail, never the headline.
+    message: error instanceof Error ? error.message : error == null ? null : String(error),
+    issues: (envelope?.issues ?? []).map((issue) =>
+      issue.path ? `${issue.path}: ${issue.message}` : issue.message,
+    ),
+    requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : null,
+  }
+}
+
 export function usePipelineErrorToast() {
   const toast = useToast()
   const ui = useUiStore()
@@ -449,6 +541,51 @@ export function usePipelineErrorToast() {
   }
 
   /**
+   * Everything that is NOT a 409: a translated status-class description, with the raw detail
+   * behind a "Show details" button that swaps it into the same toast (G2).
+   *
+   * The reveal is an UPDATE rather than a second toast so the two readings can't sit on screen
+   * disagreeing, and it makes the toast sticky at the same time — the detail is what someone
+   * copies into a bug report, and a ~5s auto-dismiss takes it away mid-copy. `actions: []` has to
+   * be passed explicitly: `update` merges over the existing toast, so an omitted `actions` would
+   * leave a "Show details" button that is now a no-op.
+   *
+   * No detail worth showing (a network fault with an unhelpful `message` and no correlation id)
+   * ⇒ no button at all, rather than a disclosure that reveals nothing.
+   */
+  function presentGenericFailure(error: unknown, fallbackTitleKey: string): void {
+    const failure = describeGenericFailure(error)
+    const detail = [
+      failure.message,
+      failure.issues.join(', '),
+      failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
+    ]
+      .filter((part) => part && part.trim().length > 0)
+      .join(' · ')
+    // No `te` guard: the key comes from a Record exhaustive over the wire union and every entry
+    // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
+    // (better than the raw prose this replaced) and a bare key can never leak.
+    const added = toast.add({
+      title: t(fallbackTitleKey),
+      description: t(failure.descriptionKey),
+      color: 'error',
+      icon: 'i-lucide-triangle-alert',
+      ...(detail
+        ? {
+            actions: [
+              {
+                label: t('errors.generic.showDetail'),
+                icon: 'i-lucide-info',
+                onClick: () =>
+                  toast.update(added.id, { description: detail, duration: 0, actions: [] }),
+              },
+            ],
+          }
+        : {}),
+    })
+  }
+
+  /**
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
    * non-conflict failures and any conflict reason without a dedicated title.
    */
@@ -459,14 +596,7 @@ export function usePipelineErrorToast() {
       presentMappedConflict(conflict, fallbackTitleKey)
       return
     }
-
-    // Not a conflict (a 4xx/5xx or a network fault) — surface its message plainly.
-    toast.add({
-      title: t(fallbackTitleKey),
-      description: error instanceof Error ? error.message : String(error),
-      color: 'error',
-      icon: 'i-lucide-triangle-alert',
-    })
+    presentGenericFailure(error, fallbackTitleKey)
   }
 
   return { present }

@@ -468,6 +468,22 @@
     "importsOnAdd": "importé à l’ajout"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Afficher les détails",
+      "requestId": "ID de requête {id}",
+      "description": {
+        "not_found": "L'élément visé par cette action n'existe plus. Rechargez la page pour voir l'état actuel.",
+        "validation": "Le serveur a rejeté cette requête comme invalide. Vérifiez les valeurs saisies, puis réessayez.",
+        "credential_required": "Cette action nécessite un identifiant personnel qui n'est pas déverrouillé. Déverrouillez ou reconnectez votre abonnement, puis réessayez.",
+        "forbidden": "Votre rôle dans cet espace de travail n'autorise pas cette action. Demandez à un administrateur de l'espace de travail de l'effectuer ou d'élargir votre rôle.",
+        "unavailable": "Ce déploiement n'a pas configuré la fonctionnalité requise par cette action. Demandez à l'opérateur du déploiement de la mettre en place.",
+        "unauthorized": "Votre session n'est plus valide. Reconnectez-vous, puis réessayez.",
+        "rate_limited": "Trop de requêtes en peu de temps. Patientez un instant, puis réessayez.",
+        "internal": "Une erreur est survenue sur le serveur. Réessayez, et transmettez les détails à l'opérateur du déploiement si le problème persiste.",
+        "network": "Le serveur est injoignable. Vérifiez votre connexion, puis réessayez.",
+        "unexpected": "Le serveur a renvoyé une réponse inattendue. Réessayez, et transmettez les détails à l'opérateur du déploiement si le problème persiste."
+      }
+    },
     "action": {
       "retryFailed": "Échec de la nouvelle tentative",
       "startFailed": "Échec du démarrage",
