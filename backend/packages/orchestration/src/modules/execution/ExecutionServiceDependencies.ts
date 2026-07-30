@@ -36,6 +36,7 @@ import type {
   RiskPolicyCacheValue,
   RiskPolicyRepository,
   RunInitiatorScope,
+  RunLifecycleSink,
   StepResolverRegistry,
   SubscriptionActivationRepository,
   TaskRepository,
@@ -396,6 +397,12 @@ export interface ExecutionServiceDependencies {
    * transition the block but no notification surfaces (tests).
    */
   notificationService?: NotificationService
+  /**
+   * Optional: pushes run-lifecycle edges (`run.started` / `run.completed` / `run.failed`) to the
+   * workspace's registered outbound endpoint, so a headless integration learns its task finished
+   * without polling. Absent → nothing is pushed and runs behave byte-for-byte as before.
+   */
+  runLifecycleSink?: RunLifecycleSink
   /**
    * Optional: resolves a workspace's runtime settings so {@link ExecutionService.start}
    * can enforce the per-service running-task limit. Absent → the limit is never enforced

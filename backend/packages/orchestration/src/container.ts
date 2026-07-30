@@ -718,6 +718,7 @@ export function createCore(injected: CoreDependencies): Core {
     initiativeRepository: dependencies.initiativeRepository,
     initiativeInterviewService,
     notificationService: notifications?.service,
+    runLifecycleSink: dependencies.runLifecycleSink,
     workspaceSettingsService: settings?.service,
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,

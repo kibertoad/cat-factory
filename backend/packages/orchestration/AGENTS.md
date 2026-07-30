@@ -64,7 +64,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   cells, code fences), which lives there rather than here because the tracker-issue writebacks
   in `@cat-factory/integrations` render through the SAME escapes; the composer scrubs free text
   with `redactSecrets` before either the prose or the JSON block sees it. `ExecutionServiceDependencies.ts` holds the engine's
-  injected-collaborator contract, re-exported from `ExecutionService.ts`. The run/step lifecycle
+  injected-collaborator contract, re-exported from `ExecutionService.ts`. `runStart.ts` holds the two
+  funnels every path that brings a run to life passes through — the atomic live-run CLAIM and the
+  HAND-OFF to the durable runner, the SPA and the outbound lifecycle sink — because
+  `start`/`retry`/`restartFrom` differ only in the block patch they write between them, so the order
+  across them is owned in one place rather than three. The run/step lifecycle
   reference is `docs/execution-state-machine.md`.
 - `merge/` — the merge policy + its evidence: `RiskPolicyService` (the per-workspace
   merge-threshold preset library, including the per-class `classRules`), `MergeTrackRecordService`

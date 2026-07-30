@@ -1,0 +1,1 @@
+ALTER TABLE "notification_webhooks" ADD COLUMN "run_events" text DEFAULT '[]' NOT NULL;

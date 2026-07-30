@@ -53,6 +53,10 @@ export class NotificationWebhookService {
       workspaceId,
       url: input.url,
       types: input.types ?? existing?.types ?? [],
+      // Omitted `runEvents` KEEPS the current subscription, like every other field here. The
+      // default for a brand-new endpoint is NONE: an operator registering a receiver for parked
+      // decisions must not silently start getting a lifecycle event per run.
+      runEvents: input.runEvents ?? existing?.runEvents ?? [],
       enabled: input.enabled ?? existing?.enabled ?? true,
       // Omitted `secret` keeps the stored one; a supplied one rotates it.
       secretSealed: input.secret
@@ -75,6 +79,7 @@ function toWire(record: NotificationWebhookRecord): NotificationWebhook {
   return {
     url: record.url,
     types: record.types,
+    runEvents: record.runEvents,
     enabled: record.enabled,
     hasSecret: record.secretSealed != null,
     updatedAt: record.updatedAt,

@@ -19,6 +19,7 @@ import {
   publicServiceListSchema,
   publicTaskListSchema,
   publicTaskSchema,
+  publicUsageSchema,
   startPublicTaskSchema,
   updatePublicTaskSchema,
 } from '../public-api.js'
@@ -236,4 +237,17 @@ export const dismissPublicNotificationContract = defineApiContract({
   pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+})
+
+// ---- usage & spend (the external dashboard read) ---------------------------
+
+/**
+ * The workspace's usage for the current billing period: the metered budget position plus the
+ * per-model breakdown behind it. Workspace-scoped by construction (the aggregate names no
+ * resource ids and no account/user dimension), so `read` is the whole scope story.
+ */
+export const getPublicUsageContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/usage',
+  responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
 })

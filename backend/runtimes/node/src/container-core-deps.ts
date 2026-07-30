@@ -20,6 +20,7 @@ import {
   type EmailSender,
   type GitHubClient,
   type GitHubInstallationRepository,
+  type RunLifecycleSink,
   type SkillSourceResyncRequest,
   DEFAULT_MODEL_PRESET_ID,
 } from '@cat-factory/kernel'
@@ -142,6 +143,8 @@ export interface NodeCoreDepsBundle {
   executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
   agentExecutor: NodeRealtimeDepsResult['agentExecutor']
   notificationChannel: NodeRealtimeDepsResult['notificationChannel']
+  /** The run-lifecycle half of the same registered endpoint (absent ⇒ no webhook configured). */
+  runLifecycleSink: RunLifecycleSink | undefined
   releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
   packageRegistryDeps: NodeAccountDepsResult['packageRegistryDeps']
   incidentEnrichmentDeps: NodeAccountDepsResult['incidentEnrichmentDeps']
@@ -443,6 +446,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     executionEventPublisher,
     agentExecutor,
     notificationChannel,
+    runLifecycleSink,
     accountSettings,
   } = bundle
   return {
@@ -602,6 +606,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
     ...(executionEventPublisher ? { executionEventPublisher } : {}),
     ...(notificationChannel ? { notificationChannel } : {}),
+    ...(runLifecycleSink ? { runLifecycleSink } : {}),
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,

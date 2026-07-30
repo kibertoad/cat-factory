@@ -168,6 +168,11 @@ function selectNodeNotificationWebhookSupport(
         err: error instanceof Error ? error.message : String(error),
         ...ctx,
       }),
+    onRunEventError: (error, ctx) =>
+      logger.warn('run lifecycle webhook delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
 }
 
