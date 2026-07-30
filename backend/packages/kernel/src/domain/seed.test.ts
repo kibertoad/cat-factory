@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { pipelineAllowedForBlockLevel, pipelineAllowedForTaskType } from '@cat-factory/contracts'
+import { hasInitiativeKinds } from './initiative-logic.js'
 import { PipelineRegistry } from './pipeline-registry.js'
 import {
   defaultPipelineIdForTaskType,
@@ -25,14 +27,17 @@ describe('seedPipelines — named-gate lowering', () => {
     }
   })
 
-  it('omits gates/enabled for a plain all-enabled, gate-less pipeline', () => {
-    const quick = byId().get('pl_quick')!
-    expect(quick.gates).toBeUndefined()
-    expect(quick.enabled).toBeUndefined()
-    expect(quick.agentKinds).toEqual([
+  it('omits gates/enabled/gating for a plain all-enabled, gate-less pipeline', () => {
+    // `pl_simple` is the ladder rung with nothing declared on any step, so the lowering must emit
+    // BARE `agentKinds` — no empty `gates`/`enabled`/`gating` arrays alongside it. That keeps a
+    // hand-authored preset and a `definePipeline`d one byte-identical when neither declares a flag.
+    const simple = byId().get('pl_simple')!
+    expect(simple.gates).toBeUndefined()
+    expect(simple.enabled).toBeUndefined()
+    expect(simple.gating).toBeUndefined()
+    expect(simple.agentKinds).toEqual([
       'coder',
-      'blueprints',
-      'mocker',
+      'reviewer',
       'deployer',
       'tester-api',
       'conflicts',
@@ -52,53 +57,42 @@ describe('seedPipelines — named-gate lowering', () => {
     expect(defaultPipelineIdForTaskType('feature')).toBeUndefined()
   })
 
-  it('lowers pl_full: human gates + opt-in brainstorms land on the named steps', () => {
+  it('lowers pl_full: estimate gating lands on the named steps, and no human gate does', () => {
     const full = byId().get('pl_full')!
     expect(full.agentKinds).toEqual([
-      'requirements-brainstorm',
-      'requirements-review',
-      'spec-writer',
-      'spec-companion',
-      'architecture-brainstorm',
+      'task-estimator',
       'architect',
-      'researcher',
+      'architect-companion',
       'coder',
       'reviewer',
-      'code-commenter',
-      'blueprints',
-      'mocker',
       'deployer',
       'tester-api',
       'conflicts',
       'ci',
+      'human-review',
       'merger',
     ])
-    // Human gates: the two brainstorms, the requirements review, and the architecture.
-    const gated = full.agentKinds.filter((_k, i) => full.gates![i])
-    expect(gated).toEqual([
-      'requirements-brainstorm',
-      'requirements-review',
-      'architecture-brainstorm',
-      'architect',
-    ])
-    // Opt-in (disabled by default): the two brainstorm dialogues.
-    const disabled = full.agentKinds.filter((_k, i) => full.enabled![i] === false)
-    expect(disabled).toEqual(['requirements-brainstorm', 'architecture-brainstorm'])
-  })
-
-  it('lowers pl_fullstack: the architecture gate sits on architect-companion, not architect', () => {
-    const fs = byId().get('pl_fullstack')!
-    const gated = fs.agentKinds.filter((_k, i) => fs.gates![i])
-    expect(gated).toEqual([
-      'requirements-brainstorm',
-      'requirements-review',
-      'architecture-brainstorm',
-      'architect-companion',
-    ])
-    expect(fs.agentKinds.filter((_k, i) => fs.enabled![i] === false)).toEqual([
-      'requirements-brainstorm',
-      'architecture-brainstorm',
-    ])
+    // The gating array is index-aligned with agentKinds, so a step inserted above can never shift a
+    // threshold onto its neighbour — the whole point of the named-step seed form.
+    const estimateGated = full.agentKinds.filter((_k, i) => full.gating?.[i]?.enabled)
+    expect(estimateGated).toEqual(['architect', 'tester-api', 'human-review'])
+    expect(full.gating![full.agentKinds.indexOf('architect')]).toMatchObject({
+      minComplexity: 0.4,
+    })
+    expect(full.gating![full.agentKinds.indexOf('human-review')]).toMatchObject({
+      minRisk: 0.8,
+      // An UNESTIMATED task must not silently wait for a human forever, so the escalation gate is
+      // the one place `skip` is the safe default — the opposite of the thoroughness-first default
+      // the other gates take.
+      onMissingEstimate: 'skip',
+    })
+    // `architect-companion` carries NO gate of its own: it cascades off the architect at runtime,
+    // so a threshold here would be a second copy to keep in sync.
+    expect(full.gating![full.agentKinds.indexOf('architect-companion')]).toBeNull()
+    // No human APPROVAL gate anywhere. The estimate may add a checkpoint but never cancel one, so a
+    // step is never both human-gated and estimate-gated (`assertValidGating` enforces it).
+    expect(full.gates).toBeUndefined()
+    expect(full.enabled).toBeUndefined()
   })
 
   it('explores the repo BEFORE interviewing the human in pl_initiative', () => {
@@ -213,5 +207,95 @@ describe('retiredPipelines — withdrawn built-ins', () => {
     registry.retire('pl_full')
     expect(retiredPipelines(registry).map((p) => p.id)).not.toContain('pl_full')
     expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_full')
+  })
+})
+
+describe('seedPipelines — purpose classification is total and matches the engine guards', () => {
+  it('classifies every built-in, so no preset falls through a narrowed picker', () => {
+    // A `document` / `review` task offers ONLY explicitly-classified pipelines, so an unclassified
+    // built-in would be invisible there — silently, with nothing failing. (A `feature` / `bug` task
+    // narrows the other way round, excluding what cannot ship code, so unclassified survives that
+    // picker; this assertion is what the document/review half relies on.) The catalog is ours, so
+    // every entry can and must say what it is for.
+    for (const p of seedPipelines()) {
+      expect(p.purpose, `${p.id} must declare a purpose`).toBeDefined()
+    }
+  })
+
+  it('pins purpose:planning against the engine’s initiative-KIND guard', () => {
+    // The SPA hides planning pipelines from ordinary blocks by `purpose`, because it cannot see the
+    // kernel's agent-kind vocabulary; the engine refuses them by KIND
+    // (`assertInitiativeShapeAllowed`). Two classifiers deciding one question drift, and the failure
+    // is asymmetric: a planning preset misclassified as `build` is offered on a task and then 409s,
+    // while a build preset misclassified as `planning` vanishes from every picker. Pinned here for
+    // the built-in catalog, which is the set both rules actually have to agree on.
+    //
+    // A `public` pipeline is EXEMPT, and `pl_initiative_breakdown` is why the exemption exists: it
+    // plans (so `purpose: 'planning'` is honest about what it does) but runs INLINE and headless off
+    // a public-API call, carrying none of the initiative kinds and therefore binding to no block
+    // level. "Plans things" and "may only run on an initiative block" are genuinely two properties,
+    // and this is the one pipeline where they come apart.
+    for (const p of seedPipelines()) {
+      if (p.public) {
+        expect(hasInitiativeKinds(p.agentKinds), `${p.id} is API-invoked, not block-bound`).toBe(
+          false,
+        )
+        continue
+      }
+      expect(p.purpose === 'planning', `${p.id} purpose vs initiative kinds`).toBe(
+        hasInitiativeKinds(p.agentKinds),
+      )
+    }
+  })
+
+  it('offers a programmatic task the build ladder and nothing that cannot ship code', () => {
+    const offered = (taskType: 'feature' | 'bug' | 'document' | 'review') =>
+      seedPipelines()
+        .filter((p) => pipelineAllowedForTaskType(p, taskType))
+        .filter((p) => pipelineAllowedForBlockLevel(p, 'task'))
+        .map((p) => p.id)
+
+    const forFeature = offered('feature')
+    // The ladder plus the bug/ralph presets are all reachable...
+    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_bugfix', 'pl_ralph']) {
+      expect(forFeature, `${id} must be offered on a feature task`).toContain(id)
+    }
+    // ...and the presets that cannot ship code are not. `pl_initiative*` are the ones the engine
+    // used to refuse AFTER the user picked them.
+    for (const id of [
+      'pl_document',
+      'pl_document_quick',
+      'pl_business_docs',
+      'pl_review',
+      'pl_initiative',
+      'pl_initiative_docs',
+      'pl_initiative_breakdown',
+    ]) {
+      expect(forFeature, `${id} must not be offered on a feature task`).not.toContain(id)
+    }
+    // A `bug` task gets the same set as a feature (both ship code).
+    expect(offered('bug')).toEqual(forFeature)
+    // The pre-existing narrowings still hold, and stay disjoint from the programmatic set.
+    expect(offered('document')).toEqual(['pl_document', 'pl_document_quick', 'pl_business_docs'])
+    expect(offered('review')).toEqual(['pl_review'])
+  })
+
+  it('offers an initiative block only the planning presets, and vice versa', () => {
+    const onInitiative = seedPipelines()
+      .filter((p) => pipelineAllowedForBlockLevel(p, 'initiative'))
+      .map((p) => p.id)
+    // `pl_initiative_breakdown` is in this set by purpose but is API-invoked and block-agnostic, so
+    // it is the one entry the engine would still refuse here. Harmless today (an initiative block
+    // drives planning through its own flow, not the generic Run menu) and removed for real when the
+    // platform-invoked presets get `availability: 'system'` — WS5 of the catalog-collapse tracker.
+    expect(onInitiative).toEqual(['pl_initiative', 'pl_initiative_docs', 'pl_initiative_breakdown'])
+    // Bidirectional, mirroring the engine guard: no planning preset is offered on a frame/module
+    // either, not just on a task.
+    for (const level of ['task', 'frame', 'module'] as const) {
+      const ids = seedPipelines()
+        .filter((p) => pipelineAllowedForBlockLevel(p, level))
+        .map((p) => p.id)
+      expect(ids, `planning presets must be hidden on a ${level}`).not.toContain('pl_initiative')
+    }
   })
 })

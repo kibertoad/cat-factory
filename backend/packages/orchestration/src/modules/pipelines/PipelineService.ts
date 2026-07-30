@@ -27,6 +27,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
@@ -50,6 +51,17 @@ export interface PipelineServiceDependencies {
    * the built-in catalog only.
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * The app-owned agent-kind registry, so a save honours a DEPLOYMENT-registered kind's own
+   * `gatable` flag — the same answer the run-start guard reaches. Optional so the service stays
+   * constructible standalone in unit tests; absent ⇒ built-in gatability only.
+   *
+   * `createCore` passes the instance `resolveCoreRuntime` RESOLVED (the facade's, else the default),
+   * which is the same one `RunAdmission` gets. Passing `CoreDependencies.agentKindRegistry` straight
+   * through instead would hand this `undefined` on every facade that doesn't inject one, and the two
+   * boundaries would then be answering "may this step be gated?" from different registries.
+   */
+  agentKindRegistry?: AgentKindRegistry
   /**
    * Resolves whether the workspace has any observability integration enabled (today: a
    * Datadog connection). When absent (no observability persistence wired at all), the
@@ -97,6 +109,7 @@ export class PipelineService {
   private readonly observabilityConnectionRepository?: ObservabilityConnectionRepository
   private readonly pipelineScheduleRepository?: PipelineScheduleRepository
   private readonly pipelineRegistry?: PipelineRegistry
+  private readonly agentKindRegistry?: AgentKindRegistry
 
   constructor({
     workspaceRepository,
@@ -105,6 +118,7 @@ export class PipelineService {
     observabilityConnectionRepository,
     pipelineScheduleRepository,
     pipelineRegistry,
+    agentKindRegistry,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
@@ -112,6 +126,7 @@ export class PipelineService {
     this.observabilityConnectionRepository = observabilityConnectionRepository
     this.pipelineScheduleRepository = pipelineScheduleRepository
     this.pipelineRegistry = pipelineRegistry
+    this.agentKindRegistry = agentKindRegistry
   }
 
   /**
@@ -152,9 +167,11 @@ export class PipelineService {
     validatePipelineShape({
       agentKinds: input.agentKinds,
       enabled: input.enabled,
+      gates: input.gates,
       gating: input.gating,
       testerQuality: input.testerQuality,
       stepOptions: input.stepOptions,
+      agentKindRegistry: this.agentKindRegistry,
     })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
     // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
@@ -200,9 +217,11 @@ export class PipelineService {
     validatePipelineShape({
       agentKinds: source.agentKinds,
       enabled: source.enabled,
+      gates: source.gates,
       gating: source.gating,
       testerQuality: source.testerQuality,
       stepOptions: source.stepOptions,
+      agentKindRegistry: this.agentKindRegistry,
     })
     // Same launch-constraint guarantee create/update give: a clone preserves the source's
     // agentKinds + availability, so re-check that the pair is launchable (e.g. a bug-intake step
@@ -269,14 +288,27 @@ export class PipelineService {
     // while leaving its companion on would orphan the companion, and adding gating (step or
     // tester-QC) without an estimator is illegal — so validate whenever the chain, enable
     // flags, gating, OR tester-QC change, not just on a chain replacement.
+    //
+    // `input.gates` is a trigger too: a human approval gate and an estimate gate on the SAME step
+    // is illegal, so adding the approval gate to an already-estimate-gated step invalidates the
+    // shape while touching neither the chain nor `gating`.
     if (
       input.agentKinds ||
       input.enabled ||
+      input.gates ||
       input.gating ||
       input.testerQuality ||
       input.stepOptions
     ) {
-      validatePipelineShape({ agentKinds, enabled, gating, testerQuality, stepOptions })
+      validatePipelineShape({
+        agentKinds,
+        enabled,
+        gates,
+        gating,
+        testerQuality,
+        stepOptions,
+        agentKindRegistry: this.agentKindRegistry,
+      })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     // Re-check the launch constraint when the chain, the enable mask, or the availability

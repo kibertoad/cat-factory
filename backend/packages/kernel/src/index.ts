@@ -129,7 +129,9 @@ export {
   BLUEPRINT_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
-  DEP_UPDATE_PIPELINE_ID,
+  BUILD_PIPELINE_ID,
+  SIMPLE_PIPELINE_ID,
+  ADAPTIVE_BUILD_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
@@ -156,7 +158,12 @@ export {
 export { DOC_INTERVIEWER_AGENT_KIND } from './domain/doc-interview-logic.js'
 // Pure block-tree walks (the single home for service-frame resolution shared by the engine
 // context builder and the test-secrets store).
-export { applicableFragmentIds, resolveServiceFrameBlock } from './domain/block-tree.js'
+export {
+  applicableFragmentIds,
+  describeOwnService,
+  resolveServiceFrameBlock,
+} from './domain/block-tree.js'
+export type { OwnServiceContext } from './domain/block-tree.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
 // agent-kind / gate registry seams): a deployment registers extra pipelines on the app-owned
 // `PipelineRegistry` at startup and `seedPipelines(registry)` seeds them into every new workspace.

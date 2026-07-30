@@ -131,6 +131,7 @@
       "updateFailed": "Değişiklikler kaydedilemedi",
       "epicFailed": "Epik değiştirilemedi",
       "moveFailed": "Taşınamadı",
+      "resizeFailed": "Yeniden boyutlandırılamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
       "unlinkFailed": "Bağımlılık kaldırılamadı",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} birleştirildi",
       "noTasksYet": "Henüz görev yok",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} uygulandı",
       "prReadyCount": "{count} PR hazır",
       "taskCount": "{count} görev | {count} görev",
       "moduleCount": "{count} modül | {count} modül",
@@ -4309,6 +4309,12 @@
     "recommendationProgress": "{ready} / {total} hazır",
     "generatingSuggestion": "Temellendirilmiş bir öneri oluşturuluyor…",
     "currentStandard": "Mevcut standart: {title}",
+    "grounding": {
+      "standard": "Ekip standardı",
+      "project-spec": "Proje şartnamesi",
+      "web": "Web kaynağı",
+      "general-practice": "Genel uygulama"
+    },
     "accept": "Kabul et",
     "reject": "Reddet",
     "reRequestPlaceholder": "Farklı bir öneri isteyin…",

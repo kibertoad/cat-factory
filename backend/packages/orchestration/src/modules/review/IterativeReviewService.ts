@@ -8,6 +8,7 @@ import type {
   ModelProviderResolver,
   ModelRef,
   NotificationType,
+  OwnServiceContext,
   RequirementConcernLevel,
   RequirementReviewItem,
   RequirementReviewStatus,
@@ -15,13 +16,19 @@ import type {
 } from '@cat-factory/kernel'
 import {
   assertFound,
+  describeOwnService,
+  resolveServiceFrameBlock,
   ReviewContendedError,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   inlineModelRef,
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/agents'
+import {
+  type BespokeSystemPrompt,
+  catFactoryObservability,
+  composeBespokePrompt,
+} from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import {
@@ -123,6 +130,19 @@ export interface IterativeReviewDeps {
   resolveRunContext?: ResolveBlockRunContext
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
+  /**
+   * The workspace's live system prompt for an agent kind, when it has edited one from the prompt
+   * editor — the same append-only revision log the engine reads per dispatch, reaching the inline
+   * review kinds here.
+   *
+   * They were the one prompt-assembly path that ignored it: the editor accepts any kind id, so a
+   * workspace could save an override for `requirements-review` and have it silently never run.
+   * Optional so a standalone/unit construction still works; absent ⇒ the shipped prompt.
+   */
+  resolveSystemPromptOverride?: (
+    workspaceId: string,
+    agentKind: string,
+  ) => Promise<string | undefined>
 }
 
 /** Output budget for the rework generation (a full standard-format document). */
@@ -172,8 +192,15 @@ export abstract class IterativeReviewService<
   protected abstract readonly reviewAgentKind: string
   /** The rework agent kind for observability (e.g. 'requirements-rework'). */
   protected abstract readonly reworkAgentKind: string
-  protected abstract readonly reviewSystemPrompt: string
-  protected abstract readonly reworkSystemPrompt: string
+  /**
+   * The reviewer's and rework editor's system prompts, each SPLIT into the role half a workspace
+   * override replaces and the directives half it may not (`BespokeSystemPrompt`). These kinds run
+   * as bare inline `generateText` calls and so never reach `systemPromptFor`, which is the seam
+   * that applies an override elsewhere AND re-appends what an override must not delete — here the
+   * JSON output contract this service parses and the scope rules the whole flow depends on.
+   */
+  protected abstract readonly reviewPrompt: BespokeSystemPrompt
+  protected abstract readonly reworkPrompt: BespokeSystemPrompt
   /** Id prefix for fresh reviews / items (e.g. 'rrv' / 'rri'). */
   protected abstract readonly reviewIdPrefix: string
   protected abstract readonly itemIdPrefix: string
@@ -410,7 +437,7 @@ export abstract class IterativeReviewService<
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: this.reworkSystemPrompt,
+        system: await this.systemPromptFor(workspaceId, this.reworkAgentKind, this.reworkPrompt),
         prompt: this.buildReworkPrompt(context, review.items),
         temperature: 0.2,
         // The reworked doc is a full standard-format document that becomes the SOLE source of
@@ -517,6 +544,43 @@ export abstract class IterativeReviewService<
   }
 
   /** Resolve the provider + ref, throwing the kind's "no model configured" error if unavailable. */
+  /**
+   * Compose a bespoke inline prompt for one call, honouring the workspace's override of its ROLE
+   * half. The directives half is re-appended on top, so an edited prompt keeps the JSON output
+   * contract this service parses and the flow-wide rules (product/technical scope, the
+   * no-assumed-product rule) it is run under — the same guarantee `systemPromptFor` gives the
+   * kinds that go through it.
+   *
+   * Resolved per call rather than cached on the instance: the log is append-only and a human may
+   * edit the prompt between a reviewer pass and the incorporation that follows it, and one point
+   * read beside an LLM call costs nothing.
+   */
+  /**
+   * Which system the block under review belongs to (see kernel's `OwnServiceContext`). Walks the
+   * block's ancestry through the SAME shared helper the engine's `AgentContextBuilder` uses, so an
+   * inline reviewer and a container agent cannot answer "what am I working on" differently.
+   *
+   * On the base class because all three inline flows need it for the same reason: none has a
+   * checkout, so without it their entire notion of the subject is a block title.
+   */
+  protected async resolveOwnService(workspaceId: string, block: Block): Promise<OwnServiceContext> {
+    const serviceFrame = await resolveServiceFrameBlock(
+      (id) => this.deps.blockRepository.get(workspaceId, id),
+      block.id,
+      block,
+    )
+    return describeOwnService(block, serviceFrame)
+  }
+
+  protected async systemPromptFor(
+    workspaceId: string,
+    agentKind: string,
+    prompt: BespokeSystemPrompt,
+  ): Promise<string> {
+    const override = await this.deps.resolveSystemPromptOverride?.(workspaceId, agentKind)
+    return composeBespokePrompt(prompt, override?.trim() ? override : undefined)
+  }
+
   protected async resolveModel(
     workspaceId: string,
     block: Block,
@@ -549,7 +613,7 @@ export abstract class IterativeReviewService<
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: this.reviewSystemPrompt,
+        system: await this.systemPromptFor(workspaceId, this.reviewAgentKind, this.reviewPrompt),
         prompt: this.buildReviewPrompt(context),
         temperature: 0.2,
         maxOutputTokens: 5000,

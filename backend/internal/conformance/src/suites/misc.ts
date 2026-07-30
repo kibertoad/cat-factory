@@ -34,7 +34,7 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         const created = await app.call<PipelineSchedule>(
           'POST',
           `/workspaces/${wsId}/recurring-pipelines`,
-          { frameId: 'blk_auth', pipelineId: 'pl_dep_update', name: 'Weekly deps', recurrence },
+          { frameId: 'blk_auth', pipelineId: 'pl_simple', name: 'Weekly deps', recurrence },
         )
         expect(created.status).toBe(201)
         expect(created.body.frameId).toBe('blk_auth')
@@ -80,7 +80,7 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines`,
           {
             frameId: 'blk_auth',
-            pipelineId: 'pl_dep_update',
+            pipelineId: 'pl_simple',
             name: 'Bug triage',
             recurrence,
             issueIntake,

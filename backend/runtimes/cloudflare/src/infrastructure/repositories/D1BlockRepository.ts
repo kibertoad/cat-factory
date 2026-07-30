@@ -128,6 +128,21 @@ export class D1BlockRepository implements BlockRepository {
       .run()
   }
 
+  async shiftChildPositions(
+    workspaceId: string,
+    parentId: string,
+    dx: number,
+    dy: number,
+  ): Promise<void> {
+    if (dx === 0 && dy === 0) return
+    await this.db
+      .prepare(
+        'UPDATE blocks SET pos_x = pos_x + ?, pos_y = pos_y + ? WHERE workspace_id = ? AND parent_id = ?',
+      )
+      .bind(dx, dy, workspaceId, parentId)
+      .run()
+  }
+
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return
     const placeholders = ids.map(() => '?').join(', ')

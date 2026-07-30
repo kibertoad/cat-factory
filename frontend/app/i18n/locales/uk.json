@@ -131,6 +131,7 @@
       "updateFailed": "Не вдалося зберегти зміни",
       "epicFailed": "Не вдалося змінити епік",
       "moveFailed": "Не вдалося перемістити",
+      "resizeFailed": "Не вдалося змінити розмір",
       "deleteFailed": "Не вдалося видалити",
       "linkFailed": "Не вдалося звʼязати завдання",
       "unlinkFailed": "Не вдалося видалити залежність",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} злито",
       "noTasksYet": "Поки немає завдань",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} реалізовано",
       "prReadyCount": "{count} PR готово",
       "taskCount": "{count} завдання | {count} завдання | {count} завдань",
       "moduleCount": "{count} модуль | {count} модулі | {count} модулів",
@@ -4297,6 +4297,12 @@
     "recommendationProgress": "{ready} / {total} готово",
     "generatingSuggestion": "Генерування обґрунтованої пропозиції…",
     "currentStandard": "Поточний стандарт: {title}",
+    "grounding": {
+      "standard": "Стандарт команди",
+      "project-spec": "Специфікація проєкту",
+      "web": "Джерело з інтернету",
+      "general-practice": "Загальна практика"
+    },
     "accept": "Прийняти",
     "reject": "Відхилити",
     "reRequestPlaceholder": "Попросити іншу рекомендацію…",

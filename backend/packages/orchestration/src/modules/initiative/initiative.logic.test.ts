@@ -1290,7 +1290,7 @@ describe('applyPolicyEdit', () => {
   const policy: InitiativeExecutionPolicy = {
     maxConcurrent: 5,
     rules: [],
-    defaultPipelineId: 'pl_quick',
+    defaultPipelineId: 'pl_simple',
     onMissingEstimate: 'default',
   }
 

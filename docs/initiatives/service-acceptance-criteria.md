@@ -222,6 +222,14 @@ gate:
 | `pl_fullstack` | `requirements-review` (gate) | 1 (`researcher`)                     |
 | `pl_bugfix`    | `clarity-review` (gate)      | 0 — `spec-writer` is the next step   |
 
+> **As of the catalog collapse this table is a historical record, not a description of the current
+> catalog.** `pl_fullstack` is retired and `pl_full` no longer carries `requirements-review` or
+> `spec-writer` at all, so `pl_bugfix` is the only surviving row. It is kept as written because it is
+> the EVIDENCE the decision below was made on — restating it against today's catalog would make the
+> conclusion look like it was reached from facts nobody had at the time. The conclusion still holds:
+> no surviving pipeline puts more than one step between a settled requirements gate and its
+> `spec-writer`.
+
 So the only way a settled review fails to reach `spec-writer` is a run abandoned or failed inside
 a 0–1 step window. **That makes Q3 structurally near-100%, which is the tracker's own stated
 condition for "Phase 3 is unnecessary and the initiative ends at Phase 1–2".** Phases 1 and 2 were

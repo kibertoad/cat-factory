@@ -131,6 +131,7 @@
       "updateFailed": "No se pudieron guardar los cambios",
       "epicFailed": "No se pudo cambiar la épica",
       "moveFailed": "No se pudo mover",
+      "resizeFailed": "No se pudo cambiar el tamaño",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
       "unlinkFailed": "No se pudo eliminar la dependencia",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} fusionadas",
       "noTasksYet": "Aún no hay tareas",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementadas",
       "prReadyCount": "{count} PR listas",
       "taskCount": "{count} tarea | {count} tareas",
       "moduleCount": "{count} módulo | {count} módulos",
@@ -4297,6 +4297,12 @@
     "recommendationProgress": "{ready} / {total} listas",
     "generatingSuggestion": "Generando una sugerencia fundamentada…",
     "currentStandard": "Estándar actual: {title}",
+    "grounding": {
+      "standard": "Estándar del equipo",
+      "project-spec": "Especificación del proyecto",
+      "web": "Fuente web",
+      "general-practice": "Práctica general"
+    },
     "accept": "Aceptar",
     "reject": "Rechazar",
     "reRequestPlaceholder": "Pide una recomendación diferente…",

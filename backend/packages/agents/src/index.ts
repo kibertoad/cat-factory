@@ -103,23 +103,45 @@ export {
   testerEnvironmentSection,
   TESTER_QC_SYSTEM_PROMPT,
 } from './agents/prompts/testing.js'
+// A bespoke system prompt SPLIT at the boundary a workspace override may cross — the shape the
+// inline engine steps and the two bespoke container kinds declare their prompts in.
+export { type BespokeSystemPrompt, composeBespokePrompt } from './agents/prompts/bespoke.js'
+// The inline engine steps' prompts keyed by agent kind, so the prompt EDITOR shows the text that
+// actually runs (these kinds never reach `systemPromptFor`).
+export {
+  ARCHITECTURE_BRAINSTORM_REWORK_AGENT_KIND,
+  CLARITY_REWORK_AGENT_KIND,
+  INLINE_ENGINE_SYSTEM_PROMPTS,
+  REQUIREMENTS_BRAINSTORM_REWORK_AGENT_KIND,
+  REQUIREMENTS_REWORK_AGENT_KIND,
+  REQUIREMENTS_WRITER_AGENT_KIND,
+} from './agents/prompts/inline-engine.js'
 // Requirements-review prompt text + its versioned-prompt registry.
 export {
+  REVIEW_PROMPT,
   REVIEW_SYSTEM_PROMPT,
+  REWORK_PROMPT,
   REWORK_SYSTEM_PROMPT,
+  WRITER_PROMPT,
   WRITER_SYSTEM_PROMPT,
 } from './agents/prompts/requirements.js'
 // Clarity-review (bug-report triage) prompt text.
 export {
+  CLARITY_REVIEW_PROMPT,
   CLARITY_REVIEW_SYSTEM_PROMPT,
+  CLARITY_REWORK_PROMPT,
   CLARITY_REWORK_SYSTEM_PROMPT,
 } from './agents/prompts/clarity.js'
 // Brainstorm (structured-dialogue) prompt text.
 export {
-  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
-  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
-  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_REWORK_PROMPT,
   ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_PROMPT,
+  REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
+  REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
 } from './agents/prompts/brainstorm.js'
 export {
   type VersionedPrompt,
@@ -168,6 +190,9 @@ export {
   companionTargets,
   isContainerBackedCompanion,
 } from './agents/kinds/companions.js'
+// Which kinds a pipeline may ESTIMATE-GATE. Shared by the pipeline-shape validation (builder save +
+// run start) so the builder can't offer a gate the engine would refuse.
+export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // The ONE definition of "does this dispatch hand the agent a real checkout?", shared by the
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
@@ -379,6 +404,8 @@ export {
   FOLLOW_UP_GUIDANCE,
   FRAGMENT_ADHERENCE_GUIDANCE,
   INLINE_PANEL_SURFACE,
+  NO_ASSUMED_PRODUCT,
+  PLATFORM_IS_NOT_THE_PRODUCT,
   PR_DESCRIPTION_FILE,
   PR_DESCRIPTION_GUIDANCE,
   STANDARDS_FOOTER,

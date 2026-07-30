@@ -84,8 +84,8 @@ Verified against the code (files cited are the authorities):
    (`[org-reviewer, security-auditor]`, no merge tail) commits its report to a branch that
    never merges — fine for a terminal report, wrong shape for cross-phase artifacts.
 5. **The hardcoded planner pipeline menu is in the STATIC system prompt**
-   (`INITIATIVE_PLANNER_SYSTEM_PROMPT`, server `agents/prompts.ts:122–145` — "Available
-   pipelines: pl_quick…"), while preset steering rides the USER prompt
+   (`INITIATIVE_PLANNER_SYSTEM_PROMPT`, `agents/kinds/initiative.ts` — "Available pipelines, in
+   ascending order of rigor: pl_simple…"), while preset steering rides the USER prompt
    (`initiativeContextLines` → "## Initiative preset:" section, plus `planShapeLines`). In
    practice presets already dominate pipeline routing without touching the menu:
    `promptAdditions[initiative-planner]` steers, `descriptor.policyDefaults` overrides the
@@ -242,7 +242,7 @@ when the resolved preset's `policyDefaults` names pipelines (`defaultPipelineId`
 `rules[].pipelineId`), the plan-shape fold (`planShapeLines` neighborhood in
 `server/src/agents/prompts.ts`) appends a "Preferred pipelines for this preset" line
 telling the planner those pipelines are pre-decided and it should not re-route items —
-neutralizing the static system prompt's `pl_quick…` menu for preset runs. No preset ⇒
+neutralizing the static system prompt's `pl_simple…` ladder menu for preset runs. No preset ⇒
 byte-identical prompt. This is rendering existing descriptor data, not a new mechanism.
 Low priority — reassess after the pilot slices; drop if planner drift doesn't occur in
 practice.

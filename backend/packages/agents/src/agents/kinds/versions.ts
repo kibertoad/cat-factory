@@ -36,32 +36,40 @@ export interface VersionedPrompt {
 
 /** The currently-shipping version of each numbered prompt. */
 export const PROMPT_VERSIONS = {
-  // v4 / v3 / v3: all three carry the shared `PRODUCT_SCOPE_BOUNDARY` — requirements review
+  // v5 / v4 / v4: all three carry the shared `PRODUCT_SCOPE_BOUNDARY` — requirements review
   // settles the product/business layer only, and the technical layer is the Architect's and
   // Researcher's. Bumped together because the boundary only holds if all three honour it.
-  'requirement-review': { id: 'requirement-review', version: 4, text: REVIEW_SYSTEM_PROMPT },
-  'requirement-rework': { id: 'requirement-rework', version: 3, text: REWORK_SYSTEM_PROMPT },
-  'requirement-writer': { id: 'requirement-writer', version: 3, text: WRITER_SYSTEM_PROMPT },
-  'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
-  'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
+  //
+  // This bump adds the `NO_ASSUMED_PRODUCT` rule (and, for the Writer, the matching rule against
+  // searching the web for a product it had to guess at, plus the `groundedIn` provenance field) and
+  // reorders each prompt so the role text precedes the platform-enforced directives — the split a
+  // per-workspace override crosses. Every prompt in the flow bumps together for the same reason
+  // the scope boundary does: an agent that keeps inventing a subject undoes the two that don't.
+  'requirement-review': { id: 'requirement-review', version: 5, text: REVIEW_SYSTEM_PROMPT },
+  'requirement-rework': { id: 'requirement-rework', version: 4, text: REWORK_SYSTEM_PROMPT },
+  'requirement-writer': { id: 'requirement-writer', version: 4, text: WRITER_SYSTEM_PROMPT },
+  // v2 across the clarity + brainstorm prompts: same `NO_ASSUMED_PRODUCT` addition and the same
+  // role/directives split.
+  'clarity-review': { id: 'clarity-review', version: 2, text: CLARITY_REVIEW_SYSTEM_PROMPT },
+  'clarity-rework': { id: 'clarity-rework', version: 2, text: CLARITY_REWORK_SYSTEM_PROMPT },
   'requirements-brainstorm': {
     id: 'requirements-brainstorm',
-    version: 1,
+    version: 2,
     text: REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
   },
   'requirements-brainstorm-rework': {
     id: 'requirements-brainstorm-rework',
-    version: 1,
+    version: 2,
     text: REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
   },
   'architecture-brainstorm': {
     id: 'architecture-brainstorm',
-    version: 1,
+    version: 2,
     text: ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT,
   },
   'architecture-brainstorm-rework': {
     id: 'architecture-brainstorm-rework',
-    version: 1,
+    version: 2,
     text: ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
   },
   // v5: the build phase now distinguishes `established` (standing) from `aspirational`

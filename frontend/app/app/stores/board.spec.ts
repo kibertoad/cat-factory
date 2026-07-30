@@ -310,6 +310,57 @@ describe('board store optimistic rollback', () => {
     expect(store.getBlock('t1')?.description).toBe('keep')
   })
 
+  it('previewResize translates the children when the drag moves the content origin', () => {
+    // A child's position is relative to its container's content origin, so growing the frame
+    // 40px west (origin -40) has to move every direct child +40 or the whole content slides with
+    // the border. A grandchild rides its module and must NOT move on its own.
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      moduleBlock('m1', 'f1', { position: { x: 20, y: 30 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+      task('t2', 'm1', { position: { x: 5, y: 5 } }),
+    ])
+    store.previewResize('f1', { x: 60, y: 100 }, { w: 640, h: 400 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 50, y: 20 })
+    expect(store.getBlock('m1')?.position).toEqual({ x: 60, y: 30 })
+    expect(store.getBlock('t2')?.position).toEqual({ x: 5, y: 5 })
+  })
+
+  it('previewResize leaves the children alone when only the far border moved', () => {
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+    ])
+    store.previewResize('f1', { x: 100, y: 100 }, { w: 700, h: 500 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+    expect(store.getBlock('f1')?.size).toEqual({ w: 700, h: 500 })
+  })
+
+  it('resizeBlock rolls the bounds AND the child translation back when the API rejects', async () => {
+    // The rollback has to undo both halves: a restored box with its contents still offset is the
+    // one failure mode that looks fine until the next refresh moves everything.
+    vi.stubGlobal('useApi', () => ({
+      resizeBlock: () => Promise.reject(new Error('conflict')),
+    }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1', { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } }),
+      task('t1', 'f1', { position: { x: 10, y: 20 } }),
+    ])
+    await store.resizeBlock(
+      'f1',
+      { position: { x: 60, y: 70 }, size: { w: 640, h: 430 } },
+      { position: { x: 100, y: 100 }, size: { w: 600, h: 400 } },
+    )
+    expect(store.getBlock('f1')?.position).toEqual({ x: 100, y: 100 })
+    expect(store.getBlock('f1')?.size).toEqual({ w: 600, h: 400 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+  })
+
   it('reparentBlock offers an undo that moves the block back to its previous home', async () => {
     vi.stubGlobal('useApi', () => ({
       reparentBlock: async (

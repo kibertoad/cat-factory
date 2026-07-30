@@ -629,6 +629,31 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   rather than the minimal public `ResolverContext`. The public step-resolver seam is scoped to light
   follow-up; `ownsTerminalStatus` is built-in-only.
 
+**A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
+(`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
+`task-estimator`'s scores fall below its thresholds, and that is what lets ONE pipeline cover a range
+that would otherwise need several near-identical presets (see
+[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md)). Three rules bind it:
+
+- **Gatability is a per-kind CAPABILITY, declared, and OFF by default** — `isGatableKind`
+  (`agents/kinds/gatable.ts`), a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+  override, since built-in kinds are not registry entries. Gate a kind whose output later steps read as
+  CONTEXT; never one some other mechanism reads STRUCTURALLY. `merger` is the sharpest case — its mere
+  presence in `instance.steps` is what makes a committing kind deliver via a PR (`runOpensPr`), so a
+  skipped merger opens a PR nothing merges. `deployer` provisions what its consumer reads,
+  `conflicts`/`ci` are the guards, `bug-intake` is the run's subject. **A new kind whose absence would
+  break rather than merely thin a run must stay unlisted**, and the default already does that for you.
+- **A skipped producer CASCADES onto its companion** (`producerWasSkipped`), evaluated at the
+  companion's own turn off the persisted `step.skipped` — a lookahead would not survive a durable
+  replay. Without it a companion grades whichever step happened to precede it, sounding confident
+  about the wrong artifact. So a companion needs no gate of its own to track its producer, and giving
+  it a duplicate threshold is a second copy to keep in sync.
+- **A step may not carry both `gates[i]` and enabled `gating`** (`assertValidGating`). The estimate may
+  ADD a human checkpoint — that is what gating a `human-review` step on risk does — but never cancel an
+  approval pause the author asked for, or a model's own triage decides nobody needs to look. Policy
+  floors belong on the merge preset's `classRules`, keyed on the COMPUTED change class rather than the
+  model's opinion.
+
 The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
 `runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing to
 fold in.
@@ -687,6 +712,27 @@ and tolerance live on the merge preset. Pass-through when the reviewer model isn
   the scope ladder (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits for
   a human indefinitely by design** — the backstops are the workspace in-flight cap and
   `POST /api/v1/jobs/:id/cancel`.
+- **An inline reviewer has no checkout, so the platform must TELL it what system the work is about.** The
+  context carries the owning service (+ its `spec/overview.md` intent), and an unresolved one is stated as
+  `NOT STATED` rather than omitted — a bare title identifies no software, and an omission reads like a
+  task whose product is obvious, so the model invents one and the next incorporation makes the invention
+  authoritative. The `NO_ASSUMED_PRODUCT` directive on every prompt in the flow is the other half; the
+  renderer is shared (`modules/review/product-context.ts`) because the rule only holds if the reviewer,
+  the dialogue and the incorporation editor all honour it.
+- **A derived subject NEVER displaces the requester's words.** An incorporated document, a brainstormed
+  direction and a clarified bug report are all rendered ABOVE the original description, which stays in the
+  prompt labelled as the original request. Substituting it was how one pass's drift became permanent: the
+  derived text is authoritative on the next pass, so nothing downstream could still see what was asked for.
+- **The Writer's provider-hosted web search is WITHHELD when the system is unidentified**
+  (`productIsIdentified`), because a model-composed query about a guessed product comes back with real
+  sources about unrelated software — an invention that now reads as researched. Its `groundedIn`
+  provenance (`standard` / `project-spec` / `web` / `general-practice`) is reported per suggestion, and an
+  unreported level stays NULL rather than defaulting.
+- **These kinds run as bare inline `generateText` calls**, so they bypass `systemPromptFor` and take their
+  prompts from `INLINE_ENGINE_SYSTEM_PROMPTS` as `{ role, directives }` pairs, composed per call through
+  `IterativeReviewService.systemPromptFor` so a **per-workspace prompt override applies to the role half
+  only**. Adding an inline engine kind means adding it there, SPLIT — one added with its directives inside
+  `role` runs fine and fails only later, as a workspace that edited it loses its JSON output contract.
 
 **Inbound tracker webhooks** — verify HMAC over the RAW body BEFORE any parse, ack 202, hand off through
 `gateways.trackerWebhook`; the provider owns verify + parse. The workspace rides the PATH and the
@@ -1047,9 +1093,18 @@ the base exporter:
   leaves.
 - **A Block carries no repo fields.** Repo↔block linkage lives in the `github_repos` projection via its
   `block_id` column, and **execution resolves the repo at runtime** via
-  `resolveRepoTarget(workspaceId, blockId)` (the row whose `block_id` matches, else `repos[0]`). So a
+  `resolveRepoTarget(workspaceId, blockId)`, which walks the block's ancestry to the enclosing service
+  frame and reads that frame's `Service.repoGithubId` — the SOLE linkage, and the only one carrying a
+  monorepo `directory`. **There is deliberately NO "first repo" fallback**: an unlinked chain THROWS a
+  `ValidationError`, because guessing once pushed a simple-service task into someone else's repo. So a
   bootstrapped repo becomes a board service only once its projection row is linked to the frame's block
   id. A workspace has exactly ONE VCS installation but may have MANY repos.
+- **A step's prompt names the service the work belongs to** — `AgentRunContext.ownService`, derived by
+  the engine from that same ancestry walk (kernel's `describeOwnService`). It is a DISCRIMINATED result,
+  not a nullable one, and "not under a service" is RENDERED rather than omitted: a bare task title names
+  no software, so a silent omission reads like a task whose product is obvious and the model supplies one
+  (see the requirements-review flow entry). The inline reviewers resolve the same thing through
+  `IterativeReviewService.resolveOwnService`.
 - **A service frame's board POSITION (and any size override) lives on its `WorkspaceMount`, not on the
   Block**, because one shared service sits at a different spot on every board that mounts it: `moveBlock`
   writes the mount and the frame block row's own `position` is frozen at creation. **Every frame-returning

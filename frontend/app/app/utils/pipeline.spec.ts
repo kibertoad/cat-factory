@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { pipelineAllowedForTaskType, purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import {
+  pipelineAllowedForBlockLevel,
+  pipelineAllowedForTaskType,
+  purposeAllowsAgentCategory,
+} from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
   pipelineAllowedForManualStart,
+  pipelineAllowedForSchedule,
   pipelineDisplaySteps,
   pipelineGateCount,
 } from '~/utils/pipeline'
@@ -65,12 +70,66 @@ describe('pipelineAllowedForTaskType', () => {
     expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
   })
 
-  it('every other task type is unrestricted (any purpose, and undefined type)', () => {
-    for (const type of ['feature', 'bug', 'spike', 'ralph', undefined] as const) {
+  it('a programmatic task (feature / bug) hides only what cannot ship code', () => {
+    // These ship code, so a doc-authoring or PR-review preset is meaningless for them — the mirror
+    // of the narrowing document/review tasks already had. `research` stays because reaching for a
+    // spike before committing to an approach is legitimate on an unscoped feature.
+    for (const type of ['feature', 'bug'] as const) {
       expect(pipelineAllowedForTaskType(pipeline({ purpose: 'build' }), type)).toBe(true)
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), type)).toBe(true)
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), type)).toBe(true)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'research' }), type)).toBe(true)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), type)).toBe(false)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), type)).toBe(false)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'planning' }), type)).toBe(false)
+    }
+  })
+
+  it('keeps an UNCLASSIFIED pipeline on a feature / bug task', () => {
+    // The one place this narrowing runs opposite to the document/review one, and it has to: a
+    // `purpose` is optional at every write boundary (the builder leaves it unset by default, a
+    // registered deployment pipeline need not declare one), so requiring it here would hide a
+    // workspace's own hand-built pipelines from the picker they were built for — silently, with
+    // nothing on screen to explain the absence. Unclassified is not known-wrong for a feature the
+    // way a document preset is.
+    for (const type of ['feature', 'bug'] as const) {
       expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(true)
+    }
+    // Still hidden from the types whose narrowing DOES demand the explicit classifier.
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'document')).toBe(false)
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
+  })
+
+  it('an un-narrowed task type stays unrestricted (spike, ralph, custom, undefined)', () => {
+    // A custom (namespaced) deployment type has no purpose mapping we could infer, and `spike` /
+    // `ralph` pin their own default pipeline instead of narrowing the picker.
+    for (const type of ['spike', 'ralph', 'acme:incident', undefined] as const) {
+      for (const purpose of ['build', 'document', 'review', 'research', undefined] as const) {
+        expect(pipelineAllowedForTaskType(pipeline({ purpose }), type)).toBe(true)
+      }
+    }
+  })
+})
+
+describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
+  it('offers an initiative block only planning pipelines', () => {
+    expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'planning' }), 'initiative')).toBe(true)
+    for (const purpose of ['build', 'document', 'review', 'research', undefined] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose }), 'initiative')).toBe(false)
+    }
+  })
+
+  it('hides planning pipelines from every ordinary block level', () => {
+    // The surface half of the engine's BIDIRECTIONAL guard. Without it the planning presets were
+    // offered on ordinary tasks and then refused at start with a 409 — the user having already
+    // chosen before learning it could not run.
+    for (const level of ['task', 'frame', 'module', 'epic'] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'planning' }), level)).toBe(false)
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'build' }), level)).toBe(true)
+    }
+  })
+
+  it('is unrestricted when the level is unknown', () => {
+    for (const purpose of ['build', 'planning', undefined] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose }), undefined)).toBe(true)
     }
   })
 })
@@ -116,5 +175,26 @@ describe('pipelineAllowedForManualStart composes the task-type gate', () => {
   it('still excludes recurring-only pipelines regardless of task type', () => {
     const recurring = pipeline({ purpose: 'document', availability: 'recurring' })
     expect(pipelineAllowedForManualStart(recurring, noFrame, blocks, 'document')).toBe(false)
+  })
+})
+
+describe('pipelineAllowedForSchedule', () => {
+  const noFrame = undefined
+  const blocks: Block[] = []
+
+  it('keeps an ordinary build pipeline and drops a one-off-only one', () => {
+    expect(pipelineAllowedForSchedule(pipeline({ purpose: 'build' }), noFrame, blocks)).toBe(true)
+    const oneOff = pipeline({ purpose: 'build', availability: 'one-off' })
+    expect(pipelineAllowedForSchedule(oneOff, noFrame, blocks)).toBe(false)
+  })
+
+  it('drops the planning presets, which nothing else keeps out of this picker', () => {
+    // A schedule seeds a `level: 'task'` block on every fire, so the engine refuses a planning
+    // pipeline exactly as it would on a manual start — and the planning presets carry no
+    // `availability`, so the one-off filter above never touched them. Worse than the manual case
+    // because a schedule fires unattended: nobody sees the refusal, the work just stops happening.
+    expect(pipelineAllowedForSchedule(pipeline({ purpose: 'planning' }), noFrame, blocks)).toBe(
+      false,
+    )
   })
 })

@@ -2313,6 +2313,7 @@
       "updateFailed": "Impossibile salvare le modifiche",
       "epicFailed": "Impossibile cambiare epic",
       "moveFailed": "Impossibile spostare",
+      "resizeFailed": "Impossibile ridimensionare",
       "deleteFailed": "Impossibile eliminare",
       "linkFailed": "Impossibile collegare le attività",
       "unlinkFailed": "Impossibile rimuovere la dipendenza",
@@ -2566,7 +2567,6 @@
       "mergedOfTotal": "{merged}/{total} unite",
       "noTasksYet": "Ancora nessuna attività",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementate",
       "prReadyCount": "{count} PR pronte",
       "taskCount": "{count} attività | {count} attività",
       "moduleCount": "{count} modulo | {count} moduli",
@@ -3864,6 +3864,12 @@
     "recommendationProgress": "{ready} / {total} pronte",
     "generatingSuggestion": "Generazione di un suggerimento fondato…",
     "currentStandard": "Standard attuale: {title}",
+    "grounding": {
+      "standard": "Standard del team",
+      "project-spec": "Specifica del progetto",
+      "web": "Fonte web",
+      "general-practice": "Prassi generale"
+    },
     "accept": "Accetta",
     "reject": "Rifiuta",
     "reRequestPlaceholder": "Chiedi una raccomandazione diversa…",

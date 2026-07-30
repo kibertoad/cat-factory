@@ -11,6 +11,11 @@
     `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding agent writes to
     `.cat-pr-description.md`, which the harness lifts onto the PR it opens) — in
     `prompts/shared.ts`), `runtime/` (`runRepoOps` — the custom-agent pre/post-op runner).
+    `kinds/gatable.ts` answers whether a pipeline may ESTIMATE-GATE a step of a given kind
+    (`isGatableKind`) — a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+    override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts`, because the built-in
+    kinds are not registry entries. A kind is NOT gatable by default; the set's comments say why
+    each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
     `kinds/capabilities.ts` holds the agent-CAPABILITY declaration vocabulary — the skill and
     tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
     them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server
@@ -20,7 +25,17 @@
     a per-workspace **prompt override** replaces: an override supplies the base and the directives
     are re-applied on top, so a workspace cannot edit away the read-only guardrail or the
     answer-in-your-reply rule. `systemPromptFor`'s third argument is that override; the dispatch
-    side of the seam lives in `@cat-factory/server`'s `agents/promptOverrides.ts`.
+    side of the seam lives in `@cat-factory/server`'s `agents/promptOverrides.ts`. It also appends
+    `PLATFORM_IS_NOT_THE_PRODUCT` UNCONDITIONALLY (every kind can see the orchestrator's own
+    mechanics, and a task with no product context of its own leaves the platform's name as the most
+    salient subject in the prompt) — after the override, so it cannot be edited away.
+    `prompts/bespoke.ts` holds `BespokeSystemPrompt`, the `{ role, directives }` split used by the
+    prompts that never reach `systemPromptFor`; `prompts/inline-engine.ts` maps the INLINE ENGINE
+    kinds (the requirements + clarity reviewers, both brainstorm stages, their rework editors and the
+    Requirement Writer) to theirs, which is what lets `IterativeReviewService` honour an override and
+    the prompt editor show the text that actually runs.
+    `prompts/standard.ts`'s `ownServiceSection` names the service a step's work belongs to and STATES
+    an unresolved one, since an omitted product is indistinguishable from an obvious one.
 - `providers/` — the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy), and

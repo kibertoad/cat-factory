@@ -1,5 +1,151 @@
 # @cat-factory/kernel
 
+## 0.199.0
+
+### Minor Changes
+
+- 1cd9d73: Tell agents which system they are working on, and stop the platform standing in for it.
+
+  A neutral task ("implement webhooks") was coming back from requirements review as a design for the
+  orchestrator's own webhooks. The cause was structural rather than a bad prompt: no agent prompt named
+  the block's OWN service. A step's prompt carried the pipeline, the block, and every PEER service —
+  never the one the work belongs to. A container agent recovers that by reading its checkout; an inline
+  reviewer cannot, so a short title arrived with no identified subject, and a model asked for concrete
+  findings against an unidentified subject supplies one — commonly the most salient proper noun in the
+  prompt, which is the platform's own name.
+
+  `AgentRunContext.ownService` now carries the enclosing service frame, derived from the ancestry walk
+  the repo resolution already does. It is a discriminated result, not a nullable field, because the two
+  ways of having no service mean opposite things: a frame-level run has none because it IS one, while a
+  loose task has none because the platform does not know — and that case is now RENDERED, not omitted.
+  An omitted product reads exactly like an obvious one, which is what invited the invention.
+
+  Three follow-on breaks in the same chain:
+
+  - A derived subject no longer displaces the requester's words. An incorporated requirements document,
+    a brainstormed direction and a clarified bug report are rendered ABOVE the original description
+    instead of replacing it. Substitution is how one pass's drift became permanent — the derived text is
+    authoritative on the next pass, so nothing downstream could still see what was asked for.
+  - The Requirement Writer's provider-hosted web search is withheld when the system is unidentified. A
+    model-composed query about a guessed product returns real sources about unrelated software, which
+    reads as diligence. Each suggestion now also reports what it rests on (`groundedIn`:
+    team standard / project spec / web / general practice), surfaced in the review window.
+  - The inline review kinds honour per-workspace prompt overrides at last. They run as bare
+    `generateText` calls, so they never reached `systemPromptFor` — the seam that applies an override —
+    while the prompt editor happily accepted one and showed a baseline no code path sent. Their prompts
+    are now `{ role, directives }` pairs like the bespoke container kinds, so an override replaces the
+    role and cannot delete the JSON output contract or the scope rules.
+
+  Behaviour change to be aware of when reviewing: every built-in prompt gains one appended paragraph
+  (the platform is not the product), and the requirements / clarity / brainstorm prompts are reordered
+  into their two halves, so all nine are version-bumped. A workspace that had saved an override for one
+  of the inline kinds will find it takes effect on the next run, having previously done nothing.
+
+### Patch Changes
+
+- 0bffe55: Resize a service frame or module by dragging any of its borders, and drop the frame's
+  "N/M implemented" tally.
+
+  The resize grips were children of the frame's inner drop zone, which put them 16px inside the
+  visible border, flush against the task canvas — two thin strips that read as scrollbars rather than
+  as the frame's edge — and only the east/south borders had one at all. All eight borders and corners
+  are now grips on the box itself (a shared `ResizeGrips.vue`, so the frame and the module can't
+  drift), each straddling the border it moves: a 12px hit band centred on it, 24px on a coarse
+  pointer, with a 2px bar that lights up on the border under the pointer and stays lit on the grabbed
+  border for the whole drag. `useFrameResize` holds that border's cursor on `<body>` while dragging so
+  the pointer outrunning the band no longer reads as a dropped grab, restoring it on `pointercancel`
+  as well as `pointerup`. The grips are hidden outright for a read-only viewer instead of lighting up
+  and no-opping.
+
+  Dragging the north or west border moves the container's content origin, and a child's position is
+  stored relative to that origin, so the contents have to be translated the other way or they slide
+  with the border. `POST /blocks/:id/resize` (new) carries both halves of the geometry and does that
+  in one arithmetic UPDATE via the new `BlockRepository.shiftChildPositions` (D1 + Drizzle, with
+  cross-runtime conformance assertions); the SPA applies the same compensation optimistically during
+  the drag and replays it inverted if the write is rejected.
+
+  Fixes a latent bug this surfaced: `BoardService`'s frame-mount resolution looked a frame block id
+  up globally (`getByFrameBlock`), while every read resolves layout from the board's own mounts. Since
+  seeded boards all carry the same block ids, a deployment with two of them could resolve another
+  board's service, land the write on the block row, and have every read override it with this board's
+  mount. It now resolves in the same direction the snapshot does: the frame id's candidate services
+  intersected with the acting board's own mounts (`mountProjection.ts`, the read half of the
+  frame-geometry split `layoutWrites.ts` writes). Starting from the board rather than from the
+  candidates is what keeps it routable in mothership mode — `listByFrameBlocks` is not
+  account-scoped, so a colliding seeded id in another org rides the candidate list, and asking the
+  persistence RPC for those services' mounts is refused closed.
+
+  The frame header's "N/M implemented" line is gone (with the `board.frame.implemented` key, in every
+  locale): each task card already shows its own status, so the frame-level tally restated that more
+  coarsely and counted every task ever added to the service rather than the work in flight. The module
+  and PR-ready counts stay, and the line hides entirely when there are neither.
+
+- Updated dependencies [0bffe55]
+- Updated dependencies [1cd9d73]
+  - @cat-factory/contracts@0.201.0
+
+## 0.198.0
+
+### Minor Changes
+
+- d9789f9: Replace the seven near-identical build presets with a three-rung build ladder, and generalise
+  estimate gating past companions so one pipeline can cover the range that used to need several.
+
+  The ladder varies the one axis anyone actually chose a build pipeline on — how much design a task
+  gets. **Standard build** (`pl_build`, the new default) is design → challenge the design → implement
+  → review → verify → guards → merge, every step unconditional. **Simple build** (`pl_simple`) drops
+  the design phase for trivial work. **Adaptive build** (`pl_full`) runs a `task-estimator` first and
+  switches its own `architect` / `tester-api` / `human-review` steps on from the estimate.
+
+  Estimate gating is now a declared per-kind capability (`isGatableKind`) rather than a
+  companion-only special case: any step whose output later steps read as context may be gated, while
+  one some other mechanism reads structurally (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`)
+  may not. A skipped producer cascades onto its review companion, and a step may no longer carry both
+  a human approval gate and an estimate gate — the estimate may add a human checkpoint, never cancel
+  one.
+
+  The gatable-kind vocabulary is exported from `@cat-factory/contracts` (`BUILTIN_GATABLE_KINDS` /
+  `isBuiltinGatableKind`) because two surfaces in different packages must answer identically: the
+  engine's shape validation and the SPA's pipeline-health advisory, which re-derives the same verdict
+  client-side. `isGatableKind` in `@cat-factory/agents` remains the registry-aware form a deployment's
+  own kind overrides through.
+
+  Pickers are scoped to the task's use-case: a `feature`/`bug` task no longer offers the
+  document-authoring, PR-review or planning presets, and a new block-level rule keeps the planning
+  presets on initiative blocks (they were previously offered on every task and then refused at start).
+  An UNCLASSIFIED pipeline — one with no `purpose`, which the builder leaves unset by default — stays
+  visible on a `feature`/`bug` task, so a workspace's own hand-built pipelines are unaffected.
+
+  **Breaking:** six built-in pipelines are retired — `pl_quick`, `pl_dep_update`, `pl_pr_review`,
+  `pl_human_review`, `pl_fullstack` and `pl_integrate`. Each is tombstoned with a replacement, so an
+  already-seeded workspace gets the "retired — remove it" advisory naming where to go instead; a task
+  pinned to one will need repointing. `pl_simple` is redefined (`mocker` dropped) and `pl_full`
+  reshaped, both version-bumped, so existing workspaces are offered a reseed. `pl_integrate` is
+  removed rather than replaced because it carried no merge tail at all, which meant its coder-class
+  `integrator` committed straight to the base branch with no conflicts check and no CI.
+
+  Two further consequences worth knowing before upgrading. A retired pipeline that a recurring
+  SCHEDULE still points at cannot be deleted (that refusal is unchanged and deliberate), so acting on
+  its advisory means repointing the schedule first. And because a step may no longer carry both a human
+  approval gate and an estimate gate, a workspace pipeline that already carries both — only reachable
+  by having added estimate gating to a human-gated companion, as a `pl_fullstack` clone allowed — is
+  now refused at save and at run start until one of the two is dropped.
+
+  Retiring `pl_fullstack` also removes the last built-in preset carrying `playwright`, `researcher`,
+  `documenter`, `spec-companion`, `human-test` and the two brainstorm dialogues. All remain available
+  as steps in the pipeline builder; none is now in a shipped preset, so a task's agent-config catalog
+  surfaces a contributing kind's settings (e.g. `playwright.e2eTarget`) only once some pipeline in the
+  workspace actually uses that kind.
+
+  The `dep-update` recurring-schedule template is no longer inferred from a pipeline id (its pipeline
+  was the ordinary build tail under a recurring name); the template value remains for explicit API
+  callers.
+
+### Patch Changes
+
+- Updated dependencies [d9789f9]
+  - @cat-factory/contracts@0.200.0
+
 ## 0.197.0
 
 ### Minor Changes

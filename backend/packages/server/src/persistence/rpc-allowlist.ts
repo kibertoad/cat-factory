@@ -70,6 +70,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     insert: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },
+    // The container-resize child translation (`BoardService.resizeBlock`): one arithmetic UPDATE
+    // over a parent's direct children. Workspace-scoped like `update`, and remote for the same
+    // reason — it is board state, on a path a mothership-mode node serves from a laptop.
+    shiftChildPositions: { scope: { kind: 'workspace', arg: 0 } },
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
     // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
     findById: { scope: { kind: 'block', arg: 0 } },

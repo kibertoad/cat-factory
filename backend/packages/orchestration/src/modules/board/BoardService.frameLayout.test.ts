@@ -53,10 +53,14 @@ describe('BoardService — frame responses carry this board’s layout override'
         },
       },
       serviceRepository: {
-        getByFrameBlock: async (id: string) =>
-          id === current.id ? ({ id: 'svc_1', frameBlockId: id } as Service) : null,
+        // `frameMount` resolves candidates by frame block id and then intersects them with THIS
+        // board's mounts (a block id is not unique across boards), so the batched pair
+        // `listByFrameBlocks` + `listByWorkspace` is what it actually calls.
+        listByFrameBlocks: async (ids: string[]) =>
+          ids.includes(current.id) ? [{ id: 'svc_1', frameBlockId: current.id } as Service] : [],
       },
       workspaceMountRepository: {
+        listByWorkspace: async (ws: string) => (ws === WS ? [mount] : []),
         get: async (ws: string, serviceId: string) =>
           ws === WS && serviceId === 'svc_1' ? mount : null,
         update: async (_ws: string, _id: string, patch: Partial<WorkspaceMount>) => {

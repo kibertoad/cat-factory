@@ -5,10 +5,10 @@ import DecisionBadge from './DecisionBadge.vue'
 import DraggableTask from './DraggableTask.vue'
 import InitiativeCard from './InitiativeCard.vue'
 import ModuleFrame from './ModuleFrame.vue'
+import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
-import { useFrameResize } from '~/composables/useFrameResize'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 
@@ -147,14 +147,6 @@ function onFrameHandle(e: PointerEvent) {
 // Lift this frame above any overlapping neighbours while the pointer is over it
 // (see useFrameStacking + BoardCanvas's frameZIndex).
 const { enter: enterFrame, leave: leaveFrame } = useFrameStacking()
-
-// Miro-style frame resizing: drag the right / bottom edges or the corner. Handles
-// live on the expanded card's drop zone (see template); the composable clamps to
-// the frame's content extent and persists the size on release.
-const { startResize } = useFrameResize()
-function onResize(e: PointerEvent, edge: 'e' | 's' | 'se') {
-  if (block.value) startResize(block.value, e, edge)
-}
 
 function addTask() {
   ui.expandFrame(props.id)
@@ -385,7 +377,7 @@ const ITEM_ICON: Record<string, string> = {
     <!-- ===================== EXPANDED: 2D canvas of tasks + modules ===================== -->
     <div
       v-else
-      class="overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
+      class="relative overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
       :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
@@ -563,16 +555,23 @@ const ITEM_ICON: Record<string, string> = {
             </div>
           </div>
 
-          <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-            <span>{{
-              t('board.frame.implemented', { merged: mergedTasks, total: taskCount })
+          <!-- Composition line. It deliberately does NOT carry a done/total tally: the
+               per-task status is already on every card in the canvas below, so the
+               frame-level "N/M implemented" was a second, coarser answer to a question
+               the canvas answers precisely — and the one people misread, since it counts
+               every task ever added to the service rather than the work in flight. What
+               stays is what the canvas can't show at a glance. -->
+          <div
+            v-if="modules.length || prTasks"
+            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500"
+          >
+            <span v-if="modules.length">{{
+              t('board.frame.moduleCount', { count: modules.length }, modules.length)
             }}</span>
-            <span v-if="modules.length"
-              >· {{ t('board.frame.moduleCount', { count: modules.length }, modules.length) }}</span
-            >
-            <span v-if="prTasks" class="text-emerald-400"
-              >· {{ t('board.frame.prReadyCount', { count: prTasks }) }}</span
-            >
+            <span v-if="modules.length && prTasks" aria-hidden="true">·</span>
+            <span v-if="prTasks" class="text-emerald-400">{{
+              t('board.frame.prReadyCount', { count: prTasks })
+            }}</span>
           </div>
         </div>
 
@@ -594,35 +593,18 @@ const ITEM_ICON: Record<string, string> = {
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
           </button>
-
-          <!-- resize handles (drag the borders to resize the service, Miro-style).
-               `nopan` (alongside `nodrag`) so the pane doesn't pan while resizing —
-               same reason as the header handle above. These stay PHYSICAL
-               (`right-0`, not `end-0`): the resize math in useFrameResize grows the
-               right/bottom edge from an unmirrored clientX/clientY delta, so a
-               logical (RTL-flipped) grip would render on the opposite edge from the
-               one the drag actually moves. -->
-          <div
-            class="nodrag nopan absolute right-0 top-0 h-full w-2 cursor-ew-resize touch-none hover:bg-sky-400/20 pointer-coarse:w-4"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 'e')"
-          />
-          <div
-            class="nodrag nopan absolute bottom-0 left-0 h-2 w-full cursor-ns-resize touch-none hover:bg-sky-400/20 pointer-coarse:h-4"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 's')"
-          />
-          <div
-            class="nodrag nopan absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none pointer-coarse:h-11 pointer-coarse:w-11"
-            :title="t('board.frame.dragToResize')"
-            @pointerdown="onResize($event, 'se')"
-          >
-            <span
-              class="absolute bottom-1 right-1 h-2 w-2 rounded-sm border-b-2 border-r-2 border-slate-500"
-            />
-          </div>
         </div>
       </div>
+
+      <!-- Every border and corner of the CARD is a resize grip (see ResizeGrips: the geometry,
+           the hit bands, and why a north/west drag translates the contents). They used to sit on
+           the inner drop zone's edge, 16px of padding inside the visible border and flush against
+           the content, where two thin strips read as scrollbars rather than as the frame's border.
+
+           The grips are PHYSICAL (`right-0`, not `end-0`): the resize math derives the box from an
+           unmirrored clientX/clientY delta, so a logical (RTL-flipped) grip would render on the
+           opposite border from the one the drag actually moves. -->
+      <ResizeGrips :block="block" tone="frame" />
     </div>
   </div>
 </template>

@@ -64,7 +64,7 @@ describe('prompt fragments', () => {
       const capturingApp = makeApp(capturing)
 
       await capturingApp.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
       await capturingApp.drive(wsId)
 
