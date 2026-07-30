@@ -55,8 +55,6 @@ function build(opts: { local: boolean; blocks: Block[] }) {
     },
     serviceRepository: { getByFrameBlock: async () => null, listByFrameBlocks: async () => [] },
     workspaceMountRepository: {
-      listByServiceIds: async (ids: string[]) =>
-        !opts.local && ids.includes('svc') ? [{ workspaceId: WS, serviceId: 'svc' }] : [],
       get: async (ws: string, serviceId: string) =>
         !opts.local && serviceId === 'svc' ? { workspaceId: ws, serviceId } : null,
       listWorkspaceIdsMountingBlock: async () => [],
