@@ -12,7 +12,7 @@ import { UNDO_WINDOW_MS } from './context'
  * in-closure functions, and the split is purely to keep every function within the size budget.
  */
 export function createBoardPlacement(ctx: BoardWriteContext) {
-  const { getBlock, upsert, api, toast, tr } = ctx
+  const { blocks, getBlock, upsert, api, toast, tr } = ctx
 
   /**
    * Move a block into a new container at a new local position. Drag-reparent commits
@@ -120,6 +120,67 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     }
   }
 
+  /**
+   * Translate every DIRECT child of a container — the client half of the compensation the
+   * backend's `shiftChildPositions` applies. A child's position is relative to its container's
+   * content origin, so moving that origin (a north/west border drag) has to move the children
+   * the other way or the contents slide with the border. Grandchildren ride their module.
+   */
+  function shiftChildren(parentId: string, dx: number, dy: number) {
+    if (!dx && !dy) return
+    for (const child of blocks.value) {
+      if (child.parentId !== parentId) continue
+      child.position = { x: child.position.x + dx, y: child.position.y + dy }
+    }
+  }
+
+  /**
+   * Local-only geometry update during an active border drag — the resize counterpart of
+   * {@link previewMove}, and for the same reason: persisting every pointer move would let an
+   * out-of-order response land a stale size after the user let go. Takes ABSOLUTE bounds and
+   * derives the origin delta itself, so a caller can drive it from a running drag without
+   * tracking what it has already applied. {@link resizeBlock} commits the final bounds once.
+   */
+  function previewResize(
+    id: string,
+    position: { x: number; y: number },
+    size?: { w: number; h: number },
+  ) {
+    const b = getBlock(id)
+    if (!b) return
+    shiftChildren(id, b.position.x - position.x, b.position.y - position.y)
+    b.position = position
+    b.size = size
+  }
+
+  /**
+   * Commit a border-drag resize: ONE call carrying both halves of the geometry, because only an
+   * operation that sees the origin delta can translate the container's children with it (see
+   * `BoardService.resizeBlock`). `from` is the pre-drag geometry — a rejected resize replays it
+   * through {@link previewResize}, which undoes the child translation by the same arithmetic that
+   * applied it, so a failure can't leave the contents offset from a box the server never stored.
+   */
+  async function resizeBlock(
+    id: string,
+    bounds: { position: { x: number; y: number }; size: { w: number; h: number } },
+    from: { position: { x: number; y: number }; size?: { w: number; h: number } },
+  ) {
+    const b = getBlock(id)
+    if (!b) return
+    previewResize(id, bounds.position, bounds.size)
+    try {
+      upsert(await api.resizeBlock(useWorkspaceStore().requireId(), id, bounds))
+    } catch (e) {
+      previewResize(id, from.position, from.size)
+      toast.add({
+        title: tr('board.toast.resizeFailed'),
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
+  }
+
   /** Patch the user-editable fields of a block (title, features, threshold…). */
   async function updateBlock(id: string, patch: UpdateBlockInput) {
     const b = getBlock(id)
@@ -196,6 +257,8 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     reparentBlock,
     previewMove,
     moveBlock,
+    previewResize,
+    resizeBlock,
     updateBlock,
     toggleDependency,
     removeDependency,

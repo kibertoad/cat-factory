@@ -5,6 +5,7 @@ import type {
   AddServiceFromRepoInput,
   AddTaskInput,
   ReparentInput,
+  ResizeBlockInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
 import type {
@@ -43,6 +44,7 @@ import {
   registerServiceForFrame,
   requireWorkspace,
 } from '@cat-factory/kernel'
+import { createBoardLayoutWrites } from './layoutWrites.js'
 import { reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
@@ -158,22 +160,11 @@ export interface BoardServiceDependencies {
   resolveRunRepoContext?: ResolveRunRepoContext
 }
 
-/**
- * The kinds of coarse board change a mutation pushes. A closed union (rather than a free
- * string) so a typo can't silently produce an unrecognised signal — the SPA treats every
- * value the same (a debounced full refresh), but the conformance suite asserts specific
- * ones, and keeping the set explicit documents what the board service emits.
- */
-export type BoardChangeReason =
-  | 'block-added'
-  | 'block-updated'
-  | 'block-moved'
-  | 'block-reparented'
-  | 'block-removed'
-  | 'block-archived'
-  | 'block-restored'
-  | 'epic-assigned'
-  | 'dependency-toggled'
+// The board-changed reason vocabulary lives in `board.logic.ts` (pure, and shared with the
+// layout writes extracted from this service); re-exported here so existing importers are
+// unaffected.
+export type { BoardChangeReason } from './board.logic.js'
+import type { BoardChangeReason } from './board.logic.js'
 
 /**
  * Board mutations: frames, modules, tasks and the dependency edges between them.
@@ -201,6 +192,12 @@ export class BoardService {
   private readonly reviewFrictionGuard: ReviewFrictionGuard
   /** The external `/api/v1` board surface (see publicBoardReads.ts). */
   private readonly publicReads: PublicBoardReads
+  /**
+   * The board's LAYOUT writes — drag a container to a new spot, drag its border to new bounds
+   * (see layoutWrites.ts). Both split their write between a frame's per-board mount override and
+   * the shared block row, and `resizeBlock` layers the child translation on top of that.
+   */
+  private readonly layout: ReturnType<typeof createBoardLayoutWrites>
 
   constructor({
     workspaceRepository,
@@ -241,6 +238,16 @@ export class BoardService {
       clock,
       settings: workspaceSettings,
       notifications: reviewFrictionNotifications,
+    })
+    this.layout = createBoardLayoutWrites({
+      blockRepository,
+      workspaceMountRepository,
+      requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
+      resolveBlock: (workspaceId, id) => this.resolveBlock(workspaceId, id),
+      frameMount: (workspaceId, block) => this.frameMount(workspaceId, block),
+      projectForWorkspace: (workspaceId, block) => this.projectForWorkspace(workspaceId, block),
+      emitBoardChanged: (originWorkspaceId, reason, blockId, originConnectionId) =>
+        this.emitBoardChanged(originWorkspaceId, reason, blockId, originConnectionId),
     })
     this.publicReads = new PublicBoardReads({
       blockRepository,
@@ -333,8 +340,19 @@ export class BoardService {
     const services = this.serviceRepository
     const mounts = this.workspaceMountRepository
     if (!services || !mounts) return null
-    const service = await services.getByFrameBlock(block.id)
-    return service ? await mounts.get(workspaceId, service.id) : null
+    // Resolved from THIS board's mounts, in the same DIRECTION the snapshot read resolves them
+    // (`WorkspaceService.composeBoard`): mounts of this workspace → their services → the one whose
+    // frame is this block. Going the other way, `getByFrameBlock(block.id)`, looks a frame block id
+    // up GLOBALLY, and every seeded board carries the same block ids (`blk_auth`, …) — so on a
+    // deployment with two seeded boards it can answer with ANOTHER board's service, this returns
+    // null, and the write lands on the block row that every read then overrides with this board's
+    // mount. Silent, and only in the direction that loses the write. Two batched queries, both
+    // workspace-sized, matching what the snapshot already pays.
+    const mine = await mounts.listByWorkspace(workspaceId)
+    if (mine.length === 0) return null
+    const mounted = await services.listByIds(mine.map((m) => m.serviceId))
+    const serviceId = mounted.find((s) => s.frameBlockId === block.id)?.id
+    return serviceId ? (mine.find((m) => m.serviceId === serviceId) ?? null) : null
   }
 
   /**
@@ -956,34 +974,28 @@ export class BoardService {
     return assertFound(await this.blockRepository.get(homeWorkspaceId, taskId), 'Block', taskId)
   }
 
+  /** Move a block to a new spot on the board (a frame's position is its per-board override). */
   async moveBlock(
     workspaceId: string,
     id: string,
     position: Position,
     originConnectionId?: string | null,
   ): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
-    // A service frame's board position is a PER-WORKSPACE layout override carried on the mount
-    // (the snapshot renders frames from the mount, so the same shared frame can sit at a
-    // different spot on each board). Write it onto THIS workspace's mount — for a home frame as
-    // much as one mounted from elsewhere — and leave the shared block untouched.
-    const mount = await this.frameMount(workspaceId, block)
-    if (mount) {
-      // `frameMount` only resolves a mount when the mount repository is wired.
-      await this.workspaceMountRepository?.update(workspaceId, mount.serviceId, { position })
-      // The frame's position is this workspace's private layout override — other boards
-      // mounting the service keep their own spot, so this signal is origin-only.
-      await this.emitBoardChanged(workspaceId, 'block-moved', null, originConnectionId)
-      // Project the mount's SIZE override on too: a response carrying the block's own size would
-      // resize the frame the moment the user finishes dragging it.
-      return applyMountLayout(block, { position, size: mount.size })
-    }
-    // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
-    await this.blockRepository.update(homeWorkspaceId, id, { position })
-    // Origin = the block's HOME so moving a shared block fans the new position out to all mounts.
-    await this.emitBoardChanged(homeWorkspaceId, 'block-moved', id, originConnectionId)
-    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+    return this.layout.moveBlock(workspaceId, id, position, originConnectionId)
+  }
+
+  /**
+   * Apply the new bounds of a container dragged by one of its borders, translating its contents
+   * when the drag moved the content ORIGIN. See `layoutWrites.ts` for why that translation is
+   * part of this write rather than a `move` plus an `update`.
+   */
+  async resizeBlock(
+    workspaceId: string,
+    id: string,
+    bounds: ResizeBlockInput,
+    originConnectionId?: string | null,
+  ): Promise<Block> {
+    return this.layout.resizeBlock(workspaceId, id, bounds, originConnectionId)
   }
 
   async updateBlock(

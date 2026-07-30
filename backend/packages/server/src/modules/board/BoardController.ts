@@ -9,6 +9,7 @@ import {
   moveBlockContract,
   removeBlockContract,
   reparentBlockContract,
+  resizeBlockContract,
   restoreBlockContract,
   toggleDependencyContract,
   updateBlockContract,
@@ -148,6 +149,21 @@ export function boardController(): Hono<AppEnv> {
         c.req.valid('json'),
         c.req.header('x-connection-id') ?? null,
       )
+    return c.json(block, 200)
+  })
+
+  // Border-drag resize. Its own route rather than a `position` + `size` patch because a
+  // north/west drag moves the container's content origin, and only an operation that sees both
+  // halves can keep the contents visually still (see `BoardService.resizeBlock`).
+  buildHonoRoute(app, resizeBlockContract, async (c) => {
+    const block = await c.get('container').boardService.resizeBlock(
+      param(c, 'workspaceId'),
+      c.req.valid('param').blockId,
+      c.req.valid('json'),
+      // Same self-echo skip as move: the response carries the authoritative block, so echoing
+      // the coarse signal back would re-hydrate the board under a drag that just ended.
+      c.req.header('x-connection-id') ?? null,
+    )
     return c.json(block, 200)
   })
 

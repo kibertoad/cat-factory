@@ -131,6 +131,7 @@
       "updateFailed": "Değişiklikler kaydedilemedi",
       "epicFailed": "Epik değiştirilemedi",
       "moveFailed": "Taşınamadı",
+      "resizeFailed": "Yeniden boyutlandırılamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
       "unlinkFailed": "Bağımlılık kaldırılamadı",

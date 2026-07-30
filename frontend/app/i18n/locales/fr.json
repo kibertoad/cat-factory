@@ -131,6 +131,7 @@
       "updateFailed": "Impossible d'enregistrer les modifications",
       "epicFailed": "Impossible de changer l'épopée",
       "moveFailed": "Impossible de déplacer",
+      "resizeFailed": "Redimensionnement impossible",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
       "unlinkFailed": "Impossible de supprimer la dépendance",

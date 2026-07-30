@@ -5,10 +5,10 @@ import DecisionBadge from './DecisionBadge.vue'
 import DraggableTask from './DraggableTask.vue'
 import InitiativeCard from './InitiativeCard.vue'
 import ModuleFrame from './ModuleFrame.vue'
+import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
-import { useFrameResize } from '~/composables/useFrameResize'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 
@@ -147,28 +147,6 @@ function onFrameHandle(e: PointerEvent) {
 // Lift this frame above any overlapping neighbours while the pointer is over it
 // (see useFrameStacking + BoardCanvas's frameZIndex).
 const { enter: enterFrame, leave: leaveFrame } = useFrameStacking()
-
-// Miro-style frame resizing: drag the card's right / bottom border or its corner
-// (see template); the composable clamps to the frame's content extent and persists
-// the size on release.
-type ResizeEdge = 'e' | 's' | 'se'
-const { resizingId, startResize } = useFrameResize()
-const resizing = computed(() => resizingId.value === props.id)
-// Which grip the pointer rests on, and which one it grabbed. The lit bar is a CHILD of the
-// grip's hit band, so a plain `hover:` utility on the bar is wrong (the pointer is over the
-// band, not the 2px bar); tracking it in state instead of a `group-hover/<name>:` variant
-// means ONE predicate lights the border whether the pointer is resting on it or dragging it.
-// The drag reads `dragEdge` rather than `hoverEdge` on purpose: the pointer routinely leaves
-// the band mid-drag, and the edge it is moving must stay lit until the drag ends.
-const hoverEdge = ref<ResizeEdge | null>(null)
-const dragEdge = ref<ResizeEdge | null>(null)
-const gripLit = (edge: ResizeEdge) =>
-  resizing.value ? dragEdge.value === edge : hoverEdge.value === edge
-function onResize(e: PointerEvent, edge: ResizeEdge) {
-  if (!block.value) return
-  dragEdge.value = edge
-  startResize(block.value, e, edge)
-}
 
 function addTask() {
   ui.expandFrame(props.id)
@@ -618,74 +596,15 @@ const ITEM_ICON: Record<string, string> = {
         </div>
       </div>
 
-      <!-- Resize grips: the card's OWN right / bottom border and its corner, which is
-           where a person reaches for them. They used to sit on the inner drop zone's
-           edge — 16px of padding inside the visible border — where two thin strips
-           flush against the content read as scrollbars rather than as the frame's
-           border, so resizing was a gesture you had to be told about.
+      <!-- Every border and corner of the CARD is a resize grip (see ResizeGrips: the geometry,
+           the hit bands, and why a north/west drag translates the contents). They used to sit on
+           the inner drop zone's edge, 16px of padding inside the visible border and flush against
+           the content, where two thin strips read as scrollbars rather than as the frame's border.
 
-           Each grip STRADDLES the border (half outside the card, half in its padding)
-           for a 12px hit target on a fine pointer (24px on a coarse one) while the
-           visual affordance stays a 2px bar lit up ON the border itself — the hit area
-           is generous, the drawn edge is not. `nopan` (alongside `nodrag`) so the pane
-           doesn't pan while resizing, same reason as the header handle above.
-
-           East / south / corner only: the frame's stored position anchors its top-left,
-           and children are positioned relative to that origin, so a north/west drag
-           would have to move the frame AND compensate every child's position to keep
-           the content visually still — a per-child write this gesture shouldn't own.
-
-           These stay PHYSICAL (`right-0`, not `end-0`): the resize math in
-           useFrameResize grows the right/bottom edge from an unmirrored
-           clientX/clientY delta, so a logical (RTL-flipped) grip would render on the
-           opposite edge from the one the drag actually moves.
-
-           Resizing persists the size, so it is a `board.write` mutation: a read-only
-           viewer gets no grips at all rather than a lit-up border that no-ops (which
-           is what `startResize`'s own permission check now backs up rather than
-           carries alone). -->
-      <template v-if="access.canWriteBoard.value">
-        <div
-          class="nodrag nopan absolute -right-1.5 top-0 z-10 h-full w-3 cursor-ew-resize touch-none pointer-coarse:-right-3 pointer-coarse:w-6"
-          :title="t('board.frame.dragToResize')"
-          data-testid="frame-resize-e"
-          @pointerenter="hoverEdge = 'e'"
-          @pointerleave="hoverEdge = null"
-          @pointerdown="onResize($event, 'e')"
-        >
-          <span
-            class="absolute inset-y-3 left-1/2 w-0.5 -translate-x-1/2 rounded-full transition-colors"
-            :class="gripLit('e') ? 'bg-sky-400' : 'bg-transparent'"
-          />
-        </div>
-        <div
-          class="nodrag nopan absolute -bottom-1.5 left-0 z-10 h-3 w-full cursor-ns-resize touch-none pointer-coarse:-bottom-3 pointer-coarse:h-6"
-          :title="t('board.frame.dragToResize')"
-          data-testid="frame-resize-s"
-          @pointerenter="hoverEdge = 's'"
-          @pointerleave="hoverEdge = null"
-          @pointerdown="onResize($event, 's')"
-        >
-          <span
-            class="absolute inset-x-3 top-1/2 h-0.5 -translate-y-1/2 rounded-full transition-colors"
-            :class="gripLit('s') ? 'bg-sky-400' : 'bg-transparent'"
-          />
-        </div>
-        <!-- Last of the three, so the corner wins the overlap with both edge grips. -->
-        <div
-          class="nodrag nopan absolute -bottom-1.5 -right-1.5 z-10 h-5 w-5 cursor-nwse-resize touch-none pointer-coarse:-bottom-3 pointer-coarse:-right-3 pointer-coarse:h-11 pointer-coarse:w-11"
-          :title="t('board.frame.dragToResize')"
-          data-testid="frame-resize-se"
-          @pointerenter="hoverEdge = 'se'"
-          @pointerleave="hoverEdge = null"
-          @pointerdown="onResize($event, 'se')"
-        >
-          <span
-            class="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-sm border-b-2 border-r-2 transition-colors pointer-coarse:bottom-3 pointer-coarse:right-3"
-            :class="gripLit('se') ? 'border-sky-400' : 'border-slate-500'"
-          />
-        </div>
-      </template>
+           The grips are PHYSICAL (`right-0`, not `end-0`): the resize math derives the box from an
+           unmirrored clientX/clientY delta, so a logical (RTL-flipped) grip would render on the
+           opposite border from the one the drag actually moves. -->
+      <ResizeGrips :block="block" tone="frame" />
     </div>
   </div>
 </template>

@@ -2305,6 +2305,7 @@
       "updateFailed": "Impossibile salvare le modifiche",
       "epicFailed": "Impossibile cambiare epic",
       "moveFailed": "Impossibile spostare",
+      "resizeFailed": "Impossibile ridimensionare",
       "deleteFailed": "Impossibile eliminare",
       "linkFailed": "Impossibile collegare le attività",
       "unlinkFailed": "Impossibile rimuovere la dipendenza",

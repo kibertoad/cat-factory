@@ -44,3 +44,5 @@ export interface ApiContext {
 }
 
 export type Position = { x: number; y: number }
+/** An explicit pixel size for a resizable container (a service frame or a module). */
+export type Size = { w: number; h: number }

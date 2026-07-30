@@ -131,6 +131,7 @@
       "updateFailed": "No se pudieron guardar los cambios",
       "epicFailed": "No se pudo cambiar la épica",
       "moveFailed": "No se pudo mover",
+      "resizeFailed": "No se pudo cambiar el tamaño",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
       "unlinkFailed": "No se pudo eliminar la dependencia",

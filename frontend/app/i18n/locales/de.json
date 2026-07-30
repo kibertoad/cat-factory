@@ -2305,6 +2305,7 @@
       "updateFailed": "Änderungen konnten nicht gespeichert werden",
       "epicFailed": "Epic konnte nicht geändert werden",
       "moveFailed": "Verschieben nicht möglich",
+      "resizeFailed": "Größe konnte nicht geändert werden",
       "deleteFailed": "Löschen nicht möglich",
       "linkFailed": "Aufgaben konnten nicht verknüpft werden",
       "unlinkFailed": "Abhängigkeit konnte nicht entfernt werden",

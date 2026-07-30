@@ -152,6 +152,7 @@
       "updateFailed": "Could not save changes",
       "epicFailed": "Could not change epic",
       "moveFailed": "Could not move",
+      "resizeFailed": "Could not resize",
       "deleteFailed": "Could not delete",
       "linkFailed": "Could not link tasks",
       "unlinkFailed": "Could not remove dependency",

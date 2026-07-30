@@ -277,6 +277,63 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
     })
 
+    it('resizing a container from its north/west border keeps its contents in place', async () => {
+      // The user-visible property: dragging the top/left border extends the box past its
+      // contents rather than dragging the contents along with it. Positions are stored relative
+      // to the container's content origin, so the server has to translate every DIRECT child by
+      // the inverse of the origin delta — and a grandchild (a task inside a module) must NOT be
+      // translated, since it rides its module, which moved as a unit.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace, blocks } = await createWorkspace()
+      const wsId = workspace.id
+      const frame = blocks.find((b) => b.id === 'blk_auth')!
+      const childrenBefore = blocks.filter((b) => b.parentId === 'blk_auth')
+      const grandchildBefore = blocks.find((b) => b.id === 'task_session')!
+      expect(childrenBefore.length).toBeGreaterThan(1)
+
+      // Grow 40px west and 30px north: the origin moves by (-40, -30), the box by (+40, +30).
+      const size = { w: (frame.size?.w ?? 600) + 40, h: (frame.size?.h ?? 400) + 30 }
+      const resized = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/resize`, {
+        position: { x: frame.position.x - 40, y: frame.position.y - 30 },
+        size,
+      })
+      expect(resized.status).toBe(200)
+      expect(resized.body.position).toEqual({ x: frame.position.x - 40, y: frame.position.y - 30 })
+      expect(resized.body.size).toEqual(size)
+
+      const after = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const byId = new Map(after.body.blocks.map((b) => [b.id, b]))
+      for (const child of childrenBefore) {
+        expect(byId.get(child.id)!.position).toEqual({
+          x: child.position.x + 40,
+          y: child.position.y + 30,
+        })
+      }
+      expect(byId.get('task_session')!.position).toEqual(grandchildBefore.position)
+    })
+
+    it('resizing a container from its east/south border moves nothing inside it', async () => {
+      // The complement of the assertion above, and the reason the translation is derived from the
+      // stored origin rather than applied unconditionally: the common drag has no origin delta.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace, blocks } = await createWorkspace()
+      const wsId = workspace.id
+      const frame = blocks.find((b) => b.id === 'blk_auth')!
+      const childrenBefore = blocks.filter((b) => b.parentId === 'blk_auth')
+
+      const resized = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/resize`, {
+        position: frame.position,
+        size: { w: (frame.size?.w ?? 600) + 120, h: (frame.size?.h ?? 400) + 90 },
+      })
+      expect(resized.status).toBe(200)
+
+      const after = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const byId = new Map(after.body.blocks.map((b) => [b.id, b]))
+      for (const child of childrenBefore) {
+        expect(byId.get(child.id)!.position).toEqual(child.position)
+      }
+    })
+
     it('returns blocks in insertion order on every store, stable across updates', async () => {
       // Parity pin: D1 lists blocks `ORDER BY rowid` (insertion order); the Postgres
       // store must match via its `seq` column. Enough fat rows to span several heap

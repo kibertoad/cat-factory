@@ -160,26 +160,36 @@ per-file patches:
   `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants (now sourced from `useBoardFlow.ts` and
   consumed by `<VueFlow>` too, so the clamps can't drift from the button-disable logic)
   (UX-16).
-- **UX-17 — Grips in the wrong place, and too small. DONE.** Re-graded to P2: the audit
-  caught the 8px hit target but missed the bigger half, which a user reported as "resizing is
-  done by dragging scrollbars inside the frame". On a service frame the grips were children of
-  the inner drop zone, so both 8px strips sat 16px INSIDE the visible border, flush against the
-  task canvas — geometry that reads as a pair of scrollbars, not as the frame's edge, so the
-  gesture had to be discovered rather than guessed. They now hang off the card itself
-  (`BlockNode.vue`) and off the module box (`ModuleFrame.vue`), STRADDLING the border: a 12px
-  hit band centred on the edge (24px on a coarse pointer) with the drawn affordance a 2px bar
-  that lights up ON the border, plus a corner grip that lights the same way. One predicate
-  (`gripLit`) drives that highlight for both the resting pointer and the drag, reading the
-  GRABBED edge while resizing rather than the hovered one — the pointer routinely leaves a
-  12px band mid-drag, and the edge being moved has to stay lit. `useFrameResize` also holds
-  the edge's cursor on `<body>` (and suppresses text selection) for the whole drag, so the
-  pointer outrunning the band no longer reads as a dropped grab, and it restores on
-  `pointercancel` as well as `pointerup` so an interrupted touch can't leave the cursor stuck.
-  The grips are `v-if`'d on `board.write`, which is what the composable's comment already
-  claimed but only `startResize` enforced. North/west edges are deliberately still not
-  resizable: a frame's stored position anchors its top-left and children are positioned
-  relative to that origin, so growing leftwards would have to write every child's position to
-  keep the content visually still.
+- **UX-17 — Grips in the wrong place, too small, and only on two borders. DONE.** Re-graded to
+  P2: the audit caught the 8px hit target but missed the bigger half, which a user reported as
+  "resizing is done by dragging scrollbars inside the frame". On a service frame the grips were
+  children of the inner drop zone, so both 8px strips sat 16px INSIDE the visible border, flush
+  against the task canvas — geometry that reads as a pair of scrollbars, not as the frame's edge,
+  so the gesture had to be discovered rather than guessed.
+
+  All eight borders/corners are now grips on the box itself (`board/nodes/ResizeGrips.vue`, shared
+  by the service frame and the module so the two can't drift), each STRADDLING the border it moves:
+  a 12px hit band centred on the edge, 24px on a coarse pointer, with the drawn affordance still a
+  2px bar lit ON the border. One predicate drives that highlight for both the resting pointer and
+  the drag, reading the GRABBED border while resizing rather than the hovered one — the pointer
+  routinely leaves a 12px band mid-drag, and the border being moved has to stay lit.
+
+  **Dragging the north/west border moves the container's content ORIGIN, and a child's position is
+  stored relative to that origin** — so the contents would otherwise slide with the border instead
+  of the border extending past them. `POST /blocks/:id/resize` carries both halves of the geometry
+  and translates the direct children by the inverse delta in ONE arithmetic UPDATE
+  (`BlockRepository.shiftChildPositions`, mirrored D1 ⇄ Drizzle with conformance assertions both
+  ways); the store applies the same compensation optimistically during the drag and replays it
+  inverted on a rejected write. Grandchildren need no pass of their own — a task inside a module
+  rides the module. Shrinking from those borders is floored by the NEAREST child, not just the far
+  edge (`contentSize` measures only the far edge, which moves inward in step with the border, so
+  nothing there ever objects).
+
+  `useFrameResize` also holds the edge's cursor on `<body>` for the whole drag, so the pointer
+  outrunning the band no longer reads as a dropped grab, and restores it on `pointercancel` as well
+  as `pointerup` so an interrupted touch can't leave the cursor stuck. The grips are `v-if`'d on
+  `board.write`, which is what the composable's comment already claimed but only `startResize`
+  enforced.
 
 ## B. Modals, forms & inputs
 
@@ -742,7 +752,10 @@ group-hover:opacity-100` control is invisible to keyboard/touch; add
   the bar is a child of the hit band, and the same predicate then covers the drag — where it
   must follow the GRABBED edge, since the pointer leaves a 12px band constantly. A pointer drag
   that tracks past its handle holds its cursor on `<body>` for the duration and restores on
-  `pointercancel` too, not only `pointerup`.
+  `pointercancel` too, not only `pointerup`. **Offer every border, not the two that are cheap to
+  implement**: users read a missing handle as a broken one, and on parent-relative coordinates the
+  cost of the other two is a single arithmetic UPDATE that translates the children (plus the
+  matching optimistic shift + rollback in the store), not a per-child write.
 - **A frame-level tally that the cards below already answer is noise, not a summary.** The
   service frame's "N/M implemented" line was removed: every task card carries its own status,
   so the frame-level count restated it more coarsely and over the wrong denominator (every task
