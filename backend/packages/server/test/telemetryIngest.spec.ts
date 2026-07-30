@@ -8,6 +8,8 @@ import { handleError } from '../src/http/errorHandler.js'
 import { telemetryIngestController } from '../src/modules/telemetry/TelemetryIngestController.js'
 import {
   HttpMachineTelemetryClient,
+  MAX_TELEMETRY_INGEST_CHARS,
+  MachineTokenUnavailableError,
   TELEMETRY_INGEST_LIMITS,
 } from '../src/telemetry/machineTelemetry.js'
 
@@ -269,7 +271,10 @@ describe('POST /internal/telemetry/ingest', () => {
     expect(stored.metrics).toHaveLength(0)
   })
 
-  it('refuses a batch whose bytes exceed the body backstop', async () => {
+  it('refuses a batch whose ACTUAL bytes exceed the body backstop', async () => {
+    // The other half of the size guard: `content-length` is absent on a chunked upload (and is in
+    // any case the client's claim about itself), so the measured length stays the authority. A
+    // `Request` sets no content-length of its own, so this reaches the check after the read.
     const { app, stored } = makeApp()
     const res = await ingest(app, await machineToken(), {
       workspaceId: 'ws_1',
@@ -320,9 +325,12 @@ describe('POST /internal/telemetry/ingest', () => {
     expect(stored.metrics.map((m) => m.id)).toEqual(['m1'])
   })
 
-  it('skips the upload entirely when the node holds no machine token yet', async () => {
-    // A node booted before the mothership login has nothing to sync to; posting megabytes for a
-    // guaranteed 403 is pure waste, and the run stays a candidate for the next sweep.
+  it('skips the upload but REJECTS when the node holds no machine token yet', async () => {
+    // A node booted before the mothership login has nothing to sync to, so posting megabytes for a
+    // guaranteed 403 is pure waste — but the skip must be a REJECTION, not an empty success. The
+    // sweep advances a run's high-water mark on a resolved ingest, so a zeroed result here is
+    // indistinguishable from "the run had no rows": it would mark the run uploaded and let the
+    // local retention prune delete telemetry the mothership never received.
     let called = 0
     const client = new HttpMachineTelemetryClient({
       baseUrl: 'http://mothership.test',
@@ -332,12 +340,36 @@ describe('POST /internal/telemetry/ingest', () => {
         return new Response('{}')
       },
     })
-    expect(await client.ingest({ workspaceId: 'ws_1', executionId: 'exe_1' })).toEqual({
-      metrics: 0,
-      snapshots: 0,
-      searchQueries: 0,
-    })
+    await expect(
+      client.ingest({ workspaceId: 'ws_1', executionId: 'exe_1' }),
+    ).rejects.toBeInstanceOf(MachineTokenUnavailableError)
     expect(called).toBe(0)
+  })
+
+  it('refuses an oversized batch on the DECLARED length, before reading the body', async () => {
+    // `c.req.text()` buffers the whole request, so a check that runs after it bounds the parsed
+    // object graph but not the string it parses from. The header check is what keeps a compromised
+    // node token from making the mothership hold an arbitrarily large body.
+    //
+    // The body here is a valid, in-scope, well under-cap batch — the ONLY thing that can produce a
+    // 413 is the declared length, so this fails if the header check is dropped.
+    const { app, stored } = makeApp()
+    const req = new Request('http://x/internal/telemetry/ingest', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${await machineToken()}`,
+      },
+      body: JSON.stringify({
+        workspaceId: 'ws_1',
+        executionId: 'exe_1',
+        metrics: [metric({ id: 'm1' })],
+      }),
+    })
+    req.headers.set('content-length', String(MAX_TELEMETRY_INGEST_CHARS + 1))
+    const res = await app.fetch(req)
+    expect(res.status).toBe(413)
+    expect(stored.metrics).toHaveLength(0)
   })
 
   it('rejects on an HTTP failure so the sweep leaves the run’s high-water mark alone', async () => {

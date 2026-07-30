@@ -190,6 +190,7 @@ export {
   type TelemetryIngestRequest,
   type TelemetryIngestResult,
   HttpMachineTelemetryClient,
+  MachineTokenUnavailableError,
 } from './telemetry/machineTelemetry.js'
 export { mountAuthGate } from './http/authGate.js'
 export {

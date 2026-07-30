@@ -86,9 +86,20 @@ export function telemetryIngestController(): Hono<AppEnv> {
       )
     }
 
-    // Size backstop BEFORE parsing: the row caps below bound COUNT, but a single pathological
-    // snapshot moves BYTES, and a compromised node token must not be able to make the mothership
-    // materialise an unbounded object graph.
+    // Size backstop, in two steps, because the row caps below bound COUNT while a single
+    // pathological snapshot moves BYTES.
+    //
+    // The DECLARED length is checked first, before the body is read at all: `c.req.text()` buffers
+    // the entire request into memory, so a check after it protects the parsed object graph but not
+    // the string it parses from — a compromised node token could still make the mothership hold an
+    // arbitrarily large body. Refusing on the header also spares the node an upload it was always
+    // going to have refused.
+    const declared = Number(c.req.header('content-length'))
+    if (Number.isFinite(declared) && declared > MAX_TELEMETRY_INGEST_CHARS) {
+      return c.json({ ok: false, error: { code: 'validation', message: 'batch too large' } }, 413)
+    }
+    // Then the ACTUAL length, since `content-length` is absent on a chunked upload and is in any
+    // case the client's claim about itself rather than a fact.
     const raw = await c.req.text()
     if (raw.length > MAX_TELEMETRY_INGEST_CHARS) {
       return c.json({ ok: false, error: { code: 'validation', message: 'batch too large' } }, 413)

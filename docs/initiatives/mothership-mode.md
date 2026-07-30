@@ -477,8 +477,15 @@
     what is missing is a bounded machine read that lets the laptop fall back to them. Also
     deliberately out of scope: `provisioningLogRepository`, whose `executionId` is NULLABLE because
     an environment outlives the run that provisioned it, so "a finished run's rows" does not
-    identify them; and `subscriptionQuotaCycleRepository`, whose both scopes key on laptop-held
-    credentials.
+    identify them; `subscriptionQuotaCycleRepository`, whose both scopes key on laptop-held
+    credentials; and an LLM call that resolved NO run (`execution_id IS NULL` — an inline call whose
+    scope named only the workspace), which the run-keyed sync has nothing to key an upload on. That
+    last one is a real if narrow LOSS rather than a deferral: those rows stay local and the
+    retention prune eventually takes them. It is tolerable because such a call is un-run-scoped by
+    definition — no run surface would have shown it — and because the SPEND it represents is
+    already remote in `tokenUsageRepository`, which the budget gate reads. Closing it needs a
+    second, workspace-keyed candidate query, and is worth doing only if those rows turn out to
+    matter to a deployment-wide view.
 
 **Login (PR 3)**
 
@@ -761,9 +768,22 @@ never remotely invocable (mothership-internal cron).
 Batch-ingesting a FINISHED run's rows up to the mothership (so hosted teammates can read them, and
 they survive the local prune) has LANDED for the three run-scoped sinks, via
 `POST /internal/telemetry/ingest` — see "Cross-cutting delegation". `provisioningLogRepository`
-(nullable `executionId` — an environment outlives the run that provisioned it) and
-`subscriptionQuotaCycleRepository` (both scopes key on laptop-held credentials) are deliberately
-NOT ingested. What remains is the READ-THROUGH fallback for a run whose local rows were pruned.
+(nullable `executionId` — an environment outlives the run that provisioned it),
+`subscriptionQuotaCycleRepository` (both scopes key on laptop-held credentials) and an LLM call
+that resolved no run at all (`execution_id IS NULL`) are deliberately NOT ingested. What remains is
+the READ-THROUGH fallback for a run whose local rows were pruned.
+
+Two properties of the sweep are load-bearing and easy to undo by accident, because both failure
+modes look like success:
+
+- **Only a resolved `ingest` may advance a run's high-water mark**, so anything that did not upload
+  must THROW. A client that returns a zeroed result when the node holds no machine token reads to
+  the sweep as "this run had no rows", marks it, and hands the rows to the prune —
+  `MachineTokenUnavailableError` exists to make that case a rejection.
+- **Batches are budgeted by BYTES as well as row count.** The mothership refuses on either, so a
+  page built to the row cap alone can sit permanently over the body cap: 413 forever, the same
+  doomed page every sweep. A row too big to post even alone is skipped and REPORTED, never retried
+  into a stall.
 
 `tokenUsageRepository` is deliberately NOT in this bucket:
 

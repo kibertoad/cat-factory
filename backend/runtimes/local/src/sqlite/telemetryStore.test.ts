@@ -74,6 +74,19 @@ describe('SqliteLlmCallMetricRepository', () => {
     expect(rows[0]?.promptPrefixCount).toBe(0)
   })
 
+  it('holds its batch transaction without yielding, so two batches cannot interleave', async () => {
+    // `recordMany` wraps its inserts in BEGIN/COMMIT, and the inserts must be SYNCHRONOUS for that
+    // to mean anything: an `await` inside the transaction yields the microtask queue, so a second
+    // batch starting there would hit a nested BEGIN (a hard SQLite error) and a concurrent
+    // single-row `record` would land inside this transaction and be rolled back with it.
+    const repo = store.llmCallMetricRepository
+    const first = repo.recordMany([metric({ id: 'a1' }), metric({ id: 'a2' })])
+    const second = repo.recordMany([metric({ id: 'b1' }), metric({ id: 'b2' })])
+    await expect(Promise.all([first, second])).resolves.toBeDefined()
+    const ids = (await repo.listByExecution('ws_1', 'exec_1')).map((r) => r.id).sort()
+    expect(ids).toEqual(['a1', 'a2', 'b1', 'b2'])
+  })
+
   it('round-trips every field, including the three input-token classes', async () => {
     await store.llmCallMetricRepository.record(metric({ streaming: true, ok: false }))
     const [row] = await store.llmCallMetricRepository.listByExecution('ws_1', 'exec_1')

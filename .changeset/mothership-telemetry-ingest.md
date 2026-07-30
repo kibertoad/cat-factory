@@ -23,3 +23,11 @@ and the local `node:sqlite` store — which is what makes a lost-ack chunk safel
 Note the deliberate asymmetry between `record` and `recordMany`: only the batch append ignores a
 duplicate id, because only the batch is retried. A batch over the per-request caps is refused
 rather than truncated, since the node treats a success as "this range is stored".
+
+That last rule is what makes the sweep's success path load-bearing, so two things follow from it.
+A node with no machine token yet rejects with the new `MachineTokenUnavailableError` instead of
+resolving an empty result, which would have read as "this run had no rows" and let the local prune
+delete telemetry that never left the laptop. And batches are budgeted by BYTES as well as row
+count, because the mothership refuses on either — a page built to the row cap alone could sit
+permanently over the body cap. A row too large to post even by itself is skipped and reported
+rather than retried into a stall.

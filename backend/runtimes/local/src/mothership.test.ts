@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { noopLogger } from '@cat-factory/kernel'
+import { MachineTokenUnavailableError } from '@cat-factory/server'
 import { type DriveConfig, NodeRealtimeHub } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
@@ -812,7 +813,7 @@ describe('composeMothership telemetry ingest delegation', () => {
     }
   })
 
-  it('skips the upload entirely on a node that has not logged in yet', async () => {
+  it('skips the upload but rejects on a node that has not logged in yet', async () => {
     let calls = 0
     vi.stubGlobal('fetch', async () => {
       calls++
@@ -820,9 +821,12 @@ describe('composeMothership telemetry ingest delegation', () => {
     })
     const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
     try {
-      await composed.telemetryClient.ingest({ workspaceId: 'ws_1', executionId: 'exec_1' })
-      // Nothing to authenticate with: the rows stay local and the run stays a candidate, rather
-      // than a guaranteed-403 upload of megabytes on every sweep.
+      // Nothing to authenticate with, so no guaranteed-403 upload of megabytes on every sweep —
+      // but the skip REJECTS, because the sweep advances a run's high-water mark on a resolved
+      // ingest and would otherwise mark rows uploaded that never left the laptop.
+      await expect(
+        composed.telemetryClient.ingest({ workspaceId: 'ws_1', executionId: 'exec_1' }),
+      ).rejects.toBeInstanceOf(MachineTokenUnavailableError)
       expect(calls).toBe(0)
     } finally {
       composed.close()

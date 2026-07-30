@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import type { AgentContextSnapshot, AgentSearchQuery, LlmCallMetric } from '@cat-factory/kernel'
-import type { MachineTelemetryClient, TelemetryIngestRequest } from '@cat-factory/server'
+import {
+  MAX_TELEMETRY_INGEST_CHARS,
+  MachineTokenUnavailableError,
+  type MachineTelemetryClient,
+  type TelemetryIngestRequest,
+} from '@cat-factory/server'
 import { type LocalTelemetryStore, createLocalTelemetryStore } from './sqlite/telemetryStore.js'
 import { sweepTelemetryIngest } from './telemetryIngest.js'
 
@@ -198,6 +203,79 @@ describe('mothership telemetry ingest sweep', () => {
     const later = NOW + 60 * MINUTE
     await store.llmCallMetricRepository.record(metric('m2', 'exec_1', later - 30 * MINUTE))
     expect(await sweep(later)).toMatchObject({ runs: 1, metrics: 2 })
+  })
+
+  it('never marks a run uploaded when the node holds no machine token', async () => {
+    // The regression this pins: the client used to answer a token-less node with a zeroed SUCCESS,
+    // which the drain read as "every page is stored". The run was marked, stopped being a
+    // candidate, and the retention prune then deleted rows the mothership had never seen — the
+    // exact silent, permanent loss the failure handling exists to prevent.
+    await store.llmCallMetricRepository.record(metric('m1', 'exec_1', QUIET))
+    client.failWith = new MachineTokenUnavailableError()
+
+    expect(await sweep()).toMatchObject({ runs: 0, metrics: 0, failed: 1 })
+
+    // Still a candidate once the login completes.
+    client.failWith = undefined
+    expect(await sweep()).toMatchObject({ runs: 1, metrics: 1, failed: 0 })
+    expect(client.batches.flatMap((b) => b.metrics ?? []).map((m) => m.id)).toEqual(['m1'])
+  })
+
+  it('stops the whole pass on a missing token instead of failing every run separately', async () => {
+    // Every remaining run would fail identically, so the pass ends with one line rather than
+    // twenty. Nothing is marked, so the backlog is intact.
+    for (const id of ['exec_1', 'exec_2', 'exec_3']) {
+      await store.llmCallMetricRepository.record(metric(`m-${id}`, id, QUIET))
+    }
+    client.failWith = new MachineTokenUnavailableError()
+    expect(await sweep()).toMatchObject({ runs: 0, failed: 1 })
+
+    client.failWith = undefined
+    expect(await sweep()).toMatchObject({ runs: 3, metrics: 3 })
+  })
+
+  it('splits a page into batches that fit the mothership’s BYTE cap', async () => {
+    // The row caps bound COUNT; the mothership refuses on bytes too. A page built to the row cap
+    // alone can sit permanently over the body cap — 413 forever, the same doomed page every sweep
+    // — so the drain budgets by serialized size as well.
+    const big = 'x'.repeat(Math.floor(MAX_TELEMETRY_INGEST_CHARS / 3))
+    for (let i = 0; i < 6; i += 1) {
+      await store.agentContextSnapshotRepository.record({
+        ...snapshot(`s${i}`, 'exec_1', QUIET + i),
+        systemPrompt: big,
+      })
+    }
+    // One page of 6 rows (under the 20-row cap), but ~2 rows' worth of budget per request.
+    expect(await sweep()).toMatchObject({ runs: 1, snapshots: 6, skipped: 0 })
+    expect(client.batches.length).toBeGreaterThan(1)
+    for (const batch of client.batches) {
+      expect(JSON.stringify(batch).length).toBeLessThanOrEqual(MAX_TELEMETRY_INGEST_CHARS)
+    }
+    // Every row still went up, exactly once and in capture order.
+    const ids = client.batches.flatMap((b) => b.snapshots ?? []).map((s) => s.id)
+    expect(ids).toEqual(['s0', 's1', 's2', 's3', 's4', 's5'])
+  })
+
+  it('skips and REPORTS a row too large to ever post, instead of stalling the run', async () => {
+    // A single row over the whole-body cap can never be uploaded. Retrying it would fail the run's
+    // drain forever and strand every row behind it; dropping it silently would leave an
+    // unexplained hole. So it is skipped, counted, and named in a warning.
+    await store.agentContextSnapshotRepository.record({
+      ...snapshot('s-huge', 'exec_1', QUIET),
+      systemPrompt: 'x'.repeat(MAX_TELEMETRY_INGEST_CHARS + 1),
+    })
+    await store.agentContextSnapshotRepository.record(snapshot('s-ok', 'exec_1', QUIET + 1))
+
+    expect(await sweep()).toMatchObject({ runs: 1, snapshots: 1, skipped: 1, failed: 0 })
+    expect(client.batches.flatMap((b) => b.snapshots ?? []).map((s) => s.id)).toEqual(['s-ok'])
+    const warned = log.lines.find(
+      (l) => l.level === 'warn' && l.msg.includes('skipped rows over the body cap'),
+    )
+    expect(warned).toBeDefined()
+    expect(String(warned?.fields?.rows)).toContain('s-huge')
+
+    // And the run is DONE — the skip must not make it a permanent candidate.
+    expect(await sweep()).toMatchObject({ runs: 0, snapshots: 0 })
   })
 
   it('ignores an LLM call that resolved no run', async () => {

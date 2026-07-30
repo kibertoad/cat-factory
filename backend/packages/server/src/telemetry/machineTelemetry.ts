@@ -61,11 +61,30 @@ export interface TelemetryIngestResult {
   searchQueries: number
 }
 
+/**
+ * Thrown when the node holds no machine token yet (booted before the mothership login), so
+ * nothing was uploaded and nothing COULD have been.
+ *
+ * It is an error rather than an empty-but-successful result because the caller's success path
+ * advances a high-water mark: a zeroed `TelemetryIngestResult` is indistinguishable from "the run
+ * had no rows", which would mark the run uploaded and let the local prune delete rows the
+ * mothership never saw. Distinct from a transport failure only so the sweep can log it as the
+ * benign, self-healing condition it is — both dispositions leave the mark alone and retry.
+ */
+export class MachineTokenUnavailableError extends Error {
+  constructor() {
+    super('no machine token: node has not completed the mothership login yet')
+    this.name = 'MachineTokenUnavailableError'
+  }
+}
+
 /** The client half: uploads one batch of a run's telemetry to the mothership. */
 export interface MachineTelemetryClient {
   /**
-   * Upload `batch`. Rejects on a transport/HTTP failure so the sweep can leave the run's
-   * high-water mark alone and retry it next pass; a partially applied batch is safe to re-offer
+   * Upload `batch`. Rejects on a transport/HTTP failure — or with
+   * {@link MachineTokenUnavailableError} when the node cannot authenticate at all — so the sweep
+   * leaves the run's high-water mark alone and retries it next pass. A resolved result therefore
+   * always means the mothership stored the range; a partially applied batch is safe to re-offer
    * because the append is idempotent by row id.
    */
   ingest(batch: TelemetryIngestRequest): Promise<TelemetryIngestResult>
@@ -97,10 +116,13 @@ export class HttpMachineTelemetryClient implements MachineTelemetryClient {
 
   async ingest(batch: TelemetryIngestRequest): Promise<TelemetryIngestResult> {
     const token = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token
-    // No token yet (a node booted before the mothership login): there is nothing to sync to, and
-    // a guaranteed-403 upload of megabytes is pure waste. The rows stay local and the run stays a
-    // candidate, so the sweep picks it up once the SPA login completes.
-    if (!token) return { metrics: 0, snapshots: 0, searchQueries: 0 }
+    // No token yet (a node booted before the mothership login): there is nothing to sync to, and a
+    // guaranteed-403 upload of megabytes is pure waste — so the upload is SKIPPED, but it is
+    // skipped by THROWING. Returning a zeroed result here would read to the sweep as "the range is
+    // stored", advancing the run's high-water mark over rows that never left the laptop and
+    // handing them to the retention prune. The rows stay local and the run stays a candidate, so
+    // the sweep picks it up once the SPA login completes.
+    if (!token) throw new MachineTokenUnavailableError()
     const fetchImpl = this.opts.fetchImpl ?? fetch
     const res = await fetchImpl(
       `${this.opts.baseUrl.replace(/\/$/, '')}/internal/telemetry/ingest`,
