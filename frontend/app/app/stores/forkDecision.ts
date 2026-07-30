@@ -26,17 +26,20 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
   const error = ref<string | null>(null)
 
   /**
-   * Reflect an authoritative fork-decision state onto the run's Coder step. A pipeline may
+   * Apply an authoritative fork-decision state to the run's Coder step. A pipeline may
    * carry more than one `coder` step, so target the step this decision is about rather than
    * the first one that happens to hold fork state: prefer the step that is still live
    * (proposing / awaiting the choice / answering), then the current step, and only then fall
-   * back to the first step carrying fork state. The stream corrects any mismatch, but this
-   * keeps the immediate optimistic echo on the right step.
+   * back to the first step carrying fork state.
+   *
+   * Only ever called through {@link ExecutionStore.echoAfter}, which drops the echo when the event
+   * stream already delivered a newer revision — without that guard this assignment silently
+   * regressed the chat thread (see `echoAfter` for the failure it caused).
    */
-  function reflect(executionId: string, state: ForkDecisionStepState | null): void {
-    if (!state) return
-    const instance = execution.getInstance(executionId)
-    if (!instance) return
+  function assign(
+    instance: ReturnType<typeof execution.getInstance> & object,
+    state: ForkDecisionStepState,
+  ): void {
     const isLive = (s: (typeof instance.steps)[number]) =>
       s.agentKind === 'coder' &&
       (s.forkDecision?.status === 'awaiting_choice' ||
@@ -54,8 +57,13 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
   async function load(executionId: string): Promise<void> {
     error.value = null
     try {
-      const state = await api.getForkDecision(workspace.requireId(), executionId)
-      reflect(executionId, state as ForkDecisionStepState | null)
+      await execution.echoAfter(
+        executionId,
+        () => api.getForkDecision(workspace.requireId(), executionId),
+        (state, instance) => {
+          if (state) assign(instance, state as ForkDecisionStepState)
+        },
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
     }
@@ -72,8 +80,11 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
     error.value = null
     choosing.value = true
     try {
-      const state = await api.chooseFork(workspace.requireId(), executionId, choice)
-      reflect(executionId, state as ForkDecisionStepState)
+      await execution.echoAfter(
+        executionId,
+        () => api.chooseFork(workspace.requireId(), executionId, choice),
+        (state, instance) => assign(instance, state as ForkDecisionStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to choose'
       throw e
@@ -85,15 +96,24 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
   /**
    * Send a grounded chat message about the surfaced forks. The reply is computed inline in the
    * durable driver and arrives via the execution stream; the immediate response is the
-   * `answering` state (the human message already appended), which we reflect so the thread shows
-   * the sent turn + a "thinking…" bubble without waiting for the stream.
+   * `answering` state (the human message already appended), echoed so the thread shows the sent
+   * turn + a "thinking…" bubble without waiting for the stream.
+   *
+   * The echo is the RACIEST one in the app and must stay guarded: `chat` emits the one-message
+   * `answering` state and then wakes the driver, which appends the reply and emits again, so with a
+   * canned (no-model) reply the two-message thread frequently reaches the browser first. Applying
+   * this response unconditionally dropped the reply and left the bubble spinning forever, since a
+   * parked run emits nothing more.
    */
   async function chat(executionId: string, text: string): Promise<void> {
     error.value = null
     chatting.value = true
     try {
-      const state = await api.forkChat(workspace.requireId(), executionId, text)
-      reflect(executionId, state as ForkDecisionStepState)
+      await execution.echoAfter(
+        executionId,
+        () => api.forkChat(workspace.requireId(), executionId, text),
+        (state, instance) => assign(instance, state as ForkDecisionStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to send message'
       throw e

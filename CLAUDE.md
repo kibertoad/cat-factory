@@ -1090,8 +1090,16 @@ restore it.
   only after it settles (which is why e2e gates on `data-connected`).
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state into the
   snapshot or reconcile rather than replace.
-- **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order refreshes
-  and assert the fresher one wins.
+- **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store that awaits
+  a mutation and then assigns the returned sub-state onto the cached run (`step.forkDecision`,
+  `step.prReview`, `step.judge`, `step.followUps`) is writing straight past `upsert`'s `rev` check. Where
+  the mutation WAKES THE DRIVER, the driver's next emit routinely beats the HTTP response, so the echo puts
+  the run back — and if the run then parks, nothing emits again and the newer state is gone for good (the
+  fork-chat reply that vanished, leaving a "thinking…" bubble spinning). Every echo therefore goes through
+  `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the request and
+  drops the echo if anything advanced it. Never hand-roll the await-then-assign.
+- **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
+  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one wins.
 
 ## Basic vs advanced interface mode (frontend)
 

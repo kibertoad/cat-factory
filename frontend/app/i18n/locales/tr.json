@@ -5660,6 +5660,10 @@
         "pending": "Sırada"
       }
     },
+    "resume": {
+      "action": "İncelemeyi sürdür",
+      "hint": "Takılmış gibi mi görünüyor? Sürdürme yalnızca hiç yanıt vermeyen parçaları yeniden inceler ve tamamlananların bulgularını korur."
+    },
     "phase": {
       "planning": "İnceleniyor…",
       "reviewing": "İnceleniyor {completed}/{total} bölüm",

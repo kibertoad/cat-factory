@@ -1127,6 +1127,11 @@ export class ExecutionService {
     return this.runDispatcher.resolvePrReview(workspaceId, executionId, input)
   }
 
+  /** @see RunDispatcher.resumePrReview */
+  resumePrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState> {
+    return this.runDispatcher.resumePrReview(workspaceId, executionId)
+  }
+
   /** @see RunDispatcher.dismissPrReviewFinding */
   dismissPrReviewFinding(
     workspaceId: string,

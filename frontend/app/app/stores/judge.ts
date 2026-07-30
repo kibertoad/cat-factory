@@ -27,13 +27,16 @@ export const useJudgeStore = defineStore('judge', () => {
    * Reflect an authoritative judge state onto the run's judge step. A pipeline may place more
    * than one judge, so target the step this verdict is about rather than the first one holding
    * judge state: prefer the step still awaiting a decision, then the current step, and only then
-   * fall back to the first step carrying judge state. The stream corrects any mismatch; this
-   * keeps the immediate optimistic echo on the right step.
+   * fall back to the first step carrying judge state.
+   *
+   * Only ever called through {@link ExecutionStore.echoAfter}, which drops the echo when the event
+   * stream already delivered a newer revision — a `bounce` re-arms the producing step, so the
+   * driver is emitting fresh state while this response is still in flight.
    */
-  function reflect(executionId: string, state: JudgeStepState | null): void {
-    if (!state) return
-    const instance = execution.getInstance(executionId)
-    if (!instance) return
+  function assign(
+    instance: ReturnType<typeof execution.getInstance> & object,
+    state: JudgeStepState,
+  ): void {
     const current = instance.steps[instance.currentStep]
     const step =
       instance.steps.find((s) => s.judge?.status === 'awaiting_decision') ??
@@ -46,8 +49,13 @@ export const useJudgeStore = defineStore('judge', () => {
   async function load(executionId: string): Promise<void> {
     error.value = null
     try {
-      const state = await api.getJudgeState(workspace.requireId(), executionId)
-      reflect(executionId, state as JudgeStepState | null)
+      await execution.echoAfter(
+        executionId,
+        () => api.getJudgeState(workspace.requireId(), executionId),
+        (state, instance) => {
+          if (state) assign(instance, state as JudgeStepState)
+        },
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
     }
@@ -66,11 +74,15 @@ export const useJudgeStore = defineStore('judge', () => {
     error.value = null
     resolving.value = true
     try {
-      const state = await api.resolveJudge(workspace.requireId(), executionId, {
-        choice,
-        ...(feedback ? { feedback } : {}),
-      })
-      reflect(executionId, state as JudgeStepState)
+      await execution.echoAfter(
+        executionId,
+        () =>
+          api.resolveJudge(workspace.requireId(), executionId, {
+            choice,
+            ...(feedback ? { feedback } : {}),
+          }),
+        (state, instance) => assign(instance, state as JudgeStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to resolve'
       throw e
