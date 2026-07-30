@@ -995,6 +995,30 @@ export const pipelineStepSchema = v.object({
    */
   promptRevision: v.optional(v.number()),
   /**
+   * The deployment-registered agent-kind VARIANT this step ran under, pinned at dispatch — the
+   * sibling of {@link promptRevision}, for the same reason and one more.
+   *
+   * `stepOptions.agentVariantId` records what the pipeline ASKED for; this records what the
+   * dispatch actually did with it, and the two genuinely differ. A variant's `systemPrompt` loses
+   * to a workspace override (the narrower tier), and an id can be withdrawn mid-run — so a reader
+   * shown only the ask would report a step as running a variation whose text never reached it.
+   * `applied` keeps those causes apart (see `AgentVariantApplication`).
+   *
+   * `fingerprint` covers the text the variant CONTRIBUTED, which is what lets Kaizen treat a
+   * re-worded variant as its own combo instead of inheriting a verification the previous wording
+   * earned — a bare id cannot express that, since re-registering an id is a supported way to
+   * re-word a variant. Absent when the variant contributed nothing, so it stays out of the key.
+   *
+   * Absent when the step named no variant, which is every step on the stock product.
+   */
+  promptVariant: v.optional(
+    v.object({
+      id: v.string(),
+      applied: v.picklist(['full', 'addition-only', 'superseded', 'withdrawn']),
+      fingerprint: v.optional(v.string()),
+    }),
+  ),
+  /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
    * a Workflows replay re-attaches to the running job instead of starting a new

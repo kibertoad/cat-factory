@@ -225,8 +225,10 @@ export class RunAdmission {
       // The QC companion's live step-state carries the same `gating` config the pipeline set, so
       // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
       testerQuality: steps.map((s) => s.testerQuality ?? null),
-      // The per-step options bag (carrying a `skill` step's `skillId`) is copied onto the run
-      // step at start, so the skill-step validation re-runs on retry against what re-executes.
+      // The per-step options bag (a `skill` step's `skillId`, a step's picked agent-kind variant)
+      // is copied onto the run step at start, so the skill-step and variant validations re-run on
+      // retry against what re-executes — which is how a retry after the deployment withdrew a
+      // variant is refused rather than quietly running the shipped prompt.
       stepOptions: steps.map((s) => s.stepOptions ?? null),
     }
   }

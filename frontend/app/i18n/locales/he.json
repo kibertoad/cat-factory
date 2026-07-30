@@ -1296,7 +1296,11 @@
         "approved": "אושר",
         "changes_requested": "התבקשו שינויים",
         "rejected": "נדחה"
-      }
+      },
+      "promptVariant": "וריאנט של הפרומפט",
+      "promptVariantAdditionOnly": "רק התוספת של הווריאנט הזה הוחלה. הפרומפט של מרחב העבודה עבור הסוכן הזה החליף את טקסט הבסיס שלו.",
+      "promptVariantSuperseded": "הווריאנט הזה לא הוחל. לפרומפט של מרחב העבודה עבור הסוכן הזה הייתה עדיפות.",
+      "promptVariantWithdrawn": "הווריאנט הזה אינו רשום עוד, ולכן השלב רץ עם הפרומפט המקורי."
     },
     "stepDetail": {
       "contents": "תוכן",
@@ -4041,7 +4045,9 @@
       "consensusGroups": "קבוצות קונצנזוס",
       "consensusGroupsHint": "בחר את הפאנלים לשימוש חוזר שהשלב הזה רשאי להסלים אליהם. לכל אחד סף הערכה משלו; מופעל התובעני ביותר שהמשימה עוברת.",
       "consensusGroupsActive": "השלב הזה מריץ את הקבוצה שנבחרה. בטל את הבחירה מכל הקבוצות כדי להגדיר כאן משתתפים.",
-      "consensusGroupAlways": "תמיד"
+      "consensusGroupAlways": "תמיד",
+      "variantLabel": "וריאנט של הפרומפט",
+      "variantShipped": "הפרומפט המקורי"
     },
     "progress": {
       "status": {

@@ -1296,7 +1296,11 @@
         "url": "Dirección",
         "copyId": "Copiar id del contenedor",
         "copyUrl": "Copiar dirección"
-      }
+      },
+      "promptVariant": "Variante del prompt",
+      "promptVariantAdditionOnly": "Solo se aplicó el añadido de esta variante. El prompt del espacio de trabajo para este agente reemplazó su texto base.",
+      "promptVariantSuperseded": "Esta variante no se aplicó. El prompt del espacio de trabajo para este agente tuvo prioridad.",
+      "promptVariantWithdrawn": "Esta variante ya no está registrada, por lo que el paso se ejecutó con el prompt original."
     },
     "stepDetail": {
       "contents": "Contenidos",
@@ -4030,7 +4034,9 @@
       "consensusGroups": "Grupos de consenso",
       "consensusGroupsHint": "Elige los paneles reutilizables a los que este paso puede escalar. Cada uno lleva su propio umbral de estimación; se ejecuta el más exigente que la tarea supere.",
       "consensusGroupsActive": "Este paso ejecuta el grupo seleccionado. Deselecciona todos los grupos para configurar aquí los participantes.",
-      "consensusGroupAlways": "siempre"
+      "consensusGroupAlways": "siempre",
+      "variantLabel": "Variante del prompt",
+      "variantShipped": "Prompt original"
     },
     "progress": {
       "status": {

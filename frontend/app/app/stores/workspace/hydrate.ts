@@ -97,6 +97,9 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
     snapshot.customTaskTypes ?? [],
   )
   useAgentsStore().hydrateCapabilities(capabilities)
+  // The deployment's registered agent-kind variants (alternate prompts for existing kinds), so
+  // the builder can offer them per step and the run views can name the one a step ran under.
+  useAgentsStore().hydrateVariants(snapshot.agentKindVariants ?? [])
   useTaskTypesStore().hydrateCapabilities(capabilities)
   // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
   // pipeline builder's per-step skill picker has its options. A straight replace.

@@ -704,6 +704,21 @@ export const ORG_RESEARCH_PIPELINE_ID = 'pl_org_research'
 export const ORG_APPLY_PIPELINE_ID = 'pl_org_apply'
 
 /**
+ * A VARIATION of the built-in `coder` — the same agent kind, told to work test-first.
+ *
+ * This is the seam to reach for when the change you want is EDITORIAL: the step still clones,
+ * edits, commits and opens a PR exactly as a Coder step does, and every engine decision keyed on
+ * `coder` (the follow-up companion, the fork-decision phase, multi-repo fan-out, the merge tail)
+ * is unchanged. Registering a `coder-tdd` KIND instead would have quietly lost all of those.
+ *
+ * It uses `promptAddition` rather than `systemPrompt` on purpose: an addition rides on top of
+ * whatever base actually runs, so it keeps applying as the product edits the shipped Coder prompt
+ * AND on top of a workspace's own override of it. A `systemPrompt` replacement is the right tool
+ * only when the role genuinely differs, and it stops tracking both.
+ */
+export const ORG_CODER_TDD_VARIANT_ID = 'org:coder-tdd'
+
+/**
  * The two phase ids — shared VERBATIM by the phase template, the planner steering, and `seedPlan`
  * (the "define the phase id ONCE, reference it everywhere" contract: the planner must emit these
  * exact ids and the ingest normalizer matches on them). Mirrors `tech-migration/phases.ts`.
@@ -883,6 +898,25 @@ export function registerExampleCustomAgents(
   registry.registerSkill(securityReviewSkill)
   registry.registerToolServer(advisoryToolServer)
   registry.registerAll(EXAMPLE_AGENT_KINDS)
+  // A VARIATION of a BUILT-IN kind (see ORG_CODER_TDD_VARIANT_ID): no new kind, no new dispatch
+  // path, no harness change — just different text on the Coder step that selects it.
+  registry.registerVariant({
+    id: ORG_CODER_TDD_VARIANT_ID,
+    baseKind: 'coder',
+    promptAddition:
+      'House rule for this step: work test-first. Before changing behaviour, add or extend a ' +
+      'test that FAILS for the reason the task describes, and say in your final report which ' +
+      'test that was and what it asserted. Only then make it pass. When the change is genuinely ' +
+      'untestable (a pure rename, a config value, generated output), say so explicitly rather ' +
+      'than writing a test that asserts nothing.',
+    presentation: {
+      label: 'TDD-first',
+      description: 'The Coder, required to land a failing test before the fix.',
+    },
+  })
+  // The apply pipeline runs its Coder step under that variant. A pipeline selects a variant
+  // through the step's OPTIONS, parallel to `agentKinds` like every other per-step knob — the
+  // step's kind is still `coder`.
   pipelineRegistry.register({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
@@ -901,6 +935,7 @@ export function registerExampleCustomAgents(
     id: ORG_APPLY_PIPELINE_ID,
     name: 'Org apply',
     agentKinds: ['coder', 'conflicts', 'ci', 'merger'],
+    stepOptions: [{ agentVariantId: ORG_CODER_TDD_VARIANT_ID }, null, null, null],
   })
   registerOrgAuditPreset(initiativePresetRegistry)
   registerOrgResearchPreset(initiativePresetRegistry)

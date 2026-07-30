@@ -10,7 +10,7 @@ import {
   SYSTEM_AGENT_META,
   uid,
 } from '~/utils/catalog'
-import type { AgentArchetype, AgentKind, CustomAgentKind } from '~/types/domain'
+import type { AgentArchetype, AgentKind, AgentKindVariant, CustomAgentKind } from '~/types/domain'
 
 /**
  * The agent palette catalog (slice 2 of the modular-vue adoption —
@@ -39,6 +39,12 @@ export const useAgentsStore = defineStore('agents', () => {
   const capabilitiesManifest = ref<RemoteModuleManifest<AppSlots> | null>(null)
   // In-UI, client-only prototype agents created via the "add agent" modal.
   const runtimeAgents = ref<AgentArchetype[]>([])
+  // The deployment's registered agent-kind VARIANTS (alternate prompts for EXISTING kinds), from
+  // the snapshot. Deliberately NOT part of the capability manifest above: a variant is not a
+  // palette block and has no result view — it is a per-step OPTION on a kind that is already
+  // there — so folding it into the kind catalog would make it placeable, which is exactly what
+  // the backend model says it is not. A straight replace, like the skills catalog it mirrors.
+  const variants = ref<AgentKindVariant[]>([])
 
   /**
    * The merged CUSTOM catalog (consumer-slot → backend-manifest → runtime), each
@@ -134,6 +140,28 @@ export const useAgentsStore = defineStore('agents', () => {
     capabilitiesManifest.value = manifest
   }
 
+  /** Hydrate the deployment's registered agent-kind variants from the snapshot (straight replace). */
+  function hydrateVariants(list: readonly AgentKindVariant[]) {
+    variants.value = [...list]
+  }
+
+  /**
+   * The variants registered for one kind — what the pipeline builder offers as that step's
+   * alternate prompt. Empty for every kind on the stock product.
+   */
+  function variantsForKind(kind: AgentKind): AgentKindVariant[] {
+    return variants.value.filter((variant) => variant.baseKind === kind)
+  }
+
+  /**
+   * A variant's display label, or the raw id when the deployment no longer registers it. The id
+   * is the honest fallback: a step really is configured to run that variant, and rendering
+   * nothing would show a varied step as if it were the stock kind.
+   */
+  function variantLabel(id: string): string {
+    return variants.value.find((variant) => variant.id === id)?.label ?? id
+  }
+
   return {
     archetypes,
     customArchetypes,
@@ -141,5 +169,9 @@ export const useAgentsStore = defineStore('agents', () => {
     addAgent,
     registerConsumerKinds,
     hydrateCapabilities,
+    variants,
+    hydrateVariants,
+    variantsForKind,
+    variantLabel,
   }
 })

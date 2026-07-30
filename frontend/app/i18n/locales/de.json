@@ -1647,7 +1647,11 @@
         "approved": "Freigegeben",
         "changes_requested": "Änderungen angefordert",
         "rejected": "Abgelehnt"
-      }
+      },
+      "promptVariant": "Prompt-Variante",
+      "promptVariantAdditionOnly": "Nur die Ergänzung dieser Variante wurde angewendet. Der Workspace-Prompt für diesen Agenten hat ihren Basistext ersetzt.",
+      "promptVariantSuperseded": "Diese Variante wurde nicht angewendet. Der Workspace-Prompt für diesen Agenten hatte Vorrang.",
+      "promptVariantWithdrawn": "Diese Variante ist nicht mehr registriert, daher lief der Schritt mit dem ausgelieferten Prompt."
     },
     "stepDetail": {
       "contents": "Inhalte",
@@ -3691,7 +3695,9 @@
       "consensusGroups": "Konsensgruppen",
       "consensusGroupsHint": "Wähle die wiederverwendbaren Panels, auf die dieser Schritt hochstufen darf. Jedes hat seine eigene Schätzungsschwelle; es läuft das anspruchsvollste, das die Aufgabe erreicht.",
       "consensusGroupsActive": "Dieser Schritt führt die ausgewählte Gruppe aus. Hebe die Auswahl aller Gruppen auf, um die Teilnehmer hier zu konfigurieren.",
-      "consensusGroupAlways": "immer"
+      "consensusGroupAlways": "immer",
+      "variantLabel": "Prompt-Variante",
+      "variantShipped": "Ausgelieferter Prompt"
     },
     "progress": {
       "status": {

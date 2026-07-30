@@ -1296,7 +1296,11 @@
         "approved": "承認済み",
         "changes_requested": "変更を依頼済み",
         "rejected": "却下済み"
-      }
+      },
+      "promptVariant": "プロンプトのバリアント",
+      "promptVariantAdditionOnly": "このバリアントの追加分のみが適用されました。このエージェントのワークスペースプロンプトが基本テキストを置き換えました。",
+      "promptVariantSuperseded": "このバリアントは適用されませんでした。このエージェントのワークスペースプロンプトが優先されました。",
+      "promptVariantWithdrawn": "このバリアントは登録されていないため、ステップは標準のプロンプトで実行されました。"
     },
     "stepDetail": {
       "contents": "内容",
@@ -4042,7 +4046,9 @@
       "consensusGroups": "コンセンサスグループ",
       "consensusGroupsHint": "このステップが引き上げられる再利用可能なパネルを選びます。各パネルは独自の見積もりしきい値を持ち、タスクが超えたうち最も厳しいものが実行されます。",
       "consensusGroupsActive": "このステップは選択したグループを実行します。ここで参加者を設定するには、すべてのグループの選択を解除してください。",
-      "consensusGroupAlways": "常時"
+      "consensusGroupAlways": "常時",
+      "variantLabel": "プロンプトのバリアント",
+      "variantShipped": "標準のプロンプト"
     },
     "progress": {
       "status": {

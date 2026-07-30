@@ -724,6 +724,18 @@ export const stepOptionsSchema = v.object({
    * metered provider path — a subscription CLI treats it as advisory).
    */
   maxOutputTokens: v.optional(agentMaxOutputTokensSchema),
+  /**
+   * The registered VARIATION of this step's agent kind it runs as — a deployment-authored
+   * alternate prompt (`AgentKindRegistry.registerVariant`), selected per step exactly as
+   * {@link skillId} selects which skill the one generic `skill` kind runs.
+   *
+   * A variant is deliberately not a kind of its own: the step still records the base
+   * `agentKind`, so every behavioural decision in the engine, the executor and the SPA is what
+   * that kind always did, and only the prompt changes. Rejected at pipeline save (and again at
+   * run start) when the id is unknown or its base kind is not this step's kind. Absent ⇒ the
+   * kind's shipped prompt.
+   */
+  agentVariantId: v.optional(v.string()),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 

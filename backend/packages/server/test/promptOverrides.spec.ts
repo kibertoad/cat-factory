@@ -11,15 +11,12 @@ import {
 } from '@cat-factory/agents'
 import {
   BESPOKE_SYSTEM_PROMPTS,
-  builtInBaseSystemPrompt,
-  builtInDirectivesFor,
-  dispatchSystemPromptFor,
-} from '../src/agents/promptOverrides.js'
-import {
   MERGER_DIRECTIVES,
   MERGER_SYSTEM_PROMPT,
   ON_CALL_SYSTEM_PROMPT,
-} from '../src/agents/prompts.js'
+  shippedBasePromptFor,
+} from '@cat-factory/agents'
+import { builtInDirectivesFor, dispatchSystemPromptFor } from '../src/agents/promptOverrides.js'
 
 // The container-dispatch half of the per-workspace prompt override. Two properties matter and
 // neither is obvious from the call sites: an override must not be able to delete the directives
@@ -187,12 +184,12 @@ describe('builtInDirectivesFor', () => {
   })
 })
 
-describe('builtInBaseSystemPrompt', () => {
+describe('shippedBasePromptFor', () => {
   it('is the text the dispatch runs for an unedited kind, so a restore restores what ran', () => {
     // This is the invariant the editor's "built-in" baseline rests on. It holds trivially for a
     // normal kind and is the whole reason the bespoke map exists for the other two.
     for (const kind of ['coder', 'architect', ...Object.keys(BESPOKE_SYSTEM_PROMPTS)]) {
-      const builtIn = builtInBaseSystemPrompt(kind, registry)
+      const builtIn = shippedBasePromptFor(kind, registry)
       expect(dispatchSystemPromptFor(context(kind, builtIn), registry)).toBe(
         dispatchSystemPromptFor(context(kind), registry),
       )

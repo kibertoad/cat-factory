@@ -101,4 +101,34 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
     expect(created.category).toBeUndefined() // lands in the palette "custom" bucket
     expect(agentKindMeta(created.kind).label).toBe('My Agent')
   })
+
+  it('holds agent-kind VARIANTS apart from the palette catalog', () => {
+    // A variant is a per-step OPTION on a kind that is already in the palette, not a kind of its
+    // own — so it must never reach `archetypes` / `agentKindMeta`, or it would become placeable.
+    const agents = useAgentsStore()
+    agents.hydrateVariants([
+      { id: 'org:tdd', baseKind: 'coder', label: 'TDD-first' },
+      { id: 'org:sec', baseKind: 'pr-reviewer', label: 'Security lens' },
+    ])
+    expect(agents.variantsForKind('coder').map((v) => v.id)).toEqual(['org:tdd'])
+    expect(agents.variantsForKind('architect')).toEqual([])
+    expect(agents.archetypes.some((a) => a.kind === 'org:tdd')).toBe(false)
+    expect(isKnownAgentKind('org:tdd')).toBe(false)
+  })
+
+  it('falls back to a variant id the deployment no longer registers', () => {
+    // A step really is configured to run that variant; rendering nothing would show a varied step
+    // as if it were the stock kind.
+    const agents = useAgentsStore()
+    agents.hydrateVariants([{ id: 'org:tdd', baseKind: 'coder', label: 'TDD-first' }])
+    expect(agents.variantLabel('org:tdd')).toBe('TDD-first')
+    expect(agents.variantLabel('org:withdrawn')).toBe('org:withdrawn')
+  })
+
+  it('swaps the variant list wholesale on re-hydrate (per-workspace snapshot)', () => {
+    const agents = useAgentsStore()
+    agents.hydrateVariants([{ id: 'org:tdd', baseKind: 'coder', label: 'TDD-first' }])
+    agents.hydrateVariants([])
+    expect(agents.variantsForKind('coder')).toEqual([])
+  })
 })

@@ -968,6 +968,29 @@ the full history of what it has run.
   "inheriting" is the row's ABSENCE, never a stored null. Ceilings are advisory on the
   subscription-CLI inline path. Doc:
   [`configurable-agent-output-budgets.md`](./docs/initiatives/configurable-agent-output-budgets.md).
+- **A code-registered VARIANT is the same unit of text, one tier out.**
+  `registerVariant({ id, baseKind, systemPrompt | promptAddition })` (`@cat-factory/agents`) gives a
+  deployment an alternate prompt for an EXISTING kind, selected per step via
+  `stepOptions.agentVariantId`. It is deliberately NOT a kind: a kind id is what every un-migrated
+  `switch(agentKind)` keys off, so a new id would dispatch down the generic path and quietly do the
+  wrong thing, whereas a varied step records the BASE kind and every behavioural decision is
+  unchanged. **A variation needing different BEHAVIOUR is a different kind.** The engine resolves it
+  in the SAME once-per-dispatch place as the workspace override and emits it through the SAME
+  `systemPromptOverride` field, so no executor branches on it and the invariants above hold for it
+  unchanged; the WORKSPACE override wins as the narrower tier, and a `promptAddition` then folds onto
+  the workspace's text rather than the shipped text — which is why an addition, not a replacement, is
+  the default a variant should reach for.
+- **A step is varied by ASKING; what the dispatch DID with the ask is a separate recorded fact.**
+  Because the workspace out-ranks the deployment on the same text, a selected variant routinely
+  reaches the prompt only partly (its addition survives, its replacement does not) or not at all
+  (displaced with no addition, or withdrawn mid-run). So the dispatch pins `step.promptVariant`
+  `{ id, applied, fingerprint? }` beside `promptRevision`, warns on every losing disposition, and
+  **every reader keys off the PIN, never off `stepOptions.agentVariantId`** — a panel or a metric
+  reading the ask reports a variation that never ran, which reads as confirmation rather than as the
+  absence it is. The `fingerprint` covers the text the variant CONTRIBUTED, so Kaizen cannot let a
+  re-worded variant inherit the verified streak its previous wording earned (re-registering an id is
+  a supported way to re-word one), and a variant that contributed nothing stays out of the key
+  entirely.
 - **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`** because `merger` and
   `on-call` dispatch a bespoke constant instead of their role prompt, bypassing `applySurfaceDirectives`.
   The role is editable; the directives (the JSON contract the engine parses, on-call's read-only
