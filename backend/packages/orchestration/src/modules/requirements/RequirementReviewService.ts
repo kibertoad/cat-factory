@@ -10,7 +10,12 @@ import type {
 } from '@cat-factory/kernel'
 import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import { assertFound, ValidationError } from '@cat-factory/kernel'
+import {
+  assertContextDocumentsReadable,
+  assertFound,
+  contextExcerptFor,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { generateText } from 'ai'
 import {
   catFactoryObservability,
@@ -696,13 +701,27 @@ export class RequirementReviewService extends IterativeReviewService<
 
   /** Assemble the block's collected requirements + any linked docs/issues. */
   protected async gatherContext(workspaceId: string, block: Block): Promise<RequirementsContext> {
-    const docs = this.documentRepository
-      ? (await this.documentRepository.listByBlock(workspaceId, block.id)).map((d) => ({
-          title: d.title,
-          url: d.url,
-          excerpt: d.excerpt,
-        }))
+    // The requirements review is the FIRST step of the default pipelines, so it is the first
+    // reader of the block's attachments — and it applies the same rule the dispatch path does: an
+    // attached document with no readable content breaks the round instead of being reviewed as if
+    // it said nothing. Asking a product owner to sign off on requirements against a document the
+    // platform could not open is worse than refusing the round (the same call the inline
+    // interviewer makes about a read failure).
+    //
+    // It asserts over the EXCERPT PROJECTION rather than over `hasReadableContent`, because that is
+    // the only half of a document this reviewer renders: it runs inline, with no checkout to
+    // materialise a body into. A body that is pure markup — the empty fenced block an extractor
+    // emits for an embed it cannot render — is something a container agent at least opens, and
+    // collapses to nothing here, so testing the body and rendering the excerpt would leave exactly
+    // this hole open one field narrower.
+    const attached = this.documentRepository
+      ? await this.documentRepository.listByBlock(workspaceId, block.id)
       : []
+    const projected = attached.map((d) => ({ doc: d, excerpt: contextExcerptFor(d) }))
+    assertContextDocumentsReadable(
+      projected.filter((p) => !p.excerpt).map((p) => ({ title: p.doc.title, url: p.doc.url })),
+    )
+    const docs = projected.map((p) => ({ title: p.doc.title, url: p.doc.url, excerpt: p.excerpt }))
     const tasks = this.taskRepository
       ? (await this.taskRepository.listByBlock(workspaceId, block.id)).map((t) => ({
           key: t.externalId,

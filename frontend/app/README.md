@@ -54,6 +54,16 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+### Always import a layer component explicitly
+
+**Import a component under `components/` by path before using it in a template.** Do not lean on Nuxt's auto-registration. This layer sets no `components` config, so the default `pathPrefix: true` applies and a component is registered under its path-prefixed name: `components/panels/StepEffortReport.vue` becomes `PanelsStepEffortReport`, and a bare `<StepEffortReport>` matches nothing.
+
+Some bare tags do work, which is exactly what makes this worth writing down. Nuxt drops a directory segment the filename already repeats, so `pipeline/PipelinePicker.vue` registers as `PipelinePicker` and resolves bare, while `pipeline/AgentKindIcon.vue` in the same folder registers as `PipelineAgentKindIcon` and does not. Whether a tag resolves therefore depends on a coincidence between a folder name and a filename, and renaming either end breaks the tag with no error. An explicit import does not care.
+
+The failure is silent, which is why this is a rule rather than a preference. An unresolved tag warns in dev and then renders nothing, so a built SPA has a hole where the component should be. Nothing catches it: not typecheck, not the unit tests, not the e2e suite, and not the user, who reads it as a backend returning no data. Seven components had shipped this way.
+
+`scripts/check-component-imports.mjs` enforces it (CI's `repo-guards` job). If a panel section is missing and the data looks right, check the import first.
+
 ## Interface modes (basic / advanced)
 
 The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday

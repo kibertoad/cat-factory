@@ -151,11 +151,15 @@ describe('driveExecution poll-failure cause recovery', () => {
 })
 
 describe('driveExecution failure identity', () => {
-  it('lifts a thrown DomainError’s details.reason onto the run failure', async () => {
+  it('lifts a thrown DomainError’s details.reason onto the run failure, as a preflight', async () => {
     // The step-result path has always forwarded `reason`; the advance-THROW path dropped it,
     // so the one failure class the SPA can offer a remedy for arrived as prose with no
     // machine-readable code (observability-logging-gaps.md, B3). `getErrorReason` is the
     // read-side dual of the `reason` a `ConflictError` carries.
+    //
+    // The KIND is `preflight`, matching what `classifyDispatchFailure` records for the same
+    // refusal caught one layer deeper: a precondition the run never satisfied means nothing
+    // reached an agent, and `agent` sends a reader looking for a transcript that does not exist.
     const h = harness({
       advance: [
         new ConflictError('No configured provider for this model.', 'providers_unconfigured'),
@@ -163,11 +167,12 @@ describe('driveExecution failure identity', () => {
     })
     await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events.at(-1)).toBe(
-      'fail:agent:No configured provider for this model.:reason=providers_unconfigured',
+      'fail:preflight:No configured provider for this model.:reason=providers_unconfigured',
     )
   })
 
-  it('leaves the reason unset for a plain Error, rather than inventing one', async () => {
+  it('leaves the reason unset — and the kind `agent` — for a plain Error', async () => {
+    // Only a DomainError is evidence of a precondition; anything else stays the agent's failure.
     const h = harness({ advance: [new Error('the container exploded')] })
     await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events.at(-1)).toBe('fail:agent:the container exploded')
