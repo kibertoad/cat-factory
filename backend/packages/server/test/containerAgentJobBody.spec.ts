@@ -7,6 +7,7 @@ import type {
   RunnerJobResult,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { CONTEXT_DOCUMENTS_OVER_BUDGET, ValidationError } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -313,6 +314,33 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits packageRegistries when no resolver is wired', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+
+  it('refuses the dispatch when the linked context overflows the byte budget', async () => {
+    // The unit test on `buildContextFiles` proves the throw; this proves it survives `startJob`
+    // — nothing reaches the transport, and the throw is a `DomainError` carrying the cause code,
+    // which is what makes `classifyDispatchFailure` file it as a `preflight` rejection rather
+    // than "the container failed to start".
+    const error = await executor
+      .startJob(
+        context('coder', {
+          contextDocs: [
+            {
+              title: 'Platform PRD',
+              url: 'https://wiki.test/prd',
+              excerpt: 'x',
+              summary: 'x',
+              body: 'x'.repeat(300_000),
+            },
+          ],
+        }),
+      )
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENTS_OVER_BUDGET)
+    expect((error as ValidationError).message).toContain('"Platform PRD"')
+    // No partial corpus was shipped: the agent never got a half-context it could not detect.
+    expect(captured).toEqual([])
   })
 })
 

@@ -109,8 +109,83 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 
 `spawn` without `frameId` creates new top-level frames; with it, the plan's
 modules and tasks are added inside that existing service frame. A document linked
-to a block is resolved at execution time and injected into the agent prompt (see
-`userPromptFor` in `core/src/modules/agents/agent-catalog.ts`).
+to a block is resolved at execution time and injected into the agent prompt
+(`resolveLinkedContext` in `packages/orchestration/src/modules/execution/linked-context.ts`
+→ `renderLinkedContext` in `packages/agents`), under the delivery rule below.
+
+## A referenced context document reaches the agent, or the run breaks
+
+A document attached to a block (and any imported document its description names outright)
+is _the intent the agent builds against_, so the resolution path treats it as load-bearing
+rather than best-effort. The rule, owned by kernel's `domain/context-references.ts` and
+asserted at every point where such a reference could go missing:
+
+**a referenced context document either reaches the agent whole, or the run fails loudly
+naming the ones that could not be delivered.** Two causes, two `error.details.reason`
+codes, both surfaced on the run's failure record (so the SPA shows the cause, not just the
+prose) and both remedied by the human:
+
+| Cause                                                                                  | Reason code                     | Refused by                                                            |
+| -------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| The reference resolves to a page with **no readable content** (blank body AND excerpt) | `context_document_unreadable`   | `resolveLinkedContext`, plus `RequirementReviewService.gatherContext` |
+| The corpus **overflows** the ~256 KB materialised-context budget                       | `context_documents_over_budget` | `buildContextFiles`                                                   |
+
+Both land on the run as a **`preflight`** failure — the honest kind, since no agent ran —
+but they refuse at different depths, so different seams classify them:
+`buildContextFiles` throws inside `startJob`, where `classifyDispatchFailure` sees it;
+`resolveLinkedContext` throws earlier, inside the context builder, so the throw leaves
+`advanceInstance` and the driver's `failureFromAdvanceError` sees it. Both map a
+`DomainError` to `preflight` plus its `details.reason`, and `runFailure.test.ts` pins that
+they agree — otherwise which seam happens to catch a refusal would decide how the board
+describes it.
+
+**Where in the run each one bites** is worth knowing, because they differ: the unreadable
+refusal fires on the first step that resolves context, which on the default pipelines is
+`requirements-review` (step 1); the over-budget refusal fires on the first CONTAINER
+dispatch, which can be after a human has already answered a requirements round. Catching
+the latter at run start would mean wiring the documents/tasks repositories into
+`ExecutionService` for a check the first dispatch performs anyway — and the reworked
+description path re-resolves per dispatch, so the resolver-level check would still be
+needed underneath it.
+
+Neither is hypothetical: `import` persists whatever the provider returned, so a
+permission-limited Confluence page, an empty Notion page or a design node whose extraction
+yielded nothing all project to a blank body. Before this rule, both cases were dropped on
+the floor — the run looked completely healthy while the agent worked from a spec nobody
+noticed it never read. The remedy is always named in the message: re-import the page, or
+detach it from the task (a task may proceed without a document; it may never do so
+silently). The over-budget message says "detach the linked context this task does not
+need" rather than naming a page, because linked **tracker issues** are sized into the same
+budget and can be what overflows it.
+
+**A refusal is asserted over the content its caller actually renders.**
+`hasReadableContent` (body OR excerpt) is right where the RAW body is delivered — a
+container agent opens the materialised markdown source and can at least see what is in it.
+An inline caller with no checkout renders only a short excerpt, so it asserts over
+`contextExcerptFor`, which can be empty for a body that is not: `import` stores
+`buildExcerpt(body)`, i.e. `markdownToText`, and a body that is pure markup (the empty
+fenced block an extractor emits for an embed it cannot render) collapses to nothing.
+Testing the body and rendering the excerpt would re-open this very hole one field narrower.
+
+Two deliberate NON-refusals:
+
+- **A URL that matches nothing imported is logged, not refused.** The providers' `parseRef`
+  implementations are host-blind (`parseNotionRef` claims any string carrying a UUID-shaped
+  run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so a claim is
+  evidence of a shape, not of a reference — failing runs on it would block a task whose
+  description happens to link a dashboard. The drop stays; an `info` line naming the URL and
+  the source is what keeps it from being silent (importing the page turns it into real
+  context). It is `info` rather than `warn` for the same reason it is not a refusal: a
+  description that links a dashboard is a normal, permanent state of a healthy task, and
+  this re-resolves on every dispatch — a warning would repeat forever with no remedy anyone
+  intends to apply, which is how a channel gets tuned out.
+- **A budget that omits an item from a PROMPT states the omission instead.** The
+  materialised index is capped at `CONTEXT_BUDGET.maxItems`, and an inline (no-checkout)
+  kind's injection at `CONTEXT_BUDGET.inlineBodyTokens`; `renderLinkedContext` says how many
+  items are unlisted (they are all on disk) and names the documents an inline prompt had no
+  budget left for, because an unmentioned omission reads as "this is the complete set". Both
+  notices are themselves BOUNDED — the inline one names a handful and counts the rest — since
+  a notice that reports a budget overrun must not be able to cause one.
 
 **The SPA never sends `frameId`.** Planning is target-blind — `plan(record)` takes
 only the document, and its prompt asks for a whole architecture (top-level frames →

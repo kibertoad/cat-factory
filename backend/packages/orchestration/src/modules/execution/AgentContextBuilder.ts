@@ -1291,6 +1291,7 @@ export class AgentContextBuilder {
         ...(this.deps.documentUrlResolver
           ? { documentUrlResolver: this.deps.documentUrlResolver }
           : {}),
+        ...(this.deps.logger ? { logger: this.deps.logger } : {}),
       },
       workspaceId,
       blockId,
