@@ -4,6 +4,7 @@ import {
   challengePrReviewFindingSchema,
   prReviewStepStateSchema,
   resolvePrReviewSchema,
+  resumePrReviewSchema,
 } from '../prReview.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -32,6 +33,20 @@ export const resolvePrReviewContract = defineApiContract({
   requestPathParamsSchema: executionIdParams,
   pathResolver: ({ executionId }) => `/executions/${executionId}/pr-review/resolve`,
   requestBodySchema: resolvePrReviewSchema,
+  responsesByStatusCode: { 200: prReviewStepStateSchema, ...errorResponses },
+})
+
+/**
+ * Re-trigger a review stuck mid-`reviewing`, re-reviewing ONLY the slices that never reported.
+ * Takes no body: what to redo is derived from the step's own `sliceReviews` + task list, never
+ * from the caller. 409 when the review is not `reviewing` (a parked or resolved review has its
+ * own actions, and re-dispatching one would destroy findings a human may be mid-selection on).
+ */
+export const resumePrReviewContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}/pr-review/resume`,
+  requestBodySchema: resumePrReviewSchema,
   responsesByStatusCode: { 200: prReviewStepStateSchema, ...errorResponses },
 })
 

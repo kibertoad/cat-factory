@@ -7,6 +7,10 @@
 // findings to a Fixer that commits fixes onto the PR branch), `Post` (publish them as inline PR
 // review comments), or `Finish` (just record the curated selection). Fix/Post act on the
 // selection, so they require at least one selected finding.
+//
+// While the review is still RUNNING it also offers `Resume`, which re-dispatches a review that
+// appears stuck for only the slices that never reported (see `canResume` for why it is always
+// offered rather than gated on an activity heuristic).
 import { computed, ref, watch } from 'vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
@@ -24,6 +28,7 @@ import { subtaskIconClass } from '~/utils/pipelineRender'
 import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -207,6 +212,25 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
   await prReview.resolve(id, activeSelectedIds.value, action).catch(() => {})
 }
 
+/**
+ * RESUME a review that appears stuck. Offered throughout the `reviewing` phase — including the
+ * neutral "planning" sub-state, since a wedge is just as possible before a plan is reported as
+ * after — because the whole complaint this answers is that a stuck review had no visible
+ * affordance at all. Deliberately NOT hidden behind a staleness heuristic: `lastActivityAt` freezes
+ * on a long silent turn (a single completion emits no tool call and grows no subagent transcript),
+ * so the platform cannot tell a wedged review from a quiet-but-working one, and hiding the control
+ * until it thinks it can would put it out of reach in exactly the case that motivated it.
+ */
+const canResume = computed(
+  () => status.value === 'reviewing' && !prReview.resuming && access.canExecuteRuns.value,
+)
+
+async function onResume(): Promise<void> {
+  const id = instanceId.value
+  if (!id || !canResume.value) return
+  await prReview.resume(id).catch(() => {})
+}
+
 // Per-finding CHALLENGE: the open finding's id (its inline concern box is showing) + the drafted
 // concern text. Dispatching moves the whole review to `challenging` until the verdict lands.
 const challengeForId = ref<string | null>(null)
@@ -272,7 +296,7 @@ async function onDismiss(id: string): Promise<void> {
           <div
             v-if="planning"
             data-testid="pr-review-planning"
-            class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+            class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
           >
             <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
             <p class="text-sm text-slate-200">{{ t('prReview.reviewing.planning.title') }}</p>
@@ -393,6 +417,37 @@ async function onDismiss(id: string): Promise<void> {
                 </li>
               </ul>
             </template>
+          </div>
+
+          <!-- Nudge a review that looks stuck. Present in BOTH reviewing sub-states, and never
+               gated on a staleness guess: the heartbeat freezes on a long silent turn, so nothing
+               here can tell wedged from quiet-but-working (see `canResume`). Re-reviews only the
+               slices that never reported; the finished ones are re-aggregated from their captured
+               reports. -->
+          <div class="mt-4 border-t border-slate-800 pt-3">
+            <p
+              v-if="prReview.error"
+              data-testid="pr-review-resume-error"
+              class="mb-2 rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+            >
+              {{ prReview.error }}
+            </p>
+            <div class="flex items-start justify-between gap-3">
+              <p class="min-w-0 text-[11px] text-slate-500">{{ t('prReview.resume.hint') }}</p>
+              <UButton
+                data-testid="pr-review-resume"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-rotate-ccw"
+                :loading="prReview.resuming"
+                :disabled="!canResume"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="onResume"
+              >
+                {{ t('prReview.resume.action') }}
+              </UButton>
+            </div>
           </div>
         </div>
 

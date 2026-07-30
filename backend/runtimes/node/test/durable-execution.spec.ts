@@ -99,7 +99,7 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
     const start = await call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
     )
     expect(start.status).toBe(201)
     expect(start.body.status).toBe('running')

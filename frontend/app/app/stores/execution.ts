@@ -130,6 +130,44 @@ export const useExecutionStore = defineStore('execution', () => {
     } else instances.value.push(instance)
   }
 
+  /**
+   * Run an action that returns a run's authoritative sub-state and apply that state to the cached
+   * run as an OPTIMISTIC ECHO — but only when the event stream has not delivered a newer revision
+   * while the request was in flight.
+   *
+   * WHY THIS EXISTS. {@link upsert} and {@link hydrate} are monotonic by `rev`, so a stale stream
+   * event can never regress a run. An action store's echo bypassed both: it reached into the cached
+   * instance and assigned `step.forkDecision` / `step.prReview` / `step.judge` / `step.followUps`
+   * directly, with nothing comparing revisions. That is a live-push CLOBBER in its optimistic-echo
+   * form, and it loses state that no later event restores.
+   *
+   * The fork-decision chat is the case that caught it. `chat` records the human turn and wakes the
+   * durable driver, which computes the reply and re-parks — two separate emits. With no model wired
+   * the reply is canned, so the driver routinely emits the two-message thread BEFORE the browser has
+   * even processed the HTTP response carrying the one-message `answering` state. Echoing that
+   * response then dropped the reply back off the thread, permanently: the run is parked, so nothing
+   * emits again. It read as a hung "thinking…" bubble to a user and as a flaky spec in CI.
+   *
+   * The guard is the run's own `rev`, captured BEFORE the request and re-read after. Any advance
+   * means the stream has already delivered this write (or something later), so the echo has nothing
+   * left to add and is skipped. Unchanged means the echo is still the freshest thing available,
+   * which is exactly what it is for. Taking the request as a thunk keeps the capture-then-compare
+   * ordering here rather than at four call sites that each have to remember it.
+   */
+  async function echoAfter<T>(
+    executionId: string,
+    send: () => Promise<T>,
+    apply: (state: T, instance: ExecutionInstance) => void,
+  ): Promise<T> {
+    const before = byId.value.get(executionId)
+    const revBefore = before ? revOf(before) : -1
+    const state = await send()
+    const instance = byId.value.get(executionId)
+    if (!instance || revOf(instance) !== revBefore) return state
+    apply(state, instance)
+    return state
+  }
+
   const byId = computed(() => {
     const map = new Map<string, ExecutionInstance>()
     for (const e of instances.value) map.set(e.id, e)
@@ -248,6 +286,7 @@ export const useExecutionStore = defineStore('execution', () => {
     instances,
     hydrate,
     upsert,
+    echoAfter,
     byId,
     getInstance,
     getByBlock,

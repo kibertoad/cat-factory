@@ -3,10 +3,17 @@ import type {
   DocumentRecord,
   DocumentRepository,
   DocumentSourceKind,
+  Logger,
   TaskRecord,
   TaskRepository,
 } from '@cat-factory/kernel'
-import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
+import {
+  assertContextDocumentsReadable,
+  buildExcerpt,
+  CONTEXT_BUDGET,
+  hasReadableContent,
+  redactSecrets,
+} from '@cat-factory/kernel'
 import { extractReferences } from '@cat-factory/integrations'
 
 /**
@@ -36,6 +43,12 @@ export interface LinkedContextSources {
   tasks?: TaskRepository
   /** Canonicalise a pasted URL to a `(source, externalId)` so link variants still resolve. */
   documentUrlResolver?: DocumentUrlResolver
+  /**
+   * Reports the references that a document provider CLAIMED but that matched nothing imported —
+   * the one class of unresolved reference that must NOT fail the run (see
+   * {@link reportUnmatchedUrls}). Absent ⇒ they are dropped as before.
+   */
+  logger?: Logger
 }
 
 /**
@@ -68,12 +81,14 @@ export function linkedContextSourcesFrom(deps: {
     kind: DocumentSourceKind
     parseRef: (url: string) => string | null
   }[]
+  logger?: Logger
 }): LinkedContextSources {
   const documentUrlResolver = makeDocumentUrlResolver(deps.documentSourceProviders)
   return {
     ...(deps.documentRepository ? { documents: deps.documentRepository } : {}),
     ...(deps.taskRepository ? { tasks: deps.taskRepository } : {}),
     ...(documentUrlResolver ? { documentUrlResolver } : {}),
+    ...(deps.logger ? { logger: deps.logger } : {}),
   }
 }
 
@@ -92,6 +107,12 @@ export interface LinkedContext {
  * repo is optional, so this is a no-op for sources that aren't wired. Deduped by
  * (source, externalId). The full body travels to the container as a materialised file; the prompt
  * carries only the one-line `summary` (see the executor + `linkedContextSection`).
+ *
+ * THROWS (`assertContextDocumentsReadable`) when a resolved document has no readable content: a
+ * reference the platform cannot put in front of the agent breaks the run rather than being dropped
+ * in silence. A URL that no imported item matches at all is the one case that stays best-effort,
+ * and it is logged rather than dropped — see {@link reportUnmatchedUrls} for why it cannot be a
+ * refusal.
  */
 export async function resolveLinkedContext(
   sources: LinkedContextSources,
@@ -134,6 +155,7 @@ export async function resolveLinkedContext(
     taskRepo?.listByRefs(workspaceId, refs.taskRefs) ?? [],
     Promise.all(
       refs.urls.map(async (url) => {
+        const claimedBy = documents ? (sources.documentUrlResolver?.(url)?.source ?? null) : null
         const [doc, task] = await Promise.all([
           (async () => {
             if (!documents) return null
@@ -147,7 +169,7 @@ export async function resolveLinkedContext(
           })(),
           taskRepo?.getByUrl(workspaceId, url) ?? null,
         ])
-        return { doc, task }
+        return { url, claimedBy, doc, task }
       }),
     ),
   ])
@@ -160,10 +182,62 @@ export async function resolveLinkedContext(
     addDoc(doc)
     addTask(task)
   }
+  reportUnmatchedUrls(sources.logger, blockId, urlItems)
+
+  // BREAK, never skip: a reference that resolved to a page with nothing in it would otherwise put
+  // the agent in front of a `.cat-context/` file holding a title and a URL it cannot open, with
+  // the run reading as perfectly healthy. Asserted HERE rather than at each caller so no dispatch
+  // path can opt out — the engine's builder and the inline initiative interviewer both go through
+  // this resolver, which is the whole reason it exists as a shared function.
+  const resolved = [...docs.values()]
+  assertContextDocumentsReadable(
+    resolved.filter((d) => !hasReadableContent(d)).map((d) => ({ title: d.title, url: d.url })),
+  )
 
   return {
-    docs: [...docs.values()].map((d) => toContextDoc(d)),
+    docs: resolved.map((d) => toContextDoc(d)),
     tasks: [...tasks.values()].map((t) => toContextTask(t)),
+  }
+}
+
+/**
+ * Report the URLs a document provider CLAIMED (its `parseRef` resolved an id out of them) but that
+ * matched neither an imported document nor an imported issue.
+ *
+ * These are deliberately NOT a refusal, and that asymmetry is the point: the providers' `parseRef`
+ * implementations are host-BLIND — `parseNotionRef` claims any string carrying a UUID-shaped run,
+ * `parseConfluenceRef` any URL with a `/pages/<digits>` segment — so a claim is evidence of a
+ * SHAPE, not of a reference. Failing runs on it would block a task whose description happens to
+ * link a dashboard or a blog post. So the drop stays, and the log is what keeps it from being
+ * silent: an operator can see that a link the description named reached no imported page (the
+ * remedy being to import it, which turns it into real context).
+ *
+ * It logs at INFO, not `warn`, for the same reason it does not refuse. The condition is a NORMAL
+ * and PERMANENT state of a healthy task — a description that links a dashboard has nothing wrong
+ * with it — and this runs on every dispatch of every step, so a `warn` would repeat forever with
+ * no remedy anyone intends to apply, which is how a channel gets tuned out. `info` is the default
+ * threshold, so the line is still there for whoever asks "why didn't the agent see my page".
+ */
+function reportUnmatchedUrls(
+  logger: Logger | undefined,
+  blockId: string,
+  items: readonly {
+    url: string
+    /** The source whose `parseRef` claimed this URL, or null when none did (or docs are unwired). */
+    claimedBy: DocumentSourceKind | null
+    doc: DocumentRecord | null
+    task: TaskRecord | null
+  }[],
+): void {
+  if (!logger) return
+  for (const item of items) {
+    if (!item.claimedBy || item.doc || item.task) continue
+    logger.info('a linked-context url looks like a document-source page but nothing is imported', {
+      blockId,
+      // A pasted link can carry a signed/`?token=` query, and this one reaches the log verbatim.
+      url: redactSecrets(item.url),
+      source: item.claimedBy,
+    })
   }
 }
 

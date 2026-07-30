@@ -123,8 +123,10 @@ const INITIATIVE_PLANNER_SYSTEM_PROMPT =
   '(how many items may run at once — 1 for delicate serialized work) and ordered ' +
   '`rules` mapping estimates to pipelines (an item matches a rule when ANY axis meets ' +
   'its `min*` threshold; first match wins; no match falls back to `defaultPipelineId`). ' +
-  'Available pipelines: `pl_quick` (small, low-risk change), `pl_simple` (standard ' +
-  'change, lighter review), `pl_full` (full spec/review/test rigor), `pl_bugfix` (bug ' +
+  'Available pipelines, in ascending order of rigor: `pl_simple` (trivial change whose ' +
+  'approach is not in question — implement, review, test, merge), `pl_build` (the default: ' +
+  'adds a design phase before the implementation), `pl_full` (sizes each task itself and ' +
+  'escalates design / testing / human PR review from the estimate), `pl_bugfix` (bug ' +
   'remediation). Record the decisions you made and any known caveats. ' +
   'Respond with ONLY a JSON object of shape {"goal","constraints":[],"nonGoals":[],' +
   '"analysisSummary","phases":[{"id","title","goal","maxConcurrent"?}],' +

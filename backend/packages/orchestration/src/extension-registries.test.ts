@@ -195,13 +195,13 @@ describe('pipeline registry', () => {
 
   it('replaces a built-in pipeline in place when ids collide', () => {
     const builtins = seedPipelines().map((p) => p.id)
-    expect(builtins).toContain('pl_quick') // precondition: overriding an existing built-in
+    expect(builtins).toContain('pl_simple') // precondition: overriding an existing built-in
     const registry = defaultPipelineRegistry()
-    registry.register({ id: 'pl_quick', name: 'Org quick', agentKinds: ['coder', 'merger'] })
+    registry.register({ id: 'pl_simple', name: 'Org quick', agentKinds: ['coder', 'merger'] })
     const pipelines = seedPipelines(registry)
     // Same ids in the same order — replaced in place, not appended.
     expect(pipelines.map((p) => p.id)).toEqual(builtins)
-    expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')
+    expect(pipelines.find((p) => p.id === 'pl_simple')?.name).toBe('Org quick')
   })
 })
 

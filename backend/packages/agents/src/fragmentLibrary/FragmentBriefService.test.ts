@@ -193,6 +193,32 @@ describe('FragmentBriefService.resolveBriefs', () => {
     expect(repo.rows).toMatchObject([{ ownerKind: 'account', ownerId: 'acc1' }])
   })
 
+  it('hands the RUN to the generator, so its model call is attributed to the paying step', async () => {
+    // A condensation is a model call on the run path. It reaches `llm_call_metrics` through the
+    // generator's own `ModelScope`, which is built from this id — so dropping it anywhere along
+    // AgentContextBuilder → resolveBodiesForRun → here → the generator files the call under a
+    // null execution id: in the store, absent from the step's rollup, reading as spend that
+    // never happened. Nothing about that fails loudly, hence this assertion.
+    const generator = fakeGenerator()
+    await service(generator).resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }], {
+      executionId: 'exec_1',
+    })
+    expect(generator.generate).toHaveBeenCalledWith(
+      'ws1',
+      expect.objectContaining({ executionId: 'exec_1' }),
+    )
+  })
+
+  it('leaves the run unnamed for a caller that has none', async () => {
+    // The honest answer, not a guess: an off-run caller's condensation is unattributed.
+    const generator = fakeGenerator()
+    await service(generator).resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(generator.generate).toHaveBeenCalledWith(
+      'ws1',
+      expect.not.objectContaining({ executionId: expect.anything() }),
+    )
+  })
+
   it('folds the full body when no generator is wired', async () => {
     const briefs = await service().resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
     expect(briefs.size).toBe(0)

@@ -51,6 +51,14 @@ export interface FragmentBriefGeneratorInput {
   title: string
   body: string
   summary?: string
+  /**
+   * The run whose dispatch triggered this condensation, when there is one. Folded into the
+   * generator's {@link ModelScope}, which is both what leases that run's credential and what
+   * ATTRIBUTES the condensation call to the run — a brief is generated ON the run path, so
+   * without it the call lands in `llm_call_metrics` under a null execution id and the step
+   * that paid for it reports less than it spent.
+   */
+  executionId?: string
 }
 
 /**

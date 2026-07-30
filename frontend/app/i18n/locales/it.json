@@ -1979,6 +1979,7 @@
         "clarity_review": "Segna come letto",
         "release_regression": "Conferma presa visione",
         "platform_health": "Conferma presa visione",
+        "infra_unreachable": "Conferma",
         "decision_required": "Segna come letto",
         "human_test_ready": "Segna come letto",
         "visual_confirmation_ready": "Segna come letto",
@@ -2027,11 +2028,13 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Esecutore degli agenti non configurato",
+        "unreachableTitle": "L'esecutore degli agenti non è raggiungibile",
         "body": "Questo deployment esegue gli agenti su un runner pool self-hosted, ma nessuno è registrato, quindi nessun agente può funzionare finché non ne connetti uno.",
         "action": "Configura il runner pool"
       },
       "ephemeralEnvironments": {
         "title": "Ambiente di test non configurato",
+        "unreachableTitle": "Il provider di ambienti di test non è raggiungibile",
         "body": "Nessun provider di ambiente effimero è registrato, quindi gli agenti di test che necessitano di un ambiente di anteprima live non possono funzionare. Apri Ambienti di test qui sotto e connetti un cluster Kubernetes o un provider di ambienti HTTP personalizzato per abilitarli.",
         "action": "Configura l'ambiente"
       },
@@ -2043,6 +2046,11 @@
       "dismiss": {
         "session": "Ignora per questa sessione",
         "permanent": "Accetto le limitazioni, non notificarmi più"
+      },
+      "unreachable": {
+        "body": "La connessione è configurata, ma una verifica in tempo reale non è riuscita a raggiungerla in questo momento. Si tratta quindi di un'interruzione e non di una configurazione mancante: gli agenti che ne dipendono falliranno finché non arriverà di nuovo una risposta. Controlla che il servizio sia attivo, poi riprova la connessione.",
+        "reason": "Ultima verifica: {detail}",
+        "action": "Verifica connessione"
       }
     },
     "spendWarningBanner": {
@@ -4743,6 +4751,7 @@
     },
     "routable": {
       "platform_health": "Salute della piattaforma",
+      "infra_unreachable": "Interruzioni dell’infrastruttura",
       "merge_review": "Revisione del merge",
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",
@@ -5656,6 +5665,10 @@
         "in_progress": "In revisione…",
         "pending": "In coda"
       }
+    },
+    "resume": {
+      "action": "Riprendi la revisione",
+      "hint": "Sembra bloccata? La ripresa riesamina solo i blocchi che non hanno mai risposto e conserva i rilievi di quelli già completati."
     },
     "phase": {
       "planning": "Revisione…",

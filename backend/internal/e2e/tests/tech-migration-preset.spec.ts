@@ -80,7 +80,7 @@ const MIGRATION_PLAN = {
       description: 'Prove parity on PostgreSQL, flip defaults, remove the old path.',
     },
   ],
-  policy: { maxConcurrent: 2, defaultPipelineId: 'pl_quick', rules: [] },
+  policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple', rules: [] },
 }
 
 test('a tech-migration initiative interviews, plans a 5-phase migration, and spawns a decorated blast-zone document', async ({

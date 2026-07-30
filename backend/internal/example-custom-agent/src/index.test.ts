@@ -308,7 +308,7 @@ describe('example org-audit initiative preset', () => {
         ],
         policy: {
           maxConcurrent: 2,
-          defaultPipelineId: 'pl_quick',
+          defaultPipelineId: 'pl_simple',
           rules: [],
           onMissingEstimate: 'default',
         },
@@ -506,7 +506,7 @@ describe('example org research-and-apply preset', () => {
         ],
         policy: {
           maxConcurrent: 1,
-          defaultPipelineId: 'pl_quick',
+          defaultPipelineId: 'pl_simple',
           rules: [],
           onMissingEstimate: 'default',
         },

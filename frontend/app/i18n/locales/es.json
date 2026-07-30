@@ -1886,6 +1886,7 @@
         "clarity_review": "Marcar como leída",
         "release_regression": "Confirmar recepción",
         "platform_health": "Confirmar recepción",
+        "infra_unreachable": "Confirmar",
         "decision_required": "Marcar como leída",
         "human_test_ready": "Marcar como leída",
         "visual_confirmation_ready": "Marcar como leída",
@@ -1940,11 +1941,13 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Ejecutor de agentes no configurado",
+        "unreachableTitle": "El ejecutor de agentes no está accesible",
         "body": "Este despliegue ejecuta los agentes en un pool de runners autoalojado, pero no hay ninguno registrado, así que ningún agente podrá ejecutarse hasta que conectes uno.",
         "action": "Configurar pool de runners"
       },
       "ephemeralEnvironments": {
         "title": "Entorno de pruebas no configurado",
+        "unreachableTitle": "El proveedor de entornos de prueba no está accesible",
         "body": "No hay ningún proveedor de entornos efímeros registrado, así que los agentes de pruebas que necesitan un entorno de vista previa activo no pueden ejecutarse. Abre Entornos de prueba abajo y conecta un clúster de Kubernetes o un proveedor de entornos HTTP personalizado para habilitarlos.",
         "action": "Configurar entorno"
       },
@@ -1956,6 +1959,11 @@
       "dismiss": {
         "session": "Descartar durante esta sesión",
         "permanent": "Acepto las limitaciones, no volver a avisarme"
+      },
+      "unreachable": {
+        "body": "La conexión está configurada, pero una comprobación en vivo no ha podido alcanzarla ahora mismo. Por eso se trata de una interrupción y no de una configuración pendiente: los agentes que dependen de ella fallarán hasta que vuelva a responder. Comprueba que el servicio esté en marcha y vuelve a probar la conexión.",
+        "reason": "Última comprobación: {detail}",
+        "action": "Comprobar conexión"
       }
     },
     "spendWarningBanner": {
@@ -3586,6 +3594,7 @@
     },
     "routable": {
       "platform_health": "Estado de la plataforma",
+      "infra_unreachable": "Interrupciones de infraestructura",
       "merge_review": "Revision de fusion",
       "pipeline_complete": "Pipeline completado",
       "ci_failed": "CI fallido",
@@ -5644,6 +5653,10 @@
         "in_progress": "Revisando…",
         "pending": "En cola"
       }
+    },
+    "resume": {
+      "action": "Reanudar la revisión",
+      "hint": "¿Parece atascada? Al reanudar solo se vuelven a revisar los fragmentos que nunca respondieron y se conservan los hallazgos de los ya terminados."
     },
     "phase": {
       "planning": "Revisando…",

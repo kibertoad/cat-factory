@@ -1,5 +1,275 @@
 # @cat-factory/node-server
 
+## 0.142.3
+
+### Patch Changes
+
+- cfda954: Raise the inline document-planning output caps: `doc-researcher` to 24000 and `doc-outliner` to
+  10000 (from the shared 5000 default), symmetrically in both runtime routing builders. Both kinds
+  return their whole deliverable as one reply, so the cap bounds the artifact rather than guarding
+  against a runaway — at 5000 a research brief truncates mid-answer and the run drafts from it.
+  Each keeps the cheap default model; only the budget changes, and `AGENT_MAX_OUTPUT_TOKENS` still
+  overrides.
+- Updated dependencies [d9789f9]
+  - @cat-factory/kernel@0.198.0
+  - @cat-factory/agents@0.91.0
+  - @cat-factory/orchestration@0.174.0
+  - @cat-factory/contracts@0.200.0
+  - @cat-factory/caching@0.11.27
+  - @cat-factory/consensus@0.13.7
+  - @cat-factory/eks@0.1.180
+  - @cat-factory/gates@0.8.27
+  - @cat-factory/gitlab@0.14.10
+  - @cat-factory/integrations@0.113.1
+  - @cat-factory/observability-langfuse@0.9.24
+  - @cat-factory/observability-otel@0.4.24
+  - @cat-factory/provider-bedrock@0.7.332
+  - @cat-factory/provider-cloudflare@0.7.333
+  - @cat-factory/provider-s3@0.2.252
+  - @cat-factory/server@0.183.1
+  - @cat-factory/spend@0.12.128
+  - @cat-factory/prompt-fragments@0.15.23
+
+## 0.142.2
+
+### Patch Changes
+
+- Updated dependencies [123ac6f]
+  - @cat-factory/agents@0.90.0
+  - @cat-factory/contracts@0.199.0
+  - @cat-factory/integrations@0.113.0
+  - @cat-factory/kernel@0.197.0
+  - @cat-factory/orchestration@0.173.0
+  - @cat-factory/server@0.183.0
+  - @cat-factory/consensus@0.13.6
+  - @cat-factory/provider-bedrock@0.7.331
+  - @cat-factory/provider-cloudflare@0.7.332
+  - @cat-factory/eks@0.1.179
+  - @cat-factory/gates@0.8.26
+  - @cat-factory/gitlab@0.14.9
+  - @cat-factory/observability-otel@0.4.23
+  - @cat-factory/prompt-fragments@0.15.22
+  - @cat-factory/spend@0.12.127
+  - @cat-factory/caching@0.11.26
+  - @cat-factory/observability-langfuse@0.9.23
+  - @cat-factory/provider-s3@0.2.251
+
+## 0.142.1
+
+### Patch Changes
+
+- Updated dependencies [550a7fe]
+  - @cat-factory/server@0.182.0
+
+## 0.142.0
+
+### Minor Changes
+
+- 99412e2: Report infrastructure that is configured but DEAD, live — the reachability watcher deferred out of
+  the `cat-factory supervise` PR (#1527), plus the wire contract and the banner it produces for.
+
+  The infra-setup banner could only say "you never set this up". A provider that WAS set up and has
+  since died looked identical to a healthy one, because the projection asks whether a connection ROW
+  exists, not whether anything answers. That gap is how an outage sits unnoticed for a day: every
+  testing agent fails while the board reports a perfectly healthy setup.
+
+  ## The watcher
+
+  `sweepInfraReachability` is a runtime-neutral sweep (Worker cron ⇄ Node interval, exactly like
+  `sweepPlatformHealth`). For each board it probes the SAVED environment-provider and runner-pool
+  connections through new `probeSavedConnection` methods — distinct from `testConnection`, which
+  answers "would this config work" for an operator at a form and asserts config safety. Re-running
+  that safety assertion against an already-persisted connection would report it as an outage the
+  moment a deployment tightened its URL policy, so the probe makes none.
+
+  Opt-in (`INFRA_REACHABILITY_WATCH`): it is the one sweep that makes an outbound call per workspace
+  per pass, to infrastructure the deployment does not own. That cost profile is the operator's call.
+
+  FOUR probe results, deliberately not two, because they need four dispositions. A probe that ANSWERED
+  `ok: false`, or did not answer inside the per-probe budget, is an outage. A probe that THREW, or that
+  could not be asked at all (a de-registered backend kind, an unparseable config), is INDETERMINATE and
+  leaves the recorded state exactly as it was — a throw is a LOCAL fault (an unresolvable connection, a
+  secret bundle that would not decrypt), and blaming the operator's cluster for our own missing key is
+  the "never infer a cause from the presence of an error" trap. An area with NOTHING REGISTERED is
+  neither: it is knowably not an outage, so the recorded failure is forgotten while announcing nothing
+  (the honest next state is the `not_defined` setup gap the snapshot recomputes, not a "recovered"
+  push). Collapsing those last two — as a `ConnectionTestResult | null` return forced — meant an
+  operator who fixed a dead runner pool by UN-REGISTERING it kept the open card forever, escalating
+  red, since nothing but a probe clears a record only a probe writes.
+
+  The watcher probes exactly the areas the snapshot projection would NAG about, through the one shared
+  `infraSetupAreaApplies` predicate. Gating on "is the module wired" (which the projection does not)
+  was strictly looser: `agentExecutorRequiresRunnerPool` is unset on Cloudflare and false on local
+  mode, so a dead-but-optional runner pool raised a card, paged Slack and pushed `unreachable` for an
+  area whose banner the projection then refused to render — an outbound probe cost paid to report
+  something nobody could see on reload.
+
+  `INFRA_REACHABILITY_INTERVAL_MS` now means the same thing on both facades. The Worker's `scheduled`
+  tick fires every 2 minutes for every backstop it drives, so the operator's only lever on the one
+  sweep that calls out per workspace did nothing there; the sweep now runs only on the tick that opens
+  a new interval window — pure arithmetic on the cron's aligned timestamp, so it stays stateless in a
+  fresh isolate.
+
+  ## Where the last-observed state lives
+
+  The contract requires publishing on TRANSITION only, which needs durable prior state — a Worker cron
+  tick runs in a fresh isolate, so in-memory would re-announce every ongoing outage every pass. Rather
+  than a table, the state is the workspace's open `infra_unreachable` notification and its
+  `payload.unreachableAreas`, the same way the platform-health sweep uses its card's `platformAlerts`
+  set. That card is already durable, already runtime-symmetric, already routed for mothership mode and
+  already read by the board snapshot — so the sweep needs one batched `listOpenByType` and the
+  projection folds the same record with no extra query and no probe on the board-load path. An
+  operator also gets an inbox card and a Slack route for the outage, which is the right surface for it
+  anyway.
+
+  The per-area probe REASON is not persisted there: it varies between passes, and any content change
+  re-delivers the card, so it would re-toast the inbox for the whole outage. It rides the live
+  transition instead — which is when someone is actually looking — and the banner RENDERS it, since a
+  refused connection, a rejected token and a timeout need different fixes and the generic body cannot
+  tell them apart. Absent after a reload, so it is an addition to the copy rather than the only thing
+  that explains the card.
+
+  ## The wire contract and the banner
+
+  - `infraSetupStatusSchema` gains **`unreachable`**, riding the existing setup projection rather than
+    a second "your infra is broken" surface: the consequence is identical to `not_defined` (a class of
+    agents cannot run) and the same operator surface fixes it, so the banner, deep-link and i18n are
+    reused.
+  - `isInfraSetupHealthStatus` + `INFRA_SETUP_HEALTH_STATUSES` mark it a HEALTH state, and the banner
+    honours the difference: the other three statuses are stable operator decisions, so they offer a
+    permanent per-user "don't notify me again"; applying that to an outage would let one click silence
+    every future occurrence. An outage is session-dismissible only and it re-nags on recurrence. BOTH
+    dismissals are keyed by the CLAIM (area + kind), never by the area alone, because the two cards an
+    area can raise say different things about it: silencing "you haven't configured this" must not also
+    silence the outage card raised after the operator configures it and the provider then dies.
+  - `applyInfraSetupTransition` (contracts) is the ONE rule about which prior state a probe verdict may
+    overwrite — only a `configured` area may become `unreachable` — and both delivery paths fold
+    through it: the backend's snapshot projection and the SPA store's live patch. The live patch used
+    to assign unconditionally, so a pushed `unreachable` rendered a red "check that the service is
+    running" banner over a `not_applicable`/`not_defined` area, which then vanished on the next reload.
+    A banner that contradicts the projection is worse than a late one.
+  - `WorkspaceEvent` gains **`infraSetup`**, carrying the area, the new status and the probe's reason,
+    which the SPA applies as a targeted one-field patch. A coarse refresh would pay the whole snapshot
+    aggregate for a one-field delta.
+
+  ## Also fixed
+
+  `FanOutEventPublisher` delegates method-by-method, so any event it does not name is silently dropped
+  for every deployment wiring the in-org fan-out — nothing throws, the browser just never updates.
+  `kaizenGradingChanged` was already being dropped that way. Both it and the new `infraSetupChanged`
+  now forward, and a structural test reflects `NoopEventPublisher`'s surface so the next added event
+  fails there instead of in production. `NoopEventPublisher` is in turn pinned to
+  `Required<ExecutionEventPublisher>`, which closes the remaining hole: every publisher method is
+  OPTIONAL, so a new event added to the port compiled fine with no implementation anywhere and would
+  have slipped past a guard that reflected an incomplete Noop.
+
+### Patch Changes
+
+- Updated dependencies [99412e2]
+  - @cat-factory/contracts@0.198.0
+  - @cat-factory/kernel@0.196.0
+  - @cat-factory/integrations@0.112.0
+  - @cat-factory/server@0.181.0
+  - @cat-factory/agents@0.89.1
+  - @cat-factory/consensus@0.13.5
+  - @cat-factory/eks@0.1.178
+  - @cat-factory/gates@0.8.25
+  - @cat-factory/gitlab@0.14.8
+  - @cat-factory/observability-otel@0.4.22
+  - @cat-factory/orchestration@0.172.1
+  - @cat-factory/prompt-fragments@0.15.21
+  - @cat-factory/spend@0.12.126
+  - @cat-factory/caching@0.11.25
+  - @cat-factory/observability-langfuse@0.9.22
+  - @cat-factory/provider-bedrock@0.7.330
+  - @cat-factory/provider-cloudflare@0.7.331
+  - @cat-factory/provider-s3@0.2.250
+
+## 0.141.1
+
+### Patch Changes
+
+- Updated dependencies [1904eb8]
+  - @cat-factory/kernel@0.195.0
+  - @cat-factory/agents@0.89.0
+  - @cat-factory/orchestration@0.172.0
+  - @cat-factory/server@0.180.0
+  - @cat-factory/caching@0.11.24
+  - @cat-factory/consensus@0.13.4
+  - @cat-factory/eks@0.1.177
+  - @cat-factory/gates@0.8.24
+  - @cat-factory/gitlab@0.14.7
+  - @cat-factory/integrations@0.111.2
+  - @cat-factory/observability-langfuse@0.9.21
+  - @cat-factory/observability-otel@0.4.21
+  - @cat-factory/provider-bedrock@0.7.329
+  - @cat-factory/provider-cloudflare@0.7.330
+  - @cat-factory/provider-s3@0.2.249
+  - @cat-factory/spend@0.12.125
+
+## 0.141.0
+
+### Minor Changes
+
+- f9db6a6: Record the inline LLM calls that local mode serves from a host CLI, and stop filing run-scoped
+  inline calls under a null execution id.
+
+  The inline `llm_call_metrics` feeder was applied as the innermost provider wrap, so local mode's
+  subscription-inline harness — which answers a Claude Code / Codex ref with its own
+  `CliInlineLanguageModel` rather than delegating — was invisible to it. With `LOCAL_NATIVE_INLINE`
+  on (the default), every inline step on a host `claude`/`codex` login recorded zero calls while the
+  same step on a metered API model recorded fine. Separately, ten of the twelve inline call sites
+  tagged only the workspace, so their rows landed with `execution_id = NULL`: in the store, but
+  absent from every run-scoped read.
+
+  Attribution also no longer trusts a settled run: `resolveBlockRunContext` drops the execution id
+  once the run is terminal (keeping the initiator), because `block.executionId` is the block's LAST
+  run rather than necessarily a live one. A stale id would report an inline call's spend against a
+  finished run's rollup, and unlike a null nothing about a wrong-but-plausible id looks wrong.
+
+  Compatibility breaks (pre-1.0, no shims):
+
+  - `createScopedModelProviderResolver` no longer takes `instrument`, and the instrumentation and
+    concurrency-limiter wraps are no longer exported individually. Apply the new
+    `wrapResolverWithTelemetry(resolver, { instrument, limiter })` on top of the resolver — after any
+    facade wrap that can substitute a resolved model. It owns the ORDER of the two wraps, which is
+    load-bearing and which nothing in the type system holds: reversed, the composition still
+    type-checks and still records every non-substituted call. Replace a `wrapResolverWithLimiter`
+    call with the `limiter` field (build it with `vendorConcurrencyLimiterFromEnv`; it stays a
+    pass-through when nothing is capped).
+  - `createNodeModelProviderResolver` builds the BASE resolver only; its `instrument` and
+    `workspaceSettingsRepository` parameters are gone, and the env-built trace-sink instrument it
+    used to fall back to is now the exported `inlineInstrumentFromEnv(env, workspaceBodiesEnabled)`.
+    A deployment assembling its own container composes the two — and MUST: a caller that merely drops
+    the removed arguments compiles fine and silently stops instrumenting its inline calls.
+  - `InlineInstrumentation` is now exported from `agents/modelProviderResolver` rather than derived
+    from `ScopedModelProviderOptions['instrument']` (same shape, same import path from the package
+    root).
+  - `FragmentBriefService.resolveBriefs` takes its run on an options object (`{ executionId }`)
+    rather than as a third positional argument.
+  - `@cat-factory/agents` additionally exports `LimitedModelProvider`, so a facade wiring test can
+    assert the wrapper it composed.
+
+### Patch Changes
+
+- Updated dependencies [f9db6a6]
+  - @cat-factory/server@0.179.0
+  - @cat-factory/agents@0.88.0
+  - @cat-factory/kernel@0.194.0
+  - @cat-factory/orchestration@0.171.1
+  - @cat-factory/consensus@0.13.3
+  - @cat-factory/provider-bedrock@0.7.328
+  - @cat-factory/provider-cloudflare@0.7.329
+  - @cat-factory/caching@0.11.23
+  - @cat-factory/eks@0.1.176
+  - @cat-factory/gates@0.8.23
+  - @cat-factory/gitlab@0.14.6
+  - @cat-factory/integrations@0.111.1
+  - @cat-factory/observability-langfuse@0.9.20
+  - @cat-factory/observability-otel@0.4.20
+  - @cat-factory/provider-s3@0.2.248
+  - @cat-factory/spend@0.12.124
+
 ## 0.140.0
 
 ### Minor Changes

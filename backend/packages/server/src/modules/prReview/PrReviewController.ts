@@ -3,6 +3,7 @@ import {
   dismissPrReviewFindingContract,
   getPrReviewContract,
   resolvePrReviewContract,
+  resumePrReviewContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -15,7 +16,9 @@ import { param } from '../../http/params.js'
  * pull request and surfaces prioritized findings; the run then parks for a human to SELECT
  * which findings matter. The read returns the run's active review state (null when no
  * `pr-reviewer` step carries one); `resolve` records the curated selection and completes the
- * read-only review, advancing the run. Mounted under `/workspaces/:workspaceId`.
+ * read-only review, advancing the run. `resume` is the exception to the park-then-act shape: it
+ * acts on a review still IN FLIGHT, re-dispatching a wedged one for only the slices that never
+ * reported. Mounted under `/workspaces/:workspaceId`.
  */
 export function prReviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -39,6 +42,18 @@ export function prReviewController(): Hono<AppEnv> {
       c
         .get('container')
         .executionService.resolvePrReview(param(c, 'workspaceId'), executionId, input),
+    )
+    return c.json(state, 200)
+  })
+
+  // Resume a review stuck mid-`reviewing`: re-dispatch the reviewer for only the slices that never
+  // reported, folding the already-captured reports in as context. Runs under the acting user's
+  // ambient context like the other dispatching endpoints — this mints a fresh container job.
+  buildHonoRoute(app, resumePrReviewContract, async (c) => {
+    const { executionId } = c.req.valid('param')
+    const userId = c.get('user')?.id
+    const state = await runWithInitiator(userId, () =>
+      c.get('container').executionService.resumePrReview(param(c, 'workspaceId'), executionId),
     )
     return c.json(state, 200)
   })

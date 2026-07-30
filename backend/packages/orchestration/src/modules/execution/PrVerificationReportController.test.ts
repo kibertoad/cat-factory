@@ -21,7 +21,7 @@ function makeInstance(overrides: Partial<ExecutionInstance> = {}): ExecutionInst
   return {
     id: 'exec_1',
     blockId: 'blk_1',
-    pipelineId: 'pl_quick',
+    pipelineId: 'pl_simple',
     pipelineName: 'Quick implement',
     steps: [{ agentKind: 'coder', state: 'done', progress: 1, decision: null }],
     currentStep: 0,

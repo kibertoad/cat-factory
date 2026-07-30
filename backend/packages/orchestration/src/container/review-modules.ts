@@ -7,7 +7,7 @@ import type { NotificationService } from '../modules/notifications/NotificationS
 import { resolvePresetModelForKind } from '../modules/modelPresets/ModelPresetService.js'
 import type { CoreDependencies, FragmentLibraryModule } from '../container.js'
 import type { BrainstormModule, ClarityModule, RequirementsModule } from './module-shapes.js'
-import { resolveBlockRunContext } from './modules.js'
+import { resolveBlockRunContext } from './blockRunContext.js'
 
 // The INLINE ITERATIVE-REVIEW modules: the requirements reviewer (+ its Requirement Writer), the
 // bug-report clarity reviewer, and the two brainstorm dialogue stages.

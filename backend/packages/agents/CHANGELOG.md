@@ -1,5 +1,210 @@
 # @cat-factory/agents
 
+## 0.91.0
+
+### Minor Changes
+
+- d9789f9: Replace the seven near-identical build presets with a three-rung build ladder, and generalise
+  estimate gating past companions so one pipeline can cover the range that used to need several.
+
+  The ladder varies the one axis anyone actually chose a build pipeline on — how much design a task
+  gets. **Standard build** (`pl_build`, the new default) is design → challenge the design → implement
+  → review → verify → guards → merge, every step unconditional. **Simple build** (`pl_simple`) drops
+  the design phase for trivial work. **Adaptive build** (`pl_full`) runs a `task-estimator` first and
+  switches its own `architect` / `tester-api` / `human-review` steps on from the estimate.
+
+  Estimate gating is now a declared per-kind capability (`isGatableKind`) rather than a
+  companion-only special case: any step whose output later steps read as context may be gated, while
+  one some other mechanism reads structurally (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`)
+  may not. A skipped producer cascades onto its review companion, and a step may no longer carry both
+  a human approval gate and an estimate gate — the estimate may add a human checkpoint, never cancel
+  one.
+
+  The gatable-kind vocabulary is exported from `@cat-factory/contracts` (`BUILTIN_GATABLE_KINDS` /
+  `isBuiltinGatableKind`) because two surfaces in different packages must answer identically: the
+  engine's shape validation and the SPA's pipeline-health advisory, which re-derives the same verdict
+  client-side. `isGatableKind` in `@cat-factory/agents` remains the registry-aware form a deployment's
+  own kind overrides through.
+
+  Pickers are scoped to the task's use-case: a `feature`/`bug` task no longer offers the
+  document-authoring, PR-review or planning presets, and a new block-level rule keeps the planning
+  presets on initiative blocks (they were previously offered on every task and then refused at start).
+  An UNCLASSIFIED pipeline — one with no `purpose`, which the builder leaves unset by default — stays
+  visible on a `feature`/`bug` task, so a workspace's own hand-built pipelines are unaffected.
+
+  **Breaking:** six built-in pipelines are retired — `pl_quick`, `pl_dep_update`, `pl_pr_review`,
+  `pl_human_review`, `pl_fullstack` and `pl_integrate`. Each is tombstoned with a replacement, so an
+  already-seeded workspace gets the "retired — remove it" advisory naming where to go instead; a task
+  pinned to one will need repointing. `pl_simple` is redefined (`mocker` dropped) and `pl_full`
+  reshaped, both version-bumped, so existing workspaces are offered a reseed. `pl_integrate` is
+  removed rather than replaced because it carried no merge tail at all, which meant its coder-class
+  `integrator` committed straight to the base branch with no conflicts check and no CI.
+
+  Two further consequences worth knowing before upgrading. A retired pipeline that a recurring
+  SCHEDULE still points at cannot be deleted (that refusal is unchanged and deliberate), so acting on
+  its advisory means repointing the schedule first. And because a step may no longer carry both a human
+  approval gate and an estimate gate, a workspace pipeline that already carries both — only reachable
+  by having added estimate gating to a human-gated companion, as a `pl_fullstack` clone allowed — is
+  now refused at save and at run start until one of the two is dropped.
+
+  Retiring `pl_fullstack` also removes the last built-in preset carrying `playwright`, `researcher`,
+  `documenter`, `spec-companion`, `human-test` and the two brainstorm dialogues. All remain available
+  as steps in the pipeline builder; none is now in a shipped preset, so a task's agent-config catalog
+  surfaces a contributing kind's settings (e.g. `playwright.e2eTarget`) only once some pipeline in the
+  workspace actually uses that kind.
+
+  The `dep-update` recurring-schedule template is no longer inferred from a pipeline id (its pipeline
+  was the ordinary build tail under a recurring name); the template value remains for explicit API
+  callers.
+
+### Patch Changes
+
+- Updated dependencies [d9789f9]
+  - @cat-factory/kernel@0.198.0
+  - @cat-factory/contracts@0.200.0
+  - @cat-factory/prompt-fragments@0.15.23
+
+## 0.90.0
+
+### Minor Changes
+
+- 123ac6f: Make a PR review's finished slices durable while it runs, and let a review stuck mid-flight be resumed for only the slices that never came back.
+
+  The reviewer fans a large diff out across parallel subagents, then folds their findings into one structured output at the very end. Until that output arrives the step holds nothing but progress counts: `prReview.slices` and `prReview.findings` are both `[]`, because `coercePrReview` runs exactly once, from the terminal result. So the entire review lived in the container's memory until its last second, and anything that killed it first — the inactivity or max-duration watchdog, an evicted container, a wedged aggregation — threw away every completed slice and left a re-run from zero as the only option.
+
+  The measured incident makes the cost concrete: 18m05s wall clock and 25.46M input tokens, of which the final **196 seconds** were a single silent turn generating the findings JSON. During that window all nine task-list entries read complete, `findings` was still empty, and `lastActivityAt` had frozen — because the heartbeat is fed by tool-call events and subagent transcript growth, and a long single completion produces neither. A run in that state is indistinguishable from a wedged one, and nothing could recover it: `ProgressGuard` needs a tool call to evaluate anything, the inactivity watchdog is reset by any subagent transcript byte, and the 60-minute max-duration kill discards the work instead of saving it.
+
+  The persistence half reads what was already on the wire and being discarded. A subagent's dispatch and its terminal `tool_result` both appear on the parent stream (only its intermediate turns don't), and the slice tracker was matching that `tool_result` purely to flip a `done` flag while dropping the report inside it. It now captures that report — bounded, credential-scrubbed — and publishes the whole set on the job view as each slice lands, so the engine can fold it onto `prReview.sliceReviews` continuously rather than at the finish line.
+
+  On top of that, `POST /executions/:id/pr-review/resume` re-dispatches a review still in `reviewing` for only the unfinished slices, handing the resumed agent the already-captured reports as `.cat-context/pr-prior-review.md` and telling it to fold their findings into its aggregate rather than re-review them. Which slices remain is derived from what the platform observed — the captured reports plus the previous attempt's task list, the only place a planned-but-never-dispatched slice is named — never from the caller.
+
+  Notes for reviewers:
+
+  - The channel is a **whole-value latest publish**, not the drain-on-read that `followUps` and `spans` use. Those can afford to lose a poll window; this one carries the work being protected, so a dropped poll response must cost nothing. The fold is correspondingly monotonic: it never demotes a `completed` slice back to `in_progress` and never drops a report the incoming set omits, because a resumed container's tracker knows only the slices IT dispatched and forwarding that verbatim would erase the previous attempt's reports — which are the whole point.
+  - **A resume bumps `prReview.resumeAttempts`, and that feeds the step's dispatch epoch.** This is the sharpest thing to check. A container-reusing transport (a warm local pool, a self-hosted runner pool) re-attaches to a known job id rather than re-running, and the reviewer step carries none of the loop counters (`test`/`gate`/`ralph`) the epoch is otherwise derived from — so without this term every resume would mint the same job id and hand the recovery straight back to the wedged job it was meant to replace.
+  - **The prior-review context file is emitted by `AgentContextBuilder`, not by a preOp** beside the reviewer's existing three. Two reasons, the second decisive: the state rides the STEP, which `RepoOpContext` deliberately does not carry (it hands ops the block-scoped run context and a `RepoFiles`); and a preOp runs only once a run repo RESOLVES, which this file needs no part of, so gating on it would silently turn a resume back into a from-zero re-review wherever repo context is unwired. The alternative considered was widening `RepoOpContext` with the step — rejected as handing every op full mutable step state to serve one field. `injectedContextFiles` therefore has two producers now, and `RunRepoOpsController` APPENDS rather than assigns.
+  - **`sliceReviews` is cleared once an aggregation CONSUMES the reports, but not when the reviewer returned neither slices nor findings.** Clearing there would destroy the only record of the finished slices while recording the run as a clean PR — the exact loss this channel prevents, wearing a pass as a disguise. That is also why a partial aggregation cannot strand reports: a resume is refused unless the review is still `reviewing`, so by the time findings land the reports are either folded in or deliberately retained.
+  - **`reviewedHeadSha` is preserved across a resume rather than re-stamped.** It records the head the findings were computed against, and the completed slices' findings were computed against that tree. The cost is a wider drift window on a long resume, which the `post` resolution already absorbs by folding drifted findings into the summary; re-stamping would silently re-enable inline anchoring on lines that may since have shifted.
+  - **The resume control is deliberately not gated on a staleness heuristic.** `lastActivityAt` freezes on a long silent turn, so the platform cannot tell a wedged review from a quiet-but-working one, and hiding the control until it thinks it can would put it out of reach in exactly the case that motivated it.
+  - Wire-shape changes, no compatibility shims (pre-1.0 policy): `prReviewStepStateSchema` gains a required-with-default `sliceReviews` and `resumeAttempts` plus an optional `resumePendingSlices`, so every construction site supplies the first two. Existing rows read as an empty list / zero.
+  - A **runner-pool** deployment maps the channel through a new `sliceReviewsPath` on the response manifest. A pool that leaves it unset keeps the old all-or-nothing behaviour, and unlike the other latest-value paths that is not merely a lost live view: without it a pool-backed review has nothing for the resume to work from. Local and Cloudflare container transports forward the job view verbatim and needed no change.
+
+  Still unaddressed, and deliberately: the frozen heartbeat itself. A long single completion produces no stream events at all, so a run in its aggregation tail still reads as wedged. A synthetic beat would defeat the inactivity watchdog outright — the only thing that kills a genuinely hung agent — and real token deltas need `--include-partial-messages` plus a rework of the call aggregator's `message.id` folding. Until then the captured reports are the tell (every slice `completed` with `findings` still empty means aggregating, not stuck), and the resume is the escape hatch either way.
+
+### Patch Changes
+
+- Updated dependencies [123ac6f]
+  - @cat-factory/contracts@0.199.0
+  - @cat-factory/kernel@0.197.0
+  - @cat-factory/prompt-fragments@0.15.22
+
+## 0.89.1
+
+### Patch Changes
+
+- Updated dependencies [99412e2]
+  - @cat-factory/contracts@0.198.0
+  - @cat-factory/kernel@0.196.0
+  - @cat-factory/prompt-fragments@0.15.21
+
+## 0.89.0
+
+### Minor Changes
+
+- 1904eb8: Break loudly when a task's referenced context documents cannot reach the agent.
+
+  A document attached to a block (or named by its description and resolved against the imported
+  corpus) is the intent the agent is meant to build against, but two paths dropped one on the floor:
+  a reference that resolved to a page with a blank body materialised a `.cat-context/` file holding a
+  title and a URL the agent cannot open, and a corpus over the ~256 KB materialised-context budget had
+  its overflow silently discarded. In both cases the run looked completely healthy while the agent
+  worked from a spec nobody noticed it never read.
+
+  Both now refuse, naming every reference that could not be delivered plus the remedy — re-import the
+  page, or detach it from the task — and carrying a machine-readable `details.reason`
+  (`context_document_unreadable` / `context_documents_over_budget`) so the run's failure record shows
+  the cause rather than only the prose. The invariant lives in kernel
+  (`domain/context-references.ts`) because the reference can vanish in two different layers and both
+  must refuse in the same words. Each refusal is asserted over the content its caller actually
+  renders: `hasReadableContent` where the raw body is delivered to a checkout, `contextExcerptFor`
+  where an inline caller can carry only a short excerpt (a body that is pure markup is something a
+  container agent at least opens, and projects to nothing for an inline reviewer).
+
+  **Compatibility break:** a run whose task attaches an empty page, or more than ~256 KB of context,
+  now fails instead of proceeding with less context than the board shows — the unreadable case on the
+  first step that resolves context (`requirements-review` on the default pipelines), the over-budget
+  case on the first container dispatch. That is the intended trade: the remedy is a human decision,
+  and it is named in the failure.
+
+  Both refusals now record the run failure as `preflight` rather than `agent`, since nothing ever
+  reached an agent. That also fixes the KIND for every other `DomainError` a driver catches out of
+  `advanceInstance` (a `github_not_connected` conflict, an unwired deploy runner), which used to be
+  filed as an agent failure and sent readers looking for a transcript that does not exist.
+
+  Two cases deliberately do NOT refuse. A URL that matches nothing imported is logged at `info`
+  instead: the providers' `parseRef` implementations are host-blind (`parseNotionRef` claims any
+  string carrying a UUID-shaped run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment),
+  so a claim is evidence of a shape rather than of a reference, and refusing would block a task whose
+  description happens to link a dashboard. And a budget that omits an item from a PROMPT now states
+  the omission rather than failing: `renderLinkedContext` says how many materialised items the capped
+  index leaves unlisted (they are all on disk) and names the documents an inline, checkout-less
+  kind's injection had no budget left for, since an unmentioned omission reads as "this is the
+  complete set". Both notices are bounded, because a notice reporting a budget overrun must not be
+  able to cause one.
+
+### Patch Changes
+
+- Updated dependencies [1904eb8]
+  - @cat-factory/kernel@0.195.0
+
+## 0.88.0
+
+### Minor Changes
+
+- f9db6a6: Record the inline LLM calls that local mode serves from a host CLI, and stop filing run-scoped
+  inline calls under a null execution id.
+
+  The inline `llm_call_metrics` feeder was applied as the innermost provider wrap, so local mode's
+  subscription-inline harness — which answers a Claude Code / Codex ref with its own
+  `CliInlineLanguageModel` rather than delegating — was invisible to it. With `LOCAL_NATIVE_INLINE`
+  on (the default), every inline step on a host `claude`/`codex` login recorded zero calls while the
+  same step on a metered API model recorded fine. Separately, ten of the twelve inline call sites
+  tagged only the workspace, so their rows landed with `execution_id = NULL`: in the store, but
+  absent from every run-scoped read.
+
+  Attribution also no longer trusts a settled run: `resolveBlockRunContext` drops the execution id
+  once the run is terminal (keeping the initiator), because `block.executionId` is the block's LAST
+  run rather than necessarily a live one. A stale id would report an inline call's spend against a
+  finished run's rollup, and unlike a null nothing about a wrong-but-plausible id looks wrong.
+
+  Compatibility breaks (pre-1.0, no shims):
+
+  - `createScopedModelProviderResolver` no longer takes `instrument`, and the instrumentation and
+    concurrency-limiter wraps are no longer exported individually. Apply the new
+    `wrapResolverWithTelemetry(resolver, { instrument, limiter })` on top of the resolver — after any
+    facade wrap that can substitute a resolved model. It owns the ORDER of the two wraps, which is
+    load-bearing and which nothing in the type system holds: reversed, the composition still
+    type-checks and still records every non-substituted call. Replace a `wrapResolverWithLimiter`
+    call with the `limiter` field (build it with `vendorConcurrencyLimiterFromEnv`; it stays a
+    pass-through when nothing is capped).
+  - `createNodeModelProviderResolver` builds the BASE resolver only; its `instrument` and
+    `workspaceSettingsRepository` parameters are gone, and the env-built trace-sink instrument it
+    used to fall back to is now the exported `inlineInstrumentFromEnv(env, workspaceBodiesEnabled)`.
+    A deployment assembling its own container composes the two — and MUST: a caller that merely drops
+    the removed arguments compiles fine and silently stops instrumenting its inline calls.
+  - `InlineInstrumentation` is now exported from `agents/modelProviderResolver` rather than derived
+    from `ScopedModelProviderOptions['instrument']` (same shape, same import path from the package
+    root).
+  - `FragmentBriefService.resolveBriefs` takes its run on an options object (`{ executionId }`)
+    rather than as a third positional argument.
+  - `@cat-factory/agents` additionally exports `LimitedModelProvider`, so a facade wiring test can
+    assert the wrapper it composed.
+
+### Patch Changes
+
+- Updated dependencies [f9db6a6]
+  - @cat-factory/kernel@0.194.0
+
 ## 0.87.2
 
 ### Patch Changes

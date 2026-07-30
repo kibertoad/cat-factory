@@ -129,7 +129,9 @@ export {
   BLUEPRINT_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
-  DEP_UPDATE_PIPELINE_ID,
+  BUILD_PIPELINE_ID,
+  SIMPLE_PIPELINE_ID,
+  ADAPTIVE_BUILD_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
@@ -316,6 +318,22 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Infrastructure REACHABILITY: the pure decision the watcher sweep and the board snapshot share
+// — what to record, which transitions to announce, and how a recorded outage folds into the
+// setup projection. See `domain/infra-reachability.ts`.
+export type {
+  InfraSetupTransition,
+  ProbeOutcome,
+  ProbeVerdict,
+  ReachabilityDecision,
+  SavedConnectionProbe,
+} from './domain/infra-reachability.js'
+export {
+  applyInfraReachability,
+  decideReachability,
+  recordedUnreachableAreas,
+} from './domain/infra-reachability.js'
+
 // Where an ordered `-f` compose layer's text comes from (the primary repo, a directly-supplied
 // document, or another repo), and the pure placement rules both consumers share — the compose
 // environment provider and the shared-stack bring-up. See `domain/compose-sources.ts`.
@@ -329,6 +347,19 @@ export {
   composeSourcesNeedPrimaryRepo,
   describeComposeSource,
 } from './domain/compose-sources.js'
+
+// The "a referenced context document reaches the agent whole, or the run breaks loudly naming it"
+// invariant, shared by the engine's resolution path and the container's materialiser. See
+// `domain/context-references.ts`.
+export {
+  CONTEXT_DOCUMENT_UNREADABLE,
+  CONTEXT_DOCUMENTS_OVER_BUDGET,
+  type ContextReferenceRef,
+  hasReadableContent,
+  contextExcerptFor,
+  assertContextDocumentsReadable,
+  assertContextReferencesFit,
+} from './domain/context-references.js'
 
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {

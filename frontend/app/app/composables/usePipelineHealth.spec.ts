@@ -140,6 +140,38 @@ describe('usePipelineHealth', () => {
     expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
   })
 
+  // The regression this pins: the advisory carried its own "only a companion may be gated" rule,
+  // so when the engine generalised gating to `BUILTIN_GATABLE_KINDS` the shipped `pl_simple`
+  // ("Adaptive build" — an estimate-gated `architect`) was reported invalid in EVERY workspace.
+  // Because the advisory auto-opens a modal over the board, that made the board unusable rather
+  // than merely warning wrongly. Both sides now read the shared contracts constant.
+  it('accepts an estimate-gated NON-companion producer that the shared gatable set allows', () => {
+    const adaptive = builtin(['task-estimator', 'architect', 'architect-companion', 'coder'], {
+      gating: [null, { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' }, null, null],
+    })
+    const { hasIssues } = scan([adaptive])
+    expect(hasIssues.value).toBe(false)
+  })
+
+  it('still flags an estimate-gated kind the shared gatable set excludes (merger)', () => {
+    const gatedMerger = builtin(['task-estimator', 'coder', 'merger'], {
+      gating: [null, null, { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' }],
+    })
+    const { invalid } = scan([gatedMerger])
+    expect(invalid.value).toHaveLength(1)
+    expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
+  })
+
+  it('flags a step carrying BOTH a human approval gate and an estimate gate (shape)', () => {
+    const both = builtin(['task-estimator', 'architect'], {
+      gates: [false, true],
+      gating: [null, { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' }],
+    })
+    const { invalid } = scan([both])
+    expect(invalid.value).toHaveLength(1)
+    expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
+  })
+
   it('reports a built-in whose catalog version moved ahead as outdated (not invalid)', () => {
     const stale = builtin(['coder', 'reviewer'], { id: 'pl_stale', version: 1 })
     const { invalid, outdated } = scan([stale], { pl_stale: 2 })

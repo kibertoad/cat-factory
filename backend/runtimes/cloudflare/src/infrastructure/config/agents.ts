@@ -116,6 +116,23 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
     temperature: envTemperature ?? 0.3,
     maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
+  // The inline document-planning kinds return their WHOLE deliverable as one reply, so this
+  // cap bounds the artifact itself rather than acting as a safety net: at 5000 the research
+  // brief truncates mid-answer (finish_reason: length) and the run drafts from a half-written
+  // brief. A doc-researcher brief — facts, sources, prior art, open questions — was observed
+  // needing ~20k output tokens, so budget 24k; the outliner's section plan needs roughly half
+  // that. Both stay on the cheap default MODEL (only the budget was wrong, not the routing).
+  // NB: on the subscription-CLI inline path the cap is advisory and NOT enforced (see the
+  // harness's `InlineJob.maxOutputTokens`), which is why observed usage can exceed it; raising
+  // it fixes the metered provider path, where it really does truncate.
+  const docResearcherDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 24000,
+  }
+  const docOutlinerDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 10000,
+  }
   const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
     architect: agenticDefault,
     reviewer: companionDefault,
@@ -123,6 +140,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
     'architect-companion': companionDefault,
     coder: coderDefault,
     'conflict-resolver': conflictResolverDefault,
+    'doc-researcher': docResearcherDefault,
+    'doc-outliner': docOutlinerDefault,
   }
   // Env overrides win over the built-in agentic defaults.
   Object.assign(byKind, parseModelOverrides(env.AGENT_MODELS))

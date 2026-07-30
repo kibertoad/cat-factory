@@ -13,6 +13,7 @@ export {
   type WorkspaceBodiesGate,
 } from './instrumented.js'
 export {
+  LimitedModelProvider,
   VendorConcurrencyLimiter,
   limitModelProvider,
   vendorConcurrencyLimiterFromEnv,

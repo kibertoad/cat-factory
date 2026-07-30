@@ -17,6 +17,7 @@ import type {
   Initiative,
   InitiativePresetRegistry,
   InitiativeRepository,
+  InjectedContextFile,
   Logger,
   PipelineStep,
   RequirementReviewRepository,
@@ -41,6 +42,9 @@ import {
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
   hasTrait,
+  PR_PRIOR_REVIEW_CONTEXT_FILE,
+  PR_REVIEWER_KIND,
+  renderPriorReviewContext,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -112,6 +116,45 @@ function buildRevisionContext(step: PipelineStep): {
 }
 
 /**
+ * The `.cat-context/pr-prior-review.md` slice of a RESUMED PR review's context — the previous
+ * attempt's captured slice reports plus the slices that still need reviewing. Empty object for
+ * every other dispatch, so the fold at the {@link AgentContextBuilder.buildContext} call site
+ * stays branch-free.
+ *
+ * Emitted by the BUILDER rather than by a preOp beside the reviewer's other three, for two
+ * reasons. The state is on the STEP (`step.prReview`), which a {@link RepoOpContext} deliberately
+ * does not carry — it hands ops the block-scoped run context and a `RepoFiles`. And a preOp only
+ * runs once a run repo RESOLVES, which is right for the diff/comments/standards ops (all of them
+ * read the repo) and wrong here: this file needs no repo access at all, and silently skipping it on
+ * a deployment whose repo context is unwired would turn a resume back into a from-zero re-review
+ * with nothing to say so.
+ *
+ * Gated on the dispatched kind being the reviewer itself: a `fix` / `post` / `challenge`
+ * re-dispatch reuses this same step under an overriding kind, and none of them aggregates
+ * anything, so handing them the prior reports would be noise charged on every turn.
+ *
+ * `resumePendingSlices` being ABSENT is the signal that this is not a resume (the controller
+ * leaves it unset when a resume observed no prior work at all, which makes it a plain restart);
+ * an EMPTY array is a real resume whose every planned slice already reported.
+ */
+function priorPrReviewContextFor(
+  agentKind: string,
+  step: PipelineStep,
+): { injectedContextFiles?: InjectedContextFile[] } {
+  if (agentKind !== PR_REVIEWER_KIND) return {}
+  const pending = step.prReview?.resumePendingSlices
+  if (!pending) return {}
+  return {
+    injectedContextFiles: [
+      {
+        path: PR_PRIOR_REVIEW_CONTEXT_FILE,
+        content: renderPriorReviewContext(step.prReview?.sliceReviews ?? [], pending),
+      },
+    ],
+  }
+}
+
+/**
  * The step's per-round dispatch epoch (see {@link AgentRunContext.dispatchEpoch}). A
  * looping step carries its round count on its own gate state: the Tester→Fixer loop on
  * `step.test.attempts` (incremented per fixer round) and a polling gate's helper loop on
@@ -134,7 +177,14 @@ function buildRevisionContext(step: PipelineStep): {
  */
 export function dispatchEpochFor(step: PipelineStep): number {
   const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
-  const base = (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions
+  // A manually RESUMED PR review counts for the same reason an eviction recovery does, and more
+  // sharply: the whole point of the resume is that the previous job is WEDGED, so re-attaching to
+  // it (which is what a container-reusing transport does for a known job id) would replace the
+  // stuck run with itself. The review is the only step kind carrying none of the loop counters
+  // above, so without this term its epoch would stay 0 across every resume.
+  const resumes = step.prReview?.resumeAttempts ?? 0
+  const base =
+    (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions + resumes
   // The optional fork-decision phase dispatches the read-only proposer on the coder step
   // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
   // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
@@ -163,6 +213,12 @@ export interface FragmentBodyResolver {
        * for a condensation it would discard.
        */
       verbosity?: 'full' | 'brief'
+      /**
+       * The run being dispatched. A `brief` resolution may GENERATE a condensation, which is
+       * a model call on the run path; passing the run is what files it against the step that
+       * spent it instead of against nothing.
+       */
+      executionId?: string
     },
   ): Promise<{ id: string; title?: string; body: string; brief?: string }[]>
 }
@@ -393,7 +449,7 @@ export class AgentContextBuilder {
       // The fragment fold keys off the EFFECTIVE dispatched kind and reads the shared frame's
       // `serviceFragmentIds`; it mutates `step.selectedFragmentIds` for observability (safe under
       // the wave — single-threaded, no other resolver touches the step).
-      this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
+      this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame, instance.id),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       this.resolveSystemPromptOverride(workspaceId, agentKind, step),
@@ -501,6 +557,9 @@ export class AgentContextBuilder {
       // entries steer a later harness fetch. Absent when the task attaches none.
       ...(block.aprioriBranches?.length ? { aprioriBranches: block.aprioriBranches } : {}),
       ...(initiative ? { initiative } : {}),
+      // A RESUMED PR review's prior slice reports, as the `.cat-context/pr-prior-review.md` the
+      // reviewer reads (see {@link priorPrReviewContextFor}). Absent for every other dispatch.
+      ...priorPrReviewContextFor(agentKind, step),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -1048,6 +1107,7 @@ export class AgentContextBuilder {
     step: PipelineStep,
     block: Block,
     serviceFrame: Block | null,
+    executionId: string,
   ): Promise<{ fragments: { id: string; title?: string; body: string; brief?: string }[] } | null> {
     // Recorded per dispatch, so it always reflects the kind that actually ran. A step
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
@@ -1075,7 +1135,10 @@ export class AgentContextBuilder {
       // Prefer the tenant-catalog resolver (managed + live document-backed
       // fragments) when wired; otherwise resolve against the static built-in pool.
       const fragments = this.deps.fragmentResolver
-        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, { verbosity })
+        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, {
+            verbosity,
+            executionId,
+          })
         : ids
             .map((id) => {
               const fragment = getFragment(id)
@@ -1287,6 +1350,7 @@ export class AgentContextBuilder {
         ...(this.deps.documentUrlResolver
           ? { documentUrlResolver: this.deps.documentUrlResolver }
           : {}),
+        ...(this.deps.logger ? { logger: this.deps.logger } : {}),
       },
       workspaceId,
       blockId,

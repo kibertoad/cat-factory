@@ -24,6 +24,9 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   'human_test_ready',
   // Deployment-level operational alert — an operator wants it in their ops channel.
   'platform_health',
+  // An infrastructure outage is the same shape of alert: routable, so it reaches the ops channel
+  // rather than only an in-app banner someone has to be looking at the board to see.
+  'infra_unreachable',
 ]
 
 /** A mapping entry's role, defaulting to `engineering` when unset (legacy entries). */
@@ -92,6 +95,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // An ENCRYPTION_KEY-drift alert (ADR 0026 D6.2): an operational, deployment-wide credential
   // issue for the operators who watch the deployment; in-app-only (absent from SLACK_ROUTABLE_TYPES).
   key_drift: { roles: ['engineering'], includeCreator: false },
+  // A configured infrastructure connection stopped answering: operational and block-less (no task
+  // creator), so it goes to the engineers who can restart the thing, like `platform_health`.
+  infra_unreachable: { roles: ['engineering'], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
@@ -184,6 +190,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   platform_health: ':bar_chart: Platform health alert',
   budget_paused: ':moneybag: Runs paused — spend budget reached',
   key_drift: ':key: Encryption-key drift — credentials need re-entry',
+  infra_unreachable: ':electric_plug: Infrastructure unreachable',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

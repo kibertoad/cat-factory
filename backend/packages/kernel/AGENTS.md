@@ -48,6 +48,24 @@ else imports its **ports** and domain types from here.
   finest grain and every coarser view (a step's per-kind rollup, the run's per-phase burn
   breakdown, the run totals) is derived here, so the numbers on a surface can't disagree with the
   totals beside them. A new consumer folds; it does not add a second `GROUP BY` on the emit path.
+- `domain/infra-reachability.ts` — the pure decision behind the **infrastructure-reachability
+  watcher**: `decideReachability` (what to record + which transitions to announce, from this pass's
+  probes and the set the open `infra_unreachable` card recorded), `recordedUnreachableAreas`, and
+  `applyInfraReachability` — a fold over contracts' `applyInfraSetupTransition`, which is the ONE
+  rule both this snapshot fold and the SPA's live event patch obey about which prior state a probe
+  verdict may overwrite. Four probe verdicts, because they need four dispositions: an outage, a
+  recovery, an `indeterminate` we could not ask about (leave the record alone) and a
+  `not_configured` area that is simply gone (forget the record, announce nothing).
+- `domain/context-references.ts` — the **"a referenced context document reaches the agent whole, or
+  the run breaks loudly naming it"** invariant: the two refusals
+  (`assertContextDocumentsReadable` / `assertContextReferencesFit`) with their `details.reason`
+  codes, plus the two readability tests a caller picks between — `hasReadableContent` where the RAW
+  body is delivered to a checkout, `contextExcerptFor` where an inline caller renders only a short
+  excerpt (a body that is pure markup passes the first and projects to nothing under the second, so
+  asserting over the body and rendering the excerpt re-opens the hole one field narrower). Shared
+  because the reference can vanish in two different layers — the engine's `resolveLinkedContext`
+  and the container's `buildContextFiles` — and both must refuse in the same words. See
+  `backend/docs/document-sources.md`.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

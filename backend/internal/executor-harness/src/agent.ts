@@ -962,8 +962,12 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
  * Assemble the {@link runCodingAgent} spec for the ordinary single-repo coding flow. Extracted
  * from {@link runSingleRepoCoding} so the many optional-field spreads don't inflate that
  * function's cyclomatic complexity; the mapping is a straight field copy off `job`.
+ *
+ * Exported for the `opensPr` assertion: whether a dispatch fills the repo's PR template turns on
+ * this one spread, and the in-place fixers reach it through the SAME function as the implementer,
+ * so no structural guard can tell their cases apart.
  */
-function buildSingleRepoCodingSpec(
+export function buildSingleRepoCodingSpec(
   job: AgentJob,
   pushBranch: string,
 ): Parameters<typeof runCodingAgent>[0] {
@@ -991,6 +995,10 @@ function buildSingleRepoCodingSpec(
     guardLimits: job.guardLimits,
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+    // Whether a pull request will open at all is exactly `job.pr` (see the `if (job.pr)` guard in
+    // `runSingleRepoCoding`), and it is what decides whether the repo's PR template is worth
+    // resolving. Read off the same field rather than a new job-body flag, so the two can't drift.
+    ...(job.pr ? { opensPr: true } : {}),
     ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
     // Skills + tool servers: installed/wired harness-aware by runAgentInWorkspace.
     ...agentCapabilities(job),

@@ -25,6 +25,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
@@ -268,6 +269,24 @@ function buildAgentRouting(
     temperature: envTemperature ?? 0.3,
     maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
+  // The inline document-planning kinds return their WHOLE deliverable as one reply, so this
+  // cap bounds the artifact itself rather than acting as a safety net: at 5000 the research
+  // brief truncates mid-answer (finish_reason: length) and the run drafts from a half-written
+  // brief. A doc-researcher brief — facts, sources, prior art, open questions — was observed
+  // needing ~20k output tokens, so budget 24k; the outliner's section plan needs roughly half
+  // that. Both stay on the cheap default MODEL (only the budget was wrong, not the routing).
+  // NB: on the subscription-CLI inline path the cap is advisory and NOT enforced (see the
+  // harness's `InlineJob.maxOutputTokens`), which is why observed usage can exceed it; raising
+  // it fixes the metered provider path, where it really does truncate. Mirrors the Worker's
+  // routing.
+  const docResearcherDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 24000,
+  }
+  const docOutlinerDefault: AgentModelConfig = {
+    ...defaultConfig,
+    maxOutputTokens: envMaxOutputTokens ?? 10000,
+  }
   return {
     routing: {
       default: defaultConfig,
@@ -278,6 +297,8 @@ function buildAgentRouting(
         'spec-companion': companionDefault,
         'architect-companion': companionDefault,
         'conflict-resolver': conflictResolverDefault,
+        'doc-researcher': docResearcherDefault,
+        'doc-outliner': docOutlinerDefault,
       },
     },
     resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
@@ -716,6 +737,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       maxFailureRate: env.PLATFORM_ALERTS_MAX_FAILURE_RATE,
       maxP99Minutes: env.PLATFORM_ALERTS_MAX_P99_MINUTES,
       maxBacklog: env.PLATFORM_ALERTS_MAX_BACKLOG,
+    }),
+    // Infrastructure-reachability watcher: a periodic sweep probes each workspace's CONFIGURED
+    // infrastructure connections and reports a dead one as `unreachable`. Opt-in
+    // (`INFRA_REACHABILITY_WATCH=true`) — it is the one sweep making an outbound call per board.
+    infraReachability: resolveInfraReachabilityConfig({
+      enabled: env.INFRA_REACHABILITY_WATCH?.trim() === 'true',
+      intervalMs: env.INFRA_REACHABILITY_INTERVAL_MS,
+      probeTimeoutMs: env.INFRA_REACHABILITY_PROBE_TIMEOUT_MS,
     }),
   }
 }

@@ -522,7 +522,10 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 
 - `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs` — bans `.catch(() => {})` in backend non-test source.
-  `node --test 'scripts/*.test.mjs'` runs that guard's own fixtures (CI runs both).
+- `node scripts/check-component-imports.mjs` — requires every layer component used in a Vue
+  template to be imported by path (a bare tag renders nothing, silently). See
+  [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
+- `node --test 'scripts/*.test.mjs'` runs both guards' own fixtures (CI runs all three).
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.
@@ -625,6 +628,31 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`. The public step-resolver seam is scoped to light
   follow-up; `ownsTerminalStatus` is built-in-only.
+
+**A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
+(`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
+`task-estimator`'s scores fall below its thresholds, and that is what lets ONE pipeline cover a range
+that would otherwise need several near-identical presets (see
+[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md)). Three rules bind it:
+
+- **Gatability is a per-kind CAPABILITY, declared, and OFF by default** — `isGatableKind`
+  (`agents/kinds/gatable.ts`), a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+  override, since built-in kinds are not registry entries. Gate a kind whose output later steps read as
+  CONTEXT; never one some other mechanism reads STRUCTURALLY. `merger` is the sharpest case — its mere
+  presence in `instance.steps` is what makes a committing kind deliver via a PR (`runOpensPr`), so a
+  skipped merger opens a PR nothing merges. `deployer` provisions what its consumer reads,
+  `conflicts`/`ci` are the guards, `bug-intake` is the run's subject. **A new kind whose absence would
+  break rather than merely thin a run must stay unlisted**, and the default already does that for you.
+- **A skipped producer CASCADES onto its companion** (`producerWasSkipped`), evaluated at the
+  companion's own turn off the persisted `step.skipped` — a lookahead would not survive a durable
+  replay. Without it a companion grades whichever step happened to precede it, sounding confident
+  about the wrong artifact. So a companion needs no gate of its own to track its producer, and giving
+  it a duplicate threshold is a second copy to keep in sync.
+- **A step may not carry both `gates[i]` and enabled `gating`** (`assertValidGating`). The estimate may
+  ADD a human checkpoint — that is what gating a `human-review` step on risk does — but never cancel an
+  approval pause the author asked for, or a model's own triage decides nobody needs to look. Policy
+  floors belong on the merge preset's `classRules`, keyed on the COMPUTED change class rather than the
+  model's opinion.
 
 The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
 `runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing to
@@ -781,6 +809,21 @@ dispatch-time `prBody()` fallback, which marks itself agent-less. The sentinel n
 `MAX_SECTION_CHARS` (50k) must stay under the host's 65,536 limit, or the report silently stops
 publishing. **A RESUMED run must refresh the PR it already opened** (`refreshExisting`), but only when the
 text is the agent's own briefing — refreshing from the fallback would clobber a human's edit.
+
+- **When the target repo ships a PR TEMPLATE, the briefing IS that template, filled in** (`pr-template.ts`,
+  which owns the discovery rules and the reasoning behind each). Neither host applies a template to an
+  API-created pull request — only to the web form a human opens — so nothing fails to say so, and our PRs
+  are the only ones on the repo missing the structure its reviewers read. The AGENT fills it, in the prompt
+  that already asks for a briefing: the sections are questions only whoever did the work can answer, so
+  stuffing the briefing under the first heading gives the template's shape and none of its meaning.
+- **Three things about it are load-bearing beyond that module.** It rides EVERY agent pass, or a
+  validation/reproduction REPAIR pass — a fresh agent still carrying the description guidance — replaces
+  the filled template with a free-form briefing. The sentinel is then read with **`titleFromHeading:
+false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` rule would retitle the PR
+  after the template's top heading and delete it from the body; a new read site owes the same flag. And
+  `pr-template.coverage.test.ts` CLASSIFIES every agent-running mode as PR-opening or not, because a new
+  PR-opening mode that skips this compiles and passes every behavioural test; it cannot anchor on
+  `openPullRequest(`, which runs in the push phase long after the prompt was composed.
 
 **Consensus panels** — an eligible step can run as a multi-model PANEL instead of a single agent
 (`@cat-factory/consensus`, `CONSENSUS_ENABLED`). REVIEW kinds are the point, and the frontend mirror
@@ -953,6 +996,26 @@ Rules that bind new work here:
   generation on Langfuse/OTel. A facade never assembles the pair by hand: `createInlineInstrumentation`
   builds both exits from ONE sink instance. Bodies reach the recorder as THUNKS, so a prompts-off
   deployment never pays to serialise a prompt the gate is about to drop.
+- **The inline instrumentation is a middleware around a RESOLVED model, so it only ever sees what the wrap
+  beneath it returned — and one facade wrap SUBSTITUTES that model.** It shipped innermost, inside
+  `createScopedModelProviderResolver`, where local mode's subscription-inline wrap (which answers a harness
+  ref with its own `CliInlineLanguageModel` instead of delegating) was invisible to it: on the default local
+  shape every inline step on a host `claude`/`codex` login recorded zero calls while the same step on a
+  metered API model recorded fine. **A facade never composes that order by hand** —
+  `wrapResolverWithTelemetry(resolver, instrument, limiter)` (`@cat-factory/server`) owns it, for the same
+  reason `createInlineInstrumentation` owns the exit pair: the wrong order still typechecks and still records
+  every non-substituted call, so nothing fails until it is the deployment you don't test on. The limiter
+  stays outermost, so a queue wait is never counted as generation time.
+- **Run attribution falls back to the credential SCOPE, which names the block's LAST run, not necessarily a
+  live one.** A per-call `catFactoryObservability({ executionId })` wins; absent, the wrap threads
+  `scope.executionId`, because most inline sites tag only the workspace and such a row is worse than
+  unrecorded — it is IN the store and absent from every run-scoped read (`listByExecution`, a step's rollup,
+  `/api/v1/debug/runs/*`), which reads as a step that spent nothing. `block.executionId` is NOT cleared when
+  a run settles, so `resolveBlockRunContext` drops the id for a TERMINAL run (keeping the initiator, which
+  the key pool still scopes by): a stale id would report spend against a finished run's rollup, and unlike a
+  null nothing about it looks wrong. Both absent ⇒ null, the honest answer for a genuinely un-run-scoped
+  call. **A NEW inline caller on the run path must build its scope with the run in it** — a call that
+  generates on the run path but resolves its own scope, like a fragment brief, carries the run on its input.
 - **State what a producer does NOT know rather than filling a field with a guess**: an inline call has
   `turnIndex` null, `httpStatus` null, `phase` `''` and `upstreamMs === totalMs`, so the derived overhead
   is a real 0. `turn_index` is NULLABLE and never 0, or a proxied call would sort to the front of its
@@ -1082,8 +1145,16 @@ restore it.
   only after it settles (which is why e2e gates on `data-connected`).
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state into the
   snapshot or reconcile rather than replace.
-- **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order refreshes
-  and assert the fresher one wins.
+- **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store that awaits
+  a mutation and then assigns the returned sub-state onto the cached run (`step.forkDecision`,
+  `step.prReview`, `step.judge`, `step.followUps`) is writing straight past `upsert`'s `rev` check. Where
+  the mutation WAKES THE DRIVER, the driver's next emit routinely beats the HTTP response, so the echo puts
+  the run back — and if the run then parks, nothing emits again and the newer state is gone for good (the
+  fork-chat reply that vanished, leaving a "thinking…" bubble spinning). Every echo therefore goes through
+  `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the request and
+  drops the echo if anything advanced it. Never hand-roll the await-then-assign.
+- **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
+  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one wins.
 
 ## Basic vs advanced interface mode (frontend)
 

@@ -26,12 +26,12 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import {
   type AppConfig,
   createInlineInstrumentation,
-  wrapResolverWithLimiter,
+  wrapResolverWithTelemetry,
 } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
 import type { DrizzleDb } from './db/client.js'
-import { type InlineInstrument, createNodeModelProviderResolver } from './modelProvider.js'
+import { createNodeModelProviderResolver } from './modelProvider.js'
 import {
   buildNodeApiKeyService,
   buildNodeLocalModelEndpointService,
@@ -43,9 +43,14 @@ import {
 } from './wireCredentialServices.js'
 
 /**
- * The Node model-provider RESOLVER (instrumented when Langfuse is on), shared per
- * `(env, db)`. Builds a per-scope provider from the DB-backed API-key pool plus opt-in
- * Cloudflare-REST / Bedrock registries. Mirrors the Worker's buildModelProviderResolver.
+ * The Node BASE model-provider resolver, shared per `(env, db)`. Builds a per-scope provider
+ * from the DB-backed API-key pool plus opt-in Cloudflare-REST / Bedrock registries. Mirrors the
+ * Worker's buildModelProviderResolver.
+ *
+ * Deliberately un-instrumented, and cached that way: the telemetry wrap and the facade's own
+ * wraps are composed per container in {@link buildNodeModelDeps} (they close over that
+ * container's trace sink, metric store and subscription-lease seams, none of which may leak
+ * across two containers sharing a Drizzle client).
  */
 const modelResolverCache = new WeakMap<DrizzleDb, ModelProviderResolver>()
 function buildModelProviderResolver(
@@ -53,34 +58,14 @@ function buildModelProviderResolver(
   db: DrizzleDb | undefined,
   apiKeys: ApiKeyService | undefined,
   localModelEndpoints: LocalModelEndpointService | undefined,
-  // The shared inline instrument (one trace sink for the proxied path, the core AND the
-  // inline calls) so the OTel SDK exporter isn't rebuilt per wiring site.
-  instrument: InlineInstrument | undefined,
-  // The workspace-settings store the inline body gate reads. Passed alongside `instrument`
-  // (rather than only inside it) so the env-fallback path in `createNodeModelProviderResolver`
-  // builds the same gate rather than defaulting to the deployment switch.
-  workspaceSettingsRepository: WorkspaceSettingsRepository | undefined,
 ): ModelProviderResolver {
   // The cache keys on the db handle (one resolver per Drizzle client). Mothership mode has no
   // db, so skip the cache entirely (WeakMap keys must be objects) and build a fresh resolver —
   // a mothership node builds one container, so there is nothing to share it with anyway.
-  if (!db)
-    return createNodeModelProviderResolver(
-      env,
-      apiKeys,
-      localModelEndpoints,
-      instrument,
-      workspaceSettingsRepository,
-    )
+  if (!db) return createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
   const cached = modelResolverCache.get(db)
   if (cached) return cached
-  const resolver = createNodeModelProviderResolver(
-    env,
-    apiKeys,
-    localModelEndpoints,
-    instrument,
-    workspaceSettingsRepository,
-  )
+  const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
   modelResolverCache.set(db, resolver)
   return resolver
 }
@@ -258,8 +243,6 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     db,
     apiKeys,
     localModelEndpoints,
-    instrument,
-    workspaceSettingsRepository,
   )
   const wrappedModelProviderResolver = wrapModelProviderResolver
     ? wrapModelProviderResolver(baseModelProviderResolver, {
@@ -277,15 +260,21 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
           : {}),
       })
     : baseModelProviderResolver
-  // Cap concurrent inline calls to a subscription vendor, OUTERMOST so it sits outside the
-  // local facade's subscription-inline harness wrap above (and therefore sees the un-degraded
-  // subscription ref). One limiter per container = per process for a stock node, per tenant in
-  // mothership mode; a pass-through when nothing is capped. Symmetric with the Worker's wrap in
-  // `buildModelProviderResolver` (see "Keep the runtimes symmetric").
-  const modelProviderResolver = wrapResolverWithLimiter(
-    wrappedModelProviderResolver,
-    vendorConcurrencyLimiterFromEnv((key) => env[key]),
-  )
+  // Observe inline calls and cap their concurrency, both applied on top of the facade wrap above
+  // — never beneath it. That wrap SUBSTITUTES the resolved model for a subscription harness ref
+  // (local mode answers one with its own `CliInlineLanguageModel` rather than delegating), so
+  // instrumenting underneath it left every inline step on a host `claude`/`codex` CLI — the
+  // default local shape — recording nothing at all while the same step on a metered API model
+  // recorded fine. The composer owns that order (and keeps the limiter outermost, so a queue wait
+  // is not generation time and it sees the un-degraded subscription ref); passing the
+  // already-wrapped resolver in is this facade's only remaining obligation. One limiter per
+  // container = per process for a stock node, per tenant in mothership mode; a pass-through when
+  // nothing is capped. Symmetric with the Worker's `buildModelProviderResolver` (see "Keep the
+  // runtimes symmetric").
+  const modelProviderResolver = wrapResolverWithTelemetry(wrappedModelProviderResolver, {
+    ...(instrument ? { instrument } : {}),
+    limiter: vendorConcurrencyLimiterFromEnv((key) => env[key]),
+  })
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     cloudflareModelsEnabledOverride ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)

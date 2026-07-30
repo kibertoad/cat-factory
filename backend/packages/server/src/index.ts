@@ -43,6 +43,7 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
+export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
@@ -99,12 +100,15 @@ export {
 } from './agents/toolServers.js'
 export {
   createScopedModelProviderResolver,
-  wrapResolverWithLimiter,
+  // The individual instrumentation / limiter wraps are deliberately NOT exported: their
+  // relative order is load-bearing and this composer is what fixes it.
+  wrapResolverWithTelemetry,
+  type InlineInstrumentation,
+  type ResolverTelemetryWraps,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {
   createInlineInstrumentation,
-  type InlineInstrumentation,
   type InlineInstrumentationOptions,
 } from './agents/inlineInstrumentation.js'
 export {
@@ -211,7 +215,13 @@ export {
 } from './config/problems.js'
 export { createMisconfiguredApp, buildMisconfiguredResponse } from './config/misconfiguredApp.js'
 export { DOCS, ENV_VARS_ANCHORS, repoDocUrl } from './config/docs.js'
-export { parseNumericEnv, describeRejectedNumericEnv } from './config/numeric.js'
+export {
+  parseNumericEnv,
+  describeRejectedNumericEnv,
+  parseTimerEnvMs,
+  MAX_TIMER_DELAY_MS,
+  type TimerEnvParse,
+} from './config/numeric.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and
@@ -332,6 +342,7 @@ export type {
   ObservabilityConfig,
   NotificationWebhookConfig,
   OtelConfig,
+  InfraReachabilityConfig,
   PlatformAlertConfig,
   PrivilegedAppConfig,
   RetentionConfig,
@@ -344,6 +355,11 @@ export {
   resolvePlatformAlertConfig,
   type PlatformAlertEnvInput,
 } from './config/platformAlerts.js'
+export {
+  resolveInfraReachabilityConfig,
+  shouldRunReachabilityPass,
+  type InfraReachabilityEnvInput,
+} from './config/infraReachability.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'
 export {
   parseDetectionConventions,

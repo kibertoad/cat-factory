@@ -11,6 +11,11 @@
     `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding agent writes to
     `.cat-pr-description.md`, which the harness lifts onto the PR it opens) — in
     `prompts/shared.ts`), `runtime/` (`runRepoOps` — the custom-agent pre/post-op runner).
+    `kinds/gatable.ts` answers whether a pipeline may ESTIMATE-GATE a step of a given kind
+    (`isGatableKind`) — a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+    override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts`, because the built-in
+    kinds are not registry entries. A kind is NOT gatable by default; the set's comments say why
+    each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
     `kinds/capabilities.ts` holds the agent-CAPABILITY declaration vocabulary — the skill and
     tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
     them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server
@@ -42,7 +47,16 @@
   inline generation on Langfuse/OTel. A wrap with neither exit throws at construction.
   Neither exit is wired by hand: the server layer's `createInlineInstrumentation` composes both
   from ONE sink instance, since handing the two halves DIFFERENT sinks typechecks and merely
-  splits the trace.
+  splits the trace. Nor is its POSITION: a middleware only sees the model the wrap beneath it
+  returned, so composing it under a facade wrap that SUBSTITUTES the model — local mode's
+  subscription-inline harness — makes every call that wrap serves invisible while every other
+  inline call keeps recording. That order therefore lives in the server layer's
+  `wrapResolverWithTelemetry` (instrumentation inside, concurrency limiter outermost) and the two
+  wraps are not individually exported, for the same reason the exit pair isn't: reversed, it
+  still typechecks.
+  A call whose tag names no run is attributed to `scope.executionId`, the run its credential
+  scope was built for; the per-call tag still wins, and neither ⇒ null. The scope only carries a
+  LIVE run (`resolveBlockRunContext`), since `block.executionId` outlives the run it names.
   Bodies leaving for a SINK pass the SAME double gate the proxied path applies: the deployment's
   `LLM_RECORD_PROMPTS` **and** the workspace's `storeAgentContext` opt-out, the latter injected
   as the required narrow `WorkspaceBodiesGate` predicate (built by kernel's

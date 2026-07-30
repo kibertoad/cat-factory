@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { describeRejectedNumericEnv, parseNumericEnv } from './numeric.js'
+import {
+  describeRejectedNumericEnv,
+  MAX_TIMER_DELAY_MS,
+  parseNumericEnv,
+  parseTimerEnvMs,
+} from './numeric.js'
 
 // A8: a numeric knob set to garbage (`JOB_MAX_POLLS=abc`) used to coerce to the built-in
 // default with no signal. These pin the parse behaviour + the operator warning message.
@@ -46,5 +51,59 @@ describe('describeRejectedNumericEnv', () => {
     expect(describeRejectedNumericEnv('CI_MAX_POLLS', '30s')).toBe(
       describeRejectedNumericEnv('CI_MAX_POLLS', '30s'),
     )
+  })
+})
+
+// A timer budget is stricter than a plain numeric knob because EVERY unusable spelling has the
+// same catastrophic shape: `setTimeout` fires it immediately, so a typo in one env var kills every
+// supervised run on the deployment at once rather than degrading one of them.
+describe('parseTimerEnvMs', () => {
+  const ms = (raw: string): number | undefined => {
+    const parsed = parseTimerEnvMs('SOME_TIMEOUT_MS', raw, 300_000)
+    return 'ms' in parsed ? parsed.ms : undefined
+  }
+  const rejection = (raw: string): string | undefined => {
+    const parsed = parseTimerEnvMs('SOME_TIMEOUT_MS', raw, 300_000)
+    return 'rejected' in parsed ? parsed.rejected : undefined
+  }
+
+  it('accepts a whole positive number of milliseconds, trimmed', () => {
+    expect(ms('300000')).toBe(300_000)
+    expect(ms('  60000  ')).toBe(60_000)
+    expect(ms('1')).toBe(1)
+  })
+
+  it('accepts the largest delay a timer can actually hold', () => {
+    expect(ms(String(MAX_TIMER_DELAY_MS))).toBe(MAX_TIMER_DELAY_MS)
+  })
+
+  // The value someone types meaning "effectively no ceiling" is exactly the one Node truncates to
+  // 1ms — so left unguarded, the operator disabling the backstop disables every run instead.
+  it('rejects a delay past the 32-bit timer ceiling, saying it would fire immediately', () => {
+    const message = rejection(String(MAX_TIMER_DELAY_MS + 1))
+    expect(message).toContain('exceeds')
+    expect(message).toContain(String(MAX_TIMER_DELAY_MS))
+    expect(message).toContain('fire immediately')
+    expect(ms('999999999999')).toBeUndefined()
+  })
+
+  it('rejects zero and negatives, saying they fire immediately', () => {
+    expect(rejection('0')).toContain('greater than zero')
+    expect(rejection('-1')).toContain('greater than zero')
+  })
+
+  it.each(['5m', '1.5', 'soon', 'NaN', 'Infinity', '-Infinity'])(
+    'rejects the unusable value %j as not a whole number',
+    (raw) => {
+      expect(rejection(raw)).toContain('not a whole number of milliseconds')
+    },
+  )
+
+  it('names the var, quotes the value, and states which default takes over', () => {
+    const message = rejection('5m')
+    expect(message).toContain('SOME_TIMEOUT_MS')
+    expect(message).toContain('"5m"')
+    expect(message).toContain('using the default 300000ms')
+    expect(message).toContain('environment-variables.md')
   })
 })

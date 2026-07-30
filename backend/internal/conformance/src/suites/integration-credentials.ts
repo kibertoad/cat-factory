@@ -246,7 +246,7 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       const blocked = await call<{
         error: { code: string; details?: { reason?: string; models?: string[] } }
       }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
       expect(blocked.status).toBe(409)
       // The conflict carries a distinct machine-readable reason (+ the offending model
@@ -258,7 +258,7 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       // Configure a qwen key → the guard passes and the run starts.
       await call('POST', `/workspaces/${wsId}/api-keys`, KEY)
       const ok = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
       expect(ok.status).toBe(201)
     })

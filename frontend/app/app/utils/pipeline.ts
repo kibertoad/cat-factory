@@ -1,9 +1,10 @@
 import {
   frameAllowsVisualPipeline,
+  pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
   pipelineHasVisualStep,
 } from '@cat-factory/contracts'
-import type { AgentKind, Block, Pipeline } from '~/types/domain'
+import type { AgentKind, Block, BlockLevel, Pipeline } from '~/types/domain'
 
 /** One agent step of a pipeline as shown in a preview: its kind + whether it's a human-gated step. */
 export interface PipelineDisplayStep {
@@ -38,9 +39,9 @@ export function pipelineGateCount(pipeline: Pipeline): number {
   return pipelineDisplaySteps(pipeline).filter((s) => s.gated).length
 }
 
-// Re-exported so a picker can import the task-type gate from the same module as the
-// launch/frame gates it composes with (the classifier itself lives in `@cat-factory/contracts`).
-export { pipelineAllowedForTaskType }
+// Re-exported so a picker can import the purpose gates from the same module as the launch/frame
+// gates they compose with (the classifiers themselves live in `@cat-factory/contracts`).
+export { pipelineAllowedForBlockLevel, pipelineAllowedForTaskType }
 
 // Surface counterpart to the backend's slice-4c run-start gate: a pipeline with a visual step
 // (`tester-ui` / `visual-confirmation`) may run only on a frame with a UI to exercise — a
@@ -69,32 +70,52 @@ export function pipelineAllowedForFrame(
 
 /**
  * Whether `pipeline` may be started as a MANUAL one-off task run (the board/inspector Run menus,
- * the add-task modal, the task run-settings default). Excludes `'recurring'`-only pipelines the
- * backend would refuse, visual pipelines on a frame with no UI, and — when a `taskType` is given —
- * pipelines whose `purpose` doesn't fit that task type (a `document` task offers only document
- * pipelines). `taskType` omitted ⇒ no task-type restriction (an un-typed context shows all).
+ * the add-task modal, the task run-settings default). Excludes, in turn:
+ *
+ *  - `'recurring'`-only pipelines the backend would refuse;
+ *  - visual pipelines on a frame with no UI;
+ *  - pipelines whose `purpose` doesn't fit the given `taskType` (a `document` task offers only
+ *    document pipelines; a `feature`/`bug` task only build + research ones);
+ *  - pipelines whose `purpose` doesn't fit the given `blockLevel` (planning pipelines run only on
+ *    an initiative block, and an initiative block runs only those).
+ *
+ * `taskType` / `blockLevel` omitted ⇒ that restriction is not applied, so an un-typed context still
+ * shows everything.
  */
 export function pipelineAllowedForManualStart(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
   taskType?: Block['taskType'],
+  blockLevel?: BlockLevel,
 ): boolean {
   return (
     pipeline.availability !== 'recurring' &&
     pipelineAllowedForFrame(pipeline, frame, blocks) &&
-    pipelineAllowedForTaskType(pipeline, taskType)
+    pipelineAllowedForTaskType(pipeline, taskType) &&
+    pipelineAllowedForBlockLevel(pipeline, blockLevel)
   )
 }
 
 /**
  * Whether `pipeline` may be attached to a RECURRING schedule (the recurring-pipeline modal).
- * Excludes `'one-off'`-only pipelines the backend would refuse.
+ * Excludes `'one-off'`-only pipelines the backend would refuse, visual pipelines on a frame with no
+ * UI, and the planning presets.
+ *
+ * The block-level gate applies here for the same reason it applies to a manual start, and it is
+ * keyed to `'task'` because a schedule seeds a `level: 'task'` block under its frame on every fire
+ * (`RecurringPipelineService`). The planning presets carry no `availability`, so nothing else keeps
+ * them out of this picker — and a schedule the engine refuses is WORSE than a manual start it
+ * refuses: it fires unattended, so nobody sees the error and the work simply never happens.
  */
 export function pipelineAllowedForSchedule(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
 ): boolean {
-  return pipeline.availability !== 'one-off' && pipelineAllowedForFrame(pipeline, frame, blocks)
+  return (
+    pipeline.availability !== 'one-off' &&
+    pipelineAllowedForFrame(pipeline, frame, blocks) &&
+    pipelineAllowedForBlockLevel(pipeline, 'task')
+  )
 }

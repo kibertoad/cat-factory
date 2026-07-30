@@ -459,4 +459,36 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   it('drops an id the catalog does not know at all', async () => {
     expect(await svc.resolveBodiesForRun('ws1', ['gone.stale-id'])).toEqual([])
   })
+
+  it('passes the RUN through to the brief service, and only on a brief dispatch', async () => {
+    // A generated brief is a model call on the run path, and its attribution rides this hop:
+    // AgentContextBuilder → here → FragmentBriefService → the generator's `ModelScope`. Dropping
+    // the id anywhere along it files the call under a null execution id — present in the store,
+    // absent from the step's rollup — so each hop is asserted rather than assumed.
+    const calls: { workspaceId: string; executionId?: string }[] = []
+    const briefService = {
+      resolveBriefs: (workspaceId: string, _c: unknown, opts?: { executionId?: string }) => {
+        calls.push({ workspaceId, ...(opts?.executionId ? { executionId: opts.executionId } : {}) })
+        return Promise.resolve(new Map<string, string>())
+      },
+    } as unknown as ConstructorParameters<typeof FragmentLibraryService>[0]['briefService']
+    const withBriefs = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock: fakeClock(),
+      ...(briefService ? { briefService } : {}),
+    })
+
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'brief',
+      executionId: 'exec_1',
+    })
+    // `full` verbosity discards a condensation, so it must not pay for one at all.
+    await withBriefs.resolveBodiesForRun('ws1', ['node.performance'], {
+      verbosity: 'full',
+      executionId: 'exec_2',
+    })
+
+    expect(calls).toEqual([{ workspaceId: 'ws1', executionId: 'exec_1' }])
+  })
 })

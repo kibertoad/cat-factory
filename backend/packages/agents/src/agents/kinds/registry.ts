@@ -118,6 +118,18 @@ export interface AgentKindDefinition {
    */
   tuning?: AgentTuning
   /**
+   * Whether a pipeline may ESTIMATE-GATE a step of this kind — skip it at runtime when the task
+   * estimate an earlier `task-estimator` produced falls below the step's thresholds. Set it for a
+   * kind whose output later steps read as CONTEXT (a design proposal, a research note, an extra
+   * verification pass); leave it off for one some other mechanism reads STRUCTURALLY, whose absence
+   * would break rather than merely thin the run.
+   *
+   * Omitted ⇒ NOT gatable: an unconditional step is the safe default, and a kind that would break
+   * when skipped must not become skippable by an author forgetting to think about it. See
+   * ./gatable for the built-in set and the reasoning behind each exclusion.
+   */
+  gatable?: boolean
+  /**
    * The optional LLM step's execution surface + output/clone spec (inline, or a
    * container explore/coding run). Present ⇒ the kind runs an agent step; omitted ⇒ the
    * kind is pure pre/post-op work (no LLM). A container surface implies the kind needs a
@@ -296,6 +308,16 @@ export class AgentKindRegistry {
   /** A registered kind's execution tuning, or undefined when unregistered / not supplied. */
   tuning(kind: AgentKind): AgentTuning | undefined {
     return this.registry.get(kind)?.tuning
+  }
+
+  /**
+   * Whether a registered kind may be ESTIMATE-GATED, or undefined when unregistered / not
+   * supplied. Deliberately tri-state rather than defaulted to `false` here: `isGatableKind`
+   * falls back to the BUILT-IN set when this is undefined, and a `false` default would shadow
+   * every built-in's answer. See {@link AgentKindDefinition.gatable}.
+   */
+  gatable(kind: AgentKind): boolean | undefined {
+    return this.registry.get(kind)?.gatable
   }
 
   /**

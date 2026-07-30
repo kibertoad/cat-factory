@@ -1,4 +1,5 @@
-import type { StepGating, TaskEstimate } from '@cat-factory/kernel'
+import type { PipelineStep, StepGating, TaskEstimate } from '@cat-factory/kernel'
+import { isCompanionKind } from '@cat-factory/agents'
 
 /**
  * Decide whether a gated pipeline step should run, given the task estimate and the step's
@@ -27,4 +28,33 @@ export function shouldRunGatedStep(
     if (threshold !== undefined && value >= threshold) return true
   }
   return false
+}
+
+/**
+ * Whether `step` is a COMPANION whose producer was skipped, and must therefore be skipped too.
+ *
+ * A companion reviews the step immediately before it (`assertValidCompanionPlacement` guarantees
+ * that adjacency over the enabled subset). Once a PRODUCER can itself be estimate-gated, a
+ * companion can arrive with nothing to review: skipping `architect` on a light task would leave
+ * `architect-companion` grading whichever step happens to precede it — silently rating the wrong
+ * artifact rather than failing.
+ *
+ * Deliberately a LOCAL rule evaluated at the companion's own turn rather than a lookahead that
+ * skips two steps at once:
+ *
+ *  - it reads PERSISTED state (`prior.skipped`), so it survives a durable-driver replay — an
+ *    in-memory "I intend to skip the next one too" would not;
+ *  - it composes with the companion's OWN gate (either reason skips it, and the reasons don't
+ *    have to agree);
+ *  - it needs no knowledge of which producer the companion targets, because adjacency is already
+ *    an invariant the shape validation enforces.
+ *
+ * `steps`/`index` are the run's step list and this step's position in it. Index 0 can never be a
+ * companion (it would have no producer, which the shape validation rejects), so a missing
+ * predecessor yields `false` rather than a skip.
+ */
+export function producerWasSkipped(steps: readonly PipelineStep[], index: number): boolean {
+  const step = steps[index]
+  if (!step || !isCompanionKind(step.agentKind)) return false
+  return steps[index - 1]?.skipped === true
 }
