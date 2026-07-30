@@ -1,6 +1,8 @@
 import {
   type AgentRunContext,
+  type ContextReferenceRef,
   type HarnessKind,
+  assertContextReferencesFit,
   CONTEXT_BUDGET,
   renderTaskContext,
 } from '@cat-factory/kernel'
@@ -25,49 +27,52 @@ function contextFileName(base: string, used: Set<string>): string {
   return name
 }
 
-type ContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number]
-type ContextTask = NonNullable<AgentRunContext['block']['contextTasks']>[number]
-
 /**
  * Materialise the block's linked context (docs + tracker issues) into files the harness
  * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
  * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
- * contextual-retrieval). Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large
- * corpus can't bloat the job body; items past the cap are dropped.
+ * contextual-retrieval).
  *
- * Returns both the files AND the docs/tasks that actually fit (`contextDocs`/`contextTasks`),
- * so the caller can render the prompt's summary index from exactly the materialised set —
- * the prompt never names a file the agent won't find on disk.
+ * Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large corpus can't bloat the job
+ * body — and a corpus that does not fit REFUSES the dispatch
+ * ({@link assertContextReferencesFit}) rather than materialising a prefix of it. The overflow
+ * items used to be dropped, which kept the prompt index honest about what was on disk but left
+ * nobody able to tell that a document the task points at never reached the agent. A `preflight`
+ * rejection naming what did not fit is the only disposition that lets the human make the call
+ * (~256 KB of attached context is far past where trimming is a judgement someone should make
+ * deliberately).
  */
 export function buildContextFiles(context: AgentRunContext): {
   files: { path: string; title: string; url: string; content: string }[]
-  contextDocs: ContextDoc[]
-  contextTasks: ContextTask[]
 } {
   const { contextDocs, contextTasks } = context.block
   const files: { path: string; title: string; url: string; content: string }[] = []
-  const keptDocs: ContextDoc[] = []
-  const keptTasks: ContextTask[] = []
-  if (!contextDocs?.length && !contextTasks?.length)
-    return { files, contextDocs: keptDocs, contextTasks: keptTasks }
+  if (!contextDocs?.length && !contextTasks?.length) return { files }
   const used = new Set<string>()
+  const omitted: ContextReferenceRef[] = []
   let bytes = 0
-  // Write the file when it fits the byte budget; report back whether it was kept so the
-  // caller can keep the prompt index in lock-step with what's on disk.
-  const fit = (title: string, url: string, baseName: string, raw: string): boolean => {
+  let totalBytes = 0
+  // Write the file when it fits the byte budget; anything past it is recorded so the refusal
+  // below can name it (and size the whole corpus against the budget in the same pass).
+  const fit = (title: string, url: string, baseName: string, raw: string): void => {
     const content = `# ${title}\nSource: ${url}\n\n${raw}`
     const size = new TextEncoder().encode(content).length
-    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) return false
+    totalBytes += size
+    if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) {
+      omitted.push({ title, url })
+      return
+    }
     bytes += size
     files.push({ path: contextFileName(baseName, used), title, url, content })
-    return true
   }
-  for (const doc of contextDocs ?? [])
-    if (fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)) keptDocs.push(doc)
+  for (const doc of contextDocs ?? []) fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)
   for (const task of contextTasks ?? [])
-    if (fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task)))
-      keptTasks.push(task)
-  return { files, contextDocs: keptDocs, contextTasks: keptTasks }
+    fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task))
+  assertContextReferencesFit(omitted, {
+    totalBytes,
+    budgetBytes: CONTEXT_BUDGET.maxContextFileBytes,
+  })
+  return { files }
 }
 
 /** One entry of the top-level `skills` job-body field the harness materialises (harness-aware). */

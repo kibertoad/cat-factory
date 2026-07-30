@@ -12,6 +12,7 @@ import {
   RISK_POLICY_CEILING_FIELD,
   type RiskPolicyAxis,
 } from '~/utils/riskPolicy'
+import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 
 const { t } = useI18n()
 
