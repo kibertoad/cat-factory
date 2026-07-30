@@ -1,5 +1,85 @@
 # @cat-factory/server
 
+## 0.183.0
+
+### Minor Changes
+
+- 123ac6f: Make a PR review's finished slices durable while it runs, and let a review stuck mid-flight be resumed for only the slices that never came back.
+
+  The reviewer fans a large diff out across parallel subagents, then folds their findings into one structured output at the very end. Until that output arrives the step holds nothing but progress counts: `prReview.slices` and `prReview.findings` are both `[]`, because `coercePrReview` runs exactly once, from the terminal result. So the entire review lived in the container's memory until its last second, and anything that killed it first — the inactivity or max-duration watchdog, an evicted container, a wedged aggregation — threw away every completed slice and left a re-run from zero as the only option.
+
+  The measured incident makes the cost concrete: 18m05s wall clock and 25.46M input tokens, of which the final **196 seconds** were a single silent turn generating the findings JSON. During that window all nine task-list entries read complete, `findings` was still empty, and `lastActivityAt` had frozen — because the heartbeat is fed by tool-call events and subagent transcript growth, and a long single completion produces neither. A run in that state is indistinguishable from a wedged one, and nothing could recover it: `ProgressGuard` needs a tool call to evaluate anything, the inactivity watchdog is reset by any subagent transcript byte, and the 60-minute max-duration kill discards the work instead of saving it.
+
+  The persistence half reads what was already on the wire and being discarded. A subagent's dispatch and its terminal `tool_result` both appear on the parent stream (only its intermediate turns don't), and the slice tracker was matching that `tool_result` purely to flip a `done` flag while dropping the report inside it. It now captures that report — bounded, credential-scrubbed — and publishes the whole set on the job view as each slice lands, so the engine can fold it onto `prReview.sliceReviews` continuously rather than at the finish line.
+
+  On top of that, `POST /executions/:id/pr-review/resume` re-dispatches a review still in `reviewing` for only the unfinished slices, handing the resumed agent the already-captured reports as `.cat-context/pr-prior-review.md` and telling it to fold their findings into its aggregate rather than re-review them. Which slices remain is derived from what the platform observed — the captured reports plus the previous attempt's task list, the only place a planned-but-never-dispatched slice is named — never from the caller.
+
+  Notes for reviewers:
+
+  - The channel is a **whole-value latest publish**, not the drain-on-read that `followUps` and `spans` use. Those can afford to lose a poll window; this one carries the work being protected, so a dropped poll response must cost nothing. The fold is correspondingly monotonic: it never demotes a `completed` slice back to `in_progress` and never drops a report the incoming set omits, because a resumed container's tracker knows only the slices IT dispatched and forwarding that verbatim would erase the previous attempt's reports — which are the whole point.
+  - **A resume bumps `prReview.resumeAttempts`, and that feeds the step's dispatch epoch.** This is the sharpest thing to check. A container-reusing transport (a warm local pool, a self-hosted runner pool) re-attaches to a known job id rather than re-running, and the reviewer step carries none of the loop counters (`test`/`gate`/`ralph`) the epoch is otherwise derived from — so without this term every resume would mint the same job id and hand the recovery straight back to the wedged job it was meant to replace.
+  - **The prior-review context file is emitted by `AgentContextBuilder`, not by a preOp** beside the reviewer's existing three. Two reasons, the second decisive: the state rides the STEP, which `RepoOpContext` deliberately does not carry (it hands ops the block-scoped run context and a `RepoFiles`); and a preOp runs only once a run repo RESOLVES, which this file needs no part of, so gating on it would silently turn a resume back into a from-zero re-review wherever repo context is unwired. The alternative considered was widening `RepoOpContext` with the step — rejected as handing every op full mutable step state to serve one field. `injectedContextFiles` therefore has two producers now, and `RunRepoOpsController` APPENDS rather than assigns.
+  - **`sliceReviews` is cleared once an aggregation CONSUMES the reports, but not when the reviewer returned neither slices nor findings.** Clearing there would destroy the only record of the finished slices while recording the run as a clean PR — the exact loss this channel prevents, wearing a pass as a disguise. That is also why a partial aggregation cannot strand reports: a resume is refused unless the review is still `reviewing`, so by the time findings land the reports are either folded in or deliberately retained.
+  - **`reviewedHeadSha` is preserved across a resume rather than re-stamped.** It records the head the findings were computed against, and the completed slices' findings were computed against that tree. The cost is a wider drift window on a long resume, which the `post` resolution already absorbs by folding drifted findings into the summary; re-stamping would silently re-enable inline anchoring on lines that may since have shifted.
+  - **The resume control is deliberately not gated on a staleness heuristic.** `lastActivityAt` freezes on a long silent turn, so the platform cannot tell a wedged review from a quiet-but-working one, and hiding the control until it thinks it can would put it out of reach in exactly the case that motivated it.
+  - Wire-shape changes, no compatibility shims (pre-1.0 policy): `prReviewStepStateSchema` gains a required-with-default `sliceReviews` and `resumeAttempts` plus an optional `resumePendingSlices`, so every construction site supplies the first two. Existing rows read as an empty list / zero.
+  - A **runner-pool** deployment maps the channel through a new `sliceReviewsPath` on the response manifest. A pool that leaves it unset keeps the old all-or-nothing behaviour, and unlike the other latest-value paths that is not merely a lost live view: without it a pool-backed review has nothing for the resume to work from. Local and Cloudflare container transports forward the job view verbatim and needed no change.
+
+  Still unaddressed, and deliberately: the frozen heartbeat itself. A long single completion produces no stream events at all, so a run in its aggregation tail still reads as wedged. A synthetic beat would defeat the inactivity watchdog outright — the only thing that kills a genuinely hung agent — and real token deltas need `--include-partial-messages` plus a rework of the call aggregator's `message.id` folding. Until then the captured reports are the tell (every slice `completed` with `findings` still empty means aggregating, not stuck), and the resume is the escape hatch either way.
+
+### Patch Changes
+
+- Updated dependencies [123ac6f]
+  - @cat-factory/agents@0.90.0
+  - @cat-factory/contracts@0.199.0
+  - @cat-factory/integrations@0.113.0
+  - @cat-factory/kernel@0.197.0
+  - @cat-factory/orchestration@0.173.0
+  - @cat-factory/prompt-fragments@0.15.22
+  - @cat-factory/spend@0.12.127
+
+## 0.182.0
+
+### Minor Changes
+
+- 550a7fe: Supervise an inline host-CLI run by how long it is STUCK, not by how long it works.
+
+  `spawnCliExec` armed one 300s timer at spawn and never touched it again, so the budget bounded the
+  whole run: an inline step was killed for being SLOW rather than for being stuck, with nothing a
+  deployment could set to say otherwise. The observed failure is a `doc-researcher` on the ambient
+  `claude` CLI killed at exactly 5 minutes having made 53 model calls, burned 2.9M tokens and run 24
+  tool calls — legitimate work, mid-turn — and every retry died the same way, so the step could never
+  complete. That also made it permanently unaccounted for: usage reaches `token_usage` from a call
+  that COMPLETED, so a step that dies on every attempt records nothing however much it spent, which
+  is what "the run shows zero model calls" actually meant.
+
+  Two budgets now, because "hung" and "long" are different failures with opposite fixes:
+
+  - an **idle** window (`LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS`, default 300000) re-armed by every chunk on
+    either stream, so it measures the gap between bytes. `stream-json` narrates a healthy `claude`
+    continuously, so silence this long is a real symptom while elapsed time never was.
+  - an absolute **ceiling** (`LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, default 3600000) for the run that
+    narrates forever and therefore never looks idle — the one case an idle window cannot bound.
+
+  Both still reject as a `timeout` (unchanged for callers), but they say different things: the idle
+  kill names the silence it overran, the ceiling kill names the ceiling and the variable that raises
+  it. The idle message drops the redundant silence clause it would otherwise restate. The FIRST kill
+  wins: every trigger stays armed until the child closes, so an abort landing inside the SIGKILL
+  grace period used to overwrite the reason and surface a supervised kill as a user cancellation.
+
+  New in `@cat-factory/server`: `parseTimerEnvMs`, the validator for an env var that becomes a
+  `setTimeout` delay, beside the `parseNumericEnv` it is deliberately stricter than. A plain numeric
+  knob is right to accept `0` / `-1` / `1.5`; a timer budget is not, and neither is a value above
+  `MAX_TIMER_DELAY_MS` (2147483647) — Node truncates a larger delay to **1ms** rather than saturating,
+  so the number an operator types meaning "effectively no ceiling" is exactly the one that would kill
+  every supervised run within milliseconds, while reporting the enormous ceiling it claims to have
+  hit. Every unusable spelling now warns and defers to the built-in default.
+
+  The incoherent-pair warning (a ceiling below the idle window makes the idle watchdog unreachable, so
+  a stuck CLI is reported as a slow one and the operator raises the wrong number) now compares the
+  EFFECTIVE budgets rather than only the explicitly-set ones — lowering just the ceiling is the likelier
+  single-knob edit, and gating on both being present let exactly that case through in silence.
+
 ## 0.181.0
 
 ### Minor Changes

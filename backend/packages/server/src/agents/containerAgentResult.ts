@@ -420,6 +420,11 @@ export function buildRunningUpdate(
     // republishes a whole NEW one (with a fresh `at`) per repair round, so forwarding the latest
     // on every poll is safe — and is what makes a failed verification visible while the loop runs.
     ...(view.reproductionReport ? { reproductionReport: view.reproductionReport } : {}),
+    // The per-slice reviews of a parallel review, forwarded latest-wins for the same reason — but
+    // load-bearing rather than merely observable: this is the ONLY path by which a review's
+    // finished slices become durable BEFORE its aggregation pass returns, so a poll that drops
+    // them costs real review work. The harness republishes the whole set on each slice.
+    ...(view.sliceReviews ? { sliceReviews: view.sliceReviews } : {}),
   }
   return view.progress
     ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }

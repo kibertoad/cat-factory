@@ -131,6 +131,18 @@ export const runnerPoolResponseMappingSchema = v.object({
    * envelope, which is still enough for the PR report and the step card.
    */
   reproductionReportPath: v.optional(v.string()),
+  /**
+   * Dot-path to the WHOLE per-slice review set a parallel PR reviewer has captured so far (the
+   * harness `sliceReviews` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `sliceReviews`.
+   *
+   * Unlike the two reports above, absent here is not merely a lost live view: the reviewer emits
+   * its `slices`/`findings` only in the TERMINAL structured output, so this channel is the only
+   * thing that makes a finished slice durable while the review is still running. Without it a
+   * pool-backed review that wedges or dies has nothing for a manual resume to work from and can
+   * only be re-run from zero.
+   */
+  sliceReviewsPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**

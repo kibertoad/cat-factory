@@ -55,6 +55,50 @@ export const prReviewSliceSchema = v.object({
 export type PrReviewSlice = v.InferOutput<typeof prReviewSliceSchema>
 
 /**
+ * One slice's review as captured WHILE the reviewer was still running, rather than at completion.
+ *
+ * WHY THIS EXISTS. The reviewer fans the slices out across parallel subagents and only returns
+ * `slices`/`findings` in its TERMINAL structured output, so until the aggregation pass finishes
+ * the step holds nothing but progress counts. A review that dies in that window — the harness
+ * inactivity/max-duration watchdog, an evicted container, a stuck aggregation — therefore loses
+ * every completed slice's work and can only be re-run from zero. The motivating incident spent 18
+ * minutes and 25M input tokens, of which the last 196 seconds were a single silent aggregation
+ * turn: had it been killed there, all eight finished slices would have been thrown away.
+ *
+ * The subagent's terminal report IS visible on the parent stream (its dispatch and its
+ * `tool_result` both appear there — only the intermediate turns don't), so the harness captures it
+ * per slice and publishes it here as the slices land. That makes completed review work durable
+ * independently of the aggregation, which is what lets a stuck review be RESUMED for only the
+ * slices that never finished (see `resumePrReviewSchema`).
+ *
+ * `report` is the subagent's verbatim prose, NOT structured findings: turning it into
+ * {@link prReviewFindingSchema} entries is the aggregation pass's job, and doing it here would mean
+ * a second model call per slice. A resume therefore re-aggregates from these reports instead of
+ * re-reviewing the slices they came from.
+ */
+export const prReviewSliceReviewSchema = v.object({
+  /** The slice label the reviewer dispatched the subagent with, used to pair progress + resume. */
+  label: v.string(),
+  /**
+   * Whether this slice's subagent finished. An `in_progress` slice is one the reviewer dispatched
+   * but never got a result for, so a resume re-reviews it (its `report` is null).
+   */
+  status: v.picklist(['in_progress', 'completed']),
+  /**
+   * The subagent's verbatim terminal report for this slice; null while `in_progress`. Bounded by
+   * the harness before it is published (a slice report is prose, not a transcript).
+   */
+  report: v.optional(v.nullable(v.string())),
+})
+export type PrReviewSliceReview = v.InferOutput<typeof prReviewSliceReviewSchema>
+
+/** Parse one untrusted slice review (a harness payload), or `null` when unusable. */
+export function parsePrReviewSliceReview(input: unknown): PrReviewSliceReview | null {
+  const parsed = v.safeParse(prReviewSliceReviewSchema, input)
+  return parsed.success ? parsed.output : null
+}
+
+/**
  * A finding's CHALLENGE lifecycle. A human can challenge a finding — optionally with a specific
  * question / concern — which dispatches the read-only **Challenge Investigator** container agent
  * to dig into the finding against the FULL source. Terminal verdicts:
@@ -215,6 +259,40 @@ export const prReviewStepStateSchema = v.object({
   summary: v.optional(v.nullable(v.string())),
   /** The cohesive slices the reviewer grouped the changed files into. */
   slices: v.optional(v.array(prReviewSliceSchema), []),
+  /**
+   * Per-slice reviews captured live while the reviewer ran (see
+   * {@link prReviewSliceReviewSchema}), keyed by slice label. Published by the harness as each
+   * slice's subagent returns, so completed review work is durable BEFORE the aggregation pass —
+   * this is what a {@link resumePrReviewSchema} resume re-aggregates from rather than re-reviewing.
+   *
+   * Distinct from {@link prReviewStepStateSchema}'s `slices`, which is the reviewer's own settled
+   * slicing recorded at completion: these are the live observations, so the two can disagree (a
+   * slice the reviewer regrouped mid-run, a slice that never finished). Survives
+   * `resetStepForRerun` so a resume can read it, and is cleared only when a review is started
+   * fresh.
+   */
+  sliceReviews: v.optional(v.array(prReviewSliceReviewSchema), []),
+  /**
+   * How many times this review has been manually RESUMED (see {@link resumePrReviewSchema}). Zero
+   * on a review nobody nudged.
+   *
+   * Not just a counter for the window: it is the review's contribution to the step's DISPATCH
+   * EPOCH, which is what gives the resumed reviewer a distinct harness job id. A container-reusing
+   * transport (a warm local pool, a self-hosted runner pool) keeps a job registry alive across
+   * dispatches and re-attaches to an existing id rather than re-running, so a resume at the same
+   * epoch would land straight back on the wedged job it was meant to replace.
+   */
+  resumeAttempts: v.optional(v.number(), 0),
+  /**
+   * The slice labels the most recent resume decided still need reviewing — derived from the step's
+   * own observations at resume time and frozen here because `resetStepForRerun` clears the live
+   * task list (`step.subtasks`) the derivation reads.
+   *
+   * ABSENT and EMPTY mean different things, so this has no default. Absent ⇒ this dispatch is a
+   * fresh review. Empty ⇒ a resume found every planned slice already reported, so the resumed
+   * reviewer only has to re-aggregate.
+   */
+  resumePendingSlices: v.optional(v.array(v.string())),
   /** The findings, ordered by severity (blocker → nit). */
   findings: v.optional(v.array(prReviewFindingSchema), []),
   /** The finding ids the human selected to act on (curated in the window). */
@@ -366,6 +444,24 @@ export const resolvePrReviewSchema = v.object({
   findingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolvePrReviewInput = v.InferOutput<typeof resolvePrReviewSchema>
+
+/**
+ * Manually re-trigger a PR review that is stuck mid-`reviewing`, preserving what already finished.
+ *
+ * The reviewer's own watchdogs cannot recover this state: `ProgressGuard` is event-driven (a fully
+ * silent agent never trips it), the inactivity watchdog is fed by subagent transcript growth (so a
+ * noisy-but-unproductive run keeps resetting it), and the only backstop is the 60-minute
+ * max-duration kill. Between those, a review can sit with its slices finished and its aggregation
+ * wedged for the better part of an hour with no way to nudge it.
+ *
+ * A resume re-dispatches the reviewer for ONLY the slices that never completed, feeding the
+ * already-captured {@link prReviewSliceReviewSchema} reports back in as context so the finished
+ * slices are re-aggregated rather than re-reviewed. There is no body: which slices to redo is
+ * derived from the step's own `sliceReviews`, never supplied by the caller, so the request cannot
+ * ask for work that contradicts what was actually observed.
+ */
+export const resumePrReviewSchema = v.object({})
+export type ResumePrReviewInput = v.InferOutput<typeof resumePrReviewSchema>
 
 /**
  * Challenge a parked finding: dispatch the Challenge Investigator with an OPTIONAL specific

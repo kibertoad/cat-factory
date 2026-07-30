@@ -299,12 +299,14 @@ export {
   registerForkProposerAgent,
 } from './agents/kinds/fork-proposer.js'
 export {
+  PR_PRIOR_REVIEW_CONTEXT_FILE,
   PR_REVIEWER_KIND,
   PR_REVIEWER_AGENT_KINDS,
   PR_REVIEWER_SYSTEM_PROMPT,
   prReview,
   type PrReviewOutput,
   registerPrReviewerAgent,
+  renderPriorReviewContext,
   resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {

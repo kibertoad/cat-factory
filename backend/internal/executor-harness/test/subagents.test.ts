@@ -2,7 +2,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, appendFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createSliceTracker, startSubagentWatcher } from '../src/subagents.js'
+import {
+  createSliceTracker,
+  SLICE_REPORT_MAX_CHARS,
+  startSubagentWatcher,
+} from '../src/subagents.js'
 
 // D2.1 (slice progress off the parent stream) + D3 (subagent usage off the transcripts),
 // corrected by ADR 0027: the watcher walks the `projects` tree for `**/subagents/*.jsonl`
@@ -41,6 +45,68 @@ describe('createSliceTracker', () => {
 
     t.onUser([toolResult('t2')])
     expect(t.progress()).toMatchObject({ completed: 2, inProgress: 0, total: 2 })
+  })
+
+  it('captures each slice report from the terminal tool_result', () => {
+    // The parent stream is the ONLY place a subagent's findings surface (its intermediate turns
+    // go to an untailed transcript), so a discarded tool_result is review work lost for good.
+    const t = createSliceTracker()
+    t.onAssistant([taskBlock('t1', 'Review auth slice')])
+    t.onAssistant([taskBlock('t2', 'Review docs slice')])
+    expect(t.sliceReviews()).toEqual([
+      { label: 'Review auth slice', status: 'in_progress', report: null },
+      { label: 'Review docs slice', status: 'in_progress', report: null },
+    ])
+
+    t.onUser([
+      {
+        type: 'tool_result',
+        tool_use_id: 't1',
+        // The CLI writes a subagent's report as content BLOCKS, not a bare string.
+        content: [{ type: 'text', text: 'blocker: token logged in plaintext' }],
+      },
+    ])
+    expect(t.sliceReviews()[0]).toEqual({
+      label: 'Review auth slice',
+      status: 'completed',
+      report: 'blocker: token logged in plaintext',
+    })
+  })
+
+  it('reads a bare-string tool_result too', () => {
+    const t = createSliceTracker()
+    t.onAssistant([taskBlock('t1', 'Review auth slice')])
+    t.onUser([{ type: 'tool_result', tool_use_id: 't1', content: 'no issues found' }])
+    expect(t.sliceReviews()[0]?.report).toBe('no issues found')
+  })
+
+  it('completes a slice whose result carried no readable text, with a null report', () => {
+    // Dropping it would send an already-reviewed slice round again on a resume.
+    const t = createSliceTracker()
+    t.onAssistant([taskBlock('t1', 'Review auth slice')])
+    t.onUser([{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'image', data: 'x' }] }])
+    expect(t.sliceReviews()[0]).toEqual({
+      label: 'Review auth slice',
+      status: 'completed',
+      report: null,
+    })
+  })
+
+  it('scrubs leased credentials out of a captured report', () => {
+    // Reports are persisted on the run, and a subagent can echo a token it saw in the checkout.
+    const t = createSliceTracker(['ghp_supersecret'])
+    t.onAssistant([taskBlock('t1', 'Review auth slice')])
+    t.onUser([
+      { type: 'tool_result', tool_use_id: 't1', content: 'found ghp_supersecret in config' },
+    ])
+    expect(t.sliceReviews()[0]?.report).not.toContain('ghp_supersecret')
+  })
+
+  it('bounds a runaway report', () => {
+    const t = createSliceTracker()
+    t.onAssistant([taskBlock('t1', 'Review auth slice')])
+    t.onUser([{ type: 'tool_result', tool_use_id: 't1', content: 'x'.repeat(50_000) }])
+    expect(t.sliceReviews()[0]!.report!.length).toBe(SLICE_REPORT_MAX_CHARS)
   })
 
   it('ignores non-dispatch tool_use and is idempotent on a repeated id', () => {

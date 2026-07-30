@@ -33,7 +33,7 @@ export const useFollowUpsStore = defineStore('followUps', () => {
     acting.value = next
   }
 
-  /** Run one decide action, reflecting the returned state onto the run's Coder step. */
+  /** Run one decide action, echoing the returned state onto the run's Coder step. */
   async function act(
     executionId: string,
     itemId: string,
@@ -42,13 +42,19 @@ export const useFollowUpsStore = defineStore('followUps', () => {
     error.value = null
     mark(itemId, true)
     try {
-      const state = await call(workspace.requireId())
-      // Reflect the authoritative state immediately (the stream will also echo it).
-      const instance = execution.getInstance(executionId)
-      const step = instance?.steps.find((s) => s.followUps?.enabled)
-      if (step && state && typeof state === 'object') {
-        step.followUps = state as typeof step.followUps
-      }
+      // Echo the authoritative state immediately (the stream also delivers it), but only when the
+      // stream has not already delivered something NEWER — deciding a follow-up can re-arm the run,
+      // so the driver emits while this response is still in flight. See `execution.echoAfter`.
+      await execution.echoAfter(
+        executionId,
+        () => call(workspace.requireId()),
+        (state, instance) => {
+          const step = instance.steps.find((s) => s.followUps?.enabled)
+          if (step && state && typeof state === 'object') {
+            step.followUps = state as typeof step.followUps
+          }
+        },
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Action failed'
       throw e
