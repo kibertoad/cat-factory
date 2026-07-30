@@ -14,6 +14,7 @@ import type {
   RunnerPoolManifest,
   RunnerPoolProvider,
   RunnerPoolRequestTemplate,
+  RunnerSliceReview,
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
@@ -426,6 +427,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const reproductionReport = this.mapReproductionReport(manifest, json)
     if (reproductionReport) view.reproductionReport = reproductionReport
 
+    // A parallel PR review's per-slice reviews, when the manifest maps them — a latest-value
+    // publish like the two reports above. Forwarded on every poll (running or done): unlike those,
+    // this channel is the ONLY thing that makes a finished slice durable before the reviewer's
+    // terminal output, so a pool-backed review that never gets there has nothing for a manual
+    // resume to work from without it.
+    const sliceReviews = this.mapSliceReviews(manifest, json)
+    if (sliceReviews) view.sliceReviews = sliceReviews
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
@@ -567,6 +576,50 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (!path) return undefined
     return coerceReproductionReport(environmentsLogic.extractByPath(json, path))
   }
+
+  /**
+   * Project the scheduler's live per-slice PR reviews onto the canonical view, when the manifest
+   * maps them. Coerced per ENTRY — one malformed slice must not discard the good reports beside it,
+   * since discarding them is the exact data loss this channel exists to prevent — and an empty
+   * result injects nothing, so a pool that maps the path but has no slices yet is indistinguishable
+   * from one that maps nothing.
+   */
+  private mapSliceReviews(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['sliceReviews'] | undefined {
+    const path = manifest.response.sliceReviewsPath
+    if (!path) return undefined
+    const reviews = coerceSliceReviews(environmentsLogic.extractByPath(json, path))
+    return reviews.length > 0 ? reviews : undefined
+  }
+}
+
+/**
+ * Coerce a scheduler's `sliceReviews` envelope into canonical {@link RunnerSliceReview} entries,
+ * dropping anything unusable. Mirrors the executor-harness's shape.
+ *
+ * An entry needs a non-empty `label`: it is the only key a resume can pair a report to the
+ * reviewer's plan by, so an unlabelled one is noise. `status` is narrowed rather than passed
+ * through, and anything that is not verbatim `completed` reads as `in_progress` — the safe
+ * direction, because over-reporting `completed` would make a resume SKIP a slice nobody reviewed,
+ * while over-reporting `in_progress` only costs re-reviewing one.
+ */
+function coerceSliceReviews(raw: unknown): RunnerSliceReview[] {
+  if (!Array.isArray(raw)) return []
+  const reviews: RunnerSliceReview[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const o = entry as Record<string, unknown>
+    if (typeof o.label !== 'string' || !o.label.trim()) continue
+    const review: RunnerSliceReview = {
+      label: o.label,
+      status: o.status === 'completed' ? 'completed' : 'in_progress',
+    }
+    if (typeof o.report === 'string') review.report = o.report
+    reviews.push(review)
+  }
+  return reviews
 }
 
 /**

@@ -5639,6 +5639,10 @@
         "pending": "En cola"
       }
     },
+    "resume": {
+      "action": "Reanudar la revisión",
+      "hint": "¿Parece atascada? Al reanudar solo se vuelven a revisar los fragmentos que nunca respondieron y se conservan los hallazgos de los ya terminados."
+    },
     "phase": {
       "planning": "Revisando…",
       "reviewing": "Revisando {completed}/{total} secciones",

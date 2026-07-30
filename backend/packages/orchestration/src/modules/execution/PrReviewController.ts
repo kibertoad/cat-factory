@@ -22,6 +22,7 @@ import {
   dismissFinding,
   failChallenge,
 } from './prReview.logic.js'
+import { planResumeSlices, sliceReviewsAfterAggregation } from './prReviewSlices.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 
@@ -58,6 +59,10 @@ export interface PrReviewControllerDeps {
  * the driver re-dispatches it as the Fixer against the reviewed PR's head branch) and `post`
  * (re-arm so the driver publishes the selected findings as inline PR comments). The `fix`/`post`
  * driver-side work lives in {@link RunDispatcher.handlePrReviewResolution}.
+ *
+ * {@link resume} is the one action that operates on a review still IN FLIGHT rather than a parked
+ * one: it re-arms a wedged `reviewing` step to re-review only the slices that never reported,
+ * folding the already-captured reports back in as context.
  */
 export class PrReviewController {
   constructor(private readonly deps: PrReviewControllerDeps) {}
@@ -113,6 +118,20 @@ export class PrReviewController {
       ? output.fragmentAdherence
       : undefined
 
+    // Drop the captured slice reports once this aggregation has CONSUMED them, and keep them when
+    // it plainly did not (see {@link sliceReviewsAfterAggregation} for why that distinction is the
+    // difference between reclaiming dead text and silently discarding the review's only record).
+    const sliceReviews = sliceReviewsAfterAggregation(step.prReview?.sliceReviews, {
+      slices,
+      findings,
+    })
+    // Carried across the terminal write so a later `fix`/`post` re-dispatch keeps minting a
+    // distinct harness job id (see `dispatchEpochFor`), and so the window can still say the
+    // review needed nudging. `resumePendingSlices` is deliberately NOT carried: both literals
+    // below omit it, which clears it, because this dispatch has now aggregated and any FURTHER
+    // dispatch off this step is no longer a resume.
+    const resumeAttempts = step.prReview?.resumeAttempts ?? 0
+
     if (findings.length === 0) {
       // A clean PR (or an unwired/degenerate reviewer): nothing to select. Record the review in
       // place and let the normal completion spine finish the read-only step (no park).
@@ -120,11 +139,8 @@ export class PrReviewController {
         status: 'done',
         summary,
         slices,
-        // Dropped now the aggregation has landed: the captured reports exist to make a review
-        // recoverable BEFORE its terminal output, and their content is folded into the findings
-        // below. Keeping eight ~24KB prose reports on the run row past that point stores a
-        // quarter-megabyte of redundant text per review.
-        sliceReviews: [],
+        sliceReviews,
+        resumeAttempts,
         findings: [],
         selectedFindingIds: [],
         resolution: 'finish',
@@ -142,9 +158,8 @@ export class PrReviewController {
       status: 'awaiting_selection',
       summary,
       slices,
-      // Dropped for the same reason as the findings-empty branch above: the reports have done
-      // their job the moment the aggregated findings are recorded.
-      sliceReviews: [],
+      sliceReviews,
+      resumeAttempts,
       findings,
       selectedFindingIds: [],
       resolution: null,
@@ -157,6 +172,88 @@ export class PrReviewController {
     }
     await this.raisePrReviewReady(workspaceId, instance, block, findings.length, slices.length)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * Manually RESUME a review stuck mid-`reviewing`, re-reviewing only the slices that never
+   * reported and re-aggregating from the ones that did.
+   *
+   * Nothing recovers this state on its own. `ProgressGuard` needs a tool call to evaluate
+   * anything, so a fully silent turn never trips it; the inactivity watchdog is reset by any
+   * subagent transcript byte, so a noisy-but-unproductive run keeps it fed; and the only backstop
+   * is the 60-minute max-duration kill, which DISCARDS the work instead of saving it. The
+   * motivating incident sat for its final 196 seconds in a single silent aggregation turn with all
+   * nine task entries reading `completed` and no findings recorded — indistinguishable from wedged.
+   *
+   * Mechanics, and why each is what it is:
+   *
+   * - The container is RECLAIMED before the CAS, both because the mutate body must stay pure and
+   *   because leaving the wedged agent running would double-spend against the same PR. Stopping is
+   *   idempotent, so it is harmless if this resume then loses the CAS race, and the abandoned job's
+   *   eventual result is discarded anyway once `jobId` is cleared (the poll fold no-ops on a
+   *   superseded job id).
+   * - The pending-slice split is frozen onto the step HERE, because it is derived from the live
+   *   task list (`step.subtasks`) that {@link StepGraph.resetStepForRerun} is about to clear.
+   * - No decision is SIGNALLED. The driver gates both halves of its loop on `step.jobId`, so
+   *   clearing it is enough: the in-flight driver re-dispatches on its next poll tick. `resolve`'s
+   *   `fix`/`post` path signals because it is parked on a decision; this one is not, and signalling
+   *   would risk a second concurrent dispatch.
+   * - `reviewedHeadSha` is PRESERVED from the original dispatch. It records the head the findings
+   *   were computed against, and the completed slices' findings were computed against THAT tree;
+   *   re-stamping it to the resume's head would claim otherwise and silently re-enable inline
+   *   comment anchoring on lines that may since have shifted. The cost is that a long resume widens
+   *   the drift window, which the `post` path already handles by folding drifted findings into the
+   *   summary.
+   *
+   * Refused unless the review is still `reviewing`: a parked or resolved review has its own
+   * actions, and re-dispatching one would destroy findings a human may be mid-selection on.
+   */
+  async resume(workspaceId: string, executionId: string): Promise<PrReviewStepState> {
+    // Reclaim BEFORE mutating: the CAS body below must stay pure, and stopping the container is an
+    // idempotent side effect that is harmless if the resume then loses the CAS race.
+    const current = await this.deps.executionRepository.get(workspaceId, executionId)
+    if (current) await this.deps.stateMachine.stopRunContainer(workspaceId, current)
+
+    let state: PrReviewStepState | undefined
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      executionId,
+      (inst) => {
+        const step = inst.steps.find((s) => s.agentKind === PR_REVIEW_STEP_KIND && s.prReview)
+        const review = step?.prReview
+        if (!step || !review) throw new ConflictError('This run has no PR review to resume.')
+        if (review.status !== 'reviewing') {
+          throw new ConflictError(
+            `Only a review still in progress can be resumed (this one is ${review.status}).`,
+          )
+        }
+        const sliceReviews = review.sliceReviews ?? []
+        const pending = planResumeSlices(sliceReviews, step.subtasks?.items ?? [])
+        // A resume that observed NOTHING — no report came back and no plan was ever written — has
+        // no prior work to preserve, so it is an honest RESTART rather than a resume: leave
+        // `resumePendingSlices` unset and the re-dispatch carries no prior-review context file,
+        // letting the reviewer re-plan from scratch. Emitting one would tell it to aggregate work
+        // that does not exist and return nothing.
+        const hasPriorWork =
+          sliceReviews.some((r) => r.status === 'completed') || pending.length > 0
+        step.prReview = {
+          ...review,
+          status: 'reviewing',
+          sliceReviews,
+          // Monotonic, and load-bearing: it is this step's contribution to the dispatch epoch, so
+          // the re-dispatch mints a job id the wedged job cannot be re-attached to.
+          resumeAttempts: (review.resumeAttempts ?? 0) + 1,
+          resumePendingSlices: hasPriorWork ? pending : undefined,
+        }
+        this.deps.stepGraph.resetStepForRerun(step)
+        this.deps.stepGraph.startStep(step)
+        if (inst.status === 'blocked') inst.status = 'running'
+        state = step.prReview
+      },
+    )
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    return state!
   }
 
   /**

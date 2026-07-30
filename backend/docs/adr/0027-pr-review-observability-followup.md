@@ -159,6 +159,7 @@ Two things travelled with the fix, both of which the collapse had been masking:
 - ADR 0026's "landed" status for D2.1 and D3 is wrong for the parallel-subagent shape those items name. The correct status is: the code shipped, the wiring is intact, and neither delivers its signal on the shape it targeted. This ADR supersedes those two status claims; D1, D4, D5, D6, D7 are unaffected.
 - Defect A undercounts cost on every subscription-billed subagent-parallel run, not just pr-review. Any kind that fans out via `Task` has the same blind spot.
 - Both fixes are small and independent. Defect A is a path change plus a fixture test. Defect B is a change to the fallback gate and/or the prompt.
+- The live signal these defects are about is only half the problem. Even with slice progress rendering correctly, the review's WORK stayed in container memory until the terminal structured output, so anything that killed the run first discarded all of it — and a long silent aggregation turn produces no stream events at all, so `lastActivityAt` freezes and such a run reads as wedged. Both are addressed by the per-slice capture channel and the manual resume recorded in [ADR 0023](./0023-pr-deep-review.md#durable-per-slice-capture--a-manual-resume-follow-up); the frozen heartbeat itself is not, for the reason given there.
 
 ## Appendix: evidence
 

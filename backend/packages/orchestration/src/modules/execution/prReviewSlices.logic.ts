@@ -114,3 +114,78 @@ export function mergeSliceReviews(
   }
   return [...byLabel.values()]
 }
+
+/**
+ * What the captured slice reports become once the reviewer's terminal output is recorded.
+ *
+ * They exist to make a review recoverable BEFORE that output, so an aggregation that CONSUMED them
+ * drops them: eight ~24KB prose reports on the run row is a quarter-megabyte of redundant text per
+ * review, and their content is in the findings by then.
+ *
+ * "Consumed" is the load-bearing word, and it is why this is a function rather than a `[]`. A
+ * reviewer that returned neither slices nor findings aggregated NOTHING — a crashed-out reply, an
+ * unusable output, a resumed run that died again — and clearing there would destroy the only record
+ * of the finished slices while recording the run as a clean PR. That is the exact loss this channel
+ * exists to prevent, wearing a pass as a disguise. So the reports survive precisely that case,
+ * leaving the review resumable.
+ *
+ * A genuinely clean PR still names its slices, so it takes the drop as before.
+ */
+export function sliceReviewsAfterAggregation(
+  existing: readonly PrReviewSliceReview[] | undefined,
+  aggregation: { slices: readonly unknown[]; findings: readonly unknown[] },
+): PrReviewSliceReview[] {
+  const aggregated = aggregation.slices.length > 0 || aggregation.findings.length > 0
+  return aggregated ? [] : [...(existing ?? [])]
+}
+
+// ---------------------------------------------------------------------------
+// Resume planning: what a manual resume of a wedged review still has to review.
+// ---------------------------------------------------------------------------
+
+/** Comparison key for a slice label — the harness pairs progress to slices the same way. */
+function sliceKey(label: string): string {
+  return label.trim().toLowerCase()
+}
+
+/**
+ * Whether a task-list entry is the reviewer's final AGGREGATION step rather than a slice. The
+ * `pr-reviewer` prompt fixes this wording ("aggregate findings") for that entry, and a resume
+ * always re-aggregates anyway, so it must never be listed as a slice to review.
+ */
+function isAggregationEntry(key: string): boolean {
+  return key.startsWith('aggregate')
+}
+
+/**
+ * Work out which slices a manual resume still has to review, from the step's OWN observations.
+ *
+ * `planned` is the reviewer's live task list (`step.subtasks.items`), and it is the only place a
+ * slice that was planned but never DISPATCHED is named at all — the slice reviews can describe
+ * nothing but subagents that actually started. So the resume set is every planned slice with no
+ * completed review, plus any dispatched-but-unfinished slice the plan does not mention (a reviewer
+ * that regrouped mid-run, or never wrote a parent plan).
+ *
+ * Deduplicated on the same trimmed/lowercased key the labels are paired by, and ordered plan-first
+ * so the resumed reviewer is handed the slices in the order the previous attempt meant to take
+ * them. Returns labels in their original casing, which is what the prompt names them by.
+ */
+export function planResumeSlices(
+  reviews: readonly PrReviewSliceReview[],
+  planned: readonly { label: string; status: string }[],
+): string[] {
+  const completed = new Set(
+    reviews.filter((r) => r.status === 'completed').map((r) => sliceKey(r.label)),
+  )
+  const pending: string[] = []
+  const seen = new Set<string>()
+  const push = (label: string): void => {
+    const key = sliceKey(label)
+    if (!key || isAggregationEntry(key) || completed.has(key) || seen.has(key)) return
+    seen.add(key)
+    pending.push(label.trim())
+  }
+  for (const item of planned) push(item.label)
+  for (const review of reviews) if (review.status !== 'completed') push(review.label)
+  return pending
+}

@@ -5651,6 +5651,10 @@
         "pending": "In coda"
       }
     },
+    "resume": {
+      "action": "Riprendi la revisione",
+      "hint": "Sembra bloccata? La ripresa riesamina solo i blocchi che non hanno mai risposto e conserva i rilievi di quelli già completati."
+    },
     "phase": {
       "planning": "Revisione…",
       "reviewing": "Revisione {completed}/{total} sezioni",

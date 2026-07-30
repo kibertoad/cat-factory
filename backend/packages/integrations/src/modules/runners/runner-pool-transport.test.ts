@@ -359,6 +359,88 @@ describe('HttpRunnerPoolProvider', () => {
     expect(malformed.reproductionReport).toBeUndefined()
   })
 
+  it('maps the live per-slice PR reviews when the manifest points at them', async () => {
+    // Unlike the two reports above, this channel is the ONLY thing that makes a finished slice
+    // durable before the reviewer's terminal output. Without the mapping a pool-backed review that
+    // wedges or dies has nothing for a manual resume to work from and can only be re-run from zero.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [
+        { label: 'api-correlation', status: 'completed', report: 'Found an N+1.' },
+        { label: 'infra-logging', status: 'in_progress' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const view = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.sliceReviews).toEqual([
+      { label: 'api-correlation', status: 'completed', report: 'Found an N+1.' },
+      { label: 'infra-logging', status: 'in_progress' },
+    ])
+  })
+
+  it('keeps the good slices beside a malformed one and never invents a `completed`', async () => {
+    // Per-entry leniency, because discarding the valid reports is the exact data loss this channel
+    // prevents. And an unrecognised status reads as `in_progress`: over-reporting `completed` would
+    // make a resume SKIP a slice nobody reviewed, while the other direction only costs a re-review.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [
+        { label: 'api', status: 'finished-ish', report: 'body' },
+        { nonsense: true },
+        { label: '   ', status: 'completed' },
+        'not an object',
+        { label: 'docs', status: 'completed', report: 42 },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const view = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.sliceReviews).toEqual([
+      { label: 'api', status: 'in_progress', report: 'body' },
+      // A non-string report is dropped rather than coerced; the slice still counts as reviewed.
+      { label: 'docs', status: 'completed' },
+    ])
+  })
+
+  it('injects nothing when the manifest maps no slice path, or the set is empty', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      sliceReviews: [{ label: 'api', status: 'completed' }],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.sliceReviews).toBeUndefined()
+
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', sliceReviews: [] })
+    const withSlices: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, sliceReviewsPath: 'sliceReviews' },
+    }
+    const empty = await provider.poll({
+      manifest: withSlices,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(empty.sliceReviews).toBeUndefined()
+  })
+
   it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
     // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
     // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the

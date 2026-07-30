@@ -20,6 +20,12 @@ export const usePrReviewStore = defineStore('prReview', () => {
 
   /** True while a resolve call is in flight (drives the Finish button spinner / disabled state). */
   const resolving = ref(false)
+  /**
+   * True while a RESUME call is in flight. Kept separate from `resolving` rather than folded into
+   * it: a resume acts during the `reviewing` phase and a resolve during `awaiting_selection`, so
+   * sharing one flag would let either action's spinner appear on the other's controls.
+   */
+  const resuming = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
   const error = ref<string | null>(null)
 
@@ -82,6 +88,25 @@ export const usePrReviewStore = defineStore('prReview', () => {
     }
   }
 
+  /**
+   * Resume a review stuck mid-`reviewing`: the reviewer is re-dispatched for only the slices that
+   * never reported, and the already-captured reports are fed back in so the finished slices are
+   * re-aggregated rather than re-reviewed. Rejected (409) unless the review is still `reviewing`.
+   */
+  async function resume(executionId: string): Promise<void> {
+    error.value = null
+    resuming.value = true
+    try {
+      const state = await api.resumePrReview(workspace.requireId(), executionId)
+      reflect(executionId, state as PrReviewStepState)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to resume review'
+      throw e
+    } finally {
+      resuming.value = false
+    }
+  }
+
   /** Dismiss a finding entirely: it's removed from the review (and the selection). Stays parked. */
   async function dismiss(executionId: string, findingId: string): Promise<void> {
     error.value = null
@@ -127,5 +152,5 @@ export const usePrReviewStore = defineStore('prReview', () => {
     }
   }
 
-  return { resolving, error, load, resolve, dismiss, challenge }
+  return { resolving, resuming, error, load, resolve, resume, dismiss, challenge }
 })

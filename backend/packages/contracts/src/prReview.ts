@@ -272,6 +272,27 @@ export const prReviewStepStateSchema = v.object({
    * fresh.
    */
   sliceReviews: v.optional(v.array(prReviewSliceReviewSchema), []),
+  /**
+   * How many times this review has been manually RESUMED (see {@link resumePrReviewSchema}). Zero
+   * on a review nobody nudged.
+   *
+   * Not just a counter for the window: it is the review's contribution to the step's DISPATCH
+   * EPOCH, which is what gives the resumed reviewer a distinct harness job id. A container-reusing
+   * transport (a warm local pool, a self-hosted runner pool) keeps a job registry alive across
+   * dispatches and re-attaches to an existing id rather than re-running, so a resume at the same
+   * epoch would land straight back on the wedged job it was meant to replace.
+   */
+  resumeAttempts: v.optional(v.number(), 0),
+  /**
+   * The slice labels the most recent resume decided still need reviewing — derived from the step's
+   * own observations at resume time and frozen here because `resetStepForRerun` clears the live
+   * task list (`step.subtasks`) the derivation reads.
+   *
+   * ABSENT and EMPTY mean different things, so this has no default. Absent ⇒ this dispatch is a
+   * fresh review. Empty ⇒ a resume found every planned slice already reported, so the resumed
+   * reviewer only has to re-aggregate.
+   */
+  resumePendingSlices: v.optional(v.array(v.string())),
   /** The findings, ordered by severity (blocker → nit). */
   findings: v.optional(v.array(prReviewFindingSchema), []),
   /** The finding ids the human selected to act on (curated in the window). */

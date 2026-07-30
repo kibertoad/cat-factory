@@ -359,12 +359,16 @@ export interface AgentRunContext {
   /** Decisions resolved earlier in this run, for context. */
   decisions: { question: string; chosen: string }[]
   /**
-   * Files a registered kind's preOp prepared for the agent to read up front — the engine
-   * materialises them into the container's `.cat-context/` alongside the linked-doc context
-   * (see {@link InjectedContextFile}). Set by the engine from the preOp's
-   * {@link RepoOpResult.contextFiles}; the `pr-reviewer` preOp uses it to hand the reviewer the
-   * PR diff + changed-file list so it skips the reconstruct-the-diff exploration turns. Absent
-   * when no preOp injected anything.
+   * Files prepared for the agent to read up front — the engine materialises them into the
+   * container's `.cat-context/` alongside the linked-doc context (see {@link InjectedContextFile}),
+   * and folds them into the user prompt for an inline caller. The `pr-reviewer` preOps use this to
+   * hand the reviewer the PR diff + changed-file list so it skips the reconstruct-the-diff
+   * exploration turns. Absent when nothing was injected.
+   *
+   * Two producers, and they ACCUMULATE rather than replace one another: a registered kind's preOps
+   * contribute their {@link RepoOpResult.contextFiles} (repo-derived), and the context builder
+   * contributes files derived from run STATE a preOp cannot see — a resumed PR review's prior slice
+   * reports live on the step, not in the repo, and must not be gated on a resolved run repo.
    */
   injectedContextFiles?: InjectedContextFile[]
   /**

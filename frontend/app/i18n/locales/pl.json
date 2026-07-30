@@ -5639,6 +5639,10 @@
         "pending": "W kolejce"
       }
     },
+    "resume": {
+      "action": "Wznów przegląd",
+      "hint": "Wygląda na zawieszony? Wznowienie sprawdza ponownie tylko te fragmenty, które nigdy nie odpowiedziały, i zachowuje ustalenia z już ukończonych."
+    },
     "phase": {
       "planning": "Przegląd…",
       "reviewing": "Przegląd {completed}/{total} fragmentów",

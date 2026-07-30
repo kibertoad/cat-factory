@@ -2250,6 +2250,11 @@ export class RunDispatcher {
     return this.prReviewController.resolve(workspaceId, executionId, input)
   }
 
+  /** Resume a review stuck mid-`reviewing`: re-review only the slices that never reported. */
+  resumePrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState> {
+    return this.prReviewController.resume(workspaceId, executionId)
+  }
+
   /** Dismiss a parked PR-review finding entirely (remove it + prune it from the selection). */
   dismissPrReviewFinding(
     workspaceId: string,

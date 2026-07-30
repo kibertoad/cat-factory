@@ -3,6 +3,7 @@ import {
   dismissPrReviewFindingContract,
   getPrReviewContract,
   resolvePrReviewContract,
+  resumePrReviewContract,
 } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
@@ -30,6 +31,15 @@ export function prReviewApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
         body,
+      }),
+
+    // Re-trigger a review stuck mid-`reviewing`: only the slices that never reported are
+    // re-reviewed. No body — the engine derives what to redo from what it observed.
+    resumePrReview: (workspaceId: string, executionId: string) =>
+      send(resumePrReviewContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
+        body: {},
       }),
 
     // Dismiss a parked finding entirely (drops it + prunes it from the selection).

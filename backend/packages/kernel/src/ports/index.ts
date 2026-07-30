@@ -450,6 +450,7 @@ export type {
   RunnerJobView,
   RunnerReproductionPhase,
   RunnerReproductionReport,
+  RunnerSliceReview,
   RunnerTransport,
   RunnerValidationReport,
 } from './runner-transport.js'

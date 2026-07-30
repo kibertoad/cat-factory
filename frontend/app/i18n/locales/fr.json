@@ -5639,6 +5639,10 @@
         "pending": "En attente"
       }
     },
+    "resume": {
+      "action": "Reprendre la revue",
+      "hint": "Elle semble bloquée ? La reprise ne réexamine que les sections qui n’ont jamais répondu et conserve les constats de celles déjà terminées."
+    },
     "phase": {
       "planning": "Révision…",
       "reviewing": "Révision {completed}/{total} sections",

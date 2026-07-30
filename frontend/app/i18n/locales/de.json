@@ -5651,6 +5651,10 @@
         "pending": "In Warteschlange"
       }
     },
+    "resume": {
+      "action": "Review fortsetzen",
+      "hint": "Hängt es? Beim Fortsetzen werden nur die Abschnitte erneut geprüft, die nie zurückgemeldet haben; die Ergebnisse der fertigen bleiben erhalten."
+    },
     "phase": {
       "planning": "Wird geprüft…",
       "reviewing": "Prüfe {completed}/{total} Abschnitte",

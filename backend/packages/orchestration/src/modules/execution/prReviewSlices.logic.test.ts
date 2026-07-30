@@ -4,6 +4,8 @@ import {
   applySliceReviews,
   coerceSliceReviews,
   mergeSliceReviews,
+  planResumeSlices,
+  sliceReviewsAfterAggregation,
 } from './prReviewSlices.logic.js'
 
 const review = (
@@ -107,5 +109,94 @@ describe('mergeSliceReviews', () => {
   it('upgrades an in-flight slice once its report lands', () => {
     const merged = mergeSliceReviews([review('a', 'in_progress')], [review('a', 'completed', 'b')])
     expect(merged).toEqual([review('a', 'completed', 'b')])
+  })
+})
+
+describe('sliceReviewsAfterAggregation', () => {
+  const kept = [review('api', 'completed', 'body')]
+
+  it('drops the reports once findings landed — their content is in the findings', () => {
+    expect(sliceReviewsAfterAggregation(kept, { slices: ['s'], findings: ['f'] })).toEqual([])
+  })
+
+  it('drops them for a genuinely clean PR, which still names its slices', () => {
+    expect(sliceReviewsAfterAggregation(kept, { slices: ['s'], findings: [] })).toEqual([])
+  })
+
+  it('KEEPS them when the reviewer aggregated nothing at all', () => {
+    // Neither slices nor findings means nothing consumed the reports. Clearing here would destroy
+    // the only record of the finished slices AND record the run as a clean PR — the exact loss this
+    // channel prevents, wearing a pass as a disguise. Keeping them leaves the review resumable.
+    expect(sliceReviewsAfterAggregation(kept, { slices: [], findings: [] })).toEqual(kept)
+  })
+
+  it('is empty when there was nothing to keep', () => {
+    expect(sliceReviewsAfterAggregation(undefined, { slices: [], findings: [] })).toEqual([])
+  })
+})
+
+describe('planResumeSlices', () => {
+  const planned = (...entries: [string, 'pending' | 'in_progress' | 'completed'][]) =>
+    entries.map(([label, status]) => ({ label, status }))
+
+  it('redoes only what never completed, and never the aggregation entry', () => {
+    // The resume's whole value is not re-reviewing finished work. The aggregation entry is not a
+    // slice and a resume re-aggregates unconditionally, so listing it would tell the reviewer to
+    // "review" its own final step.
+    const pending = planResumeSlices(
+      [review('api', 'completed', 'body'), review('infra', 'in_progress')],
+      planned(['api', 'completed'], ['infra', 'in_progress'], ['aggregate findings', 'pending']),
+    )
+    expect(pending).toEqual(['infra'])
+  })
+
+  it('names a planned slice that was never dispatched', () => {
+    // The task list is the ONLY place such a slice appears — the slice reviews can describe
+    // nothing but subagents that actually started, so deriving the set from them alone would
+    // silently drop everything the reviewer planned but never got to.
+    const pending = planResumeSlices(
+      [review('api', 'completed', 'body')],
+      planned(['api', 'completed'], ['docs', 'pending'], ['aggregate findings', 'pending']),
+    )
+    expect(pending).toEqual(['docs'])
+  })
+
+  it('includes an in-flight slice the plan never mentioned', () => {
+    // A reviewer that regrouped mid-run, or never wrote a parent plan at all (ADR 0026 D2.2),
+    // leaves dispatched work the task list does not describe.
+    expect(planResumeSlices([review('orphan', 'in_progress')], [])).toEqual(['orphan'])
+  })
+
+  it('is empty when every planned slice completed — the resume only re-aggregates', () => {
+    // The motivating incident's exact shape: all slices reported, the aggregation pass wedged.
+    const pending = planResumeSlices(
+      [review('api', 'completed', 'a'), review('infra', 'completed', 'b')],
+      planned(['api', 'completed'], ['infra', 'completed'], ['aggregate findings', 'in_progress']),
+    )
+    expect(pending).toEqual([])
+  })
+
+  it('pairs labels case- and whitespace-insensitively, and reports the original casing', () => {
+    // The harness reduces both label vocabularies (the todo entry and the subagent dispatch
+    // description) to the same key, so the plan and the reports routinely differ in casing.
+    expect(
+      planResumeSlices(
+        [review('API Correlation', 'completed', 'body')],
+        planned(['api  ', 'pending']),
+      ),
+    ).toEqual(['api'])
+    expect(planResumeSlices([], planned([' Docs Config ', 'pending']))).toEqual(['Docs Config'])
+  })
+
+  it('deduplicates and keeps the plan order, so the resume takes the slices as planned', () => {
+    const pending = planResumeSlices(
+      [review('b', 'in_progress')],
+      planned(['a', 'pending'], ['b', 'in_progress'], ['a', 'pending']),
+    )
+    expect(pending).toEqual(['a', 'b'])
+  })
+
+  it('drops a blank label, which nothing can be dispatched against', () => {
+    expect(planResumeSlices([], planned(['   ', 'pending']))).toEqual([])
   })
 })
