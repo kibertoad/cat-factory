@@ -54,8 +54,12 @@ export interface PipelineServiceDependencies {
   /**
    * The app-owned agent-kind registry, so a save honours a DEPLOYMENT-registered kind's own
    * `gatable` flag — the same answer the run-start guard reaches. Optional so the service stays
-   * constructible standalone in unit tests; absent ⇒ built-in gatability only. `CoreDependencies`
-   * supplies it, so the composition root can't forget it.
+   * constructible standalone in unit tests; absent ⇒ built-in gatability only.
+   *
+   * `createCore` passes the instance `resolveCoreRuntime` RESOLVED (the facade's, else the default),
+   * which is the same one `RunAdmission` gets. Passing `CoreDependencies.agentKindRegistry` straight
+   * through instead would hand this `undefined` on every facade that doesn't inject one, and the two
+   * boundaries would then be answering "may this step be gated?" from different registries.
    */
   agentKindRegistry?: AgentKindRegistry
   /**

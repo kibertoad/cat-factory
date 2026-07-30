@@ -22,9 +22,11 @@ may not. A skipped producer cascades onto its review companion, and a step may n
 a human approval gate and an estimate gate — the estimate may add a human checkpoint, never cancel
 one.
 
-Pickers are scoped to the task's use-case: a `feature`/`bug` task is offered only build + research
-pipelines, and a new block-level rule keeps the planning presets on initiative blocks (they were
-previously offered on every task and then refused at start).
+Pickers are scoped to the task's use-case: a `feature`/`bug` task no longer offers the
+document-authoring, PR-review or planning presets, and a new block-level rule keeps the planning
+presets on initiative blocks (they were previously offered on every task and then refused at start).
+An UNCLASSIFIED pipeline — one with no `purpose`, which the builder leaves unset by default — stays
+visible on a `feature`/`bug` task, so a workspace's own hand-built pipelines are unaffected.
 
 **Breaking:** six built-in pipelines are retired — `pl_quick`, `pl_dep_update`, `pl_pr_review`,
 `pl_human_review`, `pl_fullstack` and `pl_integrate`. Each is tombstoned with a replacement, so an
@@ -33,6 +35,19 @@ pinned to one will need repointing. `pl_simple` is redefined (`mocker` dropped) 
 reshaped, both version-bumped, so existing workspaces are offered a reseed. `pl_integrate` is
 removed rather than replaced because it carried no merge tail at all, which meant its coder-class
 `integrator` committed straight to the base branch with no conflicts check and no CI.
+
+Two further consequences worth knowing before upgrading. A retired pipeline that a recurring
+SCHEDULE still points at cannot be deleted (that refusal is unchanged and deliberate), so acting on
+its advisory means repointing the schedule first. And because a step may no longer carry both a human
+approval gate and an estimate gate, a workspace pipeline that already carries both — only reachable
+by having added estimate gating to a human-gated companion, as a `pl_fullstack` clone allowed — is
+now refused at save and at run start until one of the two is dropped.
+
+Retiring `pl_fullstack` also removes the last built-in preset carrying `playwright`, `researcher`,
+`documenter`, `spec-companion`, `human-test` and the two brainstorm dialogues. All remain available
+as steps in the pipeline builder; none is now in a shipped preset, so a task's agent-config catalog
+surfaces a contributing kind's settings (e.g. `playwright.e2eTarget`) only once some pipeline in the
+workspace actually uses that kind.
 
 The `dep-update` recurring-schedule template is no longer inferred from a pipeline id (its pipeline
 was the ordinary build tail under a recurring name); the template value remains for explicit API

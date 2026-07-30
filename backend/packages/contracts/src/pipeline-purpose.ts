@@ -63,6 +63,10 @@ export function purposeAllowsAgentCategory(
  * types already got. `research` is included because reaching for a spike before committing to an
  * approach is a legitimate move on a feature someone has not yet scoped; `planning` is not, being
  * initiative-level work that the block-level gate refuses anyway.
+ *
+ * Applied as a DENY list (everything not named here is hidden) rather than an allow list, which is
+ * the one place this narrowing differs in direction from `document` / `review` — see
+ * {@link pipelineAllowedForTaskType} for why an UNCLASSIFIED pipeline has to stay visible here.
  */
 const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
 
@@ -73,15 +77,24 @@ const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
  *
  *  - `document` → only `document` pipelines (it authors a document; nothing else applies).
  *  - `review` → only `review` pipelines (it reviews an existing PR and opens none).
- *  - `feature` / `bug` → `build` + `research` ({@link PROGRAMMATIC_PURPOSES}). These ship code, so
- *    offering them a document-authoring or PR-review preset was noise in the one picker people use
- *    most.
+ *  - `feature` / `bug` → everything EXCEPT `document` / `review` / `planning`
+ *    ({@link PROGRAMMATIC_PURPOSES}). These ship code, so offering them a document-authoring or
+ *    PR-review preset was noise in the one picker people use most.
  *  - anything else, including a CUSTOM (namespaced) type and an undefined `taskType`, is
  *    unrestricted — a deployment's own task type has no purpose mapping we could infer.
  *
- * A pipeline with no `purpose` is UNCLASSIFIED and therefore hidden from every narrowed type: the
- * narrowing requires the explicit classifier rather than guessing. Composed with the
- * launch-availability / block-level / visual-frame filters at each picker.
+ * The two narrowings run in OPPOSITE directions, and the asymmetry is deliberate:
+ *
+ *  - `document` / `review` require the EXPLICIT classifier, because a build pipeline on a document
+ *    task is actively wrong — running it would author no document and open a code PR nobody asked
+ *    for. Guessing there costs more than hiding an unclassified preset.
+ *  - `feature` / `bug` merely EXCLUDE the purposes that cannot ship code. An unclassified pipeline
+ *    is not known-wrong for a feature, and `purpose` is optional at every write boundary — the
+ *    builder leaves it unset by default and a `PipelineRegistry` entry need not declare one — so
+ *    requiring it here would silently hide a workspace's own hand-built pipelines from the picker
+ *    they were built for, with nothing on screen to explain the absence.
+ *
+ * Composed with the launch-availability / block-level / visual-frame filters at each picker.
  */
 export function pipelineAllowedForTaskType(
   pipeline: Pick<Pipeline, 'purpose'>,
@@ -90,7 +103,7 @@ export function pipelineAllowedForTaskType(
   if (taskType === 'document') return pipeline.purpose === 'document'
   if (taskType === 'review') return pipeline.purpose === 'review'
   if (taskType === 'feature' || taskType === 'bug') {
-    return pipeline.purpose !== undefined && PROGRAMMATIC_PURPOSES.includes(pipeline.purpose)
+    return pipeline.purpose === undefined || PROGRAMMATIC_PURPOSES.includes(pipeline.purpose)
   }
   return true
 }

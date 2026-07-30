@@ -392,14 +392,18 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       })
 
       // The run parks at the Coder's completion: both items surfaced + pending, the run
-      // blocked, and the NEXT step (blueprints) NOT started.
+      // blocked, and the step AFTER the Coder NOT started.
       const parked = await app.drive(wsId)
       const exec = parked.find((e) => e.blockId === 'task_login')!
       expect(exec.status).toBe('blocked')
-      const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+      const coderIndex = exec.steps.findIndex((s) => s.agentKind === 'coder')
+      const coder = exec.steps[coderIndex]!
       expect(coder.followUps?.enabled).toBe(true)
       expect(coder.followUps?.items.map((i) => i.status)).toEqual(['pending', 'pending'])
-      expect(exec.steps.find((s) => s.agentKind === 'blueprints')!.state).toBe('pending')
+      // The successor is identified by POSITION, not by kind. Naming it couples this test to the
+      // shape of whichever build preset it runs — it named `blueprints`, a step the pipeline
+      // stopped carrying — while the property under test is only "the pipeline did not advance".
+      expect(exec.steps[coderIndex + 1]!.state).toBe('pending')
 
       // GET surfaces the same live state.
       const got = await app.call('GET', `/workspaces/${wsId}/executions/${exec.id}/follow-ups`)

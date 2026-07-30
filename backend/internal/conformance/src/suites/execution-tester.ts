@@ -67,8 +67,23 @@ export function defineExecutionTesterConformance(harness: ConformanceHarness): v
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
 
-      // The catalog is derived from the seeded pipelines' agent kinds — which include
-      // `playwright`, so its `playwright.e2eTarget` descriptor must be present on BOTH stores.
+      // The catalog is derived from the agent kinds the workspace's PIPELINES use, so it carries
+      // `playwright.e2eTarget` only once some pipeline uses `playwright` — no built-in rung does
+      // since the build-ladder collapse. Asserting the absence FIRST is what makes the appearance
+      // below evidence of that derivation rather than of the seed catalog's contents (this test
+      // previously read the descriptor straight off a fresh board, so retiring the one preset that
+      // happened to carry the kind broke it).
+      const before = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      expect(before.agentConfigCatalog?.some((d) => d.id === 'playwright.e2eTarget') ?? false).toBe(
+        false,
+      )
+      const e2e = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'End-to-end tests',
+        agentKinds: ['coder', 'playwright'],
+      })
+      expect(e2e.status).toBe(201)
+
+      // Now the contributing kind is in use, its descriptor is on the snapshot — on BOTH stores.
       const snap0 = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
       expect(snap0.agentConfigCatalog?.some((d) => d.id === 'playwright.e2eTarget')).toBe(true)
 

@@ -144,10 +144,14 @@ const selectedPipeline = computed(() =>
 // pipelines (the task's manual Run control can't start one), and — for a `document` task — every
 // non-document pipeline (it authors a doc, so a build/test pipeline makes no sense). All would be
 // refused / wrong at run start (see utils/pipeline + the backend gate + the purpose classifier).
+// `blockLevel: 'task'` is passed literally because this panel only ever edits a task leaf, which
+// drops the planning presets the engine would refuse. The task-type narrowing already excludes them
+// for `feature`/`bug`, but NOT for a `spike` / `ralph` / deployment-custom type — and a planning
+// preset settable as a task's DEFAULT pipeline is a 409 on every later Start.
 const taskFrame = computed(() => board.serviceOf(props.block))
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>
-    pipelineAllowedForManualStart(p, taskFrame.value, board.blocks, props.block.taskType),
+    pipelineAllowedForManualStart(p, taskFrame.value, board.blocks, props.block.taskType, 'task'),
   ),
 )
 function setPipeline(id: string) {

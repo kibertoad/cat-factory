@@ -121,6 +121,15 @@ This is not the same as forbidding conditional human involvement. `human-review`
 on risk is escalation, and none of them uses the `gates[i]` approval flag. What the rule forbids is
 letting a model's own estimate cancel an approval pause a pipeline author explicitly asked for.
 
+`requirements-review` is the one gatable kind the structural rule cannot police, and it is listed
+alongside those three rather than with the design producers for that reason: its park is **intrinsic**
+to the kind (the iterative answer/dismiss/re-review conversation) rather than expressed as `gates[i]`,
+so `assertValidGating` cannot see it. The escalation argument has to stand on its own there — it does,
+because gating the step is the author choosing to have the conversation conditionally, and an author
+who wants it unconditionally simply leaves it ungated. Worth knowing that the guard is not what makes
+that case safe, since a future kind with an intrinsic pause would need the same judgement applied by
+hand.
+
 Per-change-class floors ride the merge preset's existing `classRules`, keyed on the **computed**
 change class (`change-class.ts`, derived from the diff) rather than the model's opinion — so "a
 schema-class change always gets a human review" is policy the estimate cannot override. (WS4.)
@@ -128,9 +137,24 @@ schema-class change always gets a human review" is policy the estimate cannot ov
 ### Pickers scope to the use-case
 
 `pipelineAllowedForTaskType` only narrowed `document` and `review`; every other type fell through to
-unrestricted. It now narrows `feature`/`bug` to `build` + `research`, and a new **block-level**
-predicate (`pipelineAllowedForBlockLevel`) mirrors `assertInitiativeShapeAllowed` so planning
-pipelines stop being offered on task blocks.
+unrestricted. It now also narrows `feature`/`bug`, and a new **block-level** predicate
+(`pipelineAllowedForBlockLevel`) mirrors `assertInitiativeShapeAllowed` so planning pipelines stop
+being offered on task blocks.
+
+The two narrowings run in **opposite directions**, which was a correction made during review rather
+than the first cut. `document` / `review` demand the EXPLICIT classifier, because a build pipeline on
+a document task is actively wrong. `feature`/`bug` only EXCLUDE `document` / `review` / `planning`,
+because `purpose` is optional at every write boundary — the builder's dropdown starts unset
+(`draftPurpose = null`) and the create request omits it, and a `PipelineRegistry` entry need not
+declare one. Requiring the classifier there would have hidden every workspace's own hand-built
+pipelines from the picker they were built for, silently, with nothing on screen to explain it. The
+kernel guard that every BUILT-IN declares a purpose is what the document/review half leans on; it
+never covered the pipelines actually at risk.
+
+Both predicates are composed at every manual-start picker — the add-task modal, the focus view's Run
+menu, the inspector's Run menu and the task's default-pipeline setting. All four, not the two the
+first cut touched: the inspector menu is reachable for frames and modules as well as tasks, and a
+planning preset settable as a task's DEFAULT pipeline is a 409 on every later Start.
 
 The block-level predicate is keyed on `purpose: 'planning'` rather than the initiative AGENT KINDS the
 engine tests, because the SPA depends on `@cat-factory/contracts` only and cannot see the kernel's kind

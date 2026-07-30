@@ -69,7 +69,7 @@ describe('pipelineAllowedForTaskType', () => {
     expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
   })
 
-  it('a programmatic task (feature / bug) offers only build + research pipelines', () => {
+  it('a programmatic task (feature / bug) hides only what cannot ship code', () => {
     // These ship code, so a doc-authoring or PR-review preset is meaningless for them — the mirror
     // of the narrowing document/review tasks already had. `research` stays because reaching for a
     // spike before committing to an approach is legitimate on an unscoped feature.
@@ -79,10 +79,22 @@ describe('pipelineAllowedForTaskType', () => {
       expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), type)).toBe(false)
       expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), type)).toBe(false)
       expect(pipelineAllowedForTaskType(pipeline({ purpose: 'planning' }), type)).toBe(false)
-      // Unclassified is hidden from every narrowed type — the narrowing wants the explicit
-      // classifier rather than a guess.
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(false)
     }
+  })
+
+  it('keeps an UNCLASSIFIED pipeline on a feature / bug task', () => {
+    // The one place this narrowing runs opposite to the document/review one, and it has to: a
+    // `purpose` is optional at every write boundary (the builder leaves it unset by default, a
+    // registered deployment pipeline need not declare one), so requiring it here would hide a
+    // workspace's own hand-built pipelines from the picker they were built for — silently, with
+    // nothing on screen to explain the absence. Unclassified is not known-wrong for a feature the
+    // way a document preset is.
+    for (const type of ['feature', 'bug'] as const) {
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(true)
+    }
+    // Still hidden from the types whose narrowing DOES demand the explicit classifier.
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'document')).toBe(false)
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
   })
 
   it('an un-narrowed task type stays unrestricted (spike, ralph, custom, undefined)', () => {

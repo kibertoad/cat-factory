@@ -44,7 +44,6 @@ export const BUILTIN_GATABLE_KINDS = new Set<string>([
   'architect',
   'researcher',
   'spec-writer',
-  'requirements-review',
   // Build-adjacent producers whose artifacts are additive.
   'mocker',
   'blueprints',
@@ -61,6 +60,17 @@ export const BUILTIN_GATABLE_KINDS = new Set<string>([
   // "require a human PR review once risk clears .8" — not the cancellation of an approval pause
   // a pipeline author asked for. That distinction is enforced separately: `assertValidGating`
   // refuses a step carrying BOTH an estimate gate and the `gates[i]` human-approval flag.
+  //
+  // `requirements-review` belongs HERE, not with the design producers above: it is not a producer
+  // whose artifact later steps read, it is an iterative answer/dismiss/re-review conversation that
+  // PARKS the run. Its pause is intrinsic to the kind rather than expressed as `gates[i]`, so the
+  // exclusivity rule cannot see it — which makes it the one entry in this set where a reader has to
+  // take the escalation argument on its own terms rather than leaning on that guard. It holds for
+  // the same reason it holds for `human-review`: gating the step is the author CHOOSING to have the
+  // checkpoint conditionally, never a third party deleting a pause somebody else asked for. An
+  // author who wants the conversation unconditionally leaves the step ungated, and one who
+  // additionally marks it `gates[i]` is refused outright.
+  'requirements-review',
   'human-review',
   'human-test',
   'visual-confirmation',

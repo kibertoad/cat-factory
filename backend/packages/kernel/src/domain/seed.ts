@@ -820,8 +820,10 @@ function buildRetiredPipelines(): RetiredPipeline[] {
     // Every optional step switched on at once. That is a saved workspace preset (clone a rung and
     // enable them), not something the product should ship and version.
     { id: 'pl_fullstack', replacedBy: 'pl_full' },
-    // The build tail under a recurring-preset name. A dependency-update schedule points at
-    // `pl_simple` — a version bump is exactly the trivial rung's use case.
+    // The build tail under a recurring-preset name. `replacedBy` points at the trivial rung because
+    // a version bump is exactly its use case — it is the advisory's RECOMMENDATION for a board still
+    // holding the retired row, not a claim about what any schedule runs: a schedule runs whichever
+    // pipeline its author picks, and the recurring modal offers the whole schedulable set.
     { id: 'pl_dep_update', replacedBy: 'pl_simple' },
     // Each was a build plus ONE human checkpoint. `human-review` is now a risk-gated step of
     // `pl_full`, so escalation happens when the estimate says it should rather than when someone

@@ -212,9 +212,11 @@ describe('retiredPipelines — withdrawn built-ins', () => {
 
 describe('seedPipelines — purpose classification is total and matches the engine guards', () => {
   it('classifies every built-in, so no preset falls through a narrowed picker', () => {
-    // A pipeline with no `purpose` is UNCLASSIFIED, which every narrowed picker HIDES (the narrowing
-    // requires the explicit classifier rather than guessing). So an unclassified built-in is
-    // invisible on a document / review / feature / bug task — silently, with nothing failing.
+    // A `document` / `review` task offers ONLY explicitly-classified pipelines, so an unclassified
+    // built-in would be invisible there — silently, with nothing failing. (A `feature` / `bug` task
+    // narrows the other way round, excluding what cannot ship code, so unclassified survives that
+    // picker; this assertion is what the document/review half relies on.) The catalog is ours, so
+    // every entry can and must say what it is for.
     for (const p of seedPipelines()) {
       expect(p.purpose, `${p.id} must declare a purpose`).toBeDefined()
     }

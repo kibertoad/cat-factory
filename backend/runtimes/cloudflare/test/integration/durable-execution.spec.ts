@@ -20,6 +20,26 @@ async function seedWorkspace() {
 }
 
 /**
+ * Seed a workspace plus a build chain carrying NO companion step, returning both ids.
+ *
+ * The agent-failure cases below drive a THROWING executor, and a companion (`reviewer`) answers an
+ * unparseable verdict by FAILING the run (`companion_rejected`, see `CompanionController`). Run on
+ * a preset that carries one, "the error was swallowed into the step's output" becomes "the run
+ * failed" — the opposite of what those cases assert. The chain is declared here rather than borrowed
+ * from the catalog precisely so a catalog edit cannot change the property under test.
+ */
+async function seedWorkspaceWithCompanionFreePipeline() {
+  const app = makeApp()
+  const { workspace } = await app.createWorkspace()
+  const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${workspace.id}/pipelines`, {
+    name: 'Plain build (no companion)',
+    agentKinds: ['coder', 'deployer', 'tester-api', 'conflicts', 'ci', 'merger'],
+  })
+  expect(pipeline.status).toBe(201)
+  return { wsId: workspace.id, pipelineId: pipeline.body.id }
+}
+
+/**
  * Drive a run until a step actually halts (a result other than `continue`), mirroring the
  * durable driver's re-entry loop. A `coder` step spends its FIRST advance resolving the
  * (default-off) implementation-fork decision phase — recording `skipped` and returning
@@ -89,12 +109,12 @@ describe('durable execution: advanceInstance', () => {
 
 describe('durable execution: agent failure handling', () => {
   it('rethrows when rethrowAgentErrors is set (so a step can retry)', async () => {
-    const wsId = await seedWorkspace()
+    const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
     const c = buildContainer(env, {
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
+    const instance = await c.executionService.start(wsId, 'task_login', pipelineId)
 
     await expect(
       advanceUntilHalt(c, wsId, instance.id, { rethrowAgentErrors: true }),
@@ -102,12 +122,12 @@ describe('durable execution: agent failure handling', () => {
   })
 
   it('swallows the error into step output by default', async () => {
-    const wsId = await seedWorkspace()
+    const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
     const c = buildContainer(env, {
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
+    const instance = await c.executionService.start(wsId, 'task_login', pipelineId)
 
     const result = await advanceUntilHalt(c, wsId, instance.id)
     expect(result.kind === 'continue' || result.kind === 'done').toBe(true)
