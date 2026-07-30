@@ -1,5 +1,38 @@
 # @cat-factory/worker
 
+## 0.128.0
+
+### Minor Changes
+
+- 9d303f0: Make an agent kind's output-token ceiling configurable from the pipeline builder, at two tiers over
+  the deployment routing default: per pipeline step (`StepOptions.maxOutputTokens`) and per workspace
+  per agent kind (the new `workspace_agent_settings` store). The engine resolves the winner once per
+  dispatch onto `AgentRunContext.maxOutputTokens` — narrowest tier wins — so the container, inline and
+  consensus paths cannot disagree about the budget a step ran under.
+
+  Note the ceiling is advisory on the subscription-CLI inline path (the one-shot CLIs don't all honour
+  it), so it bites on the metered provider path.
+
+### Patch Changes
+
+- Updated dependencies [9d303f0]
+  - @cat-factory/contracts@0.202.0
+  - @cat-factory/kernel@0.200.0
+  - @cat-factory/orchestration@0.176.0
+  - @cat-factory/server@0.185.0
+  - @cat-factory/agents@0.93.0
+  - @cat-factory/consensus@0.13.9
+  - @cat-factory/eks@0.1.182
+  - @cat-factory/gates@0.8.29
+  - @cat-factory/gitlab@0.14.12
+  - @cat-factory/integrations@0.113.3
+  - @cat-factory/observability-otel@0.4.26
+  - @cat-factory/prompt-fragments@0.15.25
+  - @cat-factory/spend@0.12.130
+  - @cat-factory/caching@0.11.29
+  - @cat-factory/observability-langfuse@0.9.26
+  - @cat-factory/provider-cloudflare@0.7.335
+
 ## 0.127.4
 
 ### Patch Changes

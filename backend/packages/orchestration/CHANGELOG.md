@@ -1,5 +1,31 @@
 # @cat-factory/orchestration
 
+## 0.176.0
+
+### Minor Changes
+
+- 9d303f0: Make an agent kind's output-token ceiling configurable from the pipeline builder, at two tiers over
+  the deployment routing default: per pipeline step (`StepOptions.maxOutputTokens`) and per workspace
+  per agent kind (the new `workspace_agent_settings` store). The engine resolves the winner once per
+  dispatch onto `AgentRunContext.maxOutputTokens` — narrowest tier wins — so the container, inline and
+  consensus paths cannot disagree about the budget a step ran under.
+
+  Note the ceiling is advisory on the subscription-CLI inline path (the one-shot CLIs don't all honour
+  it), so it bites on the metered provider path.
+
+### Patch Changes
+
+- Updated dependencies [9d303f0]
+  - @cat-factory/contracts@0.202.0
+  - @cat-factory/kernel@0.200.0
+  - @cat-factory/agents@0.93.0
+  - @cat-factory/integrations@0.113.3
+  - @cat-factory/prompt-fragments@0.15.25
+  - @cat-factory/sandbox@0.11.14
+  - @cat-factory/spend@0.12.130
+  - @cat-factory/workspaces@0.21.7
+  - @cat-factory/caching@0.11.29
+
 ## 0.175.0
 
 ### Minor Changes
