@@ -8,6 +8,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
+import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
 
 const props = defineProps<{ block: Block }>()
 
