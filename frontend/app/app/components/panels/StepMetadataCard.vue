@@ -224,7 +224,10 @@ async function copyRunId() {
 
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+      <div
+        class="text-[11px] uppercase tracking-wide text-slate-500"
+        :title="t('panels.stepMeta.standardsAppliedHint')"
+      >
         {{ t('panels.stepMeta.standardsApplied') }}
       </div>
       <div class="mt-1 flex flex-wrap gap-1">

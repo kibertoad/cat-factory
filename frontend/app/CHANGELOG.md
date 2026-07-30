@@ -1,5 +1,16 @@
 # @cat-factory/app
 
+## 0.195.2
+
+### Patch Changes
+
+- 18895e3: Explain the jargon-carrying labels across the SPA with tooltips: the estimate-gate thresholds in
+  the pipeline builder (now one shared editor, with the 0..1 scale and the OR semantics stated), the
+  merge review-effort chips and change-class badge, the agent- and reviewer-authored 1..10 scores
+  (named as self-reported), the derived service-frame status badge, a judge's threshold, the standards
+  folded into a step's prompt, the metered/subscription spend series, and the output-token budget's
+  inherit-vs-unlimited empty state.
+
 ## 0.195.1
 
 ### Patch Changes
@@ -296,6 +307,7 @@
   that explains the card.
 
   ## The wire contract and the banner
+
   - `infraSetupStatusSchema` gains **`unreachable`**, riding the existing setup projection rather than
     a second "your infra is broken" surface: the consequence is identical to `not_defined` (a class of
     agents cannot run) and the same operator surface fixes it, so the banner, deep-link and i18n are

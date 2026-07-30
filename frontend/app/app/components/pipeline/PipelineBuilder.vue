@@ -5,7 +5,9 @@ import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
+import EstimateThresholdFields from '~/components/pipeline/EstimateThresholdFields.vue'
 import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
+import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
 import {
   agentKindMeta,
@@ -47,6 +49,31 @@ function addParticipant(i: number) {
 function removeParticipant(i: number, pIdx: number) {
   pipelines.draftConsensus[i]?.participants.splice(pIdx, 1)
 }
+/**
+ * The consensus escalation gate exposes only the two axes its toggle seeds (risk + impact) —
+ * complexity is a fine reason to run a deeper TEST audit but a poor reason to convene a panel,
+ * which is about disagreement risk. A module constant rather than a template literal so the
+ * array identity is stable across re-renders.
+ */
+const CONSENSUS_ESTIMATE_AXES: readonly EstimateAxis[] = ['risk', 'impact']
+
+// Writing one axis floor back onto each of the three draft gates. These are functions rather
+// than assignments inlined in the template because a template `v-if` does not narrow inside an
+// event handler's closure, so the inline form needs a non-null assertion at every call site —
+// and a `!` on a gate that has since been toggled off is the one shape that throws.
+function setCompanionGatingAxis(i: number | null, axis: EstimateAxis, value: number | undefined) {
+  const gating = i === null ? undefined : pipelines.draftGating[i]
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+function setConsensusGatingAxis(i: number, axis: EstimateAxis, value: number | undefined) {
+  const gating = pipelines.draftConsensus[i]?.gating
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+function setTesterQualityGatingAxis(i: number, axis: EstimateAxis, value: number | undefined) {
+  const gating = pipelines.draftTesterQuality[i]?.gating
+  if (gating) gating[ESTIMATE_AXIS_FIELD[axis]] = value
+}
+
 /** Toggle gating on/off for a draft step's consensus config. */
 function toggleGating(i: number) {
   const cfg = pipelines.draftConsensus[i]
@@ -832,43 +859,15 @@ async function clone(p: Pipeline) {
                     @click="pipelines.toggleDraftGating(unit.companionIndex)"
                   />
                 </div>
-                <div
+                <EstimateThresholdFields
                   v-if="pipelines.draftGating[unit.companionIndex]?.enabled"
-                  class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
-                >
-                  <span class="text-[10px] text-slate-500">{{
-                    t('pipeline.builder.runWhenAny')
-                  }}</span>
-                  <label class="text-slate-400">{{
-                    t('pipeline.builder.complexityThreshold')
-                  }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minComplexity"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minRisk"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftGating[unit.companionIndex]!.minImpact"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                </div>
+                  :gating="pipelines.draftGating[unit.companionIndex]!"
+                  :axes="ESTIMATE_AXES"
+                  outcome="step"
+                  @update="
+                    (axis, value) => setCompanionGatingAxis(unit.companionIndex, axis, value)
+                  "
+                />
               </div>
 
               <!-- Consensus config (shown when the step is consensus-enabled). -->
@@ -999,31 +998,14 @@ async function clone(p: Pipeline) {
                       :title="t('pipeline.builder.consensusGateTooltip')"
                       @click="toggleGating(unit.index)"
                     />
-                    <template v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled">
-                      <label class="text-slate-400">{{
-                        t('pipeline.builder.riskThreshold')
-                      }}</label>
-                      <input
-                        v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minRisk"
-                        type="number"
-                        min="0"
-                        max="1"
-                        step="0.1"
-                        class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                      />
-                      <label class="text-slate-400">{{
-                        t('pipeline.builder.impactThreshold')
-                      }}</label>
-                      <input
-                        v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minImpact"
-                        type="number"
-                        min="0"
-                        max="1"
-                        step="0.1"
-                        class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                      />
-                    </template>
                   </div>
+                  <EstimateThresholdFields
+                    v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled"
+                    :gating="pipelines.draftConsensus[unit.index]!.gating!"
+                    :axes="CONSENSUS_ESTIMATE_AXES"
+                    outcome="consensus"
+                    @update="(axis, value) => setConsensusGatingAxis(unit.index, axis, value)"
+                  />
                 </template>
               </div>
 
@@ -1059,43 +1041,13 @@ async function clone(p: Pipeline) {
                     @click="pipelines.toggleDraftTesterQualityGating(unit.index)"
                   />
                 </div>
-                <div
+                <EstimateThresholdFields
                   v-if="pipelines.draftTesterQuality[unit.index]?.gating?.enabled"
-                  class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
-                >
-                  <span class="text-[10px] text-slate-500">{{
-                    t('pipeline.builder.runWhenAny')
-                  }}</span>
-                  <label class="text-slate-400">{{
-                    t('pipeline.builder.complexityThreshold')
-                  }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minComplexity"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minRisk"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
-                  <input
-                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minImpact"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
-                </div>
+                  :gating="pipelines.draftTesterQuality[unit.index]!.gating!"
+                  :axes="ESTIMATE_AXES"
+                  outcome="step"
+                  @update="(axis, value) => setTesterQualityGatingAxis(unit.index, axis, value)"
+                />
               </div>
             </li>
           </ol>

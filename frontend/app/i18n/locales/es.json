@@ -376,6 +376,14 @@
         "pr_ready": "Activo",
         "done": "Activo"
       },
+      "statusHint": {
+        "planned": "Aun no hay tareas en este servicio. Un servicio nunca se termina, asi que este es su punto de partida y no un estado atascado.",
+        "ready": "Todas las tareas de este servicio estan inactivas o fusionadas. No hay nada en ejecucion ni nada esperandote.",
+        "in_progress": "Al menos una tarea de este servicio esta en ejecucion o tiene un pull request abierto.",
+        "blocked": "Al menos una tarea o iniciativa de este servicio esta esperando una decision tuya.",
+        "pr_ready": "Al menos una tarea de este servicio esta en ejecucion o tiene un pull request abierto.",
+        "done": "Todas las tareas de este servicio estan inactivas o fusionadas. No hay nada en ejecucion ni nada esperandote."
+      },
       "shared": "Compartido",
       "sharedTitle": "Compartido entre espacios de trabajo de esta organización",
       "bootstrapping": "Arrancando…",
@@ -1235,6 +1243,7 @@
       "spinningUpContainer": "Iniciando contenedor…",
       "subtasks": "Subtareas · {completed}/{total}",
       "standardsApplied": "Estándares aplicados",
+      "standardsAppliedHint": "Los estandares de buenas practicas incorporados al prompt de sistema de este paso. Un agente que implementa recibe una version condensada de cada uno; los revisores y planificadores reciben el texto completo.",
       "decision": "Decisión",
       "awaitingChoice": "Esperando una elección humana",
       "approvalGate": "Verificación de aprobación",
@@ -1322,13 +1331,16 @@
       "effort": {
         "heading": "Esfuerzo del agente",
         "difficulty": "Dificultad",
+        "difficultyHint": "La valoracion del propio agente sobre lo dificil que fue este paso, sobre diez. Autodeclarada, no medida.",
         "outOfTen": "{value}/10",
         "reduced": "Qué redujo la efectividad",
         "obstacles": "Obstáculos clave"
       },
       "adherence": {
         "heading": "Cumplimiento de buenas prácticas",
+        "headingHint": "Los estandares de buenas practicas incorporados al prompt de este revisor, y con cuanta fidelidad juzgo que el cambio sigue cada uno.",
         "outOfTen": "{value}/10",
+        "ratingHint": "La valoracion del propio revisor sobre con cuanta fidelidad el cambio sigue este estandar, sobre diez. Autodeclarada, no medida.",
         "relatedFindings": "Hallazgos relacionados",
         "unnamed": "Estándar"
       },
@@ -1600,7 +1612,9 @@
     },
     "legend": {
       "metered": "Medido",
-      "subscription": "Suscripción"
+      "meteredHint": "Facturado por token por el proveedor. Esto es dinero real.",
+      "subscription": "Suscripción",
+      "subscriptionHint": "Solo ilustrativo. Estas llamadas se ejecutaron con un plan de tarifa plana, asi que esta cifra es lo que habrian costado los mismos tokens a traves de una API con medicion. Nunca se facturo ni cuenta como gasto."
     },
     "spend": {
       "byModel": "Gasto por modelo",
@@ -3922,9 +3936,14 @@
       "companionGateTooltip": "Ejecutar este compañero solo cuando la estimación de la tarea supere un umbral (requiere un Task Estimator antes)",
       "consensusGateTooltip": "Ejecutar el consenso solo cuando la estimación de la tarea supere un umbral (de lo contrario se ejecuta el agente estándar)",
       "runWhenAny": "ejecutar cuando (cualquiera):",
+      "gatingRunWhenAnyHint": "El paso se ejecuta cuando se alcanza o supera cualquiera de estos ejes, y se omite en caso contrario. Si no hay estimacion, se ejecuta igualmente.",
+      "gatingRunWhenAnyConsensusHint": "El panel se reune cuando se alcanza o supera cualquiera de estos ejes; por debajo se ejecuta el agente unico. Si no hay estimacion, el panel se reune igualmente.",
       "complexityThreshold": "complejidad ≥",
+      "complexityThresholdHint": "Lo dificil que es llevar a cabo el trabajo, puntuado por el Task Estimator anterior en el pipeline. La escala va de 0 a 1, no de 1 a 10. Dejalo vacio para ignorar este eje.",
       "riskThreshold": "riesgo ≥",
+      "riskThresholdHint": "Cuanto podria romper el cambio, puntuado por el Task Estimator anterior en el pipeline. La escala va de 0 a 1, no de 1 a 10. Dejalo vacio para ignorar este eje.",
       "impactThreshold": "impacto ≥",
+      "impactThresholdHint": "Hasta donde llega el cambio en el sistema, puntuado por el Task Estimator anterior en el pipeline. La escala va de 0 a 1, no de 1 a 10. Dejalo vacio para ignorar este eje.",
       "strategy": "Estrategia",
       "rounds": "Rondas",
       "purposeLabel": "Propósito",
@@ -4081,6 +4100,7 @@
       "stepLabel": "Presupuesto de salida",
       "kindLabel": "Presupuesto de salida",
       "kindHint": "Se aplica a todas las ejecuciones de este agente. Un paso del pipeline puede anularlo.",
+      "hint": "El maximo al que puede llegar una sola respuesta de este agente. Dejarlo vacio hereda del nivel superior; no elimina el limite. El valor propio de un paso del pipeline prevalece sobre el predeterminado del espacio de trabajo.",
       "inherits": "Heredado",
       "inheritsValue": "Heredado ({tokens})"
     }
@@ -4210,6 +4230,7 @@
     "empty": "Este paso todavía no ha producido un veredicto.",
     "notScored": "Sin puntuar",
     "threshold": "umbral {threshold}",
+    "thresholdHint": "La puntuacion que este paso tenia que alcanzar, tomada de la politica de fusion de la tarea. Por debajo, el juez devuelve el trabajo al paso que lo produjo con sus hallazgos como retrabajo, o aparca la ejecucion para ti cuando ya no queda presupuesto de intentos.",
     "rubricOverridden": "rúbrica del espacio de trabajo",
     "reworkRounds": "revisión {spent}/{budget}",
     "findingsHeading": "Lo que señaló la rúbrica",
@@ -5807,10 +5828,12 @@
       "config": "Configuración y CI",
       "source": "Código fuente",
       "schema": "Esquema y migraciones",
-      "unknown": "Sin clasificar"
+      "unknown": "Sin clasificar",
+      "hint": "Lo que toco el diff, deducido de los archivos modificados. La politica de fusion puede fijar su propia regla por clase, y un diff que abarca varias clases toma la mas pesada."
     },
     "effort": {
       "prompt": "Esfuerzo de revisión",
+      "promptHint": "Registra cuanta revision necesito realmente este pull request. Tu respuesta es la referencia con la que se calibran los umbrales de fusion automatica. Etiquetar es opcional y puedes fusionar sin hacerlo.",
       "none": "Sin comentarios",
       "minor": "Comentarios menores",
       "major": "Retrabajo real",

@@ -1629,6 +1629,7 @@
       },
       "subtasks": "Sotto-attivita' · {completed}/{total}",
       "standardsApplied": "Standard applicati",
+      "standardsAppliedHint": "Gli standard di buone pratiche inseriti nel prompt di sistema di questo step. Un agente che implementa ne riceve una versione condensata; revisori e pianificatori ricevono il testo completo.",
       "decision": "Decisione",
       "awaitingChoice": "In attesa di una scelta umana",
       "approvalGate": "Gate di approvazione",
@@ -1697,13 +1698,16 @@
       "effort": {
         "heading": "Sforzo dell'agente",
         "difficulty": "Difficoltà",
+        "difficultyHint": "La valutazione dell'agente stesso su quanto e stato difficile questo step, su dieci. Autodichiarata, non misurata.",
         "outOfTen": "{value}/10",
         "reduced": "Cosa ha ridotto l'efficacia",
         "obstacles": "Ostacoli principali"
       },
       "adherence": {
         "heading": "Aderenza alle best practice",
+        "headingHint": "Gli standard di buone pratiche inseriti nel prompt di questo revisore, e quanto fedelmente ha giudicato che la modifica segua ciascuno.",
         "outOfTen": "{value}/10",
+        "ratingHint": "La valutazione del revisore stesso su quanto la modifica segue questo standard, su dieci. Autodichiarata, non misurata.",
         "relatedFindings": "Rilievi correlati",
         "unnamed": "Standard"
       },
@@ -2559,6 +2563,14 @@
         "pr_ready": "Attivo",
         "done": "Live"
       },
+      "statusHint": {
+        "planned": "Nessuna attivita su questo servizio per ora. Un servizio non finisce mai, quindi questo e il punto di partenza e non uno stato bloccato.",
+        "ready": "Tutte le attivita di questo servizio sono ferme o gia unite. Non c'e nulla in esecuzione e nulla in attesa di te.",
+        "in_progress": "Almeno un'attivita di questo servizio e in esecuzione o ha una pull request aperta.",
+        "blocked": "Almeno un'attivita o iniziativa di questo servizio e in attesa di una tua decisione.",
+        "pr_ready": "Almeno un'attivita di questo servizio e in esecuzione o ha una pull request aperta.",
+        "done": "Tutte le attivita di questo servizio sono ferme o gia unite. Non c'e nulla in esecuzione e nulla in attesa di te."
+      },
       "shared": "Condiviso",
       "sharedTitle": "Condiviso tra i workspace di questa org",
       "bootstrapping": "Bootstrap in corso…",
@@ -3242,7 +3254,9 @@
     },
     "legend": {
       "metered": "A consumo",
-      "subscription": "Abbonamento"
+      "meteredHint": "Fatturato a token dal provider. Sono soldi veri.",
+      "subscription": "Abbonamento",
+      "subscriptionHint": "Solo indicativo. Queste chiamate sono state fatte su un piano forfettario, quindi questa cifra e quanto sarebbero costati gli stessi token tramite un'API a consumo. Non e mai stata fatturata e non conta mai come spesa."
     },
     "spend": {
       "byModel": "Spesa per modello",
@@ -3599,9 +3613,14 @@
       "companionGateTooltip": "Esegui questo companion solo quando la stima dell'attivita supera una soglia (richiede un Task Estimator in precedenza)",
       "consensusGateTooltip": "Esegui il consenso solo quando la stima dell'attivita supera una soglia (altrimenti viene eseguito l'agente standard)",
       "runWhenAny": "esegui quando (uno qualsiasi):",
+      "gatingRunWhenAnyHint": "Lo step viene eseguito quando uno qualsiasi di questi assi viene raggiunto o superato, altrimenti viene saltato. Se non c'e una stima, viene eseguito comunque.",
+      "gatingRunWhenAnyConsensusHint": "Il panel si riunisce quando uno qualsiasi di questi assi viene raggiunto o superato; al di sotto viene eseguito il singolo agente. Se non c'e una stima, il panel si riunisce comunque.",
       "complexityThreshold": "complessita ≥",
+      "complexityThresholdHint": "Quanto e difficile portare a termine il lavoro, valutato dal Task Estimator precedente nella pipeline. La scala va da 0 a 1, non da 1 a 10. Lascia vuoto per ignorare questo asse.",
       "riskThreshold": "rischio ≥",
+      "riskThresholdHint": "Quanto la modifica potrebbe rompere, valutato dal Task Estimator precedente nella pipeline. La scala va da 0 a 1, non da 1 a 10. Lascia vuoto per ignorare questo asse.",
       "impactThreshold": "impatto ≥",
+      "impactThresholdHint": "Quanto la modifica si estende nel sistema, valutato dal Task Estimator precedente nella pipeline. La scala va da 0 a 1, non da 1 a 10. Lascia vuoto per ignorare questo asse.",
       "strategy": "Strategia",
       "rounds": "Giri",
       "purposeLabel": "Scopo",
@@ -3758,6 +3777,7 @@
       "stepLabel": "Budget di output",
       "kindLabel": "Budget di output",
       "kindHint": "Si applica a ogni esecuzione di questo agente. Un passaggio della pipeline può sovrascriverlo.",
+      "hint": "Il massimo a cui puo arrivare una singola risposta di questo agente. Lasciarlo vuoto eredita dal livello superiore, non toglie il limite. Il valore di uno step della pipeline prevale sul predefinito dello spazio di lavoro.",
       "inherits": "Ereditato",
       "inheritsValue": "Ereditato ({tokens})"
     }
@@ -4898,6 +4918,7 @@
     "empty": "Questo passo non ha ancora prodotto un verdetto.",
     "notScored": "Non valutato",
     "threshold": "soglia {threshold}",
+    "thresholdHint": "Il punteggio che questo step doveva raggiungere, preso dalla policy di merge dell'attivita. Al di sotto il giudice rimanda il lavoro allo step che lo ha prodotto, con i suoi rilievi da correggere, oppure mette in pausa l'esecuzione per te quando non resta budget di tentativi.",
     "rubricOverridden": "rubrica dello spazio di lavoro",
     "reworkRounds": "revisione {spent}/{budget}",
     "findingsHeading": "Cosa ha segnalato la rubrica",
@@ -5819,10 +5840,12 @@
       "config": "Configurazione e CI",
       "source": "Codice sorgente",
       "schema": "Schema e migrazioni",
-      "unknown": "Non classificato"
+      "unknown": "Non classificato",
+      "hint": "Cosa ha toccato il diff, ricavato dai file modificati. La policy di merge puo definire una regola per ogni classe, e un diff che copre piu classi prende la piu pesante."
     },
     "effort": {
       "prompt": "Impegno di revisione",
+      "promptHint": "Registra quanta revisione ha richiesto davvero questa pull request. La tua risposta e il riferimento con cui vengono calibrate le soglie di merge automatico. L'etichettatura e facoltativa e puoi fare il merge senza.",
       "none": "Nessun commento",
       "minor": "Note minori",
       "major": "Rilavorazione sostanziale",

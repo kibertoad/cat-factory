@@ -309,12 +309,15 @@ watch(
                   </div>
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-[11px] text-slate-500">
-                  <span class="flex items-center gap-1">
+                  <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
                     <span class="h-2 w-2 rounded-sm bg-violet-500" />{{
                       t('reports.legend.metered')
                     }}
                   </span>
-                  <span class="flex items-center gap-1">
+                  <span
+                    class="flex items-center gap-1"
+                    :title="t('reports.legend.subscriptionHint')"
+                  >
                     <span class="h-2 w-2 rounded-sm bg-amber-600" />{{
                       t('reports.legend.subscription')
                     }}

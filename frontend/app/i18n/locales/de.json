@@ -1629,6 +1629,7 @@
       },
       "subtasks": "Teilaufgaben · {completed}/{total}",
       "standardsApplied": "Angewendete Standards",
+      "standardsAppliedHint": "Die Best-Practice-Standards, die in den System-Prompt dieses Schritts eingefügt wurden. Ein umsetzender Agent erhält von jedem eine gekürzte Fassung; Reviewer und Planer bekommen den vollen Text.",
       "decision": "Entscheidung",
       "awaitingChoice": "Wartet auf eine menschliche Wahl",
       "approvalGate": "Freigabe-Gate",
@@ -1697,13 +1698,16 @@
       "effort": {
         "heading": "Agenten-Aufwand",
         "difficulty": "Schwierigkeit",
+        "difficultyHint": "Die eigene Einschätzung des Agenten, wie schwer dieser Schritt war, von zehn. Selbst angegeben, nicht gemessen.",
         "outOfTen": "{value}/10",
         "reduced": "Was die Effektivität verringert hat",
         "obstacles": "Wichtigste Hindernisse"
       },
       "adherence": {
         "heading": "Einhaltung der Best Practices",
+        "headingHint": "Die Best-Practice-Standards, die in den Prompt dieses Reviewers eingefügt wurden, und wie genau die Änderung ihnen nach seinem Urteil folgt.",
         "outOfTen": "{value}/10",
+        "ratingHint": "Die eigene Bewertung des Reviewers, wie genau die Änderung diesem Standard folgt, von zehn. Selbst angegeben, nicht gemessen.",
         "relatedFindings": "Zugehörige Befunde",
         "unnamed": "Standard"
       },
@@ -2559,6 +2563,14 @@
         "pr_ready": "Aktiv",
         "done": "Live"
       },
+      "statusHint": {
+        "planned": "Für diesen Service gibt es noch keine Aufgaben. Ein Service wird nie fertig, das hier ist also der Anfang und kein Stillstand.",
+        "ready": "Alle Aufgaben unter diesem Service ruhen oder sind gemergt. Es läuft nichts und nichts wartet auf Sie.",
+        "in_progress": "Mindestens eine Aufgabe unter diesem Service läuft oder hat einen offenen Pull Request.",
+        "blocked": "Mindestens eine Aufgabe oder Initiative unter diesem Service wartet auf eine Entscheidung von Ihnen.",
+        "pr_ready": "Mindestens eine Aufgabe unter diesem Service läuft oder hat einen offenen Pull Request.",
+        "done": "Alle Aufgaben unter diesem Service ruhen oder sind gemergt. Es läuft nichts und nichts wartet auf Sie."
+      },
       "shared": "Geteilt",
       "sharedTitle": "Über Workspaces in dieser Organisation hinweg geteilt",
       "bootstrapping": "Wird gebootstrappt…",
@@ -3242,7 +3254,9 @@
     },
     "legend": {
       "metered": "Abgerechnet",
-      "subscription": "Abo"
+      "meteredHint": "Vom Anbieter pro Token abgerechnet. Das ist echtes Geld.",
+      "subscription": "Abo",
+      "subscriptionHint": "Nur zur Veranschaulichung. Diese Aufrufe liefen über einen Pauschaltarif; der Betrag zeigt, was dieselben Token über eine abgerechnete API gekostet hätten. Er wurde nie in Rechnung gestellt und zählt nie als Ausgabe."
     },
     "spend": {
       "byModel": "Kosten nach Modell",
@@ -3599,9 +3613,14 @@
       "companionGateTooltip": "Diesen Companion nur ausführen, wenn die Aufgabenschätzung einen Schwellenwert überschreitet (benötigt vorher einen Task Estimator)",
       "consensusGateTooltip": "Konsens nur ausführen, wenn die Aufgabenschätzung einen Schwellenwert überschreitet (sonst läuft der Standard-Agent)",
       "runWhenAny": "ausführen wenn (beliebig):",
+      "gatingRunWhenAnyHint": "Der Schritt läuft, sobald eine dieser Achsen erreicht oder überschritten wird, und wird sonst übersprungen. Liegt keine Schätzung vor, läuft er trotzdem.",
+      "gatingRunWhenAnyConsensusHint": "Das Panel tagt, sobald eine dieser Achsen erreicht oder überschritten wird; darunter läuft stattdessen der einzelne Agent. Liegt keine Schätzung vor, tagt das Panel trotzdem.",
       "complexityThreshold": "Komplexität ≥",
+      "complexityThresholdHint": "Wie aufwendig die Umsetzung ist, bewertet vom Task Estimator weiter oben in der Pipeline. Die Skala reicht von 0 bis 1, nicht von 1 bis 10. Leer lassen, um diese Achse zu ignorieren.",
       "riskThreshold": "Risiko ≥",
+      "riskThresholdHint": "Wie viel die Änderung kaputt machen könnte, bewertet vom Task Estimator weiter oben in der Pipeline. Die Skala reicht von 0 bis 1, nicht von 1 bis 10. Leer lassen, um diese Achse zu ignorieren.",
       "impactThreshold": "Auswirkung ≥",
+      "impactThresholdHint": "Wie weit die Änderung ins System hineinreicht, bewertet vom Task Estimator weiter oben in der Pipeline. Die Skala reicht von 0 bis 1, nicht von 1 bis 10. Leer lassen, um diese Achse zu ignorieren.",
       "strategy": "Strategie",
       "rounds": "Runden",
       "purposeLabel": "Zweck",
@@ -3758,6 +3777,7 @@
       "stepLabel": "Ausgabebudget",
       "kindLabel": "Ausgabebudget",
       "kindHint": "Gilt für jeden Lauf dieses Agenten. Ein Pipeline-Schritt kann es überschreiben.",
+      "hint": "Der Höchstumfang einer einzelnen Antwort dieses Agenten. Leer lassen heißt vom nächsthöheren Level erben, nicht das Limit aufheben. Der Wert eines Pipeline-Schritts sticht die Vorgabe des Workspace.",
       "inherits": "Übernommen",
       "inheritsValue": "Übernommen ({tokens})"
     }
@@ -4898,6 +4918,7 @@
     "empty": "Dieser Schritt hat noch kein Urteil erzeugt.",
     "notScored": "Nicht bewertet",
     "threshold": "Schwellenwert {threshold}",
+    "thresholdHint": "Der Wert, den dieser Schritt erreichen musste, aus der Merge-Policy der Aufgabe. Darunter schickt der Judge die Arbeit mit seinen Befunden als Nacharbeit an den erzeugenden Schritt zurück oder parkt den Lauf für Sie, wenn kein Versuchsbudget mehr übrig ist.",
     "rubricOverridden": "Raster des Arbeitsbereichs",
     "reworkRounds": "Überarbeitung {spent}/{budget}",
     "findingsHeading": "Was das Bewertungsraster beanstandet hat",
@@ -5819,10 +5840,12 @@
       "config": "Konfiguration & CI",
       "source": "Quellcode",
       "schema": "Schema & Migrationen",
-      "unknown": "Nicht klassifiziert"
+      "unknown": "Nicht klassifiziert",
+      "hint": "Was der Diff berührt hat, ermittelt aus den geänderten Dateien. Die Merge-Policy kann pro Klasse eine eigene Regel setzen; ein Diff über mehrere Klassen zählt als die schwerste davon."
     },
     "effort": {
       "prompt": "Review-Aufwand",
+      "promptHint": "Hält fest, wie viel Review dieser Pull Request wirklich gebraucht hat. Ihre Antwort ist die Referenz, an der die Auto-Merge-Schwellen kalibriert werden. Das Taggen ist freiwillig, Sie können auch ohne mergen.",
       "none": "Keine Anmerkungen",
       "minor": "Kleine Anmerkungen",
       "major": "Echte Nacharbeit",
