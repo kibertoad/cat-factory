@@ -33,39 +33,9 @@ import * as v from 'valibot'
  *  - `configured`     — a connection / backend is defined.
  *  - `not_applicable` — this runtime doesn't need it (the integration isn't wired),
  *                       so there is nothing to nag about.
- *  - `unreachable`    — it IS configured, but a live probe cannot reach it right now.
- *
- * `unreachable` is deliberately carried by this SETUP projection even though it reports runtime
- * health, because the consequence is identical to `not_defined` — a whole class of agents cannot
- * run — and the operator surface that fixes it is the same one. Sharing the projection means
- * sharing the banner, its deep-link and its i18n instead of growing a second "your infra is
- * broken" surface.
- *
- * It is NOT interchangeable with the other three in one respect, and consumers MUST honour the
- * difference: those are stable operator decisions, so the banner offers a PERMANENT per-user
- * "don't notify me again" dismissal. Applying that to `unreachable` would let one click
- * permanently silence every future outage, so a health state must be dismissible for the SESSION
- * only and must re-nag when it recurs. See `InfraSetupBanner.vue`.
  */
-export const infraSetupStatusSchema = v.picklist([
-  'not_defined',
-  'configured',
-  'not_applicable',
-  'unreachable',
-])
+export const infraSetupStatusSchema = v.picklist(['not_defined', 'configured', 'not_applicable'])
 export type InfraSetupStatus = v.InferOutput<typeof infraSetupStatusSchema>
-
-/**
- * The {@link InfraSetupStatus} values describing a live-health problem rather than an operator
- * decision. Exported so the SPA's dismissal fork — and any future alerting — keys off ONE
- * definition instead of re-listing the literal at each site.
- */
-export const INFRA_SETUP_HEALTH_STATUSES = ['unreachable'] as const
-
-/** Whether a status is a transient health failure (session-only dismissal, re-nag on recurrence). */
-export function isInfraSetupHealthStatus(status: InfraSetupStatus): boolean {
-  return (INFRA_SETUP_HEALTH_STATUSES as readonly string[]).includes(status)
-}
 
 /** The per-area infrastructure-setup status projection carried on the snapshot. */
 export const infraSetupSchema = v.object({

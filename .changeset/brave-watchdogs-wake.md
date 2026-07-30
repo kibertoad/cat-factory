@@ -1,6 +1,5 @@
 ---
 '@cat-factory/cli': minor
-'@cat-factory/contracts': minor
 ---
 
 Add `cat-factory supervise` — a self-healing watchdog for local dev, and make it the default `dev`
@@ -55,28 +54,3 @@ down, which is the shape that would fool a naive exit-code or first-line check.
 watchdog that restarts the process destroys the parked state you need when you are debugging a
 crash. Note `predev` now also builds `@cat-factory/cli`, so running `pnpm dev` directly inside
 `deploy/local` (bypassing Turbo's `^build`) still resolves the `cat-factory` bin.
-
-## Wire contract for surfacing this in the UI
-
-A supervisor that only writes to a terminal is a supervisor whose findings get missed — the
-incident above sat unnoticed for 36 hours precisely because the only evidence was a log nobody was
-tailing. So `@cat-factory/contracts` gains the wire shape the SPA banner needs:
-
-- `infraSetupStatusSchema` gains **`unreachable`** — configured, but a live probe can't reach it.
-  It rides the existing setup projection rather than a new "your infra is broken" surface, because
-  the consequence is identical to `not_defined` (a class of agents cannot run) and the operator
-  surface that fixes it is the same, so the banner, deep-link and i18n are all reused.
-  `isInfraSetupHealthStatus` + `INFRA_SETUP_HEALTH_STATUSES` mark it as a HEALTH state, which
-  consumers must honour: the other three are stable operator decisions, so the banner offers a
-  permanent per-user "don't notify me again" — applying that to an outage would let one click
-  silence every future occurrence, so a health state is session-dismissible and must re-nag.
-- `WorkspaceEvent` gains **`infraSetup`**, carrying the area, the new status, and optional
-  `detail`/`remediation`. The projection is otherwise recomputed only on snapshot load, which is
-  fine for operator decisions but useless for `unreachable`: a cluster dying mid-session would stay
-  invisible until someone reloaded the app. Publish on TRANSITION only — a reachability watcher
-  polling every few seconds would otherwise storm the workspace bus. The optional text is how the
-  supervisor's cgroup-wedge diagnosis reaches the banner, since only an attempted START can
-  discover it and the server never attempts one.
-
-Both changes are additive: the full backend solution build passes untouched, and the SPA only
-re-exports the type, so nothing changes behaviour until the producer and the banner fork land.

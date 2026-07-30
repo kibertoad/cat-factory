@@ -3,7 +3,6 @@ import type { ExecutionInstance } from './execution.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { EnvConfigRepairJob } from './env-config-repair.js'
 import type { EnvironmentTestRun } from './environment-test.js'
-import type { InfraSetupArea, InfraSetupStatus } from './infra-setup.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
@@ -53,34 +52,6 @@ export type WorkspaceEvent =
    * run is surfaced only on the inspector that triggered it.
    */
   | { type: 'envTest'; run: EnvironmentTestRun; at: number }
-  /**
-   * One infrastructure area's setup/health status changed, so the client patches its
-   * `infraSetup` projection in place and the setup banner appears or clears IMMEDIATELY.
-   *
-   * Without this the projection is only recomputed when a workspace snapshot (re)loads, which is
-   * fine for the operator-decision states — nobody un-configures a runner pool behind your back —
-   * but useless for `unreachable`: a cluster that dies mid-session would stay invisible until
-   * somebody happened to reload the app, which in practice means the next day. A dead environment
-   * provider silently fails every testing agent in the meantime, so it has to push.
-   *
-   * Publish on TRANSITION only, never per probe: a reachability watcher polling every few seconds
-   * would otherwise turn this into a permanent event storm on the workspace bus.
-   *
-   * `detail` / `remediation` are optional operator-facing text for the states where the cause is
-   * knowable and the fix is specific — the motivating case being a local cluster whose restart is
-   * blocked by a stale cgroup, which `cat-factory supervise` can diagnose (runc reports
-   * "device or resource busy") but the server cannot, since it is only discoverable by ATTEMPTING
-   * a start. The supervisor reports it through the machine API; carrying it here means that
-   * diagnosis reaches the banner instead of scrolling past in a terminal nobody is watching.
-   */
-  | {
-      type: 'infraSetup'
-      area: InfraSetupArea
-      status: InfraSetupStatus
-      detail?: string
-      remediation?: string
-      at: number
-    }
   /**
    * A human-actionable notification was raised or resolved (a PR needs review, a
    * pipeline finished and wants confirmation, CI fixing gave up). The client
