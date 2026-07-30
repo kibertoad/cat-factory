@@ -353,12 +353,15 @@ async function savePolicy() {
             </div>
           </section>
 
-          <!-- Goal & constraints -->
+          <!-- Goal & constraints. The planner's own prose, so it takes the reading measure the
+               shell's `full` width obliges (see the `width` prop): the phase/item rows below are
+               structure that reads better at the full span, but these are paragraphs and bullets
+               of agent-written text that would otherwise run the width of the display. -->
           <section v-if="initiative.goal" class="mb-4">
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.goal') }}
             </h3>
-            <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+            <p class="max-w-3xl whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
               {{ initiative.goal }}
             </p>
           </section>
@@ -366,7 +369,7 @@ async function savePolicy() {
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.constraints') }}
             </h3>
-            <ul class="list-inside list-disc text-[13px] text-slate-300">
+            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
               <li v-for="(c, i) in initiative.constraints" :key="i">{{ c }}</li>
             </ul>
           </section>
@@ -374,7 +377,7 @@ async function savePolicy() {
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.nonGoals') }}
             </h3>
-            <ul class="list-inside list-disc text-[13px] text-slate-300">
+            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
               <li v-for="(g, i) in initiative.nonGoals" :key="i">{{ g }}</li>
             </ul>
           </section>
@@ -382,7 +385,7 @@ async function savePolicy() {
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.analysis') }}
             </h3>
-            <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+            <p class="max-w-3xl whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
               {{ initiative.analysisSummary }}
             </p>
           </section>
@@ -450,7 +453,7 @@ async function savePolicy() {
                           })
                         }}
                       </div>
-                      <div v-if="item.note" class="mt-0.5 text-[10px] text-amber-300/80">
+                      <div v-if="item.note" class="mt-0.5 max-w-3xl text-[10px] text-amber-300/80">
                         {{ item.note }}
                       </div>
                       <div
@@ -592,7 +595,7 @@ async function savePolicy() {
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.deviations') }}
             </h3>
-            <ul class="list-inside list-disc text-[13px] text-slate-300">
+            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
               <li v-for="d in initiative.deviations" :key="d.id">
                 <code v-if="d.itemId" class="text-slate-400">{{ d.itemId }}</code>
                 {{ d.description }}
@@ -688,7 +691,7 @@ async function savePolicy() {
             <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('initiative.tracker.caveats') }}
             </h3>
-            <ul class="list-inside list-disc text-[13px] text-slate-300">
+            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
               <li v-for="(c, i) in initiative.caveats" :key="i">{{ c }}</li>
             </ul>
           </section>

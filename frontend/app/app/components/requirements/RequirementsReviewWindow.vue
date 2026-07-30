@@ -796,7 +796,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         {{ STATUS_LABELS[item.status] }}
                       </UBadge>
                     </div>
-                    <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
+                    <!-- The reviewer's question is prose, so it takes the measure even though the
+                         card around it takes the span (see the shell's `width` prop: the unit is
+                         the paragraph, not the section). The badge row above and the mode buttons
+                         and textarea below are what the full width is actually for. -->
+                    <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-400">
                       {{ item.detail }}
                     </p>
 
@@ -804,7 +808,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                            ones the answer lives in the textarea below, seeded from the reply) -->
                     <div
                       v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
-                      class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                      class="mt-2 max-w-3xl rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                     >
                       <span class="text-[10px] uppercase tracking-wide text-slate-500">
                         {{ t('requirements.answerLabel') }}
@@ -925,7 +929,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             >
                               {{ GROUNDING_LABELS[rec.groundedIn] }}
                             </UBadge>
-                            <p class="mt-1 whitespace-pre-line text-sm text-slate-300">
+                            <!-- The Writer's suggested answer — agent prose, so it takes the
+                                 measure like the finding's own question above it. -->
+                            <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-300">
                               {{ rec.recommendedText }}
                             </p>
                             <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -1037,11 +1043,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 }}
               </span>
             </button>
-            <!-- The document keeps a reading measure the findings above it deliberately don't:
-                 the window is `full`-width now, and a finding is a short question beside its
-                 answer control (wide is fewer rows to scroll), where this is continuous prose
-                 that would otherwise run to 200-character lines. Left-aligned rather than
-                 centred, so it starts where every finding above it starts. -->
+            <!-- The same reading measure the findings' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. Left-aligned rather than centred, so
+                 it starts where every finding above it starts. -->
             <div v-show="!docCollapsed" class="max-w-3xl">
               <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                 <button

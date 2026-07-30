@@ -20,12 +20,26 @@ worse, not better. On that line: the plan review + tracker, requirements review,
 brainstorm, PR review, tester report and service spec.
 
 **What the extra width may NOT be spent on is line length.** Continuous prose inside a `full` window
-now carries its own reading measure (`max-w-3xl`, the step reader's, over the same 13px
-`.reader-prose` sheet), and the leftover is the document's margins. Deliberately only prose: a
-findings list, a requirements table, a Gherkin block and a log tail all read better at the full span,
-and capping those would spend the width back on gutters. That split is why the plan document is capped
-while the finding cards beside it in the requirements and clarity windows are not — a finding is a
-short question next to its answer control, where wide means fewer rows to scroll.
+carries its own reading measure (`max-w-3xl`, the step reader's, over the same 13px `.reader-prose`
+sheet), and the leftover is the document's margins.
+
+The unit that obligation attaches to is the **paragraph, not the section**, which is the distinction
+that decides where it lands: "a findings list reads better at the full span" is true of the list and
+false of the prose inside each row. So the rows, badge rows, control rows, requirement tables, Gherkin
+blocks, log tails and inputs take the span, while a finding's detail, a recorded answer, an
+investigator's justification, a group rationale and every summary paragraph take the measure — a
+finding card's answer control is STACKED under its question, so nothing in it was ever "beside"
+anything, and sizing by section would have kept 200-character lines in exactly the windows this change
+widened most.
+
+`ResultWindowShell.logic.spec.ts` pins that: every window's bucket against a table naming its reason,
+plus each `full` window held to the measure. The shell cannot enforce an obligation on its own slot
+content, and without the guard three `full` windows had already shipped with no measure anywhere in
+them.
+
+What `full` costs is click-outside, since the backdrop is then only the shell's gutter. That is the
+same trade the full-bleed reader already makes (it has no backdrop close at all), and Escape plus the
+header's close button are untouched.
 
 `PrReviewWindow` gains the most: it was still on `3xl`, the narrowest bucket, for a surface listing
 per-file findings with paths, line numbers, suggested fixes and investigator justifications.
