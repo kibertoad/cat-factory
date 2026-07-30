@@ -24,6 +24,7 @@ import { subtaskIconClass } from '~/utils/pipelineRender'
 import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
