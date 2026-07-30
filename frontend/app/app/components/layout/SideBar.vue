@@ -9,7 +9,8 @@
 // Two orthogonal ways this panel shrinks. WHICH destinations exist is the interface
 // TIER (basic hides the `advanced` contributions, filtered upstream in `navSlotFilter`);
 // how much room they take is the COLLAPSE state (the icon-only rail). Basic mode starts
-// railed, but either can be changed independently from the footer switcher / the toggle.
+// railed, but either can be changed independently from the tier switcher at the top /
+// the rail toggle.
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
@@ -179,6 +180,17 @@ watch(
 
     <BoardSwitcher :collapsed="railed" />
 
+    <!-- The interface tier sits ABOVE the destinations it gates, not in the footer: basic is the
+         shipped default, so this row is most users' only sight of the tier, and below the fold in
+         a scrolled navbar it is a thin thread to hang the advanced half of the product on. The
+         wrapper is what keeps the control and its hint together — the aside's own `gap-4` would
+         otherwise push them apart. Kept OUT of the `onNavAction` group deliberately: switching
+         tiers opens nothing, and closing the compact drawer would hide the destinations the
+         switch just revealed. -->
+    <div class="space-y-1">
+      <UiModeSwitcher :collapsed="railed" />
+    </div>
+
     <div class="contents" @click="onNavAction">
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->
@@ -236,7 +248,6 @@ watch(
     </div>
 
     <div class="mt-auto space-y-2">
-      <UiModeSwitcher :collapsed="railed" />
       <LanguageSwitcher :collapsed="railed" />
       <UserMenu :collapsed="railed" />
     </div>

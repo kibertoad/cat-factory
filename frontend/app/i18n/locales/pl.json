@@ -29,6 +29,7 @@
     "advanced": "Zaawansowany",
     "basicHint": "Tylko codzienne narzędzia. Przełącz na zaawansowany, aby zobaczyć wszystko.",
     "advancedHint": "Wszystkie sekcje i wszystkie opcje uruchamiania.",
+    "switchTo": "Przełącz na {mode}",
     "pinned": "Ustawione przez to wdrożenie"
   },
   "common": {

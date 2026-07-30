@@ -29,6 +29,7 @@
     "advanced": "Avanzada",
     "basicHint": "Solo las herramientas del día a día. Cambia a Avanzada para verlo todo.",
     "advancedHint": "Todas las secciones y todas las opciones de ejecución.",
+    "switchTo": "Cambiar a {mode}",
     "pinned": "Definido por este despliegue"
   },
   "common": {

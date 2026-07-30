@@ -460,9 +460,9 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
     // Deliberately NOT `advanced`: this is the way BACK. Basic mode is the shipped default, so
     // for most users the sidebar switcher is their first sight of the tier — and in the basic
-    // rail it renders icon-only, which is a thin thread to hang the entire advanced half of the
-    // product on. The palette is reachable in both tiers, searchable by name, and is already
-    // "the primary way to reach every action", so the tier belongs in it.
+    // rail it collapses to a single toggle, which is a thin thread to hang the entire advanced
+    // half of the product on. The palette is reachable in both tiers, searchable by name, and
+    // is already "the primary way to reach every action", so the tier belongs in it.
     id: 'ui-mode',
     labelKey: 'layout.commandBar.cmd.toggleUiMode',
     icon: 'i-lucide-toggle-right',

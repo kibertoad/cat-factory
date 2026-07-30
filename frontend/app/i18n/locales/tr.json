@@ -29,6 +29,7 @@
     "advanced": "Gelişmiş",
     "basicHint": "Yalnızca günlük araçlar. Her şeyi görmek için Gelişmiş’e geçin.",
     "advancedHint": "Tüm bölümler ve tüm çalıştırma seçenekleri.",
+    "switchTo": "{mode} moduna geç",
     "pinned": "Bu dağıtım tarafından belirlendi"
   },
   "common": {

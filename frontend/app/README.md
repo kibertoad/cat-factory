@@ -77,10 +77,17 @@ a fixed order, first match wins:
    set the in-app switcher is a read-only indicator, since a preference the resolver ignores
    would be a lie. An unrecognised value is ignored rather than failing the boot.
 2. **The user's own choice**, persisted client-side (the `uiMode` store) and changed from the
-   switcher at the bottom of the sidebar — or from the **command palette** entry, which is
-   deliberately _not_ an advanced item: basic is the default, so the route back to the
-   advanced half has to exist inside basic mode.
+   switcher at the top of the sidebar, under the board switcher — or from the **command
+   palette** entry, which is deliberately _not_ an advanced item: basic is the default, so the
+   route back to the advanced half has to exist inside basic mode.
 3. **`basic`.**
+
+That switcher is a **segmented control showing both tiers**, above the fold rather than in the
+footer, because basic is the shipped default and it is most users' only sight of the tier: a
+dropdown states the current mode but not that another one exists, so the half of the product it
+gates stays invisible to anyone who does not open menus to see what is in them. In the collapsed
+rail it degrades to one button that flips the tier (with only two modes a toggle is
+unambiguous), keeping the current tier's name under the glyph.
 
 The sidebar can independently be **collapsed to an icon rail** (the toggle at its top, lg+
 only — below `lg` the navbar is already an off-canvas drawer). The rail preference is
