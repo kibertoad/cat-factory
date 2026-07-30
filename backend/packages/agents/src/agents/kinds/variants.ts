@@ -55,6 +55,14 @@ export interface AgentKindVariantDefinition {
   /**
    * The EXISTING agent kind this varies. The step runs as this kind in every respect; the
    * variant supplies only its prompt. Boot validation refuses an unknown one.
+   *
+   * It must also be a kind the DISPATCH composes a prompt for. The inline ENGINE kinds
+   * (`INLINE_ENGINE_SYSTEM_PROMPTS` — the requirements + clarity reviewers, both brainstorm
+   * stages, their rework editors) are refused: `IterativeReviewService` composes their prompt from
+   * (workspace, kind) with no step in hand, so a variant selected on such a step could never reach
+   * the model, and a per-workspace prompt override is what varies them today. The bespoke
+   * CONTAINER kinds (`merger`, `on-call`) are fine — they dispatch through the engine like any
+   * other container kind, against their ROLE half.
    */
   baseKind: AgentKind
   /**

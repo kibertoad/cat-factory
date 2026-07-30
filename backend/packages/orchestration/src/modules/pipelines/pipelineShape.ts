@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   companionTargets,
+  INLINE_ENGINE_SYSTEM_PROMPTS,
   isCompanionKind,
   isGatableKind,
   SKILL_AGENT_KIND,
@@ -104,13 +105,22 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
 
 /**
  * Every ENABLED step that selects an agent-kind VARIANT (`stepOptions[i].agentVariantId`) must
- * name one the deployment registered, and that variant's `baseKind` must be the step's own kind.
+ * name one the deployment registered, that variant's `baseKind` must be the step's own kind, and
+ * the step's kind must be one whose prompt the DISPATCH composes.
  *
- * Both halves matter and neither fails loudly on its own. An unknown id would simply run the
- * shipped prompt — the step still works, so nothing surfaces except that it silently stopped
- * being the variation someone configured. A MISMATCHED one is worse: the variant's prompt is
- * written for a different role, so the step would run a Coder told to be a reviewer and the
- * output would look like a model failure rather than a configuration error.
+ * None of the three fails loudly on its own. An unknown id would simply run the shipped prompt —
+ * the step still works, so nothing surfaces except that it silently stopped being the variation
+ * someone configured. A MISMATCHED one is worse: the variant's prompt is written for a different
+ * role, so the step would run a Coder told to be a reviewer and the output would look like a model
+ * failure rather than a configuration error.
+ *
+ * The third is {@link INLINE_ENGINE_SYSTEM_PROMPTS} — the requirements + clarity reviewers, both
+ * brainstorm stages and their rework editors. `IterativeReviewService` drives those as bare inline
+ * calls and composes their prompt from (workspace, kind) with no STEP in hand, so a variant
+ * selected on one of them cannot reach the model at all. Refusing it is the honest disposition
+ * until that path can resolve a step: a per-workspace prompt override is what varies those kinds
+ * today. Note this is NOT the whole bespoke-prompt family — `merger` and `on-call` dispatch through
+ * the engine like any container kind, so a variant works there and is covered by tests.
  *
  * Skipped entirely when no registry is supplied — the caller is validating a built-in catalog
  * with no deployment registrations in view (the kernel seed test), where refusing an id it
@@ -135,6 +145,11 @@ export function assertValidAgentVariants({
     if (variant.baseKind !== agentKinds[i]) {
       throw new ValidationError(
         `Agent variant '${variantId}' varies '${variant.baseKind}', so it cannot be selected on a '${agentKinds[i]}' step.`,
+      )
+    }
+    if (agentKinds[i] && agentKinds[i]! in INLINE_ENGINE_SYSTEM_PROMPTS) {
+      throw new ValidationError(
+        `Agent variant '${variantId}' cannot be selected on a '${agentKinds[i]}' step: that step runs inline in the engine, which composes its prompt without a step, so the variant would never reach the model. Edit the agent's prompt for this workspace instead.`,
       )
     }
   }

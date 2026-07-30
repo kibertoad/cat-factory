@@ -488,6 +488,43 @@ describe('assertValidAgentVariants', () => {
     ).toThrow(/cannot be selected on a 'architect' step/)
   })
 
+  it('refuses a variant on an INLINE-ENGINE step, which could never apply it', () => {
+    // `requirements-review` runs inline in the engine, which composes its prompt from
+    // (workspace, kind) with no step — so the selection would validate, save, run, and silently
+    // do nothing. Refusing is the honest disposition while that path has no step to read.
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:strict',
+      baseKind: 'requirements-review',
+      promptAddition: 'Be strict.',
+    })
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['requirements-review'],
+        stepOptions: [{ agentVariantId: 'org:strict' }],
+        agentKindRegistry: registry,
+      }),
+    ).toThrow(/runs inline in the engine/)
+  })
+
+  it('still accepts a variant on a BESPOKE-prompt CONTAINER kind', () => {
+    // The distinction the inline refusal must not over-reach on: `merger` also carries a bespoke
+    // prompt, but it dispatches through the engine like any container kind, so a variant applies.
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:cautious',
+      baseKind: 'merger',
+      promptAddition: 'Weigh migrations as high risk.',
+    })
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['merger'],
+        stepOptions: [{ agentVariantId: 'org:cautious' }],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+
   it('imposes no requirement on a DISABLED step', () => {
     expect(() =>
       assertValidAgentVariants({

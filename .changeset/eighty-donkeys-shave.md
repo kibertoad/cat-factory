@@ -26,6 +26,12 @@ step's selection, so a step is never reported as running a variation whose text 
 re-wording a variant under the same id starts a fresh verification streak instead of inheriting the
 previous wording's.
 
+Varying an INLINE-ENGINE kind (the requirements + clarity reviewers, the brainstorm stages, their
+rework editors) is refused at boot and at pipeline save rather than accepted and ignored: those kinds
+compose their prompt without a step, so the variant could never reach the model. Vary them with a
+per-workspace prompt override instead. `merger` and `on-call` are unaffected — they dispatch through
+the engine, so a variant applies to their role half.
+
 The two bespoke container prompts (`merger`, `on-call`) moved from `@cat-factory/server` into
 `@cat-factory/agents` alongside the inline-engine ones, and `builtInBaseSystemPrompt` is now
 `shippedBasePromptFor` exported from there.

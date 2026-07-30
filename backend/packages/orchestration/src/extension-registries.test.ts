@@ -629,6 +629,40 @@ describe('agent-kind variant validation', () => {
     ).toBe(true)
   })
 
+  it('reports a variant of an INLINE-ENGINE kind, which no step could ever apply', () => {
+    // Those kinds are driven as bare inline calls whose prompt is composed from (workspace, kind)
+    // with no step, so the variant is unreachable. Boot is where a deployment should hear it.
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:strict',
+      baseKind: 'requirements-review',
+      promptAddition: 'Be strict.',
+    })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        knownAgentKinds: new Set(['coder', 'requirements-review']),
+      }).some((p) => p.code === 'variant_inline_engine_kind'),
+    ).toBe(true)
+  })
+
+  it('accepts a variant of a bespoke-prompt CONTAINER kind, which does dispatch through the engine', () => {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:cautious',
+      baseKind: 'merger',
+      promptAddition: 'Weigh migrations as high risk.',
+    })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        knownAgentKinds: new Set(['coder', 'merger']),
+      }),
+    ).toEqual([])
+  })
+
   it('reports a REGISTERED pipeline whose step selects a variant of another kind', () => {
     const pipelines = defaultPipelineRegistry()
     pipelines.register({

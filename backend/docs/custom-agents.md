@@ -175,10 +175,19 @@ A variant applies only to the step's OWN kind. A helper dispatched off that step
 `ci-fixer`, the `fork-proposer` — is a different agent and does not inherit it, so there is
 deliberately no way to vary a helper's prompt: it has no step of its own to select one on.
 
+**What cannot be varied (yet): the inline ENGINE kinds** — the requirements + clarity reviewers,
+both brainstorm stages and their rework editors. `IterativeReviewService` drives those as bare
+inline calls and composes their prompt from `(workspace, kind)` with no step in hand, so a variant
+selected on one could never reach the model. Registering one is a BOOT error and selecting one is
+refused at pipeline save, rather than validating and silently doing nothing; vary those kinds with a
+per-workspace prompt override instead. This does not extend to `merger` and `on-call`: they carry
+bespoke prompts too, but they dispatch through the engine like any container kind, so a variant
+applies to their ROLE half normally.
+
 Boot validation refuses a variant whose `baseKind` is unknown, one that sets neither prompt field
-(it would run as the stock kind, silently), and a registered pipeline selecting a variant of the
-wrong kind — skipping a DISABLED step, exactly as pipeline save and run start do for
-workspace-authored pipelines.
+(it would run as the stock kind, silently), one varying an inline-engine kind, and a registered
+pipeline selecting a variant of the wrong kind — skipping a DISABLED step, exactly as pipeline save
+and run start do for workspace-authored pipelines.
 
 ### What was ASKED for vs what RAN
 

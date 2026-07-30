@@ -1,4 +1,5 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS } from '@cat-factory/agents'
 import type {
   AgentKind,
   GateRegistry,
@@ -210,6 +211,20 @@ function checkAgentKindVariants(
           `Agent variant "${variant.id}" sets neither systemPrompt nor promptAddition, so a step ` +
           `selecting it runs exactly the shipped "${variant.baseKind}" prompt. Give it one, or ` +
           `drop the registration.`,
+      })
+    }
+    // A kind whose prompt `IterativeReviewService` composes from (workspace, kind) with no step in
+    // hand: the variant could be selected on the step and would never reach the model. Refused at
+    // pipeline save too (`assertValidAgentVariants`), but a deployment that registers one should
+    // hear it at BOOT rather than the first time somebody tries to use it.
+    if (variant.baseKind in INLINE_ENGINE_SYSTEM_PROMPTS) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_inline_engine_kind',
+        message:
+          `Agent variant "${variant.id}" varies "${variant.baseKind}", which runs inline in the ` +
+          `engine and composes its prompt without a step, so no step could ever apply the ` +
+          `variant. Vary a dispatched kind, or edit that agent's prompt per workspace instead.`,
       })
     }
     if (registeredKindIds.has(variant.baseKind)) continue
