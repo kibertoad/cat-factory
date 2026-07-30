@@ -90,93 +90,11 @@ export function executionController(): Hono<AppEnv> {
     return c.json(block, 200)
   })
 
-  // Current spend-safeguard status (token usage vs budget for this period).
-  buildHonoRoute(app, getSpendStatusContract, async (c) => {
-    return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')), 200)
-  })
+  // The run-observability READS (spend status, workspace usage, per-run LLM metrics, the agent
+  // context snapshot, performed searches and the metrics export), registered by a sibling so this
+  // controller stays within the per-function line budget.
+  registerExecutionTelemetryRoutes(app)
 
-  // Usage report for this period: token usage broken down by billing kind / vendor /
-  // model — both metered API calls and flat-rate subscription harness usage. Powers the
-  // "Usage" settings tab. (Reporting only; the budget gate above still counts metered.)
-  buildHonoRoute(app, getWorkspaceUsageContract, async (c) => {
-    return c.json(
-      await c.get('container').spendService.usageBreakdown(param(c, 'workspaceId')),
-      200,
-    )
-  })
-
-  // LLM observability for a run: the full per-call detail (prompts, responses,
-  // token usage, output-limit headroom, transport-vs-execution latency) behind the
-  // board's step rollups. Empty when the observability sink is not wired.
-  buildHonoRoute(app, getExecutionLlmMetricsContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').llmObservability
-    const calls = observability
-      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
-      : []
-    return c.json({ executionId, calls }, 200)
-  })
-
-  // The complete context provided to each container agent in a run: the composed
-  // system + user prompts, the best-practice fragment bodies folded in, and the full
-  // content of the files injected into the container. Empty when the agent-context
-  // sink is not wired or the workspace disabled storing it.
-  buildHonoRoute(app, getExecutionAgentContextContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').agentContextObservability
-    const snapshots = observability
-      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
-      : []
-    return c.json({ executionId, snapshots }, 200)
-  })
-
-  // The web searches each container agent in a run performed through the search proxy:
-  // the query text, the provider that served it, and the result count. Empty when the
-  // search-query sink is not wired or the workspace disabled storing agent context.
-  buildHonoRoute(app, getExecutionSearchQueriesContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').searchQueryObservability
-    const searchQueries = observability
-      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
-      : []
-    return c.json({ executionId, searchQueries }, 200)
-  })
-
-  // LLM-friendly export of a run's model activity: a self-describing JSON bundle
-  // (totals + per-agent insights + every call, with derived ratios) meant to be
-  // handed straight to a model for analysis. Sets a download filename.
-  buildHonoRoute(app, exportExecutionLlmMetricsContract, async (c) => {
-    const executionId = c.req.valid('param').executionId
-    const observability = c.get('container').llmObservability
-    const exported = observability
-      ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
-      : {
-          kind: 'cat-factory.llm-metrics-export' as const,
-          version: 1 as const,
-          executionId,
-          generatedAt: 0,
-          totals: {
-            calls: 0,
-            promptTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            cacheHitRate: null,
-            completionTokens: 0,
-            upstreamMs: 0,
-            overheadMs: 0,
-            transportOverheadRatio: null,
-            errors: 0,
-            warnings: 0,
-            truncatedCalls: 0,
-          },
-          insights: [],
-          calls: [],
-        }
-    c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
-    return c.json(exported, 200)
-  })
-
-  // Resume runs paused by the spend safeguard in this workspace.
   buildHonoRoute(app, resumeSpendContract, async (c) => {
     const instances = await c
       .get('container')
@@ -295,4 +213,98 @@ export function executionController(): Hono<AppEnv> {
   })
 
   return app
+}
+
+/**
+ * The run-observability READ surface. Split out of {@link executionController} purely for size;
+ * it registers onto the SAME app instance, so every middleware mounted there still applies.
+ */
+function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
+  // Current spend-safeguard status (token usage vs budget for this period).
+  buildHonoRoute(app, getSpendStatusContract, async (c) => {
+    return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')), 200)
+  })
+
+  // Usage report for this period: token usage broken down by billing kind / vendor /
+  // model — both metered API calls and flat-rate subscription harness usage. Powers the
+  // "Usage" settings tab. (Reporting only; the budget gate above still counts metered.)
+  buildHonoRoute(app, getWorkspaceUsageContract, async (c) => {
+    return c.json(
+      await c.get('container').spendService.usageBreakdown(param(c, 'workspaceId')),
+      200,
+    )
+  })
+
+  // LLM observability for a run: the full per-call detail (prompts, responses,
+  // token usage, output-limit headroom, transport-vs-execution latency) behind the
+  // board's step rollups. Empty when the observability sink is not wired.
+  buildHonoRoute(app, getExecutionLlmMetricsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').llmObservability
+    const calls = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, calls }, 200)
+  })
+
+  // The complete context provided to each container agent in a run: the composed
+  // system + user prompts, the best-practice fragment bodies folded in, and the full
+  // content of the files injected into the container. Empty when the agent-context
+  // sink is not wired or the workspace disabled storing it.
+  buildHonoRoute(app, getExecutionAgentContextContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').agentContextObservability
+    const snapshots = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, snapshots }, 200)
+  })
+
+  // The web searches each container agent in a run performed through the search proxy:
+  // the query text, the provider that served it, and the result count. Empty when the
+  // search-query sink is not wired or the workspace disabled storing agent context.
+  buildHonoRoute(app, getExecutionSearchQueriesContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').searchQueryObservability
+    const searchQueries = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, searchQueries }, 200)
+  })
+
+  // LLM-friendly export of a run's model activity: a self-describing JSON bundle
+  // (totals + per-agent insights + every call, with derived ratios) meant to be
+  // handed straight to a model for analysis. Sets a download filename.
+  buildHonoRoute(app, exportExecutionLlmMetricsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').llmObservability
+    const exported = observability
+      ? await observability.exportForExecution(param(c, 'workspaceId'), executionId)
+      : {
+          kind: 'cat-factory.llm-metrics-export' as const,
+          version: 1 as const,
+          executionId,
+          generatedAt: 0,
+          totals: {
+            calls: 0,
+            promptTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cacheHitRate: null,
+            completionTokens: 0,
+            upstreamMs: 0,
+            overheadMs: 0,
+            transportOverheadRatio: null,
+            errors: 0,
+            warnings: 0,
+            truncatedCalls: 0,
+          },
+          insights: [],
+          calls: [],
+        }
+    c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
+    return c.json(exported, 200)
+  })
+
+  // Resume runs paused by the spend safeguard in this workspace.
 }

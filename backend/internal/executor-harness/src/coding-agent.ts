@@ -260,6 +260,75 @@ function followUpPollIntervalMs(): number {
  * retry resumes on them. Returns the run's summary/stats, whether it pushed, and
  * whether it resumed; callers decide what to do after a push (open a PR, or nothing).
  */
+/**
+ * The work-branch push machinery for one coding run: a single coalesced push plus the periodic
+ * checkpoint that keeps mid-run commits durable. Split out of {@link runCodingAgent} for the
+ * per-function line budget; the caller owns the interval's lifetime (it clears `checkpoint`).
+ *
+ * Serialize all pushes to the work branch through a single in-flight promise. A checkpoint tick
+ * and the final push (or two slow checkpoint ticks) must never run `git push` to the same branch
+ * concurrently: overlapping pushes race on the remote ref and can make a push fail with a
+ * ref-lock / non-fast-forward error — which, on the FINAL push, would fail the whole run even
+ * though the work is committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
+ * pushes once the branch has advanced past `baseSha`.
+ *
+ * Only push once the branch has advanced past its pre-run tip: pushing while it still sits at
+ * `baseSha` would create the work branch at the base commit (a zero-diff branch), which a later
+ * retry would see via `remoteBranchExists` and treat as resumable work — then fail to open a PR
+ * ("no commits between base and head"). So a run that never commits leaves NO branch behind,
+ * preserving the clean no-op outcome.
+ */
+function createWorkBranchPusher(args: {
+  dir: string
+  spec: CodingAgentSpec
+  baseSha: string
+  logger: Logger
+  signal: AbortSignal | undefined
+}): {
+  pushWorkOnce: () => Promise<void>
+  inFlightPush: () => Promise<void> | null
+  checkpoint: ReturnType<typeof setInterval>
+} {
+  const { dir, spec, baseSha, logger, signal } = args
+  let pushInFlight: Promise<void> | null = null
+  const pushWorkOnce = (): Promise<void> => {
+    if (pushInFlight) return pushInFlight
+    pushInFlight = (async () => {
+      if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
+      await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+    })().finally(() => {
+      pushInFlight = null
+    })
+    return pushInFlight
+  }
+  // Read the in-flight push, if any. A function (with an explicit return type) so the
+  // value isn't subject to the caller's straight-line narrowing — `pushInFlight` is
+  // only ever assigned inside closures, which flow analysis can't observe.
+  const inFlightPush = (): Promise<void> | null => pushInFlight
+
+  // Checkpoint the agent's committed work to the branch periodically so an eviction
+  // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
+  // agent commits its own work; this only PUSHES already-committed commits, so it
+  // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
+  // Surface checkpoint-push failures at warn with a running count: a checkpoint losing
+  // a race is harmless once, but a steadily-climbing count means mid-run work is NOT
+  // being durably checkpointed, so an eviction would lose it — previously invisible at
+  // info level. Still best-effort: a failed checkpoint never fails the run.
+  let checkpointFailures = 0
+  const checkpoint = setInterval(() => {
+    pushWorkOnce().catch((err) => {
+      checkpointFailures++
+      logger.warn('coding-agent: checkpoint push failed', {
+        reason: err instanceof Error ? err.message : String(err),
+        checkpointFailures,
+      })
+    })
+  }, checkpointIntervalMs())
+  checkpoint.unref?.()
+
+  return { pushWorkOnce, inFlightPush, checkpoint }
+}
+
 export async function runCodingAgent(
   spec: CodingAgentSpec,
   opts: RunOptions = {},
@@ -275,55 +344,17 @@ export async function runCodingAgent(
       // pre-run branch tip. See {@link prepareCodingCheckout} for the resume-safety invariants.
       const { resumed, baseSha } = await prepareCodingCheckout(dir, spec, logger, opts)
 
-      // Serialize all pushes to the work branch through a single in-flight promise.
-      // A checkpoint tick and the final push (or two slow checkpoint ticks) must never
-      // run `git push` to the same branch concurrently: overlapping pushes race on the
-      // remote ref and can make a push fail with a ref-lock / non-fast-forward error —
-      // which, on the FINAL push, would fail the whole run even though the work is
-      // committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
-      // pushes once the branch has advanced past `baseSha` (see below).
-      //
-      // Only push once the branch has advanced past its pre-run tip: pushing while it
-      // still sits at `baseSha` would create the work branch at the base commit (a
-      // zero-diff branch), which a later retry would see via `remoteBranchExists` and
-      // treat as resumable work — then fail to open a PR ("no commits between base and
-      // head"). So a run that never commits leaves NO branch behind, preserving the
-      // clean no-op outcome.
-      let pushInFlight: Promise<void> | null = null
-      const pushWorkOnce = (): Promise<void> => {
-        if (pushInFlight) return pushInFlight
-        pushInFlight = (async () => {
-          if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
-          await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
-        })().finally(() => {
-          pushInFlight = null
-        })
-        return pushInFlight
-      }
-      // Read the in-flight push, if any. A function (with an explicit return type) so the
-      // value isn't subject to the caller's straight-line narrowing — `pushInFlight` is
-      // only ever assigned inside closures, which flow analysis can't observe.
-      const inFlightPush = (): Promise<void> | null => pushInFlight
-
-      // Checkpoint the agent's committed work to the branch periodically so an eviction
-      // mid-run doesn't lose it (a retry then resumes from the pushed commits). The
-      // agent commits its own work; this only PUSHES already-committed commits, so it
-      // never races the agent's staging. Best-effort: a failed checkpoint is skipped.
-      // Surface checkpoint-push failures at warn with a running count: a checkpoint losing
-      // a race is harmless once, but a steadily-climbing count means mid-run work is NOT
-      // being durably checkpointed, so an eviction would lose it — previously invisible at
-      // info level. Still best-effort: a failed checkpoint never fails the run.
-      let checkpointFailures = 0
-      const checkpoint = setInterval(() => {
-        pushWorkOnce().catch((err) => {
-          checkpointFailures++
-          logger.warn('coding-agent: checkpoint push failed', {
-            reason: err instanceof Error ? err.message : String(err),
-            checkpointFailures,
-          })
-        })
-      }, checkpointIntervalMs())
-      checkpoint.unref?.()
+      // The work-branch push machinery: one coalesced in-flight push plus the periodic
+      // checkpoint that keeps mid-run commits durable across an eviction. Lifted into
+      // {@link createWorkBranchPusher} so this callback stays within the per-function line budget;
+      // the invariants it upholds are documented there.
+      const { pushWorkOnce, inFlightPush, checkpoint } = createWorkBranchPusher({
+        dir,
+        spec,
+        baseSha,
+        logger,
+        signal,
+      })
 
       // In a monorepo the service lives in a subdirectory: run Pi with its cwd set to
       // that subtree (git stays rooted at `dir` so commits/pushes still cover the whole

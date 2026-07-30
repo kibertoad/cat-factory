@@ -440,7 +440,78 @@ export class ExecutionService {
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
     // controllers' `runAgent`/`previewStepModel`/`deployInputs`/`deployContext` closures resolve
     // through `this.runDispatcher` lazily, so this assignment trailing their construction is safe.
-    this.runDispatcher = new RunDispatcher({
+    this.runDispatcher = this.buildRunDispatcher(dependencies, runInitiatorScopeFn)
+    this.prMerger = pullRequestMerger
+    this.notifications = notificationService
+    this.issueWriteback = issueWriteback
+    this.log = logger ?? noopLogger
+    this.subscriptionActivations = subscriptionActivationRepository
+    this.pokeInitiativeLoop = pokeInitiativeLoop
+    this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+    this.stepDecisions = new StepDecisionController({
+      agentExecutor: this.agentExecutor,
+      agentKindRegistry: this.agentKindRegistry,
+      blockRepository: this.blockRepository,
+      clock: this.clock,
+      executionRepository: this.executionRepository,
+      mergePolicy: this.mergePolicy,
+      runDispatcher: this.runDispatcher,
+      runStateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      workRunner: this.workRunner,
+      requireWorkspace: (ws) => this.requireWorkspace(ws),
+      requireBlock: (ws, id) => this.requireBlock(ws, id),
+      failRun: (ws, id, message, kind, detail, reason) =>
+        this.failRun(ws, id, message, kind, detail, reason),
+      finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
+    })
+  }
+
+  /**
+   * Assemble the post-merge board controller. A method rather than a literal in the constructor
+   * because everything it reads is already a field by the time it runs, so it needs no destructured
+   * parameter threaded through — and the constructor is a god-function against its size budget.
+   */
+  /**
+   * The per-step dispatch + completion spine. Built from the deps OBJECT rather than a
+   * hand-maintained forwarding list, for the reason the constructor states: a field dropped from
+   * such a list turns a feature off silently. Split out of the constructor purely for size.
+   */
+  private buildRunDispatcher(
+    deps: ExecutionServiceDependencies,
+    runInitiatorScopeFn: NonNullable<ExecutionServiceDependencies['runInitiatorScope']>,
+  ): RunDispatcher {
+    const {
+      blockRepository,
+      executionRepository,
+      agentExecutor,
+      agentKindRegistry,
+      gateRegistry,
+      judgeRegistry,
+      judgeAssessor,
+      stepResolverRegistry,
+      providerRegistry,
+      workRunner,
+      executionEventPublisher,
+      idGenerator,
+      clock,
+      logger,
+      spendService,
+      taskRepository,
+      workspaceSettingsRepository,
+      prVerificationReportPublisher,
+      resolveRunRepoContext,
+      appBaseUrl,
+      environmentProvisioning,
+      ticketTrackerProvider,
+      issueWriteback,
+      bugIntakeService,
+      notificationService,
+      blueprintReconciler,
+      initiativeService,
+      resolveProviderCapabilities,
+    } = deps
+    return new RunDispatcher({
       blockRepository,
       executionRepository,
       agentExecutor,
@@ -507,37 +578,8 @@ export class ExecutionService {
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
-    this.prMerger = pullRequestMerger
-    this.notifications = notificationService
-    this.issueWriteback = issueWriteback
-    this.log = logger ?? noopLogger
-    this.subscriptionActivations = subscriptionActivationRepository
-    this.pokeInitiativeLoop = pokeInitiativeLoop
-    this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
-    this.stepDecisions = new StepDecisionController({
-      agentExecutor: this.agentExecutor,
-      agentKindRegistry: this.agentKindRegistry,
-      blockRepository: this.blockRepository,
-      clock: this.clock,
-      executionRepository: this.executionRepository,
-      mergePolicy: this.mergePolicy,
-      runDispatcher: this.runDispatcher,
-      runStateMachine: this.runStateMachine,
-      stepGraph: this.stepGraph,
-      workRunner: this.workRunner,
-      requireWorkspace: (ws) => this.requireWorkspace(ws),
-      requireBlock: (ws, id) => this.requireBlock(ws, id),
-      failRun: (ws, id, message, kind, detail, reason) =>
-        this.failRun(ws, id, message, kind, detail, reason),
-      finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
-    })
   }
 
-  /**
-   * Assemble the post-merge board controller. A method rather than a literal in the constructor
-   * because everything it reads is already a field by the time it runs, so it needs no destructured
-   * parameter threaded through — and the constructor is a god-function against its size budget.
-   */
   private buildPostMergeBoard(): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
     // structurally incompatible with the interface even from inside it.

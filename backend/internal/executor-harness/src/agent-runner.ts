@@ -488,6 +488,56 @@ async function setUpClaudeMcp(
   }
 }
 
+/**
+ * No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
+ * which cannot see the CLI's internal turns. The caller remembers each `tool_use` id's name off
+ * the assistant turn (`rememberTool`) and hands the following user turn's content to `feedGuard`,
+ * which pairs each `tool_result`'s `is_error` with that name. The FIRST reason trips it: the
+ * diagnostic is recorded (readable via `reason()`, which the catch surfaces over the generic abort
+ * message) and `guardAbort` fires — folded into streamCli's signal so a tripped guard kills the CLI
+ * the same way the external watchdog does. Disabled when the caller supplies no limits (only the
+ * external watchdog then bounds the run).
+ *
+ * Split out of {@link runClaudeCode} for the per-function line budget.
+ */
+function createClaudeProgressGuard(opts: SubscriptionRunOptions): {
+  rememberTool: (id: string, name: string) => void
+  feedGuard: (content: unknown[]) => void
+  guardAbort: AbortController
+  reason: () => string | undefined
+} {
+  const guard = opts.guardLimits
+    ? new ProgressGuard(opts.guardLimits, opts.expectsEdits ?? true)
+    : undefined
+  const toolNames = new Map<string, string>()
+  const guardAbort = new AbortController()
+  let guardReason: string | undefined
+
+  const feedGuard = (content: unknown[]): void => {
+    if (!guard || guardReason) return
+    for (const block of content) {
+      if (!isObject(block) || block.type !== 'tool_result') continue
+      const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
+      const name = id ? toolNames.get(id) : undefined
+      if (id) toolNames.delete(id)
+      if (!name) continue
+      const reason = guard.observeSignal({ name, isError: block.is_error === true })
+      if (reason) {
+        guardReason = reason
+        guardAbort.abort()
+        return
+      }
+    }
+  }
+
+  return {
+    rememberTool: (id, name) => toolNames.set(id, name),
+    feedGuard,
+    guardAbort,
+    reason: () => guardReason,
+  }
+}
+
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -576,34 +626,8 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // `tool_use` id to feed the guard a {name,isError} signal. A tripped guard aborts the CLI via
   // `guardAbort` (folded into streamCli's signal below) and the run then fails with its
   // diagnostic. Disabled when the caller supplies no limits (only the external watchdog bounds it).
-  const guard = opts.guardLimits
-    ? new ProgressGuard(opts.guardLimits, opts.expectsEdits ?? true)
-    : undefined
-  const toolNames = new Map<string, string>()
-  const guardAbort = new AbortController()
-  let guardReason: string | undefined
-
-  // Feed a user turn's settled tool calls to the guard, pairing each `tool_result`'s `is_error`
-  // with the name captured for its `tool_use` id on the assistant turn. The FIRST reason trips
-  // it: record the diagnostic and abort the CLI (streamCli's close handler rejects; the catch
-  // below surfaces `guardReason` over the generic abort message). A standalone closure so the
-  // per-block loop doesn't nest onEvent past the readable-depth limit.
-  const feedGuard = (content: unknown[]): void => {
-    if (!guard || guardReason) return
-    for (const block of content) {
-      if (!isObject(block) || block.type !== 'tool_result') continue
-      const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
-      const name = id ? toolNames.get(id) : undefined
-      if (id) toolNames.delete(id)
-      if (!name) continue
-      const reason = guard.observeSignal({ name, isError: block.is_error === true })
-      if (reason) {
-        guardReason = reason
-        guardAbort.abort()
-        return
-      }
-    }
-  }
+  const progressGuard = createClaudeProgressGuard(opts)
+  const { rememberTool, feedGuard, guardAbort } = progressGuard
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
@@ -625,7 +649,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Remember each call's name against its id so the guard can pair it with the
         // `is_error` its `tool_result` carries on the next `user` turn.
         if (typeof block.id === 'string' && typeof block.name === 'string') {
-          toolNames.set(block.id, block.name)
+          rememberTool(block.id, block.name)
         }
         if (block.name === 'TodoWrite') {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
@@ -739,6 +763,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     // report is appended after them when the CLI managed to emit one before it was killed, which
     // is uncommon but is the same evidence a bad exit now carries — a guard trip is no reason to
     // discard it.
+    const guardReason = progressGuard.reason()
     if (guardReason) {
       const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
       const report = capReport(redact(terminalReport, secrets).trim())

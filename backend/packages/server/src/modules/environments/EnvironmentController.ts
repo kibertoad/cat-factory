@@ -259,8 +259,20 @@ export function environmentController(): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
-  // ---- environment registry ----------------------------------------------
+  // The environment REGISTRY + the ephemeral-environment self-test routes, registered by a
+  // sibling so this controller stays within the per-function line budget. Same `app`, so the
+  // permission middleware above still covers them.
+  registerEnvironmentRegistryRoutes(app)
 
+  return app
+}
+
+/**
+ * The environment REGISTRY reads/writes plus the ephemeral-environment self-test diagnostic.
+ * Split out of {@link environmentController} purely for size; it registers onto the SAME app
+ * instance, so the workspace-permission middleware mounted there still applies.
+ */
+function registerEnvironmentRegistryRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, listEnvironmentsContract, async (c) => {
     const env = requireEnvironments(c)
     return c.json(await env.provisioningService.listHandles(param(c, 'workspaceId')), 200)
@@ -331,6 +343,4 @@ export function environmentController(): Hono<AppEnv> {
     const run = await service.stop(param(c, 'workspaceId'), c.req.valid('param').id)
     return c.json(run, 200)
   })
-
-  return app
 }

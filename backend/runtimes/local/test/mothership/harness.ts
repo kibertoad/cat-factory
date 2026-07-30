@@ -489,33 +489,16 @@ export function makeMothershipConformanceApp(
   }
 
   // Seed/probe helpers write to the MOTHERSHIP's own Drizzle repos (the source of truth), so the
-  // SUT then reads them back over the RPC — exactly as the engine does in production.
-  const mothershipRepos = () => createDrizzleRepositories(db, SEED_CLOCK)
-
-  function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
-    return mothershipRepos().requirementReviewRepository.upsert(
-      workspaceId,
-      makeIncorporatedReview(blockId, requirements),
-    )
-  }
-  function seedReadyReview(workspaceId: string, blockId: string) {
-    return mothershipRepos().requirementReviewRepository.upsert(
-      workspaceId,
-      makeReadyReviewWithOpenItem(blockId),
-    )
-  }
-  function seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string) {
-    return mothershipRepos().clarityReviewRepository.upsert(
-      workspaceId,
-      makeIncorporatedClarityReview(blockId, report),
-    )
-  }
-  function seedService(service: Service) {
-    return mothershipRepos().serviceRepository.insert(service)
-  }
-  function getService(id: string) {
-    return mothershipRepos().serviceRepository.get(id)
-  }
+  // SUT then reads them back over the RPC — exactly as the engine does in production. Grouped in a
+  // sibling factory so this harness stays within the per-function line budget.
+  const {
+    seedIncorporatedReview,
+    seedReadyReview,
+    seedIncorporatedClarityReview,
+    seedService,
+    getService,
+    mothershipRepos,
+  } = createMothershipSeedHelpers(db)
 
   return {
     call,
@@ -580,5 +563,48 @@ export function makeMothershipConformanceApp(
         upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
       }
     },
+  }
+}
+
+/**
+ * The suite's seed/probe helpers, writing straight to the mothership's own Drizzle repositories so
+ * the SUT reads them back over the persistence RPC exactly as the engine does in production. Split
+ * out of {@link makeMothershipConformanceApp} purely for size.
+ */
+function createMothershipSeedHelpers(db: DrizzleDb) {
+  const mothershipRepos = () => createDrizzleRepositories(db, SEED_CLOCK)
+
+  function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
+    return mothershipRepos().requirementReviewRepository.upsert(
+      workspaceId,
+      makeIncorporatedReview(blockId, requirements),
+    )
+  }
+  function seedReadyReview(workspaceId: string, blockId: string) {
+    return mothershipRepos().requirementReviewRepository.upsert(
+      workspaceId,
+      makeReadyReviewWithOpenItem(blockId),
+    )
+  }
+  function seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string) {
+    return mothershipRepos().clarityReviewRepository.upsert(
+      workspaceId,
+      makeIncorporatedClarityReview(blockId, report),
+    )
+  }
+  function seedService(service: Service) {
+    return mothershipRepos().serviceRepository.insert(service)
+  }
+  function getService(id: string) {
+    return mothershipRepos().serviceRepository.get(id)
+  }
+
+  return {
+    seedIncorporatedReview,
+    seedReadyReview,
+    seedIncorporatedClarityReview,
+    seedService,
+    getService,
+    mothershipRepos,
   }
 }
