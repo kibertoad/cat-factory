@@ -10,6 +10,7 @@ import type {
   ExecutionRepository,
   IdGenerator,
   LlmCallMetricSummary,
+  Logger,
   PipelineStep,
   RunLifecycleEventKind,
   RunLifecycleSink,
@@ -23,7 +24,10 @@ import {
   foldRollupsByPhase,
   isAsyncAgentExecutor,
   isInitiativeAgentKind,
+  noopLogger,
+  redactSecrets,
   RunContendedError,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
@@ -100,6 +104,11 @@ export interface RunStateMachineDeps {
    */
   runLifecycleSink?: RunLifecycleSink
   /**
+   * The engine's structured logger, so the best-effort outbound push reports its drops.
+   * `noopLogger` when a facade wired none (this class stays unit-testable standalone).
+   */
+  logger?: Logger
+  /**
    * The merge track record. A no-merger pipeline's `pipeline_complete` card is a MERGE decision
    * point too (confirming it merges the PR), so the class + a `pending_review` record are written
    * here as well — otherwise a whole class of human merges would leave no evidence behind.
@@ -148,6 +157,7 @@ export class RunStateMachine {
   private readonly stepGraph: StepGraph
   private readonly notificationService?: NotificationService
   private readonly runLifecycleSink?: RunLifecycleSink
+  private readonly log: Logger
   private readonly mergeTrackRecord?: MergeTrackRecordService
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
@@ -169,6 +179,7 @@ export class RunStateMachine {
     this.stepGraph = deps.stepGraph
     this.notificationService = deps.notificationService
     this.runLifecycleSink = deps.runLifecycleSink
+    this.log = deps.logger ?? noopLogger
     this.mergeTrackRecord = deps.mergeTrackRecord
     this.kaizenScheduler = deps.kaizenScheduler
     this.subscriptionActivations = deps.subscriptionActivations
@@ -295,22 +306,6 @@ export class RunStateMachine {
       // already in hand (no extra read) so the loop folds them onto the tracker before reconciling.
       this.pokeInitiativeLoop?.(workspaceId, block.initiativeId, extractRunHarvest(instance))
     }
-    // Push the run's terminal edge outward (the workspace's registered webhook endpoint), so a
-    // headless integration learns its task finished without polling. Deliberately HERE, beside
-    // the other terminal hooks, rather than at each site that flips a run `done`: there are four
-    // of those and a fifth added later would silently deliver nothing. The cost of that choice is
-    // that a durable replay can re-emit a settled run, so delivery is AT-LEAST-ONCE and the body
-    // carries a `deliveryId` stable per (run, event) for the receiver to dedupe on — a repeat is
-    // byte-identical, which is what makes the cheap contract the right one here (unlike a merge
-    // or a posted review, where the effect is not the receiver's to make idempotent).
-    if (instance.status === 'done' || instance.status === 'failed') {
-      await this.publishRunLifecycle(
-        workspaceId,
-        instance,
-        block,
-        instance.status === 'done' ? 'run.completed' : 'run.failed',
-      )
-    }
     if (
       this.subscriptionActivations &&
       (instance.status === 'done' || instance.status === 'failed')
@@ -324,28 +319,61 @@ export class RunStateMachine {
         // cleanup failure surfaces there rather than being lost here.
       }
     }
+    // Push the run's terminal edge outward (the workspace's registered webhook endpoint), so a
+    // headless integration learns its task finished without polling. Deliberately HERE, beside
+    // the other terminal hooks, rather than at each site that flips a run `done`: there are four
+    // of those and a fifth added later would silently deliver nothing. The cost of that choice is
+    // that a durable replay can re-emit a settled run, so delivery is AT-LEAST-ONCE and the body
+    // carries a `deliveryId` stable per (run, event) for the receiver to dedupe on — which is what
+    // makes the cheap contract the right one here (unlike a merge or a posted review, where the
+    // effect is not the receiver's to make idempotent).
+    //
+    // LAST of the terminal hooks, and behind `runBestEffort`, because it is the only one that
+    // leaves the deployment: the sink's contract says it absorbs its own transport failures, but
+    // a sink that BREAKS that contract must not be able to strand the credential-activation
+    // cleanup above — a lingering system-encrypted token copy is a worse outcome than a dropped
+    // webhook, and the guard is what makes that ordering independent of a third-party sink.
+    if (instance.status === 'done' || instance.status === 'failed') {
+      await this.publishRunLifecycle(
+        workspaceId,
+        instance,
+        block,
+        instance.status === 'done' ? 'run.completed' : 'run.failed',
+      )
+    }
   }
 
   /**
-   * Push a run's `run.started` edge, loading the block the event names. Called from the ONE
-   * funnel that mints a live run (`insertLiveRunOrConflict`), whose insert is the atomic claim —
-   * a genuinely concurrent double-start loses there rather than reaching here — so this is once
-   * per run by construction, and a start path added later inherits it instead of quietly
-   * delivering nothing. That is the opposite trade from the terminal edge, which has four sites
-   * and therefore hooks the emit funnel at the cost of at-least-once delivery.
+   * Push a run's `run.started` edge. Called from the ONE hand-off funnel every start path ends
+   * with (`handOffLiveRun`), AFTER the block has been flipped to `in_progress` and the durable
+   * runner has the run: the outbound call is the last thing in the sequence, so a slow or dead
+   * receiver costs the announcement and never the run.
+   *
+   * It is still once-per-run by construction, because the claim that precedes the hand-off
+   * (`insertLiveRunOrConflict`) is what mints a live run — a genuinely concurrent double-start
+   * loses there rather than reaching here — and a start path added later inherits both, since
+   * one that skipped the funnel would not start its durable runner either (a loud failure, not a
+   * silently undelivered event). That is the opposite trade from the terminal edge, which has
+   * four sites and therefore hooks the emit funnel at the cost of at-least-once delivery.
+   *
+   * The block is PASSED IN rather than re-read: every caller already holds it, and on a
+   * mothership deployment a read here is a network round trip on the run-start path.
    */
-  async publishRunStarted(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    // Checked before the block read so an unwired sink costs nothing on the start path.
-    if (!this.runLifecycleSink) return
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+  async publishRunStarted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+  ): Promise<void> {
     await this.publishRunLifecycle(workspaceId, instance, block, 'run.started')
   }
 
   /**
    * Project a run transition for the outbound sink and hand it over. A no-op when no sink is
-   * wired, and never wrapped in a local `try` — the port's contract is that an implementation
-   * absorbs its own transport failures (a receiver outage must not fail the run it watches), so
-   * a guard here would only hide a sink that broke that contract.
+   * wired, and wrapped in `runBestEffort`: the port's contract is that an implementation absorbs
+   * its own transport failures (a receiver outage must not fail the run it watches), and the
+   * guard is what keeps that contract from being load-bearing on a sink this package does not
+   * own — the callers are a run's start hand-off and its terminal emit, neither of which may be
+   * derailed by a third-party sink that throws.
    *
    * The projection is deliberately small and made HERE rather than in the transport: the engine
    * owns what a run means, so a transport cannot widen what leaves the deployment by reaching for
@@ -357,35 +385,48 @@ export class RunStateMachine {
     block: Block | null | undefined,
     event: RunLifecycleEventKind,
   ): Promise<void> {
-    if (!this.runLifecycleSink) return
+    const sink = this.runLifecycleSink
+    if (!sink) return
     // A headless internal anchor block is the public API's own run — its "task" is not a board
     // task and its title is the caller's brief, so there is nothing an external receiver could do
     // with it that `GET /api/v1/jobs/:id` does not already serve. Skipped for the same reason the
     // live push is.
     if (block?.internal) return
-    await this.runLifecycleSink.runTransitioned(workspaceId, {
-      event,
-      runId: instance.id,
-      taskId: instance.blockId,
-      // A block that vanished under us (a delete racing the settle) still yields a usable event:
-      // the ids are what a receiver routes on, and an empty title is honest about what was read.
-      taskTitle: block?.title ?? '',
-      pipelineId: instance.pipelineId,
-      pipelineName: instance.pipelineName,
-      startedAt: instance.createdAt ?? null,
-      occurredAt: this.clock.now(),
-      // Null is a REAL answer on a terminal event — a findings/spike pipeline opens no PR — so a
-      // receiver must not read it as "not known yet".
-      pullRequestUrl: block?.pullRequest?.url ?? null,
-      failure:
-        event === 'run.failed' && instance.failure
-          ? {
-              kind: instance.failure.kind,
-              message: instance.failure.message,
-              reason: instance.failure.reason ?? null,
-            }
-          : null,
-    })
+    await runBestEffort(
+      this.log,
+      'execution.publishRunLifecycle',
+      () =>
+        sink.runTransitioned(workspaceId, {
+          event,
+          runId: instance.id,
+          taskId: instance.blockId,
+          // A block that vanished under us (a delete racing the settle) still yields a usable
+          // event: the ids are what a receiver routes on, and an empty title is honest about
+          // what was read.
+          taskTitle: block?.title ?? '',
+          pipelineId: instance.pipelineId,
+          pipelineName: instance.pipelineName,
+          startedAt: instance.createdAt ?? null,
+          occurredAt: this.clock.now(),
+          // Null is a REAL answer on a terminal event — a findings/spike pipeline opens no PR —
+          // so a receiver must not read it as "not known yet".
+          pullRequestUrl: block?.pullRequest?.url ?? null,
+          failure:
+            event === 'run.failed' && instance.failure
+              ? {
+                  kind: instance.failure.kind,
+                  // The failure prose is engine-authored but routinely quotes a provider error,
+                  // a command's stderr or a request URL, and this is the one projection of it
+                  // that leaves the deployment to an operator-supplied endpoint — so it is
+                  // scrubbed at the EMIT site, like every other field carrying captured output.
+                  // (`detail` is deliberately not projected at all: it is the verbatim half.)
+                  message: redactSecrets(instance.failure.message) ?? '',
+                  reason: instance.failure.reason ?? null,
+                }
+              : null,
+        }),
+      { workspaceId, executionId: instance.id, event },
+    )
   }
 
   /**

@@ -64,7 +64,9 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
 
     const body: RunWebhookDelivery = {
       // `<runId>:<event>` — stable across retries AND across a re-delivery, so it is the dedupe
-      // key a receiver uses. Delivery is at-least-once by design (see the contract doc).
+      // key a receiver uses. Delivery is at-least-once by design (see the contract doc), and the
+      // key has to carry that job alone: `sentAt` below and the projection's `occurredAt` are
+      // re-stamped on a replay, so a receiver hashing the BODY would not collapse the repeat.
       deliveryId: `${event.runId}:${event.event}`,
       sentAt: this.deps.clock.now(),
       workspaceId,

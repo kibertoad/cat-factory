@@ -109,9 +109,14 @@ export type NotificationWebhookDelivery = v.InferOutput<typeof notificationWebho
  * dedupe key a receiver MUST use. Delivery is AT-LEAST-ONCE by design. The terminal events are
  * pushed from the engine's terminal-emit funnel — the same place the run's other terminal hooks
  * live — because a run reaches `done` from four independent sites and a hook at each would
- * silently drift the day a fifth is added. A durable replay can therefore re-emit a settled run,
- * and the repeat carries byte-identical content, so it is the receiver's cheap dedupe rather than
- * a claim table this platform would then have to sweep.
+ * silently drift the day a fifth is added. A durable replay can therefore re-emit a settled run.
+ *
+ * **Dedupe on `deliveryId`, never on the body.** A re-delivery describes the same settled run, but
+ * `sentAt` and `run.occurredAt` are re-stamped from the clock when it is produced, so two
+ * deliveries of one transition are NOT byte-identical and a content hash will not collapse them.
+ * Everything a receiver routes or acts on — the ids, the event, the outcome — is stable; only the
+ * observation timestamps move. That is what makes the receiver's cheap dedupe the right contract
+ * rather than a claim table this platform would then have to sweep.
  */
 export const runWebhookDeliverySchema = v.object({
   deliveryId: v.string(),

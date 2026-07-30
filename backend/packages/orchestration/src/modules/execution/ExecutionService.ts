@@ -63,6 +63,8 @@ import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
+import type { RunStartDeps } from './runStart.js'
+import { claimLiveRunOrConflict, handOffLiveRun } from './runStart.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
@@ -349,6 +351,7 @@ export class ExecutionService {
       stepGraph: this.stepGraph,
       notificationService,
       runLifecycleSink,
+      logger,
       mergeTrackRecord,
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
@@ -897,11 +900,7 @@ export class ExecutionService {
       progress: 0,
       executionId: instance.id,
     })
-    // Hand the run off to the durable runner so it progresses server-side without
-    // a browser open. With the no-op runner (tests) this does nothing and the run
-    // is advanced directly via advanceInstance.
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.handOffLiveRun(workspaceId, instance, block)
     return instance
   }
 
@@ -2018,8 +2017,7 @@ export class ExecutionService {
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.handOffLiveRun(workspaceId, instance, block)
     return instance
   }
 
@@ -2120,41 +2118,41 @@ export class ExecutionService {
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.handOffLiveRun(workspaceId, instance, block)
     return instance
   }
 
   /**
-   * Insert a freshly-built run, enforcing the one-live-run-per-block invariant at the DB in a
-   * single atomic write (see `ExecutionRepository.insertLive`). Callers must NOT `deleteByBlock`
-   * first: `insertLive` itself clears the block's terminal rows (and `replaceId`, the specific
-   * prior run a `retry`/`restart` is knowingly superseding) in the SAME transaction as the
-   * insert. A `false` return means a genuinely-concurrent start (double click,
-   * recurring-vs-manual, notification-vs-human retry) already created the block's live run — so
-   * we REFUSE this duplicate rather than materialise a second driver + container on the same
-   * branch. The winning run is untouched (the losing transaction only deletes terminal rows /
-   * its own `replaceId`, never the winner). Surfaces as a 409 the SPA shows as a toast.
+   * Thin delegates onto the two run-start funnels (`runStart.ts`), which own the ORDER between a
+   * run's atomic claim and its hand-off and are documented there. Every start path uses both:
+   * claim, write the block state that path owns, hand off.
    */
   private async insertLiveRunOrConflict(
     workspaceId: string,
     instance: ExecutionInstance,
     replaceId?: string,
   ): Promise<void> {
-    const inserted = await this.executionRepository.insertLive(workspaceId, instance, { replaceId })
-    if (!inserted) {
-      // No machine `reason`: this is a rare double-start edge, not a distinct client-handled
-      // conflict, so the human message drives the SPA's generic 409 toast (no new
-      // ConflictReason + exhaustive-Record/i18n cascade for a transient race).
-      throw new ConflictError('A run is already active for this block.')
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
+  }
+
+  private async handOffLiveRun(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+  ): Promise<void> {
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
+  }
+
+  /** The bound callbacks `runStart.ts` needs, so it depends on no concrete repository or service. */
+  private get runStartDeps(): RunStartDeps {
+    return {
+      insertLive: (ws, instance, options) =>
+        this.executionRepository.insertLive(ws, instance, options),
+      startRun: (ws, id) => this.workRunner.startRun(ws, id),
+      emitInstance: (ws, instance) => this.runStateMachine.emitInstance(ws, instance),
+      publishRunStarted: (ws, instance, block) =>
+        this.runStateMachine.publishRunStarted(ws, instance, block),
     }
-    // Push `run.started` outward from the funnel that OWNS the claim, rather than from each of
-    // `start` / `retry` / `restartFrom`: the insert above is what makes this run the block's live
-    // one, so the event fires exactly once per run and a fourth start path inherits it. A retry
-    // and a restart each mint a FRESH run id, so they are genuinely new runs a receiver must hear
-    // start — otherwise it sees a `run.failed` for one id and later a `run.completed` for another
-    // it never learned about. Best-effort by the sink's contract.
-    await this.runStateMachine.publishRunStarted(workspaceId, instance)
   }
 
   /**

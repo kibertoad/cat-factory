@@ -882,11 +882,14 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   beside the channel by `buildNotificationWebhookSupport` from the SAME row and cipher so a facade cannot
   wire one and forget the other, and driven through the ONE `signedDelivery.ts` retry/SSRF/signature core —
   those are properties of the ENDPOINT, not of the payload, and a second copy is a second place to get the
-  SSRF guard wrong. **The started edge hooks the atomic claim (`insertLiveRunOrConflict`) and is exactly
-  once; the terminal edges hook the emit funnel and are AT-LEAST-ONCE by design**, carrying a
+  SSRF guard wrong. **The started edge rides the ONE hand-off funnel every start path ends with
+  (`handOffLiveRun`) and is exactly once — announced LAST, after the block is committed and the durable
+  runner has the run, because an outbound call must never sit between a claim and the local write it
+  belongs to; the terminal edges hook the emit funnel and are AT-LEAST-ONCE by design**, carrying a
   `<runId>:<event>` dedupe id — a run reaches `done` from four sites, and a claim table would buy
-  exactly-once for an effect whose repeat is byte-identical. Doc:
-  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+  exactly-once for an effect a receiver collapses with one id comparison. **A receiver dedupes on that
+  id, never on the body**: a replay re-stamps `sentAt`/`occurredAt`, so two deliveries of one transition
+  are not byte-identical. Doc: [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **PR verification report** — the ENGINE, not the agent, keeps a report of captured facts on every run's
 PR, as a managed section of the PR BODY delimited by `<!-- cat-factory:verification-report:start -->` /

@@ -117,8 +117,15 @@ The two edges hook different places because their call graphs differ, and the tr
 That is a deliberate departure from the platform's "atomic claim before an external side effect"
 rule, and the distinction is what the effect IS. A merge or a posted review is not idempotent and
 not the receiver's to make idempotent, so it earns a claim. A lifecycle push is a statement about a
-terminal run: a repeat is byte-identical, so the cheap contract is the correct one, and it costs no
-claim table for the platform to then have to sweep.
+terminal run, and every part of it a receiver routes or acts on — the ids, the event, the outcome —
+is stable across a re-delivery, so the cheap contract is the correct one and it costs no claim table
+for the platform to then have to sweep.
+
+**The dedupe key is `deliveryId`, not the body.** Only the observation timestamps (`sentAt` and
+`run.occurredAt`) are re-stamped when a replay produces the delivery, so two deliveries of one
+transition are not byte-identical and a content hash will not collapse them. Stamping them once and
+persisting them would make the body stable — and would mean the claim table this decision exists to
+avoid. The contract is documented on `runWebhookDeliverySchema` and pinned by a test.
 
 Two suppressions ride the projection: a headless internal ANCHOR block (the public API's own
 initiative run) is skipped exactly as the live SPA push is — its "task" is not a board task and its
@@ -152,9 +159,9 @@ routes on and an empty title is honest about what could be read.
   would have duplicated the endpoint record, the sealed secret, the SSRF guard and the retry loop
   for a granularity nobody asked for — public keys are workspace-scoped anyway, so a per-key
   endpoint distinguishes nothing a per-workspace one does not.
-- **A claim table for terminal deliveries.** Rejected above: it buys exactly-once for an effect
-  whose repeat is byte-identical, at the price of a table, a status machine, a re-claim TTL and a
-  sweeper on both facades.
+- **A claim table for terminal deliveries.** Rejected above: it buys exactly-once for an effect a
+  receiver collapses with one `deliveryId` comparison, at the price of a table, a status machine, a
+  re-claim TTL and a sweeper on both facades.
 - **Per-step lifecycle events.** A firehose — the engine emits on every container poll. The SSE
   endpoints already serve a caller that wants step-level detail, bounded by their own poll.
 - **A `since` filter on the TASK list.** Not deliverable: `blocks` carries no creation or update

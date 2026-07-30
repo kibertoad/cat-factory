@@ -293,26 +293,24 @@ function registerUsageRoutes(app: Hono<AppEnv>): void {
       )
     }
     const { spendService } = c.get('container')
-    // Independent aggregates over the same table — issued concurrently so the read costs one
-    // round trip's latency rather than two.
-    const [status, breakdown] = await Promise.all([
-      spendService.status(gate.auth.workspaceId),
-      spendService.usageBreakdown(gate.auth.workspaceId),
-    ])
+    // ONE read, not `status()` + `usageBreakdown()`: those each derive their own period from the
+    // clock, so a pair of calls straddling the month roll would pair a budget from one period with
+    // a breakdown from the next — exactly the skew serving them as one resource is meant to
+    // prevent. `periodUsage` resolves the period once and still issues both aggregates
+    // concurrently.
+    const usage = await spendService.periodUsage(gate.auth.workspaceId)
     return c.json(
       {
-        // Both halves stamp the period from the same clock-derived month start, so either is the
-        // same value; the breakdown's is used because `rows` are the thing it bounds.
-        periodStart: breakdown.periodStart,
-        currency: breakdown.currency,
+        periodStart: usage.periodStart,
+        currency: usage.currency,
         budget: {
-          inputTokens: status.inputTokens,
-          outputTokens: status.outputTokens,
-          costSpent: status.costSpent,
-          costLimit: status.costLimit,
-          exceeded: status.exceeded,
+          inputTokens: usage.budget.inputTokens,
+          outputTokens: usage.budget.outputTokens,
+          costSpent: usage.budget.costSpent,
+          costLimit: usage.budget.costLimit,
+          exceeded: usage.budget.exceeded,
         },
-        rows: breakdown.rows.map((row) => ({
+        rows: usage.rows.map((row) => ({
           billing: row.billing,
           vendor: row.vendor,
           provider: row.provider,

@@ -122,13 +122,38 @@ describe('WebhookRunLifecycleSink', () => {
     }
     expect(body.workspaceId).toBe('ws1')
     expect(body.event).toBe('run.completed')
-    // The key a receiver dedupes on: delivery is at-least-once, and a repeat of the same
-    // (run, event) carries byte-identical content.
+    // The key a receiver dedupes on: delivery is at-least-once, and every part of a repeat that a
+    // receiver routes or acts on is the same.
     expect(body.deliveryId).toBe('exec_1:run.completed')
     expect(body.sentAt).toBe(clock.now())
     expect(body.run.taskId).toBe('task_login')
     expect(body.run.pullRequestUrl).toBe('https://vcs.test/pr/7')
     expect(body.run.failure).toBeNull()
+  })
+
+  it('re-delivers one transition under the SAME id but a re-stamped sentAt', async () => {
+    // The dedupe contract, stated exactly: a durable replay re-emits a settled run, and what a
+    // receiver routes on is identical — but `sentAt` (and the projection's `occurredAt`) come from
+    // the clock at delivery time, so the two bodies are NOT byte-identical. A receiver hashing the
+    // body would process the repeat; one comparing `deliveryId` collapses it. Pinned because the
+    // whole no-claim-table decision rests on the receiver being told the right key.
+    let tick = 1_700_000_000_000
+    const { impl, calls } = fetchStub([200])
+    const s = new WebhookRunLifecycleSink({
+      notificationWebhookRepository: repoWith(webhook()),
+      secretCipher: cipher,
+      clock: { now: () => tick },
+      fetchImpl: impl,
+      sleep: async () => {},
+    })
+    await s.runTransitioned('ws1', event())
+    tick += 30_000
+    await s.runTransitioned('ws1', event({ occurredAt: tick }))
+
+    const [first, second] = calls.map((c) => JSON.parse(c.body) as Record<string, unknown>)
+    expect(second!.deliveryId).toBe(first!.deliveryId)
+    expect(second!.sentAt).not.toBe(first!.sentAt)
+    expect(JSON.stringify(second)).not.toBe(JSON.stringify(first))
   })
 
   it('carries the failure record on a run.failed event', async () => {

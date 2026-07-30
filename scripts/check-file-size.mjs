@@ -57,7 +57,12 @@ const LEGACY_ALLOWANCES = new Map([
   // moved to `PostMergeBoardController.ts` when the logging conversion pushed the file over —
   // ratcheted DOWN again. They run AFTER the merge, read the board rather than execution state,
   // and are best-effort, which is what separated them from the run state machine.
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2300],
+  // Then the two run-start funnels (the atomic live-run claim + the durable/SPA/outbound hand-off)
+  // moved to `runStart.ts` when the run-lifecycle push needed the hand-off documented — ratcheted
+  // DOWN again. What separates them is that `start`/`retry`/`restartFrom` differ ONLY in the block
+  // patch they write between the two, so the ORDER across them is the thing worth owning in one
+  // place rather than three.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2285],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
