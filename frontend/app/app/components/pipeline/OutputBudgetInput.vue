@@ -63,6 +63,7 @@ function commit(raw: string | number) {
     :min="MIN_AGENT_MAX_OUTPUT_TOKENS"
     :max="MAX_AGENT_MAX_OUTPUT_TOKENS"
     :placeholder="placeholder"
+    :title="t('pipeline.outputBudget.hint')"
     :disabled="disabled"
     @change="commit(($event.target as HTMLInputElement).value)"
   />

@@ -409,6 +409,14 @@
         "pr_ready": "Active",
         "done": "Live"
       },
+      "statusHint": {
+        "planned": "No tasks on this service yet. A service is never finished, so this is where one starts rather than a stalled state.",
+        "ready": "Every task under this service is idle or merged. Nothing is running and nothing is waiting on you.",
+        "in_progress": "At least one task under this service is running or has an open pull request.",
+        "blocked": "At least one task or initiative under this service is waiting on a decision from you.",
+        "pr_ready": "At least one task under this service is running or has an open pull request.",
+        "done": "Every task under this service is idle or merged. Nothing is running and nothing is waiting on you."
+      },
       "shared": "Shared",
       "sharedTitle": "Shared across workspaces in this org",
       "bootstrapping": "Bootstrapping…",
@@ -1318,6 +1326,7 @@
       },
       "subtasks": "Subtasks · {completed}/{total}",
       "standardsApplied": "Standards applied",
+      "standardsAppliedHint": "The best-practice standards folded into this step's system prompt. An implementing agent receives a condensed version of each; reviewers and planners get the full text.",
       "decision": "Decision",
       "awaitingChoice": "Awaiting a human choice",
       "approvalGate": "Approval gate",
@@ -1385,13 +1394,16 @@
       "effort": {
         "heading": "Agent effort",
         "difficulty": "Difficulty",
+        "difficultyHint": "The agent's own assessment of how hard this step was, out of ten. Self-reported, not measured.",
         "outOfTen": "{value}/10",
         "reduced": "What reduced effectiveness",
         "obstacles": "Key obstacles"
       },
       "adherence": {
         "heading": "Best-practice adherence",
+        "headingHint": "The best-practice standards folded into this reviewer's prompt, and how closely it judged the change to follow each one.",
         "outOfTen": "{value}/10",
+        "ratingHint": "The reviewer's own rating of how closely the change follows this standard, out of ten. Self-reported, not measured.",
         "relatedFindings": "Related findings",
         "unnamed": "Standard"
       },
@@ -1666,7 +1678,9 @@
     },
     "legend": {
       "metered": "Metered",
-      "subscription": "Subscription"
+      "meteredHint": "Billed per token by the provider. This is real money.",
+      "subscription": "Subscription",
+      "subscriptionHint": "Illustrative only. These calls ran on a flat-rate plan, so this is what the same tokens would have cost through a metered API. It was never billed and never counts as spend."
     },
     "spend": {
       "byModel": "Spend by model",
@@ -4036,9 +4050,14 @@
       "companionGateTooltip": "Only run this companion when the task estimate clears a threshold (needs a Task Estimator earlier)",
       "consensusGateTooltip": "Only run consensus when the task estimate clears a threshold (else the standard agent runs)",
       "runWhenAny": "run when (any):",
+      "gatingRunWhenAnyHint": "The step runs when any one of these axes is met or exceeded, and is skipped otherwise. If no estimate is available it runs anyway.",
+      "gatingRunWhenAnyConsensusHint": "The panel convenes when any one of these axes is met or exceeded; below that the single agent runs instead. If no estimate is available the panel convenes anyway.",
       "complexityThreshold": "complexity ≥",
+      "complexityThresholdHint": "How hard the work is to carry out, scored by the Task Estimator step earlier in the pipeline. The scale is 0 to 1, not 1 to 10. Leave it empty to ignore this axis.",
       "riskThreshold": "risk ≥",
+      "riskThresholdHint": "How much the change could break, scored by the Task Estimator step earlier in the pipeline. The scale is 0 to 1, not 1 to 10. Leave it empty to ignore this axis.",
       "impactThreshold": "impact ≥",
+      "impactThresholdHint": "How far the change reaches across the system, scored by the Task Estimator step earlier in the pipeline. The scale is 0 to 1, not 1 to 10. Leave it empty to ignore this axis.",
       "strategy": "Strategy",
       "rounds": "Rounds",
       "purposeLabel": "Purpose",
@@ -4193,6 +4212,7 @@
       "stepLabel": "Output budget",
       "kindLabel": "Output budget",
       "kindHint": "Applies to every run of this agent. A pipeline step can override it.",
+      "hint": "The most a single reply from this agent may run to. Leave it empty to inherit the next level up rather than to lift the limit. A pipeline step's own value wins over the workspace default.",
       "inherits": "Inherited",
       "inheritsValue": "Inherited ({tokens})"
     }
@@ -4394,6 +4414,7 @@
     "empty": "This step has not produced a verdict yet.",
     "notScored": "Not scored",
     "threshold": "threshold {threshold}",
+    "thresholdHint": "The score this step had to reach, taken from the task's merge policy. Below it the judge sends the work back to the step that produced it, with its findings as rework, or parks the run for you when no attempt budget is left.",
     "rubricOverridden": "workspace rubric",
     "reworkRounds": "rework {spent}/{budget}",
     "findingsHeading": "What the rubric flagged",
@@ -6002,10 +6023,12 @@
         "description": "'Source' here means program source code (as opposed to docs/config/tests), NOT the origin of something."
       },
       "schema": "Schema & migrations",
-      "unknown": "Unclassified"
+      "unknown": "Unclassified",
+      "hint": "What the diff touched, worked out from the changed files. Merge policy can set its own rule per class, and a diff spanning several classes takes the heaviest one."
     },
     "effort": {
       "prompt": "Review effort",
+      "promptHint": "Records how much review this pull request really needed. Your answer is the ground truth the auto-merge thresholds are calibrated against. Tagging is optional and you can merge without it.",
       "none": "No comments",
       "@none": {
         "description": "Answer to 'how much review effort did this PR need?': means the reviewer had NOTHING to say, not that no review happened."

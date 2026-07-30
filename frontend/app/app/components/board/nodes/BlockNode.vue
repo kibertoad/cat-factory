@@ -75,6 +75,21 @@ const FRAME_LABEL_KEYS: Record<BlockStatus, string> = {
   done: 'board.frame.status.done',
 }
 const statusLabel = computed(() => t(FRAME_LABEL_KEYS[frameStatus.value]))
+// The badge is a ROLLUP over the frame's children, not a status anybody set on the service, and
+// the label alone never says which child produced it — "Needs attention" names no task, and
+// "Live" reads as a health check rather than "caught up". So each status gets its own tooltip
+// naming what it is rolled up from. `pr_ready`/`done` are unreachable here (`frameStatus` caps
+// below `done`: a service is long-lived and never finishes) but the Record stays exhaustive over
+// `BlockStatus` for the same reason the label map does, and mirrors that map's aliasing.
+const FRAME_STATUS_HINT_KEYS: Record<BlockStatus, string> = {
+  planned: 'board.frame.statusHint.planned',
+  ready: 'board.frame.statusHint.ready',
+  in_progress: 'board.frame.statusHint.in_progress',
+  blocked: 'board.frame.statusHint.blocked',
+  pr_ready: 'board.frame.statusHint.pr_ready',
+  done: 'board.frame.statusHint.done',
+}
+const statusHint = computed(() => t(FRAME_STATUS_HINT_KEYS[frameStatus.value]))
 
 const selected = computed(() => ui.selectedBlockId === props.id)
 // Services are always expanded to their task canvas, at every zoom level: there is no
@@ -349,7 +364,7 @@ const ITEM_ICON: Record<string, string> = {
           </UBadge>
         </div>
         <div class="flex items-center justify-between">
-          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
+          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm" :title="statusHint">{{
             statusLabel
           }}</UBadge>
           <span class="text-[11px] text-slate-400">{{
@@ -474,9 +489,13 @@ const ITEM_ICON: Record<string, string> = {
               </div>
             </div>
             <div class="flex items-center gap-1">
-              <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
-                statusLabel
-              }}</UBadge>
+              <UBadge
+                :color="statusMeta.chip as any"
+                variant="subtle"
+                size="sm"
+                :title="statusHint"
+                >{{ statusLabel }}</UBadge
+              >
               <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
                    are `board.write` — hidden for a read-only viewer, who keeps the badge +
                    collapse toggle (view-only affordances). -->

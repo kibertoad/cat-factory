@@ -42,7 +42,12 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
     </div>
 
     <div class="flex items-center gap-2">
-      <span class="text-[12px] text-slate-300">{{ t('panels.stepDetail.effort.difficulty') }}</span>
+      <span
+        class="text-[12px] text-slate-300"
+        :title="t('panels.stepDetail.effort.difficultyHint')"
+      >
+        {{ t('panels.stepDetail.effort.difficulty') }}
+      </span>
       <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700/60">
         <div
           class="h-full rounded-full"
@@ -50,7 +55,11 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
           :style="{ width: `${difficultyPct}%` }"
         />
       </div>
-      <span data-testid="step-effort-difficulty" class="text-[12px] font-medium text-slate-200">
+      <span
+        data-testid="step-effort-difficulty"
+        class="text-[12px] font-medium text-slate-200"
+        :title="t('panels.stepDetail.effort.difficultyHint')"
+      >
         {{ t('panels.stepDetail.effort.outOfTen', { value: report.difficulty }) }}
       </span>
     </div>

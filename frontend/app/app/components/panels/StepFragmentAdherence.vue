@@ -33,7 +33,9 @@ function label(item: FragmentAdherence[number]): string {
       class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
     >
       <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5" />
-      <span>{{ t('panels.stepDetail.adherence.heading') }}</span>
+      <span :title="t('panels.stepDetail.adherence.headingHint')">
+        {{ t('panels.stepDetail.adherence.heading') }}
+      </span>
     </div>
 
     <div class="space-y-2.5">
@@ -54,7 +56,10 @@ function label(item: FragmentAdherence[number]): string {
               :style="{ width: `${ratingPct(item.rating)}%` }"
             />
           </div>
-          <span class="shrink-0 text-[12px] font-medium text-slate-200">
+          <span
+            class="shrink-0 text-[12px] font-medium text-slate-200"
+            :title="t('panels.stepDetail.adherence.ratingHint')"
+          >
             {{ t('panels.stepDetail.adherence.outOfTen', { value: item.rating }) }}
           </span>
         </div>
