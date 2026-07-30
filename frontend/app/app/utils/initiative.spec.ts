@@ -9,6 +9,7 @@ import {
   isPendingQuestion,
   orderInterviewQuestions,
   pendingCheckpointPhase,
+  planReviewDocument,
   selectPlanApproval,
 } from './initiative'
 
@@ -202,6 +203,48 @@ describe('selectPlanApproval', () => {
     // `dispatchStepView` routes it to (the generic panel), which is exactly what resolves it.
     const approvals = [parked('some-custom-kind', 'ap_custom')]
     expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_custom')
+  })
+})
+
+// Which shape the plan gate takes in the tracker window: a document review that OWNS the window, or
+// the compact notice above the tracker's own sections. Both the window's layout and the review
+// surface read this one value, so these pin the cases where "there is a plan to read" is not the
+// same as "the proposal is non-empty".
+
+describe('planReviewDocument', () => {
+  const gate = (proposal: string | null | undefined, outputIsRendered: boolean) => ({
+    approval: { proposal },
+    outputIsRendered,
+  })
+
+  it('is the proposal when the step says it IS the plan rendering', () => {
+    expect(planReviewDocument(gate('# Initiative plan\n\n## Goal', true))).toBe(
+      '# Initiative plan\n\n## Goal',
+    )
+  })
+
+  it('returns the proposal verbatim, so comment anchors stay on the lines they quote', () => {
+    // Anchoring is by SOURCE LINE, so trimming a leading newline would shift every anchor up one.
+    expect(planReviewDocument(gate('\n# Initiative plan\n', true))).toBe('\n# Initiative plan\n')
+  })
+
+  it('reads an un-rendered proposal as no document, however substantial it looks', () => {
+    // The planner's transcript summary: a perfectly non-empty string that is not the plan. Showing
+    // it under a table of contents is the failure the rendered review exists to end.
+    expect(
+      planReviewDocument(gate('I drafted a three-phase plan and stopped for review.', false)),
+    ).toBe('')
+  })
+
+  it('reads a rendered but blank proposal as no document', () => {
+    expect(planReviewDocument(gate('   \n  ', true))).toBe('')
+    expect(planReviewDocument(gate(null, true))).toBe('')
+    expect(planReviewDocument(gate(undefined, true))).toBe('')
+  })
+
+  it('has no document when nothing is parked', () => {
+    expect(planReviewDocument(null)).toBe('')
+    expect(planReviewDocument(undefined)).toBe('')
   })
 })
 

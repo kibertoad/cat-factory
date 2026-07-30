@@ -23,10 +23,12 @@ import {
   INITIATIVE_STATUS_LABEL_KEYS,
   initiativeProgress,
   pendingCheckpointPhase,
+  planReviewDocument,
 } from '~/utils/initiative'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
+import InitiativePlanNotice from '~/components/initiative/InitiativePlanNotice.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -60,6 +62,24 @@ const {
   instanceId: () => instanceId.value,
   stepIndex: () => stepIndex.value,
 })
+
+/**
+ * The `StepRunMeta` prop bundle, or null when no step speaks for this window. Bound as one object
+ * because it has two homes — the tracker's end-side column, and the plan review's sidebar while the
+ * review owns the window — and the run details must read identically in both.
+ */
+const runMeta = computed(() =>
+  metaStep.value
+    ? {
+        step: metaStep.value,
+        instanceId: runId.value,
+        stepNumber: position.value,
+        totalSteps: totalSteps.value,
+        runFailed: runFailed.value,
+        failureAt: failureAt.value,
+      }
+    : null,
+)
 
 const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
@@ -103,8 +123,18 @@ async function checkpointControl(action: 'resume' | 'cancel') {
 // ---- Plan review: the planner step's human gate, resolved right here -----------------------
 // Derived from the BLOCK (via the shared planning composable), not from this window's own
 // `stepIndex`: the card / inspector open the tracker with no step, and that is the entry point a
-// human parked on the gate actually uses. So the rail appears on every route into the window.
+// human parked on the gate actually uses. So the review appears on every route into the window.
 const { planApproval } = useInitiativePlanning(() => blockId.value ?? '')
+
+/**
+ * The plan document the parked gate offers, or `''` — which is also the layout decision. A rendered
+ * plan is a REPLACEMENT for the tracker body rather than a card above it: the render reads the
+ * ingested entity, so the sections below would be a second copy of what the reviewer is reading,
+ * and everything the tracker adds on top (PR links, item curation, checkpoints, follow-ups) is
+ * execution-time state that cannot exist until the plan is committed. With no document, the tracker
+ * body IS the plan, so the gate takes the compact notice above it instead.
+ */
+const planDocument = computed(() => planReviewDocument(planApproval.value))
 
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
@@ -236,30 +266,54 @@ async function savePolicy() {
       </UBadge>
     </template>
 
-    <div class="flex min-h-0 flex-1">
+    <!-- The planner's human gate, with the plan rendered as a document. This window is where the
+         park ROUTES (the planner's archetype declares this result view), so it is the only surface
+         that can resolve it — and while it is parked the review OWNS the window: an outline sidebar,
+         the plan at full height, per-block commenting and the commands in an end-side rail, the same
+         tools and the same shape the step reader gives the architect's prose. The tracker body it
+         replaces would only repeat the plan (see `planDocument`). -->
+    <InitiativePlanReview
+      v-if="planApproval && planDocument"
+      :approval="planApproval.approval"
+      :instance-id="planApproval.instanceId"
+      :can-execute="access.canExecuteRuns.value"
+      :plan-document="planDocument"
+    >
+      <template v-if="runMeta" #run-details>
+        <StepRunMeta v-bind="runMeta" />
+      </template>
+    </InitiativePlanReview>
+
+    <div v-else class="flex min-h-0 flex-1">
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-        <!-- No entity yet (module unwired / still creating) -->
+        <!-- A parked gate whose step rendered no plan: the commands, plus a notice pointing at the
+             sections below — which in that case are the only rendering of the plan there is.
+             Deliberately OUTSIDE the entity branch: the gate lives on the RUN, so it is parked
+             before `initiatives.load()` has resolved (and stays parked if it fails), and a window
+             that answered such a gate with the empty state alone would leave it unresolvable from
+             the UI. `hasSections` is what keeps the notice honest about whether the sections it
+             points at are actually rendered underneath. -->
+        <InitiativePlanNotice
+          v-if="planApproval"
+          :approval="planApproval.approval"
+          :instance-id="planApproval.instanceId"
+          :can-execute="access.canExecuteRuns.value"
+          :has-sections="!!initiative"
+        />
+
+        <!-- No entity yet (module unwired / still creating). Centred in the column when it is the
+             only thing in it; merely inset when the notice above it means `h-full` would overflow
+             the scroller by the notice's own height. -->
         <div
           v-if="!initiative"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+          class="flex flex-col items-center justify-center gap-2 text-center text-slate-400"
+          :class="planApproval ? 'py-16' : 'h-full'"
         >
           <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
         </div>
 
         <template v-else>
-          <!-- The planner's human gate. This window is where the park ROUTES (the planner's
-               archetype declares this result view), so it is the only surface that can resolve
-               it — and the plan it judges is rendered as a navigable document with per-block
-               commenting, the same tools the step reader gives the architect's prose. -->
-          <InitiativePlanReview
-            v-if="planApproval"
-            :approval="planApproval.approval"
-            :instance-id="planApproval.instanceId"
-            :can-execute="access.canExecuteRuns.value"
-            :output-is-rendered="planApproval.outputIsRendered"
-          />
-
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
                    review before the next phase spawns. Read the phase's artifacts/PRs below,
                    then resume (continue) or cancel (stop) the initiative right here. -->
@@ -646,18 +700,11 @@ async function savePolicy() {
            through `useResultViewRunMeta`, so it is present on the card / inspector entry point
            too — where this window carries no step index of its own. -->
       <aside
-        v-if="metaStep"
+        v-if="runMeta"
         data-testid="initiative-tracker-run-meta"
         class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
       >
-        <StepRunMeta
-          :step="metaStep"
-          :instance-id="runId"
-          :step-number="position"
-          :total-steps="totalSteps"
-          :run-failed="runFailed"
-          :failure-at="failureAt"
-        />
+        <StepRunMeta v-bind="runMeta" />
       </aside>
     </div>
   </ResultWindowShell>

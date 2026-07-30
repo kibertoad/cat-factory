@@ -5465,11 +5465,12 @@
     },
     "planReview": {
       "title": "Bu plan sizi bekliyor",
-      "body": "Planlayıcı aşağıdaki aşamaları ve maddeleri hazırladı. Planı kaydedip işe başlamak için onaylayın ya da neyin değişmesi gerektiğini yazarak planı geri gönderin.",
+      "body": "Planlayıcı bu aşamaları ve maddeleri hazırladı. Planı kaydedip işe başlamak için onaylayın ya da neyin değişmesi gerektiğini yazarak planı geri gönderin.",
       "approve": "Planı onayla",
       "feedbackPlaceholder": "Planlayıcı neyi değiştirmeli? Kapsam, aşama sırası, eksik iş, başka yere ait bir madde…",
       "sendBack": "Planlayıcıya geri gönder",
-      "noDocument": "Bu plan, platform incelemeye yönelik planlar üretmeye başlamadan önce hazırlandı; gezinilecek bir belge yok — plan aşağıdaki bölümlerdir.",
+      "noDocument": "Bu planlama adımı incelenecek bir plan belgesi bırakmadı, bu yüzden burada gezinilecek bir şey yok.",
+      "noDocumentSections": "Plan aşağıdaki bölümlerdir.",
       "needsFeedback": "Önce bir yorum veya geri bildirim ekleyin — planlayıcı yeniden planlamak için bunu kullanır.",
       "commentHint": "Yorum yapmak için planın herhangi bir bölümüne tıklayın."
     },
