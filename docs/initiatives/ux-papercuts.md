@@ -20,7 +20,7 @@ surfaces cluster (UX-35/40/41/42 — live per-step elapsed clocks, a named reaso
 Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button); the
 fragment/Slack form-integrity cluster (UX-21/23/29/30 — confirm before unlinking a fragment
 source, per-row loading spinners, stable+validated Slack member-map rows, a pending Slack OAuth
-button); and border-anchored frame resizing (UX-17 — grips moved onto the frame's own border
+button); and border-anchored frame resizing (UX-17, [#1537](https://github.com/kibertoad/cat-factory/pull/1537) — grips moved onto the frame's own border
 with a cursor held for the drag). This document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -74,25 +74,25 @@ per-file patches:
 
 ## A. Board & canvas
 
-| ID    | Sev | Status      | Finding                                                                        |
-| ----- | --- | ----------- | ------------------------------------------------------------------------------ |
-| UX-01 | P1  | done (#737) | No undo after a successful block delete                                        |
-| UX-02 | P1  | done (#737) | Delete confirmation never states cascade scope                                 |
-| UX-03 | P1  | done (#737) | Accidental drag-reparent commits silently, no undo                             |
-| UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                  |
-| UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop  |
-| UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                  |
-| UX-07 | P2  | done (#847) | Pipeline dropped on blank canvas gives no feedback                             |
-| UX-08 | P2  | done (#847) | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous      |
-| UX-09 | P2  | done (#847) | Double-clicking a frame/epic is a dead no-op                                   |
-| UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                    |
-| UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                       |
-| UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                             |
-| UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                      |
-| UX-14 | P3  | done (#847) | No reset-zoom-to-100%; zoom readout not clickable                              |
-| UX-15 | P3  | done (#847) | Zoom/LOD readout hidden below `sm` breakpoint                                  |
-| UX-16 | P3  | done (#847) | Zoom buttons don't disable at min/max                                          |
-| UX-17 | P2  | done        | Frame-resize grips sit inside the frame and read as scrollbars, 8px hit target |
+| ID    | Sev | Status       | Finding                                                                        |
+| ----- | --- | ------------ | ------------------------------------------------------------------------------ |
+| UX-01 | P1  | done (#737)  | No undo after a successful block delete                                        |
+| UX-02 | P1  | done (#737)  | Delete confirmation never states cascade scope                                 |
+| UX-03 | P1  | done (#737)  | Accidental drag-reparent commits silently, no undo                             |
+| UX-04 | P2  | todo         | Drag/reparent has no drop-target highlighting                                  |
+| UX-05 | P2  | todo         | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop  |
+| UX-06 | P2  | todo         | Dependency edges cannot be removed (or hovered) on the canvas                  |
+| UX-07 | P2  | done (#847)  | Pipeline dropped on blank canvas gives no feedback                             |
+| UX-08 | P2  | done (#847)  | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous      |
+| UX-09 | P2  | done (#847)  | Double-clicking a frame/epic is a dead no-op                                   |
+| UX-10 | P2  | todo         | Selection, zoom, viewport lost on reload / workspace switch                    |
+| UX-11 | P2  | todo         | Camera doesn't refit on workspace switch                                       |
+| UX-12 | P2  | todo         | No arrow-key navigation or keyboard block movement                             |
+| UX-13 | P2  | done (#737)  | Hardcoded English toast `'Could not move'` in `moveBlock`                      |
+| UX-14 | P3  | done (#847)  | No reset-zoom-to-100%; zoom readout not clickable                              |
+| UX-15 | P3  | done (#847)  | Zoom/LOD readout hidden below `sm` breakpoint                                  |
+| UX-16 | P3  | done (#847)  | Zoom buttons don't disable at min/max                                          |
+| UX-17 | P2  | done (#1537) | Frame-resize grips sit inside the frame and read as scrollbars, 8px hit target |
 
 - **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
   **defers** the backend delete by a `UNDO_WINDOW_MS` (6s) window and shows a
