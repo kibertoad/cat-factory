@@ -5,6 +5,7 @@ import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
+import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import { showOverrideField } from '~/utils/uiMode'
 import {
   agentKindMeta,
@@ -86,6 +87,7 @@ const agents = useAgentsStore()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
 const agentPrompts = useAgentPromptsStore()
+const agentSettings = useAgentSettingsStore()
 
 // The agent kind whose system prompt is open in the editor (null = closed). Per-KIND, not
 // per-step: an override applies to every run of that agent in the workspace, so two steps of
@@ -101,6 +103,26 @@ const promptEditorKind = ref<AgentKind | null>(null)
  */
 function showPromptEditor(kind: AgentKind): boolean {
   return showOverrideField(uiMode.isAdvanced, agentPrompts.isCustomized(kind) || null)
+}
+
+/**
+ * Whether this step's own output-budget field shows. Same override rule as the prompt editor: a
+ * step with no pinned ceiling inherits, so the control is advanced-only until a value actually
+ * exists — at which point it must be visible in BOTH tiers, or a basic-mode user runs on a budget
+ * a teammate pinned and they can neither see nor clear.
+ */
+function showOutputBudget(index: number): boolean {
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftMaxOutputTokens(index) ?? null)
+}
+
+/**
+ * What a step with no pinned ceiling actually runs on: the workspace's per-kind setting when it
+ * has one. Shown as the field's placeholder. Undefined ⇒ the deployment default, which the SPA
+ * deliberately does NOT guess at — it is env-resolved per agent kind and a number invented here
+ * would be wrong on the deployments that tuned it.
+ */
+function inheritedOutputBudget(kind: AgentKind): number | undefined {
+  return agentSettings.maxOutputTokensFor(kind)
 }
 const releaseHealth = useReleaseHealthStore()
 const skills = useSkillsStore()
@@ -151,6 +173,9 @@ watch(open, (isOpen) => {
   // Best-effort: the builder is fully usable without it, and a deployment that wires no
   // override store answers 503 here.
   if (isOpen) agentPrompts.loadIndex().catch(() => {})
+  // The workspace's per-kind output ceilings, which the per-step field shows as its inherited
+  // placeholder and the prompt editor edits. Best-effort on the same terms as the prompt index.
+  if (isOpen) agentSettings.load().catch(() => {})
 })
 
 function add(kind: AgentKind) {
@@ -692,6 +717,23 @@ async function clone(p: Pipeline) {
                 <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-amber-400">
                   {{ t('pipeline.builder.skillMissing') }}
                 </p>
+              </div>
+
+              <!-- This step's own output-token ceiling. An OVERRIDE of the workspace's per-kind
+                 setting (itself an override of the deployment routing default), so it is
+                 advanced-only until a value is pinned; empty inherits. -->
+              <div v-if="showOutputBudget(unit.index)" class="ms-6 flex items-center gap-2">
+                <span class="text-[10px] text-slate-500">
+                  {{ t('pipeline.outputBudget.stepLabel') }}
+                </span>
+                <OutputBudgetInput
+                  class="w-28"
+                  :model-value="pipelines.draftMaxOutputTokens(unit.index)"
+                  :inherited-value="inheritedOutputBudget(unit.kind)"
+                  @update:model-value="
+                    pipelines.setDraftMaxOutputTokens(unit.index, $event ?? undefined)
+                  "
+                />
               </div>
 
               <!-- Attached companion: a dependent reviewer for this producer, optionally

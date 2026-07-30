@@ -96,6 +96,21 @@ export interface AgentRunContext {
    */
   systemPromptOverride?: string
   /**
+   * The output-token ceiling this dispatch runs under, when a workspace or the pipeline step
+   * configured one. Overrides the deployment routing default (`AgentModelConfig.maxOutputTokens`);
+   * absent ⇒ that default stands.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link systemPromptOverride}: the narrowest-tier-wins precedence (step option > workspace
+   * setting > deployment routing) is decided in one place, so the container, inline and consensus
+   * paths cannot disagree about the budget a step ran under.
+   *
+   * Only bites where the cap is genuinely ENFORCED — the metered provider path. The one-shot
+   * subscription CLIs treat it as advisory (see the harness's `InlineJob.maxOutputTokens`), so a
+   * value set here neither raises nor constrains an ambient `claude`/`codex` inline run.
+   */
+  maxOutputTokens?: number
+  /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
    * Read ONLY by the optional consensus executor (`@cat-factory/consensus`), which

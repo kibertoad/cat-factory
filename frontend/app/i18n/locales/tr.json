@@ -4085,6 +4085,13 @@
         "deleteFailed": "Pipeline silinemedi",
         "removeFailed": "Pipeline kaldırılamadı"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Çıktı bütçesi",
+      "kindLabel": "Çıktı bütçesi",
+      "kindHint": "Bu ajanın her çalışmasına uygulanır. Bir pipeline adımı bunu geçersiz kılabilir.",
+      "inherits": "Devralındı",
+      "inheritsValue": "Devralındı ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4119,7 +4126,8 @@
       "reverted": "Yerleşik isteme dönüldü",
       "saveFailed": "İstem kaydedilemedi",
       "loadFailed": "İstem yüklenemedi",
-      "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
+      "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın.",
+      "budgetFailed": "Çıktı bütçesi kaydedilemedi"
     }
   },
   "agentTier": {

@@ -3750,6 +3750,13 @@
         "deleteFailed": "Impossibile eliminare la pipeline",
         "removeFailed": "Impossibile rimuovere la pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budget di output",
+      "kindLabel": "Budget di output",
+      "kindHint": "Si applica a ogni esecuzione di questo agente. Un passaggio della pipeline può sovrascriverlo.",
+      "inherits": "Ereditato",
+      "inheritsValue": "Ereditato ({tokens})"
     }
   },
   "agentPrompt": {
@@ -3784,7 +3791,8 @@
       "reverted": "Tornato al prompt predefinito",
       "saveFailed": "Impossibile salvare il prompt",
       "loadFailed": "Impossibile caricare il prompt",
-      "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica."
+      "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica.",
+      "budgetFailed": "Impossibile salvare il budget di output"
     }
   },
   "agentTier": {

@@ -4073,6 +4073,13 @@
         "deleteFailed": "Nie udało się usunąć pipeline'u",
         "removeFailed": "Nie udało się usunąć pipeline’u"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budżet wyjścia",
+      "kindLabel": "Budżet wyjścia",
+      "kindHint": "Dotyczy każdego uruchomienia tego agenta. Krok pipeline'u może to nadpisać.",
+      "inherits": "Odziedziczone",
+      "inheritsValue": "Odziedziczone ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4107,7 +4114,8 @@
       "reverted": "Powrót do wbudowanego promptu",
       "saveFailed": "Nie udało się zapisać promptu",
       "loadFailed": "Nie udało się wczytać promptu",
-      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
+      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz.",
+      "budgetFailed": "Nie udało się zapisać budżetu wyjścia"
     }
   },
   "agentTier": {

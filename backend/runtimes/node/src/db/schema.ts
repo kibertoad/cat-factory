@@ -624,6 +624,25 @@ export const agentPromptRevisions = pgTable(
   ],
 )
 
+// Per-workspace, per-agent-kind generation settings (mirror of D1 migration 0071), edited from
+// the pipeline builder beside the prompt overrides. The workspace tier of the deployment's
+// per-kind output-token ceiling: no row (or a NULL `max_output_tokens`) means inherit the
+// routing default. PLAIN, not append-only like `agent_prompt_revisions` — the value is one
+// scalar a human typed, so an upsert on the primary key is the right concurrency story and a
+// revision log would be ceremony. The composite primary key serves both reads (the dispatch
+// path's point read, and the workspace-prefix scan the settings UI does), so there is no
+// secondary index to keep in step.
+export const workspaceAgentSettings = pgTable(
+  'workspace_agent_settings',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    max_output_tokens: integer('max_output_tokens'),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
+)
+
 // Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
 // row per workspace; the best-practice fragment ids new services inherit, JSON array.
 export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {

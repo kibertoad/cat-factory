@@ -2,6 +2,7 @@ import type {
   AccountRepository,
   AgentExecutor,
   AgentPromptRepository,
+  WorkspaceAgentSettingsRepository,
   BlockRepository,
   BlueprintService,
   BrainstormSessionRepository,
@@ -145,6 +146,13 @@ export interface ExecutionServiceDependencies {
    * every kind runs its shipped prompt (the feature is simply off).
    */
   agentPromptRepository?: AgentPromptRepository
+  /**
+   * Optional: the workspace's per-agent-kind generation settings, threaded into the context
+   * builder so each dispatch resolves the output-token ceiling configured for that kind (a
+   * pipeline step's own option still wins). Absent ⇒ every kind runs on the deployment routing
+   * ceiling (the feature is simply off).
+   */
+  workspaceAgentSettingsRepository?: WorkspaceAgentSettingsRepository
   /**
    * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
    * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a

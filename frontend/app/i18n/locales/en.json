@@ -4188,6 +4188,13 @@
         "deleteFailed": "Could not delete pipeline",
         "removeFailed": "Could not remove pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Output budget",
+      "kindLabel": "Output budget",
+      "kindHint": "Applies to every run of this agent. A pipeline step can override it.",
+      "inherits": "Inherited",
+      "inheritsValue": "Inherited ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4231,7 +4238,8 @@
       "reverted": "Back to the built-in prompt",
       "saveFailed": "Couldn't save the prompt",
       "loadFailed": "Couldn't load the prompt",
-      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
+      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit.",
+      "budgetFailed": "Could not save the output budget"
     }
   },
   "agentTier": {

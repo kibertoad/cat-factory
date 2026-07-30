@@ -12,6 +12,7 @@ import {
   createPreviewModule,
   createIncidentEnrichmentModule,
   createAgentPromptsModule,
+  createWorkspaceAgentSettingsModule,
   createModelPresetsModule,
   createConsensusGroupsModule,
   createServiceFragmentDefaultsModule,
@@ -230,6 +231,7 @@ import type {
   TrackerModule,
   TrackerWebhookModule,
   UserSettingsModule,
+  WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
 export type {
@@ -258,6 +260,7 @@ export type {
   TrackerModule,
   TrackerWebhookModule,
   UserSettingsModule,
+  WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
 
@@ -449,6 +452,7 @@ export interface OptionalCoreModules {
   consensusGroups?: ConsensusGroupsModule
   /** Present only when the agent-prompt-override repository is wired (see CoreDependencies). */
   agentPrompts?: AgentPromptsModule
+  workspaceAgentSettings?: WorkspaceAgentSettingsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
@@ -497,6 +501,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('modelPresets', () => createModelPresetsModule(dependencies))
   modules.build('consensusGroups', () => createConsensusGroupsModule(dependencies))
   modules.build('agentPrompts', () => createAgentPromptsModule(dependencies))
+  modules.build('workspaceAgentSettings', () => createWorkspaceAgentSettingsModule(dependencies))
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }
 

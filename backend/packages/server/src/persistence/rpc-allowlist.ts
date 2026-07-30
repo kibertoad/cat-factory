@@ -332,6 +332,16 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     head: { scope: { kind: 'workspace', arg: 0 } },
     append: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Per-workspace, per-agent-kind generation settings (the output-token ceiling) — durable org
+  // state on exactly the same footing as the prompt overrides above, so `remote`. `get` is on the
+  // RUN path: `AgentContextBuilder` resolves the dispatched kind's ceiling on EVERY dispatch, so
+  // omitting it would fail an agent step with `unknown_method` rather than merely dimming a panel.
+  workspaceAgentSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // --- Agent-context run-path reads -----------------------------------------------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
   // (it builds the agent context on each dispatch), so these reads are on the run path, not just

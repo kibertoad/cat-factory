@@ -139,6 +139,27 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     draftStepOptions.value[index] = Object.keys(next).length ? next : null
   }
 
+  /**
+   * The output-token ceiling pinned on the draft step at `index`, or undefined when the step
+   * inherits (the workspace's per-kind setting, else the deployment default).
+   */
+  function draftMaxOutputTokens(index: number): number | undefined {
+    return draftStepOptions.value[index]?.maxOutputTokens
+  }
+
+  /**
+   * Set (or clear) this step's own output-token ceiling. Merges into the step's `StepOptions`
+   * bag rather than clobbering it; clearing drops the field and, if the bag empties, the whole
+   * entry — so a step back on the inherited budget persists no options at all, exactly like the
+   * other fields here.
+   */
+  function setDraftMaxOutputTokens(index: number, maxOutputTokens: number | undefined) {
+    const next: StepOptions = { ...draftStepOptions.value[index] }
+    if (maxOutputTokens != null) next.maxOutputTokens = maxOutputTokens
+    else delete next.maxOutputTokens
+    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+  }
+
   return {
     toggleDraftGating,
     toggleDraftConsensus,
@@ -153,5 +174,7 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     toggleDraftAutoRecommend,
     draftSkillId,
     setDraftSkillId,
+    draftMaxOutputTokens,
+    setDraftMaxOutputTokens,
   }
 }

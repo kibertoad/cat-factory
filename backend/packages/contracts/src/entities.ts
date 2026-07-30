@@ -5,6 +5,7 @@ import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
+import { agentMaxOutputTokensSchema } from './agent-settings.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceProvisioningSchema } from './environments.js'
@@ -712,6 +713,17 @@ export const stepOptionsSchema = v.object({
    * other kind.
    */
   skillId: v.optional(v.string()),
+  /**
+   * Output-token ceiling for THIS step's agent, overriding both the workspace's per-kind
+   * setting and the deployment routing default. The narrowest tier of the same knob — for a
+   * pipeline whose step needs a budget the rest of the workspace should not pay for (a
+   * deep-research variant of an otherwise cheap kind).
+   *
+   * Absent ⇒ fall through to the workspace setting, then the routing default. Bounded by
+   * {@link agentMaxOutputTokensSchema}; only meaningful where the cap is enforced (the
+   * metered provider path — a subscription CLI treats it as advisory).
+   */
+  maxOutputTokens: v.optional(agentMaxOutputTokensSchema),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 

@@ -50,6 +50,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'resolveWorkspaceModelDefault'
   | 'assertAgentBackendConfigured'
   | 'logger'
+  | 'workspaceAgentSettingsRepository'
 >
 
 export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
@@ -63,6 +64,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     agentKindRegistry: deps.agentKindRegistry,
     initiativePresetRegistry: deps.initiativePresetRegistry,
     agentPrompts: deps.agentPromptRepository,
+    agentSettings: deps.workspaceAgentSettingsRepository,
     consensusGroups: deps.consensusGroupRepository,
     documents: deps.documentRepository,
     documentUrlResolver: deps.documentUrlResolver,

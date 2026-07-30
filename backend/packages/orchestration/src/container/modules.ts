@@ -85,6 +85,7 @@ import { PackageRegistryService } from '../modules/packageRegistries/PackageRegi
 import { PreviewService } from '../modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from '../modules/incidentEnrichment/IncidentEnrichmentService.js'
 import { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
+import { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
 import {
   ModelPresetService,
   resolvePresetModelForKind,
@@ -130,6 +131,7 @@ import type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './module-shapes.js'
 
@@ -1337,6 +1339,23 @@ export function createAgentPromptsModule(deps: CoreDependencies): AgentPromptsMo
   if (!agentPromptRepository) return undefined
   const service = new AgentPromptService({
     agentPromptRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/**
+ * Assemble the per-agent-kind generation-settings module when its repository is present.
+ * Absent ⇒ the controller 503s and every kind runs on the deployment routing ceiling.
+ */
+export function createWorkspaceAgentSettingsModule(
+  deps: CoreDependencies,
+): WorkspaceAgentSettingsModule | undefined {
+  const { workspaceAgentSettingsRepository } = deps
+  if (!workspaceAgentSettingsRepository) return undefined
+  const service = new WorkspaceAgentSettingsService({
+    workspaceAgentSettingsRepository,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
   })
