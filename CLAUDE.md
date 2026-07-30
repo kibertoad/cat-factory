@@ -761,6 +761,21 @@ dispatch-time `prBody()` fallback, which marks itself agent-less. The sentinel n
 publishing. **A RESUMED run must refresh the PR it already opened** (`refreshExisting`), but only when the
 text is the agent's own briefing — refreshing from the fallback would clobber a human's edit.
 
+- **When the target repo ships a PR TEMPLATE, the briefing IS that template, filled in** (`pr-template.ts`,
+  which owns the discovery rules and the reasoning behind each). Neither host applies a template to an
+  API-created pull request — only to the web form a human opens — so nothing fails to say so, and our PRs
+  are the only ones on the repo missing the structure its reviewers read. The AGENT fills it, in the prompt
+  that already asks for a briefing: the sections are questions only whoever did the work can answer, so
+  stuffing the briefing under the first heading gives the template's shape and none of its meaning.
+- **Three things about it are load-bearing beyond that module.** It rides EVERY agent pass, or a
+  validation/reproduction REPAIR pass — a fresh agent still carrying the description guidance — replaces
+  the filled template with a free-form briefing. The sentinel is then read with **`titleFromHeading:
+false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` rule would retitle the PR
+  after the template's top heading and delete it from the body; a new read site owes the same flag. And
+  `pr-template.coverage.test.ts` CLASSIFIES every agent-running mode as PR-opening or not, because a new
+  PR-opening mode that skips this compiles and passes every behavioural test; it cannot anchor on
+  `openPullRequest(`, which runs in the push phase long after the prompt was composed.
+
 **Consensus panels** — an eligible step can run as a multi-model PANEL instead of a single agent
 (`@cat-factory/consensus`, `CONSENSUS_ENABLED`). REVIEW kinds are the point, and the frontend mirror
 `CONSENSUS_ELIGIBLE_KINDS` is hand-synced — extend both.
