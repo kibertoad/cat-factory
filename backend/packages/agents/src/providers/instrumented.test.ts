@@ -219,6 +219,80 @@ describe('InstrumentedModelProvider — the metric-recorder exit', () => {
     expect(c.sink.events[0]).toMatchObject({ workspaceId: null, agentKind: 'inline' })
   })
 
+  it('attributes an untagged-run call to the SCOPE the provider was built for', async () => {
+    // Ten of the twelve inline sites tag only the workspace, because the run is already in the
+    // credential scope they resolved to lease with. Without this fallback those rows land with
+    // a null execution id: in the store, but absent from `listByExecution`, a step's token
+    // rollup and `/api/v1/debug/runs/*` — which reads as "this step spent nothing".
+    const c = collectors()
+    const provider = new InstrumentedModelProvider({
+      inner: mockProvider('x'),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+      scopeExecutionId: 'exec_scope',
+    })
+
+    await generateText({
+      model: provider.resolve(ref),
+      prompt: 'hi',
+      providerOptions: catFactoryObservability({
+        agentKind: 'doc-interviewer',
+        workspaceId: 'ws_1',
+      }),
+    })
+    await flushEmit()
+
+    expect(c.recorded[0]).toMatchObject({ executionId: 'exec_scope', agentKind: 'doc-interviewer' })
+  })
+
+  it('lets the per-call tag WIN over the scope (one scope can fan out across calls)', async () => {
+    // A scope is per-provider, a tag is per-call: consensus resolves one scope and runs several
+    // participants through it, so a caller that knows better must be able to say so.
+    const c = collectors()
+    const provider = new InstrumentedModelProvider({
+      inner: mockProvider('x'),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+      scopeExecutionId: 'exec_scope',
+    })
+
+    await generateText({
+      model: provider.resolve(ref),
+      prompt: 'hi',
+      providerOptions: catFactoryObservability({
+        agentKind: 'judge',
+        workspaceId: 'ws_1',
+        executionId: 'exec_tag',
+      }),
+    })
+    await flushEmit()
+
+    expect(c.recorded[0]!.executionId).toBe('exec_tag')
+  })
+
+  it('leaves the execution id null when neither the tag nor the scope names a run', async () => {
+    // The honest answer for a genuinely un-run-scoped inline call (the document planner, a
+    // bug-hunt rating, a fragment title) — never guessed at from anything else.
+    const c = collectors()
+    const provider = new InstrumentedModelProvider({
+      inner: mockProvider('x'),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+
+    await generateText({
+      model: provider.resolve(ref),
+      prompt: 'hi',
+      providerOptions: catFactoryObservability({
+        agentKind: 'document-planner',
+        workspaceId: 'ws_1',
+      }),
+    })
+    await flushEmit()
+
+    expect(c.recorded[0]!.executionId).toBeNull()
+  })
+
   it('records a FAILED call with its cause and no bodies', async () => {
     // A failing inline call is exactly what an operator goes looking for, so it must land as
     // a row — with `ok: false` and the cause — rather than only as a thrown exception.

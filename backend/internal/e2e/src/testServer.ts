@@ -43,6 +43,7 @@ import {
   E2eGateProviders,
   E2eRepoBootstrapper,
   type FakeProfile,
+  FakeProfileRegistry,
 } from './fakeProfile.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
@@ -108,8 +109,10 @@ const baseOptions: FakeOptions = {
 }
 
 // The per-workspace fake-behaviour registry, mutated by the test-only control server below and
-// read by the two profile-aware wrappers. Keyed by workspace id.
-const profiles = new Map<string, FakeProfile>()
+// read by the profile-aware wrappers. Keyed by workspace id. Each wrapper registers its cache
+// with the registry on construction, so a `/fake-profile` write re-arms every fake derived from
+// that workspace's profile rather than stranding the write in a map nobody reads again.
+const profiles = new FakeProfileRegistry()
 const agentExecutor = new E2eFakeAgentExecutor(baseOptions, profiles)
 const repoBootstrapper = new E2eRepoBootstrapper(profiles)
 // The built-in gates (`ci`/`conflicts`/`post-release-health`) read their data source through a

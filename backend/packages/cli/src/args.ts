@@ -16,9 +16,10 @@ export type K3sRuntime = (typeof K3S_RUNTIMES)[number]
 export interface CliOptions {
   /**
    * The subcommand. `init` (the default when omitted) scaffolds a full project; `env` writes just
-   * a ready-to-run local-mode `.env`; `k3s` is the guided local-cluster setup.
+   * a ready-to-run local-mode `.env`; `k3s` is the guided local-cluster setup; `supervise` wraps a
+   * dev command in the self-healing watchdog.
    */
-  command: 'init' | 'env' | 'k3s' | 'help' | 'version'
+  command: 'init' | 'env' | 'k3s' | 'supervise' | 'help' | 'version'
   dir?: string
   projectName?: string
   appTitle?: string
@@ -42,6 +43,22 @@ export interface CliOptions {
   k3sRuntime?: K3sRuntime
   /** `k3s` command: base URL of the running SPA, opened (deep-linked) to wire the handler. */
   appUrl?: string
+  /** `supervise` command: the command to run and keep alive — everything after `--`. */
+  superviseCommand?: string[]
+  /** `supervise` command: health endpoint path probed on `port` (default `/health`). */
+  healthPath?: string
+  /** `supervise` command: directory holding the `docker-compose.yml` (default: cwd). */
+  composeDir?: string
+  /** `supervise` command: compose service to keep up before each (re)start, e.g. `postgres`. */
+  composeService?: string
+  /** `supervise` command: local cluster to keep running (started if merely stopped). */
+  k3sCluster?: string
+  /** `supervise` command: seconds between health probes. */
+  pollSeconds?: number
+  /** `supervise` command: seconds after a (re)start during which failures don't count. */
+  bootGraceSeconds?: number
+  /** `supervise` command: consecutive failed probes required before a repair. */
+  failures?: number
   /** Skip opening the browser at the token-creation URL (still prints it). */
   noOpen: boolean
   /** Non-interactive: never prompt; use defaults/flags. Fails if a required value is missing. */
@@ -66,6 +83,15 @@ export function parseArgs(argv: string[]): CliOptions {
   const queue = [...argv]
   while (queue.length > 0) {
     const raw = queue.shift() as string
+
+    // `--` ends option parsing: the rest is a command to hand to `supervise` verbatim, so its own
+    // flags (`--watch`, `-y`, …) are never mistaken for ours.
+    if (raw === '--') {
+      opts.superviseCommand = [...queue]
+      queue.length = 0
+      break
+    }
+
     const eq = raw.indexOf('=')
     const flag = raw.startsWith('--') && eq !== -1 ? raw.slice(0, eq) : raw
     const inline = raw.startsWith('--') && eq !== -1 ? raw.slice(eq + 1) : undefined
@@ -81,7 +107,37 @@ export function parseArgs(argv: string[]): CliOptions {
       throw new ArgError(`Unknown argument: ${raw}`)
     }
   }
+  assertSuperviseOnlyFlagsAreScoped(opts)
   return opts
+}
+
+/**
+ * The `supervise`-only flags are parsed by the one shared option table, so nothing structurally
+ * stops `cat-factory init --failures 2` or a stray `--` from being accepted and then silently
+ * ignored. Reject them here instead: an option that is read by no code path is a typo the user
+ * wants to hear about, not a no-op. Listed as data so a new supervise flag joins the check by name
+ * rather than being forgotten.
+ */
+const SUPERVISE_ONLY_FLAGS: ReadonlyArray<[keyof CliOptions, string]> = [
+  ['superviseCommand', '--'],
+  ['healthPath', '--health-path'],
+  ['composeDir', '--compose-dir'],
+  ['composeService', '--compose-service'],
+  ['k3sCluster', '--k3s-cluster'],
+  ['pollSeconds', '--poll'],
+  ['bootGraceSeconds', '--boot-grace'],
+  ['failures', '--failures'],
+]
+
+function assertSuperviseOnlyFlagsAreScoped(opts: CliOptions): void {
+  if (opts.command === 'supervise' || opts.command === 'help' || opts.command === 'version') return
+  for (const [key, flag] of SUPERVISE_ONLY_FLAGS) {
+    if (opts[key] !== undefined) {
+      throw new ArgError(
+        `${flag} is only valid for \`cat-factory supervise\` (got: ${opts.command})`,
+      )
+    }
+  }
 }
 
 /** Resolve a flag's value: the inline `--flag=value` form, else the next queued token. */
@@ -106,6 +162,7 @@ function applyCommandToken(
     case 'init':
     case 'env':
     case 'k3s':
+    case 'supervise':
       if (!commandSet) {
         opts.command = flag
         commandSet = true
@@ -181,6 +238,28 @@ function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) =>
     case '--app-url':
       opts.appUrl = parseAppUrl(take(flag))
       break
+    case '--health-path':
+      opts.healthPath = parseHealthPath(take(flag))
+      break
+    case '--compose-dir':
+      opts.composeDir = take(flag)
+      break
+    case '--compose-service':
+      opts.composeService = take(flag)
+      break
+    case '--k3s-cluster':
+      opts.k3sCluster = take(flag)
+      break
+    case '--poll':
+      opts.pollSeconds = parseWholeSeconds(flag, take(flag), 1)
+      break
+    case '--boot-grace':
+      // 0 is meaningful: a fast-booting toy command wants no grace window at all.
+      opts.bootGraceSeconds = parseWholeSeconds(flag, take(flag), 0)
+      break
+    case '--failures':
+      opts.failures = parseFailures(take(flag))
+      break
     case '--no-open':
       opts.noOpen = true
       break
@@ -251,6 +330,36 @@ function parseK3sRuntime(value: string): K3sRuntime {
   throw new ArgError(`Invalid --runtime "${value}" (expected: ${K3S_RUNTIMES.join(' | ')})`)
 }
 
+/** The probed health path must be rooted, so `--health-path health` can't silently probe nothing. */
+function parseHealthPath(value: string): string {
+  if (!value.startsWith('/')) {
+    throw new ArgError(`Invalid --health-path "${value}" (expected a rooted path, e.g. /health)`)
+  }
+  return value
+}
+
+/**
+ * Whole seconds only, and at least `min`. Fractions are refused rather than honoured: `--poll 0.001`
+ * would otherwise build a 1ms poll loop that spins a core and — because the derived clock-jump
+ * threshold is `poll * 3` — reads its own probe latency as a host suspend, so every failed probe
+ * repairs at once and `--failures` stops meaning anything.
+ */
+function parseWholeSeconds(flag: string, value: string, min: number): number {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < min) {
+    throw new ArgError(`Invalid ${flag} "${value}" (expected a whole number of seconds >= ${min})`)
+  }
+  return n
+}
+
+function parseFailures(value: string): number {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 1) {
+    throw new ArgError(`Invalid --failures "${value}" (expected an integer >= 1)`)
+  }
+  return n
+}
+
 function parsePort(value: string): number {
   const n = Number(value)
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
@@ -300,6 +409,8 @@ export const OPTION_DEFAULTS = {
   // The local-mode SPA URL (matches the frontend served by `cat-factory init`) — the deep-link the
   // guided k3s hand-off opens to pre-fill the Local k3s connect form.
   appUrl: 'http://localhost:3000',
+  // `supervise` probes the same `/health` every runtime mounts.
+  healthPath: '/health',
 } as const
 
 export const HELP_TEXT = `cat-factory — bootstrap a local cat-factory deployment
@@ -308,6 +419,7 @@ Usage:
   cat-factory [init] [options]
   cat-factory env [options]
   cat-factory k3s [options]
+  cat-factory supervise [options] -- <command...>
 
 Commands:
   init   Scaffold a local-mode backend (local/) + frontend SPA (frontend/): generate the
@@ -318,6 +430,11 @@ Commands:
   k3s    Guided local Kubernetes setup: probe the host for a usable cluster, then create (or
          reuse) one + a least-privilege ServiceAccount and print the values to wire the
          Local k3s environment handler. A k3s install needs sudo, so it is only ever printed.
+  supervise  Run a dev command under a self-healing watchdog. 'node --watch' PARKS on crash
+         (it restarts only on a file change), so a laptop sleep leaves the server dead with
+         the port unbound and the SPA showing only "can't reach backend" — indefinitely. This
+         probes the real signal (port listening AND /health 200), notices a resume, brings the
+         database/cluster back, and restarts the command.
 
 Options (init):
   -d, --dir <path>        Target directory (default: ./<name>)
@@ -364,4 +481,29 @@ Options (k3s):
   After provisioning, the values are printed and the SPA's Local k3s connect form is opened
   pre-filled (paste the token, then Test -> Save). A hands-free --register flag that POSTs the
   handler to the local API directly is a planned follow-up.
+
+Options (supervise):
+      --port <n>          Port the supervised server binds (default: 8787)
+      --health-path <p>   Health endpoint probed on that port (default: /health)
+  -d, --dir <path>        Working directory for the command (default: current directory)
+      --compose-service <s>  docker compose service to keep up (e.g. postgres)
+      --compose-dir <path>   Directory holding docker-compose.yml (default: --dir)
+      --k3s-cluster <name>   Local k3d/kind cluster to keep running (started if stopped)
+      --runtime <r>       Cluster distribution for --k3s-cluster: k3d | kind (default: k3d).
+                          'k3s' is refused: a host service has no cluster to start from here.
+      --poll <seconds>    Health probe interval, whole seconds (default: 10)
+      --boot-grace <seconds>  Ignore failures for this long after a (re)start (default: 60)
+      --failures <n>      Consecutive failed probes before repairing (default: 3)
+
+  Everything after \`--\` is the supervised command, passed through untouched:
+      cat-factory supervise --compose-service postgres -- pnpm dev
+
+  A cluster that is merely STOPPED is started automatically. A cluster whose restart is blocked
+  by a stale cgroup ("device or resource busy" — a state a suspend can leave behind) cannot be
+  fixed from here: clearing it needs the container ENGINE restarted, which would kill every other
+  container. That case is reported once, with the fix, instead of retried forever.
+
+  The same rule applies to the supervised command itself: restarts that never reach a serving
+  state are capped, and hitting the cap reports why and exits NON-ZERO rather than looping. A
+  command that is simply broken cannot be repaired by killing it again.
 `

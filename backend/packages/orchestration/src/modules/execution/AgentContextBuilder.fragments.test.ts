@@ -144,6 +144,30 @@ describe('AgentContextBuilder fragment resolution', () => {
     expect(s.selectedFragmentIds).toEqual(['node.best-practices'])
   })
 
+  it('hands the resolver the RUN being dispatched, so a generated brief is attributed to it', async () => {
+    // A `brief` resolution may GENERATE a condensation, which is a model call on the run path.
+    // The run reaches `llm_call_metrics` only by riding this option down to the brief generator's
+    // `ModelScope`, and nothing about omitting it fails: the brief is still folded, its spend just
+    // lands under a null execution id and the step reports less than it cost.
+    const seen: { verbosity?: string; executionId?: string }[] = []
+    const builder = makeBuilder({
+      fragmentResolver: {
+        resolveBodiesForRun: async (
+          _ws: string,
+          _ids: string[],
+          options?: { verbosity?: 'full' | 'brief'; executionId?: string },
+        ) => {
+          seen.push({ ...options })
+          return []
+        },
+      },
+    })
+    // `coder` carries the `brief-standards` trait, so this is the dispatch that can generate.
+    const s = step({ agentKind: 'coder' })
+    await builder.buildContext('ws1', instance([s]), s, true, TASK)
+    expect(seen).toEqual([{ verbosity: 'brief', executionId: 'exec_1' }])
+  })
+
   it('clears a stale selectedFragmentIds when a re-dispatch resolves to nothing', async () => {
     const s = step({ agentKind: 'coder', selectedFragmentIds: ['node.best-practices'] })
     const builder = makeBuilder({

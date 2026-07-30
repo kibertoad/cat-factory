@@ -98,6 +98,53 @@ type BootstrapHandle = Parameters<FakeRepoBootstrapper['pollBootstrap']>[0]
 
 const DEFAULT_KEY = '__default__'
 
+/** A cache of per-workspace fakes derived from {@link FakeProfile}s, re-armable per workspace. */
+interface WorkspaceScopedFakes {
+  /** Drop the cached fake(s) for `workspaceId` so the next call rebuilds from the live profile. */
+  resetWorkspace(workspaceId: string): void
+}
+
+/**
+ * The per-workspace fake-behaviour store, plus every cache derived from it.
+ *
+ * Each wrapper below caches one fake per workspace — they own per-workspace state (job maps,
+ * companion/tester counters, gate probe sequences) that has to survive across the many calls of
+ * a single run — and each reads the profile exactly ONCE, when it builds that fake. So a spec
+ * normally sets its profile BEFORE starting the run it wants to shape.
+ *
+ * A spec that legitimately needs to change behaviour PART-WAY through a workspace's life (the
+ * checkpoint spec re-arms the human decision gate so the NEXT phase's run parks rather than
+ * settling straight to `done`) would otherwise be writing into a map nobody reads again. That
+ * no-op is silent, and it surfaces only as a load-dependent e2e flake: the run the spec meant to
+ * park races to completion instead, and whatever the spec was watching for is gone before the
+ * browser can paint it. So a write RE-ARMS that workspace: the cached fakes are dropped and the
+ * next call rebuilds them from the profile just written.
+ *
+ * Re-arming resets that workspace's counters and in-memory job map along with its options, so a
+ * write landing while one of ITS OWN async jobs is mid-poll would strand that job. Every caller
+ * today writes either before the run or while the workspace is quiescent.
+ */
+export class FakeProfileRegistry {
+  private readonly profiles = new Map<string, FakeProfile>()
+  private readonly caches = new Set<WorkspaceScopedFakes>()
+
+  /** Register a profile-derived cache so {@link set} re-arms it. Each wrapper registers itself. */
+  register(cache: WorkspaceScopedFakes): void {
+    this.caches.add(cache)
+  }
+
+  /** A workspace's profile; absent ⇒ base behaviour. */
+  get(workspaceId: string): FakeProfile | undefined {
+    return this.profiles.get(workspaceId)
+  }
+
+  /** Install a workspace's profile and re-arm every fake derived from it. */
+  set(workspaceId: string, profile: FakeProfile): void {
+    this.profiles.set(workspaceId, profile)
+    for (const cache of this.caches) cache.resetWorkspace(workspaceId)
+  }
+}
+
 /** Fold a resolved profile into the fake-agent constructor options (base ⊕ profile). */
 function profileToOptions(profile: FakeProfile | undefined): FakeOptions {
   if (!profile) return {}
@@ -163,24 +210,30 @@ function profileToOptions(profile: FakeProfile | undefined): FakeOptions {
  * reports `runsAsync === false` and runs inline, identical to the plain fake.
  *
  * NOTE: a workspace's instance is built lazily on its FIRST agent call and its profile is read
- * then, so a spec must `setFakeProfile` BEFORE it starts the run (every spec does: seed → set →
- * start).
+ * then, so a spec normally `setFakeProfile`s BEFORE it starts the run (most do: seed → set →
+ * start). A profile written LATER still takes effect — {@link FakeProfileRegistry.set} re-arms
+ * this cache — at the cost of resetting that workspace's job map and counters.
  */
-export class E2eFakeAgentExecutor {
+export class E2eFakeAgentExecutor implements WorkspaceScopedFakes {
   private readonly instances = new Map<string, AsyncFakeAgentExecutor>()
   private readonly base: FakeOptions
-  private readonly profiles: ReadonlyMap<string, FakeProfile>
+  private readonly registry: FakeProfileRegistry
 
-  constructor(base: FakeOptions, profiles: ReadonlyMap<string, FakeProfile>) {
+  constructor(base: FakeOptions, registry: FakeProfileRegistry) {
     this.base = base
-    this.profiles = profiles
+    this.registry = registry
+    registry.register(this)
+  }
+
+  resetWorkspace(workspaceId: string): void {
+    this.instances.delete(workspaceId)
   }
 
   private forWorkspace(workspaceId: string | undefined): AsyncFakeAgentExecutor {
     const key = workspaceId ?? DEFAULT_KEY
     let inst = this.instances.get(key)
     if (!inst) {
-      const profile = workspaceId ? this.profiles.get(workspaceId) : undefined
+      const profile = workspaceId ? this.registry.get(workspaceId) : undefined
       inst = new AsyncFakeAgentExecutor({ ...this.base, ...profileToOptions(profile) })
       this.instances.set(key, inst)
     }
@@ -217,19 +270,24 @@ export class E2eFakeAgentExecutor {
  * map — so a bootstrap spec can request a progress script (happy path) or a poll-time failure
  * (the failure-banner + retry path) for its own workspace without touching any other spec.
  */
-export class E2eRepoBootstrapper {
+export class E2eRepoBootstrapper implements WorkspaceScopedFakes {
   private readonly instances = new Map<string, FakeRepoBootstrapper>()
-  private readonly profiles: ReadonlyMap<string, FakeProfile>
+  private readonly registry: FakeProfileRegistry
 
-  constructor(profiles: ReadonlyMap<string, FakeProfile>) {
-    this.profiles = profiles
+  constructor(registry: FakeProfileRegistry) {
+    this.registry = registry
+    registry.register(this)
+  }
+
+  resetWorkspace(workspaceId: string): void {
+    this.instances.delete(workspaceId)
   }
 
   private forWorkspace(workspaceId: string): FakeRepoBootstrapper {
     let inst = this.instances.get(workspaceId)
     if (!inst) {
       inst = new FakeRepoBootstrapper()
-      const profile = this.profiles.get(workspaceId)
+      const profile = this.registry.get(workspaceId)
       if (profile?.bootstrapProgress) {
         inst.progressScript = profile.bootstrapProgress as typeof inst.progressScript
       }
@@ -282,25 +340,34 @@ type FakeReleaseHealthProvider = ReturnType<typeof makeFakeReleaseHealth>
  * specs, whose pipelines contain no gate steps, they are never probed at all.
  *
  * NOTE: like {@link E2eFakeAgentExecutor}, a workspace's fake is built on its FIRST probe and
- * reads the profile then, so a spec must `setFakeProfile` BEFORE starting the run.
+ * reads the profile then, so a spec normally `setFakeProfile`s BEFORE starting the run. A later
+ * write still takes effect — {@link FakeProfileRegistry.set} re-arms this cache — at the cost of
+ * restarting that workspace's verdict sequences from the top.
  */
-export class E2eGateProviders {
+export class E2eGateProviders implements WorkspaceScopedFakes {
   private readonly ciByWs = new Map<string, FakeCiProvider>()
   private readonly mrgByWs = new Map<string, FakeMergeabilityProvider>()
   private readonly relByWs = new Map<string, FakeReleaseHealthProvider>()
-  private readonly profiles: ReadonlyMap<string, FakeProfile>
+  private readonly registry: FakeProfileRegistry
 
   // A plain field + body assignment, NOT a `private readonly` parameter property: the e2e
   // backend runs under Node type-stripping, whose strip-only mode rejects parameter properties
   // (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). Mirrors E2eRepoBootstrapper / E2eFakeAgentExecutor.
-  constructor(profiles: ReadonlyMap<string, FakeProfile>) {
-    this.profiles = profiles
+  constructor(registry: FakeProfileRegistry) {
+    this.registry = registry
+    registry.register(this)
+  }
+
+  resetWorkspace(workspaceId: string): void {
+    this.ciByWs.delete(workspaceId)
+    this.mrgByWs.delete(workspaceId)
+    this.relByWs.delete(workspaceId)
   }
 
   private forCi(workspaceId: string): FakeCiProvider {
     let inst = this.ciByWs.get(workspaceId)
     if (!inst) {
-      inst = makeFakeCi(this.profiles.get(workspaceId)?.ciStatus ?? [true])
+      inst = makeFakeCi(this.registry.get(workspaceId)?.ciStatus ?? [true])
       this.ciByWs.set(workspaceId, inst)
     }
     return inst
@@ -309,7 +376,7 @@ export class E2eGateProviders {
   private forMergeability(workspaceId: string): FakeMergeabilityProvider {
     let inst = this.mrgByWs.get(workspaceId)
     if (!inst) {
-      inst = makeFakeMergeability(this.profiles.get(workspaceId)?.mergeability ?? ['mergeable'])
+      inst = makeFakeMergeability(this.registry.get(workspaceId)?.mergeability ?? ['mergeable'])
       this.mrgByWs.set(workspaceId, inst)
     }
     return inst
@@ -318,7 +385,7 @@ export class E2eGateProviders {
   private forReleaseHealth(workspaceId: string): FakeReleaseHealthProvider {
     let inst = this.relByWs.get(workspaceId)
     if (!inst) {
-      inst = makeFakeReleaseHealth(this.profiles.get(workspaceId)?.releaseHealth ?? ['healthy'])
+      inst = makeFakeReleaseHealth(this.registry.get(workspaceId)?.releaseHealth ?? ['healthy'])
       this.relByWs.set(workspaceId, inst)
     }
     return inst

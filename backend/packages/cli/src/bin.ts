@@ -5,6 +5,7 @@ import { ArgError, HELP_TEXT, parseArgs } from './args.js'
 import { bootstrap } from './bootstrap.js'
 import { generateEnv } from './envCommand.js'
 import { setupK3s } from './k3s.js'
+import { supervise } from './superviseCommand.js'
 
 function readVersion(): string {
   try {
@@ -42,6 +43,10 @@ async function main(): Promise<void> {
   }
   if (options.command === 'k3s') {
     await setupK3s(options)
+    return
+  }
+  if (options.command === 'supervise') {
+    await supervise(options)
     return
   }
 

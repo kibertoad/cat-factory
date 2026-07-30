@@ -11,10 +11,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LlmObservabilityService, makeInlineCallRecorder } from '@cat-factory/orchestration'
-import type { ScopedModelProviderOptions } from './modelProviderResolver.js'
-
-/** The `instrument` slot of {@link ScopedModelProviderOptions}, once composed. */
-export type InlineInstrumentation = NonNullable<ScopedModelProviderOptions['instrument']>
+import type { InlineInstrumentation } from './modelProviderResolver.js'
 
 export interface InlineInstrumentationOptions {
   /**
@@ -41,7 +38,7 @@ export interface InlineInstrumentationOptions {
 
 /**
  * Compose the inline-LLM instrumentation both facades hand to
- * `createScopedModelProviderResolver`, so the two exits of `InstrumentedModelProvider` can only
+ * `wrapResolverWithInstrumentation`, so the two exits of `InstrumentedModelProvider` can only
  * ever be wired as a matched pair.
  *
  * The provider takes EXACTLY ONE exit per call: the recorder's `LlmObservabilityService`

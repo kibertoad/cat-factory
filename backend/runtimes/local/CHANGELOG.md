@@ -1,5 +1,92 @@
 # @cat-factory/local-server
 
+## 0.90.2
+
+### Patch Changes
+
+- f9db6a6: Record the inline LLM calls that local mode serves from a host CLI, and stop filing run-scoped
+  inline calls under a null execution id.
+
+  The inline `llm_call_metrics` feeder was applied as the innermost provider wrap, so local mode's
+  subscription-inline harness — which answers a Claude Code / Codex ref with its own
+  `CliInlineLanguageModel` rather than delegating — was invisible to it. With `LOCAL_NATIVE_INLINE`
+  on (the default), every inline step on a host `claude`/`codex` login recorded zero calls while the
+  same step on a metered API model recorded fine. Separately, ten of the twelve inline call sites
+  tagged only the workspace, so their rows landed with `execution_id = NULL`: in the store, but
+  absent from every run-scoped read.
+
+  Attribution also no longer trusts a settled run: `resolveBlockRunContext` drops the execution id
+  once the run is terminal (keeping the initiator), because `block.executionId` is the block's LAST
+  run rather than necessarily a live one. A stale id would report an inline call's spend against a
+  finished run's rollup, and unlike a null nothing about a wrong-but-plausible id looks wrong.
+
+  Compatibility breaks (pre-1.0, no shims):
+
+  - `createScopedModelProviderResolver` no longer takes `instrument`, and the instrumentation and
+    concurrency-limiter wraps are no longer exported individually. Apply the new
+    `wrapResolverWithTelemetry(resolver, { instrument, limiter })` on top of the resolver — after any
+    facade wrap that can substitute a resolved model. It owns the ORDER of the two wraps, which is
+    load-bearing and which nothing in the type system holds: reversed, the composition still
+    type-checks and still records every non-substituted call. Replace a `wrapResolverWithLimiter`
+    call with the `limiter` field (build it with `vendorConcurrencyLimiterFromEnv`; it stays a
+    pass-through when nothing is capped).
+  - `createNodeModelProviderResolver` builds the BASE resolver only; its `instrument` and
+    `workspaceSettingsRepository` parameters are gone, and the env-built trace-sink instrument it
+    used to fall back to is now the exported `inlineInstrumentFromEnv(env, workspaceBodiesEnabled)`.
+    A deployment assembling its own container composes the two — and MUST: a caller that merely drops
+    the removed arguments compiles fine and silently stops instrumenting its inline calls.
+  - `InlineInstrumentation` is now exported from `agents/modelProviderResolver` rather than derived
+    from `ScopedModelProviderOptions['instrument']` (same shape, same import path from the package
+    root).
+  - `FragmentBriefService.resolveBriefs` takes its run on an options object (`{ executionId }`)
+    rather than as a third positional argument.
+  - `@cat-factory/agents` additionally exports `LimitedModelProvider`, so a facade wiring test can
+    assert the wrapper it composed.
+
+- Updated dependencies [f9db6a6]
+  - @cat-factory/server@0.179.0
+  - @cat-factory/node-server@0.141.0
+  - @cat-factory/agents@0.88.0
+  - @cat-factory/kernel@0.194.0
+  - @cat-factory/orchestration@0.171.1
+  - @cat-factory/executor-harness@1.78.0
+  - @cat-factory/gitlab@0.14.6
+  - @cat-factory/integrations@0.111.1
+
+## 0.90.1
+
+### Patch Changes
+
+- 28ad35a: Respect the target repository's own pull-request template: a PR-opening coding dispatch now finds
+  it and the agent fills it in, instead of the platform's free-form briefing.
+
+  Neither GitHub nor GitLab applies a template to an API-created pull request — that only happens for
+  a human opening one in the web form — so the platform's pull requests were the only ones on a repo
+  silently missing the structure its reviewers expect, with nothing failing or warning to say so.
+
+  The harness discovers the template from the checkout it already has (`.github/PULL_REQUEST_TEMPLATE.md`
+  and GitHub's root/`docs/` and multi-template-directory variants, plus GitLab's
+  `.gitlab/merge_request_templates/`; case-insensitive, both hosts' conventions probed whatever the
+  repo's provider) and folds it into the prompt of the agent that just did the work, which writes its
+  `.cat-pr-description.md` as the filled template. Where the template asks for something the platform's
+  briefing guidance does not, the template wins. Repos shipping no template are byte-for-byte
+  unaffected.
+
+  A filled template's headings are the REPO's, so the sentinel is read back with the leading-`#` title
+  rule switched off: a template whose first heading is its only level-1 one would otherwise have that
+  heading lifted as the pull request's title, replacing the platform's own and deleting the heading
+  from the body. A template symlinked out of the checkout is refused rather than read, since this is
+  the one repo-chosen path the harness reads without the agent asking for it.
+
+  A directory holding SEVERAL templates with no `default` is deliberately left alone: that directory
+  exists so a human can choose per pull request, and picking one arbitrarily would file every run's
+  work under whichever name sorts first while looking deliberate.
+
+  Bumps the runner image to `1.77.0` (harness `src/**` changed).
+
+- Updated dependencies [28ad35a]
+  - @cat-factory/executor-harness@1.78.0
+
 ## 0.90.0
 
 ### Minor Changes
