@@ -444,6 +444,10 @@ export {
   type InlineObservabilityContext,
   type WorkspaceBodiesGate,
   VendorConcurrencyLimiter,
+  // Exported for the same reason `InstrumentedModelProvider` is: a facade's wiring test asserts
+  // on the wrapper it composed, and the ORDER of these two around a resolved model is
+  // load-bearing (`wrapResolverWithTelemetry`).
+  LimitedModelProvider,
   limitModelProvider,
   vendorConcurrencyLimiterFromEnv,
   type ModelResolver,

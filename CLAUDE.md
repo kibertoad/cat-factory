@@ -947,6 +947,26 @@ Rules that bind new work here:
   generation on Langfuse/OTel. A facade never assembles the pair by hand: `createInlineInstrumentation`
   builds both exits from ONE sink instance. Bodies reach the recorder as THUNKS, so a prompts-off
   deployment never pays to serialise a prompt the gate is about to drop.
+- **The inline instrumentation is a middleware around a RESOLVED model, so it only ever sees what the wrap
+  beneath it returned — and one facade wrap SUBSTITUTES that model.** It shipped innermost, inside
+  `createScopedModelProviderResolver`, where local mode's subscription-inline wrap (which answers a harness
+  ref with its own `CliInlineLanguageModel` instead of delegating) was invisible to it: on the default local
+  shape every inline step on a host `claude`/`codex` login recorded zero calls while the same step on a
+  metered API model recorded fine. **A facade never composes that order by hand** —
+  `wrapResolverWithTelemetry(resolver, instrument, limiter)` (`@cat-factory/server`) owns it, for the same
+  reason `createInlineInstrumentation` owns the exit pair: the wrong order still typechecks and still records
+  every non-substituted call, so nothing fails until it is the deployment you don't test on. The limiter
+  stays outermost, so a queue wait is never counted as generation time.
+- **Run attribution falls back to the credential SCOPE, which names the block's LAST run, not necessarily a
+  live one.** A per-call `catFactoryObservability({ executionId })` wins; absent, the wrap threads
+  `scope.executionId`, because most inline sites tag only the workspace and such a row is worse than
+  unrecorded — it is IN the store and absent from every run-scoped read (`listByExecution`, a step's rollup,
+  `/api/v1/debug/runs/*`), which reads as a step that spent nothing. `block.executionId` is NOT cleared when
+  a run settles, so `resolveBlockRunContext` drops the id for a TERMINAL run (keeping the initiator, which
+  the key pool still scopes by): a stale id would report spend against a finished run's rollup, and unlike a
+  null nothing about it looks wrong. Both absent ⇒ null, the honest answer for a genuinely un-run-scoped
+  call. **A NEW inline caller on the run path must build its scope with the run in it** — a call that
+  generates on the run path but resolves its own scope, like a fragment brief, carries the run on its input.
 - **State what a producer does NOT know rather than filling a field with a guess**: an inline call has
   `turnIndex` null, `httpStatus` null, `phase` `''` and `upstreamMs === totalMs`, so the derived overhead
   is a real 0. `turn_index` is NULLABLE and never 0, or a proxied call would sort to the front of its

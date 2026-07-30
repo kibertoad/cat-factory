@@ -196,6 +196,7 @@ export class InstrumentedModelProvider implements ModelProvider {
   private readonly recordCall?: InlineLlmCallRecorder
   private readonly recordPrompts: boolean
   private readonly workspaceBodiesEnabled: WorkspaceBodiesGate
+  private readonly scopeExecutionId: string | null
   private readonly now: () => number
   private readonly log: Logger
 
@@ -231,6 +232,27 @@ export class InstrumentedModelProvider implements ModelProvider {
      * re-applying it here would only create a second place for the rule to drift.
      */
     workspaceBodiesEnabled: WorkspaceBodiesGate
+    /**
+     * The run this provider's SCOPE was built for, used as the attribution fallback when a
+     * call's own `catFactoryObservability` tag names no `executionId`.
+     *
+     * Every run-scoped inline caller already resolves the block's active run into its
+     * {@link ModelScope} — it has to, or a facade serving a subscription ref through a
+     * per-run credential activation could not lease it. The per-call tag is the same fact
+     * stated a second time, and ten of the twelve inline sites stated only the workspace:
+     * their rows landed with `execution_id = NULL`, which is not "unrecorded" but something
+     * worse to debug — present in the store and absent from every run-scoped read
+     * (`listByExecution` / `summarizeByExecution`, a step's token rollup,
+     * `/api/v1/debug/runs/*`). Deriving it from the credential scope makes the attribution
+     * unforgettable instead of a rule each new inline site must remember.
+     *
+     * The tag still WINS where a caller sets it: a scope is per-provider while a tag is
+     * per-call, so a caller that knows better (consensus, which fans one scope out across
+     * participants) must be able to say so. Absent on both ⇒ null, the honest answer for a
+     * genuinely un-run-scoped call (the document planner, a bug-hunt rating, a fragment
+     * title) — never guessed at from anything else.
+     */
+    scopeExecutionId?: string
     /** Injectable clock (tests); defaults to `Date.now`. */
     now?: () => number
     /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
@@ -249,6 +271,7 @@ export class InstrumentedModelProvider implements ModelProvider {
     this.recordCall = deps.recordCall
     this.recordPrompts = deps.recordPrompts ?? true
     this.workspaceBodiesEnabled = deps.workspaceBodiesEnabled
+    this.scopeExecutionId = deps.scopeExecutionId ?? null
     this.now = deps.now ?? (() => Date.now())
     this.log = (deps.logger ?? noopLogger).child({ scope: 'inlineLlmTrace' })
   }
@@ -295,7 +318,9 @@ export class InstrumentedModelProvider implements ModelProvider {
     const context = readInlineObservabilityContext(params)
     const usage = readUsage((result as { usage?: unknown })?.usage)
     const workspaceId = context.workspaceId ?? null
-    const executionId = context.executionId ?? null
+    // The call's own tag first, then the credential scope this provider was built for. See
+    // `scopeExecutionId` for why the scope is the better default than a null.
+    const executionId = context.executionId ?? this.scopeExecutionId
     const finishReason = ok ? readFinishReason(result) : null
     // The recorder is the richer exit AND owns the sink fan-out, so a workspace-scoped call
     // takes it and stops. An un-tagged call (`workspaceId: null`) has no workspace to file a

@@ -112,7 +112,7 @@ import {
   createWebSearchUpstream,
   createInlineInstrumentation,
   createScopedModelProviderResolver,
-  wrapResolverWithLimiter,
+  wrapResolverWithTelemetry,
   ENV_HELP,
   configProblem,
   GitHubIdentityResolver,
@@ -333,18 +333,21 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     localEndpointsFor: localModelEndpoints
       ? (userId) => localModelEndpoints.listResolved(userId)
       : undefined,
-    instrument,
   })
-  // Cap concurrent inline calls to a subscription vendor. On the Worker the inline path
-  // degrades subscription refs before resolve, so this is a wired pass-through in practice;
-  // it bounds concurrency within one isolate (no cross-isolate/global limiting — see
-  // backend/docs/concurrency-and-redis.md), symmetric with the Node facade's wrap.
-  const resolver = wrapResolverWithLimiter(
-    scoped,
-    vendorConcurrencyLimiterFromEnv(
+  // Observe inline calls, then cap concurrency, through the ONE composer that owns their order
+  // (instrumentation inside, limiter outermost). The Worker has no facade wrap that substitutes a
+  // resolved model today, so it could not hit the local-mode blind spot this order exists for —
+  // but going through the shared composer is what keeps that true for a Worker-side wrap added
+  // later, and it keeps the two facades textually symmetric. The limiter bounds concurrency within
+  // one isolate only (no cross-isolate/global limiting — see
+  // backend/docs/concurrency-and-redis.md), and since the Worker's inline path degrades
+  // subscription refs before resolve, it is a wired pass-through here in practice.
+  const resolver = wrapResolverWithTelemetry(scoped, {
+    ...(instrument ? { instrument } : {}),
+    limiter: vendorConcurrencyLimiterFromEnv(
       (key) => (env as unknown as Record<string, string | undefined>)[key],
     ),
-  )
+  })
   modelResolverCache.set(env, resolver)
   return resolver
 }

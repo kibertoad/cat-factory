@@ -58,6 +58,15 @@ function scopeKey(ownerKind: FragmentOwnerKind, ownerId: string): string {
  */
 const NOT_CONDENSABLE = ''
 
+export interface ResolveBriefsOptions {
+  /**
+   * The run whose dispatch is folding these standards. A condensation is a model call ON the run
+   * path, so this is what attributes it to the step that paid for it; absent (a caller with no
+   * run) leaves it unattributed rather than guessed at.
+   */
+  executionId?: string
+}
+
 export class FragmentBriefService {
   private readonly repo: FragmentBriefRepository
   private readonly generator?: FragmentBriefGenerator
@@ -81,7 +90,9 @@ export class FragmentBriefService {
   async resolveBriefs(
     workspaceId: string,
     candidates: FragmentBriefCandidate[],
+    opts: ResolveBriefsOptions = {},
   ): Promise<Map<string, string>> {
+    const { executionId } = opts
     const briefs = new Map<string, string>()
     if (candidates.length === 0) return briefs
 
@@ -141,6 +152,7 @@ export class FragmentBriefService {
               title: candidate.entry.title,
               body: candidate.body,
               ...(candidate.entry.summary ? { summary: candidate.entry.summary } : {}),
+              ...(executionId ? { executionId } : {}),
             })
             // Both outcomes are persisted against the body's fingerprint. Recording the
             // refusal is what stops a standard that cannot be usefully shortened — which is

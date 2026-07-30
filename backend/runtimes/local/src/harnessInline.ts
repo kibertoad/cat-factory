@@ -795,6 +795,12 @@ class SubscriptionInlineModelProvider implements ModelProvider {
  * in local mode; a no-op when no inline harnesses are enabled (`LOCAL_NATIVE_INLINE=off`). The
  * lease seams (`leasePersonalSubscriptionToken`/`leaseSubscriptionToken`) are supplied by
  * `buildNodeContainer` (built from the same subscription services the container executor uses).
+ *
+ * This wrap SUBSTITUTES the model rather than delegating for a subscription ref, so it must stay
+ * BENEATH the telemetry wrap — `buildNodeModelDeps` applies
+ * `wrapResolverWithInstrumentation` on top of it, and reversing that (the shape this facade
+ * shipped with) makes every call served here invisible to `llm_call_metrics` while every other
+ * inline call keeps recording, which is the hardest possible version of this bug to notice.
  */
 export function wrapResolverWithInlineHarness(
   deps: InlineHarnessResolverDeps,

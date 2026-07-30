@@ -162,6 +162,12 @@ export interface FragmentBodyResolver {
        * for a condensation it would discard.
        */
       verbosity?: 'full' | 'brief'
+      /**
+       * The run being dispatched. A `brief` resolution may GENERATE a condensation, which is
+       * a model call on the run path; passing the run is what files it against the step that
+       * spent it instead of against nothing.
+       */
+      executionId?: string
     },
   ): Promise<{ id: string; title?: string; body: string; brief?: string }[]>
 }
@@ -392,7 +398,7 @@ export class AgentContextBuilder {
       // The fragment fold keys off the EFFECTIVE dispatched kind and reads the shared frame's
       // `serviceFragmentIds`; it mutates `step.selectedFragmentIds` for observability (safe under
       // the wave — single-threaded, no other resolver touches the step).
-      this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
+      this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame, instance.id),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       this.resolveSystemPromptOverride(workspaceId, agentKind, step),
@@ -1042,6 +1048,7 @@ export class AgentContextBuilder {
     step: PipelineStep,
     block: Block,
     serviceFrame: Block | null,
+    executionId: string,
   ): Promise<{ fragments: { id: string; title?: string; body: string; brief?: string }[] } | null> {
     // Recorded per dispatch, so it always reflects the kind that actually ran. A step
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
@@ -1069,7 +1076,10 @@ export class AgentContextBuilder {
       // Prefer the tenant-catalog resolver (managed + live document-backed
       // fragments) when wired; otherwise resolve against the static built-in pool.
       const fragments = this.deps.fragmentResolver
-        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, { verbosity })
+        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, {
+            verbosity,
+            executionId,
+          })
         : ids
             .map((id) => {
               const fragment = getFragment(id)

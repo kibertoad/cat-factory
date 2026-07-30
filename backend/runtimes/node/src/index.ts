@@ -73,7 +73,10 @@ export { startBootClock, type BootClock } from './bootTimings.js'
 // with no invalidation bus). It imports only from `@cat-factory/node-server`.
 export { DEFAULT_APP_CACHES_PROFILE, type AppCachesProfile } from '@cat-factory/caching'
 export { createNodeGateways } from './gateways.js'
-export { createNodeModelProviderResolver } from './modelProvider.js'
+// The BASE resolver plus the env-built trace-sink instrument. A caller assembling its own
+// container composes them with `wrapResolverWithInstrumentation` — in that order, never the
+// reverse; see the wrap's own doc for what instrumenting innermost hides.
+export { createNodeModelProviderResolver, inlineInstrumentFromEnv } from './modelProvider.js'
 
 // Installation-level extension point (mirroring the Worker facade): a deployment news a
 // `defaultAgentKindRegistry()`, registers its own kinds on it by reference, and injects it
