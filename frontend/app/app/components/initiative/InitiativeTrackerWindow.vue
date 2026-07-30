@@ -301,10 +301,13 @@ async function savePolicy() {
           :has-sections="!!initiative"
         />
 
-        <!-- No entity yet (module unwired / still creating) -->
+        <!-- No entity yet (module unwired / still creating). Centred in the column when it is the
+             only thing in it; merely inset when the notice above it means `h-full` would overflow
+             the scroller by the notice's own height. -->
         <div
           v-if="!initiative"
-          class="flex flex-col items-center justify-center gap-2 py-16 text-center text-slate-400"
+          class="flex flex-col items-center justify-center gap-2 text-center text-slate-400"
+          :class="planApproval ? 'py-16' : 'h-full'"
         >
           <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
