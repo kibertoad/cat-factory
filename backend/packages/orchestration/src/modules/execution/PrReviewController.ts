@@ -120,6 +120,11 @@ export class PrReviewController {
         status: 'done',
         summary,
         slices,
+        // Dropped now the aggregation has landed: the captured reports exist to make a review
+        // recoverable BEFORE its terminal output, and their content is folded into the findings
+        // below. Keeping eight ~24KB prose reports on the run row past that point stores a
+        // quarter-megabyte of redundant text per review.
+        sliceReviews: [],
         findings: [],
         selectedFindingIds: [],
         resolution: 'finish',
@@ -137,6 +142,9 @@ export class PrReviewController {
       status: 'awaiting_selection',
       summary,
       slices,
+      // Dropped for the same reason as the findings-empty branch above: the reports have done
+      // their job the moment the aggregated findings are recorded.
+      sliceReviews: [],
       findings,
       selectedFindingIds: [],
       resolution: null,

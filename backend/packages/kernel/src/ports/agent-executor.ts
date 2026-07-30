@@ -870,6 +870,18 @@ export type AgentJobUpdate =
        * Absent for a job carrying no declaration / on an older harness image.
        */
       reproductionReport?: unknown
+      /**
+       * The per-slice reviews a parallel PR review has captured so far (forwarded from
+       * {@link RunnerJobView.sliceReviews}), so the engine can persist each slice's completed
+       * review work as it lands instead of only from the terminal structured output.
+       *
+       * Unlike the two reports above this is not merely for surfacing: the reviewer returns its
+       * `slices`/`findings` ONLY at completion, so before this a review killed mid-run — or one
+       * whose aggregation pass wedged — lost every finished slice and could only be re-run from
+       * zero. What the engine folds from here is what a manual resume re-aggregates from. Absent
+       * for a job that dispatched no subagents / on an older harness image.
+       */
+      sliceReviews?: unknown
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,

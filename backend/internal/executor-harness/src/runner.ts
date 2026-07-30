@@ -2,6 +2,7 @@ import { redactSecrets } from './redact.js'
 import type { FollowUpLine } from './follow-ups.js'
 import type { ValidationReport } from './validation-checks.js'
 import type { ReproductionReport } from './reproduction-proof.js'
+import type { SliceReview } from './subagents.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
@@ -47,6 +48,14 @@ export interface RunOptions {
    * attempt is final, and the loop republishes a whole new one — with a fresh `at` — per round.
    */
   onReproductionProof?: (report: ReproductionReport) => void
+  /**
+   * Receives the full set of per-slice reviews a parallel review has captured, republished each
+   * time a slice's subagent returns. Latest-wins (NOT a drain buffer), for the same reason as
+   * {@link onValidationReport} but with more at stake: these carry the slices' actual review work,
+   * and a review whose aggregation never finishes is recoverable ONLY from what the backend
+   * already persisted. Absent for a job that dispatched no subagents.
+   */
+  onSliceReviews?: (reviews: SliceReview[]) => void
   /**
    * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
    * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
@@ -203,6 +212,18 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * that carried no reproduction declaration.
    */
   reproductionReport?: ReproductionReport
+  /**
+   * The per-slice reviews captured so far on a parallel (subagent-fanned) review — each slice's
+   * label, whether its subagent returned, and its verbatim report. A whole-value latest publish
+   * like {@link validationReport}, not drain-on-read.
+   *
+   * This is the durable half of a PR review. The reviewer returns `slices`/`findings` only in its
+   * TERMINAL structured output, so before this existed a review killed mid-run (or one whose
+   * aggregation pass wedged) lost every finished slice and could only be re-run from zero. The
+   * backend persists these onto the step as they arrive, which is what a manual resume re-aggregates
+   * from. Absent for a job that dispatched no subagents.
+   */
+  sliceReviews?: SliceReview[]
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -472,6 +493,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onValidationReport: (report) => {
           entry.validationReport = report
+        },
+        onSliceReviews: (reviews) => {
+          entry.sliceReviews = reviews
         },
         onReproductionProof: (report) => {
           entry.reproductionReport = report

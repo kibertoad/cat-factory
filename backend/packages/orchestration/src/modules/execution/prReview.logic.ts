@@ -57,6 +57,10 @@ export function initialPrReviewState(
     status: 'reviewing',
     summary: null,
     slices: [],
+    // Empty at dispatch and filled by the harness as each slice's subagent returns. A FRESH review
+    // deliberately starts clean: carrying a previous attempt's reports here would let a re-run
+    // inherit work it never did. A resume re-seeds it explicitly instead (see PrReviewController).
+    sliceReviews: [],
     findings: [],
     selectedFindingIds: [],
     resolution: null,

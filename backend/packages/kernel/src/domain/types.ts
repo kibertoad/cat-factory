@@ -306,6 +306,9 @@ export type {
   PrReviewSeverity,
   PrReviewCategory,
   PrReviewSlice,
+  // The live per-slice reviews captured WHILE the reviewer runs, which is what makes a review's
+  // finished slices durable before its aggregation pass returns (and resumable when it doesn't).
+  PrReviewSliceReview,
   PrReviewFinding,
   PrReviewFindingChallenge,
   PrReviewStatus,

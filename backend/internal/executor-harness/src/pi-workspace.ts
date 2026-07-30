@@ -325,6 +325,10 @@ export async function runAgentInWorkspace(
       expectsEdits: spec.expectsEdits ?? true,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
+      // Per-slice review capture, so a parallel review's finished slices are persisted as they
+      // land rather than only in the terminal output. Only the subscription runners fan work out
+      // across subagents, so this is the only path that can produce it.
+      onSliceReviews: opts.onSliceReviews,
       // Stream this run's per-call telemetry to the job's live drain. The subscription
       // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
       // proxy as they happen), so this is the only path that needs the hook.

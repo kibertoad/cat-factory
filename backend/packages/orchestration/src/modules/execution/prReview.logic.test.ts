@@ -48,6 +48,9 @@ describe('initialPrReviewState', () => {
       status: 'reviewing',
       summary: null,
       slices: [],
+      // A fresh review starts with no captured slice reports: they accrue as the harness publishes
+      // each slice, and inheriting a previous attempt's would credit work this run never did.
+      sliceReviews: [],
       findings: [],
       selectedFindingIds: [],
       resolution: null,

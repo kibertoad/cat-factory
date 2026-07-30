@@ -63,6 +63,7 @@ import {
   recordDispatchAttribution,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
+import { applySliceReviews } from './prReviewSlices.logic.js'
 import { applyReproductionReport, recordReproductionOutcome } from './reproductionProof.logic.js'
 import {
   commitInitiativeTracker,
@@ -1095,6 +1096,11 @@ export class RunDispatcher {
     // Republish the reproduction proof so a failed verification is visible WHILE the repair loop
     // still runs, for the same reason as the validation republish above.
     if (applyReproductionReport(s, update.reproductionReport)) changed = true
+    // Persist each PR-review slice's captured report as its subagent returns. Unlike the two
+    // republishes above this is not for visibility: the reviewer emits findings only in its
+    // terminal output, so this is the one thing that makes finished slices survive a review that
+    // never gets there, and the only state a manual resume can preserve work from.
+    if (applySliceReviews(s, update.sliceReviews)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.recordBackendDiagnostics(target, update.backend)) changed = true
