@@ -266,7 +266,7 @@ async function onDismiss(id: string): Promise<void> {
     icon-class="bg-indigo-500/15 text-indigo-300"
     :title="block ? t('prReview.titleWithBlock', { title: block.title }) : t('prReview.title')"
     :subtitle="t('prReview.subtitle')"
-    width="3xl"
+    width="full"
     testid="pr-review-window"
     @close="close"
   >

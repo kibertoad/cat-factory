@@ -653,7 +653,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     :subtitle="block?.title"
     :step-ref="{ instanceId, stepIndex }"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <template v-if="review" #header-extras>
@@ -1037,7 +1037,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 }}
               </span>
             </button>
-            <div v-show="!docCollapsed">
+            <!-- The document keeps a reading measure the findings above it deliberately don't:
+                 the window is `full`-width now, and a finding is a short question beside its
+                 answer control (wide is fewer rows to scroll), where this is continuous prose
+                 that would otherwise run to 200-character lines. Left-aligned rather than
+                 centred, so it starts where every finding above it starts. -->
+            <div v-show="!docCollapsed" class="max-w-3xl">
               <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                 <button
                   v-if="s.title"

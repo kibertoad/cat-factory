@@ -310,7 +310,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     :title="t('clarity.title')"
     :subtitle="block?.title"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <template v-if="review" #header-extras>
@@ -490,7 +490,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ incorporated ? t('clarity.docHeading') : t('clarity.docHeadingDraft') }}
               </span>
             </div>
-            <div v-for="s in outline.sections" :key="s.id" class="mb-2">
+            <!-- A reading measure the findings above it deliberately don't take: the window is
+                 `full`-width now, and a finding is a short question beside its answer control
+                 (wide is fewer rows to scroll), where this is continuous prose that would
+                 otherwise run to 200-character lines. -->
+            <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
               <button
                 v-if="s.title"
                 class="group flex w-full items-center gap-2 text-start"

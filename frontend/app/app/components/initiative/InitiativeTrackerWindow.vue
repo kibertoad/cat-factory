@@ -245,7 +245,7 @@ async function savePolicy() {
     icon-class="bg-indigo-500/15 text-indigo-300"
     :title="initiative?.title ?? block?.title ?? t('initiative.tracker.title')"
     :subtitle="t('initiative.tracker.subtitle')"
-    width="5xl"
+    width="full"
     testid="initiative-tracker-window"
     @close="close"
   >

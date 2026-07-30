@@ -32,6 +32,9 @@ import { effortBand, effortHint } from '~/utils/effort'
  *  (null ids), so a block-keyed window simply omits this prop. */
 type StepRef = { instanceId: string | null; stepIndex: number | null }
 
+/** Card width buckets — see the `width` prop for what picks `full` over a bucket. */
+type ResultWindowWidth = '3xl' | '4xl' | '5xl' | 'full'
+
 const props = withDefaults(
   defineProps<{
     /** Whether the window is open — drives the modal behaviour's activation. */
@@ -42,8 +45,25 @@ const props = withDefaults(
     /** Header title (the accessible dialog name) + optional secondary line. */
     title: string
     subtitle?: string
-    /** Card width bucket + backdrop layout (the two pre-slice-5 chrome variants). */
-    width?: '3xl' | '4xl' | '5xl'
+    /**
+     * Card width bucket + backdrop layout (the two pre-slice-5 chrome variants).
+     *
+     * `full` is the REVIEW/READING bucket: the panel takes the whole viewport minus the
+     * shell's own gutter, the shape the full-bleed step reader (`AgentStepDetail`) already
+     * has. It is for a window whose body lays out in COLUMNS — rails plus a fluid main
+     * column — where the width buys visible layout: the outline and the review rail stop
+     * competing with the document, a findings list stops wrapping every card, a diff or a
+     * results table stops scrolling sideways. A window that is one column of prose or a
+     * short verdict keeps a bucket: stretching two paragraphs across an ultrawide reads
+     * worse, not better.
+     *
+     * The obligation that comes with it: CONTINUOUS PROSE inside a `full` window carries its
+     * own reading measure (`max-w-3xl`, the step reader's own, over the same 13px
+     * `.reader-prose`), or the width lands as 200-character lines. Only prose — a findings
+     * list, a requirements table, a Gherkin block and a log tail all read BETTER at the full
+     * span, and capping them would spend the width on gutters.
+     */
+    width?: ResultWindowWidth
     variant?: 'stretch' | 'centered'
     /** Provide on step-result windows to show the shared restart control; omit on gates
      *  and block-keyed windows (no restart mid-gate / pre-run). */
@@ -119,10 +139,14 @@ const chipClass = computed(() =>
   effortReport.value ? CHIP_CLASS[effortBand(effortReport.value.difficulty)] : '',
 )
 
-const WIDTH: Record<'3xl' | '4xl' | '5xl', string> = {
+const WIDTH: Record<ResultWindowWidth, string> = {
   '3xl': 'max-w-3xl',
   '4xl': 'max-w-4xl',
   '5xl': 'max-w-5xl',
+  // No cap: `w-full` then spans the backdrop, which the variant insets by one gutter
+  // (`m-4` stretched, `p-4` centered) — so the window fills the screen and still reads as a
+  // window rather than a repaint of the app.
+  full: 'max-w-none',
 }
 const backdropClass = computed(() => [
   'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-slate-950/70 backdrop-blur-sm',

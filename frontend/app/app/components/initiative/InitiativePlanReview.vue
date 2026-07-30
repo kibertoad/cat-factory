@@ -224,45 +224,52 @@ async function copyPlan() {
       class="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4"
       @scroll="onScroll"
     >
-      <!-- No `max-w-*` reading measure here: with the outline and the review rail both taking a
-           fixed column out of the shell's `5xl`, this one is ~490px wide at every size that renders
-           it, so a cap would only ever be dead markup. -->
-      <section
-        v-for="s in outline.sections"
-        :id="s.id"
-        :key="s.id"
-        :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
-        class="scroll-mt-2"
-      >
-        <button
-          v-if="s.depth > 0"
-          class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-white"
-          :aria-expanded="!collapsed[s.id]"
-          @click="toggle(s.id)"
+      <!-- The reading measure, which the shell's `full` width made load-bearing: this column used
+           to be ~490px at every size that rendered it (a fixed outline and a fixed rail out of a
+           `5xl` shell), so a cap was dead markup and the comment here said so. On a window that now
+           spans the viewport it is the only thing between the plan and 200-character lines, and it
+           is the step reader's own measure (`AgentStepDetail`, `mx-auto max-w-3xl` over the same
+           13px `.reader-prose`) rather than a second opinion about how wide prose should be. The
+           leftover width is the document's margins; the LAYOUT is what the extra space bought —
+           outline and rail no longer competing with the plan for one 5xl card. -->
+      <div class="mx-auto w-full max-w-3xl">
+        <section
+          v-for="s in outline.sections"
+          :id="s.id"
+          :key="s.id"
+          :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
+          class="scroll-mt-2"
         >
-          <UIcon
-            name="i-lucide-chevron-right"
-            class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
-            :class="collapsed[s.id] ? '' : 'rotate-90'"
+          <button
+            v-if="s.depth > 0"
+            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-white"
+            :aria-expanded="!collapsed[s.id]"
+            @click="toggle(s.id)"
+          >
+            <UIcon
+              name="i-lucide-chevron-right"
+              class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
+              :class="collapsed[s.id] ? '' : 'rotate-90'"
+            />
+            <span
+              class="font-semibold text-slate-100"
+              :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-[13px]'"
+              v-html="s.titleHtml"
+            />
+          </button>
+          <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
+               gate the composer does — a viewer gets the document, not hover targets that lead
+               nowhere. -->
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div
+            v-show="!collapsed[s.id]"
+            class="reader-prose mt-0.5 text-[13px] leading-relaxed text-slate-300"
+            :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
+            @click="onProseClick"
+            v-html="s.bodyHtml"
           />
-          <span
-            class="font-semibold text-slate-100"
-            :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-[13px]'"
-            v-html="s.titleHtml"
-          />
-        </button>
-        <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
-             gate the composer does — a viewer gets the document, not hover targets that lead
-             nowhere. -->
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div
-          v-show="!collapsed[s.id]"
-          class="reader-prose mt-0.5 text-[13px] leading-relaxed text-slate-300"
-          :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
-          @click="onProseClick"
-          v-html="s.bodyHtml"
-        />
-      </section>
+        </section>
+      </div>
     </div>
 
     <!-- Review rail: what the human is being asked, the anchored comments so far, and the two

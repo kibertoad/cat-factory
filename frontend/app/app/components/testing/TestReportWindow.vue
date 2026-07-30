@@ -313,7 +313,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
     :title="headerTitle"
     :subtitle="t('testing.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
-    width="5xl"
+    width="full"
     testid="tester-report-window"
     @close="close"
   >

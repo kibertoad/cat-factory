@@ -254,7 +254,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     "
     :subtitle="block?.title"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <template v-if="session" #header-extras>
@@ -446,7 +446,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
               </span>
             </div>
-            <div v-for="s in outline.sections" :key="s.id" class="mb-2">
+            <!-- A reading measure the option cards above it deliberately don't take: the window
+                 is `full`-width now, and an option is a short proposal beside its choose/dismiss
+                 controls (wide is fewer rows to scroll), where this is continuous prose that
+                 would otherwise run to 200-character lines. -->
+            <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
               <button
                 v-if="s.title"
                 class="group flex w-full items-center gap-2 text-start"

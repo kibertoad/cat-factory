@@ -185,7 +185,7 @@ function kindLabel(item: RequirementItem): string {
     :title="t('spec.title')"
     :subtitle="block ? spec?.service || block.title : undefined"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <!-- view toggle: Gherkin only when the spec (and its feature files) are on main -->
