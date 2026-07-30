@@ -48,6 +48,7 @@ import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLo
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
+import { startInfraReachabilitySweeper } from './infraReachability.js'
 import { buildRealtimePropagator } from './propagator.js'
 import { warnIfRedisUnreachableInBackground } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
@@ -501,6 +502,9 @@ function startBackgroundSweepers(deps: {
   // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
   // notifications + platform-observability reads are wired.
   const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger)
+  // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
+  // `unreachable` (the Worker uses cron). No-op unless `INFRA_REACHABILITY_WATCH` is opted in.
+  const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger)
   return {
     stopSweeper,
     stopEnvTestSweeper,
@@ -514,6 +518,7 @@ function startBackgroundSweepers(deps: {
     stopGitHubReconcile,
     stopPlatformMetrics,
     stopPlatformHealth,
+    stopInfraReachability,
   }
 }
 
@@ -713,6 +718,7 @@ async function bootServer(
     stopGitHubReconcile,
     stopPlatformMetrics,
     stopPlatformHealth,
+    stopInfraReachability,
   } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
 
   // Backfill the deployment's declared environment-handler seeds onto every existing workspace
@@ -744,6 +750,7 @@ async function bootServer(
     stopGitHubReconcile()
     stopPlatformMetrics()
     stopPlatformHealth()
+    stopInfraReachability()
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()

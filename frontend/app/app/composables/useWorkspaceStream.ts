@@ -111,6 +111,12 @@ export function useWorkspaceStream() {
       // inspector's "Test environment creation" control shows the live stage + final
       // outcome in place without a refetch. No board block.
       environmentTest.upsert(event.run)
+    } else if (event.type === 'infraSetup') {
+      // The reachability watcher found a configured infrastructure area dead (or answering again) —
+      // patch that one area so the setup banner appears/clears immediately. A full refresh would
+      // pay the whole snapshot aggregate for a one-field delta, and the projection the snapshot
+      // recomputes already folds the same recorded state.
+      workspace.patchInfraSetup(event.area, event.status, event.detail)
     } else if (event.type === 'notification') {
       // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
       // inbox + per-block badge in place (resolved ones drop out of the inbox).

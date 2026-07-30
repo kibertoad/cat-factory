@@ -25,6 +25,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
@@ -716,6 +717,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       maxFailureRate: env.PLATFORM_ALERTS_MAX_FAILURE_RATE,
       maxP99Minutes: env.PLATFORM_ALERTS_MAX_P99_MINUTES,
       maxBacklog: env.PLATFORM_ALERTS_MAX_BACKLOG,
+    }),
+    // Infrastructure-reachability watcher: a periodic sweep probes each workspace's CONFIGURED
+    // infrastructure connections and reports a dead one as `unreachable`. Opt-in
+    // (`INFRA_REACHABILITY_WATCH=true`) — it is the one sweep making an outbound call per board.
+    infraReachability: resolveInfraReachabilityConfig({
+      enabled: env.INFRA_REACHABILITY_WATCH?.trim() === 'true',
+      intervalMs: env.INFRA_REACHABILITY_INTERVAL_MS,
+      probeTimeoutMs: env.INFRA_REACHABILITY_PROBE_TIMEOUT_MS,
     }),
   }
 }
