@@ -832,6 +832,15 @@ function createAiOnboardingModals() {
   function resetInfraSetupDismissals() {
     infraSetupSessionDismissed.value = []
   }
+  /**
+   * Drop ONE area's session dismissal — called when that area RECOVERS, so a transient health state
+   * (`unreachable`) re-nags the next time it fails. Without it, "hide for now" on one outage would
+   * quietly cover every later outage for the rest of the session, which is precisely the semantics
+   * `isInfraSetupHealthStatus` exists to keep away from a health state.
+   */
+  function clearInfraSetupSessionDismissal(area: InfraSetupArea) {
+    infraSetupSessionDismissed.value = infraSetupSessionDismissed.value.filter((a) => a !== area)
+  }
 
   // Default-test-environment banner: a single per-SESSION dismissal, cleared on workspace switch
   // like the flags above. There is deliberately no PERMANENT dismissal here (unlike the
@@ -889,6 +898,7 @@ function createAiOnboardingModals() {
     infraSetupSessionDismissed,
     dismissInfraSetupForSession,
     resetInfraSetupDismissals,
+    clearInfraSetupSessionDismissal,
     defaultProvisionDismissed,
     dismissDefaultProvision,
     resetDefaultProvisionDismissal,

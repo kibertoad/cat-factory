@@ -27,6 +27,7 @@ import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastr
 import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
+  sweepInfraReachability,
   sweepPlatformHealth,
 } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
@@ -660,6 +661,31 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       logger,
     })
     if (sweep) ctx.waitUntil(sweep)
+  }
+
+  // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
+  // `unreachable` — raising/clearing an `infra_unreachable` card and pushing an `infraSetup` event
+  // on each transition, so the setup banner appears the moment a provider dies rather than on
+  // whoever's next reload. Opt-in (`INFRA_REACHABILITY_WATCH`): it is the one sweep that makes an
+  // OUTBOUND call per workspace per pass, so the container is built only when opted in.
+  if (loadConfig(env).infraReachability.enabled) {
+    ctx.waitUntil(
+      sweepInfraReachability(buildContainer(env), logger)
+        .then(({ raised, cleared }) => {
+          if (raised > 0 || cleared > 0)
+            logger.info('infra reachability sweep', {
+              cron: 'infra-reachability',
+              raised,
+              cleared,
+            })
+        })
+        .catch((error) =>
+          logger.error('infra reachability sweep failed', {
+            cron: 'infra-reachability',
+            ...describeError(error),
+          }),
+        ),
+    )
   }
 
   // Raise/clear `platform_health` notifications when the deployment's OWN run health crosses

@@ -33,9 +33,40 @@ import * as v from 'valibot'
  *  - `configured`     — a connection / backend is defined.
  *  - `not_applicable` — this runtime doesn't need it (the integration isn't wired),
  *                       so there is nothing to nag about.
+ *  - `unreachable`    — it IS configured, but a live probe could not reach it.
+ *
+ * `unreachable` is deliberately carried by this SETUP projection even though it reports runtime
+ * health, because the consequence is identical to `not_defined` — a whole class of agents cannot
+ * run — and the operator surface that fixes it is the same one. Sharing the projection means
+ * sharing the banner, its deep-link and its i18n instead of growing a second "your infra is
+ * broken" surface.
+ *
+ * It is NOT interchangeable with the other three in one respect, and consumers MUST honour the
+ * difference: those are stable operator decisions, so the banner offers a PERMANENT per-user
+ * "don't notify me again" dismissal. Applying that to `unreachable` would let one click
+ * permanently silence every future outage, so a health state is dismissible for the SESSION
+ * only and must re-nag when it recurs. See {@link isInfraSetupHealthStatus} and
+ * `InfraSetupBanner.vue`.
  */
-export const infraSetupStatusSchema = v.picklist(['not_defined', 'configured', 'not_applicable'])
+export const infraSetupStatusSchema = v.picklist([
+  'not_defined',
+  'configured',
+  'not_applicable',
+  'unreachable',
+])
 export type InfraSetupStatus = v.InferOutput<typeof infraSetupStatusSchema>
+
+/**
+ * The {@link InfraSetupStatus} values describing a live-HEALTH problem rather than an operator
+ * decision. Exported so the SPA's dismissal fork keys off ONE definition instead of re-listing
+ * the literal at each site.
+ */
+export const INFRA_SETUP_HEALTH_STATUSES = ['unreachable'] as const
+
+/** Whether a status is a transient health failure (session-only dismissal, re-nag on recurrence). */
+export function isInfraSetupHealthStatus(status: InfraSetupStatus): boolean {
+  return (INFRA_SETUP_HEALTH_STATUSES as readonly string[]).includes(status)
+}
 
 /** The per-area infrastructure-setup status projection carried on the snapshot. */
 export const infraSetupSchema = v.object({
@@ -63,6 +94,16 @@ export type InfraSetupArea = v.InferOutput<typeof infraSetupAreaSchema>
 
 /** Every infra-setup area, as a plain readonly tuple (the source of truth for iteration). */
 export const INFRA_SETUP_AREAS = infraSetupAreaSchema.options
+
+/**
+ * The areas the reachability watcher can report `unreachable` for — those backed by a connection
+ * whose provider exposes a live connection probe. `binaryStorage` is deliberately ABSENT: it
+ * resolves an artifact store from account settings and has no cheap reachability probe, so it
+ * stays a pure operator-decision area and a dead bucket surfaces where it always did (on the
+ * write that needs it). Shared so the watcher, the projection fold and the tests agree on ONE
+ * list rather than each re-deriving "which areas can be unreachable".
+ */
+export const INFRA_SETUP_PROBED_AREAS = ['ephemeralEnvironments', 'agentExecutor'] as const
 
 /**
  * The `localStorage` key under which the SPA's `InfraSetupBanner` persists its PERMANENT,

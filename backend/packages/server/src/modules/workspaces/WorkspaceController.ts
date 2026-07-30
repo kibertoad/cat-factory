@@ -22,7 +22,11 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
-import { resolveWorkspaceAccess } from '@cat-factory/kernel'
+import {
+  applyInfraReachability,
+  recordedUnreachableAreas,
+  resolveWorkspaceAccess,
+} from '@cat-factory/kernel'
 import type {
   AccountRole,
   Logger,
@@ -467,6 +471,8 @@ async function loadSnapshotSlices(
     // from (each catalog service annotated with its mount count for the "Shared" badge).
     mounts,
     serviceCatalog,
+    // The per-area SETUP states. `unreachable` is folded on below, off the notifications read that
+    // is already in flight here, rather than probed on this hot path.
     infraSetup,
     // The workspace's projected repos (with each repo's `linkedVia`), so the per-viewer
     // redaction can tell an App-reachable frame from a personal-PAT one. Only when GitHub is
@@ -517,7 +523,16 @@ async function loadSnapshotSlices(
     settings,
     mounts,
     serviceCatalog,
-    infraSetup,
+    // Fold the reachability watcher's recorded outage into the setup projection, so a reload
+    // mid-outage still renders the banner. The record lives on the workspace's open
+    // `infra_unreachable` card, which the `notifications` read above already fetched — so this
+    // costs no extra query and, crucially, no probe on the board-load path.
+    infraSetup: applyInfraReachability(
+      infraSetup,
+      recordedUnreachableAreas(
+        notifications?.find((n) => n.type === 'infra_unreachable' && n.status === 'open'),
+      ),
+    ),
     repoProjections,
     skills,
   }

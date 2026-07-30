@@ -1962,6 +1962,7 @@
         "clarity_review": "Mark read",
         "release_regression": "Acknowledge",
         "platform_health": "Acknowledge",
+        "infra_unreachable": "Acknowledge",
         "decision_required": "Mark read",
         "human_test_ready": "Mark read",
         "visual_confirmation_ready": "Mark read",
@@ -2010,22 +2011,29 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Agent executor not configured",
+        "unreachableTitle": "Agent executor is unreachable",
         "body": "This deployment runs agents on a self-hosted runner pool, but none is registered, so no agent can run until you connect one.",
         "action": "Configure runner pool"
       },
       "ephemeralEnvironments": {
         "title": "Test environment not configured",
+        "unreachableTitle": "Test environment provider is unreachable",
         "body": "No ephemeral environment provider is registered, so testing agents that need a live preview environment can't run. Open Test environments below and connect a Kubernetes cluster or a custom HTTP environment provider to enable them.",
         "action": "Configure environment"
       },
       "binaryStorage": {
         "title": "Content storage not configured",
+        "unreachableTitle": "Content storage is unreachable",
         "body": "No binary storage backend is configured for this account, so UI screenshots and reference images have nowhere to live and the visual checks are skipped. Configure storage to enable them.",
         "action": "Configure storage"
       },
       "dismiss": {
         "session": "Dismiss for this session",
         "permanent": "I'm OK with the limitations, don't notify me again"
+      },
+      "unreachable": {
+        "body": "The connection is set up, but a live check could not reach it just now. That makes this an outage rather than a missing setup: agents that depend on it will fail until it answers again. Check that the service is running, then retest the connection.",
+        "action": "Check connection"
       }
     },
     "spendWarningBanner": {
@@ -3695,6 +3703,7 @@
     },
     "routable": {
       "platform_health": "Platform health",
+      "infra_unreachable": "Infrastructure outages",
       "merge_review": "Merge review",
       "pipeline_complete": "Pipeline complete",
       "ci_failed": "CI failed",

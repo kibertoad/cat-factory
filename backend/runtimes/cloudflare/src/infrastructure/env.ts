@@ -585,6 +585,21 @@ export interface Env {
   /** Live running/blocked/paused/pending depth at or above which the backlog alert fires (default 50). */
   PLATFORM_ALERTS_MAX_BACKLOG?: string
 
+  // ---- Infrastructure-reachability watcher (see docs/environment-variables.md) --
+  /**
+   * Opt-in flag ('true') for the infrastructure-reachability watcher: a periodic sweep probes each
+   * workspace's CONFIGURED infrastructure connections (the ephemeral-environment provider, the
+   * self-hosted runner pool) and reports a dead one as `unreachable` on the setup projection —
+   * raising an `infra_unreachable` notification and pushing an `infraSetup` event so the banner
+   * appears the moment it dies. The `scheduled` cron drives it. Off by default: it is the one sweep
+   * that makes an OUTBOUND call per workspace per pass.
+   */
+  INFRA_REACHABILITY_WATCH?: string
+  /** Node-only sweep interval (ms, floor 30s, default 5min); the Worker is cron-driven and ignores it. */
+  INFRA_REACHABILITY_INTERVAL_MS?: string
+  /** Per-probe timeout (ms, 1s..60s, default 5s). A timeout counts as unreachable. */
+  INFRA_REACHABILITY_PROBE_TIMEOUT_MS?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

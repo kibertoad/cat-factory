@@ -1886,6 +1886,7 @@
         "clarity_review": "Okundu olarak işaretle",
         "release_regression": "Onayla",
         "platform_health": "Onayla",
+        "infra_unreachable": "Onayla",
         "decision_required": "Okundu işaretle",
         "human_test_ready": "Okundu işaretle",
         "visual_confirmation_ready": "Okundu işaretle",
@@ -1940,22 +1941,29 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Aracı yürütücüsü yapılandırılmadı",
+        "unreachableTitle": "Aracı yürütücüsüne erişilemiyor",
         "body": "Bu dağıtım aracıları kendi barındırdığınız bir runner havuzunda çalıştırır, ancak kayıtlı bir havuz yok; bu yüzden bir tane bağlayana kadar hiçbir aracı çalışamaz.",
         "action": "Runner havuzunu yapılandır"
       },
       "ephemeralEnvironments": {
         "title": "Test ortamı yapılandırılmadı",
+        "unreachableTitle": "Test ortamı sağlayıcısına erişilemiyor",
         "body": "Kayıtlı bir geçici ortam sağlayıcısı yok; bu nedenle çalışan bir önizleme ortamına ihtiyaç duyan test aracıları çalışamaz. Aşağıdaki Test ortamları sekmesini açın ve etkinleştirmek için bir Kubernetes kümesi ya da özel bir HTTP ortam sağlayıcısı bağlayın.",
         "action": "Ortamı yapılandır"
       },
       "binaryStorage": {
         "title": "İçerik depolama yapılandırılmadı",
+        "unreachableTitle": "İçerik depolamaya erişilemiyor",
         "body": "Bu hesap için yapılandırılmış bir ikili depolama arka ucu yok; bu nedenle arayüz ekran görüntülerinin ve referans görsellerinin saklanacağı bir yer yok ve görsel kontroller atlanır. Etkinleştirmek için depolamayı yapılandırın.",
         "action": "Depolamayı yapılandır"
       },
       "dismiss": {
         "session": "Bu oturum için kapat",
         "permanent": "Kısıtlamaları kabul ediyorum, beni tekrar bilgilendirme"
+      },
+      "unreachable": {
+        "body": "Bağlantı yapılandırılmış durumda, ancak canlı bir denetim şu anda ona ulaşamadı. Bu yüzden eksik bir yapılandırma değil bir kesinti söz konusu: buna bağlı aracılar yeniden yanıt gelene kadar başarısız olacak. Hizmetin çalıştığını doğrulayın, ardından bağlantıyı yeniden test edin.",
+        "action": "Bağlantıyı denetle"
       }
     },
     "spendWarningBanner": {
@@ -3598,6 +3606,7 @@
     },
     "routable": {
       "platform_health": "Platform sağlığı",
+      "infra_unreachable": "Altyapı kesintileri",
       "merge_review": "Birleştirme incelemesi",
       "pipeline_complete": "Pipeline tamamlandı",
       "ci_failed": "CI başarısız",

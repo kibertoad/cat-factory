@@ -402,6 +402,31 @@ export interface PlatformAlertConfig {
 }
 
 /**
+ * The infrastructure-REACHABILITY watcher: periodically probes each workspace's CONFIGURED
+ * infrastructure connections and reports a dead one as `unreachable` on the setup projection.
+ *
+ * Opt-in, because it is the one sweep that makes an OUTBOUND call per workspace per pass — to a
+ * cluster apiserver or a runner pool the deployment does not own. On a hosted deployment with many
+ * boards that is a real, recurring cost profile the operator has to choose; the motivating case (a
+ * local/self-hosted stack whose environment provider dies with the laptop) is one workspace.
+ */
+export interface InfraReachabilityConfig {
+  /** Opt-in flag (`INFRA_REACHABILITY_WATCH=true`). */
+  enabled: boolean
+  /**
+   * How often the sweep runs (ms). Node reads `INFRA_REACHABILITY_INTERVAL_MS` (default 5min);
+   * the Worker is cron-driven (its 2-minute `scheduled` tick) and ignores this.
+   */
+  intervalMs: number
+  /**
+   * Per-probe timeout (ms), so one hung apiserver can't stall the pass for every other workspace.
+   * A timeout counts as UNREACHABLE, not as an indeterminate result: a connection that doesn't
+   * answer inside the budget is exactly the outage this watcher exists to report.
+   */
+  probeTimeoutMs: number
+}
+
+/**
  * Opt-in GitLab VCS provider config (the neutral-VCS abstraction's second backend).
  * `enabled` is false unless a `GITLAB_TOKEN` is configured. Single-token model (mirrors
  * local-mode's PAT): one connection per deployment, registered via `registerGitLab` and
@@ -470,6 +495,11 @@ export interface AppConfig {
   otel: OtelConfig
   /** Platform-health alerting config; `enabled` is false unless `PLATFORM_ALERTS=true`. */
   platformAlerts: PlatformAlertConfig
+  /**
+   * Infrastructure-reachability watcher config; `enabled` is false unless
+   * `INFRA_REACHABILITY_WATCH=true`.
+   */
+  infraReachability: InfraReachabilityConfig
   /**
    * Local-mode facade signals surfaced to the SPA; present only on the local facade
    * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.

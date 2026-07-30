@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { infraSetupAreaSchema } from './infra-setup.js'
 import { platformAlertReasonSchema, platformObservabilityWindowSchema } from './observability.js'
 import { changeClassSchema, reviewEffortSchema } from './mergeTrackRecord.js'
 import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
@@ -64,6 +65,14 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          provider (bypassing the merge card), so the merge track record has
 //                          no reviewer-effort tag. A lightweight, dismissible nudge asking for
 //                          one tap; it gates nothing and the record stays valid untagged.
+//   - `infra_unreachable`— the reachability watcher found a CONFIGURED infrastructure area (the
+//                          ephemeral-environment provider, the self-hosted runner pool) that no
+//                          longer answers its connection probe, so a class of agents cannot run.
+//                          NOT block-scoped: it concerns the whole workspace. It auto-clears when
+//                          every area answers again, and re-notifies only when the set of
+//                          unreachable areas changes (not every sweep). The card doubles as the
+//                          watcher's durable record of the last observed state, which is what lets
+//                          the sweep publish `infraSetup` on transitions only; `act` marks it read.
 //   - `budget_paused`    — one or more runs were paused by the spend safeguard (the workspace,
 //                          account, or user budget is exhausted). Workspace-scoped (one card,
 //                          not one per run) and purely informational: the sweeper never re-drives
@@ -99,6 +108,7 @@ export const notificationTypeSchema = v.picklist([
   'pr_review_ready',
   'initiative',
   'platform_health',
+  'infra_unreachable',
   'budget_paused',
   'key_drift',
   'merge_tag_request',
@@ -116,8 +126,8 @@ export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
  *
  * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
  * `release_regression`) — "the machine needs help", not "a human owes a review" — and
- * block-less/system cards (`platform_health`, `budget_paused`, `key_drift`, `initiative`) that
- * aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR it concerns has
+ * block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`, `key_drift`,
+ * `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR it concerns has
  * ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review debt would
  * friction task authoring over work that is finished.
  */
@@ -242,6 +252,18 @@ export const notificationPayloadSchema = v.object({
    * card links to); the reason set + window are enough to convey "what's wrong, go look".
    */
   platformAlerts: v.optional(v.array(platformAlertReasonSchema)),
+  /**
+   * On an `infra_unreachable` notification: the configured infrastructure areas whose live probe
+   * is currently failing, sorted. Like {@link platformAlerts} this is the card's dedup identity —
+   * the watcher re-raises the SAME card every pass and the service only re-delivers when the set
+   * changes — AND the record the snapshot projection folds back into `infraSetup`, so a reload
+   * mid-outage still renders the banner without re-probing on the board-load path.
+   *
+   * The per-area probe REASON is deliberately not carried: it varies between passes (a refused
+   * connection, then a timeout), and any content change re-delivers the card, so persisting it
+   * would re-toast the inbox for the whole outage. It rides the live `infraSetup` event instead.
+   */
+  unreachableAreas: v.optional(v.array(infraSetupAreaSchema)),
   /**
    * On a `key_drift` notification: the stored credentials the drift sweep could not decrypt
    * (never their values). This is the card's dedup identity — the sweep re-raises the SAME card

@@ -631,6 +631,33 @@ export class EnvironmentConnectionService {
   }
 
   /**
+   * Probe the workspace's SAVED primary connection, for the reachability watcher.
+   *
+   * The sibling {@link testConnection} answers "would this config work" for an operator staring at
+   * a form; this answers "does what we already stored still answer", which is the question a
+   * background sweep asks. So it resolves the stored record + its own secret bundle rather than
+   * taking candidate values, and it makes NO safety assertion: `assertConfigSafe` guards what an
+   * operator may SAVE, and re-running it here would report an already-persisted connection as an
+   * outage the moment a deployment tightened its URL policy.
+   *
+   * Returns null when there is nothing to probe — no primary handler registered, or a provider with
+   * no connection test. That is deliberately NOT `{ ok: false }`: the watcher must be able to tell
+   * "unreachable" from "unknowable", or an unprobeable provider would show as permanently down.
+   */
+  async probeSavedConnection(workspaceId: string): Promise<ConnectionTestResult | null> {
+    const record = await this.primaryRecord(workspaceId)
+    if (!record) return null
+    const { provider, manifest } = this.buildFromRecord(record)
+    const live = this.deps.environmentProvider ?? provider
+    if (!live.testConnection) return null
+    return live.testConnection({
+      manifest,
+      config: {},
+      resolveSecret: await this.buildResolveSecret(record),
+    })
+  }
+
+  /**
    * Probe a candidate per-type infra HANDLER connection before saving (nothing persisted).
    * Lowers the engine-discriminated handler config to the backend config — with a placeholder
    * manifest source, since a connectivity probe reads only the apiserver/token, never the

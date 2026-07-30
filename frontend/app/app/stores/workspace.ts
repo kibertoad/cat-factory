@@ -3,11 +3,14 @@ import { computed, ref } from 'vue'
 import type {
   BudgetCaps,
   InfraSetup,
+  InfraSetupArea,
+  InfraSetupStatus,
   SpendStatus,
   WorkspaceAccess,
   WorkspaceListItem,
   WorkspaceSnapshot,
 } from '~/types/domain'
+import { isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
@@ -271,6 +274,25 @@ export const useWorkspaceStore = defineStore(
       await refresh()
     }
 
+    /**
+     * Patch ONE infra area's status from a live `infraSetup` event, so the setup banner appears (or
+     * clears) the moment the reachability watcher notices rather than on the next snapshot load.
+     *
+     * A targeted upsert, deliberately not a `refresh()`: this is a one-field delta on a projection
+     * the snapshot recomputes wholesale, and a coalesced full refresh here would pay the ~18-read
+     * aggregate for it. A no-op before the first snapshot has landed — `hydrate` is about to set the
+     * authoritative projection, which already carries the recorded outage.
+     *
+     * Recovering an area also drops its SESSION dismissal, so a health state re-nags when it
+     * recurs (see `isInfraSetupHealthStatus`): without this, dismissing one outage would silence
+     * the next one for the rest of the session.
+     */
+    function patchInfraSetup(area: InfraSetupArea, status: InfraSetupStatus) {
+      if (!infraSetup.value) return
+      infraSetup.value = { ...infraSetup.value, [area]: status }
+      if (!isInfraSetupHealthStatus(status)) useUiStore().clearInfraSetupSessionDismissal(area)
+    }
+
     return {
       workspaceId,
       workspaces,
@@ -283,6 +305,7 @@ export const useWorkspaceStore = defineStore(
       userSpend,
       budgetCaps,
       infraSetup,
+      patchInfraSetup,
       access,
       init,
       switchTo,

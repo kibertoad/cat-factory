@@ -22,15 +22,24 @@
 // account that also has no storage — an accepted trade-off (the setting stays reachable from
 // account settings, and the SESSION dismissal re-nags on the next load regardless).
 //
-// Freshness note: `infraSetup` is a server projection recomputed only on snapshot (re)load, so a
-// banner clears on the next board load after the operator configures the area via the deep-link,
-// not the instant the config panel saves.
+// Two KINDS of card share this surface, and the difference drives the dismissal fork:
+//   - a setup gap (`not_defined`) is a stable operator decision, so both dismissals are offered;
+//   - an OUTAGE (`unreachable` — configured, but the reachability watcher's live probe can't reach
+//     it) is a health state, so ONLY the session dismissal is offered. A permanent "don't notify me
+//     again" on a transient failure would let one click silence every future outage, and the outage
+//     that matters is always the next one. `isInfraSetupHealthStatus` (contracts) is the single
+//     definition both this component and the store's re-nag logic key off.
+//
+// Freshness note: a setup gap clears on the next board load after the operator configures the area
+// via the deep-link, not the instant the config panel saves — the projection is recomputed on
+// snapshot (re)load. An OUTAGE is different: it arrives and clears live, pushed as an `infraSetup`
+// event by the watcher and applied by `workspace.patchInfraSetup`.
 import { useLocalStorage } from '@vueuse/core'
 import { computed } from 'vue'
 // The localStorage key holding the permanent per-user dismissals lives in `@cat-factory/contracts`
 // (a dependency-free package the SPA and the e2e suite both import), so the key + shape can't drift
 // between this component and the e2e seed in `backend/internal/e2e/tests/helpers.ts` (`pinWorkspace`).
-import { INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-factory/contracts'
+import { INFRA_SETUP_DISMISSED_STORAGE_KEY, isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { InfraSetupArea } from '~/types/domain'
 
@@ -48,13 +57,26 @@ const AREAS: InfraSetupArea[] = ['agentExecutor', 'ephemeralEnvironments', 'bina
 // dynamically (`t(AREA_META[area].titleKey)`), so tier-1 typed-key checking doesn't cover them;
 // the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. `action`
 // deep-links into the relevant setup surface.
+// Each area carries its OWN outage title rather than interpolating the area name into a shared one:
+// a predicate adjective ("is unreachable") agrees with its subject's gender in most of the locales we
+// ship, so `{area} is unreachable` cannot be translated correctly as one string. The outage BODY and
+// action are shared, because neither refers back to the area — each locale's body opens with its own
+// fixed subject noun for exactly that reason.
 const AREA_META: Record<
   InfraSetupArea,
-  { icon: string; titleKey: string; bodyKey: string; actionKey: string; onConfigure: () => void }
+  {
+    icon: string
+    titleKey: string
+    unreachableTitleKey: string
+    bodyKey: string
+    actionKey: string
+    onConfigure: () => void
+  }
 > = {
   agentExecutor: {
     icon: 'i-lucide-server-cog',
     titleKey: 'layout.infraSetupBanner.agentExecutor.title',
+    unreachableTitleKey: 'layout.infraSetupBanner.agentExecutor.unreachableTitle',
     bodyKey: 'layout.infraSetupBanner.agentExecutor.body',
     actionKey: 'layout.infraSetupBanner.agentExecutor.action',
     onConfigure: () => ui.openProviderConnection('runner-pool'),
@@ -62,6 +84,7 @@ const AREA_META: Record<
   ephemeralEnvironments: {
     icon: 'i-lucide-flask-conical',
     titleKey: 'layout.infraSetupBanner.ephemeralEnvironments.title',
+    unreachableTitleKey: 'layout.infraSetupBanner.ephemeralEnvironments.unreachableTitle',
     bodyKey: 'layout.infraSetupBanner.ephemeralEnvironments.body',
     actionKey: 'layout.infraSetupBanner.ephemeralEnvironments.action',
     onConfigure: () => ui.openProviderConnection('environment'),
@@ -69,6 +92,7 @@ const AREA_META: Record<
   binaryStorage: {
     icon: 'i-lucide-hard-drive',
     titleKey: 'layout.infraSetupBanner.binaryStorage.title',
+    unreachableTitleKey: 'layout.infraSetupBanner.binaryStorage.unreachableTitle',
     bodyKey: 'layout.infraSetupBanner.binaryStorage.body',
     actionKey: 'layout.infraSetupBanner.binaryStorage.action',
     onConfigure: () => ui.openContentStorageSettings(),
@@ -94,30 +118,45 @@ function dismissPermanently(area: InfraSetupArea) {
   }
 }
 
-const visible = computed<InfraSetupArea[]>(() => {
+/** One rendered card: the area plus whether it is an OUTAGE rather than a setup gap. */
+interface AreaCard {
+  area: InfraSetupArea
+  /** True for a live-health status — drives the copy, the severity styling and the dismissal fork. */
+  outage: boolean
+}
+
+const visible = computed<AreaCard[]>(() => {
   const status = workspace.infraSetup
   if (!status) return []
   return AREAS.filter(
     (area) =>
-      status[area] === 'not_defined' &&
+      (status[area] === 'not_defined' || isInfraSetupHealthStatus(status[area])) &&
       !ui.infraSetupSessionDismissed.includes(area) &&
-      !dismissedForUser.value.includes(area),
-  )
+      // The permanent dismissal covers SETUP GAPS only. An outage must re-nag whoever silenced the
+      // "you haven't configured this" prompt, because it is a different claim about a different
+      // state — they DID configure it, and it is now down.
+      !(dismissedForUser.value.includes(area) && status[area] === 'not_defined'),
+  ).map((area) => ({ area, outage: isInfraSetupHealthStatus(status[area]) }))
 })
 
-// The dismiss dropdown: the product wants the user asked WHICH kind of dismissal on close.
-function dismissMenu(area: InfraSetupArea): DropdownMenuItem[][] {
+/**
+ * The dismiss dropdown: the product wants the user asked WHICH kind of dismissal on close. An
+ * outage offers the session option ONLY — see the fork note at the top of this file.
+ */
+function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
+  const session = {
+    label: t('layout.infraSetupBanner.dismiss.session'),
+    icon: 'i-lucide-clock',
+    onSelect: () => ui.dismissInfraSetupForSession(card.area),
+  }
+  if (card.outage) return [[session]]
   return [
     [
-      {
-        label: t('layout.infraSetupBanner.dismiss.session'),
-        icon: 'i-lucide-clock',
-        onSelect: () => ui.dismissInfraSetupForSession(area),
-      },
+      session,
       {
         label: t('layout.infraSetupBanner.dismiss.permanent'),
         icon: 'i-lucide-bell-off',
-        onSelect: () => dismissPermanently(area),
+        onSelect: () => dismissPermanently(card.area),
       },
     ],
   ]
@@ -135,42 +174,69 @@ function dismissMenu(area: InfraSetupArea): DropdownMenuItem[][] {
       role="status"
       aria-live="polite"
     >
+      <!-- An OUTAGE reads red, a setup gap amber: one is something breaking now, the other is
+           something never switched on, and a reader has to be able to tell at a glance. -->
       <div
-        v-for="area in visible"
-        :key="area"
-        class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
-        :data-testid="`infra-setup-banner-${area}`"
+        v-for="card in visible"
+        :key="card.area"
+        class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 p-5 shadow-2xl backdrop-blur"
+        :class="
+          card.outage ? 'border-red-500/70 bg-red-950/95' : 'border-amber-500/70 bg-amber-950/95'
+        "
+        :data-testid="`infra-setup-banner-${card.area}`"
+        :data-infra-status="card.outage ? 'unreachable' : 'not_defined'"
       >
         <div class="flex items-start gap-4">
-          <UIcon :name="AREA_META[area].icon" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
+          <UIcon
+            :name="card.outage ? 'i-lucide-plug-zap' : AREA_META[card.area].icon"
+            class="mt-0.5 h-9 w-9 shrink-0"
+            :class="card.outage ? 'text-red-400' : 'text-amber-400'"
+          />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
-                {{ t(AREA_META[area].titleKey) }}
+              <h2
+                class="text-lg font-semibold"
+                :class="card.outage ? 'text-red-100' : 'text-amber-100'"
+              >
+                {{
+                  t(
+                    card.outage
+                      ? AREA_META[card.area].unreachableTitleKey
+                      : AREA_META[card.area].titleKey,
+                  )
+                }}
               </h2>
-              <UDropdownMenu :items="dismissMenu(area)" :content="{ align: 'end' }">
+              <UDropdownMenu :items="dismissMenu(card)" :content="{ align: 'end' }">
                 <UButton
                   color="neutral"
                   variant="ghost"
                   size="xs"
                   icon="i-lucide-x"
                   :aria-label="t('common.close')"
-                  :data-testid="`infra-setup-dismiss-${area}`"
+                  :data-testid="`infra-setup-dismiss-${card.area}`"
                 />
               </UDropdownMenu>
             </div>
-            <p class="mt-1 text-sm text-amber-200/90">
-              {{ t(AREA_META[area].bodyKey) }}
+            <p class="mt-1 text-sm" :class="card.outage ? 'text-red-200/90' : 'text-amber-200/90'">
+              {{
+                card.outage
+                  ? t('layout.infraSetupBanner.unreachable.body')
+                  : t(AREA_META[card.area].bodyKey)
+              }}
             </p>
             <div class="mt-4">
               <UButton
-                color="warning"
+                :color="card.outage ? 'error' : 'warning'"
                 variant="solid"
                 icon="i-lucide-settings"
-                :data-testid="`infra-setup-configure-${area}`"
-                @click="AREA_META[area].onConfigure()"
+                :data-testid="`infra-setup-configure-${card.area}`"
+                @click="AREA_META[card.area].onConfigure()"
               >
-                {{ t(AREA_META[area].actionKey) }}
+                {{
+                  card.outage
+                    ? t('layout.infraSetupBanner.unreachable.action')
+                    : t(AREA_META[card.area].actionKey)
+                }}
               </UButton>
             </div>
           </div>

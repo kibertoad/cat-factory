@@ -313,6 +313,36 @@ export class RunnerPoolConnectionService {
     return { transport, kind: record.kind, providerId: record.providerId }
   }
 
+  /**
+   * Probe the workspace's SAVED backend, for the reachability watcher.
+   *
+   * The sibling {@link testConnection} answers "would this config work" for an operator staring at
+   * a form; this answers "does what we already stored still answer", which is the question a
+   * background sweep asks. So it resolves the stored record + its own secret bundle rather than
+   * taking candidate values, and it makes NO safety assertion: `assertConfigSafe` guards what an
+   * operator may SAVE, and re-running it here would report an already-persisted pool as an outage
+   * the moment a deployment tightened its URL policy. The config warnings are irrelevant to
+   * reachability, so unlike `testConnection` they are not folded in.
+   *
+   * Returns null when there is nothing to probe — no backend registered, its kind is no longer in
+   * the registry, or its stored config blob won't parse. That is deliberately NOT `{ ok: false }`:
+   * the watcher must be able to tell "unreachable" from "unknowable", or a de-registered kind
+   * would show as permanently down.
+   */
+  async probeSavedConnection(workspaceId: string): Promise<ConnectionTestResult | null> {
+    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    if (!record) return null
+    const provider = this.deps.runnerBackendRegistry.get(record.kind)
+    if (!provider) return null
+    const config = this.parseConfig(record)
+    if (!config) return null
+    const bundle = await this.decryptSecrets(record)
+    return provider.testConnection(
+      config,
+      this.context((key) => bundle[key]),
+    )
+  }
+
   /** Unregister the backend (tombstones the binding). */
   async unregister(workspaceId: string): Promise<void> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
