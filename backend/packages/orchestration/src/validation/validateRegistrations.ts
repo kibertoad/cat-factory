@@ -232,13 +232,17 @@ function checkAgentKindVariants(
  * that varies THAT step's kind — the same rule `assertValidAgentVariants` applies at pipeline save
  * and run start, applied at BOOT for the pipelines a deployment ships in code, which reach neither
  * of those boundaries until somebody starts a run.
+ *
+ * "The same rule" is load-bearing: a DISABLED step never runs, so it imposes no requirement here
+ * either. Refusing one at boot while the builder saves it happily would make a shape valid or
+ * invalid depending on which door it came through.
  */
 function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
   for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
     pipeline.stepOptions?.forEach((options, i) => {
       const variantId = options?.agentVariantId
-      if (!variantId) return
+      if (!variantId || pipeline.enabled?.[i] === false) return
       const variant = opts.agentKindRegistry.variant(variantId)
       const problem = !variant
         ? 'which this deployment does not register'

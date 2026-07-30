@@ -171,13 +171,29 @@ override does (`AgentRunContext.systemPromptOverride`, resolved once per dispatc
   folds on top of the workspace's text rather than the shipped text, which is why an addition is
   the safe default: it keeps applying as the product edits the prompt and as a workspace edits it.
 
+A variant applies only to the step's OWN kind. A helper dispatched off that step — a gate's
+`ci-fixer`, the `fork-proposer` — is a different agent and does not inherit it, so there is
+deliberately no way to vary a helper's prompt: it has no step of its own to select one on.
+
 Boot validation refuses a variant whose `baseKind` is unknown, one that sets neither prompt field
 (it would run as the stock kind, silently), and a registered pipeline selecting a variant of the
-wrong kind. Pipeline save and run start apply the same rule to workspace-authored pipelines.
+wrong kind — skipping a DISABLED step, exactly as pipeline save and run start do for
+workspace-authored pipelines.
 
-Telemetry keeps them apart: the variant rides the step (`stepOptions.agentVariantId`), Kaizen folds
-it into the combo key so one variant's gradings can never verify another's prompt, and the run
-views report it beside the model as "Prompt variant".
+### What was ASKED for vs what RAN
+
+`stepOptions.agentVariantId` is the ask. Because a workspace override displaces a variant's
+`systemPrompt`, and because an id can be withdrawn mid-run, the ask is not proof the variant's text
+reached the prompt — so the dispatch pins what it actually did onto
+`PipelineStep.promptVariant`: `{ id, applied, fingerprint? }`, where `applied` is `full` /
+`addition-only` / `superseded` / `withdrawn`. Every losing disposition is also `warn`ed at the fold.
+
+**Read the pin, never the ask**, anywhere you report or key on a varied step. The run views do
+(reporting the variant beside the model as "Prompt variant", with a note naming the disposition when
+it did not fully apply), and so does Kaizen's combo key — which folds in the `fingerprint` of the
+text the variant CONTRIBUTED rather than its id, so re-registering an id to re-word a variant starts
+a fresh streak instead of inheriting the one the previous wording earned. A variant that contributed
+nothing does not enter the key at all: the key describes the text that ran.
 
 ## Capabilities: skills and tools
 

@@ -1281,7 +1281,10 @@
         "changes_requested": "変更を依頼済み",
         "rejected": "却下済み"
       },
-      "promptVariant": "プロンプトのバリアント"
+      "promptVariant": "プロンプトのバリアント",
+      "promptVariantAdditionOnly": "このバリアントの追加分のみが適用されました。このエージェントのワークスペースプロンプトが基本テキストを置き換えました。",
+      "promptVariantSuperseded": "このバリアントは適用されませんでした。このエージェントのワークスペースプロンプトが優先されました。",
+      "promptVariantWithdrawn": "このバリアントは登録されていないため、ステップは標準のプロンプトで実行されました。"
     },
     "stepDetail": {
       "contents": "内容",

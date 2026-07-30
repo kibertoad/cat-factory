@@ -25,19 +25,15 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
-const agents = useAgentsStore()
 const { t, d } = useI18n()
 
 /**
- * The deployment-registered VARIANT this step ran as — an alternate prompt for its agent kind.
+ * The deployment-registered VARIANT this step ran under — an alternate prompt for its agent kind.
  * Reported beside the model because it is the other half of "what actually ran": two steps of the
  * same kind on the same model can be told to be different things, and nothing else on this panel
  * would say so. Null on every step that ran the shipped prompt.
  */
-const variantLabel = computed(() => {
-  const id = props.step.stepOptions?.agentVariantId
-  return id ? agents.variantLabel(id) : null
-})
+const promptVariant = useStepPromptVariant(() => props.step)
 
 const { isRunning, durationLabel, activityAgoLabel } = useStepTimer({
   step: () => props.step,
@@ -122,11 +118,14 @@ async function copyRunId() {
       </p>
     </div>
 
-    <div v-if="variantLabel">
+    <div v-if="promptVariant">
       <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         {{ t('panels.stepMeta.promptVariant') }}
       </h4>
-      <p class="break-all text-[12px] text-slate-300">{{ variantLabel }}</p>
+      <p class="break-all text-[12px] text-slate-300">{{ promptVariant.label }}</p>
+      <p v-if="promptVariant.note" class="mt-0.5 text-[11px] text-amber-400/80">
+        {{ promptVariant.note }}
+      </p>
     </div>
 
     <div v-if="runId">

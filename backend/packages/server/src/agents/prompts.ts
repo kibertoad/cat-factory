@@ -21,8 +21,9 @@ import type { RepoTarget } from './ContainerAgentExecutor.js'
 // The two bespoke container prompts (`merger`, `on-call`) now live in `@cat-factory/agents`
 // (`agents/prompts/bespoke-kinds.ts`) beside the inline-engine ones, because the ENGINE needs
 // the same answer they encode — a variant's alternate prompt is resolved against the SHIPPED
-// base once per dispatch, and for these two kinds that base is the ROLE half. They are
-// re-exported from ./promptOverrides.ts, which is where this layer reads them.
+// base once per dispatch, and for these two kinds that base is the ROLE half. Import them from
+// `@cat-factory/agents` directly; this layer reads them through the bespoke-prompt map that
+// ./promptOverrides.ts composes.
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =

@@ -1281,7 +1281,10 @@
         "changes_requested": "התבקשו שינויים",
         "rejected": "נדחה"
       },
-      "promptVariant": "וריאנט של הפרומפט"
+      "promptVariant": "וריאנט של הפרומפט",
+      "promptVariantAdditionOnly": "רק התוספת של הווריאנט הזה הוחלה. הפרומפט של מרחב העבודה עבור הסוכן הזה החליף את טקסט הבסיס שלו.",
+      "promptVariantSuperseded": "הווריאנט הזה לא הוחל. לפרומפט של מרחב העבודה עבור הסוכן הזה הייתה עדיפות.",
+      "promptVariantWithdrawn": "הווריאנט הזה אינו רשום עוד, ולכן השלב רץ עם הפרומפט המקורי."
     },
     "stepDetail": {
       "contents": "תוכן",

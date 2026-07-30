@@ -1648,7 +1648,10 @@
         "changes_requested": "Änderungen angefordert",
         "rejected": "Abgelehnt"
       },
-      "promptVariant": "Prompt-Variante"
+      "promptVariant": "Prompt-Variante",
+      "promptVariantAdditionOnly": "Nur die Ergänzung dieser Variante wurde angewendet. Der Workspace-Prompt für diesen Agenten hat ihren Basistext ersetzt.",
+      "promptVariantSuperseded": "Diese Variante wurde nicht angewendet. Der Workspace-Prompt für diesen Agenten hatte Vorrang.",
+      "promptVariantWithdrawn": "Diese Variante ist nicht mehr registriert, daher lief der Schritt mit dem ausgelieferten Prompt."
     },
     "stepDetail": {
       "contents": "Inhalte",

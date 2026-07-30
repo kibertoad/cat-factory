@@ -1648,7 +1648,10 @@
         "changes_requested": "Modifiche richieste",
         "rejected": "Rifiutato"
       },
-      "promptVariant": "Variante del prompt"
+      "promptVariant": "Variante del prompt",
+      "promptVariantAdditionOnly": "È stata applicata solo l'aggiunta di questa variante. Il prompt dello spazio di lavoro per questo agente ne ha sostituito il testo di base.",
+      "promptVariantSuperseded": "Questa variante non è stata applicata. Il prompt dello spazio di lavoro per questo agente ha avuto la precedenza.",
+      "promptVariantWithdrawn": "Questa variante non è più registrata, quindi il passaggio ha usato il prompt predefinito."
     },
     "stepDetail": {
       "contents": "Contenuti",

@@ -1281,7 +1281,10 @@
         "copyId": "Copier l'id du conteneur",
         "copyUrl": "Copier l'adresse"
       },
-      "promptVariant": "Variante de prompt"
+      "promptVariant": "Variante de prompt",
+      "promptVariantAdditionOnly": "Seul l'ajout de cette variante a été appliqué. Le prompt de l'espace de travail pour cet agent a remplacé son texte de base.",
+      "promptVariantSuperseded": "Cette variante n'a pas été appliquée. Le prompt de l'espace de travail pour cet agent a prévalu.",
+      "promptVariantWithdrawn": "Cette variante n'est plus enregistrée ; l'étape a donc utilisé le prompt d'origine."
     },
     "stepDetail": {
       "contents": "Contenu",

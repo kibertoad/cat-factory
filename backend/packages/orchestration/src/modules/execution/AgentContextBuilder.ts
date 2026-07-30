@@ -38,7 +38,6 @@ import {
   selectConsensusGroup,
 } from '@cat-factory/kernel'
 import {
-  applyAgentVariant,
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
   DOC_FINALIZER_KIND,
@@ -47,10 +46,13 @@ import {
   PR_PRIOR_REVIEW_CONTEXT_FILE,
   PR_REVIEWER_KIND,
   renderPriorReviewContext,
-  shippedBasePromptFor,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import {
+  resolveDispatchMaxOutputTokens,
+  resolveDispatchSystemPrompt,
+} from './dispatchPromptSettings.js'
 import {
   boundServiceFrameIds,
   buildFrontendRunNotes,
@@ -1186,86 +1188,28 @@ export class AgentContextBuilder {
   }
 
   /**
-   * The base system prompt this dispatch replaces the shipped one with, or undefined to run the
-   * shipped one. Two tiers converge here — the deployment's registered agent-kind VARIANT for
-   * this step and the WORKSPACE's edited prompt for the kind — because they are the same unit of
-   * text, and resolving them in one place is what keeps the container, inline and consensus paths
-   * from disagreeing about which prompt a step ran under. One point read per dispatch, in the
-   * same wave as the rest of the context.
-   *
-   * The head revision's `text` is `null` when the workspace deliberately went BACK to the
-   * built-in — a real state, distinct from never having edited the kind, which is why it is
-   * recorded rather than deleted. Both resolve to "no override" here, so a revert keeps
-   * tracking the shipped prompt as the product bumps it instead of pinning a stale copy.
-   *
-   * Also PINS the resolved revision onto the step (like {@link resolveSkillsForStep} does for
-   * catalog skills), because the log is append-only: re-reading it at any later point — a
-   * Kaizen grading, a debug read, a post-mortem — would answer about whatever landed since,
-   * not about what this step actually ran. The variant needs no such pin: it is the step's own
-   * recorded option, not a moving target.
+   * The base system prompt this dispatch replaces the shipped one with (the workspace's edited
+   * prompt for the kind, folded with the step's registered agent-kind VARIANT), and the pins it
+   * leaves on the step. Thin delegate — see {@link resolveDispatchSystemPrompt}.
    */
-  private async resolveSystemPromptOverride(
+  private resolveSystemPromptOverride(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
   ): Promise<{ systemPromptOverride?: string }> {
-    const head = await this.deps.agentPrompts?.head(workspaceId, agentKind)
-    // Cleared, not left stale: a re-dispatch after the workspace reverted must not keep
-    // reporting the revision the previous attempt ran under.
-    step.promptRevision = head?.text ? head.revision : undefined
-    // The variant applies only when the kind being dispatched IS the step's own — a helper
-    // dispatched off this step (a gate's fixer, the fork proposer) is a different agent and must
-    // not inherit the step's alternate prompt. Same rule as `followUpCompanion`.
-    const variantId = agentKind === step.agentKind ? step.stepOptions?.agentVariantId : undefined
-    const variant = variantId ? this.deps.agentKindRegistry.variant(variantId) : undefined
-    // A variant the deployment has since withdrawn: the step runs the SHIPPED prompt, which is
-    // the safe disposition, but it is not what the pipeline asked for — so say so rather than
-    // let a step quietly stop being the variation someone configured.
-    if (variantId && !variant) {
-      this.deps.logger?.warn('Agent kind variant is not registered; running the shipped prompt', {
-        agentKind,
-        variantId,
-      })
-    }
-    const override = applyAgentVariant(
-      // Only paid for when a variant is actually selected; the shipped prompt is what its
-      // addition folds onto and what its replacement is measured against.
-      variant ? shippedBasePromptFor(agentKind, this.deps.agentKindRegistry) : '',
-      variant,
-      head?.text ?? undefined,
-    )
-    // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
-    // so the context literal stays a flat spread instead of gaining another conditional.
-    return override ? { systemPromptOverride: override } : {}
+    return resolveDispatchSystemPrompt(this.deps, workspaceId, agentKind, step)
   }
 
   /**
-   * The output-token ceiling this dispatch runs under, or undefined to run the deployment
-   * routing default. Resolved HERE, once per dispatch, for the same reason the prompt override
-   * is: the precedence is decided in one place, so the container, inline and consensus paths
-   * cannot disagree about the budget a step ran under.
-   *
-   * NARROWEST TIER WINS: the step's own `stepOptions.maxOutputTokens` beats the workspace's
-   * per-kind setting, which beats the deployment routing ceiling. The step value is read
-   * WITHOUT touching the repository, so a pipeline that pins its own budget costs no query.
-   *
-   * Keyed on the EFFECTIVE dispatched kind (like the prompt override), so a helper dispatched
-   * off another step — a gate's fixer, the fork proposer — gets the ceiling configured for the
-   * kind actually running rather than inheriting the parent step's.
+   * The output-token ceiling this dispatch runs under. Thin delegate — see
+   * {@link resolveDispatchMaxOutputTokens}.
    */
-  private async resolveMaxOutputTokens(
+  private resolveMaxOutputTokens(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
   ): Promise<{ maxOutputTokens?: number }> {
-    const fromStep = step.stepOptions?.maxOutputTokens
-    if (fromStep != null) return { maxOutputTokens: fromStep }
-    const configured = await this.deps.agentSettings?.get(workspaceId, agentKind)
-    // Returns the SPREAD-READY slice rather than a nullable value, so the context literal stays
-    // a flat spread instead of gaining another conditional.
-    return configured?.maxOutputTokens != null
-      ? { maxOutputTokens: configured.maxOutputTokens }
-      : {}
+    return resolveDispatchMaxOutputTokens(this.deps, workspaceId, agentKind, step)
   }
 
   /**

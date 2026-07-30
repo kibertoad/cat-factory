@@ -1,3 +1,4 @@
+import { contentHash } from '@cat-factory/kernel'
 import type { AgentKind } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
@@ -78,25 +79,84 @@ export interface AgentKindVariantDefinition {
 }
 
 /**
+ * How much of what a selected variant declares actually reached the prompt a step ran under.
+ *
+ * A variant loses its `systemPrompt` to a workspace override, because the workspace is the
+ * narrower tier — so "a variant was selected" and "the variant shaped this prompt" are different
+ * facts, and a reader shown only the first would be told something untrue. The three losing
+ * cases are kept APART rather than collapsed into one "didn't apply", because they need
+ * different fixes: drop the workspace's edit, drop the variant's replacement in favour of an
+ * addition, or re-register the variant.
+ *
+ * - `full` — everything the variant declares is in the effective prompt.
+ * - `addition-only` — a workspace override displaced its `systemPrompt`; its `promptAddition`
+ *   still folded on top.
+ * - `superseded` — a workspace override displaced its `systemPrompt` and it had no addition, so
+ *   nothing of it survives.
+ * - `withdrawn` — the id the step names is not registered (resolved by the caller, which is the
+ *   only place that knows the lookup failed).
+ */
+export type AgentVariantApplication = 'full' | 'addition-only' | 'superseded' | 'withdrawn'
+
+/** The effective prompt for one dispatch plus what the variant contributed to it. */
+export interface AppliedAgentVariant {
+  /**
+   * The effective system-prompt override, or undefined to run the shipped prompt — so an
+   * unvaried, unedited step's dispatch is byte-for-byte what it always sent, the same
+   * "absent ⇒ shipped" contract `AgentRunContext.systemPromptOverride` already has.
+   */
+  prompt?: string
+  /** How much of the variant survived into {@link prompt}. */
+  applied: AgentVariantApplication
+  /**
+   * Fingerprint of the text the variant actually CONTRIBUTED, absent when it contributed none.
+   *
+   * This is what stops a re-worded variant from inheriting the verification its previous wording
+   * earned — the same hazard the workspace revision suffix (`wN`) exists for, which a bare id
+   * cannot express because re-registering an id is a supported way to re-word a variant. It
+   * fingerprints the CONTRIBUTION rather than the definition so the key describes the text that
+   * ran: a variant whose replacement was displaced is keyed by the addition that survived, and
+   * one that contributed nothing does not enter the key at all.
+   */
+  fingerprint?: string
+}
+
+/**
  * The effective system-prompt override for one dispatch: the variant's replacement (unless a
  * workspace override already replaced the track prompt — the narrower tier wins, as it does for
  * every other per-dispatch knob) plus the variant's addition folded onto whichever base survived.
  *
- * Returns undefined when nothing overrides the shipped prompt, so an unvaried step's dispatch is
- * byte-for-byte what it always sent — the same "absent ⇒ shipped" contract
- * `AgentRunContext.systemPromptOverride` already has.
- *
  * `shipped` is passed in rather than resolved here because the caller (the engine) is the one
  * place that knows the kind actually being dispatched; see `shippedBasePromptFor`, which is what
  * it resolves it with.
+ *
+ * Called with NO variant (an ordinary step, varied or not by the workspace alone) this is just
+ * the workspace override passed through, and `applied` is vacuously `full` — there is nothing to
+ * lose. Only a caller that named a variant id reads it.
  */
 export function applyAgentVariant(
   shipped: string,
   variant: AgentKindVariantDefinition | undefined,
   workspaceOverride?: string,
-): string | undefined {
-  const replaced = workspaceOverride ?? variant?.systemPrompt
+): AppliedAgentVariant {
+  const replacement = variant?.systemPrompt
+  const replaced = workspaceOverride ?? replacement
   const addition = variant?.promptAddition?.trim()
-  if (!addition) return replaced
-  return `${replaced ?? shipped}\n\n${addition}`
+  const displaced = Boolean(replacement) && workspaceOverride !== undefined
+  if (!addition) {
+    return {
+      ...(replaced === undefined ? {} : { prompt: replaced }),
+      applied: displaced ? 'superseded' : 'full',
+      ...(displaced || !replacement ? {} : { fingerprint: contentHash(replacement) }),
+    }
+  }
+  return {
+    prompt: `${replaced ?? shipped}\n\n${addition}`,
+    applied: displaced ? 'addition-only' : 'full',
+    // The contribution, which is the addition alone once a workspace override displaced the
+    // replacement — see {@link AppliedAgentVariant.fingerprint}.
+    fingerprint: contentHash(
+      displaced || !replacement ? addition : `${replacement}\n\n${addition}`,
+    ),
+  }
 }

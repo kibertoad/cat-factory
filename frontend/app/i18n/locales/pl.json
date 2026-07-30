@@ -1281,7 +1281,10 @@
         "copyId": "Kopiuj id kontenera",
         "copyUrl": "Kopiuj adres"
       },
-      "promptVariant": "Wariant promptu"
+      "promptVariant": "Wariant promptu",
+      "promptVariantAdditionOnly": "Zastosowano tylko dodatek tego wariantu. Prompt przestrzeni roboczej dla tego agenta zastąpił jego tekst bazowy.",
+      "promptVariantSuperseded": "Ten wariant nie został zastosowany. Prompt przestrzeni roboczej dla tego agenta miał pierwszeństwo.",
+      "promptVariantWithdrawn": "Ten wariant nie jest już zarejestrowany, więc krok wykonał się na wbudowanym promptcie."
     },
     "stepDetail": {
       "contents": "Zawartość",

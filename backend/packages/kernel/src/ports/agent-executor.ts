@@ -85,14 +85,21 @@ export interface AgentRunContext {
    */
   followUpCompanion?: boolean
   /**
-   * The workspace's own system prompt for the kind being dispatched, when it has edited one
-   * from the pipeline builder. Replaces the SHIPPED track prompt; the engine-enforced surface
-   * directives and trait guidance are still layered on top by `systemPromptFor`, so an
-   * override cannot delete the read-only guardrail or the answer-in-the-reply rule.
+   * The base system prompt this dispatch runs instead of the kind's SHIPPED track prompt. Two
+   * tiers arrive through this ONE field, already folded together: the workspace's own edited
+   * prompt for the kind (from the pipeline builder) and the deployment-registered agent-kind
+   * VARIANT the step selected (`stepOptions.agentVariantId` — an alternate prompt for an existing
+   * kind, see `applyAgentVariant`). The workspace wins where both replace the prompt, being the
+   * narrower tier; a variant's `promptAddition` then folds on top of whatever survived.
+   *
+   * Either way the engine-enforced surface directives and trait guidance are still layered on top
+   * by `systemPromptFor`, so neither tier can delete the read-only guardrail or the
+   * answer-in-the-reply rule.
    *
    * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`) rather than by each
    * executor, so the container, inline and consensus paths cannot disagree about which prompt
-   * a step ran under — and so a step's telemetry records the prompt that was actually sent.
+   * a step ran under — and so a step's telemetry records the prompt that was actually sent. No
+   * executor branches on which tier produced the text, which is the point of folding both here.
    * Absent ⇒ the kind's shipped prompt.
    */
   systemPromptOverride?: string

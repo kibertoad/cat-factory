@@ -124,6 +124,8 @@ export {
 export {
   type AgentKindVariantDefinition,
   type AgentKindVariantPresentation,
+  type AgentVariantApplication,
+  type AppliedAgentVariant,
   applyAgentVariant,
 } from './agents/kinds/variants.js'
 // The inline engine steps' prompts keyed by agent kind, so the prompt EDITOR shows the text that

@@ -5,7 +5,7 @@ import type {
   ExecutionInstance,
   PipelineStep,
 } from '@cat-factory/kernel'
-import { InitiativePresetRegistry } from '@cat-factory/kernel'
+import { createRecordingLogger, InitiativePresetRegistry } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import {
   type AgentKindVariantDefinition,
@@ -182,18 +182,32 @@ describe('AgentContextBuilder agent-kind variant', () => {
     return registry
   }
 
-  /** Build the context for a step selecting `variant.id`, with an optional workspace override. */
-  async function contextForVariant(
+  /**
+   * Dispatch a step selecting `variant.id`, with an optional workspace override. Returns the STEP
+   * beside the context, because half of what a dispatch decides about a variant is recorded there
+   * (`promptVariant`) rather than in the prompt it sends.
+   */
+  async function dispatchVariant(
     variant: AgentKindVariantDefinition,
     override?: string,
     deps: Partial<AgentContextBuilderDeps> = {},
   ) {
     const s = step('coder', variant.id)
-    return makeBuilder({
+    const context = await makeBuilder({
       agentKindRegistry: registryWith(variant),
       ...(override ? { agentPrompts: promptsRepo({ agentKind: 'coder', text: override }) } : {}),
       ...deps,
     }).buildContext('ws1', instance([s]), s, true, TASK)
+    return { context, step: s }
+  }
+
+  /** Just the context, for the cases that only care about the prompt that went out. */
+  async function contextForVariant(
+    variant: AgentKindVariantDefinition,
+    override?: string,
+    deps: Partial<AgentContextBuilderDeps> = {},
+  ) {
+    return (await dispatchVariant(variant, override, deps)).context
   }
 
   it('folds an ADDITION onto the shipped prompt for the step kind', async () => {
@@ -231,23 +245,95 @@ describe('AgentContextBuilder agent-kind variant', () => {
   })
 
   it('runs the shipped prompt, loudly, when the variant is no longer registered', async () => {
-    const warnings: string[] = []
-    const logger = {
-      debug: () => {},
-      info: () => {},
-      warn: (msg: string) => warnings.push(msg),
-      error: () => {},
-      child: () => logger,
-    }
+    const logger = createRecordingLogger()
     const s = step('coder', 'org:withdrawn')
-    const context = await makeBuilder({ logger: logger as never }).buildContext(
-      'ws1',
-      instance([s]),
-      s,
-      true,
-      TASK,
-    )
+    const context = await makeBuilder({ logger }).buildContext('ws1', instance([s]), s, true, TASK)
     expect(context.systemPromptOverride).toBeUndefined()
-    expect(warnings.join(' ')).toMatch(/not registered/)
+    expect(
+      logger.lines
+        .filter((l) => l.level === 'warn')
+        .map((l) => l.msg)
+        .join(' '),
+    ).toMatch(/not registered/)
+    // …and the step says the variant did not run, rather than leaving a reader to infer it from
+    // the selection alone.
+    expect(s.promptVariant).toEqual({ id: 'org:withdrawn', applied: 'withdrawn' })
+  })
+})
+
+// `stepOptions.agentVariantId` is what the pipeline ASKED for; `step.promptVariant` is what the
+// dispatch DID with it. They diverge whenever the workspace has edited the same kind, and every
+// later reader — the run panels, Kaizen's combo key — reads the pin, so these pin down that it
+// tells the truth about each disposition rather than echoing the request.
+describe('AgentContextBuilder agent-kind variant pin', () => {
+  const TDD: AgentKindVariantDefinition = {
+    id: 'org:tdd',
+    baseKind: 'coder',
+    promptAddition: 'Work test-first.',
+  }
+  const POET: AgentKindVariantDefinition = {
+    id: 'org:poet',
+    baseKind: 'coder',
+    systemPrompt: 'Be a poet.',
+  }
+
+  function registryWith(variant: AgentKindVariantDefinition) {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant(variant)
+    return registry
+  }
+
+  async function dispatch(
+    variant: AgentKindVariantDefinition,
+    override?: string,
+    logger = createRecordingLogger(),
+  ) {
+    const s = step('coder', variant.id)
+    await makeBuilder({
+      agentKindRegistry: registryWith(variant),
+      logger,
+      ...(override ? { agentPrompts: promptsRepo({ agentKind: 'coder', text: override }) } : {}),
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+    return { step: s, warnings: logger.lines.filter((l) => l.level === 'warn') }
+  }
+
+  it('pins a fully-applied variant with a fingerprint of what it contributed', async () => {
+    const { step: s, warnings } = await dispatch(TDD)
+    expect(s.promptVariant?.applied).toBe('full')
+    expect(s.promptVariant?.fingerprint).toBeTruthy()
+    expect(warnings).toEqual([])
+  })
+
+  it('pins a REPLACEMENT the workspace displaced as superseded, and warns', async () => {
+    // The silent-loss case: the workspace legitimately wins, but a deployment configured this
+    // prompt in code and nothing else about the run would say it never ran.
+    const { step: s, warnings } = await dispatch(POET, 'Mine.')
+    expect(s.promptVariant).toEqual({ id: 'org:poet', applied: 'superseded' })
+    expect(warnings.map((l) => l.msg).join(' ')).toMatch(/displaced/)
+  })
+
+  it('pins a displaced replacement whose addition survived as addition-only', async () => {
+    const { step: s, warnings } = await dispatch(
+      { ...POET, promptAddition: 'Work test-first.' },
+      'Mine.',
+    )
+    expect(s.promptVariant?.applied).toBe('addition-only')
+    expect(s.promptVariant?.fingerprint).toBeTruthy()
+    expect(warnings).toHaveLength(1)
+  })
+
+  it('pins nothing on an unvaried step, so the stock product records nothing new', async () => {
+    const s = step('coder')
+    await makeBuilder({}).buildContext('ws1', instance([s]), s, true, TASK)
+    expect(s.promptVariant).toBeUndefined()
+  })
+
+  it('clears a stale pin on re-dispatch after the selection was cleared', async () => {
+    // Same rule as `promptRevision`: a re-dispatch must not keep reporting what the previous
+    // attempt ran under.
+    const s = step('coder')
+    s.promptVariant = { id: 'org:tdd', applied: 'full', fingerprint: 'stale' }
+    await makeBuilder({}).buildContext('ws1', instance([s]), s, true, TASK)
+    expect(s.promptVariant).toBeUndefined()
   })
 })

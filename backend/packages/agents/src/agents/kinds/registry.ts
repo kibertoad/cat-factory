@@ -474,11 +474,19 @@ export class AgentKindRegistry {
    * resolved to definitions and deduplicated by server id. Unknown registered ids are reported,
    * not thrown on (see {@link skillsFor}).
    */
+  toolServersFor(kind: AgentKind): ReturnType<typeof normalizeToolRefs> {
+    const own = this.registry.get(kind)?.toolServers ?? []
+    const assigned = this.assignedToolServers.get(kind) ?? []
+    if (own.length === 0 && assigned.length === 0) return EMPTY_TOOL_REFS
+    return normalizeToolRefs([...own, ...assigned], (id) => this.toolServerDefinitions.get(id))
+  }
+
   /**
    * Register a VARIATION of an existing agent kind — an alternate prompt a pipeline step selects
    * by id, running the base kind in every other respect. A later registration of the same id
    * replaces the earlier one, which is also how a deployment RE-WORDS a variant an installed
-   * package shipped without forking it.
+   * package shipped without forking it — safe for Kaizen because a step is keyed by a fingerprint
+   * of the text its variant contributed, not by the id alone (see `AppliedAgentVariant`).
    *
    * Nothing is validated here (an id may legitimately be registered before its base kind is):
    * `validateRegistrations` reports an unknown base, a collision with a kind id, and a variant
@@ -509,13 +517,6 @@ export class AgentKindRegistry {
    */
   variantsForKind(kind: AgentKind): AgentKindVariantDefinition[] {
     return this.variants().filter((variant) => variant.baseKind === kind)
-  }
-
-  toolServersFor(kind: AgentKind): ReturnType<typeof normalizeToolRefs> {
-    const own = this.registry.get(kind)?.toolServers ?? []
-    const assigned = this.assignedToolServers.get(kind) ?? []
-    if (own.length === 0 && assigned.length === 0) return EMPTY_TOOL_REFS
-    return normalizeToolRefs([...own, ...assigned], (id) => this.toolServerDefinitions.get(id))
   }
 }
 

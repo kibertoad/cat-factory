@@ -35,7 +35,10 @@
     `switch(agentKind)` keys off; a varied step records the BASE kind, so only the prompt changes.
     `applyAgentVariant` is the pure composition the ENGINE runs once per dispatch, folding the
     variant onto the workspace's own override and emitting the result through the SAME
-    `AgentRunContext.systemPromptOverride` seam — which is why no executor branches on variants.
+    `AgentRunContext.systemPromptOverride` seam — which is why no executor branches on variants. It
+    returns what the variant CONTRIBUTED (`applied` + a `fingerprint` of that text) beside the
+    prompt, because the workspace wins on the same text: the engine pins that on the step, and every
+    reader that reports or keys on a varied step reads the pin rather than the selection.
     `prompts/bespoke.ts` holds `BespokeSystemPrompt`, the `{ role, directives }` split used by the
     prompts that never reach `systemPromptFor`; `prompts/bespoke-kinds.ts` holds the two bespoke
     CONTAINER prompts (`merger`, `on-call`, moved here from the server layer), the

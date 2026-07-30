@@ -646,6 +646,28 @@ describe('agent-kind variant validation', () => {
     expect(problems.some((p) => p.code === 'pipeline_variant_unresolved')).toBe(true)
   })
 
+  it('imposes no requirement on a DISABLED step of a registered pipeline', () => {
+    // Boot must apply exactly the rule the builder applies (`assertValidAgentVariants` skips a
+    // disabled step), or the same shape would be valid or invalid depending on which door it
+    // came through — refused in code, accepted through the API.
+    const pipelines = defaultPipelineRegistry()
+    pipelines.register({
+      id: 'pl_org_flow',
+      name: 'Org flow',
+      agentKinds: ['architect', 'coder'],
+      enabled: [false, true],
+      stepOptions: [{ agentVariantId: 'org:tdd' }, null],
+    })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: withCoderVariant(),
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+        knownAgentKinds: new Set(['architect', 'coder']),
+      }),
+    ).toEqual([])
+  })
+
   it('accepts a REGISTERED pipeline selecting a variant of the right step kind', () => {
     const pipelines = defaultPipelineRegistry()
     pipelines.register({

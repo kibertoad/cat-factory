@@ -1345,7 +1345,10 @@
         "changes_requested": "Changes requested",
         "rejected": "Rejected"
       },
-      "promptVariant": "Prompt variant"
+      "promptVariant": "Prompt variant",
+      "promptVariantAdditionOnly": "Only this variant's addition applied. The workspace prompt for this agent replaced its base text.",
+      "promptVariantSuperseded": "This variant did not apply. The workspace prompt for this agent took precedence.",
+      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt."
     },
     "stepDetail": {
       "contents": "Contents",
