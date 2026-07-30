@@ -4,6 +4,7 @@ import type {
   LlmCallActivity,
   Notification,
 } from '@cat-factory/kernel'
+import { NoopEventPublisher } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FanOutEventPublisher } from '../src/events/FanOutEventPublisher.js'
 
@@ -50,6 +51,10 @@ class RecordingPublisher implements ExecutionEventPublisher {
   llmCalls: string[] = []
   async llmCallObserved(ws: string): Promise<void> {
     this.llmCalls.push(ws)
+  }
+  infraChanges: string[] = []
+  async infraSetupChanged(ws: string): Promise<void> {
+    this.infraChanges.push(ws)
   }
 }
 
@@ -125,6 +130,37 @@ describe('FanOutEventPublisher', () => {
     })
     await fanOut.llmCallObserved('wsA', { executionId: 'ex1' } as LlmCallActivity)
     expect(inner.llmCalls).toEqual(['wsA'])
+  })
+
+  it('delivers an infraSetup transition to the origin only (the projection is per-board)', async () => {
+    const inner = new RecordingPublisher()
+    const fanOut = new FanOutEventPublisher(inner, {
+      // A reachability transition carries no block id, so the mount join must never be consulted —
+      // and a board mounting a shared service reads its OWN infra wiring, so there is nothing to
+      // fan out even if it did.
+      workspaceMountRepository: mountRepo(['wsA', 'wsB'], () => {
+        throw new Error('should not be queried for an infraSetup change')
+      }),
+    })
+    await fanOut.infraSetupChanged('wsA', { area: 'agentExecutor', status: 'unreachable' })
+    expect(inner.infraChanges).toEqual(['wsA'])
+  })
+
+  it('forwards every optional publisher method the port declares', () => {
+    // This decorator delegates method-by-method, so an event it does not name is silently DROPPED
+    // for every deployment that wires the fan-out — nothing throws, nothing logs, the browser just
+    // never updates. Reflecting the port's own surface (via the Noop implementation, which
+    // implements all of it) is what makes the next added event fail HERE instead of in production.
+    const fanOut = new FanOutEventPublisher(new RecordingPublisher(), {
+      workspaceMountRepository: mountRepo([]),
+    })
+    const declared = Object.getOwnPropertyNames(NoopEventPublisher.prototype).filter(
+      (name) => name !== 'constructor',
+    )
+    const missing = declared.filter(
+      (name) => typeof (fanOut as unknown as Record<string, unknown>)[name] !== 'function',
+    )
+    expect(missing).toEqual([])
   })
 
   it('resolves targets with a single mount-repo query per event', async () => {

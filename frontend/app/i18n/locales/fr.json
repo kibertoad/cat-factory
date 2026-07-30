@@ -1886,6 +1886,7 @@
         "clarity_review": "Marquer comme lu",
         "release_regression": "Accuser réception",
         "platform_health": "Accuser réception",
+        "infra_unreachable": "Accuser réception",
         "decision_required": "Marquer comme lu",
         "human_test_ready": "Marquer comme lu",
         "visual_confirmation_ready": "Marquer comme lu",
@@ -1940,11 +1941,13 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Exécuteur d'agents non configuré",
+        "unreachableTitle": "L'exécuteur d'agents est inaccessible",
         "body": "Ce déploiement exécute les agents sur un pool de runners auto-hébergé, mais aucun n'est enregistré, donc aucun agent ne pourra s'exécuter tant que vous n'en connectez pas un.",
         "action": "Configurer le pool de runners"
       },
       "ephemeralEnvironments": {
         "title": "Environnement de test non configuré",
+        "unreachableTitle": "Le fournisseur d'environnements de test est inaccessible",
         "body": "Aucun fournisseur d'environnements éphémères n'est enregistré, donc les agents de test qui nécessitent un environnement de prévisualisation actif ne peuvent pas s'exécuter. Ouvrez Environnements de test ci-dessous et connectez un cluster Kubernetes ou un fournisseur d'environnements HTTP personnalisé pour les activer.",
         "action": "Configurer l'environnement"
       },
@@ -1956,6 +1959,11 @@
       "dismiss": {
         "session": "Ignorer pour cette session",
         "permanent": "J'accepte les limitations, ne plus me notifier"
+      },
+      "unreachable": {
+        "body": "La connexion est configurée, mais une vérification en direct n'a pas pu l'atteindre à l'instant. Il s'agit donc d'une panne et non d'une configuration manquante : les agents qui en dépendent échoueront jusqu'à ce qu'une réponse revienne. Vérifiez que le service fonctionne, puis testez la connexion à nouveau.",
+        "reason": "Dernière vérification : {detail}",
+        "action": "Vérifier la connexion"
       }
     },
     "spendWarningBanner": {
@@ -3586,6 +3594,7 @@
     },
     "routable": {
       "platform_health": "Santé de la plateforme",
+      "infra_unreachable": "Pannes d'infrastructure",
       "merge_review": "Revue de fusion",
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",

@@ -14,6 +14,7 @@ import type {
   Notification,
   RequirementReview,
 } from '../domain/types.js'
+import type { InfraSetupTransition } from '../domain/infra-reachability.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -77,6 +78,13 @@ export interface ExecutionEventPublisher {
    * that predate notifications need no change.
    */
   notificationChanged?(workspaceId: string, notification: Notification): Promise<void>
+  /**
+   * One infrastructure area's reachability changed: push the delta so the setup banner appears
+   * (or clears) the moment the reachability watcher notices, instead of on whoever's next reload.
+   * Called on TRANSITION only — an outage is announced once, not once per sweep. Optional; a
+   * runtime with no real-time transport wired leaves it a no-op.
+   */
+  infraSetupChanged?(workspaceId: string, change: InfraSetupTransition): Promise<void>
   /**
    * One container-agent LLM call completed at the proxy: push its compact summary
    * (no prompt/response bodies) so an open "Model activity" view updates live,
@@ -144,13 +152,20 @@ export interface ExecutionEventPublisher {
  * as before — no events are pushed (tests, and any deployment without the
  * WORKSPACE_EVENTS binding).
  */
-export class NoopEventPublisher implements ExecutionEventPublisher {
+// `Required<…>` rather than the bare port, and that is load-bearing beyond this class: because
+// every publisher method is OPTIONAL, a new event added to the port compiles fine with no
+// implementation anywhere — and `FanOutEventPublisher` (which delegates method-by-method) would
+// then DROP it silently for every deployment wiring the in-org fan-out. Its drift guard reflects
+// this class's surface, so pinning this one to the port's FULL surface is what makes the next
+// added event fail at compile time here instead of in production.
+export class NoopEventPublisher implements Required<ExecutionEventPublisher> {
   async executionChanged(): Promise<void> {}
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
   async envConfigRepairChanged(): Promise<void> {}
   async envTestChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
+  async infraSetupChanged(): Promise<void> {}
   async llmCallObserved(): Promise<void> {}
   async requirementReviewChanged(): Promise<void> {}
   async consensusSessionChanged(): Promise<void> {}

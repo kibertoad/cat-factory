@@ -522,7 +522,10 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 
 - `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs` — bans `.catch(() => {})` in backend non-test source.
-  `node --test 'scripts/*.test.mjs'` runs that guard's own fixtures (CI runs both).
+- `node scripts/check-component-imports.mjs` — requires every layer component used in a Vue
+  template to be imported by path (a bare tag renders nothing, silently). See
+  [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
+- `node --test 'scripts/*.test.mjs'` runs both guards' own fixtures (CI runs all three).
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.

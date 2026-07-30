@@ -81,6 +81,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   merely gained an optional field); `config/` — the `AppConfig`
   contract; `runtime/gateways.ts` — the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
+- `runtime/` also holds the **runtime-neutral periodic sweeps** each facade drives from its own
+  scheduler (Worker cron ⇄ Node `setInterval`), so the behaviour cannot drift between them:
+  `platformHealth.ts` (run-health threshold alerting), `keyDrift.ts`, and `infraReachability.ts`
+  (probes each board's CONFIGURED infrastructure connections and reports a dead one as
+  `unreachable`). A new sweep belongs here and is called from BOTH facades.
 - `observability/logger.ts` — the **only place a logging library is named**: pino adapted onto the
   kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
   destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the

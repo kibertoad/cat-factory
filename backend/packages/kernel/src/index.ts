@@ -311,6 +311,22 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Infrastructure REACHABILITY: the pure decision the watcher sweep and the board snapshot share
+// — what to record, which transitions to announce, and how a recorded outage folds into the
+// setup projection. See `domain/infra-reachability.ts`.
+export type {
+  InfraSetupTransition,
+  ProbeOutcome,
+  ProbeVerdict,
+  ReachabilityDecision,
+  SavedConnectionProbe,
+} from './domain/infra-reachability.js'
+export {
+  applyInfraReachability,
+  decideReachability,
+  recordedUnreachableAreas,
+} from './domain/infra-reachability.js'
+
 // Where an ordered `-f` compose layer's text comes from (the primary repo, a directly-supplied
 // document, or another repo), and the pure placement rules both consumers share — the compose
 // environment provider and the shared-stack bring-up. See `domain/compose-sources.ts`.

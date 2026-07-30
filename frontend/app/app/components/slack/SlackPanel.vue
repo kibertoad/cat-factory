@@ -43,6 +43,7 @@ const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
   { type: 'pr_review_ready', label: t('slack.routable.pr_review_ready') },
   { type: 'initiative', label: t('slack.routable.initiative') },
   { type: 'platform_health', label: t('slack.routable.platform_health') },
+  { type: 'infra_unreachable', label: t('slack.routable.infra_unreachable') },
 ])
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
@@ -75,6 +76,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   budget_paused: { enabled: false, channel: '' },
   // In-app only (not in ROUTABLE), but the map is exhaustive over the type.
   key_drift: { enabled: false, channel: '' },
+  infra_unreachable: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 // Editable member rows carry a client-only stable `uid` (see `slackMemberMapping`) so

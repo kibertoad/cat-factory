@@ -16,6 +16,7 @@ import {
   segmentPct,
   trendMagnitude,
 } from './ReportsPanel.logic'
+import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
