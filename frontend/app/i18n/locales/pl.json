@@ -376,6 +376,14 @@
         "pr_ready": "Aktywne",
         "done": "Aktywne"
       },
+      "statusHint": {
+        "planned": "Ta usługa nie ma jeszcze zadań. Usługa nigdy się nie kończy, więc to punkt wyjścia, a nie utknięcie.",
+        "ready": "Wszystkie zadania tej usługi są bezczynne lub scalone. Nic się nie wykonuje i nic nie czeka na Ciebie.",
+        "in_progress": "Co najmniej jedno zadanie tej usługi jest wykonywane lub ma otwarty pull request.",
+        "blocked": "Co najmniej jedno zadanie lub inicjatywa tej usługi czeka na Twoją decyzję.",
+        "pr_ready": "Co najmniej jedno zadanie tej usługi jest wykonywane lub ma otwarty pull request.",
+        "done": "Wszystkie zadania tej usługi są bezczynne lub scalone. Nic się nie wykonuje i nic nie czeka na Ciebie."
+      },
       "shared": "Współdzielone",
       "sharedTitle": "Współdzielone między obszarami roboczymi tej organizacji",
       "bootstrapping": "Inicjalizacja…",
@@ -1235,6 +1243,7 @@
       "spinningUpContainer": "Uruchamianie kontenera…",
       "subtasks": "Podzadania · {completed}/{total}",
       "standardsApplied": "Zastosowane standardy",
+      "standardsAppliedHint": "Standardy dobrych praktyk wplecione w prompt systemowy tego kroku. Agent wykonawczy dostaje skróconą wersję każdego z nich, a recenzenci i planiści pełny tekst.",
       "decision": "Decyzja",
       "awaitingChoice": "Oczekiwanie na wybór człowieka",
       "approvalGate": "Bramka zatwierdzenia",
@@ -1321,13 +1330,16 @@
       "effort": {
         "heading": "Wysiłek agenta",
         "difficulty": "Trudność",
+        "difficultyHint": "Własna ocena agenta, jak trudny był ten krok, w skali do dziesięciu. Deklaracja agenta, a nie pomiar.",
         "outOfTen": "{value}/10",
         "reduced": "Co obniżyło skuteczność",
         "obstacles": "Kluczowe przeszkody"
       },
       "adherence": {
         "heading": "Zgodność z najlepszymi praktykami",
+        "headingHint": "Standardy dobrych praktyk wplecione w prompt tego recenzenta oraz to, jak ściśle jego zdaniem zmiana trzyma się każdego z nich.",
         "outOfTen": "{value}/10",
+        "ratingHint": "Własna ocena recenzenta, jak ściśle zmiana trzyma się tego standardu, w skali do dziesięciu. Deklaracja recenzenta, a nie pomiar.",
         "relatedFindings": "Powiązane ustalenia",
         "unnamed": "Standard"
       },
@@ -1599,7 +1611,9 @@
     },
     "legend": {
       "metered": "Rozliczane",
-      "subscription": "Subskrypcja"
+      "meteredHint": "Rozliczane przez dostawcę za tokeny. To realne pieniądze.",
+      "subscription": "Subskrypcja",
+      "subscriptionHint": "Tylko poglądowo. Te wywołania przebiegły w planie ryczałtowym, więc kwota pokazuje, ile te same tokeny kosztowałyby przez rozliczane API. Nigdy nie została zafakturowana i nie liczy się jako wydatek."
     },
     "spend": {
       "byModel": "Koszty według modelu",
@@ -3921,9 +3935,14 @@
       "companionGateTooltip": "Uruchamiaj tego towarzysza tylko, gdy szacunek zadania przekroczy próg (wymaga wcześniejszego Task Estimatora)",
       "consensusGateTooltip": "Uruchamiaj konsensus tylko, gdy szacunek zadania przekroczy próg (w przeciwnym razie uruchamia się standardowy agent)",
       "runWhenAny": "uruchom, gdy (którekolwiek):",
+      "gatingRunWhenAnyHint": "Krok uruchamia się, gdy którakolwiek z tych osi zostanie osiągnięta lub przekroczona, a w przeciwnym razie jest pomijany. Gdy brak szacunku, uruchamia się mimo to.",
+      "gatingRunWhenAnyConsensusHint": "Panel zbiera się, gdy którakolwiek z tych osi zostanie osiągnięta lub przekroczona; poniżej uruchamia się pojedynczy agent. Gdy brak szacunku, panel zbiera się mimo to.",
       "complexityThreshold": "złożoność ≥",
+      "complexityThresholdHint": "Jak trudne jest wykonanie pracy, ocenione przez Task Estimatora wcześniej w pipelinie. Skala to 0 do 1, a nie 1 do 10. Zostaw puste, aby pominąć tę oś.",
       "riskThreshold": "ryzyko ≥",
+      "riskThresholdHint": "Jak wiele zmiana może zepsuć, ocenione przez Task Estimatora wcześniej w pipelinie. Skala to 0 do 1, a nie 1 do 10. Zostaw puste, aby pominąć tę oś.",
       "impactThreshold": "wpływ ≥",
+      "impactThresholdHint": "Jak daleko zmiana sięga w systemie, ocenione przez Task Estimatora wcześniej w pipelinie. Skala to 0 do 1, a nie 1 do 10. Zostaw puste, aby pominąć tę oś.",
       "strategy": "Strategia",
       "rounds": "Rundy",
       "purposeLabel": "Cel",
@@ -4078,6 +4097,7 @@
       "stepLabel": "Budżet wyjścia",
       "kindLabel": "Budżet wyjścia",
       "kindHint": "Dotyczy każdego uruchomienia tego agenta. Krok pipeline'u może to nadpisać.",
+      "hint": "Maksymalna długość pojedynczej odpowiedzi tego agenta. Puste pole dziedziczy wartość z wyższego poziomu, a nie znosi limitu. Wartość ustawiona na kroku pipeline'u ma pierwszeństwo przed domyślną wartością obszaru roboczego.",
       "inherits": "Odziedziczone",
       "inheritsValue": "Odziedziczone ({tokens})"
     }
@@ -4207,6 +4227,7 @@
     "empty": "Ten krok nie wydał jeszcze werdyktu.",
     "notScored": "Bez oceny",
     "threshold": "próg {threshold}",
+    "thresholdHint": "Wynik, który ten krok musiał osiągnąć, wzięty z polityki scalania zadania. Poniżej sędzia odsyła pracę do kroku, który ją wytworzył, przekazując swoje uwagi do poprawy, albo wstrzymuje przebieg i czeka na Ciebie, gdy skończy się budżet prób.",
     "rubricOverridden": "rubryka przestrzeni roboczej",
     "reworkRounds": "poprawki {spent}/{budget}",
     "findingsHeading": "Co zgłosiła rubryka",
@@ -5804,10 +5825,12 @@
       "config": "Konfiguracja i CI",
       "source": "Kod źródłowy",
       "schema": "Schemat i migracje",
-      "unknown": "Niesklasyfikowane"
+      "unknown": "Niesklasyfikowane",
+      "hint": "Czego dotknęła zmiana, ustalone na podstawie zmienionych plików. Polityka scalania może mieć własną regułę dla każdej klasy, a zmiana obejmująca kilka klas liczy się jako najcięższa z nich."
     },
     "effort": {
       "prompt": "Nakład przeglądu",
+      "promptHint": "Zapisuje, ile przeglądu naprawdę wymagał ten pull request. Twoja odpowiedź jest punktem odniesienia, względem którego kalibrowane są progi automatycznego scalania. Oznaczanie jest opcjonalne i możesz scalić bez niego.",
       "none": "Bez uwag",
       "minor": "Drobne uwagi",
       "major": "Istotne przeróbki",

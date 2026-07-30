@@ -40,7 +40,11 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
                figure would report money that was never billed. -->
           <span class="shrink-0 tabular-nums text-slate-400">
             {{ money(row.meteredCost) }}
-            <span v-if="row.subscriptionCost > 0" class="text-amber-400">
+            <span
+              v-if="row.subscriptionCost > 0"
+              class="text-amber-400"
+              :title="t('reports.legend.subscriptionHint')"
+            >
               {{ t('reports.spend.subscriptionAside', { value: money(row.subscriptionCost) }) }}
             </span>
           </span>

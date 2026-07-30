@@ -151,7 +151,11 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           <span class="text-[13px] font-semibold text-slate-100">
             {{ score === null ? t('judge.notScored') : n(score, 'percent') }}
           </span>
-          <span v-if="threshold !== null" class="text-[12px] text-slate-400">
+          <span
+            v-if="threshold !== null"
+            class="text-[12px] text-slate-400"
+            :title="t('judge.thresholdHint')"
+          >
             {{ t('judge.threshold', { threshold: n(threshold, 'percent') }) }}
           </span>
           <span v-if="judge.disposition" class="text-[12px] text-slate-400">
