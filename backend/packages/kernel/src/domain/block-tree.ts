@@ -26,6 +26,43 @@ export async function resolveServiceFrameBlock(
 }
 
 /**
+ * Which system a block's work belongs to, as a DISCRIMINATED result: the enclosing service frame
+ * when there is one, else the positive reason there is not.
+ *
+ * Every prompt-assembling path needs this, and the two "no service" cases mean opposite things to
+ * a prompt — a frame-level run has no owning service because it IS one, while a loose task has
+ * none because the platform genuinely does not know which system it belongs to, and that second
+ * case must be STATED (an unidentified product must never render like an obvious one, or a model
+ * supplies its own). Keeping the derivation here, beside the walk that feeds it, is what stops the
+ * container path and the inline reviewers from answering the question differently.
+ */
+export type OwnServiceContext =
+  | { stated: true; frameId: string; title: string; description?: string }
+  | { stated: false; reason: 'block-is-the-service' | 'not-under-a-service' }
+
+/**
+ * Derive the {@link OwnServiceContext} for a block from its already-resolved service frame (see
+ * {@link resolveServiceFrameBlock}, whose result may be a non-frame topmost block when the block
+ * sits outside any service — which is exactly why the `level` is re-checked here).
+ */
+export function describeOwnService(
+  block: Pick<Block, 'id' | 'level'>,
+  serviceFrame: Pick<Block, 'id' | 'level' | 'title' | 'description'> | null | undefined,
+): OwnServiceContext {
+  if (block.level === 'frame') return { stated: false, reason: 'block-is-the-service' }
+  if (!serviceFrame || serviceFrame.level !== 'frame' || serviceFrame.id === block.id) {
+    return { stated: false, reason: 'not-under-a-service' }
+  }
+  const description = serviceFrame.description?.trim()
+  return {
+    stated: true,
+    frameId: serviceFrame.id,
+    title: serviceFrame.title,
+    ...(description ? { description } : {}),
+  }
+}
+
+/**
  * The best-practice fragment ids that apply to a block's run — the SINGLE source of truth shared
  * by every run-time fold path (the engine's `AgentContextBuilder` and the requirements-review
  * grounding), so the two can't drift. A TASK (or module) OWNS its selection outright: its inherited

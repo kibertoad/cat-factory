@@ -131,6 +131,7 @@
       "updateFailed": "Impossible d'enregistrer les modifications",
       "epicFailed": "Impossible de changer l'épopée",
       "moveFailed": "Impossible de déplacer",
+      "resizeFailed": "Redimensionnement impossible",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
       "unlinkFailed": "Impossible de supprimer la dépendance",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} fusionnées",
       "noTasksYet": "Pas encore de tâches",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implémentées",
       "prReadyCount": "{count} PR prêtes",
       "taskCount": "{count} tâche | {count} tâches",
       "moduleCount": "{count} module | {count} modules",
@@ -4073,6 +4073,13 @@
         "deleteFailed": "Impossible de supprimer le pipeline",
         "removeFailed": "Impossible de retirer le pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budget de sortie",
+      "kindLabel": "Budget de sortie",
+      "kindHint": "S'applique à chaque exécution de cet agent. Une étape du pipeline peut le remplacer.",
+      "inherits": "Hérité",
+      "inheritsValue": "Hérité ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4107,7 +4114,8 @@
       "reverted": "Retour à l'invite par défaut",
       "saveFailed": "Impossible d'enregistrer l'invite",
       "loadFailed": "Impossible de charger l'invite",
-      "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification."
+      "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification.",
+      "budgetFailed": "Impossible d'enregistrer le budget de sortie"
     }
   },
   "agentTier": {
@@ -4297,6 +4305,12 @@
     "recommendationProgress": "{ready} / {total} prêtes",
     "generatingSuggestion": "Génération d'une suggestion étayée…",
     "currentStandard": "Standard actuel : {title}",
+    "grounding": {
+      "standard": "Standard de l'équipe",
+      "project-spec": "Spécification du projet",
+      "web": "Source web",
+      "general-practice": "Pratique générale"
+    },
     "accept": "Accepter",
     "reject": "Rejeter",
     "reRequestPlaceholder": "Demander une autre recommandation…",

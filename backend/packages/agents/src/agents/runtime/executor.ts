@@ -213,7 +213,10 @@ export class AiAgentExecutor implements AgentExecutor {
       system,
       prompt: userPromptFor(context, this.agentKindRegistry),
       temperature: config.temperature,
-      maxOutputTokens: config.maxOutputTokens,
+      // The engine resolves the effective ceiling once per dispatch (step option > workspace
+      // setting > this deployment default), so every executor path agrees on the budget. Absent
+      // ⇒ the deployment routing default for the kind.
+      maxOutputTokens: context.maxOutputTokens ?? config.maxOutputTokens,
       ...(tools ? { tools } : {}),
       // Tag the call so an instrumented provider can group it under its run's trace
       // (a no-op when no trace sink is wired; ignored by every model provider).

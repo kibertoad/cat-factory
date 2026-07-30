@@ -28,6 +28,53 @@ export const FINAL_ANSWER_IN_REPLY =
   'contains the answer.'
 
 /**
+ * Appended to every agent that reasons about a work item WITHOUT a checkout to orient itself in —
+ * the inline reviewers and structured-dialogue agents (requirements review + rework, the Writer,
+ * clarity triage, both brainstorm stages).
+ *
+ * Those agents receive a task's title and description and nothing else that names the software
+ * under discussion, and a bare title ("implement webhooks") is domain-ambiguous. Asked for
+ * concrete findings against it, a model will supply the missing product itself — and once one
+ * pass has named a product, the incorporated document carries that invention into every later
+ * pass. Naming the absent product is the finding; inventing one buries the real question under
+ * confident detail about software that does not exist.
+ *
+ * Stated once here because it only holds if every agent in a flow honours it: a reviewer that
+ * stays with the stated system, an editor that does not write an assumed one into the document,
+ * and a Writer that does not recommend against one.
+ */
+export const NO_ASSUMED_PRODUCT =
+  'THE SYSTEM UNDER DISCUSSION IS ONLY WHAT THE CONTEXT NAMES. Never assume, infer or introduce ' +
+  'a product, company, vendor, framework, platform, tool or business domain the context you were ' +
+  'given does not name — not to make a point concrete, and not as an illustrative example. If the ' +
+  'context does not identify which system this work belongs to, treat that as a FACT ABOUT THE ' +
+  'CONTEXT and not a gap in your knowledge: stay at the level the text actually supports, say ' +
+  'plainly that the system is unidentified, and where a point genuinely depends on knowing which ' +
+  'system this is, raise THAT as the point ("which service / product is this for?"). A confident ' +
+  'answer about the wrong software is worse than an explicit "not stated here".'
+
+/**
+ * Appended to EVERY kind's system prompt by `systemPromptFor`, alongside the surface directives.
+ *
+ * The platform's own mechanics are visible to an agent from the inside — `cat-factory/<block>`
+ * branch names, `.cat-context/` and `.cat-*` sentinel files, managed markers in a pull request
+ * body — and a task with no product context of its own gives a model nothing else concrete to
+ * anchor on. The platform name is then the most salient proper noun in the whole prompt, which is
+ * how a neutral "implement webhooks" comes back as a design for the orchestrator's webhooks.
+ *
+ * Appended after any workspace override, so an edited prompt cannot delete it.
+ */
+export const PLATFORM_IS_NOT_THE_PRODUCT =
+  'THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent ' +
+  'orchestration platform (cat-factory), and its mechanics are visible around you: branch names ' +
+  'under `cat-factory/`, `.cat-context/` context files, `.cat-*` sentinel files, and managed ' +
+  'markers in pull request bodies. Those belong to the harness running you. Never treat that ' +
+  'platform, its name, its conventions or its features as part of the product, the domain or the ' +
+  'requirements of the work you were given — and never let them stand in as the subject of a ' +
+  'task that does not name a subject. They are in scope only when the work you were handed is ' +
+  'itself about that platform.'
+
+/**
  * Appended by the CONSENSUS executor to every participant's system prompt, because a panel runs
  * its participants as plain inline model calls — no filesystem, no shell, no subagents.
  *

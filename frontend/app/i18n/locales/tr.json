@@ -131,6 +131,7 @@
       "updateFailed": "Değişiklikler kaydedilemedi",
       "epicFailed": "Epik değiştirilemedi",
       "moveFailed": "Taşınamadı",
+      "resizeFailed": "Yeniden boyutlandırılamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
       "unlinkFailed": "Bağımlılık kaldırılamadı",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} birleştirildi",
       "noTasksYet": "Henüz görev yok",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} uygulandı",
       "prReadyCount": "{count} PR hazır",
       "taskCount": "{count} görev | {count} görev",
       "moduleCount": "{count} modül | {count} modül",
@@ -4085,6 +4085,13 @@
         "deleteFailed": "Pipeline silinemedi",
         "removeFailed": "Pipeline kaldırılamadı"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Çıktı bütçesi",
+      "kindLabel": "Çıktı bütçesi",
+      "kindHint": "Bu ajanın her çalışmasına uygulanır. Bir pipeline adımı bunu geçersiz kılabilir.",
+      "inherits": "Devralındı",
+      "inheritsValue": "Devralındı ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4119,7 +4126,8 @@
       "reverted": "Yerleşik isteme dönüldü",
       "saveFailed": "İstem kaydedilemedi",
       "loadFailed": "İstem yüklenemedi",
-      "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
+      "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın.",
+      "budgetFailed": "Çıktı bütçesi kaydedilemedi"
     }
   },
   "agentTier": {
@@ -4309,6 +4317,12 @@
     "recommendationProgress": "{ready} / {total} hazır",
     "generatingSuggestion": "Temellendirilmiş bir öneri oluşturuluyor…",
     "currentStandard": "Mevcut standart: {title}",
+    "grounding": {
+      "standard": "Ekip standardı",
+      "project-spec": "Proje şartnamesi",
+      "web": "Web kaynağı",
+      "general-practice": "Genel uygulama"
+    },
     "accept": "Kabul et",
     "reject": "Reddet",
     "reRequestPlaceholder": "Farklı bir öneri isteyin…",

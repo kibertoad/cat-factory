@@ -19,10 +19,12 @@ import {
 import { generateText } from 'ai'
 import {
   catFactoryObservability,
+  composeBespokePrompt,
   providerWebSearchTools,
-  REVIEW_SYSTEM_PROMPT,
-  REWORK_SYSTEM_PROMPT,
-  WRITER_SYSTEM_PROMPT,
+  REQUIREMENTS_WRITER_AGENT_KIND,
+  REVIEW_PROMPT,
+  REWORK_PROMPT,
+  WRITER_PROMPT,
 } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
@@ -41,7 +43,9 @@ import {
   coerceChunkRecommendations,
   coerceSingleRecommendation,
   extractJson,
+  type WriterSuggestion,
   findSourceItem,
+  productIsIdentified,
 } from './requirements.logic.js'
 
 /**
@@ -123,8 +127,8 @@ export class RequirementReviewService extends IterativeReviewService<
   protected readonly reviewerLabel = 'requirements reviewer'
   protected readonly reviewAgentKind = 'requirements-review'
   protected readonly reworkAgentKind = 'requirements-rework'
-  protected readonly reviewSystemPrompt = REVIEW_SYSTEM_PROMPT
-  protected readonly reworkSystemPrompt = REWORK_SYSTEM_PROMPT
+  protected readonly reviewPrompt = REVIEW_PROMPT
+  protected readonly reworkPrompt = REWORK_PROMPT
   protected readonly reviewIdPrefix = 'rrv'
   protected readonly itemIdPrefix = 'rri'
   protected readonly revisedNoun = 'revised requirements'
@@ -254,6 +258,7 @@ export class RequirementReviewService extends IterativeReviewService<
           status: 'pending',
           note: noteByItem.get(item.id) ?? null,
           groundedInFragment: null,
+          groundedIn: null,
           createdAt: now,
           updatedAt: now,
         })
@@ -327,6 +332,11 @@ export class RequirementReviewService extends IterativeReviewService<
       specExcerpts: sharedSpecExcerpts,
       webResults: sharedWebResults,
     }
+    // The workspace's own Writer prompt, when it edited one. Resolved once for the batch beside the
+    // rest of the shared inputs — every chunk of one batch must run under the same prompt.
+    const writerPromptOverride = (
+      await this.deps.resolveSystemPromptOverride?.(workspaceId, REQUIREMENTS_WRITER_AGENT_KIND)
+    )?.trim()
 
     // Group the pending placeholders by their "do it differently" note so every finding in a
     // batched prompt shares the one note the prompt carries (a fresh batch shares null; a
@@ -368,13 +378,17 @@ export class RequirementReviewService extends IterativeReviewService<
         const suggestions = liveFindings.length
           ? await this.runWriterForChunk(
               workspaceId,
-              { model, ref },
+              {
+                model,
+                ref,
+                ...(writerPromptOverride ? { promptOverride: writerPromptOverride } : {}),
+              },
               context,
               liveFindings,
               note,
               grounding,
             )
-          : new Map<string, { recommendation: string; fromStandard: string | null }>()
+          : new Map<string, WriterSuggestion>()
         // Re-read fresh before applying — the human may have acted during the Writer call — and
         // write under CAS, so an answer that lands between that read and this write survives
         // instead of being overwritten by this chunk's whole-row snapshot (race-audit 2.5).
@@ -415,7 +429,7 @@ export class RequirementReviewService extends IterativeReviewService<
   private applyRecommendationToTarget(
     target: { ph: RequirementRecommendation; finding: RequirementReviewItem | undefined },
     review: RequirementReview,
-    suggestions: Map<string, { recommendation: string; fromStandard: string | null }>,
+    suggestions: Map<string, WriterSuggestion>,
     fragmentById: Map<string, GroundingFragment>,
     now: number,
   ): { produced: boolean; readyForReview: boolean } {
@@ -437,6 +451,11 @@ export class RequirementReviewService extends IterativeReviewService<
     const standard = suggestion.fromStandard ? fragmentById.get(suggestion.fromStandard) : undefined
     rec.recommendedText = suggestion.recommendation
     rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+    // What the answer actually rests on. A resolved standard IS the provenance, whatever the model
+    // reported — the platform matched the id, so it knows better than the reply does; otherwise the
+    // Writer's own report stands, null included (see `recommendationSourceSchema`: unreported is
+    // not the same as unsupported).
+    rec.groundedIn = standard ? 'standard' : suggestion.groundedIn
     rec.updatedAt = now
     if (!rec.auto) {
       rec.status = 'ready'
@@ -506,6 +525,7 @@ export class RequirementReviewService extends IterativeReviewService<
       rec.status = 'pending'
       rec.recommendedText = ''
       rec.groundedInFragment = null
+      rec.groundedIn = null
       rec.note = note.trim() || null
       const item = findSourceItem(review.items, rec.sourceFinding)
       if (!item) {
@@ -569,17 +589,21 @@ export class RequirementReviewService extends IterativeReviewService<
    */
   private async runWriterForChunk(
     workspaceId: string,
-    resolved: { model: ReturnType<ModelProvider['resolve']>; ref: ModelRef },
+    resolved: {
+      model: ReturnType<ModelProvider['resolve']>
+      ref: ModelRef
+      promptOverride?: string
+    },
     context: RequirementsContext,
     findings: RequirementReviewItem[],
     note: string | undefined,
     grounding: RecommendationGrounding,
-  ): Promise<Map<string, { recommendation: string; fromStandard: string | null }>> {
-    const { model, ref } = resolved
+  ): Promise<Map<string, WriterSuggestion>> {
+    const { model, ref, promptOverride } = resolved
     try {
       const result = await generateText({
         model,
-        system: WRITER_SYSTEM_PROMPT,
+        system: composeBespokePrompt(WRITER_PROMPT, promptOverride),
         prompt: buildRecommendationPrompt(context, findings, grounding, note),
         temperature: 0.2,
         // Keep the SAME 6000-token budget per finding the single-finding path used, scaled by the
@@ -588,7 +612,14 @@ export class RequirementReviewService extends IterativeReviewService<
         maxOutputTokens: 6000 * Math.min(findings.length, RECOMMENDATION_CHUNK_SIZE),
         // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
         // gateway-RAG `webResults` already folded into the prompt cover other providers.
-        ...(providerWebSearchTools(ref.provider)
+        //
+        // WITHHELD when the context does not identify the system under discussion. Search is the
+        // step that turns a guess into a citation: a model that has quietly settled on a product
+        // searches for THAT product, and comes back with real sources about software this work has
+        // nothing to do with — which reads to a human as diligence rather than as the invention it
+        // is. With no identified subject the Writer answers from general practice instead (its
+        // prompt says so), which is weaker and looks it.
+        ...(productIsIdentified(context) && providerWebSearchTools(ref.provider)
           ? { tools: providerWebSearchTools(ref.provider) }
           : {}),
         providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
@@ -732,17 +763,55 @@ export class RequirementReviewService extends IterativeReviewService<
         }))
       : []
     // When an upstream `requirements-brainstorm` dialogue settled a converged direction, that
-    // direction (which already shaped the rough idea into crisp requirements) is the subject the
-    // reviewer critiques — not the raw description it superseded.
-    const brainstormDirection = await this.resolveBrainstormDirection?.(workspaceId, block.id)
+    // direction (which already shaped the rough idea into crisp requirements) is the primary
+    // subject the reviewer critiques. It is carried in its OWN field rather than written over
+    // `description`: substituting it made the requester's own words unrecoverable on every later
+    // pass, so a dialogue that drifted off the request could never be caught against it.
+    const [brainstormDirection, service, specIntent] = await Promise.all([
+      this.resolveBrainstormDirection?.(workspaceId, block.id),
+      this.resolveOwnService(workspaceId, block),
+      this.readSpecIntent(workspaceId, block),
+    ])
     return {
-      block: {
-        title: block.title,
-        type: block.type,
-        description: brainstormDirection?.trim() || block.description,
-      },
+      block: { title: block.title, type: block.type, description: block.description },
+      service,
+      ...(specIntent ? { specIntent } : {}),
+      ...(brainstormDirection?.trim() ? { refinedDirection: brainstormDirection.trim() } : {}),
       docs,
       tasks,
     }
   }
+
+  /**
+   * The service's own statement of intent, from the committed `spec/overview.md` — the first
+   * paragraph only, since the reviewer needs to know WHAT the service is, not its full
+   * specification. Best-effort: unwired, unlinked or unreadable ⇒ undefined, and the product
+   * context then rests on the service frame's board title + description alone.
+   */
+  private async readSpecIntent(workspaceId: string, block: Block): Promise<string | undefined> {
+    try {
+      const ctx = await this.resolveRunRepoContext?.(workspaceId, block.id)
+      if (!ctx) return undefined
+      const file = await ctx.repo.getFile('spec/overview.md', ctx.baseBranch)
+      return firstProse(file?.content)
+    } catch {
+      // best-effort grounding — see `gatherSpecExcerpts`
+      return undefined
+    }
+  }
+}
+
+/**
+ * The first prose paragraph of a Markdown document, headings skipped, capped. Used to lift a
+ * service's intent out of its `spec/overview.md` without pulling the whole specification into
+ * every reviewer pass. Undefined when there is no prose to lift.
+ */
+function firstProse(content: string | undefined, maxChars = 800): string | undefined {
+  if (!content?.trim()) return undefined
+  for (const block of content.split(/\n\s*\n/)) {
+    const paragraph = block.trim()
+    if (!paragraph || paragraph.startsWith('#') || paragraph.startsWith('<!--')) continue
+    return paragraph.length > maxChars ? `${paragraph.slice(0, maxChars)}…` : paragraph
+  }
+  return undefined
 }

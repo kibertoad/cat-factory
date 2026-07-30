@@ -32,6 +32,7 @@ import type {
   AgentContextSnapshotRepository,
   AgentExecutor,
   AgentPromptRepository,
+  WorkspaceAgentSettingsRepository,
   AgentSearchQueryRepository,
   AppCaches,
   BlockRepository,
@@ -1048,6 +1049,14 @@ export interface CoreDependencies {
    * `agentPrompts` module isn't assembled and every kind runs the prompt it ships with.
    */
   agentPromptRepository?: AgentPromptRepository
+  /**
+   * Stores a workspace's per-agent-kind generation settings — today the output-token ceiling,
+   * edited from the pipeline builder beside the prompt overrides. Optional and default-off:
+   * absent → the `workspaceAgentSettings` module isn't assembled, the controller 503s, and every
+   * kind runs on the deployment routing ceiling. Read on the RUN path too: `AgentContextBuilder`
+   * resolves the dispatched kind's ceiling at dispatch.
+   */
+  workspaceAgentSettingsRepository?: WorkspaceAgentSettingsRepository
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
    * DEFAULT: Cloudflare/Node deploy `mdp_kimi` (Cloudflare-runnable on the bare baseline),

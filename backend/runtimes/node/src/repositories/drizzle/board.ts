@@ -444,6 +444,22 @@ export class DrizzleBlockRepository implements BlockRepository {
       .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
   }
 
+  async shiftChildPositions(
+    workspaceId: string,
+    parentId: string,
+    dx: number,
+    dy: number,
+  ): Promise<void> {
+    if (dx === 0 && dy === 0) return
+    await this.db
+      .update(blocks)
+      .set({
+        pos_x: sql`${blocks.pos_x} + ${dx}`,
+        pos_y: sql`${blocks.pos_y} + ${dy}`,
+      })
+      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.parent_id, parentId)))
+  }
+
   async deleteMany(workspaceId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return
     await this.db

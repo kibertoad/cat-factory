@@ -131,6 +131,7 @@
       "updateFailed": "変更を保存できませんでした",
       "epicFailed": "エピックを変更できませんでした",
       "moveFailed": "移動できませんでした",
+      "resizeFailed": "サイズを変更できませんでした",
       "deleteFailed": "削除できませんでした",
       "linkFailed": "タスクをリンクできませんでした",
       "unlinkFailed": "依存関係を削除できませんでした",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} マージ済み",
       "noTasksYet": "タスクはまだありません",
       "prCount": "{count} 件の PR",
-      "implemented": "{merged}/{total} 実装済み",
       "prReadyCount": "{count} 件の PR が準備完了",
       "taskCount": "{count} 件のタスク | {count} 件のタスク",
       "moduleCount": "{count} 件のモジュール | {count} 件のモジュール",
@@ -4085,6 +4085,13 @@
         "deleteFailed": "パイプラインを削除できませんでした",
         "removeFailed": "パイプラインを削除できませんでした"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "出力予算",
+      "kindLabel": "出力予算",
+      "kindHint": "このエージェントのすべての実行に適用されます。パイプラインのステップで上書きできます。",
+      "inherits": "継承",
+      "inheritsValue": "継承（{tokens}）"
     }
   },
   "agentPrompt": {
@@ -4119,7 +4126,8 @@
       "reverted": "組み込みのプロンプトに戻しました",
       "saveFailed": "プロンプトを保存できませんでした",
       "loadFailed": "プロンプトを読み込めませんでした",
-      "conflict": "このプロンプトは別のユーザーが変更しました。再読み込みしました。編集をやり直してください。"
+      "conflict": "このプロンプトは別のユーザーが変更しました。再読み込みしました。編集をやり直してください。",
+      "budgetFailed": "出力予算を保存できませんでした"
     }
   },
   "agentTier": {
@@ -4309,6 +4317,12 @@
     "recommendationProgress": "{ready} / {total} 件準備完了",
     "generatingSuggestion": "根拠に基づいた提案を生成中…",
     "currentStandard": "現在の標準: {title}",
+    "grounding": {
+      "standard": "チーム標準",
+      "project-spec": "プロジェクト仕様",
+      "web": "Web の情報源",
+      "general-practice": "一般的な慣行"
+    },
     "accept": "承認",
     "reject": "却下",
     "reRequestPlaceholder": "別の推奨をリクエスト…",

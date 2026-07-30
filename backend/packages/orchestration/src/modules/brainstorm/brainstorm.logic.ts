@@ -1,4 +1,9 @@
-import type { Block, BrainstormStage, RequirementReviewItem } from '@cat-factory/kernel'
+import type {
+  Block,
+  BrainstormStage,
+  OwnServiceContext,
+  RequirementReviewItem,
+} from '@cat-factory/kernel'
 
 // Pure logic for the brainstorm (structured-dialogue) agent: assembling the subject the
 // agent reasons over (the rough description for `requirements`, the refined requirements
@@ -16,12 +21,21 @@ export {
   hasNotesToIncorporate,
   type ReviewDisposition,
 } from '../requirements/requirements.logic.js'
+import { renderProductContextLines } from '../review/product-context.js'
 
 /** Everything a brainstorm agent reasons over for one stage. */
 export interface BrainstormContext {
   block: Pick<Block, 'title' | 'type' | 'description'>
   /** Which dialogue this is — selects the seed subject + the option framing. */
   stage: BrainstormStage
+  /**
+   * Which system this work belongs to — the enclosing service frame, or the positive reason there
+   * is none. A brainstorm runs INLINE with no checkout, so this is its only means of knowing what
+   * software the idea is FOR; the unresolved case is stated rather than omitted, because an agent
+   * asked to propose options for an unidentified system will otherwise pick one itself and propose
+   * options for that. Absent for a caller that resolves nothing (a test fake).
+   */
+  service?: OwnServiceContext
   /**
    * The requirements refined in prior stages (a requirements review's incorporated doc, or a
    * requirements-brainstorm's converged direction). Present only for the `architecture` stage;
@@ -47,16 +61,15 @@ const stageNoun = (stage: BrainstormStage): string =>
  * the incorporate step rewrites.
  */
 export function renderBrainstormSubject(ctx: BrainstormContext): string {
+  const lines = [
+    `# ${ctx.block.title} (${ctx.block.type})`,
+    ...renderProductContextLines(ctx.service, 'propose'),
+    '',
+  ]
+  const original = ctx.block.description?.trim() || '(no description provided)'
   if (ctx.convergedDoc?.trim()) {
-    return [
-      `# ${ctx.block.title} (${ctx.block.type})`,
-      '',
-      `## Current ${stageNoun(ctx.stage)} (under discussion)`,
-      ctx.convergedDoc.trim(),
-    ].join('\n')
-  }
-  const lines = [`# ${ctx.block.title} (${ctx.block.type})`, '']
-  if (ctx.stage === 'architecture' && ctx.refinedRequirements?.trim()) {
+    lines.push(`## Current ${stageNoun(ctx.stage)} (under discussion)`, ctx.convergedDoc.trim())
+  } else if (ctx.stage === 'architecture' && ctx.refinedRequirements?.trim()) {
     lines.push(
       '## Refined requirements (the basis for the approach)',
       ctx.refinedRequirements.trim(),
@@ -64,8 +77,13 @@ export function renderBrainstormSubject(ctx: BrainstormContext): string {
   } else {
     // For the architecture stage with no refined requirements threaded in, the raw description
     // is the seed — the same fallback as the requirements stage.
-    lines.push('## Rough idea', ctx.block.description?.trim() || '(no description provided)')
+    lines.push('## Rough idea', original)
+    return lines.join('\n')
   }
+  // A derived subject never DISPLACES the requester's own words — it is layered above them. The
+  // dialogue is where an idea gets shaped, so the shaping is exactly what has to stay checkable
+  // against what was actually asked for.
+  lines.push('', '## Original request (as written by the requester)', original)
   return lines.join('\n')
 }
 

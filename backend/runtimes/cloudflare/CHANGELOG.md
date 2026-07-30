@@ -1,5 +1,98 @@
 # @cat-factory/worker
 
+## 0.128.0
+
+### Minor Changes
+
+- 9d303f0: Make an agent kind's output-token ceiling configurable from the pipeline builder, at two tiers over
+  the deployment routing default: per pipeline step (`StepOptions.maxOutputTokens`) and per workspace
+  per agent kind (the new `workspace_agent_settings` store). The engine resolves the winner once per
+  dispatch onto `AgentRunContext.maxOutputTokens` — narrowest tier wins — so the container, inline and
+  consensus paths cannot disagree about the budget a step ran under.
+
+  Note the ceiling is advisory on the subscription-CLI inline path (the one-shot CLIs don't all honour
+  it), so it bites on the metered provider path.
+
+### Patch Changes
+
+- Updated dependencies [9d303f0]
+  - @cat-factory/contracts@0.202.0
+  - @cat-factory/kernel@0.200.0
+  - @cat-factory/orchestration@0.176.0
+  - @cat-factory/server@0.185.0
+  - @cat-factory/agents@0.93.0
+  - @cat-factory/consensus@0.13.9
+  - @cat-factory/eks@0.1.182
+  - @cat-factory/gates@0.8.29
+  - @cat-factory/gitlab@0.14.12
+  - @cat-factory/integrations@0.113.3
+  - @cat-factory/observability-otel@0.4.26
+  - @cat-factory/prompt-fragments@0.15.25
+  - @cat-factory/spend@0.12.130
+  - @cat-factory/caching@0.11.29
+  - @cat-factory/observability-langfuse@0.9.26
+  - @cat-factory/provider-cloudflare@0.7.335
+
+## 0.127.4
+
+### Patch Changes
+
+- 0bffe55: Resize a service frame or module by dragging any of its borders, and drop the frame's
+  "N/M implemented" tally.
+
+  The resize grips were children of the frame's inner drop zone, which put them 16px inside the
+  visible border, flush against the task canvas — two thin strips that read as scrollbars rather than
+  as the frame's edge — and only the east/south borders had one at all. All eight borders and corners
+  are now grips on the box itself (a shared `ResizeGrips.vue`, so the frame and the module can't
+  drift), each straddling the border it moves: a 12px hit band centred on it, 24px on a coarse
+  pointer, with a 2px bar that lights up on the border under the pointer and stays lit on the grabbed
+  border for the whole drag. `useFrameResize` holds that border's cursor on `<body>` while dragging so
+  the pointer outrunning the band no longer reads as a dropped grab, restoring it on `pointercancel`
+  as well as `pointerup`. The grips are hidden outright for a read-only viewer instead of lighting up
+  and no-opping.
+
+  Dragging the north or west border moves the container's content origin, and a child's position is
+  stored relative to that origin, so the contents have to be translated the other way or they slide
+  with the border. `POST /blocks/:id/resize` (new) carries both halves of the geometry and does that
+  in one arithmetic UPDATE via the new `BlockRepository.shiftChildPositions` (D1 + Drizzle, with
+  cross-runtime conformance assertions); the SPA applies the same compensation optimistically during
+  the drag and replays it inverted if the write is rejected.
+
+  Fixes a latent bug this surfaced: `BoardService`'s frame-mount resolution looked a frame block id
+  up globally (`getByFrameBlock`), while every read resolves layout from the board's own mounts. Since
+  seeded boards all carry the same block ids, a deployment with two of them could resolve another
+  board's service, land the write on the block row, and have every read override it with this board's
+  mount. It now resolves in the same direction the snapshot does: the frame id's candidate services
+  intersected with the acting board's own mounts (`mountProjection.ts`, the read half of the
+  frame-geometry split `layoutWrites.ts` writes). Starting from the board rather than from the
+  candidates is what keeps it routable in mothership mode — `listByFrameBlocks` is not
+  account-scoped, so a colliding seeded id in another org rides the candidate list, and asking the
+  persistence RPC for those services' mounts is refused closed.
+
+  The frame header's "N/M implemented" line is gone (with the `board.frame.implemented` key, in every
+  locale): each task card already shows its own status, so the frame-level tally restated that more
+  coarsely and counted every task ever added to the service rather than the work in flight. The module
+  and PR-ready counts stay, and the line hides entirely when there are neither.
+
+- Updated dependencies [0bffe55]
+- Updated dependencies [1cd9d73]
+  - @cat-factory/contracts@0.201.0
+  - @cat-factory/kernel@0.199.0
+  - @cat-factory/orchestration@0.175.0
+  - @cat-factory/server@0.184.0
+  - @cat-factory/agents@0.92.0
+  - @cat-factory/consensus@0.13.8
+  - @cat-factory/eks@0.1.181
+  - @cat-factory/gates@0.8.28
+  - @cat-factory/gitlab@0.14.11
+  - @cat-factory/integrations@0.113.2
+  - @cat-factory/observability-otel@0.4.25
+  - @cat-factory/prompt-fragments@0.15.24
+  - @cat-factory/spend@0.12.129
+  - @cat-factory/caching@0.11.28
+  - @cat-factory/observability-langfuse@0.9.25
+  - @cat-factory/provider-cloudflare@0.7.334
+
 ## 0.127.3
 
 ### Patch Changes

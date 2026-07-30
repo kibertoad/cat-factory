@@ -17,6 +17,7 @@ import {
   type OrderedFinding,
 } from './RequirementsReviewWindow.logic'
 import type {
+  RecommendationSource,
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
@@ -150,12 +151,29 @@ const STATUS_COLOR = {
   recommend_requested: 'primary',
 } as const satisfies Record<ReviewItemStatus, string>
 
+// What a Writer suggestion actually rests on. Shown because a suggestion drawn from the team's own
+// standards and one resting on nothing but the model look identical once they are sitting in the
+// answer box, and they deserve very different scrutiny. A suggestion whose standard resolved already
+// carries the richer "current standard" badge, so this fills in the rest rather than repeating it.
+const GROUNDING_COLOR = {
+  standard: 'success',
+  'project-spec': 'info',
+  web: 'neutral',
+  'general-practice': 'warning',
+} as const satisfies Record<RecommendationSource, string>
+
 // Exhaustive enum→label maps of literal keys, so the typed-key drift guard sees each key
 // (vs a runtime-built `requirements.severity.${value}`).
 const SEVERITY_LABELS = computed<Record<ReviewItemSeverity, string>>(() => ({
   high: t('requirements.severity.high'),
   medium: t('requirements.severity.medium'),
   low: t('requirements.severity.low'),
+}))
+const GROUNDING_LABELS = computed<Record<RecommendationSource, string>>(() => ({
+  standard: t('requirements.grounding.standard'),
+  'project-spec': t('requirements.grounding.project-spec'),
+  web: t('requirements.grounding.web'),
+  'general-practice': t('requirements.grounding.general-practice'),
 }))
 const CATEGORY_LABELS = computed<Record<ReviewItemCategory, string>>(() => ({
   gap: t('requirements.category.gap'),
@@ -842,6 +860,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                               })
                             }}
                           </UBadge>
+                          <UBadge
+                            v-else-if="autoDefaults.get(item.id)!.groundedIn"
+                            size="xs"
+                            variant="subtle"
+                            :color="GROUNDING_COLOR[autoDefaults.get(item.id)!.groundedIn!]"
+                          >
+                            {{ GROUNDING_LABELS[autoDefaults.get(item.id)!.groundedIn!] }}
+                          </UBadge>
                         </div>
                         <UTextarea
                           v-model="drafts[item.id]"
@@ -890,6 +916,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                                   title: rec.groundedInFragment.title,
                                 })
                               }}
+                            </UBadge>
+                            <UBadge
+                              v-else-if="rec.groundedIn"
+                              size="xs"
+                              variant="subtle"
+                              :color="GROUNDING_COLOR[rec.groundedIn]"
+                            >
+                              {{ GROUNDING_LABELS[rec.groundedIn] }}
                             </UBadge>
                             <p class="mt-1 whitespace-pre-line text-sm text-slate-300">
                               {{ rec.recommendedText }}

@@ -6,7 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import { assertFound, DEFAULT_MAX_REQUIREMENT_ITERATIONS } from '@cat-factory/kernel'
-import { CLARITY_REVIEW_SYSTEM_PROMPT, CLARITY_REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
+import { CLARITY_REVIEW_PROMPT, CLARITY_REWORK_PROMPT } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
   IterativeReviewService,
@@ -54,8 +54,8 @@ export class ClarityReviewService extends IterativeReviewService<
   protected readonly reviewerLabel = 'clarity reviewer'
   protected readonly reviewAgentKind = 'clarity-review'
   protected readonly reworkAgentKind = 'clarity-rework'
-  protected readonly reviewSystemPrompt = CLARITY_REVIEW_SYSTEM_PROMPT
-  protected readonly reworkSystemPrompt = CLARITY_REWORK_SYSTEM_PROMPT
+  protected readonly reviewPrompt = CLARITY_REVIEW_PROMPT
+  protected readonly reworkPrompt = CLARITY_REWORK_PROMPT
   protected readonly reviewIdPrefix = 'clr'
   protected readonly itemIdPrefix = 'clri'
   protected readonly revisedNoun = 'revised bug report'
@@ -139,12 +139,13 @@ export class ClarityReviewService extends IterativeReviewService<
 
   /** Assemble the bug report under review (block + optional investigation). */
   protected async gatherContext(
-    _workspaceId: string,
+    workspaceId: string,
     block: Block,
     input: ClarityContextInput,
   ): Promise<ClarityContext> {
     return {
       block: { title: block.title, type: block.type, description: block.description },
+      service: await this.resolveOwnService(workspaceId, block),
       investigation: input.investigation,
     }
   }

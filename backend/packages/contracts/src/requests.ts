@@ -226,6 +226,17 @@ export type UpdateBlockInput = v.InferOutput<typeof updateBlockSchema>
 export const moveBlockSchema = v.object({ position: positionSchema })
 export type MoveBlockInput = v.InferOutput<typeof moveBlockSchema>
 
+/**
+ * The new bounds of a container dragged by one of its borders. Distinct from a `position` patch
+ * plus a `size` patch on purpose: this is the ONE request that may move a container's content
+ * ORIGIN, and the server keeps the contents visually still by translating the direct children by
+ * the inverse delta. Sending the two fields separately would either lose that (two independent
+ * writes, no delta to derive) or force `move` to guess whether a position change came from a
+ * drag of the whole container — where the children are meant to travel with it.
+ */
+export const resizeBlockSchema = v.object({ position: positionSchema, size: sizeSchema })
+export type ResizeBlockInput = v.InferOutput<typeof resizeBlockSchema>
+
 export const reparentSchema = v.object({
   parentId: v.pipe(v.string(), v.minLength(1)),
   position: positionSchema,

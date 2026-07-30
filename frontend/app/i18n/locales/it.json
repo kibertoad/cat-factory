@@ -2313,6 +2313,7 @@
       "updateFailed": "Impossibile salvare le modifiche",
       "epicFailed": "Impossibile cambiare epic",
       "moveFailed": "Impossibile spostare",
+      "resizeFailed": "Impossibile ridimensionare",
       "deleteFailed": "Impossibile eliminare",
       "linkFailed": "Impossibile collegare le attività",
       "unlinkFailed": "Impossibile rimuovere la dipendenza",
@@ -2566,7 +2567,6 @@
       "mergedOfTotal": "{merged}/{total} unite",
       "noTasksYet": "Ancora nessuna attività",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementate",
       "prReadyCount": "{count} PR pronte",
       "taskCount": "{count} attività | {count} attività",
       "moduleCount": "{count} modulo | {count} moduli",
@@ -3750,6 +3750,13 @@
         "deleteFailed": "Impossibile eliminare la pipeline",
         "removeFailed": "Impossibile rimuovere la pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budget di output",
+      "kindLabel": "Budget di output",
+      "kindHint": "Si applica a ogni esecuzione di questo agente. Un passaggio della pipeline può sovrascriverlo.",
+      "inherits": "Ereditato",
+      "inheritsValue": "Ereditato ({tokens})"
     }
   },
   "agentPrompt": {
@@ -3784,7 +3791,8 @@
       "reverted": "Tornato al prompt predefinito",
       "saveFailed": "Impossibile salvare il prompt",
       "loadFailed": "Impossibile caricare il prompt",
-      "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica."
+      "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica.",
+      "budgetFailed": "Impossibile salvare il budget di output"
     }
   },
   "agentTier": {
@@ -3864,6 +3872,12 @@
     "recommendationProgress": "{ready} / {total} pronte",
     "generatingSuggestion": "Generazione di un suggerimento fondato…",
     "currentStandard": "Standard attuale: {title}",
+    "grounding": {
+      "standard": "Standard del team",
+      "project-spec": "Specifica del progetto",
+      "web": "Fonte web",
+      "general-practice": "Prassi generale"
+    },
     "accept": "Accetta",
     "reject": "Rifiuta",
     "reRequestPlaceholder": "Chiedi una raccomandazione diversa…",

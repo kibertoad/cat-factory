@@ -159,6 +159,20 @@ export interface BlockRepository {
    * service so it renders on — and fans out to — the right boards.
    */
   setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
+  /**
+   * Translate every DIRECT child of `parentId` by `(dx, dy)`, in ONE statement.
+   *
+   * A child's position is relative to its container's content origin, so a resize that moves
+   * that origin — dragging a frame's or module's north/west border — has to move the children
+   * the other way or the whole content slides with the border. The alternative shapes are both
+   * banned: a per-child `update` in a loop is the N+1 this codebase forbids, and inferring the
+   * shift inside `update` would wrongly fire on a plain container MOVE (where children are meant
+   * to travel with their parent). Hence one arithmetic UPDATE expressing exactly that intent.
+   *
+   * Grandchildren need no pass of their own: a task inside a module is positioned relative to
+   * the MODULE, which this statement moves as a unit.
+   */
+  shiftChildPositions(workspaceId: string, parentId: string, dx: number, dy: number): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
   /**
    * Count the workspace's HEADLESS internal anchor blocks (`internal = 1`) still in flight

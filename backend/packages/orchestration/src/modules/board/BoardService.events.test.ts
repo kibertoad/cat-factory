@@ -42,8 +42,16 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
         deleteMany: async () => {},
       },
       // Sharing is wired: the acting workspace mounts the home's service.
-      serviceRepository: { getByFrameBlock: async () => ({ id: SERVICE_ID }) },
+      serviceRepository: {
+        listByFrameBlocks: async (ids: string[]) =>
+          ids.map((frameBlockId) => ({ id: SERVICE_ID, frameBlockId })),
+        // Still used by the service-for-container resolution on the add/reparent paths.
+        getByFrameBlock: async () => ({ id: SERVICE_ID }),
+      },
       workspaceMountRepository: {
+        // Only the ACTING board mounts the service, so a frame edit from elsewhere finds no mount.
+        listByWorkspace: async (ws: string) =>
+          ws === ACTING ? [{ workspaceId: ACTING, serviceId: SERVICE_ID }] : [],
         get: async (ws: string, serviceId: string) =>
           ws === ACTING && serviceId === SERVICE_ID ? { workspaceId: ws, serviceId } : null,
       },

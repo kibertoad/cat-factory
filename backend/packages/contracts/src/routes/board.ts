@@ -9,6 +9,7 @@ import {
   assignEpicSchema,
   moveBlockSchema,
   reparentSchema,
+  resizeBlockSchema,
   toggleDependencySchema,
   updateBlockSchema,
 } from '../requests.js'
@@ -80,6 +81,14 @@ export const moveBlockContract = defineApiContract({
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/move`,
   requestBodySchema: moveBlockSchema,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
+})
+
+export const resizeBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/resize`,
+  requestBodySchema: resizeBlockSchema,
   responsesByStatusCode: { 200: blockSchema, ...errorResponses },
 })
 

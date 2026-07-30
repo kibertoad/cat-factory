@@ -485,6 +485,9 @@ export type {
   AgentPromptSummary,
   SaveAgentPromptInput,
   PromoteAgentPromptInput,
+  // Per-workspace, per-agent-kind generation settings (the output-token ceiling).
+  WorkspaceAgentSettings,
+  UpdateWorkspaceAgentSettingsInput,
   // Per-workspace default service-fragment selection (new services inherit it).
   ServiceFragmentDefaults,
   SetServiceFragmentDefaultsInput,

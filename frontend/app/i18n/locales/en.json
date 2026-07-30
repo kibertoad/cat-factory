@@ -152,6 +152,7 @@
       "updateFailed": "Could not save changes",
       "epicFailed": "Could not change epic",
       "moveFailed": "Could not move",
+      "resizeFailed": "Could not resize",
       "deleteFailed": "Could not delete",
       "linkFailed": "Could not link tasks",
       "unlinkFailed": "Could not remove dependency",
@@ -417,7 +418,6 @@
       "mergedOfTotal": "{merged}/{total} merged",
       "noTasksYet": "No tasks yet",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implemented",
       "prReadyCount": "{count} PR ready",
       "taskCount": "{count} task | {count} tasks",
       "@taskCount": {
@@ -4188,6 +4188,13 @@
         "deleteFailed": "Could not delete pipeline",
         "removeFailed": "Could not remove pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Output budget",
+      "kindLabel": "Output budget",
+      "kindHint": "Applies to every run of this agent. A pipeline step can override it.",
+      "inherits": "Inherited",
+      "inheritsValue": "Inherited ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4231,7 +4238,8 @@
       "reverted": "Back to the built-in prompt",
       "saveFailed": "Couldn't save the prompt",
       "loadFailed": "Couldn't load the prompt",
-      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
+      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit.",
+      "budgetFailed": "Could not save the output budget"
     }
   },
   "agentTier": {
@@ -4484,6 +4492,16 @@
     "recommendationProgress": "{ready} / {total} ready",
     "generatingSuggestion": "Generating a grounded suggestion…",
     "currentStandard": "Current standard: {title}",
+    "grounding": {
+      "standard": "Team standard",
+      "@standard": "Badge on a suggested answer: it came from the team's own best-practice standard. Noun phrase, short — fits a small badge.",
+      "project-spec": "Project spec",
+      "@project-spec": "Badge on a suggested answer: it came from the project's own committed specification documents. Noun phrase, short.",
+      "web": "Web source",
+      "@web": "Badge on a suggested answer: it came from a web search result. Noun phrase, short.",
+      "general-practice": "General practice",
+      "@general-practice": "Badge on a suggested answer: it rests only on the model's general knowledge, with no team standard, project spec or source behind it — the weakest grounding, so the wording should not sound authoritative. Noun phrase, short."
+    },
     "accept": "Accept",
     "reject": "Reject",
     "reRequestPlaceholder": "Ask for a different recommendation…",

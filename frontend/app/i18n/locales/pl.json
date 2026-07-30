@@ -131,6 +131,7 @@
       "updateFailed": "Nie udało się zapisać zmian",
       "epicFailed": "Nie udało się zmienić epiku",
       "moveFailed": "Nie udało się przenieść",
+      "resizeFailed": "Nie udało się zmienić rozmiaru",
       "deleteFailed": "Nie udało się usunąć",
       "linkFailed": "Nie udało się powiązać zadań",
       "unlinkFailed": "Nie udało się usunąć zależności",
@@ -384,7 +385,6 @@
       "mergedOfTotal": "{merged}/{total} scalonych",
       "noTasksYet": "Brak zadań",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} wdrożonych",
       "prReadyCount": "{count} PR gotowych",
       "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
       "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
@@ -4073,6 +4073,13 @@
         "deleteFailed": "Nie udało się usunąć pipeline'u",
         "removeFailed": "Nie udało się usunąć pipeline’u"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budżet wyjścia",
+      "kindLabel": "Budżet wyjścia",
+      "kindHint": "Dotyczy każdego uruchomienia tego agenta. Krok pipeline'u może to nadpisać.",
+      "inherits": "Odziedziczone",
+      "inheritsValue": "Odziedziczone ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4107,7 +4114,8 @@
       "reverted": "Powrót do wbudowanego promptu",
       "saveFailed": "Nie udało się zapisać promptu",
       "loadFailed": "Nie udało się wczytać promptu",
-      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
+      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz.",
+      "budgetFailed": "Nie udało się zapisać budżetu wyjścia"
     }
   },
   "agentTier": {
@@ -4297,6 +4305,12 @@
     "recommendationProgress": "{ready} / {total} gotowych",
     "generatingSuggestion": "Generowanie ugruntowanej sugestii…",
     "currentStandard": "Aktualny standard: {title}",
+    "grounding": {
+      "standard": "Standard zespołu",
+      "project-spec": "Specyfikacja projektu",
+      "web": "Źródło z sieci",
+      "general-practice": "Ogólna praktyka"
+    },
     "accept": "Akceptuj",
     "reject": "Odrzuć",
     "reRequestPlaceholder": "Poproś o inną rekomendację…",

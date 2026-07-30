@@ -70,6 +70,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     insert: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },
+    // The container-resize child translation (`BoardService.resizeBlock`): one arithmetic UPDATE
+    // over a parent's direct children. Workspace-scoped like `update`, and remote for the same
+    // reason — it is board state, on a path a mothership-mode node serves from a laptop.
+    shiftChildPositions: { scope: { kind: 'workspace', arg: 0 } },
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
     // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
     findById: { scope: { kind: 'block', arg: 0 } },
@@ -331,6 +335,16 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listHeads: { scope: { kind: 'workspace', arg: 0 } },
     head: { scope: { kind: 'workspace', arg: 0 } },
     append: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // Per-workspace, per-agent-kind generation settings (the output-token ceiling) — durable org
+  // state on exactly the same footing as the prompt overrides above, so `remote`. `get` is on the
+  // RUN path: `AgentContextBuilder` resolves the dispatched kind's ceiling on EVERY dispatch, so
+  // omitting it would fail an agent step with `unknown_method` rather than merely dimming a panel.
+  workspaceAgentSettingsRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Agent-context run-path reads -----------------------------------------------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step

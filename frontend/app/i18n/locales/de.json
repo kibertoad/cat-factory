@@ -2313,6 +2313,7 @@
       "updateFailed": "Änderungen konnten nicht gespeichert werden",
       "epicFailed": "Epic konnte nicht geändert werden",
       "moveFailed": "Verschieben nicht möglich",
+      "resizeFailed": "Größe konnte nicht geändert werden",
       "deleteFailed": "Löschen nicht möglich",
       "linkFailed": "Aufgaben konnten nicht verknüpft werden",
       "unlinkFailed": "Abhängigkeit konnte nicht entfernt werden",
@@ -2566,7 +2567,6 @@
       "mergedOfTotal": "{merged}/{total} gemergt",
       "noTasksYet": "Noch keine Aufgaben",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementiert",
       "prReadyCount": "{count} PR bereit",
       "taskCount": "{count} Aufgabe | {count} Aufgaben",
       "moduleCount": "{count} Modul | {count} Module",
@@ -3750,6 +3750,13 @@
         "deleteFailed": "Pipeline konnte nicht gelöscht werden",
         "removeFailed": "Pipeline konnte nicht entfernt werden"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Ausgabebudget",
+      "kindLabel": "Ausgabebudget",
+      "kindHint": "Gilt für jeden Lauf dieses Agenten. Ein Pipeline-Schritt kann es überschreiben.",
+      "inherits": "Übernommen",
+      "inheritsValue": "Übernommen ({tokens})"
     }
   },
   "agentPrompt": {
@@ -3784,7 +3791,8 @@
       "reverted": "Zurück zum Standardprompt",
       "saveFailed": "Prompt konnte nicht gespeichert werden",
       "loadFailed": "Prompt konnte nicht geladen werden",
-      "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an."
+      "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an.",
+      "budgetFailed": "Ausgabebudget konnte nicht gespeichert werden"
     }
   },
   "agentTier": {
@@ -3864,6 +3872,12 @@
     "recommendationProgress": "{ready} / {total} bereit",
     "generatingSuggestion": "Ein fundierter Vorschlag wird generiert…",
     "currentStandard": "Aktueller Standard: {title}",
+    "grounding": {
+      "standard": "Team-Standard",
+      "project-spec": "Projektspezifikation",
+      "web": "Webquelle",
+      "general-practice": "Allgemeine Praxis"
+    },
     "accept": "Annehmen",
     "reject": "Ablehnen",
     "reRequestPlaceholder": "Nach einer anderen Empfehlung fragen…",

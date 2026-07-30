@@ -129,6 +129,20 @@ function makeRegistry(): {
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
       // The public API's in-flight cap (workspace-scoped SQL COUNT → a number).
       countActiveInternal: async (_ws: string) => 3,
+      // The container-resize child translation: a workspace-scoped arithmetic UPDATE returning
+      // nothing. The stub echoes its arguments so the test can prove they arrived intact — a
+      // silently dropped `dx`/`dy` would leave a mothership-mode board's contents behind.
+      shiftChildPositions: async (
+        workspaceId: string,
+        parentId: string,
+        dx: number,
+        dy: number,
+      ) => ({
+        ws: workspaceId,
+        parentId,
+        dx,
+        dy,
+      }),
     },
     serviceRepository: {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
@@ -207,6 +221,14 @@ function makeRegistry(): {
       listHeads: async (ws: string) => [{ ws }],
       head: async (ws: string) => ({ ws }),
       append: async () => undefined,
+    },
+    // Per-agent-kind generation settings (the output-token ceiling). `get` is on the RUN path
+    // (every dispatch resolves the dispatched kind's ceiling); `list` serves the builder.
+    workspaceAgentSettingsRepository: {
+      get: async (ws: string) => ({ ws }),
+      list: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      remove: async () => undefined,
     },
     // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
     documentRepository: {
@@ -791,6 +813,10 @@ describe('board-load read surface (workspace-scoped)', () => {
     // The run-path read: an unrouted `head` would fail every agent dispatch in mothership mode
     // with `unknown_method`, not merely leave the builder's badges blank.
     { repo: 'agentPromptRepository', method: 'head', args: ['coder'] },
+    { repo: 'workspaceAgentSettingsRepository', method: 'list', args: [] },
+    // Also a run-path read: an unrouted `get` would fail every agent dispatch in mothership
+    // mode with `unknown_method` rather than merely leaving the builder's budget field blank.
+    { repo: 'workspaceAgentSettingsRepository', method: 'get', args: ['doc-researcher'] },
     { repo: 'serviceFragmentDefaultsRepository', method: 'get', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'list', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'getByBlock', args: ['blk_1'] },
@@ -852,6 +878,18 @@ describe('board-load read surface (workspace-scoped)', () => {
     await expect(remoteRegistry().blockRepository!.countActiveInternal!('ws_in')).resolves.toBe(3)
     await expect(
       remoteRegistry().blockRepository!.countActiveInternal!('ws_out'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The container-resize child translation. Not in the table above because it takes FOUR args:
+  // the point of the round trip is that the numeric delta survives the wire, since a dropped
+  // `dx`/`dy` would resize the box and leave its contents behind rather than fail.
+  it('forwards blockRepository.shiftChildPositions with its delta, and 404s out of scope', async () => {
+    await expect(
+      remoteRegistry().blockRepository!.shiftChildPositions!('ws_in', 'blk_auth', -40, -30),
+    ).resolves.toEqual({ ws: 'ws_in', parentId: 'blk_auth', dx: -40, dy: -30 })
+    await expect(
+      remoteRegistry().blockRepository!.shiftChildPositions!('ws_out', 'blk_auth', -40, -30),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
@@ -1119,6 +1157,12 @@ describe('settings, preset & schedule management surface (workspace-scoped write
       method: 'append',
       args: [{ agentKind: 'coder', revision: 1, text: 'be terse', createdAt: 1 }],
     },
+    {
+      repo: 'workspaceAgentSettingsRepository',
+      method: 'upsert',
+      args: [{ agentKind: 'doc-researcher', maxOutputTokens: 24000, updatedAt: 1 }],
+    },
+    { repo: 'workspaceAgentSettingsRepository', method: 'remove', args: ['doc-researcher'] },
     { repo: 'pipelineScheduleRepository', method: 'get', args: ['sched_1'], echoes: true },
     { repo: 'pipelineScheduleRepository', method: 'upsert', args: [{ id: 'sched_1' }] },
     { repo: 'pipelineScheduleRepository', method: 'remove', args: ['sched_1'] },
