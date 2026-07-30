@@ -960,6 +960,14 @@ the full history of what it has run.
   prompt-assembly site must honour it.** A step records the revision it ran under
   (`PipelineStep.promptRevision`, absent ⇒ shipped), which Kaizen keys its `(prompt, agent, model)` combo
   off.
+- **A per-kind GENERATION setting is the sibling store, not another revision log.** The
+  output-token ceiling rides `workspace_agent_settings` (per workspace, per kind, edited in the same
+  editor), resolved by the SAME once-per-dispatch rule onto `AgentRunContext.maxOutputTokens` with a
+  pipeline step's `stepOptions.maxOutputTokens` winning over it. It UPSERTS where the prompt log
+  appends — a scalar someone retypes, not authored text a lost update would destroy — and
+  "inheriting" is the row's ABSENCE, never a stored null. Ceilings are advisory on the
+  subscription-CLI inline path. Doc:
+  [`configurable-agent-output-budgets.md`](./docs/initiatives/configurable-agent-output-budgets.md).
 - **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`** because `merger` and
   `on-call` dispatch a bespoke constant instead of their role prompt, bypassing `applySurfaceDirectives`.
   The role is editable; the directives (the JSON contract the engine parses, on-call's read-only

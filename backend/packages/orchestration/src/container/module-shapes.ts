@@ -26,6 +26,7 @@ import type { SandboxRunService } from '../modules/sandbox/SandboxRunService.js'
 import type { SandboxService } from '../modules/sandbox/SandboxService.js'
 import type { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import type { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
+import type { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
 import type { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import type { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import type { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
@@ -159,6 +160,11 @@ export interface ConsensusGroupsModule {
 /** The agent-prompt-override feature's service, present only when its repository is wired. */
 export interface AgentPromptsModule {
   service: AgentPromptService
+}
+
+/** The per-agent-kind generation settings service, present only when its repository is wired. */
+export interface WorkspaceAgentSettingsModule {
+  service: WorkspaceAgentSettingsService
 }
 
 /** The default service-fragment feature's service, present only when its repository is wired. */

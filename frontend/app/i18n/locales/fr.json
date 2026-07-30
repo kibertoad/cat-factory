@@ -4073,6 +4073,13 @@
         "deleteFailed": "Impossible de supprimer le pipeline",
         "removeFailed": "Impossible de retirer le pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Budget de sortie",
+      "kindLabel": "Budget de sortie",
+      "kindHint": "S'applique à chaque exécution de cet agent. Une étape du pipeline peut le remplacer.",
+      "inherits": "Hérité",
+      "inheritsValue": "Hérité ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4107,7 +4114,8 @@
       "reverted": "Retour à l'invite par défaut",
       "saveFailed": "Impossible d'enregistrer l'invite",
       "loadFailed": "Impossible de charger l'invite",
-      "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification."
+      "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification.",
+      "budgetFailed": "Impossible d'enregistrer le budget de sortie"
     }
   },
   "agentTier": {

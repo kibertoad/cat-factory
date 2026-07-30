@@ -3750,6 +3750,13 @@
         "deleteFailed": "Pipeline konnte nicht gelöscht werden",
         "removeFailed": "Pipeline konnte nicht entfernt werden"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Ausgabebudget",
+      "kindLabel": "Ausgabebudget",
+      "kindHint": "Gilt für jeden Lauf dieses Agenten. Ein Pipeline-Schritt kann es überschreiben.",
+      "inherits": "Übernommen",
+      "inheritsValue": "Übernommen ({tokens})"
     }
   },
   "agentPrompt": {
@@ -3784,7 +3791,8 @@
       "reverted": "Zurück zum Standardprompt",
       "saveFailed": "Prompt konnte nicht gespeichert werden",
       "loadFailed": "Prompt konnte nicht geladen werden",
-      "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an."
+      "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an.",
+      "budgetFailed": "Ausgabebudget konnte nicht gespeichert werden"
     }
   },
   "agentTier": {

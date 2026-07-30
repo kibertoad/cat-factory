@@ -10,6 +10,7 @@ import type {
   AccountSettingsRepository,
   AgentContextSnapshotRepository,
   AgentPromptRepository,
+  WorkspaceAgentSettingsRepository,
   AgentRunRepository,
   AgentSearchQueryRepository,
   BinaryArtifactMetadataStore,
@@ -99,6 +100,7 @@ import {
 import {
   DrizzleAccountSettingsRepository,
   DrizzleAgentPromptRepository,
+  DrizzleWorkspaceAgentSettingsRepository,
   DrizzleModelPresetRepository,
   DrizzleTrackerSettingsRepository,
   DrizzleUserSettingsRepository,
@@ -159,6 +161,7 @@ export interface CoreRepositories {
   reportsRepository: ReportsRepository
   modelPresetRepository: ModelPresetRepository
   agentPromptRepository: AgentPromptRepository
+  workspaceAgentSettingsRepository: WorkspaceAgentSettingsRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
@@ -213,6 +216,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     reportsRepository: new DrizzleReportsRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     agentPromptRepository: new DrizzleAgentPromptRepository(db),
+    workspaceAgentSettingsRepository: new DrizzleWorkspaceAgentSettingsRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),

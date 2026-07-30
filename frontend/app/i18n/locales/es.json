@@ -4073,6 +4073,13 @@
         "deleteFailed": "No se pudo eliminar el pipeline",
         "removeFailed": "No se pudo quitar el pipeline"
       }
+    },
+    "outputBudget": {
+      "stepLabel": "Presupuesto de salida",
+      "kindLabel": "Presupuesto de salida",
+      "kindHint": "Se aplica a todas las ejecuciones de este agente. Un paso del pipeline puede anularlo.",
+      "inherits": "Heredado",
+      "inheritsValue": "Heredado ({tokens})"
     }
   },
   "agentPrompt": {
@@ -4107,7 +4114,8 @@
       "reverted": "De vuelta al prompt predeterminado",
       "saveFailed": "No se pudo guardar el prompt",
       "loadFailed": "No se pudo cargar el prompt",
-      "conflict": "Otra persona cambió este prompt. Se recargó: vuelve a aplicar tu edición."
+      "conflict": "Otra persona cambió este prompt. Se recargó: vuelve a aplicar tu edición.",
+      "budgetFailed": "No se pudo guardar el presupuesto de salida"
     }
   },
   "agentTier": {

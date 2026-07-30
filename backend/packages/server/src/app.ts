@@ -39,6 +39,7 @@ import { packageRegistriesController } from './modules/packageRegistries/Package
 import { previewController } from './modules/preview/PreviewController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { agentPromptController } from './modules/agentPrompts/AgentPromptController.js'
+import { workspaceAgentSettingsController } from './modules/agentSettings/WorkspaceAgentSettingsController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
@@ -278,6 +279,7 @@ function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): voi
   app.route('/workspaces/:workspaceId', incidentEnrichmentController())
   app.route('/workspaces/:workspaceId', modelPresetController())
   app.route('/workspaces/:workspaceId', agentPromptController())
+  app.route('/workspaces/:workspaceId', workspaceAgentSettingsController())
   app.route('/workspaces/:workspaceId', serviceFragmentDefaultsController())
   app.route('/workspaces/:workspaceId', recurringPipelineController())
   app.route('/workspaces/:workspaceId', trackerSettingsController())

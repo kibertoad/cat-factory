@@ -31,6 +31,8 @@ import type {
   TrackerSettingsRepository,
   UserSettings,
   UserSettingsRepository,
+  WorkspaceAgentSettings,
+  WorkspaceAgentSettingsRepository,
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -48,6 +50,7 @@ import {
   trackerCommentIngests,
   trackerSettings,
   userSettings,
+  workspaceAgentSettings,
   workspaceSettings,
 } from '../../db/schema.js'
 
@@ -857,5 +860,87 @@ export class DrizzleAgentPromptRepository implements AgentPromptRepository {
       created_at: revision.createdAt,
       created_by: revision.createdBy ?? null,
     })
+  }
+}
+
+/** The row shape both reads below project, so the mapper is shared across them. */
+interface WorkspaceAgentSettingsRow {
+  agent_kind: string
+  max_output_tokens: number | null
+  updated_at: number
+}
+
+function rowToWorkspaceAgentSettings(row: WorkspaceAgentSettingsRow): WorkspaceAgentSettings {
+  return {
+    agentKind: row.agent_kind,
+    // Kept as an explicit null rather than folded away like the optional prompt fields: null is a
+    // MEANINGFUL state here ("inheriting the deployment default"), which the settings UI shows.
+    maxOutputTokens: row.max_output_tokens,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Per-workspace, per-agent-kind generation settings — the Drizzle mirror of
+ * `D1WorkspaceAgentSettingsRepository`. One row per kind; no row (or a NULL
+ * `max_output_tokens`) means the kind inherits the deployment routing default.
+ *
+ * `upsert` is conflict-targeted on the full primary key, the deliberate opposite of
+ * `DrizzleAgentPromptRepository.append` above: see the port for why a scalar knob upserts
+ * where an authored prompt appends.
+ */
+export class DrizzleWorkspaceAgentSettingsRepository implements WorkspaceAgentSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, agentKind: string): Promise<WorkspaceAgentSettings | null> {
+    const [row] = await this.db
+      .select()
+      .from(workspaceAgentSettings)
+      .where(
+        and(
+          eq(workspaceAgentSettings.workspace_id, workspaceId),
+          eq(workspaceAgentSettings.agent_kind, agentKind),
+        ),
+      )
+      .limit(1)
+    return row ? rowToWorkspaceAgentSettings(row) : null
+  }
+
+  async list(workspaceId: string): Promise<WorkspaceAgentSettings[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceAgentSettings)
+      .where(eq(workspaceAgentSettings.workspace_id, workspaceId))
+      .orderBy(workspaceAgentSettings.agent_kind)
+    return rows.map(rowToWorkspaceAgentSettings)
+  }
+
+  async upsert(workspaceId: string, settings: WorkspaceAgentSettings): Promise<void> {
+    await this.db
+      .insert(workspaceAgentSettings)
+      .values({
+        workspace_id: workspaceId,
+        agent_kind: settings.agentKind,
+        max_output_tokens: settings.maxOutputTokens,
+        updated_at: settings.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceAgentSettings.workspace_id, workspaceAgentSettings.agent_kind],
+        set: {
+          max_output_tokens: settings.maxOutputTokens,
+          updated_at: settings.updatedAt,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, agentKind: string): Promise<void> {
+    await this.db
+      .delete(workspaceAgentSettings)
+      .where(
+        and(
+          eq(workspaceAgentSettings.workspace_id, workspaceId),
+          eq(workspaceAgentSettings.agent_kind, agentKind),
+        ),
+      )
   }
 }

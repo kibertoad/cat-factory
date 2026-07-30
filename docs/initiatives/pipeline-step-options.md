@@ -40,6 +40,11 @@ implementation — it lives entirely in the new seam and touches ZERO of the leg
 never `{ autoRecommend: true }`), so an all-default pipeline persists no `step_options` array at
 all — exactly like the legacy aligners.
 
+**Fields added on this seam since the pilot** (each needing no column and no migration, which is
+the seam paying off): `skillId` (the `skill` step's picked repo-sourced skill) and
+`maxOutputTokens` (a step's own output-token ceiling — the narrowest tier of
+[`configurable-agent-output-budgets.md`](./configurable-agent-output-budgets.md)).
+
 ## Migration checklist — fold each legacy array into `stepOptions.<field>`
 
 Each row: move the capability from its own array/column to a field on `StepOptions`, delete the

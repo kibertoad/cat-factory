@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { AgentPromptRevision } from '~/types/agent-prompts'
 import { agentKindMeta } from '~/utils/catalog'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import {
   draftForRevision,
   isDirty,
@@ -30,6 +31,7 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const toast = useToast()
 const prompts = useAgentPromptsStore()
+const agentSettings = useAgentSettingsStore()
 
 const open = computed({
   get: () => props.agentKind !== null,
@@ -75,6 +77,29 @@ watch(
 
 const detail = computed(() => prompts.detail)
 const label = computed(() => (props.agentKind ? agentKindMeta(props.agentKind).label : ''))
+
+/**
+ * The workspace-wide output-token ceiling for this kind — the same per-agent-kind scope this
+ * editor already owns for the prompt, which is why it lives here rather than in a settings screen
+ * of its own. A pipeline step may still pin its own budget over it.
+ *
+ * Saved on its own, immediately: unlike the prompt (whose save appends a revision and wants an
+ * explicit commit) this is one scalar with no history, so a separate Save button would only invite
+ * someone to type a number, close the modal and wonder why nothing changed.
+ */
+const budget = computed(() =>
+  props.agentKind ? agentSettings.maxOutputTokensFor(props.agentKind) : undefined,
+)
+
+async function saveBudget(value: number | null) {
+  const kind = props.agentKind
+  if (!kind) return
+  try {
+    await agentSettings.setMaxOutputTokens(kind, value)
+  } catch {
+    toast.add({ title: t('agentPrompt.toast.budgetFailed'), color: 'error' })
+  }
+}
 
 /** The live prompt, so "no change" can be reported instead of appending an identical revision. */
 const dirty = computed(() => isDirty(draft.value, detail.value))
@@ -162,6 +187,21 @@ function revisionLabel(revision: AgentPromptRevision): string {
           <UBadge :color="detail.customized ? 'warning' : 'neutral'" variant="subtle" size="sm">
             {{ detail.customized ? t('agentPrompt.customized') : t('agentPrompt.usingBuiltin') }}
           </UBadge>
+        </div>
+
+        <!-- The workspace-wide output ceiling for this kind. Same per-agent-kind scope as the
+             prompt below it; saves on change, since there is no revision log to commit to. -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[11px] text-slate-400">{{ t('pipeline.outputBudget.kindLabel') }}</span>
+          <OutputBudgetInput
+            class="w-32"
+            :model-value="budget"
+            :disabled="agentSettings.saving"
+            @update:model-value="saveBudget"
+          />
+          <span class="text-[10px] text-slate-500">
+            {{ t('pipeline.outputBudget.kindHint') }}
+          </span>
         </div>
 
         <!-- What the platform appends is SHOWN, not described. A prose summary of it is copy

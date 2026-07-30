@@ -299,6 +299,9 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // by the settings controller AND on the run path (per-dispatch tier resolution).
     consensusGroupRepository: repos.consensusGroupRepository,
     agentPromptRepository: repos.agentPromptRepository,
+    // Per-agent-kind generation settings (the output-token ceiling). Read by the settings
+    // controller AND on the run path (per-dispatch ceiling resolution).
+    workspaceAgentSettingsRepository: repos.workspaceAgentSettingsRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
     // Claude). Applied only at first seed, so a user's later manual default choice wins.

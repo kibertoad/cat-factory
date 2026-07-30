@@ -1,6 +1,7 @@
 import type {
   AccountRepository,
   AgentPromptRepository,
+  WorkspaceAgentSettingsRepository,
   AgentRunContext,
   Block,
   BlockRepository,
@@ -258,6 +259,13 @@ export interface AgentContextBuilderDeps {
    */
   agentPrompts?: AgentPromptRepository
   /**
+   * Optional: the workspace's per-agent-kind generation settings. When wired, each dispatch
+   * resolves the kind's configured output-token ceiling, which the step's own
+   * `stepOptions.maxOutputTokens` still overrides. Absent (or no row for the kind) ⇒ the
+   * deployment routing ceiling, unchanged.
+   */
+  agentSettings?: WorkspaceAgentSettingsRepository
+  /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
    * group the task's estimate earns is materialised onto the context. Absent (or the step names
@@ -428,6 +436,9 @@ export class AgentContextBuilder {
       // than in each executor, so the container / inline / consensus paths cannot disagree
       // about which prompt a step ran under.
       systemPromptOverride,
+      // The output-token ceiling this dispatch runs under: the step's own option, else the
+      // workspace's per-kind setting, else nothing (⇒ the deployment routing ceiling stands).
+      maxOutputTokens,
       // The consensus config this dispatch actually runs under: the step's own config when it
       // authored inline participants, the workspace group its estimate earned when it named a
       // tier set, or nothing at all when no tier cleared (⇒ the standard single-actor agent).
@@ -453,6 +464,7 @@ export class AgentContextBuilder {
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       this.resolveSystemPromptOverride(workspaceId, agentKind, step),
+      this.resolveMaxOutputTokens(workspaceId, agentKind, step),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
@@ -487,6 +499,7 @@ export class AgentContextBuilder {
       ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
       isFinalStep,
       ...systemPromptOverride,
+      ...maxOutputTokens,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.
       // Gated on the EFFECTIVE dispatched kind matching the step's own kind, so a HELPER
@@ -1196,6 +1209,35 @@ export class AgentContextBuilder {
     // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
     // so the context literal stays a flat spread instead of gaining another conditional.
     return head?.text ? { systemPromptOverride: head.text } : {}
+  }
+
+  /**
+   * The output-token ceiling this dispatch runs under, or undefined to run the deployment
+   * routing default. Resolved HERE, once per dispatch, for the same reason the prompt override
+   * is: the precedence is decided in one place, so the container, inline and consensus paths
+   * cannot disagree about the budget a step ran under.
+   *
+   * NARROWEST TIER WINS: the step's own `stepOptions.maxOutputTokens` beats the workspace's
+   * per-kind setting, which beats the deployment routing ceiling. The step value is read
+   * WITHOUT touching the repository, so a pipeline that pins its own budget costs no query.
+   *
+   * Keyed on the EFFECTIVE dispatched kind (like the prompt override), so a helper dispatched
+   * off another step — a gate's fixer, the fork proposer — gets the ceiling configured for the
+   * kind actually running rather than inheriting the parent step's.
+   */
+  private async resolveMaxOutputTokens(
+    workspaceId: string,
+    agentKind: string,
+    step: PipelineStep,
+  ): Promise<{ maxOutputTokens?: number }> {
+    const fromStep = step.stepOptions?.maxOutputTokens
+    if (fromStep != null) return { maxOutputTokens: fromStep }
+    const configured = await this.deps.agentSettings?.get(workspaceId, agentKind)
+    // Returns the SPREAD-READY slice rather than a nullable value, so the context literal stays
+    // a flat spread instead of gaining another conditional.
+    return configured?.maxOutputTokens != null
+      ? { maxOutputTokens: configured.maxOutputTokens }
+      : {}
   }
 
   /**

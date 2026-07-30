@@ -198,6 +198,10 @@ export {
   type AgentPromptServiceDependencies,
 } from './modules/agentPrompts/AgentPromptService.js'
 export {
+  WorkspaceAgentSettingsService,
+  type WorkspaceAgentSettingsServiceDependencies,
+} from './modules/agentSettings/WorkspaceAgentSettingsService.js'
+export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,
 } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
@@ -358,6 +362,7 @@ export {
   type ModelPresetsModule,
   type ConsensusGroupsModule,
   type AgentPromptsModule,
+  type WorkspaceAgentSettingsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
   type SkillLibraryModule,

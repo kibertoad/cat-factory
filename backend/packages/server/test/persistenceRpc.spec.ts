@@ -222,6 +222,14 @@ function makeRegistry(): {
       head: async (ws: string) => ({ ws }),
       append: async () => undefined,
     },
+    // Per-agent-kind generation settings (the output-token ceiling). `get` is on the RUN path
+    // (every dispatch resolves the dispatched kind's ceiling); `list` serves the builder.
+    workspaceAgentSettingsRepository: {
+      get: async (ws: string) => ({ ws }),
+      list: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      remove: async () => undefined,
+    },
     // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
     documentRepository: {
       listByBlock: async (ws: string) => [{ ws }],
@@ -805,6 +813,10 @@ describe('board-load read surface (workspace-scoped)', () => {
     // The run-path read: an unrouted `head` would fail every agent dispatch in mothership mode
     // with `unknown_method`, not merely leave the builder's badges blank.
     { repo: 'agentPromptRepository', method: 'head', args: ['coder'] },
+    { repo: 'workspaceAgentSettingsRepository', method: 'list', args: [] },
+    // Also a run-path read: an unrouted `get` would fail every agent dispatch in mothership
+    // mode with `unknown_method` rather than merely leaving the builder's budget field blank.
+    { repo: 'workspaceAgentSettingsRepository', method: 'get', args: ['doc-researcher'] },
     { repo: 'serviceFragmentDefaultsRepository', method: 'get', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'list', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'getByBlock', args: ['blk_1'] },
@@ -1145,6 +1157,12 @@ describe('settings, preset & schedule management surface (workspace-scoped write
       method: 'append',
       args: [{ agentKind: 'coder', revision: 1, text: 'be terse', createdAt: 1 }],
     },
+    {
+      repo: 'workspaceAgentSettingsRepository',
+      method: 'upsert',
+      args: [{ agentKind: 'doc-researcher', maxOutputTokens: 24000, updatedAt: 1 }],
+    },
+    { repo: 'workspaceAgentSettingsRepository', method: 'remove', args: ['doc-researcher'] },
     { repo: 'pipelineScheduleRepository', method: 'get', args: ['sched_1'], echoes: true },
     { repo: 'pipelineScheduleRepository', method: 'upsert', args: [{ id: 'sched_1' }] },
     { repo: 'pipelineScheduleRepository', method: 'remove', args: ['sched_1'] },
