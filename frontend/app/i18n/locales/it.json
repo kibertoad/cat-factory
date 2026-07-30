@@ -4412,7 +4412,7 @@
     },
     "planReview": {
       "title": "Questo piano ti sta aspettando",
-      "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
+      "body": "Il planner ha redatto queste fasi e questi elementi. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
       "approve": "Approva il piano",
       "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
       "sendBack": "Rimanda al planner",

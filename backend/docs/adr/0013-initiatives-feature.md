@@ -83,6 +83,19 @@ Key shape decisions:
   step reader gives the architect's prose: `useStepProse` for the outline, `useProseComments` for
   the anchoring, and one global `.reader-prose` sheet for the presentation, so the review surfaces
   cannot drift.
+- **The step reader's LAYOUT is shared too, and it is what makes the review readable.** The first
+  cut put the document in a card inside the tracker's scrolling column: the outline and the document
+  split that column's width, the document was capped at a 20rem window, and the tracker's own goal /
+  phases / policy / logs sections — the same plan, since the render reads the ingested entity —
+  repeated underneath it. So while a rendered plan is parked, the review OWNS the window instead: the
+  outline is a sidebar OUTSIDE the document, the document takes the window's full height, and the
+  commands sit in an end-side rail. Replacing the tracker body rather than sitting above it is safe
+  precisely because of the bullet above — the document IS the ingested plan, and everything the
+  tracker adds on top (PR links, item curation, checkpoints, follow-ups) is execution-time state that
+  cannot exist until the plan is committed. The exception is a gate carrying no rendering at all,
+  where the tracker's sections are the only view of the plan there is: that one keeps a compact
+  notice above them (`planReviewDocument` decides which, so the surface and its host cannot disagree
+  about what is on screen).
 - **What is rendered is the INGESTED plan, which is why this does not ride the generic artifact
   seam.** `reviewableArtifactOutput` renders the agent's RAW result, and that is sound only while
   the committed artifact IS that result — true of the spec doc and the blueprint tree, whose files

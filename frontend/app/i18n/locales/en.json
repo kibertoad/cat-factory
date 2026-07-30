@@ -5627,7 +5627,7 @@
     },
     "planReview": {
       "title": "This plan is waiting for you",
-      "body": "The planner drafted the phases and items below. Approve them to commit the plan and start the work, or send the plan back with what to change.",
+      "body": "The planner drafted these phases and items. Approve them to commit the plan and start the work, or send the plan back with what to change.",
       "approve": "Approve plan",
       "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
       "sendBack": "Send back to the planner",

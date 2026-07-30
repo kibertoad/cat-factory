@@ -5439,7 +5439,7 @@
     },
     "planReview": {
       "title": "Ce plan vous attend",
-      "body": "Le planificateur a rédigé les phases et les éléments ci-dessous. Approuvez-les pour valider le plan et lancer le travail, ou renvoyez le plan en indiquant ce qu'il faut changer.",
+      "body": "Le planificateur a rédigé ces phases et ces éléments. Approuvez-les pour valider le plan et lancer le travail, ou renvoyez le plan en indiquant ce qu'il faut changer.",
       "approve": "Approuver le plan",
       "feedbackPlaceholder": "Que doit changer le planificateur ? Périmètre, ordre des phases, travail manquant, un élément qui a sa place ailleurs…",
       "sendBack": "Renvoyer au planificateur",

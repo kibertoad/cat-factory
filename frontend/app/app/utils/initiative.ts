@@ -103,6 +103,29 @@ export function selectPlanApproval<A extends { agentKind: string }>(
   return approvals.find((a) => resultViewOf(a.agentKind) !== INTERVIEW_GATE_RESULT_VIEW)
 }
 
+/**
+ * The plan DOCUMENT a parked gate offers for review — its proposal, but only once the step says
+ * that proposal IS the plan rendering (`outputIsRendered`); `''` otherwise.
+ *
+ * A step that rendered nothing parks on the planner's transcript SUMMARY, which is a perfectly
+ * non-empty string, so an emptiness check alone would present one sentence under a table of
+ * contents as though it were the plan. `''` is what routes such a gate to the compact notice
+ * instead — and the SAME value decides the tracker window's layout (a document review takes the
+ * whole window; a notice sits above the tracker's own sections), so the surface and its host can
+ * never disagree about which shape is on screen.
+ *
+ * Rendered-but-blank counts as no document. The proposal comes back VERBATIM, never trimmed: the
+ * review anchors comments to source LINE numbers, so dropping a leading newline would shift every
+ * anchor off the block it quotes.
+ */
+export function planReviewDocument(
+  gate: { approval: { proposal?: string | null }; outputIsRendered: boolean } | null | undefined,
+): string {
+  if (!gate?.outputIsRendered) return ''
+  const proposal = gate.approval.proposal ?? ''
+  return proposal.trim() ? proposal : ''
+}
+
 /** Follow-up triage status → i18n label key. Exhaustive so a new status fails the build. */
 export const INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS: Record<InitiativeFollowUp['status'], string> = {
   open: 'initiative.followUpStatus.open',

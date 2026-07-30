@@ -5439,7 +5439,7 @@
     },
     "planReview": {
       "title": "Ten plan czeka na Ciebie",
-      "body": "Planer przygotował poniższe fazy i elementy. Zatwierdź je, aby zapisać plan i rozpocząć pracę, albo odeślij plan z informacją, co zmienić.",
+      "body": "Planer przygotował te fazy i elementy. Zatwierdź je, aby zapisać plan i rozpocząć pracę, albo odeślij plan z informacją, co zmienić.",
       "approve": "Zatwierdź plan",
       "feedbackPlaceholder": "Co planer ma zmienić? Zakres, kolejność faz, brakująca praca, element, który pasuje gdzie indziej…",
       "sendBack": "Odeślij do planera",

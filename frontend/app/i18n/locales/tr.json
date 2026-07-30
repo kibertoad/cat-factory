@@ -5451,7 +5451,7 @@
     },
     "planReview": {
       "title": "Bu plan sizi bekliyor",
-      "body": "Planlayıcı aşağıdaki aşamaları ve maddeleri hazırladı. Planı kaydedip işe başlamak için onaylayın ya da neyin değişmesi gerektiğini yazarak planı geri gönderin.",
+      "body": "Planlayıcı bu aşamaları ve maddeleri hazırladı. Planı kaydedip işe başlamak için onaylayın ya da neyin değişmesi gerektiğini yazarak planı geri gönderin.",
       "approve": "Planı onayla",
       "feedbackPlaceholder": "Planlayıcı neyi değiştirmeli? Kapsam, aşama sırası, eksik iş, başka yere ait bir madde…",
       "sendBack": "Planlayıcıya geri gönder",

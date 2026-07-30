@@ -142,6 +142,15 @@ test.describe('initiative plan review', () => {
     await expect(doc).toContainText('The only item of the plan awaiting approval.')
     await expect(rail.getByTestId('initiative-plan-toc')).toBeVisible()
 
+    // ...and it is the ONLY copy of the plan on screen. The review owns the window while the gate is
+    // parked, precisely because the tracker's own goal/phase sections render the same ingested plan:
+    // when they shipped together, a reviewer scrolled a 20rem document with a second copy of it
+    // underneath. Counting the goal is the cheapest way to pin that — it was 2 before.
+    await expect(tracker.getByText('Ship the thing, in one reviewed phase.')).toHaveCount(1)
+    // Taking the window does NOT cost the run details (model, run id, token telemetry): they move
+    // into the outline sidebar rather than disappearing for the duration of the review.
+    await expect(rail.getByTestId('initiative-plan-run-meta')).toBeVisible()
+
     // Send back is refused until there is something to re-plan FROM.
     await expect(rail.getByTestId('initiative-plan-send-back')).toBeDisabled()
 
