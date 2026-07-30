@@ -50,8 +50,8 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       },
       workspaceMountRepository: {
         // Only the ACTING board mounts the service, so a frame edit from elsewhere finds no mount.
-        listByServiceIds: async (ids: string[]) =>
-          ids.includes(SERVICE_ID) ? [{ workspaceId: ACTING, serviceId: SERVICE_ID }] : [],
+        listByWorkspace: async (ws: string) =>
+          ws === ACTING ? [{ workspaceId: ACTING, serviceId: SERVICE_ID }] : [],
         get: async (ws: string, serviceId: string) =>
           ws === ACTING && serviceId === SERVICE_ID ? { workspaceId: ws, serviceId } : null,
       },

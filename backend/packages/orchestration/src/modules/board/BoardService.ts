@@ -45,6 +45,7 @@ import {
   requireWorkspace,
 } from '@cat-factory/kernel'
 import { createBoardLayoutWrites } from './layoutWrites.js'
+import { createMountProjection } from './mountProjection.js'
 import { reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
@@ -198,6 +199,11 @@ export class BoardService {
    * the shared block row, and `resizeBlock` layers the child translation on top of that.
    */
   private readonly layout: ReturnType<typeof createBoardLayoutWrites>
+  /**
+   * The read half of that same frame-geometry split (see mountProjection.ts): resolve this board's
+   * mount for a frame, and project it onto anything a mutation hands back.
+   */
+  private readonly mountProjection: ReturnType<typeof createMountProjection>
 
   constructor({
     workspaceRepository,
@@ -238,6 +244,10 @@ export class BoardService {
       clock,
       settings: workspaceSettings,
       notifications: reviewFrictionNotifications,
+    })
+    this.mountProjection = createMountProjection({
+      serviceRepository,
+      workspaceMountRepository,
     })
     this.layout = createBoardLayoutWrites({
       blockRepository,
@@ -329,40 +339,14 @@ export class BoardService {
     )
   }
 
-  /**
-   * THIS workspace's mount for `block` when it is a service frame mounted here, else null (a
-   * non-frame, a legacy/unregistered frame, or in-org sharing not wired). The mount carries the
-   * frame's per-workspace layout override, so it is both what a frame move/resize WRITES and what
-   * every frame-returning read must project through. Costs no query for a non-frame.
-   */
-  private async frameMount(workspaceId: string, block: Block): Promise<WorkspaceMount | null> {
-    if (block.level !== 'frame') return null
-    const services = this.serviceRepository
-    const mounts = this.workspaceMountRepository
-    if (!services || !mounts) return null
-    // A frame block id does NOT uniquely identify a service: every seeded board carries the same
-    // ids (`blk_auth`, …), so `getByFrameBlock` answers with an arbitrary one of them. Paired with
-    // `mounts.get(thisWorkspace, thatServiceId)` that reads as "this frame has no mount here" on a
-    // deployment with two seeded boards — and then a frame write lands on the block row that every
-    // READ overrides with this board's mount (`WorkspaceService.composeBoard`), silently, in the
-    // one direction that loses the write. So resolve the candidates for this frame id and keep the
-    // one mounted HERE: two batched queries, no per-candidate round-trip.
-    const candidates = await services.listByFrameBlocks([block.id])
-    if (candidates.length === 0) return null
-    const mounted = await mounts.listByServiceIds(candidates.map((s) => s.id))
-    return mounted.find((m) => m.workspaceId === workspaceId) ?? null
+  /** @see createMountProjection — THIS board's layout override for a service frame, else null. */
+  private frameMount(workspaceId: string, block: Block): Promise<WorkspaceMount | null> {
+    return this.mountProjection.frameMount(workspaceId, block)
   }
 
-  /**
-   * Project a block onto THIS workspace's board before returning it from a mutation. A service
-   * frame's position/size are the mount's per-workspace layout override rather than fields of the
-   * shared block (see {@link applyMountLayout}), so a response built from the block row alone
-   * reports the coordinates the row happened to be created with — and the SPA, which upserts the
-   * authoritative block a mutation returns, would jump the frame to that spot on every edit.
-   * Pass-through for a non-frame.
-   */
-  private async projectForWorkspace(workspaceId: string, block: Block): Promise<Block> {
-    return applyMountLayout(block, await this.frameMount(workspaceId, block))
+  /** @see createMountProjection — project a mutation response onto THIS board. */
+  private projectForWorkspace(workspaceId: string, block: Block): Promise<Block> {
+    return this.mountProjection.projectForWorkspace(workspaceId, block)
   }
 
   /**

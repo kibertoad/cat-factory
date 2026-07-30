@@ -33,7 +33,12 @@ Fixes a latent bug this surfaced: `BoardService`'s frame-mount resolution looked
 up globally (`getByFrameBlock`), while every read resolves layout from the board's own mounts. Since
 seeded boards all carry the same block ids, a deployment with two of them could resolve another
 board's service, land the write on the block row, and have every read override it with this board's
-mount. It now resolves in the same direction the snapshot does.
+mount. It now resolves in the same direction the snapshot does: the frame id's candidate services
+intersected with the acting board's own mounts (`mountProjection.ts`, the read half of the
+frame-geometry split `layoutWrites.ts` writes). Starting from the board rather than from the
+candidates is what keeps it routable in mothership mode — `listByFrameBlocks` is not
+account-scoped, so a colliding seeded id in another org rides the candidate list, and asking the
+persistence RPC for those services' mounts is refused closed.
 
 The frame header's "N/M implemented" line is gone (with the `board.frame.implemented` key, in every
 locale): each task card already shows its own status, so the frame-level tally restated that more

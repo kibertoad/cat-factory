@@ -65,8 +65,8 @@ describe('BoardService — service delete cleanup, delete guard, archive/restore
         },
       },
       workspaceMountRepository: {
-        listByServiceIds: async (ids: string[]) =>
-          [...mounts.values()].filter((m) => ids.includes(m.serviceId)),
+        listByWorkspace: async (ws: string) =>
+          [...mounts.values()].filter((m) => m.workspaceId === ws),
         listWorkspaceIdsMountingBlock: async () => [],
         removeByServices: async (ids: string[]) => {
           for (const [k, m] of mounts) if (ids.includes(m.serviceId)) mounts.delete(k)
