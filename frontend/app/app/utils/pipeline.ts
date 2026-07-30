@@ -99,12 +99,23 @@ export function pipelineAllowedForManualStart(
 
 /**
  * Whether `pipeline` may be attached to a RECURRING schedule (the recurring-pipeline modal).
- * Excludes `'one-off'`-only pipelines the backend would refuse.
+ * Excludes `'one-off'`-only pipelines the backend would refuse, visual pipelines on a frame with no
+ * UI, and the planning presets.
+ *
+ * The block-level gate applies here for the same reason it applies to a manual start, and it is
+ * keyed to `'task'` because a schedule seeds a `level: 'task'` block under its frame on every fire
+ * (`RecurringPipelineService`). The planning presets carry no `availability`, so nothing else keeps
+ * them out of this picker — and a schedule the engine refuses is WORSE than a manual start it
+ * refuses: it fires unattended, so nobody sees the error and the work simply never happens.
  */
 export function pipelineAllowedForSchedule(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
 ): boolean {
-  return pipeline.availability !== 'one-off' && pipelineAllowedForFrame(pipeline, frame, blocks)
+  return (
+    pipeline.availability !== 'one-off' &&
+    pipelineAllowedForFrame(pipeline, frame, blocks) &&
+    pipelineAllowedForBlockLevel(pipeline, 'task')
+  )
 }

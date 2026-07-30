@@ -7,6 +7,7 @@ import {
 import type { Block, Pipeline } from '~/types/domain'
 import {
   pipelineAllowedForManualStart,
+  pipelineAllowedForSchedule,
   pipelineDisplaySteps,
   pipelineGateCount,
 } from '~/utils/pipeline'
@@ -174,5 +175,26 @@ describe('pipelineAllowedForManualStart composes the task-type gate', () => {
   it('still excludes recurring-only pipelines regardless of task type', () => {
     const recurring = pipeline({ purpose: 'document', availability: 'recurring' })
     expect(pipelineAllowedForManualStart(recurring, noFrame, blocks, 'document')).toBe(false)
+  })
+})
+
+describe('pipelineAllowedForSchedule', () => {
+  const noFrame = undefined
+  const blocks: Block[] = []
+
+  it('keeps an ordinary build pipeline and drops a one-off-only one', () => {
+    expect(pipelineAllowedForSchedule(pipeline({ purpose: 'build' }), noFrame, blocks)).toBe(true)
+    const oneOff = pipeline({ purpose: 'build', availability: 'one-off' })
+    expect(pipelineAllowedForSchedule(oneOff, noFrame, blocks)).toBe(false)
+  })
+
+  it('drops the planning presets, which nothing else keeps out of this picker', () => {
+    // A schedule seeds a `level: 'task'` block on every fire, so the engine refuses a planning
+    // pipeline exactly as it would on a manual start — and the planning presets carry no
+    // `availability`, so the one-off filter above never touched them. Worse than the manual case
+    // because a schedule fires unattended: nobody sees the refusal, the work just stops happening.
+    expect(pipelineAllowedForSchedule(pipeline({ purpose: 'planning' }), noFrame, blocks)).toBe(
+      false,
+    )
   })
 })

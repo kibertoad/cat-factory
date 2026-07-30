@@ -156,6 +156,12 @@ menu, the inspector's Run menu and the task's default-pipeline setting. All four
 first cut touched: the inspector menu is reachable for frames and modules as well as tasks, and a
 planning preset settable as a task's DEFAULT pipeline is a 409 on every later Start.
 
+The block-level gate also applies to the RECURRING-schedule picker, keyed to `'task'` because a
+schedule seeds a `level: 'task'` block on every fire. The planning presets declare no `availability`,
+so the one-off filter never excluded them there — and a schedule the engine refuses is worse than a
+manual start it refuses, since it fires unattended: nobody sees the error and the work simply never
+happens, which is the same reasoning behind refusing to delete a pipeline a schedule points at.
+
 The block-level predicate is keyed on `purpose: 'planning'` rather than the initiative AGENT KINDS the
 engine tests, because the SPA depends on `@cat-factory/contracts` only and cannot see the kernel's kind
 vocabulary. Two classifiers deciding one question drift, so a kernel drift guard pins that they keep
