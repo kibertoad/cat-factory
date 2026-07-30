@@ -22,6 +22,7 @@ import {
   type SubscriptionVendor,
   subscriptionVendorForRef,
 } from '@cat-factory/kernel'
+import { parseTimerEnvMs } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import { sanitizedChildEnv } from './childEnv.js'
@@ -107,6 +108,19 @@ const DEFAULT_CLI_IDLE_TIMEOUT_MS = 300_000
  * latency budget, and a run that hits it is reported as having hit a ceiling rather than as hung.
  */
 const DEFAULT_CLI_MAX_TIMEOUT_MS = 3_600_000
+/**
+ * The env vars the two budgets above are configured from.
+ *
+ * Constants rather than literals because the names are read in TWO places that must agree:
+ * {@link inlineCliBudgetFromEnv}, which parses them, and the ceiling failure message, which tells
+ * the operator which one to raise. A rename that updated only the parser would leave the message
+ * naming a variable that no longer exists — advice that is worse than none, since it reads as
+ * authoritative. This module owns both ends, so the coupling belongs here and not in a doc.
+ */
+export const INLINE_CLI_BUDGET_VARS = {
+  idle: 'LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS',
+  max: 'LOCAL_INLINE_CLI_MAX_TIMEOUT_MS',
+} as const
 // A CLI that ignores SIGTERM is escalated to SIGKILL after this grace period.
 const KILL_GRACE_MS = 2_000
 /** How much of the CLI's output a failure message carries. Tail-biased: the error is at the end. */
@@ -265,7 +279,14 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     let killedReason: 'aborted' | 'idle' | 'ceiling' | undefined
     let killTimer: ReturnType<typeof setTimeout> | undefined
     // Terminate the child (SIGTERM), escalating to SIGKILL if it doesn't exit promptly.
+    //
+    // FIRST kill wins. Every trigger stays armed until `close`, so a second one can land inside the
+    // SIGKILL grace period — an abort arriving while an idle kill is still escalating used to
+    // overwrite `killedReason`, and `reason` is what a CALLER switches on, so the run surfaced as
+    // `aborted` rather than the timeout that actually ended it. Re-entering would also orphan the
+    // running `killTimer`. The same "a kill is already in flight" idiom guards `noteOutput`.
     const terminate = (reason: 'aborted' | 'idle' | 'ceiling'): void => {
+      if (killedReason) return
       killedReason = reason
       child.kill('SIGTERM')
       killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
@@ -361,7 +382,8 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
         // streaming from one that had also gone quiet inside the final idle window.
         failed(
           'timeout',
-          `${command} hit its ${maxTimeoutMs}ms ceiling (raise LOCAL_INLINE_CLI_MAX_TIMEOUT_MS)`,
+          `${command} hit its ${maxTimeoutMs}ms wall-clock ceiling ` +
+            `(raise ${INLINE_CLI_BUDGET_VARS.max})`,
         )
         return
       }
@@ -557,23 +579,6 @@ export interface InlineCliBudget {
 }
 
 /**
- * A whole POSITIVE number of milliseconds, or `undefined` when the value is unusable.
- *
- * Deliberately NOT `parseNumericEnv` from `@cat-factory/server`, which this would otherwise reuse:
- * that helper accepts any FINITE number, so `0`, `-1` and `1.5` all come back as legitimate values.
- * As a `setTimeout` budget those are worse than the typo they came from — a zero or negative delay
- * fires on the next tick, so the deployment would kill every inline step the instant it started,
- * which is the exact failure this change exists to stop. (`Number.isInteger` also rejects `NaN` and
- * both infinities, so a separate finiteness check would be redundant.)
- */
-function parsePositiveMs(raw: string | undefined): number | undefined {
-  if (raw === undefined || raw.trim() === '') return undefined
-  const value = Number(raw.trim())
-  if (!Number.isInteger(value) || value <= 0) return undefined
-  return value
-}
-
-/**
  * Read the inline host-CLI supervision budget from the environment.
  *
  * Both knobs exist because the defaults cannot fit every machine: an inline `doc-researcher` on a
@@ -582,10 +587,12 @@ function parsePositiveMs(raw: string | undefined): number | undefined {
  * {@link DEFAULT_CLI_MAX_TIMEOUT_MS}. Before them the 5-minute budget was a hard-coded constant with
  * no seam at all, so a deployment whose steps outgrew it had no way to say so.
  *
- * A malformed value WARNS and falls back to the default rather than throwing or silently coercing:
+ * An unusable value WARNS and falls back to the default rather than throwing or silently coercing:
  * `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS=5m` is a typo whose author should hear about it, but it is not
- * worth refusing to boot the whole deployment over — and `Number('5m')` is `NaN`, which as a timer
- * budget fires immediately and would kill every inline step at once.
+ * worth refusing to boot the whole deployment over. Validation is `parseTimerEnvMs`, which is
+ * stricter than the general `parseNumericEnv` for the reason that governs this whole module: every
+ * unusable spelling of a timer budget makes `setTimeout` fire IMMEDIATELY, so one typo here kills
+ * every inline step on the deployment at once rather than degrading one of them.
  */
 export function inlineCliBudgetFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -594,31 +601,33 @@ export function inlineCliBudgetFromEnv(
   const read = (name: string, fallback: number): number | undefined => {
     const raw = env[name]
     if (raw === undefined || raw.trim() === '') return undefined
-    const parsed = parsePositiveMs(raw)
-    if (parsed === undefined) {
-      onWarn?.(
-        `local mode: ${name}="${raw}" is not a whole number of milliseconds — ` +
-          `using the default ${fallback}ms.`,
-      )
+    const parsed = parseTimerEnvMs(name, raw, fallback)
+    if ('rejected' in parsed) {
+      onWarn?.(`local mode: ${parsed.rejected}`)
       return undefined
     }
-    return parsed
+    return parsed.ms
   }
-  const idleTimeoutMs = read('LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS', DEFAULT_CLI_IDLE_TIMEOUT_MS)
-  const maxTimeoutMs = read('LOCAL_INLINE_CLI_MAX_TIMEOUT_MS', DEFAULT_CLI_MAX_TIMEOUT_MS)
-  // A ceiling below the idle budget would make the idle watchdog unreachable — the run would always
-  // die of the ceiling first, and its failure would blame the wrong thing. Report it and keep the
-  // pair coherent by letting the explicit idle budget stand.
-  if (
-    idleTimeoutMs !== undefined &&
-    maxTimeoutMs !== undefined &&
-    maxTimeoutMs < idleTimeoutMs &&
-    onWarn
-  ) {
-    onWarn(
-      `local mode: LOCAL_INLINE_CLI_MAX_TIMEOUT_MS (${maxTimeoutMs}ms) is below ` +
-        `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS (${idleTimeoutMs}ms), so every stalled inline run will be ` +
-        'reported as hitting the ceiling rather than as stuck.',
+  const idleTimeoutMs = read(INLINE_CLI_BUDGET_VARS.idle, DEFAULT_CLI_IDLE_TIMEOUT_MS)
+  const maxTimeoutMs = read(INLINE_CLI_BUDGET_VARS.max, DEFAULT_CLI_MAX_TIMEOUT_MS)
+  // A ceiling below the idle budget makes the idle watchdog unreachable: the run always dies of the
+  // ceiling first, so a genuinely STUCK CLI is reported as one that ran too long and the operator
+  // goes and raises the wrong number.
+  //
+  // Compared on the EFFECTIVE values, not just the explicitly-set ones. Lowering only the ceiling —
+  // `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS=60000` against the 300000ms default idle window — is the more
+  // likely single-knob edit of the two (bounding runaway runs is why an operator comes here at all)
+  // and produces exactly the same incoherence; gating on both being set would let it through in
+  // silence. Nothing is rewritten: the pair stands as configured and the warning is the whole remedy,
+  // because which of the two the operator meant is not ours to guess.
+  const effectiveIdle = idleTimeoutMs ?? DEFAULT_CLI_IDLE_TIMEOUT_MS
+  const effectiveMax = maxTimeoutMs ?? DEFAULT_CLI_MAX_TIMEOUT_MS
+  if (effectiveMax < effectiveIdle) {
+    const named = (value: number | undefined): string => (value === undefined ? ' default' : '')
+    onWarn?.(
+      `local mode: ${INLINE_CLI_BUDGET_VARS.max} (${effectiveMax}ms${named(maxTimeoutMs)}) is below ` +
+        `${INLINE_CLI_BUDGET_VARS.idle} (${effectiveIdle}ms${named(idleTimeoutMs)}), so every ` +
+        'stalled inline run will be reported as hitting the ceiling rather than as stuck.',
     )
   }
   return {

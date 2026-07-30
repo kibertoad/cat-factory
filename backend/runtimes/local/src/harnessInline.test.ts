@@ -13,7 +13,7 @@ import {
   type InlineCliRequest,
   vendorConcurrencyLimiterFromEnv,
 } from '@cat-factory/agents'
-import { wrapResolverWithTelemetry } from '@cat-factory/server'
+import { MAX_TIMER_DELAY_MS, wrapResolverWithTelemetry } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import {
@@ -22,6 +22,7 @@ import {
   type CliExecFailureReason,
   type CliExecOptions,
   detectHostInlineClis,
+  INLINE_CLI_BUDGET_VARS,
   inlineCliBudgetFromEnv,
   makeInlineHarnessPredicate,
   runnerForVendor,
@@ -486,6 +487,28 @@ describe('inlineCliBudgetFromEnv', () => {
     },
   )
 
+  // The nastiest spelling of all, because it is what someone types MEANING "effectively no
+  // ceiling": `setTimeout` truncates a delay past 2^31-1 to 1ms, so the operator disabling the
+  // backstop would instead kill every inline step within milliseconds — and the failure would name
+  // the enormous ceiling it claims to have hit, reading as though the budget were working.
+  it.each([String(MAX_TIMER_DELAY_MS + 1), '999999999999'])(
+    'warns and defaults on %j, which a timer would truncate to 1ms',
+    (raw) => {
+      const warnings: string[] = []
+      expect(
+        inlineCliBudgetFromEnv({ LOCAL_INLINE_CLI_MAX_TIMEOUT_MS: raw }, (m) => warnings.push(m)),
+      ).toEqual({})
+      expect(warnings[0]).toMatch(/LOCAL_INLINE_CLI_MAX_TIMEOUT_MS/)
+      expect(warnings[0]).toMatch(/fire immediately/)
+    },
+  )
+
+  it('accepts the largest delay a timer can actually hold', () => {
+    expect(
+      inlineCliBudgetFromEnv({ LOCAL_INLINE_CLI_MAX_TIMEOUT_MS: String(MAX_TIMER_DELAY_MS) }),
+    ).toEqual({ maxTimeoutMs: MAX_TIMER_DELAY_MS })
+  })
+
   // A ceiling under the idle window makes the idle watchdog unreachable, so every stalled run would
   // be reported as having hit the ceiling — the operator would go raise the wrong number.
   it('warns when the ceiling sits below the idle window, and keeps both as configured', () => {
@@ -502,6 +525,32 @@ describe('inlineCliBudgetFromEnv', () => {
     expect(warnings[0]).toMatch(/reported as hitting the ceiling/)
   })
 
+  // The incoherence is a property of the EFFECTIVE pair, so it has to be caught when only one knob
+  // is set — and lowering just the ceiling is the likelier edit of the two, since bounding runaway
+  // runs is why an operator opens this file at all. Gating on both being present let it through.
+  it('warns when a lone ceiling sits below the DEFAULT idle window, naming which side defaulted', () => {
+    const warnings: string[] = []
+    const budget = inlineCliBudgetFromEnv({ LOCAL_INLINE_CLI_MAX_TIMEOUT_MS: '60000' }, (m) =>
+      warnings.push(m),
+    )
+    expect(budget).toEqual({ maxTimeoutMs: 60_000 })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/reported as hitting the ceiling/)
+    // The operator set one of these two numbers; say which one they are actually up against.
+    expect(warnings[0]).toContain('300000ms default')
+  })
+
+  it('warns when a lone idle window sits above the DEFAULT ceiling', () => {
+    const warnings: string[] = []
+    expect(
+      inlineCliBudgetFromEnv({ LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS: '7200000' }, (m) =>
+        warnings.push(m),
+      ),
+    ).toEqual({ idleTimeoutMs: 7_200_000 })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('3600000ms default')
+  })
+
   it('stays quiet on a coherent pair', () => {
     const warnings: string[] = []
     inlineCliBudgetFromEnv(
@@ -511,6 +560,12 @@ describe('inlineCliBudgetFromEnv', () => {
       },
       (m) => warnings.push(m),
     )
+    expect(warnings).toEqual([])
+  })
+
+  it('stays quiet when neither knob is set, since the shipped defaults are coherent', () => {
+    const warnings: string[] = []
+    expect(inlineCliBudgetFromEnv({}, (m) => warnings.push(m))).toEqual({})
     expect(warnings).toEqual([])
   })
 })
@@ -625,10 +680,17 @@ describe('spawnCliExec', () => {
     expect((failure as CliExecFailure).message).toMatch(/timed out after 300ms/)
   })
 
-  /** A child that writes `ticks` lines `everyMs` apart, then exits cleanly. */
+  /**
+   * A child that writes `ticks` lines `everyMs` apart, then exits cleanly.
+   *
+   * The FIRST line is written synchronously, before the interval is armed, so an assertion that
+   * output reached the observer races only the spawn and not the spawn PLUS one interval period.
+   * Node cold start is the dominant term in these budgets (~35ms idle here, several times that on a
+   * loaded CI runner), and the ceiling case deliberately runs a very short one.
+   */
   const ticker = (ticks: number, everyMs: number): string =>
-    `let n=0;const t=setInterval(()=>{process.stdout.write(\`tick \${n}\\n\`);` +
-    `if(++n===${ticks}){clearInterval(t);process.exit(0)}},${everyMs})`
+    `let n=0;const w=()=>process.stdout.write(\`tick \${n}\\n\`);w();` +
+    `const t=setInterval(()=>{if(++n===${ticks}){clearInterval(t);process.exit(0)}else w()},${everyMs})`
 
   // THE regression this budget split exists for. The idle window bounds how long the CLI may be
   // STUCK, not how long it may work — so a run that keeps narrating outlives it, however many
@@ -662,13 +724,40 @@ describe('spawnCliExec', () => {
   // prints an envelope per iteration, so it never looks stuck. The ceiling is what ends that, and it
   // says so differently because the fix is different: raise the ceiling, don't retry.
   it('kills a still-talking run at the ceiling, and blames the ceiling rather than a stall', async () => {
-    const { lines, failure } = await streamFrom(ticker(10_000, 10), 5_000, 250)
+    const { lines, failure } = await streamFrom(ticker(10_000, 10), 5_000, 600)
     expect(reasonOf(failure)).toBe('timeout')
     const message = (failure as CliExecFailure).message
-    expect(message).toMatch(/hit its 250ms ceiling/)
-    expect(message).toMatch(/LOCAL_INLINE_CLI_MAX_TIMEOUT_MS/)
+    expect(message).toMatch(/hit its 600ms wall-clock ceiling/)
+    expect(message).toContain(INLINE_CLI_BUDGET_VARS.max)
     // It was mid-stream when the ceiling landed — the partial output still reaches the observer.
     expect(lines).toContain('tick 0')
+  })
+
+  // `terminate` used to be re-entrant, and every trigger stays armed until `close`. An abort landing
+  // inside the SIGKILL grace period of an idle kill therefore overwrote `killedReason` — and unlike
+  // the message, `reason` is what a CALLER switches on, so a supervised kill surfaced as a
+  // user cancellation. First kill wins.
+  it('keeps the FIRST kill reason when an abort lands during the SIGTERM grace period', async () => {
+    const controller = new AbortController()
+    // Ignores SIGTERM, so it survives into the grace period and the abort has a window to land in.
+    // (On Windows `child.kill` terminates regardless of the signal, so the child is already gone by
+    // then and the listener detached — the assertion still holds, it just stops racing anything.)
+    const pending = spawnCliExec(
+      process.execPath,
+      ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'],
+      '',
+      { idleTimeoutMs: 100, signal: controller.signal },
+    ).then(
+      () => null as unknown,
+      (err: unknown) => err,
+    )
+    const abortDuringGrace = setTimeout(() => controller.abort(), 300)
+    const failure = await pending
+    clearTimeout(abortDuringGrace)
+    // The idle kill is what ended it, and that has to survive the later abort on BOTH channels: the
+    // message the operator reads and the `reason` the caller branches on.
+    expect(reasonOf(failure)).toBe('timeout')
+    expect((failure as CliExecFailure).message).toMatch(/timed out after 100ms with no output/)
   })
 
   it('tags a bad exit as `exit` and still reports its output', async () => {

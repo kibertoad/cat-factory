@@ -482,7 +482,7 @@ ended it — they want opposite reactions:
 | Failure says                              | Meaning                                               | Do                                                                                                      |
 | ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `timed out after 300000ms with no output` | The CLI went **silent** that long — presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
-| `hit its 3600000ms ceiling`               | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
+| `hit its 3600000ms wall-clock ceiling`    | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
 
 The idle budget is measured from the **last byte**, not from the spawn, so a step that keeps
 streaming is never killed for taking long — only for going quiet. That distinction matters
@@ -491,3 +491,12 @@ COMPLETED, so a step that dies on every attempt leaves no spend behind, however 
 The failure message carries what its partial stream had already accounted for (`burned 897k
 tokens across 16 model calls`), and the CLI's own session log under
 `~/.claude/projects/<cwd-slug>/*.jsonl` has the full record.
+
+Both knobs take a whole number of milliseconds from `1` to `2147483647` (about 24 days, the
+largest delay a timer can hold). Anything else — `5m`, `0`, a negative, a fraction, or a number
+above that ceiling — is **reported at boot and ignored** in favour of the default. That is
+deliberately stricter than the platform's other numeric variables: every unusable spelling of a
+timer budget makes the watchdog fire immediately, so the value someone types meaning "effectively
+no ceiling" is precisely the one that would otherwise kill every inline step within milliseconds.
+Setting the ceiling below the idle window is also reported, because the idle watchdog then becomes
+unreachable and every stalled run would blame the ceiling instead.
