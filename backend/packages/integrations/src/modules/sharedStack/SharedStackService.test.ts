@@ -144,12 +144,15 @@ const baseInput = {
   allowHostCommands: false,
 }
 
-describe('SharedStackService', () => {
-  let repo: SharedStackRepository
-  beforeEach(() => {
-    repo = makeRepo()
-  })
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+let repo: SharedStackRepository
+beforeEach(() => {
+  repo = makeRepo()
+})
 
+describe('SharedStackService — bring-up and teardown', () => {
   it('creates a stopped stack and lists it', async () => {
     const svc = makeService(repo)
     const created = await svc.create(WS, baseInput)
@@ -353,7 +356,9 @@ describe('SharedStackService', () => {
     expect(up.status).toBe('running')
     expect(runPreflights).not.toHaveBeenCalled()
   })
+})
 
+describe('SharedStackService — refs, guards and compose layers', () => {
   it('ensureUp/teardown refuse without a Docker runtime', async () => {
     const created = await makeService(repo).create(WS, baseInput)
     const svc = makeService(repo) // no runtime

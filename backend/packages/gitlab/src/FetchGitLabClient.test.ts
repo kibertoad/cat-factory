@@ -67,7 +67,7 @@ function client(routes: Parameters<typeof fakeFetch>[0]) {
   return { c, calls }
 }
 
-describe('FetchGitLabClient', () => {
+describe('FetchGitLabClient — neutral projections', () => {
   it('maps a project to the neutral repo projection', async () => {
     const { c } = client({
       'GET /projects/7': {
@@ -290,7 +290,9 @@ describe('FetchGitLabClient', () => {
       /not supported on GitLab/,
     )
   })
+})
 
+describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
   it('reads the PR base ref and requested reviewers from the MR detail', async () => {
     const { c } = client({
       'GET /projects/7/merge_requests/3': {

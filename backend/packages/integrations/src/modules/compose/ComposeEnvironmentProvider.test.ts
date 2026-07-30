@@ -406,45 +406,48 @@ describe('ComposeEnvironmentProvider', () => {
   })
 })
 
-describe('ComposeEnvironmentProvider — stack recipes', () => {
-  afterEach(() => vi.unstubAllGlobals())
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+afterEach(() => vi.unstubAllGlobals())
 
-  const recipeManifest = (recipe: StackRecipe, extra: Record<string, unknown> = {}) => ({
-    ...manifest,
-    providerConfig: { service: 'web', port: '8080', ...extra, recipe },
+const recipeManifest = (recipe: StackRecipe, extra: Record<string, unknown> = {}) => ({
+  ...manifest,
+  providerConfig: { service: 'web', port: '8080', ...extra, recipe },
+})
+
+// A recipe always needs a checkout runtime + a clone target; both the compose files it layers
+// must exist in the run repo.
+const recipeReq = (
+  recipe: StackRecipe,
+  opts: {
+    files: Record<string, string>
+    extra?: Record<string, unknown>
+    recordStep?: ProvisionEnvironmentRequest['recordStep']
+    ensureSharedStacks?: ProvisionEnvironmentRequest['ensureSharedStacks']
+    runPreflights?: ProvisionEnvironmentRequest['runPreflights']
+  } = {
+    files: {},
+  },
+): ProvisionEnvironmentRequest =>
+  baseReq({
+    manifest: recipeManifest(recipe, opts.extra),
+    runRepo: fakeRunRepo(opts.files),
+    clone: () =>
+      Promise.resolve({ cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 't' }),
+    ...(opts.recordStep ? { recordStep: opts.recordStep } : {}),
+    ...(opts.ensureSharedStacks ? { ensureSharedStacks: opts.ensureSharedStacks } : {}),
+    ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
   })
 
-  // A recipe always needs a checkout runtime + a clone target; both the compose files it layers
-  // must exist in the run repo.
-  const recipeReq = (
-    recipe: StackRecipe,
-    opts: {
-      files: Record<string, string>
-      extra?: Record<string, unknown>
-      recordStep?: ProvisionEnvironmentRequest['recordStep']
-      ensureSharedStacks?: ProvisionEnvironmentRequest['ensureSharedStacks']
-      runPreflights?: ProvisionEnvironmentRequest['runPreflights']
-    } = {
-      files: {},
-    },
-  ): ProvisionEnvironmentRequest =>
-    baseReq({
-      manifest: recipeManifest(recipe, opts.extra),
-      runRepo: fakeRunRepo(opts.files),
-      clone: () =>
-        Promise.resolve({ cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 't' }),
-      ...(opts.recordStep ? { recordStep: opts.recordStep } : {}),
-      ...(opts.ensureSharedStacks ? { ensureSharedStacks: opts.ensureSharedStacks } : {}),
-      ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
-    })
+// A script that greenlights a whole recipe bring-up (up/exec/host green, ps healthy, port bound).
+const greenScript: Script = (args) => {
+  if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49200', stderr: '' }
+  if (args.includes('ps')) return { code: 0, stdout: '[{"State":"running"}]', stderr: '' }
+  return { code: 0, stdout: '', stderr: '' }
+}
 
-  // A script that greenlights a whole recipe bring-up (up/exec/host green, ps healthy, port bound).
-  const greenScript: Script = (args) => {
-    if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49200', stderr: '' }
-    if (args.includes('ps')) return { code: 0, stdout: '[{"State":"running"}]', stderr: '' }
-    return { code: 0, stdout: '', stderr: '' }
-  }
-
+describe('ComposeEnvironmentProvider — stack recipes', () => {
   it('layers -f files, enables profiles, materializes env files, runs steps, then resolves the URL', async () => {
     const recipe: StackRecipe = {
       composeFiles: ['docker/dev.yml', 'docker/dev.override.yml'],
@@ -655,7 +658,9 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
     expect(env.error).toContain('escapes the checkout')
     expect(calls).toHaveLength(0)
   })
+})
 
+describe('ComposeEnvironmentProvider — shared stacks and preflight', () => {
   it('ensures shared stacks up FIRST, then attaches the project to their managed networks', async () => {
     const ensureCalls: string[][] = []
     const recipe: StackRecipe = { sharedStackRefs: ['ss_shared'] }

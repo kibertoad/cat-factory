@@ -2,7 +2,6 @@ import type {} from '@cat-factory/kernel'
 import type { AppCaches, Logger } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
-  createTesterQualityReviewer,
   createSlackModule,
   createMergeTrackRecordModule,
   createRiskPoliciesModule,
@@ -50,7 +49,6 @@ import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
-import { makeDocumentUrlResolver } from './modules/execution/linked-context.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
@@ -95,7 +93,6 @@ import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepai
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
-import { resolvePresetModelForKind } from './modules/modelPresets/ModelPresetService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import type { FragmentLibraryModule, SkillLibraryModule } from './container-content-libraries.js'
 import type {
@@ -512,12 +509,9 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
-    stepResolverRegistry,
-    providerRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     initiativePresetRegistry,
-    workRunner,
     executionEventPublisher,
     caches,
     logger,

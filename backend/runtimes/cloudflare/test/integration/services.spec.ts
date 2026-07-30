@@ -14,7 +14,7 @@ async function serviceFor(
   return svc
 }
 
-describe('in-org shared services', () => {
+describe('in-org shared services — mounting and lifecycle', () => {
   it('registers a service + mount when a frame is created', async () => {
     const { call, createWorkspace } = makeApp()
     const { workspace } = await createWorkspace({ seed: false })
@@ -255,7 +255,9 @@ describe('in-org shared services', () => {
     )
     expect(bList.body.map((s) => s.id)).toContain(schedule.body.id)
   })
+})
 
+describe('in-org shared services — layout and cross-board edits', () => {
   it('persists a home service frame move (frame layout lives on the mount)', async () => {
     const { call, createWorkspace } = makeApp()
     const { workspace } = await createWorkspace({ seed: false })

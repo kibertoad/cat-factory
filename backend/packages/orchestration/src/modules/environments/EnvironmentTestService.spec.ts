@@ -236,7 +236,7 @@ function makeService(opts: {
   return { service, runRepo, registry, teardowns, released, logs }
 }
 
-describe('EnvironmentTestService', () => {
+describe('EnvironmentTestService — start guards and the happy paths', () => {
   it('rejects an infraless service (nothing to test)', async () => {
     const { service } = makeService({ block: frameBlock({ provisioning: { type: 'infraless' } }) })
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
@@ -432,7 +432,9 @@ describe('EnvironmentTestService', () => {
     expect((await service.getRun('ws', started.id)).status).toBe('succeeded')
     expect(teardowns).toEqual(['env-pin'])
   })
+})
 
+describe('EnvironmentTestService — failure, teardown and terminal guards', () => {
   it('fails at dispatch, attributing it to `provisioning` (not the mislabeled `creating_branch`), and cleans up', async () => {
     const { repo, calls } = fakeRepo()
     const { service, registry, released, logs } = makeService({

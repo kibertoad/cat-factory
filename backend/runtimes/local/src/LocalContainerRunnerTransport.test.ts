@@ -51,7 +51,7 @@ function mkTransport(opts: MkOpts): LocalContainerRunnerTransport {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('LocalContainerRunnerTransport', () => {
+describe('LocalContainerRunnerTransport — dispatch', () => {
   it('starts a labelled container, waits for health, then POSTs the job to /jobs', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
@@ -238,7 +238,9 @@ describe('LocalContainerRunnerTransport', () => {
     expect(view.state).toBe('done')
     expect(view.result?.prUrl).toBe('https://x/pr/1')
   })
+})
 
+describe('LocalContainerRunnerTransport — poll, eviction and release', () => {
   it('forwards the harness liveness heartbeat verbatim on a running poll', async () => {
     // Runtime symmetry with the Cloudflare container transport: local casts the harness JobView
     // verbatim, so the harness `heartbeatAt` must ride through to `RunnerJobView.heartbeatAt` (which
@@ -494,7 +496,9 @@ describe('LocalContainerRunnerTransport', () => {
     expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
     expect(calls.some((c) => c[0] === 'run')).toBe(true)
   })
+})
 
+describe('LocalContainerRunnerTransport — reaping and start-up failures', () => {
   it('reapExited force-removes exited managed containers and returns the count', async () => {
     const calls: string[][] = []
     const exec: ContainerExec = (args) => {

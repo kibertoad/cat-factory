@@ -557,6 +557,308 @@ function registerLocalInfraTesterTests(harness: ConformanceHarness): void {
     },
   )
 
+  registerLocalComposeTesterTests(harness)
+}
+
+/**
+ * How a tester REPORT is dispositioned: first-round fixer loop, advisory low/medium
+ * concerns, a cannot-test abort, a failed check, and a terminally withheld greenlight.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerTesterVerdictTests(harness: ConformanceHarness): void {
+  it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
+    // The FIRST testing round hands ANY finding back to the fixer — even a single
+    // low-severity nit — so the first batch of issues is always addressed. From the
+    // SECOND round onward low/medium concerns are advisory: only a high/critical
+    // blocker withholds the greenlight, so the run isn't stuck re-fixing a nit forever.
+    const greenWithNit = {
+      greenlight: true,
+      summary: 'all good, one minor nit',
+      tested: ['login'],
+      outcomes: [{ name: 'login', status: 'passed' as const }],
+      concerns: [{ title: 'naming', detail: 'rename a var', severity: 'low' as const }],
+    }
+    const app = harness.makeApp({
+      asyncKinds: ['coder', 'tester-api', 'fixer'],
+      asyncPolls: 1,
+      // The SAME nit on both rounds: round 1 loops the fixer (first batch always
+      // does); round 2 greenlights it (now advisory).
+      testReports: [greenWithNit, greenWithNit],
+      pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code + test nit',
+      agentKinds: ['coder', 'tester-api'],
+    })
+    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('done')
+    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+    expect(testerStep.state).toBe('done')
+    // The first-round nit looped the fixer exactly once; the second-round nit was advisory.
+    expect(testerStep.test?.attempts).toBe(1)
+    expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+    // The fixer round was recorded as an inspectable attempt (so the test window can
+    // surface what each otherwise-opaque fixer sub-job did), with the concerns it was handed.
+    expect(testerStep.test?.attemptLog).toHaveLength(1)
+    expect(testerStep.test?.attemptLog?.[0]?.outcome).toBe('completed')
+    // The fixer was handed the first round's report — the same nit (`naming`).
+    expect(testerStep.test?.attemptLog?.[0]?.concerns?.[0]?.title).toBe('naming')
+  })
+
+  it('aborts the run (no fixer) when the tester reports it cannot test', async () => {
+    // The Tester reports `abort` (its ephemeral environment never came up, say): the engine
+    // must STOP the run for a human — fail it, leave the step un-`done` — and NOT loop the
+    // fixer (which can't provision infrastructure). No fixer ⇒ attempts stays 0.
+    const aborted = {
+      greenlight: false,
+      summary: 'could not stand up the environment',
+      tested: [],
+      outcomes: [],
+      concerns: [],
+      abort: { reason: 'the ephemeral environment failed to provision' },
+    }
+    const app = harness.makeApp({
+      asyncKinds: ['coder', 'tester-api', 'fixer'],
+      asyncPolls: 1,
+      testReports: [aborted],
+      pullRequest: { url: 'https://gh/pr/9', number: 9, branch: 'cat-factory/task_login' },
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code + test abort',
+      agentKinds: ['coder', 'tester-api'],
+    })
+    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('failed')
+    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+    expect(testerStep.state).not.toBe('done')
+    // The fixer was NOT dispatched — an abort is handed straight to a human.
+    expect(testerStep.test?.attempts ?? 0).toBe(0)
+    expect(testerStep.test?.attemptLog ?? []).toHaveLength(0)
+  })
+
+  it('loops the fixer when a report greenlights but a check FAILED (a failed outcome is a blocker)', async () => {
+    // Defensive verdict: a `failed` outcome is itself a blocker, so the engine must NOT
+    // accept a report that greenlights with a red check — it loops the fixer regardless of
+    // the greenlight flag. The first report greenlights yet has a failed outcome (so it must
+    // be rejected and dispatch the fixer); the second is cleanly green (so the run converges).
+    // Without the failed-outcome guard the first report is accepted at attempts=0 and the run
+    // completes without ever fixing the red check.
+    const greenButFailed = {
+      greenlight: true,
+      summary: 'shipping it',
+      tested: ['login'],
+      outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
+      concerns: [],
+    }
+    const green = {
+      greenlight: true,
+      summary: 'all good',
+      tested: ['login'],
+      outcomes: [{ name: 'login', status: 'passed' as const }],
+      concerns: [],
+    }
+    const app = harness.makeApp({
+      asyncKinds: ['coder', 'tester-api', 'fixer'],
+      asyncPolls: 1,
+      testReports: [greenButFailed, green],
+      pullRequest: { url: 'https://gh/pr/7', number: 7, branch: 'cat-factory/task_login' },
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code + test failed-outcome',
+      agentKinds: ['coder', 'tester-api'],
+    })
+    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('done')
+    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+    expect(testerStep.state).toBe('done')
+    // The greenlit-but-failed report was rejected and looped the fixer exactly once before
+    // the clean re-test greenlit — NOT accepted on the first round.
+    expect(testerStep.test?.attempts).toBe(1)
+    expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+  })
+
+  it('fails the run (tester step left un-done) when the greenlight is withheld terminally', async () => {
+    // A report with a blocking (critical) concern and NO PR branch for a fixer to
+    // push to is terminal: the run FAILS and the tester step is left un-`done` (it
+    // is never falsely marked complete on a failure). Also exercises the engine's
+    // defensive override — a `greenlight:true` carrying a critical concern is still
+    // withheld, so a buggy/over-eager report can't slip a blocker through.
+    const bogusGreen = {
+      greenlight: true,
+      summary: 'shipped with a known crash',
+      tested: ['login'],
+      outcomes: [{ name: 'login', status: 'failed' as const, detail: 'crash' }],
+      concerns: [{ title: 'NPE', detail: 'crashes on null', severity: 'critical' as const }],
+    }
+    const app = harness.makeApp({
+      asyncKinds: ['tester-api', 'fixer'],
+      asyncPolls: 1,
+      testReports: [bogusGreen],
+      // No pullRequest → no branch for the fixer to push to → terminal failure.
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Test only',
+      agentKinds: ['tester-api'],
+    })
+    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('failed')
+    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+    expect(testerStep.state).not.toBe('done')
+  })
+}
+
+/**
+ * The frontend UI-tester's live-service precondition and the visual pipeline's UI gate.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerFrontendTesterGateTests(harness: ConformanceHarness): void {
+  it('refuses a frontend UI-tester with no live service under test, reading frontend_config on both stores', async () => {
+    // Slice 3 (frontend-preview-ui-testing): a `tester-ui` on a task under a `type: 'frontend'`
+    // frame is gated on the frame's `frontendConfig` — it needs at least one bound service with
+    // a LIVE ephemeral env (the "service under test"). With the env integration ON (this suite's
+    // default) but nothing provisioned, every binding resolves to a mock, so the start is refused
+    // with `frontend-no-live-service`. This pins the D1 ⇄ Drizzle parity of reading the
+    // `frontend_config` JSON column DURING A RUN: a facade that dropped/mismapped the column
+    // would resolve to "no frontend config", fall through to the (empty) backend-service branch,
+    // and let the run START (201) instead of refusing it (409). The pure binding→URL resolution
+    // (the live service-under-test URL) is covered by the `resolveFrontendBindings` unit tests.
+    // Binary storage is wired so this refusal is the FRONTEND gate, not the storage gate.
+    const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    // Configure the SEEDED `blk_frontend` frame (a `type: 'frontend'` frame in the board seed)
+    // rather than creating one via `POST /blocks`: addFrame registers an account-owned service
+    // (serviceRepository.insert), which the mothership harness's read-scoped remote proxy can't
+    // write — so a fresh frame would 500 there. The seeded frame exists on every harness, so
+    // this exercises the frontend gate uniformly. PATCH its config: one `service` binding with
+    // no live env, plus a mock binding.
+    const frameId = 'blk_frontend'
+    const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${frameId}`, {
+      frontendConfig: {
+        packageManager: 'pnpm',
+        buildScript: 'build',
+        backendBindings: [
+          { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+          { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
+        ],
+      },
+    })
+    expect(patched.status).toBe(200)
+
+    // A task inside the frontend frame, and a UI-tester pipeline run against it.
+    const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/${frameId}/tasks`, {
+      title: 'Exercise the dashboard',
+    })
+    expect(task.status).toBe(201)
+    const taskId = task.body.id!
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + UI test',
+      agentKinds: ['coder', 'tester-ui'],
+    })
+    const blocked = await app.call<{
+      error: { code: string; details?: { reason?: string; infraReason?: string } }
+    }>('POST', `/workspaces/${wsId}/blocks/${taskId}/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(blocked.status).toBe(409)
+    expect(blocked.body.error.code).toBe('conflict')
+    expect(blocked.body.error.details?.reason).toBe('tester_infra_unsupported')
+    expect(blocked.body.error.details?.infraReason).toBe('frontend-no-live-service')
+  })
+
+  it('gates a visual pipeline to a frame with a UI (refuse on a bare service, allow once a frontend links it)', async () => {
+    // Slice 4c (frontend-preview-ui-testing): a pipeline with a VISUAL step (`tester-ui` /
+    // `visual-confirmation`) may run only where there is a UI to exercise — a `frontend` frame,
+    // or a frame a `frontend` frame links to. `task_login` lives under the `blk_auth` SERVICE
+    // frame, which has no frontend linked in the seed, so a visual pipeline is refused up-front
+    // with `visual_pipeline_no_frontend`. Once the seeded frontend frame BINDS `blk_auth`
+    // (a frontend→service link), the same run is allowed and starts. This pins the D1 ⇄ Drizzle
+    // parity of reading `frontend_config` to discover the link during a run-start gate: a facade
+    // that dropped/mismapped the column would find no link and refuse the allowed case too.
+    // Binary storage is wired so the allowed run isn't refused by the storage gate instead.
+    const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Visual build',
+      agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+    })
+
+    // No frontend links `blk_auth` yet ⇒ the visual pipeline is refused on `task_login`.
+    const refused = await app.call<{
+      error: { code: string; details?: { reason?: string; frameType?: string | null } }
+    }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('conflict')
+    expect(refused.body.error.details?.reason).toBe('visual_pipeline_no_frontend')
+    expect(refused.body.error.details?.frameType).toBe('service')
+
+    // Link the seeded frontend frame to `blk_auth`: now the service HAS a frontend, so the same
+    // visual pipeline is allowed to start on its task.
+    await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+      frontendConfig: {
+        backendBindings: [
+          { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+        ],
+      },
+    })
+    const started = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(started.status).toBe(201)
+  })
+
+  // Skipped on the mothership harness: this test runs a real `deployer` (registering an
+  // environment connection + provisioning through it), which drives the env connect/provision
+  // write surface. That surface is deliberately NOT exposed over the mothership RPC boundary
+  // yet (see `packages/server/src/persistence/rpc.ts`: `environmentRegistryRepository` is
+  // read-only there and `environmentConnectionRepository` is unproxied — "the connect/provision
+  // surface ... is a later slice"), so it 500s on that node. The sibling refusal test above
+  // stays mothership-safe because it only reads/PATCHes seeded blocks. Every OTHER harness
+  // (node/local/worker, real persistence) exercises the full provision path here.
+}
+
+/**
+ * The two local-infra Tester paths a mothership node (and, for the last, the Worker) cannot
+ * serve — skipped per harness rather than asserted differently.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerLocalComposeTesterTests(harness: ConformanceHarness): void {
   it.skipIf(harness.name === 'mothership')(
     'injects the derived frontend origins into the deployer provision and stamps run-start notes',
     async () => {
@@ -931,295 +1233,4 @@ function registerVisualConfirmationTests(harness: ConformanceHarness): void {
     }
     expect(exec.status).toBe('done')
   })
-}
-
-/**
- * How a tester REPORT is dispositioned: first-round fixer loop, advisory low/medium
- * concerns, a cannot-test abort, a failed check, and a terminally withheld greenlight.
- *
- * Registered from the suite above; split out purely to keep each function within the
- * per-function line budget. Every test is unchanged.
- */
-function registerTesterVerdictTests(harness: ConformanceHarness): void {
-  it('always loops the fixer on the FIRST round, then treats low/medium concerns as advisory', async () => {
-    // The FIRST testing round hands ANY finding back to the fixer — even a single
-    // low-severity nit — so the first batch of issues is always addressed. From the
-    // SECOND round onward low/medium concerns are advisory: only a high/critical
-    // blocker withholds the greenlight, so the run isn't stuck re-fixing a nit forever.
-    const greenWithNit = {
-      greenlight: true,
-      summary: 'all good, one minor nit',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'passed' as const }],
-      concerns: [{ title: 'naming', detail: 'rename a var', severity: 'low' as const }],
-    }
-    const app = harness.makeApp({
-      asyncKinds: ['coder', 'tester-api', 'fixer'],
-      asyncPolls: 1,
-      // The SAME nit on both rounds: round 1 loops the fixer (first batch always
-      // does); round 2 greenlights it (now advisory).
-      testReports: [greenWithNit, greenWithNit],
-      pullRequest: { url: 'https://gh/pr/1', number: 1, branch: 'cat-factory/task_login' },
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Code + test nit',
-      agentKinds: ['coder', 'tester-api'],
-    })
-    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('done')
-    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
-    expect(testerStep.state).toBe('done')
-    // The first-round nit looped the fixer exactly once; the second-round nit was advisory.
-    expect(testerStep.test?.attempts).toBe(1)
-    expect(testerStep.test?.lastReport?.greenlight).toBe(true)
-    // The fixer round was recorded as an inspectable attempt (so the test window can
-    // surface what each otherwise-opaque fixer sub-job did), with the concerns it was handed.
-    expect(testerStep.test?.attemptLog).toHaveLength(1)
-    expect(testerStep.test?.attemptLog?.[0]?.outcome).toBe('completed')
-    // The fixer was handed the first round's report — the same nit (`naming`).
-    expect(testerStep.test?.attemptLog?.[0]?.concerns?.[0]?.title).toBe('naming')
-  })
-
-  it('aborts the run (no fixer) when the tester reports it cannot test', async () => {
-    // The Tester reports `abort` (its ephemeral environment never came up, say): the engine
-    // must STOP the run for a human — fail it, leave the step un-`done` — and NOT loop the
-    // fixer (which can't provision infrastructure). No fixer ⇒ attempts stays 0.
-    const aborted = {
-      greenlight: false,
-      summary: 'could not stand up the environment',
-      tested: [],
-      outcomes: [],
-      concerns: [],
-      abort: { reason: 'the ephemeral environment failed to provision' },
-    }
-    const app = harness.makeApp({
-      asyncKinds: ['coder', 'tester-api', 'fixer'],
-      asyncPolls: 1,
-      testReports: [aborted],
-      pullRequest: { url: 'https://gh/pr/9', number: 9, branch: 'cat-factory/task_login' },
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Code + test abort',
-      agentKinds: ['coder', 'tester-api'],
-    })
-    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('failed')
-    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
-    expect(testerStep.state).not.toBe('done')
-    // The fixer was NOT dispatched — an abort is handed straight to a human.
-    expect(testerStep.test?.attempts ?? 0).toBe(0)
-    expect(testerStep.test?.attemptLog ?? []).toHaveLength(0)
-  })
-
-  it('loops the fixer when a report greenlights but a check FAILED (a failed outcome is a blocker)', async () => {
-    // Defensive verdict: a `failed` outcome is itself a blocker, so the engine must NOT
-    // accept a report that greenlights with a red check — it loops the fixer regardless of
-    // the greenlight flag. The first report greenlights yet has a failed outcome (so it must
-    // be rejected and dispatch the fixer); the second is cleanly green (so the run converges).
-    // Without the failed-outcome guard the first report is accepted at attempts=0 and the run
-    // completes without ever fixing the red check.
-    const greenButFailed = {
-      greenlight: true,
-      summary: 'shipping it',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'failed' as const, detail: 'returns 500' }],
-      concerns: [],
-    }
-    const green = {
-      greenlight: true,
-      summary: 'all good',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'passed' as const }],
-      concerns: [],
-    }
-    const app = harness.makeApp({
-      asyncKinds: ['coder', 'tester-api', 'fixer'],
-      asyncPolls: 1,
-      testReports: [greenButFailed, green],
-      pullRequest: { url: 'https://gh/pr/7', number: 7, branch: 'cat-factory/task_login' },
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Code + test failed-outcome',
-      agentKinds: ['coder', 'tester-api'],
-    })
-    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('done')
-    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
-    expect(testerStep.state).toBe('done')
-    // The greenlit-but-failed report was rejected and looped the fixer exactly once before
-    // the clean re-test greenlit — NOT accepted on the first round.
-    expect(testerStep.test?.attempts).toBe(1)
-    expect(testerStep.test?.lastReport?.greenlight).toBe(true)
-  })
-
-  it('fails the run (tester step left un-done) when the greenlight is withheld terminally', async () => {
-    // A report with a blocking (critical) concern and NO PR branch for a fixer to
-    // push to is terminal: the run FAILS and the tester step is left un-`done` (it
-    // is never falsely marked complete on a failure). Also exercises the engine's
-    // defensive override — a `greenlight:true` carrying a critical concern is still
-    // withheld, so a buggy/over-eager report can't slip a blocker through.
-    const bogusGreen = {
-      greenlight: true,
-      summary: 'shipped with a known crash',
-      tested: ['login'],
-      outcomes: [{ name: 'login', status: 'failed' as const, detail: 'crash' }],
-      concerns: [{ title: 'NPE', detail: 'crashes on null', severity: 'critical' as const }],
-    }
-    const app = harness.makeApp({
-      asyncKinds: ['tester-api', 'fixer'],
-      asyncPolls: 1,
-      testReports: [bogusGreen],
-      // No pullRequest → no branch for the fixer to push to → terminal failure.
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Test only',
-      agentKinds: ['tester-api'],
-    })
-    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('failed')
-    const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
-    expect(testerStep.state).not.toBe('done')
-  })
-}
-
-/**
- * The frontend UI-tester's live-service precondition and the visual pipeline's UI gate.
- *
- * Registered from the suite above; split out purely to keep each function within the
- * per-function line budget. Every test is unchanged.
- */
-function registerFrontendTesterGateTests(harness: ConformanceHarness): void {
-  it('refuses a frontend UI-tester with no live service under test, reading frontend_config on both stores', async () => {
-    // Slice 3 (frontend-preview-ui-testing): a `tester-ui` on a task under a `type: 'frontend'`
-    // frame is gated on the frame's `frontendConfig` — it needs at least one bound service with
-    // a LIVE ephemeral env (the "service under test"). With the env integration ON (this suite's
-    // default) but nothing provisioned, every binding resolves to a mock, so the start is refused
-    // with `frontend-no-live-service`. This pins the D1 ⇄ Drizzle parity of reading the
-    // `frontend_config` JSON column DURING A RUN: a facade that dropped/mismapped the column
-    // would resolve to "no frontend config", fall through to the (empty) backend-service branch,
-    // and let the run START (201) instead of refusing it (409). The pure binding→URL resolution
-    // (the live service-under-test URL) is covered by the `resolveFrontendBindings` unit tests.
-    // Binary storage is wired so this refusal is the FRONTEND gate, not the storage gate.
-    const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-
-    // Configure the SEEDED `blk_frontend` frame (a `type: 'frontend'` frame in the board seed)
-    // rather than creating one via `POST /blocks`: addFrame registers an account-owned service
-    // (serviceRepository.insert), which the mothership harness's read-scoped remote proxy can't
-    // write — so a fresh frame would 500 there. The seeded frame exists on every harness, so
-    // this exercises the frontend gate uniformly. PATCH its config: one `service` binding with
-    // no live env, plus a mock binding.
-    const frameId = 'blk_frontend'
-    const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${frameId}`, {
-      frontendConfig: {
-        packageManager: 'pnpm',
-        buildScript: 'build',
-        backendBindings: [
-          { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
-          { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
-        ],
-      },
-    })
-    expect(patched.status).toBe(200)
-
-    // A task inside the frontend frame, and a UI-tester pipeline run against it.
-    const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/${frameId}/tasks`, {
-      title: 'Exercise the dashboard',
-    })
-    expect(task.status).toBe(201)
-    const taskId = task.body.id!
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Build + UI test',
-      agentKinds: ['coder', 'tester-ui'],
-    })
-    const blocked = await app.call<{
-      error: { code: string; details?: { reason?: string; infraReason?: string } }
-    }>('POST', `/workspaces/${wsId}/blocks/${taskId}/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(blocked.status).toBe(409)
-    expect(blocked.body.error.code).toBe('conflict')
-    expect(blocked.body.error.details?.reason).toBe('tester_infra_unsupported')
-    expect(blocked.body.error.details?.infraReason).toBe('frontend-no-live-service')
-  })
-
-  it('gates a visual pipeline to a frame with a UI (refuse on a bare service, allow once a frontend links it)', async () => {
-    // Slice 4c (frontend-preview-ui-testing): a pipeline with a VISUAL step (`tester-ui` /
-    // `visual-confirmation`) may run only where there is a UI to exercise — a `frontend` frame,
-    // or a frame a `frontend` frame links to. `task_login` lives under the `blk_auth` SERVICE
-    // frame, which has no frontend linked in the seed, so a visual pipeline is refused up-front
-    // with `visual_pipeline_no_frontend`. Once the seeded frontend frame BINDS `blk_auth`
-    // (a frontend→service link), the same run is allowed and starts. This pins the D1 ⇄ Drizzle
-    // parity of reading `frontend_config` to discover the link during a run-start gate: a facade
-    // that dropped/mismapped the column would find no link and refuse the allowed case too.
-    // Binary storage is wired so the allowed run isn't refused by the storage gate instead.
-    const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Visual build',
-      agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
-    })
-
-    // No frontend links `blk_auth` yet ⇒ the visual pipeline is refused on `task_login`.
-    const refused = await app.call<{
-      error: { code: string; details?: { reason?: string; frameType?: string | null } }
-    }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
-    expect(refused.status).toBe(409)
-    expect(refused.body.error.code).toBe('conflict')
-    expect(refused.body.error.details?.reason).toBe('visual_pipeline_no_frontend')
-    expect(refused.body.error.details?.frameType).toBe('service')
-
-    // Link the seeded frontend frame to `blk_auth`: now the service HAS a frontend, so the same
-    // visual pipeline is allowed to start on its task.
-    await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
-      frontendConfig: {
-        backendBindings: [
-          { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
-        ],
-      },
-    })
-    const started = await app.call<ExecutionInstance>(
-      'POST',
-      `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
-    )
-    expect(started.status).toBe(201)
-  })
-
-  // Skipped on the mothership harness: this test runs a real `deployer` (registering an
-  // environment connection + provisioning through it), which drives the env connect/provision
-  // write surface. That surface is deliberately NOT exposed over the mothership RPC boundary
-  // yet (see `packages/server/src/persistence/rpc.ts`: `environmentRegistryRepository` is
-  // read-only there and `environmentConnectionRepository` is unproxied — "the connect/provision
-  // surface ... is a later slice"), so it 500s on that node. The sibling refusal test above
-  // stays mothership-safe because it only reads/PATCHes seeded blocks. Every OTHER harness
-  // (node/local/worker, real persistence) exercises the full provision path here.
 }

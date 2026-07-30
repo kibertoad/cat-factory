@@ -135,56 +135,55 @@ describe('RunnerPoolTransport', () => {
   })
 })
 
-describe('HttpRunnerPoolProvider', () => {
-  // The provider drives the org's scheduler over the global `fetch`; intercept that real fetch
-  // with undici's MockAgent (instead of replacing `fetch` wholesale via `vi.stubGlobal`), so the
-  // real URL building, header casing and Response parsing are exercised. `disableNetConnect`
-  // makes any un-mocked request fail loudly.
-  const POOL = 'https://pool.test'
-  let agent: MockAgent
-  let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+const POOL = 'https://pool.test'
+let agent: MockAgent
+let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
 
-  beforeEach(() => {
-    previousDispatcher = getGlobalDispatcher()
-    agent = new MockAgent()
-    agent.disableNetConnect()
-    setGlobalDispatcher(agent)
-    // Node's built-in `fetch` binds to its OWN bundled undici (v7 on Node 24), which ignores a
-    // dispatcher set on the userland `undici` package (v8) — so the MockAgent above would be
-    // silently bypassed and the provider would hit the REAL scheduler URL. Route the SUT's
-    // `fetch` through the userland undici's fetch, which honours the dispatcher we set.
-    vi.stubGlobal('fetch', undiciFetch)
-  })
+beforeEach(() => {
+  previousDispatcher = getGlobalDispatcher()
+  agent = new MockAgent()
+  agent.disableNetConnect()
+  setGlobalDispatcher(agent)
+  // Node's built-in `fetch` binds to its OWN bundled undici (v7 on Node 24), which ignores a
+  // dispatcher set on the userland `undici` package (v8) — so the MockAgent above would be
+  // silently bypassed and the provider would hit the REAL scheduler URL. Route the SUT's
+  // `fetch` through the userland undici's fetch, which honours the dispatcher we set.
+  vi.stubGlobal('fetch', undiciFetch)
+})
 
-  afterEach(async () => {
-    vi.unstubAllGlobals()
-    setGlobalDispatcher(previousDispatcher)
-    await agent.close()
-  })
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  setGlobalDispatcher(previousDispatcher)
+  await agent.close()
+})
 
-  interface SeenRequest {
-    url: string
-    headers: Record<string, string>
-    body: string
-  }
+interface SeenRequest {
+  url: string
+  headers: Record<string, string>
+  body: string
+}
 
-  /** Record requests matching path+method (reconstructing the full URL), replying with `json`. */
-  function capture(path: string, method: string, json: unknown, status = 200): SeenRequest[] {
-    const seen: SeenRequest[] = []
-    agent
-      .get(POOL)
-      .intercept({ path, method })
-      .reply(status, (opts) => {
-        seen.push({
-          url: `${POOL}${opts.path}`,
-          headers: opts.headers as Record<string, string>,
-          body: opts.body ? String(opts.body) : '',
-        })
-        return typeof json === 'string' ? json : JSON.stringify(json)
+/** Record requests matching path+method (reconstructing the full URL), replying with `json`. */
+function capture(path: string, method: string, json: unknown, status = 200): SeenRequest[] {
+  const seen: SeenRequest[] = []
+  agent
+    .get(POOL)
+    .intercept({ path, method })
+    .reply(status, (opts) => {
+      seen.push({
+        url: `${POOL}${opts.path}`,
+        headers: opts.headers as Record<string, string>,
+        body: opts.body ? String(opts.body) : '',
       })
-    return seen
-  }
+      return typeof json === 'string' ? json : JSON.stringify(json)
+    })
+  return seen
+}
 
+describe('HttpRunnerPoolProvider — dispatch templating and view mapping', () => {
   it('interpolates the dispatch body + bearer auth and forwards the job spec', async () => {
     const seen = capture('/api/jobs', 'POST', {}, 202)
     const provider = new HttpRunnerPoolProvider()
@@ -440,7 +439,9 @@ describe('HttpRunnerPoolProvider', () => {
     })
     expect(empty.sliceReviews).toBeUndefined()
   })
+})
 
+describe('HttpRunnerPoolProvider — failure, eviction and result mapping', () => {
   it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
     // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
     // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the

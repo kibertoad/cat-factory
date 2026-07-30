@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Decision, ExecutionInstance, PipelineStep, StepApproval } from '~/types/domain'
+import type { ExecutionInstance } from '~/types/domain'
 import { createExecutionCommands } from '~/stores/execution/commands'
 import { createPendingGateSelectors } from '~/stores/execution/pendingGates'
 

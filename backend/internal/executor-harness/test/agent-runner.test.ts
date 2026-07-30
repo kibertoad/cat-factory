@@ -125,7 +125,57 @@ describe.skipIf(!unix)('runClaudeCode system-prompt carriage', () => {
   })
 })
 
-describe.skipIf(!unix)('runClaudeCode telemetry', () => {
+// The subagent-dispatch stream fixture, hoisted to module scope when the one long `describe` was
+// split into siblings so both still see it.
+const subagentDispatchStream = (): string[] => [
+  JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg_1',
+      model: 'claude-opus-5',
+      stop_reason: 'tool_use',
+      usage: { input_tokens: 100, output_tokens: 10 },
+      content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
+    },
+  }),
+  JSON.stringify({
+    type: 'assistant',
+    parent_tool_use_id: 'toolu_01',
+    message: {
+      id: 'msg_sub',
+      model: 'claude-opus-5',
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 19_430, output_tokens: 400 },
+      content: [{ type: 'text', text: 'slice findings' }],
+    },
+  }),
+  JSON.stringify({
+    type: 'user',
+    parent_tool_use_id: 'toolu_01',
+    message: { content: [{ type: 'tool_result', content: 'subagent tool output' }] },
+  }),
+  JSON.stringify({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
+  }),
+  JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg_2',
+      model: 'claude-opus-5',
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 200, output_tokens: 20 },
+      content: [{ type: 'text', text: 'aggregated' }],
+    },
+  }),
+  JSON.stringify({
+    type: 'result',
+    result: 'done',
+    usage: { input_tokens: 300, output_tokens: 30 },
+  }),
+]
+
+describe.skipIf(!unix)('runClaudeCode telemetry — per-call folding', () => {
   it('lifts full per-call bodies, per-turn tokens, model and finish reason', async () => {
     fakeCli('claude', [
       JSON.stringify({
@@ -284,54 +334,9 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
   })
 
   /** A parent turn that dispatches a subagent, the subagent's own tagged turns, then the join. */
-  const subagentDispatchStream = (): string[] => [
-    JSON.stringify({
-      type: 'assistant',
-      message: {
-        id: 'msg_1',
-        model: 'claude-opus-5',
-        stop_reason: 'tool_use',
-        usage: { input_tokens: 100, output_tokens: 10 },
-        content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
-      },
-    }),
-    JSON.stringify({
-      type: 'assistant',
-      parent_tool_use_id: 'toolu_01',
-      message: {
-        id: 'msg_sub',
-        model: 'claude-opus-5',
-        stop_reason: 'end_turn',
-        usage: { input_tokens: 19_430, output_tokens: 400 },
-        content: [{ type: 'text', text: 'slice findings' }],
-      },
-    }),
-    JSON.stringify({
-      type: 'user',
-      parent_tool_use_id: 'toolu_01',
-      message: { content: [{ type: 'tool_result', content: 'subagent tool output' }] },
-    }),
-    JSON.stringify({
-      type: 'user',
-      message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
-    }),
-    JSON.stringify({
-      type: 'assistant',
-      message: {
-        id: 'msg_2',
-        model: 'claude-opus-5',
-        stop_reason: 'end_turn',
-        usage: { input_tokens: 200, output_tokens: 20 },
-        content: [{ type: 'text', text: 'aggregated' }],
-      },
-    }),
-    JSON.stringify({
-      type: 'result',
-      result: 'done',
-      usage: { input_tokens: 300, output_tokens: 30 },
-    }),
-  ]
+})
 
+describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live stream', () => {
   it('never splices a subagent’s turns into the PARENT’s prompt chain', async () => {
     // Subagent turns ride the parent's stdout tagged with the dispatch that spawned them. Folding
     // them into the parent's reconstruction produced a `promptText` interleaving two conversations
