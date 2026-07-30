@@ -142,7 +142,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       const auth = { authorization: `Bearer ${created.body.secret}` }
 
       // Pipeline discovery: the public inline pipeline is public + headless-startable; a
-      // container pipeline (pl_quick) is listed but neither. Closes the "start demands a
+      // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
       // pipelineId, nothing lists them" gap.
       const pipelines = await call<{
         pipelines: {
@@ -158,7 +158,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(breakdown?.public).toBe(true)
       expect(breakdown?.headlessStartable).toBe(true)
       expect(breakdown && breakdown.steps.length > 0).toBe(true)
-      const quick = byId.get('pl_quick')
+      const quick = byId.get('pl_simple')
       expect(quick).toBeTruthy()
       expect(quick?.headlessStartable).toBe(false)
 
@@ -195,7 +195,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       const started = await call<{ executionId: string | null }>(
         'POST',
         `/api/v1/tasks/${taskId}/start`,
-        { pipelineId: 'pl_quick' },
+        { pipelineId: 'pl_simple' },
         auth,
       )
       expect(started.status).toBe(202)

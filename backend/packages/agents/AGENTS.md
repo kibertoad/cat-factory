@@ -11,6 +11,11 @@
     `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding agent writes to
     `.cat-pr-description.md`, which the harness lifts onto the PR it opens) — in
     `prompts/shared.ts`), `runtime/` (`runRepoOps` — the custom-agent pre/post-op runner).
+    `kinds/gatable.ts` answers whether a pipeline may ESTIMATE-GATE a step of a given kind
+    (`isGatableKind`) — a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+    override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts`, because the built-in
+    kinds are not registry entries. A kind is NOT gatable by default; the set's comments say why
+    each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
     `kinds/capabilities.ts` holds the agent-CAPABILITY declaration vocabulary — the skill and
     tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
     them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server

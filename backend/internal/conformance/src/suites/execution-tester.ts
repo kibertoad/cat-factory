@@ -25,7 +25,7 @@ export function defineExecutionTesterConformance(harness: ConformanceHarness): v
       const start = await app.call<ExecutionInstance>(
         'POST',
         `/workspaces/${wsId}/blocks/task_login/executions`,
-        { pipelineId: 'pl_quick' },
+        { pipelineId: 'pl_simple' },
       )
       expect(start.status).toBe(201)
       expect(start.body.status).toBe('running')

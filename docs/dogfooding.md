@@ -133,10 +133,10 @@ a red PR ten minutes later.
 ## 5. Pick a pipeline
 
 Every built-in pipeline that runs a `tester-*` or `human-test` step already runs a `deployer`
-before it, so no custom pipeline is needed — "Quick implement" (`pl_quick`) and "Full build"
-(`pl_full`) both work as-is. The deployer is a no-op for a frame that declares no environment,
-which is why it can sit in every pipeline; once you have completed steps 2 and 3 it starts
-standing one up.
+before it, so no custom pipeline is needed — any rung of the build ladder works as-is: "Standard
+build" (`pl_build`, the default), "Simple build" (`pl_simple`) or "Adaptive build" (`pl_full`). The
+deployer is a no-op for a frame that declares no environment, which is why it can sit in every
+pipeline; once you have completed steps 2 and 3 it starts standing one up.
 
 ## What a preview does and does not cover
 

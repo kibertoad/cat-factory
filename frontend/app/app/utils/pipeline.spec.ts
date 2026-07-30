@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { pipelineAllowedForTaskType, purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import {
+  pipelineAllowedForBlockLevel,
+  pipelineAllowedForTaskType,
+  purposeAllowsAgentCategory,
+} from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
   pipelineAllowedForManualStart,
@@ -65,12 +69,54 @@ describe('pipelineAllowedForTaskType', () => {
     expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
   })
 
-  it('every other task type is unrestricted (any purpose, and undefined type)', () => {
-    for (const type of ['feature', 'bug', 'spike', 'ralph', undefined] as const) {
+  it('a programmatic task (feature / bug) offers only build + research pipelines', () => {
+    // These ship code, so a doc-authoring or PR-review preset is meaningless for them — the mirror
+    // of the narrowing document/review tasks already had. `research` stays because reaching for a
+    // spike before committing to an approach is legitimate on an unscoped feature.
+    for (const type of ['feature', 'bug'] as const) {
       expect(pipelineAllowedForTaskType(pipeline({ purpose: 'build' }), type)).toBe(true)
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), type)).toBe(true)
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), type)).toBe(true)
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(true)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'research' }), type)).toBe(true)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), type)).toBe(false)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), type)).toBe(false)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: 'planning' }), type)).toBe(false)
+      // Unclassified is hidden from every narrowed type — the narrowing wants the explicit
+      // classifier rather than a guess.
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(false)
+    }
+  })
+
+  it('an un-narrowed task type stays unrestricted (spike, ralph, custom, undefined)', () => {
+    // A custom (namespaced) deployment type has no purpose mapping we could infer, and `spike` /
+    // `ralph` pin their own default pipeline instead of narrowing the picker.
+    for (const type of ['spike', 'ralph', 'acme:incident', undefined] as const) {
+      for (const purpose of ['build', 'document', 'review', 'research', undefined] as const) {
+        expect(pipelineAllowedForTaskType(pipeline({ purpose }), type)).toBe(true)
+      }
+    }
+  })
+})
+
+describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
+  it('offers an initiative block only planning pipelines', () => {
+    expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'planning' }), 'initiative')).toBe(true)
+    for (const purpose of ['build', 'document', 'review', 'research', undefined] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose }), 'initiative')).toBe(false)
+    }
+  })
+
+  it('hides planning pipelines from every ordinary block level', () => {
+    // The surface half of the engine's BIDIRECTIONAL guard. Without it the planning presets were
+    // offered on ordinary tasks and then refused at start with a 409 — the user having already
+    // chosen before learning it could not run.
+    for (const level of ['task', 'frame', 'module', 'epic'] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'planning' }), level)).toBe(false)
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose: 'build' }), level)).toBe(true)
+    }
+  })
+
+  it('is unrestricted when the level is unknown', () => {
+    for (const purpose of ['build', 'planning', undefined] as const) {
+      expect(pipelineAllowedForBlockLevel(pipeline({ purpose }), undefined)).toBe(true)
     }
   })
 })

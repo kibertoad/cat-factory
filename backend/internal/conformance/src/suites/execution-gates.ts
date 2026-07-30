@@ -66,6 +66,77 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       expect((ran.companion?.verdicts.length ?? 0) > 0).toBe(true)
     })
 
+    it('skips an estimate-gated PRODUCER and cascades the skip onto its companion', async () => {
+      // Gating is not companion-only: a producer whose output later steps read as CONTEXT rather
+      // than depend on structurally may be skipped too (`isGatableKind`). The `architect` is the
+      // motivating case — the default `pl_full` gates it on complexity so a trivial task pays for
+      // no design round-trip.
+      //
+      // The CASCADE is the part that needs a real run to prove: `architect-companion` carries no
+      // gate of its own, and must be skipped anyway because its producer was. Without that it would
+      // grade whichever step happens to precede it — silently rating the wrong artifact rather than
+      // failing, which is exactly the kind of bug a unit test on one function can miss.
+      const app = harness.makeApp({
+        confidence: 1,
+        taskEstimate: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'trivial' },
+      })
+      const { workspace } = await app.createWorkspace()
+      const pipe = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Estimate-gated architect',
+        agentKinds: ['task-estimator', 'architect', 'architect-companion', 'coder'],
+        gating: [null, { enabled: true, minComplexity: 0.6 }, null, null],
+      })
+      expect(pipe.status).toBe(201)
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/task_login/executions`,
+        { pipelineId: pipe.body.id },
+      )
+      expect(start.status).toBe(201)
+      const exec = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+
+      const step = (kind: string) => exec.steps.find((s) => s.agentKind === kind)!
+      // The gated producer skipped on its own threshold.
+      expect(step('architect').skipped).toBe(true)
+      // The companion cascaded — and graded nothing, so it cannot have reviewed the estimator.
+      expect(step('architect-companion').skipped).toBe(true)
+      expect(step('architect-companion').companion?.verdicts ?? []).toEqual([])
+      // The unconditional work still ran, so skipping a producer thins the run rather than
+      // breaking it.
+      expect(step('coder').skipped ?? false).toBe(false)
+    })
+
+    it('rejects a pipeline that estimate-gates a step whose absence would break the run', async () => {
+      // Gatability is a per-kind capability, not a category. `merger` is the sharpest case: its
+      // mere PRESENCE in `instance.steps` is what makes a committing kind deliver via a pull
+      // request (`runOpensPr`), so a skipped merger would leave a PR nothing merges. Refused at
+      // save on both facades — a `validation` domain error → 422.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Gated merger',
+        agentKinds: ['task-estimator', 'coder', 'merger'],
+        gating: [null, null, { enabled: true, minRisk: 0.6 }],
+      })
+      expect(res.status).toBe(422)
+    })
+
+    it('rejects a step carrying both a human approval gate and an estimate gate', async () => {
+      // The estimate may ADD a human checkpoint but never cancel one: a step that is both
+      // human-gated and estimate-gated would let a model's own triage decide that nobody needs to
+      // look at it. Refused at save on both facades.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Gated human gate',
+        agentKinds: ['task-estimator', 'architect', 'coder'],
+        gates: [false, true, false],
+        gating: [null, { enabled: true, minRisk: 0.6 }, null],
+      })
+      expect(res.status).toBe(422)
+    })
+
     it('rejects a pipeline that gates a step with no task-estimator before it', async () => {
       // Estimate gating is meaningless without an estimate to consult, so a pipeline with
       // any enabled gating but no preceding `task-estimator` is rejected at save (and at
@@ -251,7 +322,7 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       const start = await app.call<ExecutionInstance>(
         'POST',
         `/workspaces/${wsId}/blocks/task_login/executions`,
-        { pipelineId: 'pl_quick' },
+        { pipelineId: 'pl_simple' },
       )
       expect(start.status).toBe(201)
 
@@ -317,7 +388,7 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
 
       // The run parks at the Coder's completion: both items surfaced + pending, the run
@@ -364,7 +435,7 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       const wsId = workspace.id
 
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
       await app.drive(wsId)
 
@@ -395,7 +466,7 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       const wsId = workspace.id
 
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_simple',
       })
 
       const blocked = await app.drive(wsId)

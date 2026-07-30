@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
+import { AgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
   assertValidCompanionPlacement,
@@ -9,12 +10,129 @@ import {
   validatePipelineShape,
 } from './pipelineShape.js'
 
+/** A gate config that sets a threshold, so only the rule under test can be the failure. */
+const gated = { enabled: true as const, minRisk: 0.5, onMissingEstimate: 'run' as const }
+
 describe('validatePipelineShape', () => {
   it('every built-in seed pipeline is structurally valid (so runs never refuse to start)', () => {
     for (const p of seedPipelines()) {
       expect(() =>
-        validatePipelineShape({ agentKinds: p.agentKinds, enabled: p.enabled, gating: p.gating }),
+        validatePipelineShape({
+          agentKinds: p.agentKinds,
+          enabled: p.enabled,
+          // `gates` rides along so the built-in catalog is checked against the human-gate /
+          // estimate-gate exclusivity rule too — a preset declaring both would otherwise ship and
+          // fail only at run start.
+          gates: p.gates,
+          gating: p.gating,
+        }),
       ).not.toThrow()
+    }
+  })
+
+  it('pl_build is the positional default: the design phase plus the everyday loop', () => {
+    const pipelines = seedPipelines()
+    // The POSITIONAL default: a plain "Start" with no pinned pipeline resolves `pipelines[0]`, so
+    // the default rung has to be first. This assertion is what stops a catalog reorder from
+    // silently promoting a different rung.
+    expect(pipelines[0]!.id).toBe('pl_build')
+    const build = pipelines[0]!
+    expect(build.agentKinds).toEqual([
+      'architect',
+      'architect-companion',
+      'coder',
+      'reviewer',
+      'deployer',
+      'tester-api',
+      'conflicts',
+      'ci',
+      'merger',
+    ])
+    // It includes the design phase but stops short of the requirements interview, which is the
+    // whole point of this rung sitting between pl_simple and pl_full.
+    expect(build.agentKinds).not.toContain('requirements-review')
+    expect(build.agentKinds).not.toContain('spec-writer')
+  })
+
+  it('the fixed rungs are unconditional end to end (no gating, no parks, no estimator)', () => {
+    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
+    for (const id of ['pl_build', 'pl_simple']) {
+      const p = byId.get(id)
+      expect(p, `${id} must be a built-in seed pipeline`).toBeTruthy()
+      // A fixed rung's shape is known before the run starts: nothing can switch itself on, the run
+      // never parks for a human, and there is no estimator to pay for — a pipeline that cannot
+      // escalate has nothing to consult an estimate for.
+      expect(p!.gating, `${id} must not gate`).toBeUndefined()
+      expect(p!.gates, `${id} must not park`).toBeUndefined()
+      expect(p!.enabled, `${id} must have no opt-in steps`).toBeUndefined()
+      expect(p!.agentKinds, `${id} must not pay for an estimate`).not.toContain('task-estimator')
+    }
+  })
+
+  it('pl_simple is pl_build minus the design phase, and keeps the same guarded tail', () => {
+    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
+    const simple = byId.get('pl_simple')!
+    const build = byId.get('pl_build')!
+    expect(simple.agentKinds).toEqual(
+      build.agentKinds.filter((k) => k !== 'architect' && k !== 'architect-companion'),
+    )
+    // Every rung ends with the same non-negotiable guard tail, so none can merge over a conflict
+    // or a red build. Asserted as an ORDERING rather than the literal last three kinds, because
+    // `pl_full` legitimately slots its risk-gated `human-review` between `ci` and `merger`.
+    for (const p of [simple, build, byId.get('pl_full')!]) {
+      const kinds = p.agentKinds
+      expect(kinds.at(-1), `${p.id} must end at the merger`).toBe('merger')
+      for (const guard of ['conflicts', 'ci']) {
+        const at = kinds.indexOf(guard)
+        expect(at, `${p.id} must run ${guard}`).toBeGreaterThanOrEqual(0)
+        expect(at, `${p.id} must run ${guard} before merging`).toBeLessThan(kinds.length - 1)
+      }
+      expect(kinds.indexOf('conflicts'), `${p.id} conflicts before ci`).toBeLessThan(
+        kinds.indexOf('ci'),
+      )
+    }
+  })
+
+  it('the adaptive build pipeline is estimate-gated off a leading task-estimator', () => {
+    const full = seedPipelines().find((p) => p.id === 'pl_full')
+    expect(full, 'pl_full must be a built-in seed pipeline').toBeTruthy()
+    const kinds = full!.agentKinds
+    // The estimator leads, so every gate below it has an estimate to read.
+    expect(kinds[0]).toBe('task-estimator')
+    // The gated steps are the optional ones; the guards and the implementation are not.
+    // `architect-companion` is deliberately absent: it CASCADES off the architect rather than
+    // carrying a duplicate copy of its threshold.
+    const gatedKinds = kinds.filter((_k, i) => full!.gating?.[i]?.enabled)
+    expect(gatedKinds).toEqual(['architect', 'tester-api', 'human-review'])
+    expect(full!.gating?.[kinds.indexOf('architect-companion')]).toBeNull()
+    for (const unconditional of ['coder', 'reviewer', 'deployer', 'conflicts', 'ci', 'merger']) {
+      const i = kinds.indexOf(unconditional)
+      expect(i, `${unconditional} must be present`).toBeGreaterThanOrEqual(0)
+      expect(full!.gating?.[i]?.enabled ?? false, `${unconditional} must be unconditional`).toBe(
+        false,
+      )
+    }
+    // No human approval gate at all on the default — the only human checkpoint is the risk-gated
+    // `human-review` STEP, which is an escalation rather than an approval pause.
+    expect(full!.gates?.some(Boolean) ?? false).toBe(false)
+  })
+
+  it('the retired build variants are gone from the catalog and tombstoned', () => {
+    const live = new Set(seedPipelines().map((p) => p.id))
+    for (const retired of [
+      'pl_quick',
+      'pl_fullstack',
+      'pl_dep_update',
+      'pl_pr_review',
+      'pl_human_review',
+      'pl_integrate',
+    ]) {
+      expect(live.has(retired), `${retired} must be withdrawn`).toBe(false)
+    }
+    // Every `replacedBy` target must still be live, or the advisory names a replacement the
+    // workspace cannot switch to.
+    for (const target of ['pl_simple', 'pl_build', 'pl_full']) {
+      expect(live.has(target), `${target} must remain live`).toBe(true)
     }
   })
 
@@ -27,6 +145,7 @@ describe('validatePipelineShape', () => {
       validatePipelineShape({
         agentKinds: kinds,
         enabled: bugTriage!.enabled,
+        gates: bugTriage!.gates,
         gating: bugTriage!.gating,
       }),
     ).not.toThrow()
@@ -47,116 +166,198 @@ describe('validatePipelineShape', () => {
   })
 
   it('requires a companion to run immediately after a producer it can review', () => {
-    expect(() => assertValidCompanionPlacement(['reviewer'])).toThrow()
+    expect(() => assertValidCompanionPlacement({ agentKinds: ['reviewer'] })).toThrow()
     // A disabled producer leaves its companion orphaned → rejected.
-    expect(() => assertValidCompanionPlacement(['coder', 'reviewer'], [false, true])).toThrow()
+    expect(() =>
+      assertValidCompanionPlacement({ agentKinds: ['coder', 'reviewer'], enabled: [false, true] }),
+    ).toThrow()
     // Adjacent producer → companion is valid.
-    expect(() => assertValidCompanionPlacement(['coder', 'reviewer'])).not.toThrow()
+    expect(() => assertValidCompanionPlacement({ agentKinds: ['coder', 'reviewer'] })).not.toThrow()
     // A step slipped between the producer and its companion → rejected (strict adjacency).
-    expect(() => assertValidCompanionPlacement(['coder', 'tester-api', 'reviewer'])).toThrow()
+    expect(() =>
+      assertValidCompanionPlacement({ agentKinds: ['coder', 'tester-api', 'reviewer'] }),
+    ).toThrow()
     // Adjacency is over the ENABLED subset: a disabled step between them doesn't break it.
     expect(() =>
-      assertValidCompanionPlacement(['coder', 'tester-api', 'reviewer'], [true, false, true]),
+      assertValidCompanionPlacement({
+        agentKinds: ['coder', 'tester-api', 'reviewer'],
+        enabled: [true, false, true],
+      }),
     ).not.toThrow()
   })
 
   it('requires an enabled task-estimator before any enabled gated step', () => {
     expect(() =>
-      assertValidGating(['coder', 'reviewer'], undefined, [
-        null,
-        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
-      ]),
-    ).toThrow()
+      assertValidGating({ agentKinds: ['coder', 'reviewer'], gating: [null, gated] }),
+    ).toThrow(/no enabled 'task-estimator' step runs before it/)
     expect(() =>
-      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
-        null,
-        null,
-        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
-      ]),
+      assertValidGating({
+        agentKinds: ['task-estimator', 'coder', 'reviewer'],
+        gating: [null, null, gated],
+      }),
     ).not.toThrow()
     // A disabled gated step imposes no requirement.
     expect(() =>
-      assertValidGating(
-        ['coder', 'reviewer'],
-        [true, false],
-        [null, { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' }],
-      ),
+      assertValidGating({
+        agentKinds: ['coder', 'reviewer'],
+        enabled: [true, false],
+        gating: [null, gated],
+      }),
     ).not.toThrow()
   })
 
-  it('only allows gating on companion steps (skipping a producer would starve downstream)', () => {
-    // A producer (coder) cannot be estimate-gated even with an estimator before it.
+  describe('which kinds may be estimate-gated', () => {
+    it('allows a PRODUCER whose output later steps read as context', () => {
+      // The generalisation past companions: `pl_simple` shipped with no architect and no
+      // spec-writer, so skipping either degrades the next step's context rather than breaking it.
+      for (const kind of ['architect', 'spec-writer', 'researcher', 'mocker', 'tester-api']) {
+        expect(
+          () =>
+            assertValidGating({
+              agentKinds: ['task-estimator', kind, 'coder'],
+              gating: [null, gated, null],
+            }),
+          `${kind} must be gatable`,
+        ).not.toThrow()
+      }
+    })
+
+    it('refuses a step some other mechanism reads structurally', () => {
+      // `merger` is the worst case: `runOpensPr` tests `instance.steps` for it to decide whether a
+      // committing kind delivers via a PR, so a skipped merger leaves a PR nothing merges.
+      // `deployer` provisions what its consumer reads; `conflicts`/`ci` are the guards; `coder` is
+      // the work itself.
+      for (const kind of ['merger', 'deployer', 'conflicts', 'ci', 'coder', 'bug-intake']) {
+        expect(
+          () =>
+            assertValidGating({
+              agentKinds: ['task-estimator', kind],
+              gating: [null, gated],
+            }),
+          `${kind} must not be gatable`,
+        ).toThrow(/cannot be estimate-gated/)
+      }
+    })
+
+    it('honours a DEPLOYMENT-registered kind’s own gatable flag over the built-in set', () => {
+      const registry = new AgentKindRegistry()
+      registry.register({ kind: 'acme-auditor', systemPrompt: 'audit', gatable: true })
+      registry.register({ kind: 'acme-publisher', systemPrompt: 'publish', gatable: false })
+      // Registered gatable → allowed, even though it is in no built-in set.
+      expect(() =>
+        assertValidGating({
+          agentKinds: ['task-estimator', 'acme-auditor'],
+          gating: [null, gated],
+          agentKindRegistry: registry,
+        }),
+      ).not.toThrow()
+      // Registered NOT gatable → refused.
+      expect(() =>
+        assertValidGating({
+          agentKinds: ['task-estimator', 'acme-publisher'],
+          gating: [null, gated],
+          agentKindRegistry: registry,
+        }),
+      ).toThrow(/cannot be estimate-gated/)
+      // Unregistered, and not a built-in gatable kind → refused (an unknown kind is unconditional).
+      expect(() =>
+        assertValidGating({
+          agentKinds: ['task-estimator', 'acme-unknown'],
+          gating: [null, gated],
+          agentKindRegistry: registry,
+        }),
+      ).toThrow(/cannot be estimate-gated/)
+    })
+  })
+
+  it('refuses a step carrying BOTH a human approval gate and an estimate gate', () => {
+    // The estimate may ADD a human checkpoint (a risk-gated `human-review` step) but never cancel
+    // an approval pause the author asked for — which is what gating a `gates[i]` step would do
+    // below its threshold.
     expect(() =>
-      assertValidGating(['task-estimator', 'coder', 'tester-api'], undefined, [
-        null,
-        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
-        null,
-      ]),
-    ).toThrow()
-    // The companion in the same chain is fine.
+      assertValidGating({
+        agentKinds: ['task-estimator', 'requirements-review'],
+        gates: [false, true],
+        gating: [null, gated],
+      }),
+    ).toThrow(/carries a human approval gate/)
+    // The same step without the approval gate is fine.
     expect(() =>
-      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
-        null,
-        null,
-        { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' },
-      ]),
+      assertValidGating({
+        agentKinds: ['task-estimator', 'requirements-review'],
+        gates: [false, false],
+        gating: [null, gated],
+      }),
+    ).not.toThrow()
+    // And a human-gated step with no estimate gate is fine.
+    expect(() =>
+      assertValidGating({
+        agentKinds: ['task-estimator', 'requirements-review'],
+        gates: [false, true],
+        gating: [null, null],
+      }),
     ).not.toThrow()
   })
 
   it('rejects enabled gating with no axis threshold (it would always skip)', () => {
     expect(() =>
-      assertValidGating(['task-estimator', 'coder', 'reviewer'], undefined, [
-        null,
-        null,
-        { enabled: true, onMissingEstimate: 'run' },
-      ]),
-    ).toThrow()
+      assertValidGating({
+        agentKinds: ['task-estimator', 'coder', 'reviewer'],
+        gating: [null, null, { enabled: true, onMissingEstimate: 'run' }],
+      }),
+    ).toThrow(/sets no threshold/)
   })
 
   describe('tester quality-control gating', () => {
     it('requires an enabled task-estimator before a QC-gated Tester step', () => {
       expect(() =>
-        assertValidTesterQualityGating(['coder', 'tester-api'], undefined, [
-          null,
-          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
-        ]),
+        assertValidTesterQualityGating({
+          agentKinds: ['coder', 'tester-api'],
+          testerQuality: [null, { enabled: true, gating: gated }],
+        }),
       ).toThrow()
       expect(() =>
-        assertValidTesterQualityGating(['task-estimator', 'coder', 'tester-api'], undefined, [
-          null,
-          null,
-          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
-        ]),
+        assertValidTesterQualityGating({
+          agentKinds: ['task-estimator', 'coder', 'tester-api'],
+          testerQuality: [null, null, { enabled: true, gating: gated }],
+        }),
       ).not.toThrow()
     })
 
     it('rejects a QC gate that sets no axis threshold', () => {
       expect(() =>
-        assertValidTesterQualityGating(['task-estimator', 'tester-api'], undefined, [
-          null,
-          { enabled: true, gating: { enabled: true, onMissingEstimate: 'run' } },
-        ]),
+        assertValidTesterQualityGating({
+          agentKinds: ['task-estimator', 'tester-api'],
+          testerQuality: [
+            null,
+            { enabled: true, gating: { enabled: true, onMissingEstimate: 'run' } },
+          ],
+        }),
       ).toThrow()
     })
 
     it('imposes no requirement when QC is enabled-but-ungated, disabled, or gate-disabled', () => {
       // Enabled, no gating → nothing to validate.
       expect(() =>
-        assertValidTesterQualityGating(['tester-api'], undefined, [{ enabled: true }]),
+        assertValidTesterQualityGating({
+          agentKinds: ['tester-api'],
+          testerQuality: [{ enabled: true }],
+        }),
       ).not.toThrow()
       // A disabled Tester step with a QC gate imposes no requirement (it never runs).
       expect(() =>
-        assertValidTesterQualityGating(
-          ['tester-api'],
-          [false],
-          [{ enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } }],
-        ),
+        assertValidTesterQualityGating({
+          agentKinds: ['tester-api'],
+          enabled: [false],
+          testerQuality: [{ enabled: true, gating: gated }],
+        }),
       ).not.toThrow()
       // A QC gate flagged disabled needs no estimator.
       expect(() =>
-        assertValidTesterQualityGating(['tester-api'], undefined, [
-          { enabled: true, gating: { enabled: false, onMissingEstimate: 'run' } },
-        ]),
+        assertValidTesterQualityGating({
+          agentKinds: ['tester-api'],
+          testerQuality: [{ enabled: true, gating: { enabled: false, onMissingEstimate: 'run' } }],
+        }),
       ).not.toThrow()
     })
   })
@@ -219,26 +420,29 @@ describe('assertPipelineLaunchable', () => {
 
 describe('assertValidSkillSteps', () => {
   it('rejects an enabled skill step that selects no skill', () => {
-    expect(() => assertValidSkillSteps(['skill'], undefined, undefined)).toThrow(
+    expect(() => assertValidSkillSteps({ agentKinds: ['skill'] })).toThrow(/must select a skill/)
+    expect(() => assertValidSkillSteps({ agentKinds: ['skill'], stepOptions: [{}] })).toThrow(
       /must select a skill/,
     )
-    expect(() => assertValidSkillSteps(['skill'], undefined, [{}])).toThrow(/must select a skill/)
-    expect(() => assertValidSkillSteps(['skill'], undefined, [{ skillId: '  ' }])).toThrow(
-      /must select a skill/,
-    )
+    expect(() =>
+      assertValidSkillSteps({ agentKinds: ['skill'], stepOptions: [{ skillId: '  ' }] }),
+    ).toThrow(/must select a skill/)
   })
 
   it('accepts a skill step that names a skill', () => {
     expect(() =>
-      assertValidSkillSteps(['coder', 'skill'], undefined, [null, { skillId: 'src:s:x' }]),
+      assertValidSkillSteps({
+        agentKinds: ['coder', 'skill'],
+        stepOptions: [null, { skillId: 'src:s:x' }],
+      }),
     ).not.toThrow()
   })
 
   it('imposes no requirement on a DISABLED skill step', () => {
-    expect(() => assertValidSkillSteps(['skill'], [false], undefined)).not.toThrow()
+    expect(() => assertValidSkillSteps({ agentKinds: ['skill'], enabled: [false] })).not.toThrow()
   })
 
   it('ignores stepOptions.skillId on a non-skill kind', () => {
-    expect(() => assertValidSkillSteps(['coder'], undefined, [{}])).not.toThrow()
+    expect(() => assertValidSkillSteps({ agentKinds: ['coder'], stepOptions: [{}] })).not.toThrow()
   })
 })

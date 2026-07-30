@@ -1,6 +1,6 @@
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
-import type { Block, Pipeline } from './types.js'
+import type { Block, Pipeline, StepGating } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
@@ -123,20 +123,25 @@ export function seedBlocks(): Block[] {
 
 /**
  * A pipeline step in the readable seed form. A bare kind string is an ENABLED step with no human
- * gate; the object form NAMES the step's human `gate` (approval pause) and/or marks it opt-in
- * (`enabled: false` — present in the preset but disabled by default). This replaces the fragile
- * index-aligned `gates`/`enabled` boolean arrays: a gate is declared BY NAME on its own step, so
+ * gate; the object form NAMES the step's human `gate` (approval pause), marks it opt-in
+ * (`enabled: false` — present in the preset but disabled by default), and/or declares its estimate
+ * `gating` (skip the step unless the task estimate clears a threshold). This replaces the fragile
+ * index-aligned `gates`/`enabled`/`gating` arrays: each is declared BY NAME on its own step, so
  * inserting a step (e.g. a `deployer` before the tester) can never shift a positional flag onto the
  * wrong step. `gate` is intentionally the extension seam — a custom gate can carry its own config
  * here (see the ambient-augmentation note in docs/initiatives/deployer-single-provisioner.md).
+ *
+ * `gate` and `gating` are mutually exclusive on one step, and `validatePipelineShape` enforces
+ * that rather than this type: the estimate may ADD a human checkpoint but never cancel an approval
+ * pause the author asked for. A pipeline declaring both fails the kernel seed test.
  */
-type SeedStep = string | { kind: string; gate?: boolean; enabled?: boolean }
+type SeedStep = string | { kind: string; gate?: boolean; enabled?: boolean; gating?: StepGating }
 
 /**
  * Lower a named-step pipeline spec into the wire {@link Pipeline} (index-aligned
- * `agentKinds`/`gates`/`enabled`). `gates`/`enabled` are emitted ONLY when a step actually declares
- * a human gate / is disabled by default, so a plain all-enabled, gate-less pipeline stays as bare
- * `agentKinds` — its persisted shape is byte-identical to the hand-authored form.
+ * `agentKinds`/`gates`/`enabled`/`gating`). Each array is emitted ONLY when a step actually declares
+ * the corresponding flag, so a plain all-enabled, gate-less pipeline stays as bare `agentKinds` —
+ * its persisted shape is byte-identical to the hand-authored form.
  */
 function definePipeline(spec: {
   id: string
@@ -152,6 +157,7 @@ function definePipeline(spec: {
   const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
   const gates = norm.map((s) => s.gate === true)
   const enabled = norm.map((s) => s.enabled !== false)
+  const gating = norm.map((s) => s.gating ?? null)
   return {
     id: spec.id,
     name: spec.name,
@@ -159,6 +165,7 @@ function definePipeline(spec: {
     agentKinds: norm.map((s) => s.kind),
     ...(gates.some(Boolean) ? { gates } : {}),
     ...(enabled.some((e) => !e) ? { enabled } : {}),
+    ...(gating.some((g) => g !== null) ? { gating } : {}),
     ...(spec.availability ? { availability: spec.availability } : {}),
     ...(spec.purpose ? { purpose: spec.purpose } : {}),
     ...(spec.labels ? { labels: spec.labels } : {}),
@@ -173,112 +180,149 @@ function definePipeline(spec: {
 // `definePipeline` helper.
 function buildDeliveryPipelines(): Pipeline[] {
   return [
-    // `requirements` runs first and reviews the collected requirements; the spec-writer then
-    // applies them as an increment onto the in-repo spec baseline, and only THEN does the architect
-    // design the solution against that written spec (the architect is spec-aware). The requirements
-    // review + the architecture pause for human approval (`gate: true`); the spec is NOT human-gated
-    // — its `spec-companion` rates it and loops the spec-writer back automatically. `blueprints`
-    // refreshes the service map from the new code; a `deployer` stands a kubernetes/custom env up
-    // for the tester (a no-op otherwise); `conflicts`/`ci`/`merger` gate + ship the PR. The two
-    // brainstorm dialogues are opt-in (`enabled: false`). Version bumped for the deployer reseed.
-    definePipeline({
-      id: 'pl_full',
-      name: 'Full build',
+    // ---- The build ladder: three fixed rungs plus one adaptive preset ---------------------
+    //
+    // The catalog collapse (docs/initiatives/pipeline-catalog-collapse.md) replaced seven
+    // near-identical build presets with a deliberate ladder. The axis is HOW MUCH DESIGN a task
+    // gets, because that is the only axis anyone actually chose a build pipeline on:
+    //
+    //   pl_build   (DEFAULT) design → implement → review → verify → guards → merge
+    //   pl_simple            implement → review → verify → guards → merge
+    //   pl_full    (adaptive) sizes the task and switches its own optional steps on
+    //
+    // All three share the same non-negotiable tail — `conflicts → ci → merger` — so no rung can
+    // merge over a conflict or a red build, and each opens exactly one PR that `merger` lands
+    // according to the task's merge preset (automatically, or held for a person).
+    //
+    // ORDER IS LOAD-BEARING: `seedPipelines()[0]` is the positional default a plain "Start"
+    // resolves (see TaskCard's `pipelines.pipelines[0]`), so the default rung must stay first.
+
+    // THE DEFAULT. The everyday programmatic loop: work out the shape of the solution, build it,
+    // review it, verify it, pass the guards, merge. Every step is UNCONDITIONAL, so a run's shape
+    // is known before it starts and is the same every time.
+    //
+    // It includes the `architect` because the design step is what stops the coder from inventing an
+    // approach mid-implementation, and its inline `architect-companion` because a design nobody
+    // challenges is just the first idea — the companion rates it and loops the architect back below
+    // threshold, converging without a human in the loop.
+    //
+    // It deliberately STOPS there. What it omits, and why each is more than the everyday loop
+    // needs: `requirements-review` (an iterative human answer/dismiss/re-review conversation that
+    // parks the run — the right tool for genuinely ambiguous scope, overkill for a task someone
+    // already wrote down), `spec-writer` (mutates the in-repo spec baseline), `researcher`,
+    // `mocker` (authors and commits WireMock mappings), `blueprints` (rewrites the service map),
+    // `code-commenter`, the docs kinds, and any human approval gate. All remain available as
+    // opt-in steps in the builder; they are omitted rather than shipped disabled so the preset's
+    // step list reads as exactly what it does.
+    {
+      id: 'pl_build',
+      name: 'Standard build',
       purpose: 'build',
       description:
-        'The standard end-to-end build: review the requirements, write the spec, design the solution, implement and review it, refresh the service map, test, then gate on conflicts + CI and merge the PR.',
-      // `code-commenter` runs after the reviewer clears the implementation: it amends the coder's
-      // PR in place with comment-only edits (WHY-not-what, fixes drifted comments, drops noise), so
-      // basic comment hygiene is business-as-usual on every task. `ci` re-runs to prove the
-      // comment-only diff is behaviour-neutral. Version bumped for the code-commenter reseed,
-      // then again for the pipeline-description reseed, then again for the purpose classifier reseed.
-      version: 5,
-      steps: [
-        // Opt-in structured-dialogue option exploration before the requirements review.
-        { kind: 'requirements-brainstorm', gate: true, enabled: false },
-        { kind: 'requirements-review', gate: true },
-        'spec-writer',
-        'spec-companion',
-        // Opt-in structured-dialogue approach exploration before the architect.
-        { kind: 'architecture-brainstorm', gate: true, enabled: false },
-        { kind: 'architect', gate: true },
-        'researcher',
+        'The default: design the solution and challenge the design, implement and review the change, run the tests, then gate on conflicts + CI and merge. Every step always runs — no requirements interview, no human pauses.',
+      version: 1,
+      agentKinds: [
+        'architect',
+        'architect-companion',
         'coder',
         'reviewer',
-        'code-commenter',
-        'blueprints',
-        'mocker',
         'deployer',
         'tester-api',
         'conflicts',
         'ci',
         'merger',
       ],
-    }),
-    definePipeline({
-      // The most thorough preset: a complex, full-stack feature run that engages
-      // every valuable agent so no angle is left uncovered. It extends "Full build"
-      // with the up-front researcher, the acceptance-scenario author, the external-
-      // dependency mock builder, the business-logic documenter and the developer
-      // documenter, in addition to the runnable end-to-end (`playwright`) tests:
-      //
-      //   requirements-review → analyse + clarify the collected context (human gate)
-      //   researcher          → investigate prior art, libraries and constraints
-      //   spec-writer         → apply this task's clarified requirements as a spec
-      //                         increment (+ acceptance scenarios) onto the baseline
-      //                         on the work branch BEFORE the design/code
-      //   spec-companion      → challenge acceptance-scenario coverage; loop the
-      //                         spec-writer back below threshold (no human gate)
-      //   architect           → design the solution against the written spec
-      //   architect-companion → challenge the design's quality; loop back below
-      //                         threshold, then raise the human gate on a pass
-      //   mocker        → stand up mocks for the external dependencies
-      //   coder         → implement the feature on the implementation branch
-      //   reviewer      → coder's companion: rate the change immediately, loop back
-      //                   for rework before the map/test tail runs
-      //   code-commenter→ bring the changed code's in-source comments up to standard
-      //                   (why-not-what, fix drift, drop noise) on the same PR
-      //   blueprints    → refresh the in-repo service map from the new code
-      //   business-documenter → capture the domain rules the code now encodes
-      //   tester        → define the unit / integration test strategy
-      //   playwright    → author the runnable end-to-end / acceptance TESTS (from the
-      //                   spec's derived Gherkin)
-      //   documenter    → write the developer-facing documentation
-      //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
-      id: 'pl_fullstack',
-      name: 'Complex fullstack feature',
+    },
+    // The TRIVIAL rung: the plainest thing that can ship a change. `pl_build` minus the design
+    // phase, for work whose approach is not in question — a copy fix, a version bump, a one-line
+    // guard. Unconditional like `pl_build`, and with no estimator either: a pipeline that cannot
+    // escalate has nothing to consult an estimate for, so paying for one would be pure overhead.
+    //
+    // `deployer` stays because it PROVISIONS the environment `tester-api` reads
+    // (`assertDeployerBeforeConsumer`) and is a no-op on an infraless service — it adds no
+    // complexity a service hasn't already declared.
+    {
+      id: 'pl_simple',
+      name: 'Simple build',
       purpose: 'build',
       description:
-        'The most thorough preset — engages every valuable agent (research, spec, design, mocks, end-to-end tests and docs) for a complex, full-stack feature, then gates and ships the PR.',
-      // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Human gates: the
-      // two opt-in brainstorm dialogues, the requirements review, and — after its companion clears
-      // the quality bar — the architecture (on `architect-companion`). A `code-commenter` runs after
-      // the reviewer to keep in-source comments up to standard on the same PR. Version bumped for
-      // the code-commenter reseed, then again for the pipeline-description reseed, then again for the purpose classifier reseed.
+        'For trivial work whose approach is not in question: implement and review the change, run the tests, then gate on conflicts + CI and merge. No design phase, no human pauses, no surprises.',
+      // Version 5 is the catalog collapse: `mocker` dropped, because authoring stub mappings is not
+      // part of the plainest path to a merged change.
       version: 5,
+      agentKinds: ['coder', 'reviewer', 'deployer', 'tester-api', 'conflicts', 'ci', 'merger'],
+    },
+    // The ADAPTIVE rung: the same delivery loop, but it sizes the task up first and switches the
+    // expensive optional steps on only when the work warrants them. Pick this over the fixed rungs
+    // when a service's tasks vary enough in size that ONE fixed shape is wrong for most of them —
+    // it is the rung that picks between the other two per task, rather than per service.
+    //
+    // A `task-estimator` runs first — one cheap inline call — and the optional steps are
+    // ESTIMATE-GATED off it:
+    //
+    //   - `architect` (+ its companion, which cascades) above a complexity bar. This is exactly the
+    //     `pl_simple`-vs-`pl_build` choice, made per task from the estimate instead of once by
+    //     whoever picked the pipeline.
+    //   - `tester-api` above a low complexity/risk bar, so a trivial change isn't charged a
+    //     verification pass its own diff can't justify.
+    //   - `human-review` above a HIGH risk bar. This is the escalation direction: the default is
+    //     to merge on the preset's thresholds, and a genuinely risky change additionally waits for
+    //     a person on the PR. It replaces the whole `pl_pr_review` preset.
+    //
+    // So a trivial task runs estimator → coder → reviewer → deployer → conflicts → ci → merger,
+    // and a risky one runs the full ladder. `deployer` is unconditional because it PROVISIONS the
+    // environment the tester reads (`assertDeployerBeforeConsumer`) and is a no-op on an infraless
+    // service; `conflicts`/`ci`/`merger` are unconditional because "pass the guards" is not
+    // negotiable on task size.
+    //
+    // Everything the old `pl_full`/`pl_fullstack` carried unconditionally — the requirements
+    // review, spec increment, researcher, mocks, blueprints refresh, comment pass, docs, e2e
+    // tests — remains available as opt-in steps in the builder. They are omitted here rather than
+    // shipped disabled so the default's step list reads as what it does.
+    definePipeline({
+      id: 'pl_full',
+      name: 'Adaptive build',
+      purpose: 'build',
+      description:
+        'Sizes the task up first, then designs it only when it needs designing, implements and reviews, verifies, and gates on conflicts + CI before merging. Optional steps switch themselves on for bigger tasks — a risky change also waits for a human review on the PR.',
+      // Version 6 is the catalog collapse: the preset went from 15 unconditional steps to a gated
+      // 7-to-10 and absorbed pl_quick / pl_dep_update / pl_pr_review / pl_human_review /
+      // pl_fullstack / pl_integrate, which are retired (see buildRetiredPipelines). The bump is what
+      // offers an already-seeded workspace the reseed.
+      version: 6,
       steps: [
-        // Opt-in structured-dialogue option exploration.
-        { kind: 'requirements-brainstorm', gate: true, enabled: false },
-        { kind: 'requirements-review', gate: true },
-        'researcher',
-        'spec-writer',
-        'spec-companion',
-        // Opt-in structured-dialogue approach exploration.
-        { kind: 'architecture-brainstorm', gate: true, enabled: false },
-        'architect',
-        { kind: 'architect-companion', gate: true },
-        'mocker',
+        // Sizes the task so every gate below has an estimate to read. Inline + cheap, and
+        // `assertValidGating` requires it to precede any gated step.
+        'task-estimator',
+        {
+          kind: 'architect',
+          gating: { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' },
+        },
+        // Deliberately carries NO gate of its own: it CASCADES with the architect, skipped
+        // automatically whenever its producer was (see `producerWasSkipped`). Repeating the
+        // architect's threshold here would be a second copy to keep in sync, and the two could
+        // only ever disagree by leaving a design unreviewed.
+        'architect-companion',
         'coder',
+        // The coder's companion — unconditional. A code review is the cheapest defect-catching
+        // step in the run, and gating it is what made pl_quick and pl_simple different pipelines.
         'reviewer',
-        'code-commenter',
-        'blueprints',
-        'business-documenter',
+        // Stands a kubernetes/custom/compose env up for the tester; a no-op otherwise. NOT gatable
+        // — it provisions what its consumer reads.
         'deployer',
-        'tester-api',
-        'playwright',
-        'documenter',
+        {
+          kind: 'tester-api',
+          gating: { enabled: true, minComplexity: 0.3, minRisk: 0.3, onMissingEstimate: 'run' },
+        },
         'conflicts',
         'ci',
+        // Waits for a real human review on the PR once risk clears the bar — escalation, not a
+        // gate the estimate can cancel (it carries no `gate: true`, so the exclusivity rule is
+        // satisfied). A pass-through until a PR-review provider is wired.
+        {
+          kind: 'human-review',
+          gating: { enabled: true, minRisk: 0.8, onMissingEstimate: 'skip' },
+        },
         'merger',
       ],
     }),
@@ -306,52 +350,6 @@ function buildDeliveryPipelines(): Pipeline[] {
         'merger',
       ],
     }),
-    {
-      id: 'pl_quick',
-      name: 'Quick implement',
-      purpose: 'build',
-      description:
-        'A fast build with no design or spec phase: implement, refresh the map, mock and test, then gate on conflicts + CI and merge.',
-      // A `deployer` runs before the tester so a kubernetes/custom service gets its ephemeral env
-      // stood up (a no-op for docker-compose/infraless/frontend); bump the version for the reseed
-      // offer. Same pattern across every tester/human-test built-in below. Bumped again for the
-      // pipeline-description reseed, then again for the purpose classifier reseed.
-      version: 4,
-      agentKinds: [
-        'coder',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
-    // The leanest end-to-end build: implement → review → test, then the standard
-    // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
-    // its `reviewer` companion rates it immediately and loops it back for automatic
-    // rework below threshold, `mocker` stands up the external-dependency mocks the
-    // `tester` needs to run the suite, and `conflicts` / `ci` / `merger` gate and
-    // ship the PR — no design, spec or docs phases.
-    {
-      id: 'pl_simple',
-      name: 'Simple',
-      purpose: 'build',
-      description:
-        'The leanest build: implement and review, run the tests, then gate on conflicts + CI and merge — no design, spec, or docs.',
-      version: 4,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
     // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
     // a fresh-context container run that works the task spec, after which the harness runs the
     // task's configured programmatic validation command (exit 0 = done) and the engine loops
@@ -368,60 +366,6 @@ function buildDeliveryPipelines(): Pipeline[] {
       description:
         'A single persistent coding step that retries against your validation command until it passes, then gates and ships the PR.',
       agentKinds: ['ralph', 'conflicts', 'ci', 'merger'],
-    },
-    {
-      id: 'pl_integrate',
-      name: 'Integrate & ship',
-      purpose: 'build',
-      description:
-        'Wire an existing change into the surrounding system, mock and test it, then document it.',
-      version: 4,
-      agentKinds: ['integrator', 'mocker', 'deployer', 'tester-api', 'documenter'],
-    },
-    // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
-    // ephemeral environment and PARKS for a person to validate the change in a live URL before
-    // the standard mergeability / CI / merge tail. From the gate the human can request a fix
-    // (the Tester's `fixer`), pull main into the branch (the `conflict-resolver` on a conflict),
-    // or destroy/recreate the env. Opt-in — it requires a human present and (ideally) an
-    // ephemeral-environment provider, so it is NOT folded into the always-on default pipelines.
-    {
-      id: 'pl_human_review',
-      name: 'Build & human-test',
-      purpose: 'build',
-      description:
-        'Implement and review, then pause on a live ephemeral environment for a person to validate the change before gating on conflicts + CI and merging.',
-      // The `deployer` stands the ephemeral env up before the human-test gate reads it (the gate no
-      // longer provisions its own — the deployer is the single provisioner; the gate loops back here
-      // to rebuild on a fix/recreate). Bumped again for the pipeline-description reseed, then again for the purpose classifier reseed.
-      version: 4,
-      agentKinds: ['coder', 'reviewer', 'deployer', 'human-test', 'conflicts', 'ci', 'merger'],
-    },
-    // A human-code-review build: the full implement → review → map → test tail, then a
-    // `human-review` gate that watches the PR for a human reviewer on GitHub before `merger`
-    // ships it. The gate advances once the PR meets GitHub's required approvals with no
-    // unresolved review threads; otherwise it loops the `fixer` to address the reviewer's
-    // comments (after a grace period when not yet approved) and waits indefinitely for the
-    // human. Opt-in — it requires a real reviewer (and a wired PR-review provider), so it is
-    // NOT folded into the always-on default pipelines; it is a pass-through when unwired.
-    {
-      id: 'pl_pr_review',
-      name: 'Build & PR review',
-      purpose: 'build',
-      description:
-        'The full implement → review → test build, then wait for a human code review on the PR — looping a fixer on comments — before merging.',
-      version: 4,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'human-review',
-        'merger',
-      ],
     },
   ]
 }
@@ -502,30 +446,12 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'merger',
       ],
     },
-    // Recurring-pipeline presets. "Dependency updates" is a plain implement →
-    // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
-    // a special `tracker` step (files a GitHub issue / Jira ticket from the
-    // analysis) before implementation. Both are picked when creating a recurring
-    // pipeline on a service.
-    {
-      id: 'pl_dep_update',
-      name: 'Dependency updates',
-      purpose: 'build',
-      description:
-        'A recurring implement → review → test → merge run for keeping a repository up to date on its dependencies.',
-      version: 4,
-      agentKinds: [
-        'coder',
-        'reviewer',
-        'blueprints',
-        'mocker',
-        'deployer',
-        'tester-api',
-        'conflicts',
-        'ci',
-        'merger',
-      ],
-    },
+    // The recurring TECH-DEBT preset: a read-only `analysis` agent audits the repo and a
+    // `tracker` step files an issue/ticket from the findings before the standard build tail
+    // implements and ships the fix. Picked when creating a recurring pipeline on a service.
+    //
+    // Dependency updates used to be a preset of its own here; it was exactly the default build
+    // tail under a different name, so a schedule now points at `pl_full` for that.
     {
       id: 'pl_tech_debt',
       name: 'Tech debt',
@@ -870,13 +796,44 @@ function buildSpecialtyPipelines(): Pipeline[] {
  * offer to delete a deployment's pipelines every time its registry was unwired. Retirement is
  * therefore only ever a POSITIVE assertion.
  *
- * The list is empty today: no built-in has been withdrawn yet. To retire one, delete its definition
- * from the builder above and add its id here with a comment saying why; point `replacedBy` at the
- * preset that supersedes it when one does, so the advisory can name the replacement. A deployment
- * retires its OWN registered pipelines through {@link PipelineRegistry.retire}.
+ * To retire one, delete its definition from the builder above and add its id here with a comment
+ * saying why; point `replacedBy` at the preset that supersedes it when one does, so the advisory can
+ * name the replacement. A deployment retires its OWN registered pipelines through
+ * {@link PipelineRegistry.retire}.
  */
 function buildRetiredPipelines(): RetiredPipeline[] {
-  return []
+  return [
+    // The catalog collapse (docs/initiatives/pipeline-catalog-collapse.md). All six were the SAME
+    // spine as the build ladder — `coder → [reviewer] → [blueprints] → [mocker] → deployer →
+    // tester → conflicts → ci → [human gate] → merger` — differing by at most two toggles, which
+    // is not an axis anyone picks a pipeline on: `pl_quick` differed from `pl_simple` by
+    // reviewer-vs-blueprints. The ladder now varies the one axis that matters (how much design a
+    // task gets), so these have nothing left to vary.
+    //
+    // Every step they carried is still reachable — as a rung of the ladder, an estimate-gated step
+    // of `pl_full` (`human-review`), or an opt-in step in the builder (`blueprints`, `mocker`, the
+    // spec / research / docs phases) — so retiring them removes presets, not capability.
+
+    // Differed from `pl_simple` by reviewer-vs-blueprints, which is not a choice: a code review is
+    // the cheapest defect-catching step in a run and a service-map refresh is not.
+    { id: 'pl_quick', replacedBy: 'pl_simple' },
+    // Every optional step switched on at once. That is a saved workspace preset (clone a rung and
+    // enable them), not something the product should ship and version.
+    { id: 'pl_fullstack', replacedBy: 'pl_full' },
+    // The build tail under a recurring-preset name. A dependency-update schedule points at
+    // `pl_simple` — a version bump is exactly the trivial rung's use case.
+    { id: 'pl_dep_update', replacedBy: 'pl_simple' },
+    // Each was a build plus ONE human checkpoint. `human-review` is now a risk-gated step of
+    // `pl_full`, so escalation happens when the estimate says it should rather than when someone
+    // remembered to pick a different pipeline; `human-test` remains a builder toggle.
+    { id: 'pl_pr_review', replacedBy: 'pl_full' },
+    { id: 'pl_human_review', replacedBy: 'pl_full' },
+    // Retired rather than folded in, because its shape was unsafe: with no `merger` step
+    // `runOpensPr` is false, so the `integrator` — a coder-class agent — committed STRAIGHT to the
+    // base branch with no conflicts check and no CI. Wiring an existing change into its
+    // surroundings is the `coder`'s job on a ladder rung, which gates and merges properly.
+    { id: 'pl_integrate', replacedBy: 'pl_build' },
+  ]
 }
 
 /**
@@ -1038,8 +995,7 @@ export function defaultPipelineIdForTaskType(
   return undefined
 }
 
-/** Pipeline ids of the built-in recurring-pipeline presets. */
-export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
+/** Pipeline id of the built-in recurring tech-debt preset. */
 export const TECH_DEBT_PIPELINE_ID = 'pl_tech_debt'
 /** Pipeline id of the recurring bug-triage pipeline (backlog worker; see backend/docs/bug-triage-pipeline.md). */
 export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
@@ -1049,3 +1005,29 @@ export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
  * investigate/clarify path the recurring triage pipeline uses — see backend/docs/bug-hunt.md.
  */
 export const BUGFIX_PIPELINE_ID = 'pl_bugfix'
+
+// ---- The build ladder's three rungs -------------------------------------------------------
+// The axis is how much design a task gets. `pl_build` is the DEFAULT and must stay first in
+// `buildDeliveryPipelines`, because `seedPipelines()[0]` is the positional default a plain "Start"
+// resolves. A caller that needs "the ordinary build pipeline" programmatically should name
+// `BUILD_PIPELINE_ID` rather than re-deriving it from catalog order.
+
+/**
+ * Pipeline id of the DEFAULT build pipeline: `architect` → `architect-companion` → `coder` →
+ * `reviewer` → `deployer` → `tester-api` → `conflicts` → `ci` → `merger`, every step
+ * unconditional. The everyday programmatic loop.
+ */
+export const BUILD_PIPELINE_ID = 'pl_build'
+
+/**
+ * Pipeline id of the TRIVIAL rung — {@link BUILD_PIPELINE_ID} minus the design phase, for work
+ * whose approach is not in question (a copy fix, a version bump, a one-line guard).
+ */
+export const SIMPLE_PIPELINE_ID = 'pl_simple'
+
+/**
+ * Pipeline id of the ADAPTIVE rung, which runs a `task-estimator` first and estimate-gates its own
+ * `architect` / `tester-api` / `human-review` steps — the `pl_simple`-vs-`pl_build` choice made per
+ * task rather than per service.
+ */
+export const ADAPTIVE_BUILD_PIPELINE_ID = 'pl_full'

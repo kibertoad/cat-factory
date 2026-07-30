@@ -626,6 +626,31 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   rather than the minimal public `ResolverContext`. The public step-resolver seam is scoped to light
   follow-up; `ownsTerminalStatus` is built-in-only.
 
+**A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
+(`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
+`task-estimator`'s scores fall below its thresholds, and that is what lets ONE pipeline cover a range
+that would otherwise need several near-identical presets (see
+[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md)). Three rules bind it:
+
+- **Gatability is a per-kind CAPABILITY, declared, and OFF by default** — `isGatableKind`
+  (`agents/kinds/gatable.ts`), a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+  override, since built-in kinds are not registry entries. Gate a kind whose output later steps read as
+  CONTEXT; never one some other mechanism reads STRUCTURALLY. `merger` is the sharpest case — its mere
+  presence in `instance.steps` is what makes a committing kind deliver via a PR (`runOpensPr`), so a
+  skipped merger opens a PR nothing merges. `deployer` provisions what its consumer reads,
+  `conflicts`/`ci` are the guards, `bug-intake` is the run's subject. **A new kind whose absence would
+  break rather than merely thin a run must stay unlisted**, and the default already does that for you.
+- **A skipped producer CASCADES onto its companion** (`producerWasSkipped`), evaluated at the
+  companion's own turn off the persisted `step.skipped` — a lookahead would not survive a durable
+  replay. Without it a companion grades whichever step happened to precede it, sounding confident
+  about the wrong artifact. So a companion needs no gate of its own to track its producer, and giving
+  it a duplicate threshold is a second copy to keep in sync.
+- **A step may not carry both `gates[i]` and enabled `gating`** (`assertValidGating`). The estimate may
+  ADD a human checkpoint — that is what gating a `human-review` step on risk does — but never cancel an
+  approval pause the author asked for, or a model's own triage decides nobody needs to look. Policy
+  floors belong on the merge preset's `classRules`, keyed on the COMPUTED change class rather than the
+  model's opinion.
+
 The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
 `runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing to
 fold in.

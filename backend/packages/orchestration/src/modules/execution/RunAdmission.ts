@@ -144,10 +144,12 @@ export class RunAdmission {
     shape: PipelineShape,
     initiatedBy: string | null | undefined,
   ): Promise<void> {
-    // Reject a structurally-invalid chain (a misplaced companion or estimate-gating without a
-    // preceding task-estimator). The builder also rejects these at save, but a pipeline can
-    // become invalid out of band.
-    validatePipelineShape(shape)
+    // Reject a structurally-invalid chain (a misplaced companion, or estimate-gating on a kind
+    // that may not be skipped / without a preceding task-estimator). The builder also rejects
+    // these at save, but a pipeline can become invalid out of band. The agent-kind registry rides
+    // along so a DEPLOYMENT-registered kind's own `gatable` flag is honoured here exactly as it is
+    // at save — without it, a registered gatable kind would pass the builder and be refused here.
+    validatePipelineShape({ ...shape, agentKindRegistry: this.agentKindRegistry })
 
     // The Initiative Planning kinds run ONLY on an `initiative`-level block, and an
     // initiative block accepts ONLY such a chain — bidirectional, and here in the shared
@@ -215,6 +217,10 @@ export class RunAdmission {
   runnableShapeOf(steps: readonly PipelineStep[]): PipelineShape {
     return {
       agentKinds: steps.map((s) => s.agentKind),
+      // The per-step form of the pipeline's `gates[i]`, copied onto the run step at start. Read by
+      // the gating validation to refuse a step carrying both a human gate and an estimate gate, so
+      // a retry re-checks that against exactly what re-executes.
+      gates: steps.map((s) => s.requiresApproval === true),
       gating: steps.map((s) => s.gating ?? null),
       // The QC companion's live step-state carries the same `gating` config the pipeline set, so
       // the tester-QC gating validation re-runs on a retry against exactly what re-executes.

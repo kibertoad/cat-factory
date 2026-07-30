@@ -48,7 +48,7 @@ describe('durable execution: advanceInstance', () => {
       agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
 
     let result: AdvanceResult = { kind: 'continue' }
     let steps = 0
@@ -73,7 +73,7 @@ describe('durable execution: advanceInstance', () => {
       agentExecutor: new FakeAgentExecutor({ decisionOnSteps: [0], confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const result = await advanceUntilHalt(c, wsId, instance.id)
     expect(result.kind).toBe('awaiting_decision')
@@ -94,7 +94,7 @@ describe('durable execution: agent failure handling', () => {
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
 
     await expect(
       advanceUntilHalt(c, wsId, instance.id, { rethrowAgentErrors: true }),
@@ -107,7 +107,7 @@ describe('durable execution: agent failure handling', () => {
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const result = await advanceUntilHalt(c, wsId, instance.id)
     expect(result.kind === 'continue' || result.kind === 'done').toBe(true)
@@ -125,7 +125,7 @@ describe('durable execution: failRun + retry', () => {
       agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
 
     await c.executionService.failRun(wsId, instance.id, 'kaboom', 'job_failed')
 
@@ -164,7 +164,7 @@ describe('durable execution: WorkRunner signalling', () => {
       workRunner,
     })
 
-    const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await c.executionService.start(wsId, 'task_login', 'pl_simple')
     expect(workRunner.started).toContainEqual({ workspaceId: wsId, executionId: instance.id })
 
     const advanced = await advanceUntilHalt(c, wsId, instance.id)
@@ -190,7 +190,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
@@ -220,7 +220,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
@@ -253,7 +253,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
@@ -318,7 +318,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const redrove: AgentRunRef[] = []
@@ -368,7 +368,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     // Backdate the lease far past the (realistic, positive) hard-stall deadline.
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
@@ -423,7 +423,7 @@ describe('durable execution: sweeper', () => {
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
-    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
 
     const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
     const orphanedSince = new Map<string, number>()

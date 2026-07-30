@@ -168,6 +168,9 @@ export {
   companionTargets,
   isContainerBackedCompanion,
 } from './agents/kinds/companions.js'
+// Which kinds a pipeline may ESTIMATE-GATE. Shared by the pipeline-shape validation (builder save +
+// run start) so the builder can't offer a gate the engine would refuse.
+export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // The ONE definition of "does this dispatch hand the agent a real checkout?", shared by the
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.

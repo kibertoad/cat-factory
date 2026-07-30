@@ -198,7 +198,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
     const started = await app.call<Task>(
       'POST',
       '/api/v1/tasks/task_login/start',
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
       auth,
     )
     expect(started.status).toBe(202)
@@ -235,7 +235,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/tasks/${task.body.taskId}/start`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
       auth,
     )
     expect(refused.status).toBe(409)
@@ -269,7 +269,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/tasks/${taskId}/start`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_simple' },
       auth,
     )
     expect(refused.status).toBe(409)

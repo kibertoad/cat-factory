@@ -53,7 +53,7 @@ describe('preset_tech_migration — descriptor + registration', () => {
   it('declares the conservative migration execution policy', () => {
     expect(preset.descriptor.policyDefaults).toEqual({
       maxConcurrent: 2,
-      defaultPipelineId: 'pl_quick',
+      defaultPipelineId: 'pl_simple',
       rules: [{ pipelineId: 'pl_full', minRisk: 0.6, minComplexity: 0.6 }],
       onMissingEstimate: 'strongest',
     })
@@ -146,7 +146,7 @@ describe('preset_tech_migration — seedPlan wiring (spawn decoration through th
         { id: 'del1', phaseId: MIGRATION_PHASE_IDS.delivery, title: 'Swap the orders repository' },
         { id: 'ver1', phaseId: MIGRATION_PHASE_IDS.verifyDecommission, title: 'Verify parity' },
       ],
-      policy: { maxConcurrent: 2, defaultPipelineId: 'pl_quick' },
+      policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple' },
     })
     const out = parseInitiativePlanDraft(
       preset.seedPlan!(draft, { migrationDocsDir: 'docs/migration' }),
