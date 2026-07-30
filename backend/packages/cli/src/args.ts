@@ -107,7 +107,37 @@ export function parseArgs(argv: string[]): CliOptions {
       throw new ArgError(`Unknown argument: ${raw}`)
     }
   }
+  assertSuperviseOnlyFlagsAreScoped(opts)
   return opts
+}
+
+/**
+ * The `supervise`-only flags are parsed by the one shared option table, so nothing structurally
+ * stops `cat-factory init --failures 2` or a stray `--` from being accepted and then silently
+ * ignored. Reject them here instead: an option that is read by no code path is a typo the user
+ * wants to hear about, not a no-op. Listed as data so a new supervise flag joins the check by name
+ * rather than being forgotten.
+ */
+const SUPERVISE_ONLY_FLAGS: ReadonlyArray<[keyof CliOptions, string]> = [
+  ['superviseCommand', '--'],
+  ['healthPath', '--health-path'],
+  ['composeDir', '--compose-dir'],
+  ['composeService', '--compose-service'],
+  ['k3sCluster', '--k3s-cluster'],
+  ['pollSeconds', '--poll'],
+  ['bootGraceSeconds', '--boot-grace'],
+  ['failures', '--failures'],
+]
+
+function assertSuperviseOnlyFlagsAreScoped(opts: CliOptions): void {
+  if (opts.command === 'supervise' || opts.command === 'help' || opts.command === 'version') return
+  for (const [key, flag] of SUPERVISE_ONLY_FLAGS) {
+    if (opts[key] !== undefined) {
+      throw new ArgError(
+        `${flag} is only valid for \`cat-factory supervise\` (got: ${opts.command})`,
+      )
+    }
+  }
 }
 
 /** Resolve a flag's value: the inline `--flag=value` form, else the next queued token. */
@@ -221,10 +251,11 @@ function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) =>
       opts.k3sCluster = take(flag)
       break
     case '--poll':
-      opts.pollSeconds = parsePositiveSeconds(flag, take(flag))
+      opts.pollSeconds = parseWholeSeconds(flag, take(flag), 1)
       break
     case '--boot-grace':
-      opts.bootGraceSeconds = parsePositiveSeconds(flag, take(flag))
+      // 0 is meaningful: a fast-booting toy command wants no grace window at all.
+      opts.bootGraceSeconds = parseWholeSeconds(flag, take(flag), 0)
       break
     case '--failures':
       opts.failures = parseFailures(take(flag))
@@ -307,10 +338,16 @@ function parseHealthPath(value: string): string {
   return value
 }
 
-function parsePositiveSeconds(flag: string, value: string): number {
+/**
+ * Whole seconds only, and at least `min`. Fractions are refused rather than honoured: `--poll 0.001`
+ * would otherwise build a 1ms poll loop that spins a core and — because the derived clock-jump
+ * threshold is `poll * 3` — reads its own probe latency as a host suspend, so every failed probe
+ * repairs at once and `--failures` stops meaning anything.
+ */
+function parseWholeSeconds(flag: string, value: string, min: number): number {
   const n = Number(value)
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new ArgError(`Invalid ${flag} "${value}" (expected a positive number of seconds)`)
+  if (!Number.isInteger(n) || n < min) {
+    throw new ArgError(`Invalid ${flag} "${value}" (expected a whole number of seconds >= ${min})`)
   }
   return n
 }
@@ -452,8 +489,9 @@ Options (supervise):
       --compose-service <s>  docker compose service to keep up (e.g. postgres)
       --compose-dir <path>   Directory holding docker-compose.yml (default: --dir)
       --k3s-cluster <name>   Local k3d/kind cluster to keep running (started if stopped)
-      --runtime <r>       Cluster distribution for --k3s-cluster: k3d | kind (default: k3d)
-      --poll <seconds>    Health probe interval (default: 10)
+      --runtime <r>       Cluster distribution for --k3s-cluster: k3d | kind (default: k3d).
+                          'k3s' is refused: a host service has no cluster to start from here.
+      --poll <seconds>    Health probe interval, whole seconds (default: 10)
       --boot-grace <seconds>  Ignore failures for this long after a (re)start (default: 60)
       --failures <n>      Consecutive failed probes before repairing (default: 3)
 
@@ -464,4 +502,8 @@ Options (supervise):
   by a stale cgroup ("device or resource busy" — a state a suspend can leave behind) cannot be
   fixed from here: clearing it needs the container ENGINE restarted, which would kill every other
   container. That case is reported once, with the fix, instead of retried forever.
+
+  The same rule applies to the supervised command itself: restarts that never reach a serving
+  state are capped, and hitting the cap reports why and exits NON-ZERO rather than looping. A
+  command that is simply broken cannot be repaired by killing it again.
 `

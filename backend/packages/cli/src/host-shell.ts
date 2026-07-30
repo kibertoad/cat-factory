@@ -41,11 +41,16 @@ export interface HostShell {
    * `opts.input`, when set, is written to the child's stdin and the stream is closed — used to
    * feed a manifest to `kubectl apply -f -` WITHOUT writing it (or the token Secret it creates)
    * to a temp file on disk.
+   *
+   * `opts.cwd` runs the command from a specific directory. Required by anything that shells out to
+   * a directory-sensitive tool: `docker compose` resolves its `docker-compose.yml` relative to the
+   * working directory, so a supervisor launched from elsewhere would silently operate on no
+   * compose project at all.
    */
   run(
     cmd: string,
     args: string[],
-    opts?: { timeoutMs?: number; input?: string },
+    opts?: { timeoutMs?: number; input?: string; cwd?: string },
   ): Promise<ShellResult>
 }
 
@@ -70,7 +75,7 @@ export function createNodeShell(): HostShell {
         const stdin = opts?.input !== undefined ? 'pipe' : 'ignore'
         let child: ReturnType<typeof spawn>
         try {
-          child = spawn(cmd, args, { stdio: [stdin, 'pipe', 'pipe'] })
+          child = spawn(cmd, args, { cwd: opts?.cwd, stdio: [stdin, 'pipe', 'pipe'] })
         } catch {
           finish({ code: COMMAND_NOT_FOUND, stdout: '', stderr: `${cmd}: not found` })
           return

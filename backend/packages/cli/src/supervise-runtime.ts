@@ -12,7 +12,7 @@
 import { spawn } from 'node:child_process'
 import http from 'node:http'
 import net from 'node:net'
-import type { HostShell } from './host-shell.js'
+import { COMMAND_NOT_FOUND, type HostShell } from './host-shell.js'
 import { initialState, type SuperviseConfig, stateAfterStart, step } from './supervise.js'
 
 /** Probes whether the supervised service is actually SERVING (not merely booted). */
@@ -55,13 +55,15 @@ export interface ChildLauncher {
 
 /** Frees a port held by an orphaned listener, so a restart can bind it again. */
 export interface PortReaper {
-  reap(): Promise<void>
+  /** Resolves with the PIDs actually killed (empty when the port was already free). */
+  reap(): Promise<string[]>
 }
 
 /** Injectable clock, so tests never wait in real time. */
 export interface SuperviseClock {
   now(): number
-  sleep(ms: number): Promise<void>
+  /** Resolves after `ms`, or EARLY if `signal` aborts — so Ctrl-C isn't stuck behind a poll interval. */
+  sleep(ms: number, signal?: AbortSignal): Promise<void>
 }
 
 /**
@@ -73,9 +75,23 @@ export interface SuperviseClock {
  */
 export const systemClock: SuperviseClock = {
   now: () => Date.now(),
-  sleep: (ms) =>
+  sleep: (ms, signal) =>
     new Promise((resolve) => {
-      setTimeout(resolve, ms)
+      if (signal?.aborted === true) {
+        resolve()
+        return
+      }
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve()
+      }, ms)
+      // Without this a Ctrl-C would sit out the remainder of the poll interval before the loop
+      // noticed, so the shutdown that is supposed to reap the child takes up to `--poll` seconds.
+      function onAbort(): void {
+        clearTimeout(timer)
+        resolve()
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
     }),
 }
 
@@ -142,12 +158,27 @@ const COMPOSE_POLL_MS = 2_000
  */
 export function createComposeDependency(
   shell: HostShell,
-  opts: { dir: string; service: string },
+  opts: {
+    /**
+     * Directory holding the `docker-compose.yml`. Passed as the shell-out's `cwd` on EVERY compose
+     * call, never merely stored: compose resolves its project file relative to the working
+     * directory, so a supervisor started from anywhere else would address no project at all and
+     * report a permanently un-ready database instead of restoring it.
+     */
+    dir: string
+    service: string
+    /** Overridable so tests don't wait out the real readiness budget. */
+    readyTimeoutMs?: number
+    readyPollMs?: number
+  },
 ): ServiceDependency {
+  const readyTimeoutMs = opts.readyTimeoutMs ?? COMPOSE_READY_TIMEOUT_MS
+  const readyPollMs = opts.readyPollMs ?? COMPOSE_POLL_MS
+
   const inspectReady = async (id: string): Promise<boolean> => {
     const format =
       '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
-    const result = await shell.run('docker', ['inspect', id, '--format', format])
+    const result = await shell.run('docker', ['inspect', id, '--format', format], { cwd: opts.dir })
     if (result.code !== 0) return false
     const [status, health] = result.stdout.trim().split('|')
     // A service with no healthcheck configured can only be judged by `running`.
@@ -159,16 +190,19 @@ export function createComposeDependency(
     async ensure() {
       const up = await shell.run('docker', ['compose', 'up', '-d', opts.service], {
         timeoutMs: 60_000,
+        cwd: opts.dir,
       })
       if (up.code !== 0) return false
 
-      const deadline = Date.now() + COMPOSE_READY_TIMEOUT_MS
+      const deadline = Date.now() + readyTimeoutMs
       while (Date.now() < deadline) {
-        const ps = await shell.run('docker', ['compose', 'ps', '-q', opts.service])
+        const ps = await shell.run('docker', ['compose', 'ps', '-q', opts.service], {
+          cwd: opts.dir,
+        })
         const id = ps.stdout.trim().split(/\r?\n/).filter(Boolean)[0]
         if (id && (await inspectReady(id))) return true
         await new Promise((resolve) => {
-          setTimeout(resolve, COMPOSE_POLL_MS)
+          setTimeout(resolve, readyPollMs)
         })
       }
       return false
@@ -181,15 +215,40 @@ export function createComposeDependency(
  * package-manager wrapper that is killed without its subtree leaves the real `node` orphaned and
  * still holding the socket, and the relaunch then dies with `EADDRINUSE` — turning one outage into
  * a restart loop. Reaping by PORT is the only check that covers an orphan we never had a handle on.
+ *
+ * It is also, unavoidably, the bluntest thing this supervisor does: reaping by port means SIGKILLing
+ * a process we were never handed. If `--port` names a port some unrelated service owns, that service
+ * is what dies. There is no portable way to prove descent from our own child, so the mitigation is
+ * disclosure rather than detection — every kill NAMES the pid and, where the platform will tell us,
+ * the command behind it, and `reap()` reports what it killed so the caller can log it. Callers only
+ * ever reap AFTER their own child is confirmed dead, so a healthy stack is never a candidate.
  */
-export function createPortReaper(shell: HostShell, port: number): PortReaper {
-  const isWindows = process.platform === 'win32'
+export function createPortReaper(
+  shell: HostShell,
+  port: number,
+  opts: { platform?: string; log?: (message: string) => void } = {},
+): PortReaper {
+  const isWindows = (opts.platform ?? process.platform) === 'win32'
+  const log = opts.log ?? ((): void => {})
+
+  /** Best-effort "what IS this pid", so a surprising kill is at least explicable after the fact. */
+  const describe = async (pid: string): Promise<string> => {
+    const result = isWindows
+      ? await shell.run('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'])
+      : await shell.run('ps', ['-p', pid, '-o', 'command='])
+    if (result.code !== 0) return `pid ${pid}`
+    const text = result.stdout.trim().split(/\r?\n/)[0]?.trim()
+    return text ? `pid ${pid} (${text})` : `pid ${pid}`
+  }
 
   const listenerPids = async (): Promise<string[]> => {
     if (isWindows) {
       // Plain `netstat -ano` (not `-p tcp`, which is IPv4-only) so an IPv6-only listener is seen.
       const result = await shell.run('netstat', ['-ano'])
-      if (result.code !== 0) return []
+      if (result.code !== 0) {
+        log(`⚠ cannot check port ${port}: netstat failed — an orphaned listener will not be reaped`)
+        return []
+      }
       const pids = new Set<string>()
       for (const line of result.stdout.split(/\r?\n/)) {
         const match = line.match(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/i)
@@ -198,17 +257,31 @@ export function createPortReaper(shell: HostShell, port: number): PortReaper {
       return [...pids]
     }
     const result = await shell.run('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'])
+    // `lsof` exits 1 for "nothing matched", which is the common case and not worth a word. A MISSING
+    // lsof is different: it is not installed by default on many Linux images, so the reaper silently
+    // becomes a no-op and the EADDRINUSE restart loop it exists to prevent comes back unexplained.
+    if (result.code === COMMAND_NOT_FOUND) {
+      log(
+        `⚠ cannot check port ${port}: lsof is not installed — an orphaned listener holding the ` +
+          'port will not be reaped, so a restart may fail with EADDRINUSE',
+      )
+      return []
+    }
     if (result.code !== 0) return []
     return [...new Set(result.stdout.split(/\s+/).filter(Boolean))]
   }
 
   return {
     async reap() {
+      const killed: string[] = []
       for (const pid of await listenerPids()) {
+        log(`↯ port ${port} is still held by ${await describe(pid)} — killing it`)
         // `/T` (Windows) kills the descendants too; elsewhere the group is signalled by the caller.
         if (isWindows) await shell.run('taskkill', ['/PID', pid, '/F', '/T'])
         else await shell.run('kill', ['-9', pid])
+        killed.push(pid)
       }
+      return killed
     },
   }
 }
@@ -279,6 +352,14 @@ export interface SupervisorDeps {
   reaper?: PortReaper
   clock?: SuperviseClock
   log?: (message: string) => void
+  /**
+   * Aborting stops the loop and, before returning, kills the supervised child and reaps the port.
+   * The loop OWNS the child handle, so shutdown has to live here: a signal handler outside it can
+   * only reach the port, which on POSIX kills the inner listener while leaving the package-manager
+   * wrapper and its `node --watch` alive and parked — a Ctrl-C that orphans exactly the process tree
+   * this command exists to manage.
+   */
+  stopSignal?: AbortSignal
   /** Stop after this many ticks — tests only; production runs until the process is signalled. */
   maxTicks?: number
 }
@@ -289,6 +370,12 @@ export interface SupervisorOutcome {
   repairs: number
   /** Dependencies that reported a state only an operator can clear, by label. */
   blocked: string[]
+  /**
+   * Set when the supervisor STOPPED trying, with the reason. Restarting cannot fix a command that
+   * is simply broken, so `maxFailedStarts` consecutive restarts that never reached a serving state
+   * end the loop and report — the caller turns this into a non-zero exit.
+   */
+  gaveUp?: string
 }
 
 /**
@@ -327,36 +414,70 @@ const RESTART_SETTLE_MS = 1_500
 
 /**
  * Run the supervision loop: start the child, then probe on an interval and repair when the
- * decisions in `supervise.ts` say so. Returns when `maxTicks` is reached (tests) or never
- * (production, until the process is signalled).
+ * decisions in `supervise.ts` say so. Returns when `stopSignal` aborts, when the crash-loop budget
+ * is spent, or when `maxTicks` is reached (tests) — in production, otherwise never.
  */
 export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOutcome> {
   const clock = deps.clock ?? systemClock
   const log = deps.log ?? ((message: string) => process.stdout.write(`${message}\n`))
-  const { config } = deps
+  const { config, stopSignal } = deps
 
-  let child = deps.launcher.start()
-  let state = initialState(clock.now(), config)
   let repairs = 0
   let ticks = 0
   let blocked: string[] = []
+  let gaveUp: string | undefined
   const warned = new Set<string>()
+
+  // A child that has exited is a fact the probe can only infer, slowly. Tracked per generation so a
+  // dead PREDECESSOR's late `exited` can never be read as the current child having died.
+  let generation = 0
+  let childExited = false
+  const startChild = (): SupervisedChild => {
+    const mine = ++generation
+    childExited = false
+    const started = deps.launcher.start()
+    void started.exited.then(() => {
+      if (mine === generation) childExited = true
+    })
+    return started
+  }
+
+  let child = startChild()
+  let state = initialState(clock.now(), config)
+
+  // Restarts that have not yet produced a serving stack. Reset by any successful probe, so this
+  // counts a genuine crash loop rather than a long-lived stack that has been repaired often.
+  let failedStarts = 0
 
   const restart = async (): Promise<void> => {
     await child.kill()
     await clock.sleep(RESTART_SETTLE_MS)
-    // Reap AFTER killing the tree: this only catches an orphan the tree kill could not reach.
+    // Reap AFTER killing the tree: this only catches an orphan the tree kill could not reach. Our
+    // own child is dead by now, so anything still on the port is by definition not it.
     if (deps.reaper) await deps.reaper.reap()
-    child = deps.launcher.start()
-    state = stateAfterStart(clock.now(), config, state)
+    child = startChild()
+    state = stateAfterStart(clock.now(), config)
   }
 
-  while (deps.maxTicks === undefined || ticks < deps.maxTicks) {
-    await clock.sleep(config.pollMs)
+  // Read through a function, not inline: `signal.aborted` flips underneath us, and a direct
+  // comparison in the loop condition would let the compiler narrow it to `false` for the body.
+  const stopRequested = (): boolean => stopSignal?.aborted === true
+
+  while (
+    !stopRequested() &&
+    gaveUp === undefined &&
+    (deps.maxTicks === undefined || ticks < deps.maxTicks)
+  ) {
+    await clock.sleep(config.pollMs, stopSignal)
+    if (stopRequested()) break
     ticks += 1
 
+    // Sampled BEFORE the probe: the probe can take seconds against a filtered port, and folding
+    // that into the drift would read as a suspend (see `clockJumpMs`).
+    const now = clock.now()
     const serving = await deps.probe.serving()
-    const next = step(state, { now: clock.now(), serving }, config)
+    if (serving) failedStarts = 0
+    const next = step(state, { now, serving, childExited }, config)
     state = next.state
     const { action } = next
 
@@ -375,7 +496,18 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
         break
       case 'repair': {
         repairs += 1
+        failedStarts += 1
         log(`⚠ not serving — ${action.reason}; repair #${repairs}`)
+        if (failedStarts > config.maxFailedStarts) {
+          // Reported, not retried — the same rule the wedged-cgroup path follows. A command that has
+          // never once served is not going to start serving because we killed it again.
+          gaveUp =
+            `the supervised command has failed to serve ${failedStarts} starts in a row. ` +
+            'Restarting cannot fix a command that is broken — run it directly to see why ' +
+            '(in deploy/local: `pnpm dev:raw`).'
+          log(`✖ GIVING UP: ${gaveUp}`)
+          break
+        }
         if (deps.dependencies?.length) {
           blocked = await ensureDependencies(deps.dependencies, log, warned)
         }
@@ -386,5 +518,12 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
     }
   }
 
-  return { ticks, repairs, blocked }
+  // Shutdown is the loop's job because the loop owns the child handle.
+  await child.kill()
+  if (deps.reaper) {
+    const killed = await deps.reaper.reap()
+    if (killed.length > 0) log(`↯ reaped ${killed.length} orphaned listener(s) on shutdown`)
+  }
+
+  return { ticks, repairs, blocked, gaveUp }
 }

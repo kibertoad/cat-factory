@@ -32,15 +32,30 @@ repair rather than accumulating the usual three failed probes, and it deliberate
 active boot-grace window too — a resume is precisely when the stack is most likely already dead, and
 deferring costs another `failureThreshold * pollMs` of downtime to re-learn what we can already tell.
 
-**One failure is reported, not retried.** A cluster whose restart is blocked by a stale cgroup
-(`runc create failed: … cgroup.procs: device or resource busy` — a state a suspend can leave behind)
-cannot be repaired from inside a supervisor: clearing it requires restarting the container _engine_,
-which would kill every other container, including the database this same supervisor depends on. So
-that case throws `OperatorActionRequiredError`, whose message is printed **once** with the actual
-fix. Looping on it would reproduce the exact pathology this command exists to end — during the
-incident that motivated this work, a k3d load balancer restarted 518 times against a missing
-upstream, exiting **0** each time, so `docker ps` showed motion and the cluster sat dead for 36
-hours.
+**A hopeless repair is reported, not retried.** Two cases qualify. A cluster whose restart is blocked
+by a stale cgroup (`runc create failed: … cgroup.procs: device or resource busy` — a state a suspend
+can leave behind) cannot be repaired from inside a supervisor: clearing it requires restarting the
+container _engine_, which would kill every other container, including the database this same
+supervisor depends on. So that case throws `OperatorActionRequiredError`, whose message is printed
+**once** with the actual fix. And a supervised command that never reaches a serving state is capped at
+`maxFailedStarts` restarts, then reported with a non-zero exit — restarting cannot fix a command that
+is simply broken, and any successful probe resets the count so a long-lived stack is never capped.
+Looping on either would reproduce the exact pathology this command exists to end: during the incident
+that motivated this work, a k3d load balancer restarted 518 times against a missing upstream, exiting
+**0** each time, so `docker ps` showed motion and the cluster sat dead for 36 hours.
+
+**Shutdown belongs to the loop, because the loop owns the child handle.** A signal handler outside it
+can only reach the port, which on POSIX kills the inner listener while leaving the package-manager
+wrapper and its parked `node --watch` alive — a Ctrl-C that orphans exactly the tree this command
+manages. So `SIGINT`/`SIGTERM` abort an `AbortSignal` the loop is sleeping on, and it kills the child
+tree and reaps the port on its way out.
+
+Two things the design refuses to do quietly. `--runtime k3s` alongside `--k3s-cluster` is **rejected**
+rather than silently supervised as k3d (which would leave the dependency reporting "not ready, will
+retry" forever, with nothing naming the real cause), and a missing `lsof` — absent by default on many
+Linux images — is **announced**, because it silently turns the port reaper into a no-op and brings
+back the `EADDRINUSE` restart loop it exists to prevent. Reaping by port means SIGKILLing a process we
+were never handed, so every kill names the pid and the command behind it.
 
 The judgement is kept pure in `supervise.ts` (state + observation → next state + action) so every
 transition is table-tested without processes, sockets, or an ambient clock; effects live behind
@@ -48,6 +63,17 @@ seams in `supervise-runtime.ts` and reach the host through the existing `HostShe
 logic is driven by a scripted fake shell rather than a real cluster. Cluster readiness is judged
 from the apiserver's own version — `kubectl` still prints the client half when the control plane is
 down, which is the shape that would fool a naive exit-code or first-line check.
+
+`HostShell.run` gains a `cwd`, which the compose dependency passes on every call: compose resolves its
+project file relative to the working directory, so without it `--compose-dir` addressed no project at
+all and reported a permanently un-ready database rather than restoring one.
+
+Two timing details are load-bearing and both were wrong in a way that only shows up on the path this
+command is FOR. The clock-jump measurement is taken tick-start to tick-start, and `lastTickAt` is
+re-based when a child restarts: a repair runs the whole dependency ladder first, whose budgets are 90s
+(compose) and 120s (apiserver) against a 30s jump threshold, so measuring across it made a
+slow-but-successful recovery read as a suspend — and since resume detection outranks the boot grace,
+the supervisor killed the child it had just started.
 
 `deploy/local`'s `dev` script is now the supervised one and the bare `node --watch` moves to
 `dev:raw`. The safe path should be the one you get by default; the escape hatch exists because a

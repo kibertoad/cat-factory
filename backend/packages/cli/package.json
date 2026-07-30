@@ -40,7 +40,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:supervise": "vitest run --config vitest.supervise.config.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0"

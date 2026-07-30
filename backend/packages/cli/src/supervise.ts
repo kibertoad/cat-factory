@@ -32,10 +32,23 @@ export interface SuperviseConfig {
   /**
    * A tick arriving this much later than `pollMs` means time jumped — the host slept (or stalled
    * hard). Timers do not fire while suspended, so lateness is the signal.
+   *
+   * The measurement is deliberately taken tick-START to tick-START (see {@link step}): sampling it
+   * after the probe would fold the probe's own duration into the drift, and a probe that times out
+   * on a filtered port takes seconds — enough to read as a suspend on a short `--poll` and so to
+   * bypass `failureThreshold` entirely.
    */
   clockJumpMs: number
   /** Consecutive failed probes required before a repair (outside any grace window). */
   failureThreshold: number
+  /**
+   * How many restarts in a row may fail to produce a SERVING stack before the supervisor reports
+   * and gives up. A command that is simply broken (a syntax error, a missing binary, a port already
+   * owned by something else) can never be fixed by restarting it, and looping forever on it is the
+   * exact pathology this supervisor exists to end — the motivating incident was a container that
+   * restarted 518 times, exiting 0 each time, while `docker ps` showed healthy motion.
+   */
+  maxFailedStarts: number
 }
 
 /** Defaults chosen for a laptop-dev loop: notice within ~30s, never fight a cold boot. */
@@ -44,6 +57,7 @@ export const SUPERVISE_DEFAULTS = {
   bootGraceMs: 60_000,
   resumeGraceMs: 25_000,
   failureThreshold: 3,
+  maxFailedStarts: 5,
 } as const
 
 /**
@@ -58,6 +72,7 @@ export function resolveSuperviseConfig(partial: Partial<SuperviseConfig> = {}): 
     resumeGraceMs: partial.resumeGraceMs ?? SUPERVISE_DEFAULTS.resumeGraceMs,
     clockJumpMs: partial.clockJumpMs ?? pollMs * 3,
     failureThreshold: partial.failureThreshold ?? SUPERVISE_DEFAULTS.failureThreshold,
+    maxFailedStarts: partial.maxFailedStarts ?? SUPERVISE_DEFAULTS.maxFailedStarts,
   }
 }
 
@@ -91,27 +106,43 @@ export function initialState(now: number, config: SuperviseConfig): SuperviseSta
   return { failures: 0, quietUntil: now + config.bootGraceMs, lastTickAt: now }
 }
 
-/** State to adopt right after (re)spawning a child mid-run — a fresh boot grace, counters clear. */
-export function stateAfterStart(
-  now: number,
-  config: SuperviseConfig,
-  previous: SuperviseState,
-): SuperviseState {
-  return { failures: 0, quietUntil: now + config.bootGraceMs, lastTickAt: previous.lastTickAt }
+/**
+ * State to adopt right after (re)spawning a child mid-run — a fresh boot grace, counters clear.
+ *
+ * `lastTickAt` is re-based on `now` (the moment the new child started), NOT carried over from the
+ * previous tick, because a repair is not instantaneous: it runs the whole dependency ladder first,
+ * and those budgets are 90s (compose readiness) and 120s (apiserver readiness) against a default
+ * `clockJumpMs` of 30s. Carrying the old timestamp forward makes the very next tick measure the
+ * repair's own duration as drift, read a slow-but-successful recovery as a host suspend, and — since
+ * resume detection deliberately outranks the boot-grace window — immediately kill the child it just
+ * started. Re-basing means the clock-jump signal only ever measures time we were genuinely idle.
+ */
+export function stateAfterStart(now: number, config: SuperviseConfig): SuperviseState {
+  return { failures: 0, quietUntil: now + config.bootGraceMs, lastTickAt: now }
 }
 
 /**
  * One tick of the supervisor: current state + what we just observed -> next state + the action to
  * take. Pure; the caller supplies `now` and the probe result.
  *
- * Order matters. The clock-jump check runs FIRST and outranks the grace windows, because a resume
- * is precisely when the stack is most likely already dead — deferring it to the normal threshold
- * path would idle for another `failureThreshold * pollMs` before repairing something we can
- * already tell is broken.
+ * `now` must be sampled at the START of the tick, before the probe runs — see `clockJumpMs`.
+ *
+ * Order matters:
+ *  1. The clock-jump check runs FIRST and outranks the grace windows, because a resume is precisely
+ *     when the stack is most likely already dead — deferring it to the normal threshold path would
+ *     idle for another `failureThreshold * pollMs` before repairing something we can already tell
+ *     is broken.
+ *  2. A confirmed-serving stack short-circuits everything below it.
+ *  3. A child that has EXITED then repairs immediately, ahead of the grace window and the failure
+ *     counter, because neither can tell us anything a dead process handle hasn't already: counting
+ *     three more probes against a process that does not exist just adds `failureThreshold * pollMs`
+ *     of downtime. This is checked only once the stack is known not to be serving, so a wrapper that
+ *     exits while its grandchild keeps serving (a shell that `exec`s away, say) is left alone
+ *     rather than having a healthy server restarted out from under it.
  */
 export function step(
   state: SuperviseState,
-  observation: { now: number; serving: boolean },
+  observation: { now: number; serving: boolean; childExited?: boolean },
   config: SuperviseConfig,
 ): { state: SuperviseState; action: SuperviseAction } {
   const { now, serving } = observation
@@ -142,6 +173,13 @@ export function step(
         ? { kind: 'recovered', afterFailures: state.failures }
         : { kind: 'serving' }
     return { state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now }, action }
+  }
+
+  if (observation.childExited === true) {
+    return {
+      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now },
+      action: { kind: 'repair', reason: 'the supervised command exited' },
+    }
   }
 
   if (now < state.quietUntil) {

@@ -30,6 +30,7 @@ describe('resolveSuperviseConfig', () => {
     expect(resolved.pollMs).toBe(10_000)
     expect(resolved.failureThreshold).toBe(3)
     expect(resolved.bootGraceMs).toBe(60_000)
+    expect(resolved.maxFailedStarts).toBe(5)
   })
 })
 
@@ -69,12 +70,54 @@ describe('step — boot grace', () => {
 
   it('a restart resets the counters and re-arms the grace window', () => {
     const now = 2_000_000
-    const previous: SuperviseState = { failures: 2, quietUntil: 0, lastTickAt: 1_999_000 }
-    const next = stateAfterStart(now, config, previous)
+    const next = stateAfterStart(now, config)
     expect(next.failures).toBe(0)
     expect(next.quietUntil).toBe(now + config.bootGraceMs)
-    // lastTickAt is preserved so the restart itself is not mistaken for a clock jump.
-    expect(next.lastTickAt).toBe(previous.lastTickAt)
+  })
+
+  it('re-bases lastTickAt on the restart, so a SLOW repair is not read as a host sleep', () => {
+    // The regression: a repair runs the dependency ladder first, whose budgets are 90s (compose)
+    // and 120s (apiserver) against a 30s clock-jump threshold. Carrying the pre-repair tick forward
+    // made the next tick measure the repair's own duration as drift, so a slow-but-SUCCESSFUL
+    // recovery was misread as a suspend — and since resume detection outranks the boot grace, the
+    // freshly started child was killed immediately.
+    const repairTickAt = 1_000_000
+    const restartedAt = repairTickAt + 60_000 // the ladder took a minute to bring Postgres back
+    const state = stateAfterStart(restartedAt, config)
+
+    const nextTickAt = restartedAt + config.pollMs
+    const { action } = step(state, { now: nextTickAt, serving: false }, config)
+
+    // Still booting, so it waits the grace out. It must NOT read as `repair`.
+    expect(action.kind).toBe('grace')
+  })
+})
+
+describe('step — the child process exited', () => {
+  it('repairs at once, without counting probes against a process that no longer exists', () => {
+    const now = 1_000_000
+    const { action } = step(settled(now), { now, serving: false, childExited: true }, config)
+    expect(action).toEqual({ kind: 'repair', reason: 'the supervised command exited' })
+  })
+
+  it('outranks the boot-grace window', () => {
+    const now = 1_000_000
+    const state: SuperviseState = {
+      failures: 0,
+      quietUntil: now + 30_000,
+      lastTickAt: now - config.pollMs,
+    }
+    expect(step(state, { now, serving: false, childExited: true }, config).action.kind).toBe(
+      'repair',
+    )
+  })
+
+  it('leaves a SERVING stack alone even when the child handle is gone', () => {
+    // A wrapper that execs away (or otherwise exits while its grandchild keeps the socket) must not
+    // have a healthy server restarted out from under it — serving is checked first, deliberately.
+    const now = 1_000_000
+    const { action } = step(settled(now), { now, serving: true, childExited: true }, config)
+    expect(action).toEqual({ kind: 'serving' })
   })
 })
 

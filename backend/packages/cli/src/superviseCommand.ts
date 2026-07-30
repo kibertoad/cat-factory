@@ -7,9 +7,9 @@
  */
 
 import { resolve } from 'node:path'
-import { ArgError, type CliOptions, OPTION_DEFAULTS } from './args.js'
+import { ArgError, type CliOptions, type K3sRuntime, OPTION_DEFAULTS } from './args.js'
 import { createNodeShell } from './host-shell.js'
-import { createK3sClusterDependency } from './supervise-k3s.js'
+import { createK3sClusterDependency, type SupervisedK3sRuntime } from './supervise-k3s.js'
 import {
   createChildLauncher,
   createComposeDependency,
@@ -29,11 +29,34 @@ import { resolveSuperviseConfig } from './supervise.js'
  * Deliberately NOT `JSON.stringify`: that escapes backslashes (`C:\\Program Files\\…`), which no
  * shell unescapes, so the quoted path becomes a path that does not exist. Only the surrounding
  * quotes and any embedded quote need handling.
+ *
+ * The escape for an embedded quote is platform-specific, because `shell: true` means a genuinely
+ * different shell on each side: `cmd.exe` does not honour a backslash escape at all (it would pass
+ * the backslash through and treat the quote as closing the argument), and doubles the quote instead.
+ * `platform` is injectable so both dialects are testable from either host.
  */
-export function quoteToken(token: string): string {
+export function quoteToken(token: string, platform: string = process.platform): string {
   if (token === '') return '""'
   if (!/[\s"]/.test(token)) return token
-  return `"${token.replace(/"/g, '\\"')}"`
+  const escaped =
+    platform === 'win32' ? token.replace(/"/g, '""') : token.replace(/"/g, String.raw`\"`)
+  return `"${escaped}"`
+}
+
+/**
+ * Narrow the shared `--runtime` picklist to what a supervisor can actually start, REFUSING the
+ * third member rather than quietly treating it as k3d. `k3s` proper is a host service (systemd), not
+ * a set of containers this command owns, so it has no `cluster start` to call. Degrading silently
+ * would leave `k3d cluster list` never listing the cluster, so the dependency would report "not
+ * ready — will retry next cycle" on every cycle forever, with nothing naming the real reason.
+ */
+function supervisedRuntime(runtime: K3sRuntime | undefined): SupervisedK3sRuntime {
+  if (runtime === undefined) return 'k3d'
+  if (runtime === 'k3d' || runtime === 'kind') return runtime
+  throw new ArgError(
+    `--runtime ${runtime} cannot be supervised: a k3s host service has no cluster for this command ` +
+      'to start. Use --runtime k3d or --runtime kind, or drop --k3s-cluster.',
+  )
 }
 
 export async function supervise(options: CliOptions): Promise<void> {
@@ -45,7 +68,8 @@ export async function supervise(options: CliOptions): Promise<void> {
     )
   }
 
-  const command = argv.map(quoteToken).join(' ')
+  // Not `argv.map(quoteToken)`: `map` would pass the index as the platform argument.
+  const command = argv.map((token) => quoteToken(token)).join(' ')
   const cwd = options.dir ? resolve(options.dir) : process.cwd()
   const port = options.port ?? OPTION_DEFAULTS.port
   const healthPath = options.healthPath ?? OPTION_DEFAULTS.healthPath
@@ -75,18 +99,19 @@ export async function supervise(options: CliOptions): Promise<void> {
     dependencies.push(
       createK3sClusterDependency(shell, {
         cluster: options.k3sCluster,
-        runtime: options.k3sRuntime === 'kind' ? 'kind' : 'k3d',
+        runtime: supervisedRuntime(options.k3sRuntime),
       }),
     )
   }
 
   const launcher = createChildLauncher({ command, cwd })
   const probe = createHealthProbe({ port, healthPath })
-  const reaper = createPortReaper(shell, port)
 
   const log = (message: string): void => {
     process.stdout.write(`[supervise] ${message}\n`)
   }
+
+  const reaper = createPortReaper(shell, port, { log })
 
   log(
     `watching :${port}${healthPath} every ${config.pollMs / 1_000}s — ` +
@@ -111,17 +136,29 @@ export async function supervise(options: CliOptions): Promise<void> {
     }
   }
 
-  let stopping = false
+  // Shutdown is delegated to the loop, which owns the child handle: aborting makes it break out of
+  // its sleep, kill the child TREE, and reap the port. Reaping from here instead would kill the
+  // inner listener while leaving the package-manager wrapper and its parked `node --watch` alive.
+  const stopper = new AbortController()
   const stop = (): void => {
-    if (stopping) return
-    stopping = true
+    if (stopper.signal.aborted) return
     log('shutting down')
-    // The loop's child handle is not reachable from here; reaping the port is what guarantees the
-    // real listener dies with us rather than lingering to block the next start.
-    void reaper.reap().finally(() => process.exit(0))
+    stopper.abort()
   }
   process.on('SIGINT', stop)
   process.on('SIGTERM', stop)
 
-  await runSupervisor({ config, probe, launcher, dependencies, reaper, log })
+  const outcome = await runSupervisor({
+    config,
+    probe,
+    launcher,
+    dependencies,
+    reaper,
+    log,
+    stopSignal: stopper.signal,
+  })
+
+  // A supervisor that stopped because the command is broken must not report success — a wrapper
+  // exiting 0 on a dead stack is the failure shape this whole command exists to make impossible.
+  if (outcome.gaveUp !== undefined) process.exitCode = 1
 }

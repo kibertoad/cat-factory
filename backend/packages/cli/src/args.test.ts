@@ -167,4 +167,29 @@ describe('parseArgs — supervise', () => {
     expect(() => parseArgs(['supervise', '--boot-grace', '-1'])).toThrow(ArgError)
     expect(() => parseArgs(['supervise', '--failures', '0'])).toThrow(ArgError)
   })
+
+  it('rejects a fractional poll interval', () => {
+    // A 1ms poll spins a core, and since the clock-jump threshold derives from the interval it also
+    // makes the probe's own latency read as a host suspend — which bypasses --failures entirely.
+    expect(() => parseArgs(['supervise', '--poll', '0.001'])).toThrow(ArgError)
+    expect(() => parseArgs(['supervise', '--poll', '1.5'])).toThrow(ArgError)
+  })
+
+  it('allows a zero boot grace, which is a real choice for a fast-booting command', () => {
+    expect(parseArgs(['supervise', '--boot-grace', '0']).bootGraceSeconds).toBe(0)
+  })
+
+  it('refuses a supervise-only flag on another command instead of ignoring it', () => {
+    // These share one option table, so nothing structural stops them being parsed for `init` and
+    // then read by no code path at all. A silently-ignored flag is a typo the user wants to hear.
+    expect(() => parseArgs(['init', '--failures', '2'])).toThrow(/only valid for/)
+    expect(() => parseArgs(['env', '--health-path', '/ready'])).toThrow(ArgError)
+    expect(() => parseArgs(['k3s', '--compose-service', 'postgres'])).toThrow(ArgError)
+    expect(() => parseArgs(['init', '--', 'pnpm', 'dev'])).toThrow(ArgError)
+  })
+
+  it('still allows the flags it genuinely shares with other commands', () => {
+    expect(parseArgs(['supervise', '--port', '8788', '--', 'x']).port).toBe(8788)
+    expect(parseArgs(['k3s', '--runtime', 'kind']).k3sRuntime).toBe('kind')
+  })
 })

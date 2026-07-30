@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
+import net, { type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,15 +23,28 @@ import { afterEach, describe, expect, it } from 'vitest'
  */
 
 const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url))
-const PORT = 8899
-const HEALTH = `http://127.0.0.1:${PORT}/health`
 
-const TOY_SERVER = `
+/**
+ * The supervisor has to be told a FIXED port (it probes one), but hard-coding it would make the
+ * suite collide with whatever else happens to be on that port — including a second shard of itself.
+ * So claim a free one from the OS first and release it: a small race window, versus a guaranteed
+ * clash. The port must also be free at the moment the toy server binds, which is why the reservation
+ * is released rather than held.
+ */
+async function reservePort(): Promise<number> {
+  const server = net.createServer()
+  await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready))
+  const { port } = server.address() as AddressInfo
+  await new Promise<void>((closed) => server.close(() => closed()))
+  return port
+}
+
+const toyServer = (port: number): string => `
 import http from 'node:http'
 http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200); res.end('{"status":"ok"}'); return }
   res.writeHead(404); res.end()
-}).listen(${PORT}, '127.0.0.1', () => console.log('toy-server-pid=' + process.pid))
+}).listen(${port}, '127.0.0.1', () => console.log('toy-server-pid=' + process.pid))
 `
 
 function statusOf(url: string): Promise<number> {
@@ -89,9 +103,11 @@ describe.skipIf(!existsSync(BIN))('cat-factory supervise (integration)', () => {
   })
 
   it('outlives its child and restarts it', async () => {
+    const port = await reservePort()
+    const health = `http://127.0.0.1:${port}/health`
     const dir = mkdtempSync(join(tmpdir(), 'cf-supervise-'))
     const script = join(dir, 'toy-server.mjs')
-    writeFileSync(script, TOY_SERVER)
+    writeFileSync(script, toyServer(port))
 
     supervisor = spawn(
       process.execPath,
@@ -99,7 +115,7 @@ describe.skipIf(!existsSync(BIN))('cat-factory supervise (integration)', () => {
         BIN,
         'supervise',
         '--port',
-        String(PORT),
+        String(port),
         '--poll',
         '1',
         '--boot-grace',
@@ -123,7 +139,7 @@ describe.skipIf(!existsSync(BIN))('cat-factory supervise (integration)', () => {
       output += chunk.toString()
     })
 
-    const bootedUp = await waitFor(async () => (await statusOf(HEALTH)) === 200, 30_000)
+    const bootedUp = await waitFor(async () => (await statusOf(health)) === 200, 30_000)
     expect(bootedUp, `supervised child never served. Output:\n${output}`).toBe(true)
 
     const firstPid = Number(/toy-server-pid=(\d+)/.exec(output)?.[1])
@@ -132,10 +148,10 @@ describe.skipIf(!existsSync(BIN))('cat-factory supervise (integration)', () => {
     // Kill the CHILD only. The supervisor keeps its own PID, so this is the exact moment the
     // unref'd-timer bug made it exit 0.
     process.kill(firstPid, 'SIGKILL')
-    const wentDown = await waitFor(async () => (await statusOf(HEALTH)) !== 200, 15_000)
+    const wentDown = await waitFor(async () => (await statusOf(health)) !== 200, 15_000)
     expect(wentDown, `the child never actually went down. Output:\n${output}`).toBe(true)
 
-    const cameBack = await waitFor(async () => (await statusOf(HEALTH)) === 200, 60_000)
+    const cameBack = await waitFor(async () => (await statusOf(health)) === 200, 60_000)
     expect(cameBack, `supervisor did not restart the child. Output:\n${output}`).toBe(true)
 
     // The supervisor itself must still be running — the whole point.
