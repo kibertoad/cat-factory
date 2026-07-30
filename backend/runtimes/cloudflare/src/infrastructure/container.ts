@@ -1419,6 +1419,82 @@ export function buildContainer(
     injectedPoolProvider: overrides.runnerPoolProvider,
   })
 
+  // The deployment-wide stores and sinks every controller and the engine share: the credential
+  // pools, the per-run telemetry sinks, the account-settings reader and the derived
+  // artifact-store / web-search / webhook seams. Extracted so this root stays within the
+  // per-function line budget; every field is consumed by `assembleWorkerContainer`, so it is
+  // SPREAD there rather than re-listed.
+  const shared = buildWorkerSharedServices({
+    env,
+    config,
+    db,
+    telemetryDb,
+    clock,
+    idGenerator,
+    caches,
+    userSecretKindRegistry,
+    contentStorageCapability,
+    buildCfBlobBackend,
+    cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
+  })
+
+  return assembleWorkerContainer({
+    ...shared,
+    env,
+    config,
+    db,
+    telemetryDb,
+    clock,
+    idGenerator,
+    caches,
+    overrides,
+    gateProviders: opts.gateProviders,
+    registries: {
+      environmentBackendRegistry,
+      runnerBackendRegistry,
+      customManifestTypeRegistry,
+      userSecretKindRegistry,
+      agentKindRegistry,
+      gateRegistry,
+      judgeRegistry,
+      stepResolverRegistry,
+      initiativePresetRegistry,
+      vcsRegistry,
+      providerRegistry,
+    },
+    provisioningLogRepository,
+    resolveTransport,
+  })
+}
+
+interface WorkerSharedServicesInput {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  telemetryDb: D1Database
+  clock: SystemClock
+  idGenerator: CryptoIdGenerator
+  caches: ReturnType<typeof createAppCaches>
+  userSecretKindRegistry: ReturnType<typeof resolveWorkerRegistries>['userSecretKindRegistry']
+  contentStorageCapability: ReturnType<typeof cloudflareContentStorage>['capability']
+  buildCfBlobBackend: ReturnType<typeof cloudflareContentStorage>['buildBlobBackend']
+  cloudflareModelsEnabledOverride: boolean | undefined
+}
+
+function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
+  const {
+    env,
+    config,
+    db,
+    telemetryDb,
+    clock,
+    idGenerator,
+    caches,
+    userSecretKindRegistry,
+    contentStorageCapability,
+    buildCfBlobBackend,
+  } = input
+
   // The subscription-token pool (Claude Code / Codex credentials) — built once and
   // shared by the container executor (lease + usage feedback) and the
   // vendor-credential controller, so both read the same pool.
@@ -1468,7 +1544,7 @@ export function buildContainer(
   // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
   // (the cross-runtime conformance suite) may force it off to assert key-driven
   // selectability + the provider guard uniformly across runtimes.
-  const cloudflareModelsEnabled = opts.cloudflareModelsEnabled ?? !!env.AI
+  const cloudflareModelsEnabled = input.cloudflareModelsEnabledOverride ?? !!env.AI
 
   // Built once so the consensus executor and the engine share the same publisher (live
   // consensus transcript pushes ride the same hub as run/board events).
@@ -1546,32 +1622,8 @@ export function buildContainer(
     clock,
   )
 
-  return assembleWorkerContainer({
-    env,
-    config,
-    db,
-    telemetryDb,
-    clock,
-    idGenerator,
-    caches,
-    overrides,
-    gateProviders: opts.gateProviders,
+  return {
     cloudflareModelsEnabled,
-    registries: {
-      environmentBackendRegistry,
-      runnerBackendRegistry,
-      customManifestTypeRegistry,
-      userSecretKindRegistry,
-      agentKindRegistry,
-      gateRegistry,
-      judgeRegistry,
-      stepResolverRegistry,
-      initiativePresetRegistry,
-      vcsRegistry,
-      providerRegistry,
-    },
-    provisioningLogRepository,
-    resolveTransport,
     subscriptions,
     testSecretsService,
     validationConfigService,
@@ -1594,5 +1646,5 @@ export function buildContainer(
     resolveBinaryArtifactStore,
     githubWebhookIngest,
     notificationWebhookSupport,
-  })
+  }
 }

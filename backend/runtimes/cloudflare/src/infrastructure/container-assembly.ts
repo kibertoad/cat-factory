@@ -190,6 +190,52 @@ export interface WorkerContainerAssemblyInput {
  * override earlier ones in the same order) — purely the function-size ratchet split, not a
  * behaviour change.
  */
+/**
+ * The three secondary run kinds that each own a job store plus an optional Workflows-backed
+ * durable driver: repo bootstrap, env-config repair and the ephemeral-environment self-test.
+ * Grouped out of {@link buildWorkerCoreDependencies} so that assembler stays within the
+ * per-function line budget; every entry is spread straight back into the same literal.
+ */
+function selectWorkerDurableJobDeps(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: WorkerContainerAssemblyInput['clock']
+  idGenerator: WorkerContainerAssemblyInput['idGenerator']
+  resolveTransport: WorkerContainerAssemblyInput['resolveTransport']
+}): Partial<CoreDependencies> {
+  const { env, config, db, clock, idGenerator, resolveTransport } = args
+  return {
+    // Repo-bootstrap repositories are wired unconditionally (reference-architecture
+    // CRUD is always available); the run path additionally needs the bootstrapper.
+    referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
+    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
+    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator, resolveTransport),
+    // Durably drive each bootstrap run's poll loop when the Workflows binding is
+    // present (mirrors the execution driver); without it a run still dispatches.
+    bootstrapRunner: env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
+      : undefined,
+    // Env-config-repair runs share the unified `agent_runs` table (kind-scoped). The
+    // job repository is wired unconditionally; the repairer (the agent fallback) is wired
+    // post-overrides over the FINAL provider, and the durable runner when its
+    // Workflows binding is present (else the cron sweep re-drives a run left running).
+    envConfigRepairJobRepository: new D1EnvConfigRepairJobRepository({ db }),
+    envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
+      ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : undefined,
+    // The ephemeral-environment self-test: its own run store + the durable driver when the
+    // Workflows binding is present. The Workflow self-finalizes on poll-budget exhaustion,
+    // and the cron `sweepStuckEnvTests` (index.ts scheduled) is the backstop for a lost or
+    // terminal instance — the run store is not agent_runs, so the unified run sweep never
+    // covers it.
+    environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
+    environmentTestRunner: env.ENV_TEST_WORKFLOW
+      ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
+      : undefined,
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -332,33 +378,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     dynamicModelPricesFor: openRouterCatalog
       ? (ws) => openRouterCatalog.capabilitiesFor(ws)
       : undefined,
-    // Repo-bootstrap repositories are wired unconditionally (reference-architecture
-    // CRUD is always available); the run path additionally needs the bootstrapper.
-    referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
-    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
-    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator, resolveTransport),
-    // Durably drive each bootstrap run's poll loop when the Workflows binding is
-    // present (mirrors the execution driver); without it a run still dispatches.
-    bootstrapRunner: env.BOOTSTRAP_WORKFLOW
-      ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
-      : undefined,
-    // Env-config-repair runs share the unified `agent_runs` table (kind-scoped). The
-    // job repository is wired unconditionally; the repairer (the agent fallback) is wired
-    // post-overrides below over the FINAL provider, and the durable runner when its
-    // Workflows binding is present (else the cron sweep re-drives a run left running).
-    envConfigRepairJobRepository: new D1EnvConfigRepairJobRepository({ db }),
-    envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
-      ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
-      : undefined,
-    // The ephemeral-environment self-test: its own run store + the durable driver when the
-    // Workflows binding is present. The Workflow self-finalizes on poll-budget exhaustion,
-    // and the cron `sweepStuckEnvTests` (index.ts scheduled) is the backstop for a lost or
-    // terminal instance — the run store is not agent_runs, so the unified run sweep never
-    // covers it.
-    environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
-    environmentTestRunner: env.ENV_TEST_WORKFLOW
-      ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
-      : undefined,
+    ...selectWorkerDurableJobDeps({ env, config, db, clock, idGenerator, resolveTransport }),
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps({
       env,

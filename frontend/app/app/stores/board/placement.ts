@@ -1,6 +1,7 @@
 import type { UpdateBlockInput } from '@cat-factory/contracts'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { createBoardDependencies } from './dependencies'
 import type { BoardWriteContext } from './context'
 import { UNDO_WINDOW_MS } from './context'
 
@@ -215,43 +216,9 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     }
   }
 
-  /**
-   * Toggle a dependency edge target -> source (target dependsOn source). The backend
-   * rejects an edge that would close a cycle (422) — surface that as a toast rather than
-   * letting it throw unhandled out of a board gesture.
-   */
-  async function toggleDependency(targetId: string, sourceId: string) {
-    if (targetId === sourceId || !getBlock(targetId)) return
-    try {
-      upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
-    } catch (e) {
-      toast.add({
-        title: tr('board.toast.linkFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
-
-  /** Remove a dependency edge target -> source if it exists. */
-  async function removeDependency(targetId: string, sourceId: string) {
-    const t = getBlock(targetId)
-    if (!t || !t.dependsOn.includes(sourceId)) return
-    // the backend exposes a single toggle; the edge exists, so toggling removes it
-    try {
-      upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
-    } catch (e) {
-      // Mirror `toggleDependency`: a failure must surface (and leave the edge visible) rather
-      // than rejecting unhandled with no feedback.
-      toast.add({
-        title: tr('board.toast.unlinkFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
-    }
-  }
+  // The dependency-edge writes, split along the same seam into a sibling factory over the same
+  // context; re-exposed here so every existing caller is unchanged.
+  const { toggleDependency, removeDependency } = createBoardDependencies(ctx)
 
   return {
     reparentBlock,

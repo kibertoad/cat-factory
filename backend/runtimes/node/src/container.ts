@@ -5,7 +5,6 @@
 // adds no cost to a deployment that never uses EKS.
 import { type NotificationWebhookService } from '@cat-factory/integrations'
 import {
-  type Clock,
   type GitHubInstallationRepository,
   type InlineLlmCallRecorder,
   type SubscriptionVendor,
@@ -14,14 +13,10 @@ import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
   type AppConfig,
   type ServerContainer,
-  CompositeAgentExecutor,
   ContainerSessionService,
-  GitHubAppAuth,
-  GitHubAppRegistry,
   GitHubIdentityResolver,
   testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
-  buildResolveRepoTargets,
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
@@ -37,6 +32,7 @@ import type { VcsIdentityRegistry } from '@cat-factory/kernel'
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeModelDeps } from './container-model-deps.js'
 import { buildNodeRunServices } from './container-run-services-deps.js'
+import { buildNodeAppRegistry, buildNodeRunPlatform } from './container-run-platform.js'
 import { buildNodeBootstrapper, buildNodeTransportDeploy } from './container-transport-deps.js'
 import { buildNodeAccountDeps } from './container-account-deps.js'
 import { buildNodeRealtimeDeps } from './container-realtime-deps.js'
@@ -45,10 +41,6 @@ import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
 
-import {
-  DrizzleGitHubInstallationRepository,
-  DrizzleRunnerPoolConnectionRepository,
-} from './repositories/containerExecution.js'
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 import { DrizzleSealedSecretInventory } from './repositories/drizzle/sealedSecretInventory.js'
@@ -57,10 +49,7 @@ import { createDrizzleRepositories } from './repositories/drizzle.js'
 // The container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
-import {
-  buildNodeContainerExecutor,
-  selectNodeEnvConfigRepairer,
-} from './container-executor-deps.js'
+import { selectNodeEnvConfigRepairer } from './container-executor-deps.js'
 
 import { assembleNodeCoreDependencies } from './container-core-deps.js'
 import {
@@ -88,50 +77,6 @@ export {
  * Rate-limit accounting is best-effort telemetry the Worker persists to D1; the Node
  * facade has no such table, so it drops the snapshots (exactly like the local facade).
  */
-/**
- * The workspace-spanning GitHub App registry, built once and shared by everything that
- * needs an App credential: the container executor's push-token mint, the tech-debt
- * issue filer, and the CI / merge / mergeability gate client. Returns undefined when
- * the App isn't configured (`github.enabled` + `GITHUB_APP_PRIVATE_KEY`), so each
- * caller degrades the way it always has.
- */
-function buildNodeAppRegistry(
-  env: NodeJS.ProcessEnv,
-  config: AppConfig,
-  clock: Clock,
-  installationRepository: GitHubInstallationRepository,
-): GitHubAppRegistry | undefined {
-  const privateKeyPem = env.GITHUB_APP_PRIVATE_KEY?.trim()
-  if (!config.github.enabled || !privateKeyPem) return undefined
-  const makeAuth = (appId: string, key: string) =>
-    new GitHubAppAuth({
-      appId,
-      privateKeyPem: key,
-      installationRepository,
-      clock,
-      apiBase: config.github.apiBase,
-    })
-  // Privileged App tier (ADR 0005): the second App carries `Administration: write`
-  // for repo provisioning. Activates only when both its config id and key are
-  // present, mirroring the Worker's `buildAppRegistry`.
-  const privilegedKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim()
-  const privileged =
-    config.github.privilegedApp && privilegedKey
-      ? {
-          appId: config.github.privilegedApp.appId,
-          auth: makeAuth(config.github.privilegedApp.appId, privilegedKey),
-        }
-      : undefined
-  return new GitHubAppRegistry({
-    default: {
-      appId: config.github.appId,
-      auth: makeAuth(config.github.appId, privateKeyPem),
-    },
-    privileged,
-    installationRepository,
-  })
-}
-
 /**
  * The hosted PAT-login registry: lets a user sign in by pasting their OWN source-control PAT,
  * which the shared `/auth/pat` flow resolves to the account it belongs to (and holds to the
@@ -912,6 +857,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // model-preset resolver. Lifted into `container-foundation.ts` so this root stays within the
   // per-function line budget; every side effect (the `config.infrastructure ??=` fill, the
   // `registerGitLab` registration) still happens here, first, exactly as before.
+  const foundation = resolveNodeContainerFoundation(options)
   const {
     env,
     config,
@@ -922,9 +868,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     remoteRepos,
     sourced,
     registries,
-    gitlabEngineClient,
     resolveWorkspaceModelDefault,
-  } = resolveNodeContainerFoundation(options)
+  } = foundation
   const {
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -943,20 +888,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // local-model-endpoint + user-secret + OpenRouter + subscription + personal-subscription
   // stores, the trace sink, the model-provider resolver, and the inline executor), lifted into
   // `container-model-deps.ts` so this composition root stays within the file-size budget.
-  const {
-    apiKeys,
-    publicApiKeys,
-    localModelEndpoints,
-    userSecrets,
-    resolveUserGitHubToken,
-    openRouterCatalog,
-    subscriptions,
-    personalSubscriptions,
-    traceSink,
-    modelProviderResolver,
-    cloudflareModelsEnabled,
-    inline,
-  } = buildNodeModelDeps({
+  const models = buildNodeModelDeps({
     env,
     config,
     db,
@@ -978,180 +910,28 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     llmCallMetricRepository: repos.llmCallMetricRepository,
   })
 
-  // Persistence the container-execution path needs (built from the same db). The
-  // runner-pool repo also backs the `runners` Core module so a pool is registrable
-  // via the API; the installation repo backs both token minting and repo resolution.
-  const runnerPoolConnectionRepository = sourced(
-    'runnerPoolConnectionRepository',
-    (d) => new DrizzleRunnerPoolConnectionRepository(d),
-  )
-  const githubInstallationRepository =
-    options.githubInstallationRepository ??
-    sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d))
-  // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
-  // (block→repo resolution) and the GitHub sync/webhook module below.
-  const repoProjectionRepository = sourced(
-    'repoProjectionRepository',
-    (d) => new DrizzleRepoProjectionRepository(d),
-  )
+  // Everything the engine needs to actually RUN a block: repo resolution, the runner transport +
+  // deploy seams, the per-run services, the agent executor, the GitHub-client-dependent
+  // integration slice, and the repo bootstrapper. Lifted into `container-run-platform.ts` so this
+  // root stays within the per-function line budget. Every field of the bundle is consumed by the
+  // finalize step below, so it is SPREAD there rather than re-listed here.
+  const platform = buildNodeRunPlatform({ options, foundation, models })
 
-  // The GitHub App registry, built once when the App is configured and shared by the
-  // container executor's push-token mint, the tech-debt issue filer, and the CI / merge
-  // gate client below. Undefined when the App isn't configured.
-  const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
-
-  // The repo a running block targets (installation + owner/name), resolved from the
-  // github_repos projection. Built once and shared by the container executor, the
-  // GitHub-issue tracker filer, and the CI / merge providers.
-  const resolveRepoTarget = buildResolveRepoTarget({
-    installationRepository: githubInstallationRepository,
-    repoProjectionRepository,
-    blockRepository: repos.blockRepository,
-    // The org service repo (its `getByFrameBlock` is all `buildResolveRepoTarget` needs); already
-    // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
-    // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
-    serviceRepository: repos.serviceRepository,
-    // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
-    // module + bootstrapper invalidate the same bag on every projection write.
-    repoProjectionCache: options.caches?.repoProjection,
-  })
-
-  // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
-  // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
-  // resolves the involved frames in one query). Fed to the container executor so the
-  // implementer can fan a cross-service change out across sibling checkouts.
-  const resolveRepoTargets = buildResolveRepoTargets({
-    installationRepository: githubInstallationRepository,
-    repoProjectionRepository,
-    blockRepository: repos.blockRepository,
-    serviceRepository: repos.serviceRepository,
-  })
-
-  // The runner-transport resolver + the container-backed deploy lifecycle seams (resolve the
-  // workspace's transport, wrap it with the provisioning-log decorator, build the deploy job
-  // client + clone-target resolver), lifted into `container-transport-deps.ts` to keep this
-  // root within budget.
-  const { resolveTransport, baseDeployMint, deployDeps } = buildNodeTransportDeploy({
-    config,
-    repos,
-    idGenerator,
-    clock,
-    runnerPoolConnectionRepository,
-    runnerBackendRegistry,
-    appRegistry,
-    resolveRepoTarget,
-    workspaceRepository: repos.workspaceRepository,
-    resolveTransportOverride: options.resolveTransport,
-    runnerPoolProvider: options.runnerPoolProvider,
-    skipProvisioningLogWrap: options.skipProvisioningLogWrap,
-    mintInstallationToken: options.mintInstallationToken,
-    deployJobClientOverride: options.deployJobClient,
-    disableDefaultDeployJobClient: options.disableDefaultDeployJobClient,
-    resolveDeployCloneTargetOverride: options.resolveDeployCloneTarget,
-    resolveRepoOrigin: options.resolveRepoOrigin,
-  })
-  // The per-run agent-observability + web-search + sealed-secret services (agent-context /
-  // search-query / harness-call telemetry sinks, the web-search upstream + availability
-  // resolver, the package-registry + test-secret dispatch resolvers, the subscription-quota
-  // provider), lifted into `container-run-services-deps.ts` to keep this root within budget.
-  // Kept as ONE value and SPREAD into the finalize bundle below rather than destructured
-  // field-by-field: every field is either forwarded verbatim or read at a single call site, so
-  // the destructure was ~13 lines of pure re-listing that had to be edited twice per new run
-  // service (once here, once in the bundle literal).
-  const runServices = buildNodeRunServices({
-    env,
-    config,
-    repos,
-    idGenerator,
-    clock,
-    caches: options.caches,
-  })
-
-  const container = buildNodeContainerExecutor({
-    env,
-    config,
-    appRegistry,
-    resolveRepoTarget,
-    resolveRepoTargets,
-    resolveTransport,
-    resolveWorkspaceModelDefault,
-    agentKindRegistry,
-    mintInstallationTokenOverride: options.mintInstallationToken,
+  const {
+    apiKeys,
+    publicApiKeys,
+    localModelEndpoints,
+    userSecrets,
+    openRouterCatalog,
     subscriptions,
     personalSubscriptions,
-    resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
-    resolveUserGitHubToken,
-    agentContextObservability: runServices.agentContextObservability,
-    resolveWebSearchAvailability: runServices.resolveWebSearchAvailability,
-    resolveRepoOrigin: options.resolveRepoOrigin,
-    resolvePackageRegistries: runServices.resolvePackageRegistries,
-    resolveTestSecrets: runServices.resolveTestSecrets,
-    recordHarnessCalls: runServices.recordHarnessCalls,
-    recordSubscriptionQuotaUsage: (target, usage) =>
-      runServices.subscriptionQuotaProvider.recordUsage(target, usage),
-  })
-
-  // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
-  // route to the container (and fail loudly when its prerequisites are unconfigured).
-  // Optionally wrapped with the consensus mechanism below (after the event publisher
-  // is built, so live consensus pushes ride the same hub).
-  const standardAgentExecutor = new CompositeAgentExecutor(inline, container, agentKindRegistry)
-
-  // The GitHub-client-dependent slice of the composition root: the engine's GitHub client, the
-  // CI / mergeability / review / doc-quality gate-provider wiring (registered onto
-  // `providerRegistry` as a side effect — kept BEFORE `applyGateProviders` below), the task-source
-  // deps, issue writeback, and the GitHub gate + projection/sync module deps. Lifted into
-  // `container-github-deps.ts` (mirroring the Worker's `selectGitHubDeps`) so this composition root
-  // stays within the file-size budget — same reason `container-executor-deps.ts` exists.
-  const {
-    githubClient,
-    tasks,
-    fileGitHubIssue,
-    issueWritebackProvider,
-    githubGateDeps,
-    githubModuleDeps,
-  } = selectNodeGitHubDeps({
-    config,
-    db,
-    remoteRepos,
-    sourced,
-    idGenerator,
-    clock,
-    appRegistry,
-    githubClientOverride: options.githubClient,
-    resolveUserGitHubToken,
-    gitlabEngineClient,
-    providerRegistry,
-    resolveRepoTarget,
-    resolveRepoOrigin: options.resolveRepoOrigin,
-    githubInstallationRepository,
-    repoProjectionRepository,
-    blockRepository: repos.blockRepository,
-    trackerSettingsRepository: repos.trackerSettingsRepository,
-    workspaceRepository: repos.workspaceRepository,
-    caches: options.caches,
-  })
-
-  // Repo-bootstrap: the reference-architecture library + the container-dispatching
-  // `repoBootstrapper`, lifted into `container-transport-deps.ts` to keep this root within budget.
-  const { bootstrapJobRepository, bootstrapMintInstallationToken, repoBootstrapper } =
-    buildNodeBootstrapper({
-      env,
-      config,
-      sourced,
-      resolveTransport,
-      githubInstallationRepository,
-      repoProjectionRepository,
-      appRegistry,
-      githubClient,
-      mintInstallationToken: options.mintInstallationToken,
-      resolvePackageRegistries: runServices.resolvePackageRegistries,
-      caches: options.caches,
-    })
-
+    traceSink,
+    modelProviderResolver,
+    cloudflareModelsEnabled,
+  } = models
   return finalizeNodeContainer({
-    // The per-run services bundle, forwarded as a unit (see `runServices` above).
-    ...runServices,
+    // The run-platform bundle, forwarded as a unit (see `platform` above).
+    ...platform,
     config,
     options,
     env,
@@ -1160,12 +940,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     sourced,
     idGenerator,
     clock,
-    standardAgentExecutor,
     modelProviderResolver,
     resolveWorkspaceModelDefault,
     agentKindRegistry,
     providerRegistry,
-    githubInstallationRepository,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -1179,23 +957,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     localModelEndpoints,
     openRouterCatalog,
     cloudflareModelsEnabled,
-    deployDeps,
-    runnerPoolConnectionRepository,
-    githubClient,
-    tasks,
-    fileGitHubIssue,
-    issueWritebackProvider,
-    githubGateDeps,
-    githubModuleDeps,
-    bootstrapJobRepository,
-    repoBootstrapper,
-    resolveRepoTarget,
-    baseDeployMint,
-    resolveTransport,
-    bootstrapMintInstallationToken,
     remoteRepos,
-    appRegistry,
-    repoProjectionRepository,
     vcsRegistry,
     publicApiKeys,
     userSecrets,
