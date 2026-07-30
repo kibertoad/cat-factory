@@ -100,7 +100,6 @@
   that explains the card.
 
   ## The wire contract and the banner
-
   - `infraSetupStatusSchema` gains **`unreachable`**, riding the existing setup projection rather than
     a second "your infra is broken" surface: the consequence is identical to `not_defined` (a class of
     agents cannot run) and the same operator surface fixes it, so the banner, deep-link and i18n are
