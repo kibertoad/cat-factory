@@ -4297,6 +4297,12 @@
     "recommendationProgress": "{ready} / {total} готово",
     "generatingSuggestion": "Генерування обґрунтованої пропозиції…",
     "currentStandard": "Поточний стандарт: {title}",
+    "grounding": {
+      "standard": "Стандарт команди",
+      "project-spec": "Специфікація проєкту",
+      "web": "Джерело з інтернету",
+      "general-practice": "Загальна практика"
+    },
     "accept": "Прийняти",
     "reject": "Відхилити",
     "reRequestPlaceholder": "Попросити іншу рекомендацію…",

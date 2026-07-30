@@ -3864,6 +3864,12 @@
     "recommendationProgress": "{ready} / {total} bereit",
     "generatingSuggestion": "Ein fundierter Vorschlag wird generiert…",
     "currentStandard": "Aktueller Standard: {title}",
+    "grounding": {
+      "standard": "Team-Standard",
+      "project-spec": "Projektspezifikation",
+      "web": "Webquelle",
+      "general-practice": "Allgemeine Praxis"
+    },
     "accept": "Annehmen",
     "reject": "Ablehnen",
     "reRequestPlaceholder": "Nach einer anderen Empfehlung fragen…",

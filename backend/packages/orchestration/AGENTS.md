@@ -5,7 +5,9 @@
 `CoreDependencies`, is ~815 lines of pure declaration and lives in its own
 `src/container/dependencies.ts`, re-exported from `container.ts` so every import site is
 unchanged — add a new dependency field there, not here. The ~30
-optional-module factory functions live in `src/container/modules.ts`, and their optional
+optional-module factory functions live in `src/container/modules.ts` (the inline iterative-review
+ones — requirements / clarity / brainstorm — in `src/container/review-modules.ts`, re-exported from
+`modules.ts`), and their optional
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`
 — see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
@@ -81,8 +83,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `recurring/`, `settings/`, … — the other module services. In `review/`, EVERY write to a review
   goes through `IterativeReviewService.mutateReview` (load → apply → rev-guarded
   `compareAndSwap`, reloading and re-applying on a lost race) and a fresh run publishes with the
-  atomic `replaceForBlock` — a blind `upsert` drops a concurrent editor's answer. See
-  CLAUDE.md → "Requirements review".
+  atomic `replaceForBlock` — a blind `upsert` drops a concurrent editor's answer. `review/` also
+  owns the two things every inline reviewer shares: `product-context.ts` (which system the work
+  belongs to, STATING an unresolved one) and `IterativeReviewService.systemPromptFor`, which composes
+  each kind's `{ role, directives }` pair so a per-workspace prompt override replaces the role only.
+  See CLAUDE.md → "Requirements review".
 - `validation/` — request validation.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",

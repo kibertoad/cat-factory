@@ -19,8 +19,6 @@ import type {
   JudgeAssessor,
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
-import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
-import { getFragment } from '@cat-factory/prompt-fragments'
 import type { SpendService } from '@cat-factory/spend'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -59,7 +57,6 @@ import { BoardService } from '../modules/board/BoardService.js'
 import { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { BootstrapService } from '../modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from '../modules/envConfigRepair/EnvConfigRepairService.js'
-import { RequirementReviewService } from '../modules/requirements/RequirementReviewService.js'
 import {
   buildEnvironmentProvisioningService,
   buildEnvironmentTestService,
@@ -72,8 +69,6 @@ import { JudgeService } from '../modules/execution/JudgeService.js'
 import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
-import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
-import { BrainstormService } from '../modules/brainstorm/BrainstormService.js'
 import { NotificationService } from '../modules/notifications/NotificationService.js'
 import { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
@@ -101,7 +96,6 @@ import type {
   CoreDependencies,
   DocumentsModule,
   EnvironmentsModule,
-  FragmentLibraryModule,
   GitHubModule,
   RunnersModule,
   ServicesModule,
@@ -109,8 +103,6 @@ import type {
 } from '../container.js'
 import type {
   AgentPromptsModule,
-  BrainstormModule,
-  ClarityModule,
   IncidentEnrichmentModule,
   KaizenModule,
   MergeTrackRecordModule,
@@ -738,183 +730,14 @@ export function createForkChatService(deps: CoreDependencies): ForkChatService |
   })
 }
 
-export function createRequirementsModule(
-  deps: CoreDependencies,
-  notificationService?: NotificationService,
-  fragmentLibrary?: FragmentLibraryModule,
-): RequirementsModule | undefined {
-  const { requirementReviewRepository } = deps
-  if (!requirementReviewRepository) return undefined
-
-  const service = new RequirementReviewService({
-    requirementReviewRepository,
-    blockRepository: deps.blockRepository,
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    // Tell product people + the task creator to react to a review's findings (when
-    // the notifications subsystem is wired). Best-effort; absent → no notification.
-    notificationService,
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The dedicated reviewer ref, else the document planner's (both the agents' default).
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    // In local mode, run the reviewer inline through the ambient Claude Code / Codex CLI on a
-    // subscription model instead of degrading to the routing default.
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    // Honour the workspace's model presets for the `requirements` kind too, so the
-    // reviewer resolves its model exactly like a pipeline step. Reuses the already
-    // wired model-preset repository (the workspace default preset); absent → only
-    // block-pin + routing default.
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
-    // The reviewer runs during a parked run, so its execution + initiator come from the
-    // block's active run — threaded into the model scope so an inline subscription ref served
-    // through a leased per-run activation (local container inline backend) can lease it.
-    resolveRunContext: resolveBlockRunContext(deps),
-    documentRepository: deps.documentRepository,
-    taskRepository: deps.taskRepository,
-    // The Requirement Writer (second companion) grounds recommendations on the run's repo
-    // (`spec/` + `tech-spec/` via the checkout-free RepoFiles) — wired in all three facades.
-    resolveRunRepoContext: deps.resolveRunRepoContext,
-    // …and on the block's best-practice fragments (team/org standards), checked FIRST. Uses the
-    // SAME task-authoritative rule as the agent context builder (the shared `applicableFragmentIds`
-    // helper): a task grounds on its OWN `fragmentIds` only — a per-task removal must stick here too
-    // — while a frame-level review re-unions the service's `serviceFragmentIds`. Resolved against
-    // the merged tenant catalog when the fragment library is wired (so managed + document-backed
-    // fragments ground the review exactly like they reach a code-aware run), else the static pool.
-    resolveBlockFragments: async (workspaceId: string, blockId: string) => {
-      const block = await deps.blockRepository.get(workspaceId, blockId)
-      if (!block) return []
-      const serviceFrame = await resolveServiceFrameBlock(
-        (id) => deps.blockRepository.get(workspaceId, id),
-        blockId,
-        block,
-      )
-      const ids = applicableFragmentIds(block, serviceFrame)
-      if (fragmentLibrary) {
-        // Resolve the merged tenant catalog ONCE and reuse it for both the titles map and
-        // the body resolution (which would otherwise re-resolve the same catalog).
-        const catalog = await fragmentLibrary.libraryService.resolveCatalog(workspaceId)
-        const titles = new Map(catalog.map((e) => [e.id, e.title]))
-        // Reviewer grounding reads the FULL standards (the default verbosity): a review
-        // judges built work against what the standard actually says, which is the same
-        // reason reviewer kinds never fold a brief.
-        const bodies = await fragmentLibrary.libraryService.resolveBodiesForRun(workspaceId, ids, {
-          catalog,
-        })
-        return bodies.map(({ id, body }) => ({ id, title: titles.get(id) ?? id, body }))
-      }
-      const out: { id: string; title: string; body: string }[] = []
-      for (const id of ids) {
-        const fragment = getFragment(id)
-        if (fragment) out.push({ id, title: fragment.title, body: fragment.body })
-      }
-      return out
-    },
-    // `webSearch` (gateway-RAG) is wired by the web-search-connection workstream; until then
-    // the Writer still gets provider-hosted web search on Anthropic/OpenAI models.
-    // When an upstream `requirements-brainstorm` dialogue settled a converged direction, the
-    // reviewer critiques THAT (the refined requirements) instead of the raw description.
-    resolveBrainstormDirection: deps.brainstormSessionRepository
-      ? async (workspaceId: string, blockId: string) => {
-          const session = await deps.brainstormSessionRepository!.getByBlockStage(
-            workspaceId,
-            blockId,
-            'requirements',
-          )
-          return session?.status === 'incorporated' && session.convergedDirection
-            ? session.convergedDirection
-            : undefined
-        }
-      : undefined,
-  })
-  return { service }
-}
-
-/**
- * Assemble the brainstorm (structured-dialogue) module when its repository is present (both
- * runtime facades wire it unconditionally). Mirrors {@link createClarityModule}: it builds ONE
- * {@link BrainstormService} per stage (sharing the repository) and reuses the requirements
- * reviewer's model config since all the inline reviewers resolve their model identically. The
- * architecture stage seeds from the refined requirements (a requirements review's incorporated
- * doc, else the requirements-brainstorm's converged direction).
- */
-export function createBrainstormModule(
-  deps: CoreDependencies,
-  notificationService?: NotificationService,
-): BrainstormModule | undefined {
-  const { brainstormSessionRepository } = deps
-  if (!brainstormSessionRepository) return undefined
-
-  const resolveWorkspaceModelDefault = deps.modelPresetRepository
-    ? (workspaceId: string, agentKind: string, modelPresetId?: string) =>
-        resolvePresetModelForKind(
-          deps.modelPresetRepository!,
-          workspaceId,
-          agentKind,
-          modelPresetId,
-        )
-    : undefined
-
-  // The architecture stage's seed: the most refined requirements available — a settled
-  // requirements review's incorporated doc, else the requirements-brainstorm's direction.
-  const resolveRefinedRequirements = async (
-    workspaceId: string,
-    blockId: string,
-  ): Promise<string | undefined> => {
-    const review = await deps.requirementReviewRepository?.getByBlock(workspaceId, blockId)
-    if (review?.status === 'incorporated' && review.incorporatedRequirements) {
-      return review.incorporatedRequirements
-    }
-    const session = await brainstormSessionRepository.getByBlockStage(
-      workspaceId,
-      blockId,
-      'requirements',
-    )
-    return session?.status === 'incorporated' && session.convergedDirection
-      ? session.convergedDirection
-      : undefined
-  }
-
-  const common = {
-    brainstormSessionRepository,
-    blockRepository: deps.blockRepository,
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    notificationService,
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    // Brainstorm stages are pipeline gate steps that run during a parked run, so their
-    // execution + initiator come from the block's active run — threaded into the model scope
-    // so an inline subscription ref served through a leased per-run activation (local container
-    // inline backend) can lease it, exactly like the requirements/clarity reviewers.
-    resolveRunContext: resolveBlockRunContext(deps),
-    resolveWorkspaceModelDefault,
-  }
-
-  return {
-    services: {
-      requirements: new BrainstormService({ ...common, stage: 'requirements' }),
-      architecture: new BrainstormService({
-        ...common,
-        stage: 'architecture',
-        resolveRefinedRequirements,
-      }),
-    },
-  }
-}
+// The inline iterative-review modules (requirements / clarity / brainstorm) live in
+// `review-modules.ts` — one cohesive group, extracted when this file hit its size budget. Re-exported
+// here so the composition root keeps one import site for every module factory.
+export {
+  createBrainstormModule,
+  createClarityModule,
+  createRequirementsModule,
+} from './review-modules.js'
 
 /**
  * Assemble the Kaizen module when its repositories are wired (both runtime facades wire them
@@ -955,44 +778,6 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
             modelPresetId,
           )
       : undefined,
-  })
-  return { service }
-}
-
-/**
- * Assemble the clarity-review module when its repository is present (both runtime facades
- * wire it unconditionally). Mirrors {@link createRequirementsModule}: it reuses the
- * requirements reviewer's model config (the same routing default) since both reviewers
- * resolve their model identically.
- */
-export function createClarityModule(
-  deps: CoreDependencies,
-  notificationService?: NotificationService,
-): ClarityModule | undefined {
-  const { clarityReviewRepository } = deps
-  if (!clarityReviewRepository) return undefined
-
-  const service = new ClarityReviewService({
-    clarityReviewRepository,
-    blockRepository: deps.blockRepository,
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    notificationService,
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
-    resolveRunContext: resolveBlockRunContext(deps),
   })
   return { service }
 }

@@ -4309,6 +4309,12 @@
     "recommendationProgress": "{ready} / {total} 件準備完了",
     "generatingSuggestion": "根拠に基づいた提案を生成中…",
     "currentStandard": "現在の標準: {title}",
+    "grounding": {
+      "standard": "チーム標準",
+      "project-spec": "プロジェクト仕様",
+      "web": "Web の情報源",
+      "general-practice": "一般的な慣行"
+    },
     "accept": "承認",
     "reject": "却下",
     "reRequestPlaceholder": "別の推奨をリクエスト…",

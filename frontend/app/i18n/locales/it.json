@@ -3864,6 +3864,12 @@
     "recommendationProgress": "{ready} / {total} pronte",
     "generatingSuggestion": "Generazione di un suggerimento fondato…",
     "currentStandard": "Standard attuale: {title}",
+    "grounding": {
+      "standard": "Standard del team",
+      "project-spec": "Specifica del progetto",
+      "web": "Fonte web",
+      "general-practice": "Prassi generale"
+    },
     "accept": "Accetta",
     "reject": "Rifiuta",
     "reRequestPlaceholder": "Chiedi una raccomandazione diversa…",

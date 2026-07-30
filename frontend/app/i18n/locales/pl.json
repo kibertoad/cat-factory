@@ -4297,6 +4297,12 @@
     "recommendationProgress": "{ready} / {total} gotowych",
     "generatingSuggestion": "Generowanie ugruntowanej sugestii…",
     "currentStandard": "Aktualny standard: {title}",
+    "grounding": {
+      "standard": "Standard zespołu",
+      "project-spec": "Specyfikacja projektu",
+      "web": "Źródło z sieci",
+      "general-practice": "Ogólna praktyka"
+    },
     "accept": "Akceptuj",
     "reject": "Odrzuć",
     "reRequestPlaceholder": "Poproś o inną rekomendację…",

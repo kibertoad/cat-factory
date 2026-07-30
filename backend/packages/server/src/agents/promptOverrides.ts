@@ -1,8 +1,11 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
+  type BespokeSystemPrompt,
   appendedDirectivesFor,
   baseSystemPromptFor,
+  composeBespokePrompt,
+  INLINE_ENGINE_SYSTEM_PROMPTS,
   systemPromptFor,
 } from '@cat-factory/agents'
 import { MERGER_AGENT_KIND, ON_CALL_AGENT_KIND } from '@cat-factory/orchestration'
@@ -18,8 +21,9 @@ import {
 // A workspace can replace an agent kind's system prompt from the pipeline builder; the engine
 // resolves the live override once per dispatch onto `AgentRunContext.systemPromptOverride`,
 // and every executor has to honour it. The inline and consensus executors do that by passing
-// it straight to `systemPromptFor`'s `override` parameter. The CONTAINER dispatch needs this
-// module because two kinds bypass `systemPromptFor` entirely.
+// it straight to `systemPromptFor`'s `override` parameter. This module exists for the kinds that
+// bypass `systemPromptFor` entirely: two container kinds (`merger`, `on-call`) and the inline
+// ENGINE steps that `IterativeReviewService` drives as bare `generateText` calls.
 //
 // The property this module exists to hold, on BOTH paths: an override replaces what an agent is
 // TOLD TO BE, never how the platform RUNS it. On the `systemPromptFor` path that separation is
@@ -27,44 +31,31 @@ import {
 // into the two halves here instead.
 
 /**
- * A bespoke container prompt, split at the boundary an override may cross.
+ * Every kind whose prompt is a bespoke constant rather than a `systemPromptFor` composition, keyed
+ * by agent kind and SPLIT at the boundary an override may cross ({@link BespokeSystemPrompt}).
  *
- * The halves are declared apart rather than sliced out of one string because the split is a
- * JUDGEMENT about each sentence (is this what the agent is for, or how the platform parses it?),
- * not a lexical fact — and a slice offset would silently move the boundary the next time either
- * half is edited.
+ * Two families, for the same reason. The container kinds `merger` and `on-call` dispatch a bespoke
+ * constant (both return a strict JSON assessment whose contract is stated in that prompt); the
+ * inline ENGINE steps — the requirements + clarity reviewers, both brainstorm stages, their rework
+ * editors and the Requirement Writer — are driven by `IterativeReviewService` as bare inline calls.
+ * Neither family passes through `systemPromptFor`, so neither gets its override applied or its
+ * invariants re-appended by that seam.
+ *
+ * Collected here so the prompt EDITOR and the RUN agree on what "the built-in prompt for this kind"
+ * is. With the constants only inlined, an editor built on `systemPromptFor` showed the merger's thin
+ * one-line role — and the requirements reviewer's `roles.ts` line — as the baseline while something
+ * else entirely ran: "restore the built-in" restored a prompt that was never running, and a diff
+ * against the baseline was noise.
+ *
+ * Adding another such kind means adding it here, SPLIT — a kind added with its directives inside
+ * `role` compiles and runs fine, and fails only later, as a workspace that edited it loses its
+ * guardrail or its JSON contract.
  */
-export interface BespokeContainerPrompt {
-  /** What the agent is FOR. Replaced wholesale by a workspace override. */
-  role: string
-  /**
-   * What the platform DEPENDS on: the read-only guardrail, the machine-parsed output contract,
-   * the answer-in-your-reply rule. Re-appended on top of an override, so it cannot be edited
-   * away. Carries its own leading separator, exactly as the appended directives do on the
-   * `systemPromptFor` path — so `role + directives` is the shipped prompt byte for byte.
-   */
-  directives: string
+export const BESPOKE_SYSTEM_PROMPTS: Partial<Record<AgentKind, BespokeSystemPrompt>> = {
+  ...INLINE_ENGINE_SYSTEM_PROMPTS,
+  [MERGER_AGENT_KIND]: { role: MERGER_ROLE_PROMPT, directives: MERGER_DIRECTIVES },
+  [ON_CALL_AGENT_KIND]: { role: ON_CALL_ROLE_PROMPT, directives: ON_CALL_DIRECTIVES },
 }
-
-/**
- * The kinds whose container dispatch deliberately sends a bespoke prompt instead of the kind's
- * role text (both return a strict JSON assessment whose contract is stated in that prompt).
- *
- * Named here rather than left inline at the two dispatch sites so the prompt EDITOR and the
- * DISPATCH agree on what "the built-in prompt for this kind" is. With the constants only
- * inlined, an editor built on `systemPromptFor` would show a merger's thin one-line role as
- * the baseline while the container actually ran this text — so "restore the built-in" would
- * restore something that was never running, and a diff against the baseline would be noise.
- *
- * Adding a third such kind means adding it here, SPLIT — a kind added with its directives
- * inside `role` compiles and dispatches fine, and fails only later as a workspace that edited
- * it losing its guardrail or its JSON contract.
- */
-export const BESPOKE_CONTAINER_SYSTEM_PROMPTS: Partial<Record<AgentKind, BespokeContainerPrompt>> =
-  {
-    [MERGER_AGENT_KIND]: { role: MERGER_ROLE_PROMPT, directives: MERGER_DIRECTIVES },
-    [ON_CALL_AGENT_KIND]: { role: ON_CALL_ROLE_PROMPT, directives: ON_CALL_DIRECTIVES },
-  }
 
 /**
  * The SHIPPED prompt for a kind — what an override replaces, and what the editor shows as the
@@ -78,7 +69,7 @@ export const BESPOKE_CONTAINER_SYSTEM_PROMPTS: Partial<Record<AgentKind, Bespoke
  * duplicate it on save.
  */
 export function builtInBaseSystemPrompt(kind: AgentKind, registry: AgentKindRegistry): string {
-  return BESPOKE_CONTAINER_SYSTEM_PROMPTS[kind]?.role ?? baseSystemPromptFor(kind, registry)
+  return BESPOKE_SYSTEM_PROMPTS[kind]?.role ?? baseSystemPromptFor(kind, registry)
 }
 
 /**
@@ -91,7 +82,7 @@ export function builtInBaseSystemPrompt(kind: AgentKind, registry: AgentKindRegi
  * rather than measured because their dispatch never goes through `systemPromptFor` at all.
  */
 export function builtInDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
-  return BESPOKE_CONTAINER_SYSTEM_PROMPTS[kind]?.directives ?? appendedDirectivesFor(kind, registry)
+  return BESPOKE_SYSTEM_PROMPTS[kind]?.directives ?? appendedDirectivesFor(kind, registry)
 }
 
 /**
@@ -106,7 +97,7 @@ export function dispatchSystemPromptFor(
   context: AgentRunContext,
   registry: AgentKindRegistry,
 ): string {
-  const bespoke = BESPOKE_CONTAINER_SYSTEM_PROMPTS[context.agentKind]
-  if (bespoke) return `${context.systemPromptOverride ?? bespoke.role}${bespoke.directives}`
+  const bespoke = BESPOKE_SYSTEM_PROMPTS[context.agentKind]
+  if (bespoke) return composeBespokePrompt(bespoke, context.systemPromptOverride)
   return systemPromptFor(context.agentKind, registry, context.systemPromptOverride)
 }
