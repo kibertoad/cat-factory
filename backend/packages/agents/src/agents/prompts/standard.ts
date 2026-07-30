@@ -354,6 +354,12 @@ export function linkedContextSection(
 }
 
 /**
+ * How many unseated documents the inline omission notice NAMES before falling back to a count.
+ * The notice reports a budget overrun, so it must not be able to cause one.
+ */
+const UNSEATED_NAMED_LIMIT = 5
+
+/**
  * The rendering half of {@link linkedContextSection}, taking the resolved docs/issues
  * directly instead of an {@link AgentRunContext}. Exists because the initiative-planning
  * INTERVIEWER is an inline service that never passes through the context builder (it
@@ -405,9 +411,9 @@ export function renderLinkedContext(
     lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
     // An inline caller has no `.cat-context/` to fall back on, so a document the budget can't seat
     // is genuinely absent from this prompt. A clamped body already marks its own cut; the ones that
-    // got no room at all are named below, because an unmentioned omission reads as "this task has
-    // no other requirements" — which is how an inline reviewer confidently approves against a spec
-    // it never received.
+    // got no room at all are named below (up to {@link UNSEATED_NAMED_LIMIT}), because an
+    // unmentioned omission reads as "this task has no other requirements" — which is how an inline
+    // reviewer confidently approves against a spec it never received.
     const unseated: typeof contextDocs = []
     for (const doc of contextDocs) {
       const remaining = CONTEXT_BUDGET.inlineBodyTokens - spent
@@ -419,15 +425,21 @@ export function renderLinkedContext(
       spent += estimateTokens(slice)
       lines.push(`### ${doc.title} (${doc.url})`, slice)
     }
-    if (unseated.length)
+    if (unseated.length) {
+      // The notice is BOUNDED, or it becomes the overrun it exists to report: a task with thirty
+      // attachments would append thirty titles and URLs to a prompt that just ran out of budget.
+      // Naming a handful and counting the rest is what the materialized index above does too.
+      const named = unseated.slice(0, UNSEATED_NAMED_LIMIT)
+      const rest = unseated.length - named.length
       lines.push(
         '',
         `${unseated.length} further linked document${unseated.length === 1 ? '' : 's'} did not fit ` +
           `this prompt's context budget and ${unseated.length === 1 ? 'is' : 'are'} NOT included ` +
-          `above: ${unseated.map((d) => `${d.title} (${d.url})`).join(', ')}. Treat what you were ` +
-          `given as incomplete, and say so in your output if the missing text would change your ` +
-          `conclusion.`,
+          `above: ${named.map((d) => `${d.title} (${d.url})`).join(', ')}` +
+          `${rest > 0 ? `, and ${rest} more` : ''}. Treat what you were given as incomplete, and ` +
+          `say so in your output if the missing text would change your conclusion.`,
       )
+    }
   }
   if (contextTasks?.length) {
     lines.push('', 'Linked tracker issues (extra context):')

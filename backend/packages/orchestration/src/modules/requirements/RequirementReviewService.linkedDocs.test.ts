@@ -67,4 +67,28 @@ describe('RequirementReviewService: attached documents', () => {
       CONTEXT_DOCUMENT_UNREADABLE,
     )
   })
+
+  it('refuses a body this INLINE reader cannot project to an excerpt, not just a blank one', async () => {
+    // This reviewer has no checkout: it renders the excerpt and nothing else. A body that is pure
+    // markup — the empty fenced block an extractor emits for an embed it cannot render — is
+    // something a CONTAINER agent at least opens, and collapses to nothing here. Testing the body
+    // and rendering the excerpt would leave the very hole this rule closes open, one field
+    // narrower.
+    const error = await makeService([attached({ body: '```\n```' })])
+      .review('ws', 'blk_1')
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENT_UNREADABLE)
+  })
+
+  it('derives the excerpt from the body when the stored excerpt is blank', async () => {
+    // A document imported before its excerpt was computed (or through a path that leaves it
+    // empty) still has readable prose; the reviewer must SEE it rather than be handed ''.
+    const error = await makeService([attached({ body: 'Widgets must page at 50.', excerpt: '' })])
+      .review('ws', 'blk_1')
+      .catch((e: unknown) => e)
+    expect((error as ValidationError | undefined)?.details?.reason).not.toBe(
+      CONTEXT_DOCUMENT_UNREADABLE,
+    )
+  })
 })

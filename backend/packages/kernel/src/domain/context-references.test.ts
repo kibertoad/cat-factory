@@ -5,6 +5,7 @@ import {
   assertContextReferencesFit,
   CONTEXT_DOCUMENT_UNREADABLE,
   CONTEXT_DOCUMENTS_OVER_BUDGET,
+  contextExcerptFor,
   hasReadableContent,
 } from './context-references.js'
 
@@ -20,6 +21,29 @@ describe('hasReadableContent', () => {
     expect(hasReadableContent({ body: '  \n ', excerpt: '' })).toBe(false)
     expect(hasReadableContent({})).toBe(false)
     expect(hasReadableContent({ body: null, excerpt: null })).toBe(false)
+  })
+})
+
+describe('contextExcerptFor', () => {
+  it('prefers the stored excerpt, and derives one from the body when it is blank', () => {
+    expect(contextExcerptFor({ body: '# Spec', excerpt: 'Token bucket.' })).toBe('Token bucket.')
+    expect(contextExcerptFor({ body: '# Rate limiter\n\n100 rps.', excerpt: '' })).toContain(
+      '100 rps',
+    )
+  })
+
+  it('is EMPTY for a non-blank body that carries no text — the case hasReadableContent accepts', () => {
+    // The divergence is the whole reason this exists. An extractor that meets an embed it cannot
+    // render emits an empty fenced block: markup a container agent opens and can at least see,
+    // and nothing at all once collapsed to text for an excerpt-only caller.
+    const markupOnly = { body: '```\n```', excerpt: '' }
+    expect(hasReadableContent(markupOnly)).toBe(true)
+    expect(contextExcerptFor(markupOnly)).toBe('')
+  })
+
+  it('is empty for absent content', () => {
+    expect(contextExcerptFor({})).toBe('')
+    expect(contextExcerptFor({ body: null, excerpt: null })).toBe('')
   })
 })
 
@@ -54,6 +78,21 @@ describe('assertContextDocumentsReadable', () => {
     expect(() => assertContextDocumentsReadable([{ title: 'Local notes', url: '' }])).toThrow(
       /"Local notes"/,
     )
+  })
+
+  it('agrees between the prose and details.references about a whitespace-only URL', () => {
+    // Both halves trim, so a blank-but-present url can't be named in the prose as absent while
+    // landing in the machine-readable list as '   '.
+    const error = (() => {
+      try {
+        assertContextDocumentsReadable([{ title: 'Local notes', url: '   ' }])
+        return null
+      } catch (e) {
+        return e as ValidationError
+      }
+    })()
+    expect(error!.message).toContain('"Local notes".')
+    expect(error!.details?.references).toEqual(['Local notes'])
   })
 })
 

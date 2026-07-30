@@ -104,6 +104,8 @@ describe('resolveLinkedContext: unresolvable references', () => {
   it('logs — never fails — a claimed URL that matches nothing imported', async () => {
     // `parseNotionRef`-style claims are host-blind, so a dashboard link carrying a UUID would
     // otherwise block the run. The drop stays; the log is what keeps it from being silent.
+    // At INFO, not `warn`: this is a normal, permanent state of a healthy task and it re-resolves
+    // on every dispatch, so a warning would repeat forever with no remedy anyone means to apply.
     const logger = createRecordingLogger()
     const sources = linkedContextSourcesFrom({
       documentRepository: documentsRepo([]),
@@ -120,9 +122,10 @@ describe('resolveLinkedContext: unresolvable references', () => {
     expect(docs).toEqual([])
     expect(
       logger.lines.some(
-        (l) => l.level === 'warn' && l.fields?.url === 'https://grafana.example/d/4242',
+        (l) => l.level === 'info' && l.fields?.url === 'https://grafana.example/d/4242',
       ),
     ).toBe(true)
+    expect(logger.lines.some((l) => l.level === 'warn')).toBe(false)
   })
 
   it('is a no-op for an unwired documents integration', async () => {

@@ -125,4 +125,25 @@ describe('linked context in agent prompts', () => {
     expect(prompt).toContain('Pricing addendum (https://docs/pricing)')
     expect(prompt).toContain('Treat what you were given as incomplete')
   })
+
+  it('bounds the omission notice — it reports an overrun, so it must not cause one', () => {
+    const ctx = contextFor('reviewer' as AgentKind)
+    const one = ctx.block.contextDocs![0]!
+    ctx.block.contextDocs = [
+      { ...one, title: 'Huge PRD', body: 'x'.repeat(40_000) },
+      ...Array.from({ length: 30 }, (_, i) => ({
+        ...one,
+        title: `Addendum ${i}`,
+        url: `https://docs/addendum-${i}`,
+      })),
+    ]
+    ctx.block.contextTasks = []
+    const prompt = userPromptFor(ctx, registry)
+    // All 30 are COUNTED, only the first few are named, and the rest are accounted for — naming
+    // every one would append 30 titles and URLs to a prompt that just ran out of budget.
+    expect(prompt).toContain('30 further linked documents did not fit')
+    expect(prompt).toContain('Addendum 0 (https://docs/addendum-0)')
+    expect(prompt).toContain('and 25 more')
+    expect(prompt).not.toContain('Addendum 29')
+  })
 })

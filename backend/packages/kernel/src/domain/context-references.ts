@@ -1,3 +1,4 @@
+import { buildExcerpt } from '../shared/markdown.logic.js'
 import { redactSecrets } from '../shared/redact-secrets.logic.js'
 import { ValidationError } from './errors.js'
 
@@ -11,10 +12,16 @@ import { ValidationError } from './errors.js'
 // The failure mode it removes is silent: a reference that resolves to an empty page, or a corpus
 // that overflows the job body's byte budget, used to be dropped on the floor. The run then looked
 // completely healthy while the agent worked from a spec nobody noticed it never read — the exact
-// "'absent' and 'zero' must never render the same" hazard, one layer up. Both refusals are
-// `ValidationError`s carrying a machine-readable `reason`, so a throw on the dispatch path is
-// classified as a `preflight` rejection (`classifyDispatchFailure`) and the run's failure record
-// keeps the cause code alongside the prose.
+// "'absent' and 'zero' must never render the same" hazard, one layer up.
+//
+// Both refusals are `ValidationError`s carrying a machine-readable `reason`, and both land on the
+// run as a `preflight` failure — the honest kind, since no agent ran. They refuse at DIFFERENT
+// depths and are therefore classified by different seams, which must agree:
+// `buildContextFiles` refuses inside `startJob`, so `classifyDispatchFailure` sees the throw;
+// `resolveLinkedContext` refuses earlier, inside the context builder, so the throw leaves
+// `advanceInstance` and the driver's `failureFromAdvanceError` sees it. Both map a `DomainError`
+// to `preflight` + its `details.reason`, so the run's failure record keeps the cause code
+// alongside the prose either way.
 //
 // Both remedies are the human's, and both are named in the message: make the reference readable
 // (re-import the page), or detach it from the task — a task is allowed to proceed without a
@@ -44,9 +51,13 @@ function describeRef(ref: ContextReferenceRef): string {
   return url ? `"${title}" (${url})` : `"${title}"`
 }
 
-/** The machine-readable `details.references` list: the URL where there is one, else the title. */
+/**
+ * The machine-readable `details.references` list: the URL where there is one, else the title.
+ * TRIMMED on the same rule {@link describeRef} uses, so the prose and the machine-readable list
+ * can never disagree about whether a reference carries a URL.
+ */
 function referenceIds(refs: readonly ContextReferenceRef[]): string[] {
-  return refs.map((r) => redactSecrets(r.url || r.title) ?? '')
+  return refs.map((r) => redactSecrets(r.url.trim() || r.title.trim()) ?? '')
 }
 
 /** `a`, `b` and `c` — an oxford-comma-free list for a one-line refusal. */
@@ -73,6 +84,22 @@ export function hasReadableContent(doc: {
 }
 
 /**
+ * The readable text an EXCERPT-ONLY caller actually puts in front of its model: the stored
+ * excerpt, else one derived from the body. Empty ⇒ that caller has nothing to show.
+ *
+ * {@link hasReadableContent} is the right test where the RAW body is delivered — a container agent
+ * opens the materialised markdown source and can at least see what is in it. A caller with no
+ * checkout renders this projection instead, and it can come back empty from a body that is NOT
+ * blank: `import` stores `buildExcerpt(body)`, i.e. `markdownToText`, so a body that is pure
+ * MARKUP — the empty fenced block an extractor emits for an embed it cannot render — collapses to
+ * nothing. Asserting over the body and then rendering this is how such a caller would re-open the
+ * very hole this module closes, one field narrower — so it asserts over what it renders.
+ */
+export function contextExcerptFor(doc: { body?: string | null; excerpt?: string | null }): string {
+  return doc.excerpt?.trim() || buildExcerpt(doc.body ?? '').trim()
+}
+
+/**
  * Refuse the run when any referenced context document resolved to an unreadable page, naming each
  * one plus the two remedies. Nothing to report ⇒ a no-op, so every caller can assert
  * unconditionally.
@@ -95,6 +122,11 @@ export function assertContextDocumentsReadable(unreadable: readonly ContextRefer
  * an agent in front of a partial corpus it has no way to notice is partial — and unlike an
  * unreadable page, there is nothing to re-import here: the human has to decide what this task
  * actually needs.
+ *
+ * The remedy is worded for LINKED CONTEXT rather than for documents, because linked TRACKER ISSUES
+ * are sized into the same budget and can be what overflows it: "re-import a shorter page" is
+ * nonsense advice about an issue, and the message names the items, so the reader can already see
+ * which kind each one is.
  */
 export function assertContextReferencesFit(
   omitted: readonly ContextReferenceRef[],
@@ -106,8 +138,8 @@ export function assertContextReferencesFit(
   throw new ValidationError(
     `The context attached to this task totals ${kb(sizes.totalBytes)}, over the ` +
       `${kb(sizes.budgetBytes)} an agent's checkout can carry, so ${omitted.length} ${plural} ` +
-      `would not reach it: ${joinRefs(omitted)}. Detach what this task does not need (or attach a ` +
-      `shorter page) to unblock the run.`,
+      `would not reach it: ${joinRefs(omitted)}. Detach the linked context this task does not ` +
+      `need to unblock the run.`,
     {
       reason: CONTEXT_DOCUMENTS_OVER_BUDGET,
       references: referenceIds(omitted),

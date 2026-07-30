@@ -333,6 +333,7 @@ export {
   CONTEXT_DOCUMENTS_OVER_BUDGET,
   type ContextReferenceRef,
   hasReadableContent,
+  contextExcerptFor,
   assertContextDocumentsReadable,
   assertContextReferencesFit,
 } from './domain/context-references.js'

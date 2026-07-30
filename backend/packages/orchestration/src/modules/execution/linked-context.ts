@@ -46,7 +46,7 @@ export interface LinkedContextSources {
   /**
    * Reports the references that a document provider CLAIMED but that matched nothing imported —
    * the one class of unresolved reference that must NOT fail the run (see
-   * {@link warnUnmatchedUrls}). Absent ⇒ they are dropped as before.
+   * {@link reportUnmatchedUrls}). Absent ⇒ they are dropped as before.
    */
   logger?: Logger
 }
@@ -111,7 +111,7 @@ export interface LinkedContext {
  * THROWS (`assertContextDocumentsReadable`) when a resolved document has no readable content: a
  * reference the platform cannot put in front of the agent breaks the run rather than being dropped
  * in silence. A URL that no imported item matches at all is the one case that stays best-effort,
- * and it is logged rather than dropped — see {@link warnUnmatchedUrls} for why it cannot be a
+ * and it is logged rather than dropped — see {@link reportUnmatchedUrls} for why it cannot be a
  * refusal.
  */
 export async function resolveLinkedContext(
@@ -182,7 +182,7 @@ export async function resolveLinkedContext(
     addDoc(doc)
     addTask(task)
   }
-  warnUnmatchedUrls(sources.logger, blockId, urlItems)
+  reportUnmatchedUrls(sources.logger, blockId, urlItems)
 
   // BREAK, never skip: a reference that resolved to a page with nothing in it would otherwise put
   // the agent in front of a `.cat-context/` file holding a title and a URL it cannot open, with
@@ -211,8 +211,14 @@ export async function resolveLinkedContext(
  * link a dashboard or a blog post. So the drop stays, and the log is what keeps it from being
  * silent: an operator can see that a link the description named reached no imported page (the
  * remedy being to import it, which turns it into real context).
+ *
+ * It logs at INFO, not `warn`, for the same reason it does not refuse. The condition is a NORMAL
+ * and PERMANENT state of a healthy task — a description that links a dashboard has nothing wrong
+ * with it — and this runs on every dispatch of every step, so a `warn` would repeat forever with
+ * no remedy anyone intends to apply, which is how a channel gets tuned out. `info` is the default
+ * threshold, so the line is still there for whoever asks "why didn't the agent see my page".
  */
-function warnUnmatchedUrls(
+function reportUnmatchedUrls(
   logger: Logger | undefined,
   blockId: string,
   items: readonly {
@@ -226,7 +232,7 @@ function warnUnmatchedUrls(
   if (!logger) return
   for (const item of items) {
     if (!item.claimedBy || item.doc || item.task) continue
-    logger.warn('a linked-context url looks like a document-source page but nothing is imported', {
+    logger.info('a linked-context url looks like a document-source page but nothing is imported', {
       blockId,
       // A pasted link can carry a signed/`?token=` query, and this one reaches the log verbatim.
       url: redactSecrets(item.url),
