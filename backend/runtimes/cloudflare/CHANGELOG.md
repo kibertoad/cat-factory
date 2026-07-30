@@ -1,5 +1,27 @@
 # @cat-factory/worker
 
+## 0.127.2
+
+### Patch Changes
+
+- Updated dependencies [123ac6f]
+  - @cat-factory/agents@0.90.0
+  - @cat-factory/contracts@0.199.0
+  - @cat-factory/integrations@0.113.0
+  - @cat-factory/kernel@0.197.0
+  - @cat-factory/orchestration@0.173.0
+  - @cat-factory/server@0.183.0
+  - @cat-factory/consensus@0.13.6
+  - @cat-factory/provider-cloudflare@0.7.332
+  - @cat-factory/eks@0.1.179
+  - @cat-factory/gates@0.8.26
+  - @cat-factory/gitlab@0.14.9
+  - @cat-factory/observability-otel@0.4.23
+  - @cat-factory/prompt-fragments@0.15.22
+  - @cat-factory/spend@0.12.127
+  - @cat-factory/caching@0.11.26
+  - @cat-factory/observability-langfuse@0.9.23
+
 ## 0.127.1
 
 ### Patch Changes
@@ -76,6 +98,7 @@
   that explains the card.
 
   ## The wire contract and the banner
+
   - `infraSetupStatusSchema` gains **`unreachable`**, riding the existing setup projection rather than
     a second "your infra is broken" surface: the consequence is identical to `not_defined` (a class of
     agents cannot run) and the same operator surface fixes it, so the banner, deep-link and i18n are
