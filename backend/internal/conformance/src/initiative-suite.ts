@@ -145,7 +145,7 @@ export function defineInitiativeSuite(
     })
 
     registerInitiativeCasTests(makeRepos, ids)
-    registerInitiativeIngestTests(makeRepos, ids)
+    registerInitiativeIngestTests(name, makeRepos, ids)
     it("round-trips a block-level initiative + a task's initiativeId membership link", async () => {
       const { blocks } = makeRepos()
       const { ws, block } = ids()
@@ -394,6 +394,7 @@ function registerInitiativeCasTests(
  * per-function line budget. Every test is unchanged.
  */
 function registerInitiativeIngestTests(
+  name: string,
   makeRepos: InitiativeRepoFactory,
   ids: () => { ws: string; block: string; id: string },
 ): void {
