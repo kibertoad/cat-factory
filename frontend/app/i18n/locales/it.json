@@ -4542,6 +4542,7 @@
     "advanced": "Avanzata",
     "basicHint": "Solo gli strumenti di uso quotidiano. Passa ad Avanzata per vedere tutto.",
     "advancedHint": "Tutte le sezioni e tutte le opzioni di esecuzione.",
+    "switchTo": "Passa alla modalità {mode}",
     "pinned": "Impostato da questo deployment"
   },
   "common": {

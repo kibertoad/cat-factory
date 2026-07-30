@@ -29,6 +29,7 @@
     "advanced": "Avancée",
     "basicHint": "Uniquement les outils du quotidien. Passez en mode avancé pour tout afficher.",
     "advancedHint": "Toutes les sections et toutes les options d’exécution.",
+    "switchTo": "Passer en {mode}",
     "pinned": "Défini par ce déploiement"
   },
   "common": {

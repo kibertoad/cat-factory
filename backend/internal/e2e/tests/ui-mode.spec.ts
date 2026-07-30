@@ -60,8 +60,8 @@ test.describe('interface mode (basic / advanced)', () => {
     await expect(frame.getByTestId('frame-add-initiative')).toHaveCount(0)
 
     // Switching tiers reveals them live, through the same store the nav reads — no reload.
-    await page.getByTestId('ui-mode-switcher').click()
-    await page.getByRole('menuitem', { name: 'Advanced' }).click()
+    // Basic starts railed, where the switcher degrades to the one-button toggle.
+    await page.getByTestId('ui-mode-toggle').click()
     await expect(frame.getByTestId('frame-add-recurring').first()).toBeVisible()
     await expect(frame.getByTestId('frame-add-initiative').first()).toBeVisible()
   })
@@ -89,8 +89,8 @@ test.describe('interface mode (basic / advanced)', () => {
   }) => {
     void seededBoard
 
-    await page.getByTestId('ui-mode-switcher').click()
-    await page.getByRole('menuitem', { name: 'Advanced' }).click()
+    // Basic starts railed, so the switcher is its one-button toggle here.
+    await page.getByTestId('ui-mode-toggle').click()
 
     // No reload: the nav re-gates through the same reactive slot filter a permission flip uses.
     await expect(page.getByTestId('nav-kaizen')).toBeVisible()
@@ -98,9 +98,10 @@ test.describe('interface mode (basic / advanced)', () => {
     // Advanced's default is the expanded navbar, so the labels come back too.
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
 
-    // ...and back: switching to basic hides them again, still without a reload.
-    await page.getByTestId('ui-mode-switcher').click()
-    await page.getByRole('menuitem', { name: 'Basic' }).click()
+    // ...and back: expanded, the switcher is the segmented control, so both tiers are on screen
+    // and returning to basic is one click on the segment that names it.
+    await expect(page.getByTestId('ui-mode-switcher')).toBeVisible()
+    await page.getByTestId('ui-mode-option-basic').click()
     await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
   })
@@ -126,8 +127,8 @@ test.describe('interface mode (basic / advanced)', () => {
     seededBoard,
   }) => {
     void seededBoard
-    // The way BACK out of basic mode. The sidebar switcher is icon-only in the basic rail, so
-    // the palette entry is what keeps the advanced half discoverable — it must not be `advanced`.
+    // The way BACK out of basic mode. The sidebar switcher is a single toggle in the basic rail,
+    // so the palette entry is the searchable second route — it must not be `advanced`.
     // Driven by click rather than ⌘K so the spec doesn't also depend on the shortcut binding.
     await page.getByTestId('command-bar-launcher').click()
     await expect(page.getByTestId('command-bar')).toBeVisible()

@@ -32,6 +32,10 @@
     "advanced": "Advanced",
     "basicHint": "Everyday tools only. Switch to Advanced to see everything.",
     "advancedHint": "Every destination and every run option.",
+    "switchTo": "Switch to {mode}",
+    "@switchTo": {
+      "description": "Tooltip on the collapsed-sidebar tier button. {mode} is the OTHER interface tier name, i.e. the Basic or Advanced value from this same section - inflect the surrounding words to agree with it."
+    },
     "pinned": "Set by this deployment"
   },
   "common": {

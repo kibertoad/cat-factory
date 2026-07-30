@@ -4542,6 +4542,7 @@
     "advanced": "Erweitert",
     "basicHint": "Nur die alltäglichen Werkzeuge. Für alles auf „Erweitert“ umschalten.",
     "advancedHint": "Alle Bereiche und alle Ausführungsoptionen.",
+    "switchTo": "Zu „{mode}“ wechseln",
     "pinned": "Von dieser Installation festgelegt"
   },
   "common": {
