@@ -441,6 +441,12 @@ export {
   type InlineCliRequest,
   type InlineCliResult,
   type InlineCliRunner,
+  type InlineCliTelemetry,
+  // The marker that decides which of the two inline-telemetry producers owns a model's rows.
+  // Exported alongside `InstrumentedModelProvider` for the same reason: a facade's wiring test
+  // asserts that a self-reporting model came back UNWRAPPED.
+  reportsOwnLlmCalls,
+  type SelfReportingLanguageModel,
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,

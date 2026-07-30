@@ -372,17 +372,20 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     // subscription credential — so the inline reviewers/brainstorm/estimator + inline agent
     // kinds run on the subscription even without a host CLI (and in mothership mode). Gated by
     // `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above. The
-    // per-run personal / pooled lease seams are supplied by `buildNodeContainer` (built from the
-    // same subscription services the container executor uses) via the wrap `deps` argument.
+    // per-run personal / pooled lease seams AND the inline `llm_call_metrics` recorder are supplied
+    // by `buildNodeContainer` (all built from the same services the container executor uses) via the
+    // wrap `deps` argument — the recorder because a harness CLI runs a whole tool loop behind one
+    // `generateText`, so the model this wrap substitutes files every call the CLI made rather than
+    // leaving the instrumentation around it to infer one from the SDK boundary.
     ...(inlineAgents
       ? {
-          wrapModelProviderResolver: (inner, leaseDeps) =>
+          wrapModelProviderResolver: (inner, wrapDeps) =>
             wrapResolverWithInlineHarness({
               inlineHarnesses,
               hostCliVendors: detectHostInlineClis(env),
               cliBudget: inlineCliBudget,
               runInline: (req) => resolveContainerTransport().then((t) => t.runInline(req)),
-              ...leaseDeps,
+              ...wrapDeps,
             })(inner),
         }
       : {}),

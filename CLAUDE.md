@@ -937,7 +937,9 @@ plan to close them: [`observability-logging-gaps.md`](./docs/initiatives/observa
 - **`llm_call_metrics`** — per LLM call. **THREE producers converge on the ONE `LlmObservabilityService`
   and a new one must too**: the proxy; the subscription harnesses (Claude Code / Codex bypass the proxy, so
   the harness lifts metrics off each CLI's event stream); and INLINE calls, through the kernel
-  `InlineLlmCallRecorder` port.
+  `InlineLlmCallRecorder` port. An inline call SERVED BY a harness CLI is both at once — it reaches the
+  store through the inline port, carrying per-call rows lifted off the CLI's stream — which is why the
+  model owns them and the instrumentation stands down (below), not a fourth producer.
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch, including the
   full content of injected `.cat-context/*` files, which the agent reads via tools and which therefore
   never reach proxy telemetry. A redacted allow-list projection, never a token or credential-bearing URL.
@@ -960,6 +962,20 @@ Rules that bind new work here:
   reason `createInlineInstrumentation` owns the exit pair: the wrong order still typechecks and still records
   every non-substituted call, so nothing fails until it is the deployment you don't test on. The limiter
   stays outermost, so a queue wait is never counted as generation time.
+- **A model served by a harness CLI files its OWN calls, and the middleware around it STANDS DOWN.** One
+  `doGenerate` on `CliInlineLanguageModel` is not one model call — the CLI runs a whole tool loop behind it,
+  routinely 16+ calls over eight minutes — so the middleware could only ever report it as ONE lumped row,
+  only once the subprocess exited, and (a rejection carries no usage) as ZEROS whenever the run was killed.
+  The model therefore takes the facade's recorder and files each call the CLI reports, live; the middleware
+  asks `reportsOwnLlmCalls(model)` and returns it unwrapped, because two producers for one call would double
+  every token in the step's rollup. **The model is ASKED, never a facade told**: the instrumentation sits
+  outside the wrap that substitutes the model (it has to — above), so it cannot know what the inner wrap
+  returned. A CLI that narrates nothing (`codex exec`), or a build that reports turns but no per-turn usage,
+  reports no call carrying tokens — the model then files the ONE aggregate row the SDK boundary knows, which
+  is what the middleware would have recorded. Only Claude Code's `stream-json` is parsed per call, through
+  the container harness's `createClaudeRunTelemetry` (`@cat-factory/executor-harness/claude-stream`) — the
+  ONE fold, imported rather than re-implemented, because folding per ENVELOPE instead of per `message.id`
+  inflated a measured 1.47M tokens to 5.53M and both paths had to learn that once.
 - **Run attribution falls back to the credential SCOPE, which names the block's LAST run, not necessarily a
   live one.** A per-call `catFactoryObservability({ executionId })` wins; absent, the wrap threads
   `scope.executionId`, because most inline sites tag only the workspace and such a row is worse than
@@ -970,10 +986,14 @@ Rules that bind new work here:
   null nothing about it looks wrong. Both absent ⇒ null, the honest answer for a genuinely un-run-scoped
   call. **A NEW inline caller on the run path must build its scope with the run in it** — a call that
   generates on the run path but resolves its own scope, like a fragment brief, carries the run on its input.
+  The precedence itself is ONE function, `resolveInlineAttribution`, because both inline producers apply it.
 - **State what a producer does NOT know rather than filling a field with a guess**: an inline call has
-  `turnIndex` null, `httpStatus` null, `phase` `''` and `upstreamMs === totalMs`, so the derived overhead
-  is a real 0. `turn_index` is NULLABLE and never 0, or a proxied call would sort to the front of its
-  phase.
+  `httpStatus` null, `phase` `''` and `upstreamMs === totalMs`, so the derived overhead is a real 0.
+  `turnIndex` is null for a plain `generateText` (no turn concept) and REAL for a harness-CLI call, whose
+  stream numbered it; `turn_index` is NULLABLE and never 0, or a proxied call would sort to the front of its
+  phase. A harness-CLI row likewise says `durationMs` 0 and `requestMaxTokens` null — the CLIs expose no
+  per-call timing and apply their own ceiling, so this step's elapsed time or our ignored ask would both be
+  fabrications.
 - **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input with
   `cacheReadTokens` + `cacheWriteTokens` beside it, priced ~1x / ~0.1x / 1.25-2x base input — a cache WRITE
   costs more than fresh — so a producer that sums them makes a loop that keeps invalidating its prefix read

@@ -12,6 +12,14 @@ import type { HarnessCallMetric } from './pi.js'
 // This aggregator folds every envelope sharing a `message.id` back into the one call it belongs to,
 // and buffers that call's tool_result turns so the reconstructed prompt chain keeps the shape the
 // model was actually sent: one assistant turn holding all its blocks, then the results.
+//
+// TWO CONSUMERS, and a change here reaches both. The container/host harness drives it from a
+// coding job's stdout (`agent-runner.ts`), and the BACKEND drives it from the host `claude` an
+// inline step runs on (`runtimes/local/src/harnessInline.ts`, importing this module through the
+// package's `./claude-stream` subpath). Both parse the SAME `stream-json`, and the second used to
+// carry its own lesser fold — which is how the inline path came to report one lumped call per step
+// while the container path reported every turn. Keep this the only implementation; it is also the
+// one place the per-block over-count above is fixed.
 
 /** One model call, assembled from every stream envelope that carried a piece of it. */
 export interface AggregatedClaudeCall {

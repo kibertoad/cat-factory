@@ -258,6 +258,17 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
                 subscriptions.leaseToken(workspaceId, vendor),
             }
           : {}),
+        // Hand the wrap the SAME recorder the instrumentation above is built with, so a model it
+        // SUBSTITUTES can file the per-call telemetry the middleware structurally cannot see. Local
+        // mode's inline harness is the case: one `generateText` there is a whole CLI tool loop, so
+        // the middleware could only ever report it as one lumped call, only once the subprocess had
+        // exited, and — a rejection carrying no usage — as zeros whenever the run was killed. Such a
+        // model stands the middleware down (`reportsOwnLlmCalls`), which is why this must be that
+        // one recorder and not a second: the service behind it owns the trace fan-out.
+        //
+        // Not a conditional spread: the field is required-but-nullable precisely so omitting it here
+        // is a typecheck failure rather than a deployment that silently reports no model activity.
+        recordInlineCall: instrument?.recordCall,
       })
     : baseModelProviderResolver
   // Observe inline calls and cap their concurrency, both applied on top of the facade wrap above

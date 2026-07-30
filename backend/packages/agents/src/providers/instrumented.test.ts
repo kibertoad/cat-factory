@@ -107,6 +107,45 @@ function bodiesOf(call: InlineLlmCall) {
 }
 
 describe('InstrumentedModelProvider — wiring', () => {
+  // A harness-CLI model runs a whole tool loop behind ONE `doGenerate`, so it knows the calls this
+  // middleware cannot see and files them itself. Wrapping it as well would add a lumped duplicate
+  // to every step's rollup — and the duplicate is the LESS truthful of the two: one call for
+  // sixteen, only once the subprocess exited, and zeros whenever the run was killed.
+  it('leaves a model that reports its own calls unwrapped', async () => {
+    const c = collectors()
+    const selfReporting: LanguageModel = Object.assign(
+      new MockLanguageModelV3({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'from the CLI' }],
+          finishReason: { unified: 'stop' as const, raw: 'stop' },
+          usage: USAGE,
+          warnings: [],
+        }),
+      }),
+      { reportsOwnLlmCalls: true },
+    )
+    const provider = new InstrumentedModelProvider({
+      inner: { resolve: () => selfReporting },
+      recordCall: c.recordCall,
+      traceSink: c.sink,
+      workspaceBodiesEnabled: allowBodies,
+    })
+
+    const resolved = provider.resolve(ref)
+    // The very model, not a wrapper around it — the assertion that keeps a later change from
+    // silently re-adding the duplicate.
+    expect(resolved).toBe(selfReporting)
+
+    await generateText({
+      model: resolved,
+      prompt: 'go',
+      providerOptions: catFactoryObservability({ agentKind: 'doc-researcher', workspaceId: 'ws1' }),
+    })
+    await flushEmit()
+    expect(c.recorded).toEqual([])
+    expect(c.sink.events).toEqual([])
+  })
+
   it('refuses to wrap a provider with no exit', () => {
     // A provider that instruments nothing is a wiring mistake wearing the wrapper's clothes:
     // every call pays the middleware and reaches nothing, while the facades' `instanceof`

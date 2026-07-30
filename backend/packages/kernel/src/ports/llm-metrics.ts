@@ -344,6 +344,17 @@ export interface InlineLlmCall {
   toolCount: number
   /** The output ceiling the request asked for, or null when it named none. */
   requestMaxTokens: number | null
+  /**
+   * This call's ordinal within the ONE inline step that produced it, or absent where there is
+   * no turn concept to report.
+   *
+   * A plain `generateText` is one call and has none — it omits this, and the row stores
+   * `turn_index` NULL so it orders by `createdAt` exactly like a proxied row. An inline step
+   * served by a HARNESS CLI is the case that has one: the CLI runs a whole tool loop behind a
+   * single SDK call and reports each model call it made, so those rows carry the ordinal the
+   * stream gave them. Never faked from a message count — an envelope is not a turn.
+   */
+  turnIndex?: number
   /** FRESH (uncached) input tokens — exclusive of both cache classes. */
   promptTokens: number
   cacheReadTokens: number

@@ -51,7 +51,18 @@
   same rule inside the service instead, so bodies reach it ungated — and as THUNKS, so the far
   side's gate costs a prompts-off deployment nothing. Any new inline call site must tag its
   `workspaceId` via `catFactoryObservability`, or no opt-out can apply to it AND it records no
-  metric row.
+  metric row. The attribution precedence itself is kernel's `resolveInlineAttribution`, shared
+  with the second producer below.
+  Finally, `cli-inline.ts` (`CliInlineLanguageModel` — the model a HARNESS CLI serves) is the one
+  model the middleware deliberately does NOT wrap. One `doGenerate` there is a whole CLI tool loop,
+  so it takes the facade's recorder itself and files each call the CLI reports, live, then declares
+  `reportsOwnLlmCalls` so the middleware returns it untouched — two producers for one call would
+  double every token of the step. Left to the middleware it would be one lumped row per step,
+  written only once the subprocess exited, and zeroed whenever the run was killed (a rejection
+  carries no usage). A CLI that reports no call carrying tokens (`codex exec` narrates nothing) gets
+  the single aggregate row instead, and a failed run gets a zero-token row at the next ordinal for
+  the call that never completed. The model is ASKED rather than a facade told, because the
+  instrumentation sits OUTSIDE the wrap that substitutes it and cannot see what that wrap returned.
 - `fragmentLibrary/` — the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`) — the ONE

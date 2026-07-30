@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "comment": "Self-contained (does not extend the monorepo base) so the Docker build context can be just this package directory.",
+  "comment:declaration": "Declarations are emitted for the `./claude-stream` subpath: the BACKEND imports the Claude Code stream aggregator from `dist` at RUNTIME (unlike the compile-only `./embed`, which resolves to source), so it needs types beside the JS.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -17,7 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "rootDir": "src",
     "outDir": "dist",
-    "declaration": false,
+    "declaration": true,
     "sourceMap": false
   },
   "include": ["src/**/*.ts"]
