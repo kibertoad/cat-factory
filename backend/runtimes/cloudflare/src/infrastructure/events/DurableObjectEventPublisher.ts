@@ -15,7 +15,11 @@ import type {
   RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
-import { describeError, type ExecutionEventPublisher } from '@cat-factory/kernel'
+import {
+  describeError,
+  type ExecutionEventPublisher,
+  type InfraSetupTransition,
+} from '@cat-factory/kernel'
 import { logger } from '../observability/logger'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
@@ -88,6 +92,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
     await this.publish(workspaceId, { type: 'notification', notification, at: Date.now() })
+  }
+
+  async infraSetupChanged(workspaceId: string, change: InfraSetupTransition): Promise<void> {
+    await this.publish(workspaceId, { type: 'infraSetup', ...change, at: Date.now() })
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {

@@ -43,6 +43,7 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
+export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
@@ -335,6 +336,7 @@ export type {
   ObservabilityConfig,
   NotificationWebhookConfig,
   OtelConfig,
+  InfraReachabilityConfig,
   PlatformAlertConfig,
   PrivilegedAppConfig,
   RetentionConfig,
@@ -347,6 +349,11 @@ export {
   resolvePlatformAlertConfig,
   type PlatformAlertEnvInput,
 } from './config/platformAlerts.js'
+export {
+  resolveInfraReachabilityConfig,
+  shouldRunReachabilityPass,
+  type InfraReachabilityEnvInput,
+} from './config/infraReachability.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'
 export {
   parseDetectionConventions,

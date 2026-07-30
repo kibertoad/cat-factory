@@ -88,6 +88,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // sealed). Not block-scoped; "act" drops the listed stale ciphertexts so they can be re-entered
   // (or restore the previous key to recover them instead).
   key_drift: { icon: 'i-lucide-key-round', color: 'error' },
+  // A configured infrastructure connection stopped answering its live probe. Not block-scoped and
+  // nothing to act on from here — the fix is on the provider's side, and the card clears itself when
+  // the reachability watcher sees it answer again; "act" just marks it read.
+  infra_unreachable: { icon: 'i-lucide-plug-zap', color: 'error' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -114,6 +118,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   platform_health: 'layout.notifications.action.platform_health',
   budget_paused: 'layout.notifications.action.budget_paused',
   key_drift: 'layout.notifications.action.key_drift',
+  infra_unreachable: 'layout.notifications.action.infra_unreachable',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a

@@ -3,6 +3,11 @@ import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types
 import type { InfrastructureTab, ProviderConnectionKind } from '~/types/providerConnections'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
+  infraSetupDismissalKey,
+  type InfraSetupCardKind,
+  type InfraSetupDismissalKey,
+} from '~/utils/infraSetup'
+import {
   DEFAULT_PROVISION_DEEP_LINK_PARAM,
   DEFAULT_PROVISION_DEEP_LINK_VALUE,
 } from '~/utils/defaultProvisioning'
@@ -820,17 +825,34 @@ function createAiOnboardingModals() {
   const aiSetupDismissed = ref(false)
   const aiPresetDismissed = ref(false)
 
-  // Infra-setup banner: per-SESSION dismissals, one flag per area, cleared on workspace switch
-  // exactly like the AI-onboarding flags (a dismissal in one workspace must not suppress the
-  // independent prompt for another). The PERMANENT "don't notify me again" dismissal is per-USER
-  // and persists in localStorage from the banner component; this only covers "hide for now".
-  const infraSetupSessionDismissed = ref<InfraSetupArea[]>([])
-  function dismissInfraSetupForSession(area: InfraSetupArea) {
-    if (!infraSetupSessionDismissed.value.includes(area))
-      infraSetupSessionDismissed.value = [...infraSetupSessionDismissed.value, area]
+  // Infra-setup banner: per-SESSION dismissals, cleared on workspace switch exactly like the
+  // AI-onboarding flags (a dismissal in one workspace must not suppress the independent prompt for
+  // another). The PERMANENT "don't notify me again" dismissal is per-USER and persists in
+  // localStorage from the banner component; this only covers "hide for now".
+  //
+  // Keyed by area AND KIND, not by area alone: the two cards an area can raise are different
+  // claims. Dismissing "you haven't configured this" for the session must not also silence the
+  // OUTAGE card that appears after the operator configures it and the provider then dies — the same
+  // asymmetry that makes the permanent dismissal setup-gap-only, one tier down.
+  const infraSetupSessionDismissed = ref<InfraSetupDismissalKey[]>([])
+  function dismissInfraSetupForSession(area: InfraSetupArea, kind: InfraSetupCardKind) {
+    const key = infraSetupDismissalKey(area, kind)
+    if (!infraSetupSessionDismissed.value.includes(key))
+      infraSetupSessionDismissed.value = [...infraSetupSessionDismissed.value, key]
   }
   function resetInfraSetupDismissals() {
     infraSetupSessionDismissed.value = []
+  }
+  /**
+   * Drop an area's OUTAGE session dismissal — called when that area RECOVERS, so a transient health
+   * state (`unreachable`) re-nags the next time it fails. Without it, "hide for now" on one outage
+   * would quietly cover every later outage for the rest of the session, which is precisely the
+   * semantics `isInfraSetupHealthStatus` exists to keep away from a health state. The area's
+   * setup-gap dismissal is left alone: recovery says nothing about that claim.
+   */
+  function clearInfraSetupSessionDismissal(area: InfraSetupArea) {
+    const key = infraSetupDismissalKey(area, 'outage')
+    infraSetupSessionDismissed.value = infraSetupSessionDismissed.value.filter((k) => k !== key)
   }
 
   // Default-test-environment banner: a single per-SESSION dismissal, cleared on workspace switch
@@ -889,6 +911,7 @@ function createAiOnboardingModals() {
     infraSetupSessionDismissed,
     dismissInfraSetupForSession,
     resetInfraSetupDismissals,
+    clearInfraSetupSessionDismissal,
     defaultProvisionDismissed,
     dismissDefaultProvision,
     resetDefaultProvisionDismissal,

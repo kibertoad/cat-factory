@@ -3,6 +3,7 @@ import type { ExecutionInstance } from './execution.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { EnvConfigRepairJob } from './env-config-repair.js'
 import type { EnvironmentTestRun } from './environment-test.js'
+import type { InfraSetupArea, InfraSetupStatus } from './infra-setup.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
@@ -52,6 +53,33 @@ export type WorkspaceEvent =
    * run is surfaced only on the inspector that triggered it.
    */
   | { type: 'envTest'; run: EnvironmentTestRun; at: number }
+  /**
+   * One infrastructure area's reachability changed, so the client patches its `infraSetup`
+   * projection in place and the setup banner appears or clears IMMEDIATELY.
+   *
+   * Without this the projection is only recomputed when a workspace snapshot (re)loads, which is
+   * fine for the operator-decision states — nobody un-configures a runner pool behind your back —
+   * but useless for `unreachable`: a cluster that dies mid-session would stay invisible until
+   * somebody happened to reload the app, which in practice means the next day. A dead environment
+   * provider silently fails every testing agent in the meantime, so it has to push.
+   *
+   * Published on TRANSITION only, never per probe: the watcher polls on a sweep cadence, so
+   * re-announcing an ongoing outage every pass would turn this into a standing event storm on the
+   * workspace bus.
+   *
+   * `detail` is the probe's own operator-facing reason (a refused connection reads very
+   * differently from a rejected token) and is deliberately NOT persisted on the notification the
+   * watcher raises: it varies between passes, and the card re-delivers whenever its content
+   * changes, so carrying it there would re-toast the inbox for the whole outage. It therefore
+   * rides the live transition only — which is exactly when someone is looking.
+   */
+  | {
+      type: 'infraSetup'
+      area: InfraSetupArea
+      status: InfraSetupStatus
+      detail?: string
+      at: number
+    }
   /**
    * A human-actionable notification was raised or resolved (a PR needs review, a
    * pipeline finished and wants confirmation, CI fixing gave up). The client

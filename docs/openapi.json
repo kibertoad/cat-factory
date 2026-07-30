@@ -394,6 +394,17 @@
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "unreachableAreas": {
+                    "items": {
+                      "enum": [
+                        "ephemeralEnvironments",
+                        "agentExecutor",
+                        "binaryStorage"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [],
@@ -451,6 +462,7 @@
               "pr_review_ready",
               "initiative",
               "platform_health",
+              "infra_unreachable",
               "budget_paused",
               "key_drift",
               "merge_tag_request"
@@ -1862,6 +1874,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -1919,6 +1942,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -3600,6 +3624,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -3657,6 +3692,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -5505,6 +5541,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -5562,6 +5609,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -7156,6 +7204,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -7213,6 +7272,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -9466,6 +9526,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -9523,6 +9594,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -11092,6 +11164,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -11149,6 +11232,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -13002,6 +13086,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -13059,6 +13154,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -14616,6 +14712,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -14673,6 +14780,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -16233,6 +16341,17 @@
                                     "type": "string"
                                   },
                                   "type": "array"
+                                },
+                                "unreachableAreas": {
+                                  "items": {
+                                    "enum": [
+                                      "ephemeralEnvironments",
+                                      "agentExecutor",
+                                      "binaryStorage"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 }
                               },
                               "required": [],
@@ -16290,6 +16409,7 @@
                             "pr_review_ready",
                             "initiative",
                             "platform_health",
+                            "infra_unreachable",
                             "budget_paused",
                             "key_drift",
                             "merge_tag_request"
@@ -18162,6 +18282,17 @@
                                   "type": "string"
                                 },
                                 "type": "array"
+                              },
+                              "unreachableAreas": {
+                                "items": {
+                                  "enum": [
+                                    "ephemeralEnvironments",
+                                    "agentExecutor",
+                                    "binaryStorage"
+                                  ],
+                                  "type": "string"
+                                },
+                                "type": "array"
                               }
                             },
                             "required": [],
@@ -18219,6 +18350,7 @@
                           "pr_review_ready",
                           "initiative",
                           "platform_health",
+                          "infra_unreachable",
                           "budget_paused",
                           "key_drift",
                           "merge_tag_request"
