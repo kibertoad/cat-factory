@@ -49,7 +49,11 @@ const LEGACY_ALLOWANCES = new Map([
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
   // The poll paths' "fold one update onto the step" helpers now live in `step-fold.logic.ts`,
   // so `RunDispatcher.ts` ratchets down accordingly.
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2430],
+  // The `max-lines` step-1 slice then took two more cohesive collaborators out of it: the RUNNING
+  // half of the poll branch tree (`PollRunningController.ts`, the sibling of the settled-poll
+  // `PollCompletionController`) and the one-shot engine steps tracker / bug-intake /
+  // initiative-committer (`OneShotStepController.ts`) — ratcheted 2430 -> 1900.
+  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 1900],
   // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
   // its own module (re-exported, so no call site changed) when the PR-verification-report hook
   // needed headroom — ratcheted DOWN to lock the win in.
@@ -57,12 +61,15 @@ const LEGACY_ALLOWANCES = new Map([
   // moved to `PostMergeBoardController.ts` when the logging conversion pushed the file over —
   // ratcheted DOWN again. They run AFTER the merge, read the board rather than execution state,
   // and are best-effort, which is what separated them from the run state machine.
-  // Then the two run-start funnels (the atomic live-run claim + the durable/SPA/outbound hand-off)
-  // moved to `runStart.ts` when the run-lifecycle push needed the hand-off documented — ratcheted
-  // DOWN again. What separates them is that `start`/`retry`/`restartFrom` differ ONLY in the block
-  // patch they write between the two, so the ORDER across them is the thing worth owning in one
-  // place rather than three.
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2285],
+  // Then the HUMAN decision surface (resolve / approve / request-changes / reject / merge, plus
+  // the human-review fix request and the gate guard they share) moved to
+  // `StepDecisionController.ts` for the `max-lines` step-1 slice — ratcheted 2300 -> 2000.
+  // The two run-start funnels (the atomic live-run claim + the durable/SPA/outbound hand-off) then
+  // moved to `runStart.ts` when the run-lifecycle push needed the hand-off documented — the budget
+  // stays where the slice above put it, since that one had already left headroom. What separates
+  // them is that `start`/`retry`/`restartFrom` differ ONLY in the block patch they write between
+  // the two, so the ORDER across them is the thing worth owning in one place rather than three.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2000],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -80,7 +87,13 @@ const LEGACY_ALLOWANCES = new Map([
   // The per-service store factories (`buildTestSecretsService` / `buildValidationConfigService`)
   // now live with the rest of that family in `wireCredentialServices.ts`, so the Worker
   // composition root ratchets down accordingly.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2300],
+  // The `max-lines` step-1 slice then split three more modules out of the Worker root, mirroring
+  // the Node facade's own file names: `container-model-resolver.ts` (the memoised inline model
+  // provider + the per-step workspace default), `container-executor-deps.ts` (runner-transport
+  // selection, the container executor, the composite + consensus wrap) and
+  // `container-vcs-identity.ts` (the App registry + repo-target resolvers three sibling modules
+  // already read off the root) — ratcheted 2300 -> 1650.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1650],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -88,10 +101,17 @@ const LEGACY_ALLOWANCES = new Map([
   // now live in `schema-integrations.ts`, re-exported from `schema.ts`. Combined with main's own
   // trimming the file is down to ~2130, so the allowance ratchets to the tighter of the two
   // in-flight values and then some.
-  ['backend/runtimes/node/src/db/schema.ts', 2150],
+  // The tenancy & identity tables (the `workspaces`/`users` roots, login identities, the account +
+  // membership graph, invitations / password resets and the per-account rows) then moved to
+  // `db/tables/identity.ts`, re-exported — ratcheted 2150 -> 1900.
+  ['backend/runtimes/node/src/db/schema.ts', 1900],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
-  ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],
+  // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan
+  // and the facts inferred back off it) now lives in `provision-detect.kubernetes.ts`, over the
+  // YAML/loose-value primitives both halves share in `provision-detect.yaml.ts` — ratcheted
+  // 2250 -> 1850.
+  ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 1850],
   // The repo-targeting declaration block (RepoTarget/ResolveRepoTarget/RepoOrigin/…) moved to
   // `agents/repoTargeting.ts`, and the poll site's pure runner-view → engine-update shaping
   // (`buildRunningUpdate` / `buildFailureMeta`) now lives with the rest of the output-boundary

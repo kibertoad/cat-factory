@@ -350,7 +350,7 @@ export class RunStateMachine {
    * receiver costs the announcement and never the run.
    *
    * It is still once-per-run by construction, because the claim that precedes the hand-off
-   * (`insertLiveRunOrConflict`) is what mints a live run — a genuinely concurrent double-start
+   * (`claimLiveRunOrConflict`) is what mints a live run — a genuinely concurrent double-start
    * loses there rather than reaching here — and a start path added later inherits both, since
    * one that skipped the funnel would not start its durable runner either (a loud failure, not a
    * silently undelivered event). That is the opposite trade from the terminal edge, which has

@@ -95,6 +95,7 @@ import {
   buildWorkerVcsIdentityRegistry,
   maybeWrapConsensus,
   selectAgentExecutor,
+  type WorkerExecutorDeps,
   selectDeployDeps,
   selectDocumentsDeps,
   selectEmailInvitationDeps,
@@ -165,6 +166,10 @@ export interface WorkerContainerAssemblyInput {
   agentContextObservability: AgentContextObservabilityService
   searchQueryObservability: SearchQueryObservabilityService
   accountSettings: AccountSettingsService | undefined
+  /** The container executor's private-registry resolver — see {@link WorkerExecutorDeps}. */
+  executorPackageRegistries: WorkerExecutorDeps['resolvePackageRegistries']
+  /** The container executor's dedicated, uncached account-settings reader — see {@link WorkerExecutorDeps}. */
+  webSearchAccountSettings: AccountSettingsService | undefined
   defaultWebSearchUpstream: WebSearchUpstream | undefined
   resolveBinaryArtifactStore: ResolveBinaryArtifactStore
   githubWebhookIngest: CfGitHubWebhookIngest
@@ -213,6 +218,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     agentContextObservability,
     searchQueryObservability,
     accountSettings,
+    executorPackageRegistries,
+    webSearchAccountSettings,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -298,6 +305,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           subscriptions,
           personalSubscriptions,
           agentContextObservability,
+          resolvePackageRegistries: executorPackageRegistries,
+          webSearchAccountSettings,
         }),
         env,
         config,

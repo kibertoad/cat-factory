@@ -33,7 +33,14 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `DispatcherRegistryDeps` seam the dispatcher assembles), `RunAdmission` (the
   start/retry/restart `assert*` preflights),
   `review-kinds.ts` (the requirements/clarity/brainstorm `ReviewKind` factories),
-  `DeployerStepController` (the deployer provision fan-out + env projection),
+  `StepDecisionController` (the HUMAN decision surface on a parked run — resolve / approve /
+  request-changes / reject / merge / decline-to-merge and the human-review fix request; the
+  engine keeps thin delegates because the HTTP + public-API controllers reach it through the
+  facade), `PollRunningController` + `PollCompletionController` (the RUNNING and SETTLED halves
+  of the agent-poll branch tree), `OneShotStepController` (the one-shot engine steps `tracker` /
+  `bug-intake` / `initiative-committer`),
+  `DeployerStepController` (the deployer provision fan-out + env projection — the fourth
+  one-shot step, which had its own controller first),
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
   human merges or declines), `PostMergeBoardController` (the BOARD-shaped follow-up a merged task

@@ -24,13 +24,7 @@ import {
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   pipelineHasVisualStep,
 } from '@cat-factory/contracts'
-import {
-  companionFor,
-  companionTargets,
-  hasTrait,
-  INTERVIEW_GATE_TRAIT,
-  isCompanionKind,
-} from '@cat-factory/agents'
+import { companionFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
@@ -49,16 +43,7 @@ import {
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { DEFAULT_RISK_POLICY, noopLogger, runBestEffort } from '@cat-factory/kernel'
-import {
-  REQUIREMENTS_REVIEW_AGENT_KIND,
-  CLARITY_REVIEW_AGENT_KIND,
-  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-  isTesterKind,
-  HUMAN_TEST_AGENT_KIND,
-  VISUAL_CONFIRM_AGENT_KIND,
-  HUMAN_REVIEW_AGENT_KIND,
-} from './ci.logic.js'
+import { isTesterKind } from './ci.logic.js'
 import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
@@ -68,6 +53,7 @@ import { claimLiveRunOrConflict, handOffLiveRun } from './runStart.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
+import { StepDecisionController } from './StepDecisionController.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
@@ -112,7 +98,6 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
 import { RunMergePolicy } from './RunMergePolicy.js'
 import type { ResolvedRunRiskPolicy } from './policy-types.js'
-import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import { descendantIds } from '../board/board.logic.js'
@@ -256,6 +241,8 @@ export class ExecutionService {
    * / `resolveGatePollExhaustion` + the follow-up human-action API are thin pass-throughs.
    */
   private readonly runDispatcher: RunDispatcher
+  /** The human decision surface on a parked run (approve / reject / merge / …). */
+  private readonly stepDecisions: StepDecisionController
 
   constructor(dependencies: ExecutionServiceDependencies) {
     // Bind the whole deps object, then destructure what this constructor itself reads. The
@@ -527,6 +514,23 @@ export class ExecutionService {
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+    this.stepDecisions = new StepDecisionController({
+      agentExecutor: this.agentExecutor,
+      agentKindRegistry: this.agentKindRegistry,
+      blockRepository: this.blockRepository,
+      clock: this.clock,
+      executionRepository: this.executionRepository,
+      mergePolicy: this.mergePolicy,
+      runDispatcher: this.runDispatcher,
+      runStateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      workRunner: this.workRunner,
+      requireWorkspace: (ws) => this.requireWorkspace(ws),
+      requireBlock: (ws, id) => this.requireBlock(ws, id),
+      failRun: (ws, id, message, kind, detail, reason) =>
+        this.failRun(ws, id, message, kind, detail, reason),
+      finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
+    })
   }
 
   /**
@@ -776,7 +780,7 @@ export class ExecutionService {
       }
     }
 
-    // NB: do NOT `deleteByBlock` here — `insertLiveRunOrConflict` (below) atomically clears the
+    // NB: do NOT `deleteByBlock` here — `claimLiveRunOrConflict` (below) atomically clears the
     // block's terminal rows AND the `prior` run it replaces, then inserts the new live run, so a
     // concurrent double-start is rejected by the live-run index instead of both wiping each
     // other's row (see insertLive).
@@ -894,13 +898,13 @@ export class ExecutionService {
       ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }
-    await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'in_progress',
       progress: 0,
       executionId: instance.id,
     })
-    await this.handOffLiveRun(workspaceId, instance, block)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
@@ -1235,73 +1239,6 @@ export class ExecutionService {
   // the `advanceRunPastGate`/`settleAdvancedGate` split (run under `mutateInstance`), and
   // {@link dispatchIterationCap}.
 
-  /**
-   * Several gates park on a `step.approval` but are NOT generic prose approvals — they are
-   * driven by their own dedicated surface, never the generic
-   * approve/request-changes/reject resolvers (which would advance the run bypassing the
-   * loop). Guard those resolvers so a stray approve can't short-circuit any of them:
-   * the requirements/clarity review gates, the brainstorms, the human-testing and
-   * visual-confirmation gates, an interview-trait gate, a companion at its rework cap
-   * (`companion.exceeded`), the follow-up companion with undecided items, and a coder
-   * parked on the implementation-fork decision (whose approve would skip the build
-   * dispatch entirely).
-   */
-  private assertNotIterativeGate(step: PipelineStep): void {
-    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the requirements review through its review window, not the approval gate',
-      )
-    }
-    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the clarity review through its review window, not the approval gate',
-      )
-    }
-    if (
-      step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
-      step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND
-    ) {
-      throw new ConflictError(
-        'Resolve the brainstorm through its brainstorm window, not the approval gate',
-      )
-    }
-    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
-      )
-    }
-    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
-      )
-    }
-    if (hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry)) {
-      throw new ConflictError(
-        'Resolve the interview through its interview window, not the approval gate',
-      )
-    }
-    if (step.companion?.exceeded) {
-      throw new ConflictError(
-        'Resolve this companion review through its iteration-cap prompt, not the approval gate',
-      )
-    }
-    if (step.followUps?.enabled && step.followUps.items.some((i) => i.status === 'pending')) {
-      throw new ConflictError(
-        'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
-      )
-    }
-    if (
-      step.forkDecision?.status === 'awaiting_choice' ||
-      step.forkDecision?.status === 'answering'
-    ) {
-      // Approving here would advance the run PAST the coder step with the build never run
-      // (the park sits between the proposer and the Coder dispatch).
-      throw new ConflictError(
-        'Resolve the implementation-fork decision through its fork window (choose an approach), not the approval gate',
-      )
-    }
-  }
-
   /** Pick the brainstorm kind for a stage (the dedicated window drives both via the same loop). */
   private brainstormKindFor(stage: BrainstormStage): ReviewKind<BrainstormSession> {
     return stage === 'architecture'
@@ -1452,65 +1389,6 @@ export class ExecutionService {
   // above and {@link gate-window-facades}.
 
   /**
-   * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform
-   * instructions — bypassing the precheck + grace window. Parks a `pendingFix` on the gate step,
-   * consumed on the gate's next poll (see {@link evaluateGate}) which dispatches the fixer with
-   * the instructions folded in. A second request before the first is consumed simply replaces the
-   * pending instructions. Throws when no human-review gate is currently parked.
-   *
-   * The run is re-driven via `workRunner.startRun` so the pending fix is picked up promptly even
-   * when the driver had died (e.g. its durable advance job expired/was evicted before the stale-
-   * run sweeper re-drove it) — `startRun` is idempotent for a live run (the exclusive advance
-   * queue no-ops a duplicate send), so this only has an effect when no driver is currently
-   * polling. A spend-paused run is left paused (it resumes through its own path).
-   */
-  async requestHumanReviewFix(
-    workspaceId: string,
-    blockId: string,
-    instructions: string,
-  ): Promise<ExecutionInstance> {
-    const block = await this.blockRepository.get(workspaceId, blockId)
-    if (!block?.executionId) {
-      throw new ConflictError('No human-review gate is currently awaiting input')
-    }
-    // Optimistic-concurrency write: parking the `pendingFix` can race the gate's own poll
-    // (the durable driver advancing the run), so re-read + re-apply on fresh state instead
-    // of clobbering — the lost-update fix, same path as resolveDecision. The validation runs
-    // inside the mutation so it sees the run as it stands at write time.
-    const instance = await this.runStateMachine.mutateInstance(
-      workspaceId,
-      block.executionId,
-      (inst) => {
-        const step = inst.steps[inst.currentStep]
-        if (!step || step.agentKind !== HUMAN_REVIEW_AGENT_KIND || !step.gate) {
-          throw new ConflictError('No human-review gate is currently awaiting input')
-        }
-        // The fix is consumed by evaluateGate's pendingFix branch, which dispatches the fixer
-        // ONLY when the gate's provider is wired AND there is an async executor to escalate to.
-        // Reject up front when neither holds, instead of silently parking a pendingFix the gate
-        // would discard on its pass-through (an unwired gate advances) — the caller must see the
-        // failure, not a 200.
-        const gate = this.runDispatcher.gateFor(step.agentKind)
-        if (!gate?.wired() || !isAsyncAgentExecutor(this.agentExecutor)) {
-          throw new ConflictError(
-            'The human-review gate cannot dispatch a fix on this deployment (no review provider or async executor configured)',
-          )
-        }
-        step.gate.pendingFix = { instructions, at: this.clock.now() }
-        // Re-arm a decision-parked run so the re-driven loop polls instead of no-oping; a spend-
-        // paused run stays paused.
-        if (inst.status === 'blocked') inst.status = 'running'
-      },
-    )
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    // Ensure a driver is active to consume the pending fix (idempotent for a live run).
-    if (instance.status === 'running') {
-      await this.workRunner.startRun(workspaceId, instance.id)
-    }
-    return instance
-  }
-
-  /**
    * Merge a block's PR(s) for real, then mark it `done`. The remote merge happens FIRST (via
    * the {@link PullRequestMerger} port) and only on its success does the block flip to `done`
    * — so `done` provably means "merged", not a board-only status. When no merger is wired
@@ -1652,272 +1530,73 @@ export class ExecutionService {
     return this.postMergeBoard.applyModuleAssignment(workspaceId, taskId)
   }
 
+  // ---- human decision surface (delegated) ---------------------------------
+  // Resolve / approve / request-changes / reject / merge and the human-review fix request all
+  // live on {@link StepDecisionController} — the decisions PEOPLE make about a parked run, as
+  // opposed to the engine's own advance path. These stay here as thin delegates because the HTTP
+  // + public-API controllers reach them through the engine facade.
+
   /** Resolve a pending decision; the run's next step lets the agent finish it. */
-  async resolveDecision(
+  resolveDecision(
     workspaceId: string,
     executionId: string,
     decisionId: string,
     choice: string,
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    // Optimistic-concurrency write: a second resolve (double-click) or a racing driver
-    // poll can't clobber the chosen decision — the loser re-reads and re-applies.
-    const instance = await this.runStateMachine.mutateInstance(
-      workspaceId,
-      executionId,
-      async (inst) => {
-        const step = inst.steps.find((s) => s.decision?.id === decisionId)
-        if (!step || !step.decision) throw new NotFoundError('Decision', decisionId)
-        step.decision.chosen = choice
-        this.stepGraph.startStep(step)
-        if (inst.status === 'blocked') inst.status = 'running'
-        await this.runStateMachine.updateBlockProgress(workspaceId, inst, 'in_progress')
-      },
-    )
-    // Wake the parked durable run, if any. The DB write above remains the source
-    // of truth (so the backstop sweeper can still re-drive it); the signal is an
-    // optimisation that lets the workflow continue immediately.
-    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, choice)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return instance
+    return this.stepDecisions.resolveDecision(workspaceId, executionId, decisionId, choice)
   }
 
-  /**
-   * Approve a step's gated proposal: the run advances to the next step, carrying
-   * the (optionally human-edited) proposal forward as context. Mirrors
-   * {@link resolveDecision}'s durable-wake but *advances* the pipeline instead of
-   * re-running the step (the step is already done). Idempotent — re-approving an
-   * already-approved gate is a no-op.
-   */
-  async approveStep(
+  /** Approve a step's gated proposal (optionally replacing it with the human's edit). */
+  approveStep(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     opts: { proposal?: string } = {},
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    // Optimistic-concurrency write like resolveDecision/requestStepChanges: an approve
-    // holding a stale snapshot (a racing reject, a driver poll, a terminal transition)
-    // must re-read and re-validate rather than blind-write — otherwise it can resurrect
-    // a run another writer already failed. The advance's in-memory half runs inside the
-    // CAS; the non-idempotent side effects (block writes, driver signal, emit) run once
-    // after, on the winning state.
-    let stepIndex = -1
-    let alreadyApproved = false
-    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
-      alreadyApproved = false
-      stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
-      const step = inst.steps[stepIndex]
-      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-      this.assertNotIterativeGate(step)
-      if (step.approval.status === 'approved') {
-        alreadyApproved = true
-        return
-      }
-      if (step.approval.status === 'rejected') {
-        throw new ConflictError(`Approval '${approvalId}' was rejected`)
-      }
-      if (inst.status === 'failed' || inst.status === 'done') {
-        throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
-      }
-
-      // A human edit to the proposal replaces the agent's text, so the revised
-      // proposal is what downstream steps read (via priorOutputs). That only holds when the
-      // output IS the agent's work product: a step whose output is a RENDERING of an
-      // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan —
-      // see `reviewableArtifactOutput`) would take the edit into `step.output` while the
-      // committed artifact stayed the ingested one, so the correction silently reaches
-      // nothing. Refuse rather than accept-and-drop; the reviewer's route is "request
-      // changes", which re-runs the producer with the correction as feedback.
-      if (opts.proposal !== undefined) {
-        if (step.outputIsRendered) {
-          throw new ValidationError(
-            "This step's output is a rendering of the artifact it already produced, so edits " +
-              'to it cannot change that artifact. Request changes instead — the step re-runs ' +
-              'with your feedback.',
-            { reason: 'proposal_not_editable' },
-          )
-        }
-        step.output = opts.proposal
-        step.approval.proposal = opts.proposal
-      }
-      step.approval.status = 'approved'
-      // A gate is never raised on the final step, but the shared advance stays defensive.
-      this.runStateMachine.advanceRunPastGate(inst, stepIndex)
-    })
-    if (alreadyApproved) return instance
-    await this.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
-    return instance
+    return this.stepDecisions.approveStep(workspaceId, executionId, approvalId, opts)
   }
 
-  /**
-   * Request changes on a step's gated proposal: the same step re-runs with the
-   * human's freeform feedback and/or per-block comments (and its prior proposal)
-   * folded into the agent's context (see {@link AgentContextBuilder}). The run is left
-   * `running` on the same step; on the re-run's completion the gate is raised
-   * afresh. At least one of `feedback`/`comments` is expected (the controller
-   * validates this), but an empty review is harmless — the agent simply re-runs.
-   */
-  async requestStepChanges(
+  /** Request changes on a step's gated proposal; the step re-runs with the feedback folded in. */
+  requestStepChanges(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     review: { feedback?: string; comments?: StepReviewComment[] },
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    // Optimistic-concurrency write: two concurrent change-requests on the same gate
-    // (the documented double-submit) can't both dispatch a re-run — the loser re-reads,
-    // sees `changes_requested`, and is rejected below instead of clobbering.
-    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
-      const step = inst.steps.find((s) => s.approval?.id === approvalId)
-      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-      this.assertNotIterativeGate(step)
-      if (step.approval.status === 'approved') {
-        throw new ConflictError(`Approval '${approvalId}' is already approved`)
-      }
-      if (step.approval.status === 'rejected') {
-        throw new ConflictError(`Approval '${approvalId}' was rejected`)
-      }
-      // A re-run is already in flight (and will raise a fresh gate on completion);
-      // acting on this now-stale gate id would dispatch duplicate work.
-      if (step.approval.status === 'changes_requested') {
-        throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
-      }
-
-      const stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
-
-      step.approval.status = 'changes_requested'
-      step.approval.feedback = review.feedback
-      step.approval.comments = review.comments?.length ? review.comments : undefined
-
-      // A companion's gate reviews the PRODUCER's output, not the companion's own work:
-      // requesting changes here must re-run the producer (with the human's feedback
-      // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
-      // nearest preceding step of one of the companion's target kinds.
-      if (isCompanionKind(step.agentKind)) {
-        const targets = companionTargets(step.agentKind)
-        let producerIndex = -1
-        for (let i = stepIndex - 1; i >= 0; i--) {
-          if (targets.includes(inst.steps[i]!.agentKind)) {
-            producerIndex = i
-            break
-          }
-        }
-        const producer = producerIndex >= 0 ? inst.steps[producerIndex]! : undefined
-        if (producer) {
-          // Re-run the producer (with the human's feedback) and every step up to and
-          // including the companion, then the companion re-grades. Does NOT touch the
-          // companion's automatic-rework budget — a human-driven iteration is unbounded.
-          const previousProposal = producer.output ?? step.approval.proposal
-          this.stepGraph.rerunProducerThrough(inst, producerIndex, stepIndex, {
-            previousProposal,
-            feedback: review.feedback ?? '',
-            ...(review.comments?.length ? { comments: review.comments } : {}),
-          })
-          if (inst.status === 'blocked') inst.status = 'running'
-          return
-        }
-      }
-
-      // Drop the live job handle so the re-run dispatches fresh work rather than
-      // re-attaching to the finished job (async steps); inline steps ignore this.
-      step.jobId = undefined
-      // A requested re-run is a fresh execution: clear the prior timing so the next
-      // start/finish times this attempt rather than spanning the human gate wait.
-      step.startedAt = null
-      step.finishedAt = null
-      this.stepGraph.startStep(step)
-      if (inst.status === 'blocked') inst.status = 'running'
-    })
-    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'changes_requested')
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return instance
+    return this.stepDecisions.requestStepChanges(workspaceId, executionId, approvalId, review)
   }
 
-  /**
-   * Reject a step's gated proposal: the run stops entirely. The gate is marked
-   * `rejected` and the run is failed with a dedicated `rejected` failure kind, so
-   * the board surfaces it via the shared failure banner (block → `blocked`) with a
-   * Retry affordance. The parked durable run is woken so it observes the now-terminal
-   * status and stops (the workflow's advance loop no-ops on a non-running run).
-   * Idempotent — rejecting an already-terminal gate is a no-op.
-   */
-  async rejectStep(
+  /** Reject a step's gated proposal; the run stops with a `rejected` failure. */
+  rejectStep(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     reason?: string,
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    // Optimistic-concurrency write: a reject racing the durable driver (or a concurrent
-    // resolve/request-changes on the same gate) re-reads and re-applies instead of
-    // clobbering the other writer — the lost-update fix, same as resolveDecision.
-    let alreadyRejected = false
-    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
-      const step = inst.steps.find((s) => s.approval?.id === approvalId)
-      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-      this.assertNotIterativeGate(step)
-      if (step.approval.status === 'approved') {
-        throw new ConflictError(`Approval '${approvalId}' is already approved`)
-      }
-      // A re-run is in flight; this gate id is stale (a fresh one is raised on its
-      // completion). Reject the current gate via that fresh id, not this one.
-      if (step.approval.status === 'changes_requested') {
-        throw new ConflictError(`Approval '${approvalId}' is being re-run`)
-      }
-      // Already rejected (and the run already failed): leave it as-is and skip failRun below.
-      if (step.approval.status === 'rejected') {
-        alreadyRejected = true
-        return
-      }
-      step.approval.status = 'rejected'
-      if (reason) step.approval.feedback = reason
-    })
-    if (alreadyRejected) return instance
-    const message = reason
-      ? `A reviewer rejected the proposal: ${reason}`
-      : 'A reviewer rejected the proposal, stopping the run.'
-    // failRun persists the terminal failure + flips the block to `blocked` and emits.
-    await this.failRun(workspaceId, executionId, message, 'rejected')
-    // Wake the parked durable run; it re-reads the now-terminal status and stops.
-    await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'rejected')
-    return assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
+    return this.stepDecisions.rejectStep(workspaceId, executionId, approvalId, reason)
   }
 
-  /**
-   * Merge an open PR: a block moves from `pr_ready` to `done`. This is the HUMAN merge path —
-   * a `merge_review` / `pipeline_complete` notification act, or the inspector's merge control.
-   *
-   * `reviewEffort` records, in the same call, how much review the PR actually needed. It is
-   * always optional: an untagged merge settles the track record with a null tag and nothing
-   * downstream breaks. The record settle runs AFTER the merge and is best-effort inside the
-   * service, so no part of this feature can fail or block a merge.
-   */
-  async mergePr(
+  /** Dispatch the human-review gate's fixer from a human's freeform instructions. */
+  requestHumanReviewFix(
+    workspaceId: string,
+    blockId: string,
+    instructions: string,
+  ): Promise<ExecutionInstance> {
+    return this.stepDecisions.requestHumanReviewFix(workspaceId, blockId, instructions)
+  }
+
+  /** Merge an open PR for real, moving the block from `pr_ready` to `done`. */
+  mergePr(
     workspaceId: string,
     blockId: string,
     reviewEffort?: ReviewEffort | null,
   ): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    const block = await this.requireBlock(workspaceId, blockId)
-    if (block.status !== 'pr_ready') {
-      throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
-    }
-    await this.finalizeMerge(workspaceId, blockId)
-    await this.mergePolicy.recordHumanMerge(workspaceId, blockId, reviewEffort)
-    return this.requireBlock(workspaceId, blockId)
+    return this.stepDecisions.mergePr(workspaceId, blockId, reviewEffort)
   }
 
-  /**
-   * Record that a human DECLINED to merge — they dismissed the review card rather than acting on
-   * it, so the class's rollup counts a rejection instead of a forever-`pending_review` row.
-   */
+  /** Record that a human DECLINED to merge (the review card was dismissed, not acted on). */
   recordMergeRejection(workspaceId: string, executionId: string): Promise<void> {
-    return this.mergePolicy.recordRejection(workspaceId, executionId)
+    return this.stepDecisions.recordMergeRejection(workspaceId, executionId)
   }
 
   /**
@@ -2000,7 +1679,7 @@ export class ExecutionService {
     await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single run per
     // block, matching the board's by-block projection). This mints a FRESH run id; the
-    // atomic `insertLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
+    // atomic `claimLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
     // any terminal rows in the SAME transaction, so a concurrent double-retry is serialised by
     // the live-run index (the loser gets a 409) instead of both deleting-then-inserting.
     const instance = buildResumedInstance({
@@ -2010,14 +1689,14 @@ export class ExecutionService {
       initiatedBy,
       now: this.clock.now(),
     })
-    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.handOffLiveRun(workspaceId, instance, block)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
@@ -2100,7 +1779,7 @@ export class ExecutionService {
     const newId = this.idGenerator.next('exec')
     const replaceId = previous.id
     await activate?.(newId)
-    // Like retry(), this mints a FRESH run id. `insertLiveRunOrConflict` atomically supersedes
+    // Like retry(), this mints a FRESH run id. `claimLiveRunOrConflict` atomically supersedes
     // the torn-down source run (`replaceId`, which here may still be LIVE — running/paused/
     // blocked) and clears terminal rows in one transaction, so a concurrent start that already
     // created a NEW live run for the block loses (409) instead of being silently clobbered.
@@ -2111,39 +1790,23 @@ export class ExecutionService {
       initiatedBy,
       now: this.clock.now(),
     })
-    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.handOffLiveRun(workspaceId, instance, block)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
   /**
-   * Thin delegates onto the two run-start funnels (`runStart.ts`), which own the ORDER between a
-   * run's atomic claim and its hand-off and are documented there. Every start path uses both:
-   * claim, write the block state that path owns, hand off.
+   * The bound callbacks the two run-start funnels (`runStart.ts`) need, so they depend on no
+   * concrete repository or service. Those funnels own the ORDER between a run's atomic claim and
+   * its hand-off and are documented there; every start path calls both, writing the block state
+   * that path owns in between.
    */
-  private async insertLiveRunOrConflict(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    replaceId?: string,
-  ): Promise<void> {
-    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
-  }
-
-  private async handOffLiveRun(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block | null | undefined,
-  ): Promise<void> {
-    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
-  }
-
-  /** The bound callbacks `runStart.ts` needs, so it depends on no concrete repository or service. */
   private get runStartDeps(): RunStartDeps {
     return {
       insertLive: (ws, instance, options) =>
