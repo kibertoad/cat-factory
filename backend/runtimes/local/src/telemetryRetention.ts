@@ -36,6 +36,8 @@ export interface LocalTelemetryRetentionResult {
   agentSearchQueries: number
   provisioningLog: number
   subscriptionQuotaCycles: number
+  /** Upstream-ingest high-water marks (PR 5's sync UP) whose runs' rows are long gone. */
+  ingestState: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -74,6 +76,13 @@ export async function sweepLocalTelemetryRetention(
     ),
     subscriptionQuotaCycles: await prune(SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS, now, (c) =>
       store.subscriptionQuotaCycleRepository.deleteOlderThan(c),
+    ),
+    // The ingest bookkeeping rides the LLM-call window too, and the ordering is what makes that
+    // safe: a mark is stamped at ingest time, which is always at or after the newest row it covers,
+    // so the mark outlives the rows it describes and can never be dropped while a still-stored run
+    // would be re-uploaded because of it.
+    ingestState: await prune(retention.llmCallMetricsMs, now, async (c) =>
+      store.ingestReader.deleteIngestStateOlderThan(c),
     ),
   }
 }

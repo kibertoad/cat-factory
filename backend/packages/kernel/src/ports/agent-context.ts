@@ -80,6 +80,21 @@ export interface AgentContextIndexQuery {
 export interface AgentContextSnapshotRepository {
   /** Append one captured dispatch context. */
   record(snapshot: AgentContextSnapshot): Promise<void>
+  /**
+   * Append a BATCH of captured dispatch contexts in one round trip, IGNORING any whose id is
+   * already stored.
+   *
+   * This exists for the mothership-mode telemetry INGEST (`POST /internal/telemetry/ingest`,
+   * docs/initiatives/mothership-mode.md, PR 5), which uploads a finished run's locally captured
+   * snapshots and RETRIES a chunk whose ack was lost — so unlike the single-row
+   * {@link AgentContextSnapshotRepository.record}, which is called once per dispatch and lets a
+   * duplicate id surface, the batch append is idempotent by id BY CONSTRUCTION. Looping `record`
+   * over the batch would be the banned N+1 write; a store implements this as one chunked
+   * multi-row insert.
+   *
+   * An empty batch is a no-op, not an error — the ingest drains until a page comes back empty.
+   */
+  recordMany(snapshots: AgentContextSnapshot[]): Promise<void>
   /** Snapshots recorded for a run, newest first. */
   listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]>
   /**

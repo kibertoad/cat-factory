@@ -31,13 +31,21 @@ transport + the GitHub token/client seams differ.
   hub's rooms) are the two halves of its real-time channel. Read
   `docs/initiatives/mothership-mode.md` before touching any of it — and `CLAUDE.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
-- `sqlite/telemetryStore.ts` + `telemetryRetention.ts` — the LOCAL-FIRST telemetry bucket (per-call
+- `sqlite/telemetryStore.ts` (+ `sqlite/telemetryRows.ts`, `sqlite/telemetryIngestReader.ts`) +
+  `telemetryRetention.ts` + `telemetryIngest.ts` — the LOCAL-FIRST telemetry bucket (per-call
   LLM metrics, agent-context snapshots, performed web searches, the provisioning log, modeled quota
   cycles) and its hourly prune. Layered over the remote registry by `composeMothership`, so every
   consumer resolves it with no per-consumer wiring; the bucket's membership is declared once in
   `@cat-factory/server`'s `LOCAL_FIRST_PERSISTENCE_REPOSITORIES`, which TYPES the composition —
   adding a telemetry repository without listing it there fails to compile rather than silently
-  resolving a remote proxy the allow-list will only answer `unknown_method`.
+  resolving a remote proxy the allow-list will only answer `unknown_method`. `telemetryIngest.ts` is
+  the sync UP: a background sweep that uploads a QUIESCED run's rows to the mothership's
+  `POST /internal/telemetry/ingest`, so a run this laptop drove is readable by hosted teammates and
+  outlives the local prune. Quiescence stands in for "finished" because the node holds no execution
+  index of its own; a failed upload leaves the run's high-water mark alone and retries — including
+  when the node holds no machine token yet, which THROWS rather than resolving empty, because the
+  sweep's success path advances that mark. Only rows scoped to a run sync up: an inline LLM call
+  that resolved no `executionId` stays local and is eventually pruned.
 - `harnessImage.ts` — `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
   boot (must stay a matched set with the backend — `CLAUDE.md` → "Releases & changesets").
 - `harnessInline.ts` — serving an enabled subscription harness ref as an INLINE call: the
