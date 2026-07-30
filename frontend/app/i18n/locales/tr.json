@@ -376,6 +376,14 @@
         "pr_ready": "Etkin",
         "done": "Canlı"
       },
+      "statusHint": {
+        "planned": "Bu hizmette henüz görev yok. Bir hizmet hiçbir zaman bitmez, dolayısıyla bu takılmış bir durum değil, başlangıç noktasıdır.",
+        "ready": "Bu hizmetin altındaki tüm görevler boşta ya da birleştirilmiş. Çalışan bir şey yok ve sizi bekleyen bir şey yok.",
+        "in_progress": "Bu hizmetin altındaki en az bir görev çalışıyor ya da açık bir pull request'i var.",
+        "blocked": "Bu hizmetin altındaki en az bir görev veya girişim sizden bir karar bekliyor.",
+        "pr_ready": "Bu hizmetin altındaki en az bir görev çalışıyor ya da açık bir pull request'i var.",
+        "done": "Bu hizmetin altındaki tüm görevler boşta ya da birleştirilmiş. Çalışan bir şey yok ve sizi bekleyen bir şey yok."
+      },
       "shared": "Paylaşılan",
       "sharedTitle": "Bu organizasyondaki çalışma alanları arasında paylaşılan",
       "bootstrapping": "Bootstrap yapılıyor…",
@@ -1254,6 +1262,7 @@
       },
       "subtasks": "Alt görevler · {completed}/{total}",
       "standardsApplied": "Uygulanan standartlar",
+      "standardsAppliedHint": "Bu adımın sistem istemine eklenen iyi uygulama standartları. Uygulayan bir ajan her birinin kısaltılmış sürümünü alır; gözden geçirenler ve planlayıcılar tam metni alır.",
       "decision": "Karar",
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",
@@ -1321,13 +1330,16 @@
       "effort": {
         "heading": "Aracı eforu",
         "difficulty": "Zorluk",
+        "difficultyHint": "Bu adımın ne kadar zor olduğuna dair ajanın kendi değerlendirmesi, on üzerinden. Ölçülmüş değil, ajanın kendi beyanı.",
         "outOfTen": "{value}/10",
         "reduced": "Etkinliği azaltan etkenler",
         "obstacles": "Başlıca engeller"
       },
       "adherence": {
         "heading": "En iyi uygulamalara uyum",
+        "headingHint": "Bu gözden geçirenin istemine eklenen iyi uygulama standartları ve değişikliğin her birine ne kadar uyduğuna dair değerlendirmesi.",
         "outOfTen": "{value}/10",
+        "ratingHint": "Değişikliğin bu standarda ne kadar uyduğuna dair gözden geçirenin kendi puanı, on üzerinden. Ölçülmüş değil, kendi beyanı.",
         "relatedFindings": "İlgili bulgular",
         "unnamed": "Standart"
       },
@@ -1599,7 +1611,9 @@
     },
     "legend": {
       "metered": "Ölçümlü",
-      "subscription": "Abonelik"
+      "meteredHint": "Sağlayıcı tarafından token başına faturalandırılır. Bu gerçek paradır.",
+      "subscription": "Abonelik",
+      "subscriptionHint": "Yalnızca gösterge amaçlıdır. Bu çağrılar sabit ücretli bir planda çalıştı; bu tutar aynı tokenların ölçümlü bir API üzerinden ne tutacağını gösterir. Hiçbir zaman faturalandırılmadı ve harcama olarak sayılmaz."
     },
     "spend": {
       "byModel": "Modele göre harcama",
@@ -3933,9 +3947,14 @@
       "companionGateTooltip": "Bu eşlikçiyi yalnızca görev tahmini bir eşiği aştığında çalıştır (daha önce bir Görev Tahmincisi gerekir)",
       "consensusGateTooltip": "Fikir birliğini yalnızca görev tahmini bir eşiği aştığında çalıştır (aksi halde standart ajan çalışır)",
       "runWhenAny": "şu durumda çalıştır (herhangi biri):",
+      "gatingRunWhenAnyHint": "Bu eksenlerden herhangi biri eşiğe ulaştığında veya aştığında adım çalışır, aksi halde atlanır. Tahmin yoksa yine de çalışır.",
+      "gatingRunWhenAnyConsensusHint": "Bu eksenlerden herhangi biri eşiğe ulaştığında veya aştığında panel toplanır; altında ise tek ajan çalışır. Tahmin yoksa panel yine de toplanır.",
       "complexityThreshold": "karmaşıklık ≥",
+      "complexityThresholdHint": "İşin yapılmasının ne kadar zor olduğu; pipeline'da daha önce yer alan Görev Tahmincisi tarafından puanlanır. Ölçek 1-10 değil, 0-1 arasıdır. Bu ekseni yok saymak için boş bırakın.",
       "riskThreshold": "risk ≥",
+      "riskThresholdHint": "Değişikliğin ne kadar şeyi bozabileceği; pipeline'da daha önce yer alan Görev Tahmincisi tarafından puanlanır. Ölçek 1-10 değil, 0-1 arasıdır. Bu ekseni yok saymak için boş bırakın.",
       "impactThreshold": "etki ≥",
+      "impactThresholdHint": "Değişikliğin sistem genelinde ne kadar yayıldığı; pipeline'da daha önce yer alan Görev Tahmincisi tarafından puanlanır. Ölçek 1-10 değil, 0-1 arasıdır. Bu ekseni yok saymak için boş bırakın.",
       "strategy": "Strateji",
       "rounds": "Tur",
       "purposeLabel": "Amaç",
@@ -4090,6 +4109,7 @@
       "stepLabel": "Çıktı bütçesi",
       "kindLabel": "Çıktı bütçesi",
       "kindHint": "Bu ajanın her çalışmasına uygulanır. Bir pipeline adımı bunu geçersiz kılabilir.",
+      "hint": "Bu ajanın tek bir yanıtının ulaşabileceği üst sınır. Boş bırakmak sınırı kaldırmaz, bir üst seviyeden devralır. Pipeline adımının kendi değeri çalışma alanı varsayılanını geçersiz kılar.",
       "inherits": "Devralındı",
       "inheritsValue": "Devralındı ({tokens})"
     }
@@ -4219,6 +4239,7 @@
     "empty": "Bu adım henüz bir karar üretmedi.",
     "notScored": "Puanlanmadı",
     "threshold": "eşik {threshold}",
+    "thresholdHint": "Bu adımın ulaşması gereken puan; görevin birleştirme politikasından alınır. Altında kaldığında hakem, bulgularını yeniden çalışma olarak ekleyip işi üreten adıma geri gönderir; deneme bütçesi kalmadıysa çalıştırmayı sizin için beklemeye alır.",
     "rubricOverridden": "çalışma alanı ölçütü",
     "reworkRounds": "yeniden çalışma {spent}/{budget}",
     "findingsHeading": "Ölçütün işaretledikleri",
@@ -5816,10 +5837,12 @@
       "config": "Yapılandırma ve CI",
       "source": "Kaynak kodu",
       "schema": "Şema ve geçişler",
-      "unknown": "Sınıflandırılmamış"
+      "unknown": "Sınıflandırılmamış",
+      "hint": "Değişen dosyalardan çıkarılan, bu farkın neye dokunduğu. Birleştirme politikası her sınıf için ayrı kural tanımlayabilir; birden çok sınıfa yayılan bir fark en ağır sınıfa göre değerlendirilir."
     },
     "effort": {
       "prompt": "İnceleme eforu",
+      "promptHint": "Bu pull request'in gerçekte ne kadar incelemeye ihtiyaç duyduğunu kaydeder. Yanıtınız, otomatik birleştirme eşiklerinin kalibre edildiği referanstır. Etiketleme isteğe bağlıdır ve etiketlemeden de birleştirebilirsiniz.",
       "none": "Yorum yok",
       "minor": "Küçük notlar",
       "major": "Ciddi yeniden çalışma",

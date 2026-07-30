@@ -1,11 +1,12 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `complexity` at **step 2 (30)**; `max-statements` at **step 2 (50)**;
+targets (4 / 4 / **6**); `complexity` at **step 2 (30)**; `max-statements` at its floor (**49**);
 `max-lines-per-function` at **step 2 (300)** for product code (test suites carved off into an
-`overrides` ratchet at 2453); `max-lines` at its free floor (**2648**). `complexity` (→20) /
-`max-statements` (→30) / `max-lines` (→2000, →1500) / `max-lines-per-function` (→150) still need the
-remaining god-file refactors to reach their final targets · **Owner:** core · **Started:** 2026-07-20
+`overrides` ratchet, now at its floor **1323**); `max-lines` past **step 1** at its floor
+(**1956**). `complexity` (→20) / `max-statements` (→30) / `max-lines` (→1500) /
+`max-lines-per-function` (→150) still need the remaining long-tail refactors to reach their final
+targets · **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -82,13 +83,47 @@ worst offender. These are the starting ceilings, not the goal.
 | Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                                   |
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------------ |
 | `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
-| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)             |
-| `max-lines-per-function` |     **300** |           **150** | product floor after the eleventh-pass >300 split (node `container.ts` 296); tests: 2453 (`overrides`)  |
-| `max-lines`              |    **2648** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2648)                                       |
+| `max-statements`         |      **49** |            **30** | at its floor — `provision-detect.logic.test.ts` / `RunDispatcher.recordStepResult` (49)                |
+| `max-lines-per-function` |     **300** |           **150** | product floor after the eleventh-pass >300 split (node `container.ts` 296); tests: 1323 (`overrides`)  |
+| `max-lines`              |    **1956** |          **1500** | past step 1, at its floor — `execution/ExecutionService.ts` (1956)                                     |
 | `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                        |
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 
+> **Twelfth pass (landed):** `max-lines` went **past step 1 in one slice — 2648 → its floor
+> 1956** by splitting all six files above 2000, the last rule still sitting at a free floor and the
+> god-file split the earlier passes kept deferring to it. Each split is a cohesive MOVE, not a
+> re-slice: the engine's `ExecutionService` (2277) lost the HUMAN decision surface — resolve /
+> approve / request-changes / reject / merge / decline-to-merge, the human-review fix request, and
+> the `assertNotIterativeGate` guard only those three approvals use — to a
+> `StepDecisionController` taking a deps object of bound engine call-backs (the `RunDispatcher`
+> controller pattern), leaving thin delegates so no HTTP call site changed; `RunDispatcher` (2390)
+> lost two, the RUNNING half of the poll branch tree (`PollRunningController`, the exact sibling of
+> the settled-poll `PollCompletionController`) and the one-shot engine steps `tracker` /
+> `bug-intake` / `initiative-committer` (`OneShotStepController` — the taxonomy bucket CLAUDE.md
+> already names, whose fourth member `deployer` had its own controller since the first pass); the
+> Worker `container.ts` (2214) split three ways along the Node facade's OWN module names
+> (`container-model-resolver.ts`, `container-executor-deps.ts`, `container-vcs-identity.ts`), with
+> the executor's two remaining root-owned handles threaded through `WorkerExecutorDeps` rather than
+> imported back, so the module graph stays one-way; `provision-detect.logic.ts` (2234) split its
+> Kubernetes half (`provision-detect.kubernetes.ts`) over the YAML/loose-value primitives both
+> halves share (`provision-detect.yaml.ts`); the Node `db/schema.ts` (2078) moved the tenancy &
+> identity tables to `db/tables/identity.ts` (which is also where the schema's only two FK targets
+> live, so the referencing credential tables import FROM it); and `persistenceRpc.spec.ts` (2445)
+> moved its 587-line in-process fixture to `persistenceRpc.harness.ts` and split the per-surface
+> allow-list tables into `persistenceRpcSurfaces.spec.ts`, de-duplicating 19 byte-identical local
+> `remoteRegistry` factories onto one shared helper on the way. Two ceilings tightened for free
+> alongside: `max-statements` 50 → **49**, and the test `overrides` ratchet for
+> `max-lines-per-function` **2453 → 1323** (the conformance suites' own floor — the old number
+> predated their splits). Five `check-file-size.mjs` allowances ratcheted DOWN to lock the wins in
+> (RunDispatcher 2430 → 1900, ExecutionService 2300 → 2000, Worker container 2300 → 1650, node
+> schema 2150 → 1900, provision-detect 2250 → 1850). Verified by the orchestration (1299), server,
+> integrations and app unit suites plus a whole-tree typecheck (64/64); every extraction is a
+> behaviour-neutral move, and the cross-runtime conformance suites cover the two facades in CI. No
+> harness `src/**` touched, so no image bump. `complexity` / `max-lines-per-function` (product)
+> unchanged — step 2 (1500) now takes `ExecutionService` / `RunDispatcher` / node `schema.ts` /
+> `provision-detect.logic.ts` again, plus the 1500–1620 band behind them.
+>
 > **Eleventh pass (landed):** `max-lines-per-function` reached **step 2 (400 → 300)** by splitting
 > all twelve product functions above 300 along cohesive, behaviour-neutral seams, and `max-lines`
 > tightened **for free** (2802 → **2648**) because two of those splits were sibling-file moves out of
@@ -303,11 +338,12 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-statements` — 157 → 30
 
-| Step      | `max` | Offenders to split first                                                | Status    |
-| --------- | ----: | ----------------------------------------------------------------------- | --------- |
-| baseline  |   157 | —                                                                       | ✅ landed |
-| 1 + 2     |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
-| 3 (final) |    30 | (~105) — the long tail                                                  | ☐ todo    |
+| Step       | `max` | Offenders to split first                                                | Status    |
+| ---------- | ----: | ----------------------------------------------------------------------- | --------- |
+| baseline   |   157 | —                                                                       | ✅ landed |
+| 1 + 2      |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
+| free floor |    49 | — (no refactor; taken alongside the twelfth pass's `max-lines` slice)   | ✅ landed |
+| 3 (final)  |    30 | (~104) — the long tail                                                  | ☐ todo    |
 
 ### `max-lines-per-function` — 3103 → 150
 
@@ -324,18 +360,24 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,
 > big `describe`/`it` blocks). **Decided (step 1):** an `overrides` entry holds the test globs
 > (`**/*.test.ts`, `**/*.spec.ts`, `internal/conformance/src/**`, `internal/e2e/**`) to their own
-> ratchet (currently **2453**) so the global (product) ceiling tightens without contorting the
-> table-driven Vitest suites. Steps 2/3 walk the PRODUCT ceiling down; tighten the test override
-> separately if the suites shrink.
+> ratchet (currently **1323**, dropped from 2453 for free in the twelfth pass — the old number
+> predated the conformance suites' own splits) so the global (product) ceiling tightens without
+> contorting the table-driven Vitest suites. Steps 2/3 walk the PRODUCT ceiling down; tighten the
+> test override separately as the suites shrink. Note the globs cover `*.spec.ts` / `*.test.ts`
+> and the conformance/e2e trees, NOT a test-SUPPORT module beside them: a `test/*.harness.ts`
+> holding a shared fixture answers to the PRODUCT ceiling, so split it rather than widening the
+> globs (the persistence-RPC harness's 530-line `makeRegistry` split into four per-surface
+> builders over one shared fixtures object).
 
 ### `max-lines` — 3119 → 1500
 
-| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                           | Status    |
-| ---------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3119 | —                                                                                                                                                                                                                                                                                  | ✅ landed |
-| free floor |  2802 | — (no refactor; #1266 split the old 3119 `suites/execution.ts` + `node/container.ts` offenders)                                                                                                                                                                                    | ✅ landed |
-| 1          |  2000 | (9) `ExecutionService.ts` 2802, `cloudflare/container.ts` 2710, `node/container.ts` 2583, `suites/core.ts` 2471, `RunDispatcher.ts` 2397, `provision-detect.logic.ts` 2280, `node/db/schema.ts` 2262, `server/test/persistenceRpc.spec.ts` 2148, `orchestration/container.ts` 1934 | ☐ todo    |
-| 2 (final)  |  1500 | (13) — aligns with `check-file-size.mjs`                                                                                                                                                                                                                                           | ☐ todo    |
+| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                            | Status    |
+| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline   |  3119 | —                                                                                                                                                                                                                                                                                                                   | ✅ landed |
+| free floor |  2802 | — (no refactor; #1266 split the old 3119 `suites/execution.ts` + `node/container.ts` offenders)                                                                                                                                                                                                                     | ✅ landed |
+| free floor |  2648 | — (no refactor; two eleventh-pass function splits were sibling-file moves out of this rule's own god-files)                                                                                                                                                                                                         | ✅ landed |
+| 1 (→ 1956) |  2000 | (6) `persistenceRpc.spec.ts` 2445 → harness + surfaces spec, `RunDispatcher.ts` 2390 → `PollRunningController` + `OneShotStepController`, `ExecutionService.ts` 2277 → `StepDecisionController`, `provision-detect.logic.ts` 2234, Worker `container.ts` 2214 (3 ways), `node/db/schema.ts` 2078 — see twelfth pass | ✅ landed |
+| 2 (final)  |  1500 | (7) `ExecutionService.ts` 1956, `node/db/schema.ts` 1894, `RunDispatcher.ts` 1880, `provision-detect.logic.ts` 1826, `provision-detect.logic.test.ts` 1620, Worker `container.ts` 1598 — aligns with `check-file-size.mjs`                                                                                          | ☐ todo    |
 
 ### `max-params` — 20 → 6
 

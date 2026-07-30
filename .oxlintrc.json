@@ -9,8 +9,8 @@
     "max-depth": ["error", { "max": 4 }],
     "max-nested-callbacks": ["error", { "max": 4 }],
     "max-params": ["error", { "max": 6 }],
-    "max-statements": ["error", { "max": 50 }],
-    "max-lines": ["error", { "max": 2648 }],
+    "max-statements": ["error", { "max": 49 }],
+    "max-lines": ["error", { "max": 1956 }],
     "max-lines-per-function": ["error", { "max": 300 }]
   },
   "overrides": [
@@ -22,7 +22,7 @@
         "backend/internal/e2e/**"
       ],
       "rules": {
-        "max-lines-per-function": ["error", { "max": 2453 }]
+        "max-lines-per-function": ["error", { "max": 1323 }]
       }
     }
   ],

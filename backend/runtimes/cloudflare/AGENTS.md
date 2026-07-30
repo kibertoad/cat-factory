@@ -17,7 +17,15 @@ Cloudflare Workflows (durable execution), queues/cron, and the `workers-ai` bind
 
 - `repositories/` — the D1 (SQLite) repos implementing the kernel ports (the **twin** of the
   Node facade's Drizzle repos).
-- `container.ts` — the DI composition root (`buildContainer`).
+- `container.ts` — the DI composition root (`buildContainer`), with its size-budget splits
+  beside it: `container-assembly.ts` (the `ServerContainer` assembly), `container-registries.ts`
+  (app-owned registry resolution), `container-trace-sinks.ts` (external LLM-trace destinations),
+  `container-model-resolver.ts` (the memoised inline `ModelProviderResolver` + the per-step
+  workspace default), `container-executor-deps.ts` (runner-transport selection, the container
+  executor, the inline/sandbox composite and the consensus wrap) and `container-vcs-identity.ts`
+  (the multi-App GitHub registry + the repo-target resolvers several siblings share). The
+  executor and vcs-identity modules never import the root back — what they need from it arrives
+  through `WorkerExecutorDeps` — so the module graph stays one-way.
 - `ai/`, `gateways/`, `github/` — the CF gateway impls (realtime, GitHub, LLM upstream) + the
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring — see `docs/glossary.md`).
