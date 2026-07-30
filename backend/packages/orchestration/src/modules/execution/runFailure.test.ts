@@ -1,18 +1,21 @@
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { classifyDispatchFailure } from './job.logic.js'
 import { failureFromAdvanceError, failureFromDriver, failureFromResult } from './runFailure.js'
 
 // These derivations exist so the two durable drivers can't disagree about what a failure IS.
 // The regression they encode: the Cloudflare driver silently dropped `reason` on every path.
 
 describe('failureFromAdvanceError', () => {
-  it("lifts a DomainError's machine reason onto the failure", () => {
+  it("lifts a DomainError's machine reason onto the failure, as a preflight rejection", () => {
     const failure = failureFromAdvanceError(
       new ConflictError('No agent backend', 'agent_backend_unconfigured'),
     )
     expect(failure).toEqual({
       message: 'No agent backend',
-      kind: 'agent',
+      // NOT `agent`: a precondition the run never satisfied means nothing reached an agent, so
+      // `agent` would send a reader looking for a transcript that does not exist.
+      kind: 'preflight',
       detail: null,
       reason: 'agent_backend_unconfigured',
     })
@@ -23,9 +26,23 @@ describe('failureFromAdvanceError', () => {
       new ValidationError('No deploy runner', { reason: 'deploy_runner_unwired' }),
     )
     expect(failure.reason).toBe('deploy_runner_unwired')
+    expect(failure.kind).toBe('preflight')
   })
 
-  it('leaves reason null for a plain Error and for a non-Error throw', () => {
+  it('agrees with classifyDispatchFailure on the same refusal', () => {
+    // The two seams catch throws from the SAME engine at different depths — a refusal inside
+    // `startJob` vs. one that escapes `advanceInstance` — so which one happens to see a given
+    // refusal must not decide how the board describes it.
+    const error = new ValidationError('Unreadable context document', {
+      reason: 'context_document_unreadable',
+    })
+    const dispatched = classifyDispatchFailure(error)
+    const advanced = failureFromAdvanceError(error)
+    expect(advanced.kind).toBe(dispatched.failureKind)
+    expect(advanced.reason).toBe(dispatched.reason)
+  })
+
+  it('leaves reason null — and the kind `agent` — for a plain Error and a non-Error throw', () => {
     expect(failureFromAdvanceError(new Error('boom'))).toEqual({
       message: 'boom',
       kind: 'agent',

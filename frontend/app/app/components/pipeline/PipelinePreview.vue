@@ -12,6 +12,7 @@ import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import { pipelineDisplaySteps, pipelineGateCount } from '~/utils/pipeline'
+import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 
 const props = defineProps<{ pipeline: Pipeline }>()
 const { t } = useI18n()

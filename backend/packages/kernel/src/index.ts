@@ -325,6 +325,19 @@ export {
   describeComposeSource,
 } from './domain/compose-sources.js'
 
+// The "a referenced context document reaches the agent whole, or the run breaks loudly naming it"
+// invariant, shared by the engine's resolution path and the container's materialiser. See
+// `domain/context-references.ts`.
+export {
+  CONTEXT_DOCUMENT_UNREADABLE,
+  CONTEXT_DOCUMENTS_OVER_BUDGET,
+  type ContextReferenceRef,
+  hasReadableContent,
+  contextExcerptFor,
+  assertContextDocumentsReadable,
+  assertContextReferencesFit,
+} from './domain/context-references.js'
+
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {
   clearsConsensusBar,
