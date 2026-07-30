@@ -9,7 +9,9 @@ import type {
   EnvironmentTestRun,
   ExecutionEventPublisher,
   ExecutionInstance,
+  InfraSetupTransition,
   Initiative,
+  KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
@@ -102,6 +104,21 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
     const targets = await this.targets(workspaceId, notification.blockId)
     await Promise.all(targets.map((ws) => this.inner.notificationChanged?.(ws, notification)))
+  }
+
+  // A reachability transition concerns the WORKSPACE's own infrastructure wiring, not a block, so
+  // there is nothing to resolve a shared service from — and nothing to fan out: a board that mounts
+  // a service from another workspace reads its OWN infra projection. Origin only.
+  async infraSetupChanged(workspaceId: string, change: InfraSetupTransition): Promise<void> {
+    await this.inner.infraSetupChanged?.(workspaceId, change)
+  }
+
+  // Run-details only (never surfaced on the board), so no shared-service fan-out. Forwarded
+  // explicitly because this decorator delegates method-by-method: an event it doesn't name is
+  // silently DROPPED for every deployment that wires the fan-out, with nothing failing.
+  // `fanOutEventPublisher.spec.ts` pins that surface so the next addition can't be forgotten.
+  async kaizenGradingChanged(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    await this.inner.kaizenGradingChanged?.(workspaceId, grading)
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {

@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   BudgetCaps,
-  InfraSetup,
   SpendStatus,
   WorkspaceAccess,
   WorkspaceListItem,
@@ -11,6 +10,7 @@ import type {
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
+import { createInfraSetupState } from '~/stores/workspace/infraSetup'
 import { markBoot } from '~/utils/bootMarks'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
@@ -50,12 +50,14 @@ export const useWorkspaceStore = defineStore(
     const userSpend = ref<SpendStatus | null>(null)
     /** Operator hard ceilings on the account/user budget tiers (null until first load). */
     const budgetCaps = ref<BudgetCaps | null>(null)
-    /**
-     * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
-     * storage) from the snapshot, driving the infra-setup banner. Null on an older backend that
-     * doesn't compute it (⇒ no banner).
-     */
-    const infraSetup = ref<InfraSetup | null>(null)
+    // The infra-setup slice (the banner's projection + the live reachability patch), extracted
+    // because it is the one slice with RULES rather than a plain assign-from-snapshot.
+    const {
+      infraSetup,
+      infraSetupDetails,
+      hydrate: hydrateInfraSetup,
+      patchInfraSetup,
+    } = createInfraSetupState()
     /**
      * The signed-in caller's resolved workspace-RBAC access to the ACTIVE board — their
      * effective role + the permission set it grants, from the auth gate's resolution
@@ -92,7 +94,7 @@ export const useWorkspaceStore = defineStore(
       accountSpend.value = snapshot.accountSpend ?? null
       userSpend.value = snapshot.userSpend ?? null
       budgetCaps.value = snapshot.budgetCaps ?? null
-      infraSetup.value = snapshot.infraSetup ?? null
+      hydrateInfraSetup(snapshot.infraSetup)
       access.value = snapshot.access ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename). The
       // snapshot's `workspace` carries no `viewerRole` (that's a `GET /workspaces` list
@@ -283,6 +285,8 @@ export const useWorkspaceStore = defineStore(
       userSpend,
       budgetCaps,
       infraSetup,
+      infraSetupDetails,
+      patchInfraSetup,
       access,
       init,
       switchTo,

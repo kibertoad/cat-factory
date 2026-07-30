@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import {
   areaStatus,
+  infraSetupAreaApplies,
   type InfraSetupSources,
   snapshotInfraSetup,
-} from '../src/modules/workspaces/WorkspaceController.js'
+} from '../src/modules/workspaces/infraSetup.js'
 
 // Unit coverage for the infra-setup snapshot projection. The cross-runtime conformance suite only
 // pins "present + valid enum" (per-area values legitimately differ by runtime); these tests pin the
@@ -151,6 +152,35 @@ describe('snapshotInfraSetup', () => {
     // Even a *registered* pool is not_applicable there: the pool isn't the executor of record.
     const registered = await snapshotInfraSetup({ runners: runnerSource(true) }, WS)
     expect(registered.agentExecutor).toBe('not_applicable')
+  })
+
+  it('exposes the same applicability predicate the reachability watcher probes on', () => {
+    // ONE definition, deliberately: the watcher gated only on "is the module wired", which is
+    // strictly looser than this, so a dead-but-optional runner pool raised a card and paged Slack
+    // for an area whose `not_applicable` status the snapshot fold then refused to render.
+    const optionalPool = { runners: runnerSource(true) }
+    expect(infraSetupAreaApplies(optionalPool, 'agentExecutor')).toBe(false)
+    expect(
+      infraSetupAreaApplies(
+        { ...optionalPool, agentExecutorRequiresRunnerPool: true },
+        'agentExecutor',
+      ),
+    ).toBe(true)
+    // Environments default to required, and a zero-config test-env default opts out.
+    expect(infraSetupAreaApplies({ environments: envSource(true) }, 'ephemeralEnvironments')).toBe(
+      true,
+    )
+    expect(
+      infraSetupAreaApplies(
+        { environments: envSource(true), ephemeralEnvironmentsRequireProvider: false },
+        'ephemeralEnvironments',
+      ),
+    ).toBe(false)
+    // An unwired module never applies, whatever the flag says.
+    expect(infraSetupAreaApplies({ agentExecutorRequiresRunnerPool: true }, 'agentExecutor')).toBe(
+      false,
+    )
+    expect(infraSetupAreaApplies({}, 'binaryStorage')).toBe(false)
   })
 
   it('treats a resolved artifact store as configured', async () => {

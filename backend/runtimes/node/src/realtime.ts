@@ -17,7 +17,12 @@ import type {
   RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
-import { describeError, type ExecutionEventPublisher, type Logger } from '@cat-factory/kernel'
+import {
+  describeError,
+  type ExecutionEventPublisher,
+  type InfraSetupTransition,
+  type Logger,
+} from '@cat-factory/kernel'
 import {
   type AccountOfWorkspace,
   type AuthConfig,
@@ -238,6 +243,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
     this.publish(workspaceId, { type: 'notification', notification, at: Date.now() })
+  }
+
+  async infraSetupChanged(workspaceId: string, change: InfraSetupTransition): Promise<void> {
+    this.publish(workspaceId, { type: 'infraSetup', ...change, at: Date.now() })
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {

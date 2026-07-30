@@ -1886,6 +1886,7 @@
         "clarity_review": "既読にする",
         "release_regression": "確認",
         "platform_health": "確認",
+        "infra_unreachable": "確認",
         "decision_required": "既読にする",
         "human_test_ready": "既読にする",
         "visual_confirmation_ready": "既読にする",
@@ -1940,11 +1941,13 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "エージェント実行環境が未設定です",
+        "unreachableTitle": "エージェント実行環境に到達できません",
         "body": "このデプロイはセルフホストのランナープールでエージェントを実行しますが、登録されているものがないため、接続するまでエージェントを実行できません。",
         "action": "ランナープールを設定"
       },
       "ephemeralEnvironments": {
         "title": "テスト環境が未設定です",
+        "unreachableTitle": "テスト環境プロバイダーに到達できません",
         "body": "エフェメラル環境プロバイダーが登録されていないため、稼働中のプレビュー環境を必要とするテストエージェントを実行できません。下の「テスト環境」を開き、Kubernetes クラスターまたはカスタム HTTP 環境プロバイダーを接続して有効にしてください。",
         "action": "環境を設定"
       },
@@ -1956,6 +1959,11 @@
       "dismiss": {
         "session": "このセッションでは非表示にする",
         "permanent": "制限を理解しました。今後通知しない"
+      },
+      "unreachable": {
+        "body": "接続は設定済みですが、ライブチェックでは到達できませんでした。つまり設定漏れではなく障害です。応答が戻るまで、これに依存するエージェントは失敗します。サービスが稼働しているか確認したうえで、接続を再テストしてください。",
+        "reason": "最後のチェック: {detail}",
+        "action": "接続を確認"
       }
     },
     "spendWarningBanner": {
@@ -3598,6 +3606,7 @@
     },
     "routable": {
       "platform_health": "プラットフォームの健全性",
+      "infra_unreachable": "インフラ障害",
       "merge_review": "マージレビュー",
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",
