@@ -777,6 +777,59 @@ describe('composeMothership realtime upstream adapter', () => {
   })
 })
 
+describe('composeMothership telemetry ingest delegation', () => {
+  it('uploads a run batch to the ingest endpoint with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true, stored: { metrics: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      const result = await composed.telemetryClient.ingest({
+        workspaceId: 'ws_1',
+        executionId: 'exec_1',
+        metrics: [],
+      })
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/telemetry/ingest')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // The batch names the run it belongs to; the mothership binds that pair and stamps it onto
+      // every row, so the node cannot file telemetry into a workspace or run it did not address.
+      expect(seen[0]!.body).toMatchObject({ workspaceId: 'ws_1', executionId: 'exec_1' })
+      expect(result.metrics).toBe(1)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('skips the upload entirely on a node that has not logged in yet', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await composed.telemetryClient.ingest({ workspaceId: 'ws_1', executionId: 'exec_1' })
+      // Nothing to authenticate with: the rows stay local and the run stays a candidate, rather
+      // than a guaranteed-403 upload of megabytes on every sweep.
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+})
+
 describe('composeMothership notification delivery delegation', () => {
   const notification = { id: 'ntf_1', workspaceId: 'ws_1', title: 'Merge review' } as never
 

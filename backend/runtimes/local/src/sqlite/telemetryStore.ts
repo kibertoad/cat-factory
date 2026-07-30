@@ -335,6 +335,21 @@ CREATE TABLE IF NOT EXISTS subscription_quota_cycles (
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_quota_cycles_window
   ON subscription_quota_cycles (window_started_at);
+
+-- Per-run high-water mark for the UPSTREAM telemetry ingest (docs/initiatives/mothership-mode.md,
+-- PR 5): which runs have already been uploaded to the mothership, and up to which capture time.
+-- Local-only bookkeeping -- it never leaves the laptop and has no mothership counterpart.
+CREATE TABLE IF NOT EXISTS telemetry_ingest_state (
+  workspace_id TEXT NOT NULL,
+  execution_id TEXT NOT NULL,
+  -- The newest captured row (across the three run-scoped sinks) this run was ingested through.
+  -- A later row moves the run's newest-write time past this and makes it a candidate again, which
+  -- is what covers a RESUMED run: the upload is idempotent by row id, so re-offering the
+  -- already-ingested prefix costs bandwidth and nothing else.
+  ingested_through INTEGER NOT NULL,
+  ingested_at INTEGER NOT NULL,
+  PRIMARY KEY (workspace_id, execution_id)
+);
 `
 
 interface MetricRow {
@@ -461,6 +476,22 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.phase,
         metric.turnIndex,
       )
+  }
+
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    // `DatabaseSync` is synchronous and single-process, so the loop below is one uninterrupted
+    // append rather than N round trips — this is the local mirror of the other runtimes' batch
+    // insert, not the N+1 the rule forbids. Wrapped in a transaction so a partially applied
+    // batch can't leave the run's rows interleaved with a concurrent writer's.
+    if (metrics.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const metric of metrics) await this.record(metric)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   async latestChainTip(
@@ -738,12 +769,33 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
   constructor(private readonly db: DatabaseSync) {}
 
   async record(snapshot: AgentContextSnapshot): Promise<void> {
+    this.insert(snapshot, false)
+  }
+
+  async recordMany(snapshots: AgentContextSnapshot[]): Promise<void> {
+    // Synchronous single-process appends inside one transaction — the local mirror of the other
+    // runtimes' batch insert. Duplicate ids are IGNORED here (unlike the single-row `record`),
+    // per the port: a batch append has to be retryable.
+    if (snapshots.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const snapshot of snapshots) this.insert(snapshot, true)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private insert(snapshot: AgentContextSnapshot, ignoreDuplicateId: boolean): void {
     this.db
       .prepare(
         `INSERT INTO agent_context_snapshots
            (id, workspace_id, execution_id, agent_kind, step_index, created_at,
             model, harness, system_prompt, user_prompt, fragments, context_files, extras)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)${
+           ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''
+         }`,
       )
       .run(
         snapshot.id,
@@ -860,11 +912,29 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async record(query: AgentSearchQuery): Promise<void> {
+    this.insert(query, false)
+  }
+
+  async recordMany(queries: AgentSearchQuery[]): Promise<void> {
+    // See the snapshot repo's note: one transaction, duplicate ids ignored so the batch append
+    // stays retryable.
+    if (queries.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const query of queries) this.insert(query, true)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private insert(query: AgentSearchQuery, ignoreDuplicateId: boolean): void {
     this.db
       .prepare(
         `INSERT INTO agent_search_queries
            (id, workspace_id, execution_id, agent_kind, provider, query, result_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)${ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''}`,
       )
       .run(
         query.id,
@@ -1179,9 +1249,213 @@ export interface LocalTelemetryRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
 }
 
-/** The local telemetry repositories plus a handle to close the underlying db. */
+/** A run whose captured telemetry has not been uploaded to the mothership yet. */
+export interface PendingIngestRun {
+  workspaceId: string
+  executionId: string
+  /** The newest captured row across the run's three sinks — the high-water mark to mark. */
+  lastWriteAt: number
+}
+
+/** EXCLUSIVE keyset on the `(createdAt, id)` composite every ingest read walks forwards. */
+export interface IngestCursor {
+  createdAt: number
+  id: string
+}
+
+/**
+ * The UPSTREAM half of the telemetry bucket (docs/initiatives/mothership-mode.md, PR 5): the
+ * reads a mothership-mode node's ingest sweep walks, plus the per-run high-water mark it keeps.
+ *
+ * These are deliberately NOT kernel port methods. They exist only on the laptop side of the
+ * sync — the mothership never reads its telemetry this way — so they are a local-facade
+ * differentiator like the work queue, with no symmetry obligation.
+ *
+ * Every read is FORWARD-ordered (`created_at, id` ascending) and keyset-paged, because the sweep
+ * uploads a run oldest-first and must resume exactly where it stopped. Bodies are returned WHOLE
+ * — unlike the debug API's bounded pages, the point here is to move the stored bytes — so the
+ * caller bounds memory with `limit`, sized per sink to the weight of one row.
+ */
+export interface LocalTelemetryIngestReader {
+  /**
+   * Runs whose newest captured row is older than `quiescentBefore` and newer than what was last
+   * ingested, oldest-quiescence first. Quiescence is what stands in for "finished": the node
+   * holds no run index of its own (executions live on the mothership), and a run that has stopped
+   * producing telemetry for the grace period is done as far as its telemetry is concerned. A
+   * resumed run simply becomes a candidate again.
+   *
+   * One grouped query over the three sinks — never a per-run probe.
+   */
+  listPendingRuns(quiescentBefore: number, limit: number): PendingIngestRun[]
+  listMetrics(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): LlmCallMetric[]
+  listSnapshots(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentContextSnapshot[]
+  listSearchQueries(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentSearchQuery[]
+  /** Record that the run is uploaded through `throughAt` (its `lastWriteAt` at sweep time). */
+  markIngested(workspaceId: string, executionId: string, throughAt: number, at: number): void
+  /**
+   * Retention for the bookkeeping table itself. Nothing else bounds it: the rows outlive the
+   * telemetry they describe (that is the point — a re-appearing run must not be re-uploaded), so
+   * they are pruned on the same window as the sinks, one sweep later than the rows they tracked.
+   */
+  deleteIngestStateOlderThan(epochMs: number): number
+}
+
+/** The local telemetry repositories plus the ingest reader and a handle to close the db. */
 export interface LocalTelemetryStore extends LocalTelemetryRepositories {
+  ingestReader: LocalTelemetryIngestReader
   close(): void
+}
+
+/** `WHERE` fragment + binds for the forward keyset every ingest read shares. */
+function ingestKeyset(cursor: IngestCursor | undefined): {
+  sql: string
+  binds: (string | number)[]
+} {
+  if (!cursor) return { sql: '', binds: [] }
+  // Composite, matching the ORDER BY: telemetry is appended in same-millisecond bursts, so a
+  // timestamp-only cursor would silently drop rows from the next page.
+  return {
+    sql: ' AND (created_at > ? OR (created_at = ? AND id > ?))',
+    binds: [cursor.createdAt, cursor.createdAt, cursor.id],
+  }
+}
+
+class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
+  constructor(private readonly db: DatabaseSync) {}
+
+  listPendingRuns(quiescentBefore: number, limit: number): PendingIngestRun[] {
+    // ONE grouped query across the three run-scoped sinks, anti-joined against the high-water
+    // marks. `execution_id IS NOT NULL` drops the un-run-scoped LLM calls (an inline call that
+    // resolved no run): they are not part of "a finished run's telemetry" and there is nothing to
+    // key their upload on.
+    const rows = this.db
+      .prepare(
+        `SELECT w.workspace_id, w.execution_id, MAX(w.last_write) AS last_write
+           FROM (
+             SELECT workspace_id, execution_id, MAX(created_at) AS last_write
+               FROM llm_call_metrics WHERE execution_id IS NOT NULL GROUP BY 1, 2
+             UNION ALL
+             SELECT workspace_id, execution_id, MAX(created_at)
+               FROM agent_context_snapshots GROUP BY 1, 2
+             UNION ALL
+             SELECT workspace_id, execution_id, MAX(created_at)
+               FROM agent_search_queries GROUP BY 1, 2
+           ) AS w
+           LEFT JOIN telemetry_ingest_state s
+             ON s.workspace_id = w.workspace_id AND s.execution_id = w.execution_id
+          GROUP BY w.workspace_id, w.execution_id
+         HAVING MAX(w.last_write) <= ?
+            AND (MAX(s.ingested_through) IS NULL OR MAX(s.ingested_through) < MAX(w.last_write))
+          ORDER BY last_write ASC
+          LIMIT ?`,
+      )
+      .all(quiescentBefore, limit) as unknown as {
+      workspace_id: string
+      execution_id: string
+      last_write: number
+    }[]
+    return rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      executionId: row.execution_id,
+      lastWriteAt: row.last_write,
+    }))
+  }
+
+  private page<Row>(
+    table: string,
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): Row[] {
+    const keyset = ingestKeyset(cursor)
+    return this.db
+      .prepare(
+        `SELECT * FROM ${table}
+          WHERE workspace_id = ? AND execution_id = ?${keyset.sql}
+          ORDER BY created_at ASC, id ASC
+          LIMIT ?`,
+      )
+      .all(workspaceId, executionId, ...keyset.binds, limit) as unknown as Row[]
+  }
+
+  listMetrics(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): LlmCallMetric[] {
+    return this.page<MetricRow>('llm_call_metrics', workspaceId, executionId, cursor, limit).map(
+      rowToMetric,
+    )
+  }
+
+  listSnapshots(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentContextSnapshot[] {
+    return this.page<SnapshotRow>(
+      'agent_context_snapshots',
+      workspaceId,
+      executionId,
+      cursor,
+      limit,
+    ).map(rowToSnapshot)
+  }
+
+  listSearchQueries(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentSearchQuery[] {
+    return this.page<SearchQueryRow>(
+      'agent_search_queries',
+      workspaceId,
+      executionId,
+      cursor,
+      limit,
+    ).map(rowToQuery)
+  }
+
+  markIngested(workspaceId: string, executionId: string, throughAt: number, at: number): void {
+    // Monotonic: a concurrent sweep that got further must not be walked back, so the update only
+    // moves the mark forwards.
+    this.db
+      .prepare(
+        `INSERT INTO telemetry_ingest_state
+           (workspace_id, execution_id, ingested_through, ingested_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(workspace_id, execution_id) DO UPDATE SET
+           ingested_through = MAX(excluded.ingested_through, telemetry_ingest_state.ingested_through),
+           ingested_at = excluded.ingested_at`,
+      )
+      .run(workspaceId, executionId, throughAt, at)
+  }
+
+  deleteIngestStateOlderThan(epochMs: number): number {
+    const res = this.db
+      .prepare('DELETE FROM telemetry_ingest_state WHERE ingested_at < ?')
+      .run(epochMs)
+    return Number(res.changes)
+  }
 }
 
 /**
@@ -1197,6 +1471,7 @@ export function createLocalTelemetryStore(path: string): LocalTelemetryStore {
     agentSearchQueryRepository: new SqliteAgentSearchQueryRepository(db),
     provisioningLogRepository: new SqliteProvisioningLogRepository(db),
     subscriptionQuotaCycleRepository: new SqliteSubscriptionQuotaCycleRepository(db),
+    ingestReader: new SqliteTelemetryIngestReader(db),
     close: () => db.close(),
   }
 }

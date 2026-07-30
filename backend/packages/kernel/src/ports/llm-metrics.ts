@@ -424,6 +424,20 @@ export interface LlmCallMetricRepository {
    */
   record(metric: LlmCallMetric): Promise<void>
   /**
+   * Append a BATCH of metered calls in one round trip, ignoring any whose id is already
+   * stored. Same first-write-wins semantics as {@link LlmCallMetricRepository.record}, and
+   * the same "only a duplicate id is ignored" rule — a batch must not become the one place a
+   * malformed row is silently dropped.
+   *
+   * This exists for the mothership-mode telemetry INGEST (`POST /internal/telemetry/ingest`,
+   * docs/initiatives/mothership-mode.md, PR 5), which uploads a finished run's locally
+   * captured calls. Looping {@link LlmCallMetricRepository.record} over that batch would be
+   * the banned N+1 write; a store implements this as one chunked multi-row insert.
+   *
+   * An empty batch is a no-op, not an error — the ingest drains until a page comes back empty.
+   */
+  recordMany(metrics: LlmCallMetric[]): Promise<void>
+  /**
    * The most recent CHAINABLE call's tip for a `(workspaceId, executionId, agentKind)`
    * conversation, or null when there is none. Lets the sink store the next call's
    * prompt as a delta against this one. Cheap: one indexed row, no text columns.

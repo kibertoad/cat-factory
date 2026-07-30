@@ -20,6 +20,9 @@ function fakeRepo() {
     async record(s) {
       rows.push(s)
     },
+    async recordMany(batch) {
+      rows.push(...batch)
+    },
     async listByExecution(_w, e) {
       return rows.filter((r) => r.executionId === e)
     },

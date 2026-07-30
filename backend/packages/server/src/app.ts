@@ -46,6 +46,7 @@ import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
 import { notificationRelayController } from './modules/notifications/NotificationRelayController.js'
 import { pipelineController } from './modules/pipelines/PipelineController.js'
+import { telemetryIngestController } from './modules/telemetry/TelemetryIngestController.js'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController.js'
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
@@ -153,6 +154,13 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // `machineNotificationDelivery`. Mounted on both facades so either can be a mothership. See
   // docs/initiatives/mothership-mode.md.
   app.route('/', notificationRelayController())
+  // Mothership-mode telemetry INGEST (`/internal/telemetry/ingest`): a mothership-mode local node
+  // captures its run telemetry locally (product decision 5) and uploads a quiesced run's rows here
+  // in bounded batches, so hosted teammates can read them and they outlive the node's short local
+  // retention window. Machine-token gated like the persistence RPC; 503 unless the facade attached
+  // its repository registry. Mounted on both facades so either can be a mothership. See
+  // docs/initiatives/mothership-mode.md.
+  app.route('/', telemetryIngestController())
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())

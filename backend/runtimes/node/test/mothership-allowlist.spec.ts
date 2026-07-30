@@ -224,8 +224,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // bounded pages (`listPage`/`get`/`listIndex`/`countByExecution`) included. Routing those would
   // be the exact shape the bucket exists to forbid, since a page over a long run is a bulk read of
   // the heaviest columns in the system.
+  //
+  // `recordMany` is the batch append the mothership performs FOR a node, behind the dedicated
+  // `POST /internal/telemetry/ingest` endpoint — not something a node invokes through the generic
+  // persistence RPC. Allow-listing it would re-admit exactly the per-row remote write the local-
+  // first bucket exists to prevent, so it is classified with the rest of the sink.
   llmCallMetricRepository: {
     record: 'telemetry',
+    recordMany: 'telemetry',
     latestChainTip: 'telemetry',
     listByExecution: 'telemetry',
     summarizeByExecution: 'telemetry',
@@ -235,6 +241,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   agentContextSnapshotRepository: {
     record: 'telemetry',
+    recordMany: 'telemetry',
     listByExecution: 'telemetry',
     listIndex: 'telemetry',
     get: 'telemetry',
@@ -243,6 +250,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   agentSearchQueryRepository: {
     record: 'telemetry',
+    recordMany: 'telemetry',
     listByExecution: 'telemetry',
     listPage: 'telemetry',
     countByExecution: 'telemetry',

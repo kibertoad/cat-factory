@@ -113,9 +113,23 @@ describe('sweepLocalTelemetryRetention', () => {
       agentSearchQueries: 1,
       provisioningLog: 0,
       subscriptionQuotaCycles: 0,
+      ingestState: 0,
     })
     expect((await store.llmCallMetricRepository.listByExecution('ws_1', 'exec_1')).length).toBe(1)
     expect((await store.provisioningLogRepository.list('ws_1')).length).toBe(2)
+  })
+
+  it('prunes an ingest high-water mark on the LLM window, never before its rows', async () => {
+    // The mark is stamped at ingest time, which is at or after the newest row it covers, so it
+    // outlives them. Dropping it early would make a still-stored run look un-ingested and
+    // re-upload the whole thing.
+    await seed(store, NOW - 7 * 24 * 60 * 60 * 1000, 'week_old')
+    store.ingestReader.markIngested('ws_1', 'exec_1', NOW - 7 * 24 * 60 * 60 * 1000, NOW - 1000)
+    expect((await sweepLocalTelemetryRetention(store, RETENTION, NOW)).ingestState).toBe(0)
+    expect(store.ingestReader.listPendingRuns(NOW, 10)).toEqual([])
+
+    store.ingestReader.markIngested('ws_1', 'exec_2', 1, NOW - 7 * 24 * 60 * 60 * 1000)
+    expect((await sweepLocalTelemetryRetention(store, RETENTION, NOW)).ingestState).toBe(1)
   })
 
   it('treats a non-positive window as disabled rather than as "delete everything"', async () => {

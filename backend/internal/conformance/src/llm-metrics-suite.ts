@@ -1064,6 +1064,38 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(found[0]!.response.matchOffset).toBe(2)
     })
 
+    it('batch-appends calls, ignoring ids it already stored', async () => {
+      // The mothership-mode telemetry ingest (docs/initiatives/mothership-mode.md, PR 5) uploads a
+      // finished run's calls through `recordMany` and RETRIES a chunk whose ack was lost, so both
+      // halves matter: the batch lands whole, and re-offering it is inert. Ignoring rather than
+      // overwriting is what protects the stored prompt DELTA, which is only meaningful against the
+      // chain tip that preceded the row's FIRST write.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        metric({ id: `${ws}-1`, workspaceId: ws, executionId: e1, createdAt: 10 }),
+        metric({ id: `${ws}-2`, workspaceId: ws, executionId: e1, createdAt: 20 }),
+      ])
+      expect((await repo.listByExecution(ws, e1)).map((c) => c.id)).toEqual([`${ws}-2`, `${ws}-1`])
+
+      await repo.recordMany([
+        metric({
+          id: `${ws}-1`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          responseText: 'rewritten',
+        }),
+        metric({ id: `${ws}-3`, workspaceId: ws, executionId: e1, createdAt: 30 }),
+      ])
+      const after = await repo.listByExecution(ws, e1)
+      expect(after.map((c) => c.id)).toEqual([`${ws}-3`, `${ws}-2`, `${ws}-1`])
+      expect(after.find((c) => c.id === `${ws}-1`)?.responseText).toBe('ok')
+
+      // An empty batch is a no-op, never an error — the drain posts until a page comes back empty.
+      await expect(repo.recordMany([])).resolves.toBeUndefined()
+    })
+
     it('prunes rows older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

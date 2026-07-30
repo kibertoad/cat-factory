@@ -309,6 +309,12 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
   }
 }
 
+/**
+ * Statements per `db.batch` in the batch append. D1 executes a batch in one round trip as an
+ * implicit transaction; chunking keeps a long run's ingest off any single-request ceiling.
+ */
+const INSERT_CHUNK_SIZE = 50
+
 /** D1-backed sink for LLM observability (see migration 0026). */
 export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
   private readonly db: D1Database
@@ -327,7 +333,23 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
     // violations, so a malformed metric would vanish here while still throwing on Postgres.
     // This mirrors the Drizzle repo's `onConflictDoNothing({ target: id })` exactly — only a
     // duplicate id is ignored.
-    await this.db
+    await this.insertStatement(metric).run()
+  }
+
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    // One `batch` per chunk — a single round trip and one implicit transaction each — never a
+    // `record` loop (the banned N+1 write). D1 caps bound parameters per statement, so a batch of
+    // single-row statements is the portable shape rather than one multi-row VALUES. Same
+    // first-write-wins-by-id semantics as `record`, which is what lets the mothership-mode
+    // telemetry ingest retry a chunk whose ack was lost.
+    const statements = metrics.map((metric) => this.insertStatement(metric))
+    for (let i = 0; i < statements.length; i += INSERT_CHUNK_SIZE) {
+      await this.db.batch(statements.slice(i, i + INSERT_CHUNK_SIZE))
+    }
+  }
+
+  private insertStatement(metric: LlmCallMetric) {
+    return this.db
       .prepare(
         `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
@@ -371,7 +393,6 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.responseText,
         metric.reasoningText,
       )
-      .run()
   }
 
   async latestChainTip(
