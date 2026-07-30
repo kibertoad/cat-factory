@@ -497,233 +497,7 @@ function registerMetricProducerTests(
     expect(cell?.completionTokens).toBe(80)
   })
 
-  it('round-trips the phase and turn axes, including the unattributed slice', async () => {
-    // The token-burn instrument's two columns (docs/initiatives/token-burn-instrumentation.md).
-    // They exist to tell a repair round's spend apart from the agent's own loop, so what a
-    // store must not do is flatten either one — an integer column that drops NULL to 0 would
-    // sort every proxied call to the front of its phase as "turn 0".
-    const repo = makeRepo()
-    const { ws, e1 } = ids()
-    await repo.record(
-      metric({
-        id: `${ws}-p1`,
-        workspaceId: ws,
-        executionId: e1,
-        createdAt: 10,
-        phase: 'validation-repair',
-        turnIndex: 7,
-      }),
-    )
-    // A proxied call: a real row with a real phase, but no job-scoped turn counter behind it.
-    await repo.record(
-      metric({
-        id: `${ws}-p2`,
-        workspaceId: ws,
-        executionId: e1,
-        createdAt: 20,
-        turnIndex: null,
-      }),
-    )
-    // Nothing could attribute this one — the unattributed slice is a REAL group, not a gap.
-    await repo.record(
-      metric({
-        id: `${ws}-p3`,
-        workspaceId: ws,
-        executionId: e1,
-        createdAt: 30,
-        phase: '',
-        turnIndex: null,
-      }),
-    )
-    const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
-    expect(rows[`${ws}-p1`]!.phase).toBe('validation-repair')
-    expect(rows[`${ws}-p1`]!.turnIndex).toBe(7)
-    expect(rows[`${ws}-p2`]!.turnIndex).toBeNull()
-    expect(rows[`${ws}-p3`]!.phase).toBe('')
-    expect(rows[`${ws}-p3`]!.turnIndex).toBeNull()
-  })
-
-  it('carries the harness phase onto the row and the turn index off `seq`', async () => {
-    // The producing path for those columns: the harness stamps the phase it is IN when the
-    // call is emitted, and its job-scoped `seq` doubles as the turn ordinal — the same number
-    // the row id is minted from, so the two can never disagree. An older image that reports no
-    // phase must land in the unattributed slice rather than be guessed at from the agent kind.
-    const repo = makeRepo()
-    const { ws, e1 } = ids()
-    let n = 0
-    const record = makeHarnessCallRecorder(
-      new LlmObservabilityService({
-        llmCallMetricRepository: repo,
-        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
-        clock: { now: () => 1 },
-      }),
-    )
-    const call = (seq: number, phase?: string): HarnessCallMetric => ({
-      model: 'claude-opus-4-8',
-      promptText: JSON.stringify(Array.from({ length: seq + 1 }, () => ({ role: 'user' }))),
-      messageCount: seq + 1,
-      responseText: `r${seq}`,
-      reasoningText: '',
-      inputTokens: 10,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      outputTokens: 5,
-      finishReason: 'end_turn',
-      seq,
-      ...(phase !== undefined ? { phase } : {}),
-    })
-    await record({
-      workspaceId: ws,
-      executionId: e1,
-      agentKind: 'coder',
-      provider: 'claude',
-      model: 'claude:claude-opus-4-8',
-      jobId: `${ws}-job`,
-      calls: [call(0, 'agent'), call(1, 'validation-repair'), call(2)],
-    })
-
-    const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
-    expect(rows[`${ws}-job-hc-0`]!.phase).toBe('agent')
-    expect(rows[`${ws}-job-hc-0`]!.turnIndex).toBe(0)
-    expect(rows[`${ws}-job-hc-1`]!.phase).toBe('validation-repair')
-    expect(rows[`${ws}-job-hc-1`]!.turnIndex).toBe(1)
-    expect(rows[`${ws}-job-hc-2`]!.phase).toBe('')
-    expect(rows[`${ws}-job-hc-2`]!.turnIndex).toBe(2)
-  })
-
-  it('ignores a re-recorded call instead of duplicating or overwriting its row', async () => {
-    // A harness call reaches the backend more than once BY DESIGN: live as the harness
-    // drains it mid-run, again in the job's terminal list, and again on a durable-driver
-    // replay. Each mints the same `<jobId>-hc-<seq>` id, so the store must ignore the
-    // repeat. Two ways this goes wrong on a real store, neither visible to a unit test: a
-    // plain INSERT throws (dropping every LATER call in the same batch), and an UPSERT
-    // rewrites the row's prompt delta against a chain tip that has since moved on.
-    const repo = makeRepo()
-    const { ws, e1 } = ids()
-    let n = 0
-    const record = makeHarnessCallRecorder(
-      new LlmObservabilityService({
-        llmCallMetricRepository: repo,
-        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
-        clock: { now: () => 1 },
-      }),
-    )
-    // Each call's prompt extends the previous one, so the delta chain has something to
-    // compress and a rewritten row would show it. `seq` is the harness's job-scoped sequence:
-    // it — NOT the position in the batch — is what makes the two channels agree on a row id.
-    const call = (seq: number, responseText: string): HarnessCallMetric => ({
-      model: 'claude-opus-4-8',
-      promptText: JSON.stringify(
-        Array.from({ length: seq + 1 }, () => ({ role: 'user', content: 'u' })),
-      ),
-      messageCount: seq + 1,
-      responseText,
-      reasoningText: '',
-      inputTokens: 10,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      outputTokens: 5,
-      finishReason: 'end_turn',
-      seq,
-    })
-    const base = {
-      workspaceId: ws,
-      executionId: e1,
-      agentKind: 'coder',
-      provider: 'claude',
-      model: 'claude:claude-opus-4-8',
-      jobId: `${ws}-job`,
-    }
-    // The live drain records calls 0 and 1 as they happen...
-    await record({ ...base, calls: [call(0, 'first'), call(1, 'second')] })
-    // ...then the terminal write re-offers them ALONGSIDE the ones that never streamed —
-    // deliberately NOT in `seq` order, so a recorder that fell back to the batch index would
-    // mint `-hc-0` for 'third' and see it swallowed as a duplicate of 'first'.
-    await record({
-      ...base,
-      calls: [call(2, 'third'), call(0, 'first'), call(3, 'fourth'), call(1, 'second')],
-    })
-
-    const rows = await repo.listByExecution(ws, e1)
-    // Four calls, four rows: the repeats were ignored AND the new ones still landed — a
-    // throwing INSERT would have aborted the batch and lost 'third' and 'fourth'.
-    expect(rows).toHaveLength(4)
-    expect(rows.map((r) => r.responseText).sort()).toEqual(['first', 'fourth', 'second', 'third'])
-    // First write wins: the chain each row was stored against is intact, not recomputed
-    // against a later tip, and the newly-landed calls chained onto it in order.
-    const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
-    expect(byResponse['first']!.promptPrefixCount).toBe(0)
-    expect(byResponse['second']!.promptPrefixCount).toBe(1)
-    expect(byResponse['third']!.promptPrefixCount).toBe(2)
-    expect(byResponse['fourth']!.promptPrefixCount).toBe(3)
-  })
-
-  it('keeps a promptless subagent call out of the prompt-delta chain', async () => {
-    // Subagent calls carry no re-sendable request transcript (empty prompt, messageCount 0),
-    // and they interleave with the parent's in RECORD order now that telemetry streams live.
-    // If one becomes the chain tip, the next parent call can't chain onto it and stores its
-    // whole prompt — so a subagent-heavy run loses the compression this chain exists for. The
-    // clock advances per call here, which is what makes the subagent row the newest.
-    const repo = makeRepo()
-    const { ws, e1 } = ids()
-    let n = 0
-    let t = 0
-    const record = makeHarnessCallRecorder(
-      new LlmObservabilityService({
-        llmCallMetricRepository: repo,
-        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
-        clock: { now: () => (t += 1) },
-      }),
-    )
-    const base = {
-      workspaceId: ws,
-      executionId: e1,
-      agentKind: 'pr-reviewer',
-      provider: 'claude',
-      model: 'claude:claude-opus-4-8',
-    }
-    const tokens = { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 }
-    const parent = (messageCount: number, responseText: string): HarnessCallMetric => ({
-      model: 'claude-opus-4-8',
-      promptText: JSON.stringify(
-        Array.from({ length: messageCount }, () => ({ role: 'user', content: 'u' })),
-      ),
-      messageCount,
-      responseText,
-      reasoningText: '',
-      ...tokens,
-      finishReason: 'end_turn',
-    })
-    const subagent = (responseText: string): HarnessCallMetric => ({
-      model: 'claude-opus-4-8',
-      promptText: '',
-      messageCount: 0,
-      responseText,
-      reasoningText: '',
-      ...tokens,
-      finishReason: 'end_turn',
-    })
-
-    await record({ ...base, calls: [parent(1, 'p1')] })
-    await record({ ...base, calls: [subagent('s1')] })
-    await record({ ...base, calls: [parent(2, 'p2')] })
-
-    const rows = await repo.listByExecution(ws, e1)
-    const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
-    // The subagent row lands, as its own chain-less entry.
-    expect(byResponse['s1']!.promptPrefixCount).toBe(0)
-    // The parent call after it still chained onto the previous PARENT call (prefix 1), rather
-    // than falling back to storing its whole prompt (prefix 0) — so what it stores is the ONE
-    // new message, and the chain it hangs off is the parent's.
-    expect(byResponse['p2']!.promptPrefixCount).toBe(1)
-    expect(JSON.parse(byResponse['p2']!.promptText)).toHaveLength(1)
-  })
-
-  // --- the remote debugging surface's bounded page (`/api/v1/debug/*`) -----------------
-  // These are the assertions that keep the size guarantee honest across stores: the slice and
-  // every filter are pushed into SQL, so a runtime that implemented either in JavaScript (or
-  // sliced with a different offset convention — `substr` is 1-based, `slice` is 0-based) would
-  // hand a remote caller more bytes than it budgeted for, and only fail here.
+  registerMetricPhaseAxisTests(makeRepo, ids)
 }
 
 /**
@@ -1170,4 +944,244 @@ function registerMetricBatchTests(
     expect(removed).toBeGreaterThanOrEqual(1)
     expect((await repo.listByExecution(ws, e1)).map((c) => c.id)).toEqual([`${ws}-new`])
   })
+}
+
+/**
+ * The phase and turn axes (including the unattributed slice), the harness phase stamped at
+ * emit time, re-record idempotency, and the promptless subagent call kept out of the chain.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerMetricPhaseAxisTests(
+  makeRepo: () => LlmCallMetricRepository,
+  ids: () => MetricIds,
+): void {
+  it('round-trips the phase and turn axes, including the unattributed slice', async () => {
+    // The token-burn instrument's two columns (docs/initiatives/token-burn-instrumentation.md).
+    // They exist to tell a repair round's spend apart from the agent's own loop, so what a
+    // store must not do is flatten either one — an integer column that drops NULL to 0 would
+    // sort every proxied call to the front of its phase as "turn 0".
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(
+      metric({
+        id: `${ws}-p1`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 10,
+        phase: 'validation-repair',
+        turnIndex: 7,
+      }),
+    )
+    // A proxied call: a real row with a real phase, but no job-scoped turn counter behind it.
+    await repo.record(
+      metric({
+        id: `${ws}-p2`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 20,
+        turnIndex: null,
+      }),
+    )
+    // Nothing could attribute this one — the unattributed slice is a REAL group, not a gap.
+    await repo.record(
+      metric({
+        id: `${ws}-p3`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 30,
+        phase: '',
+        turnIndex: null,
+      }),
+    )
+    const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
+    expect(rows[`${ws}-p1`]!.phase).toBe('validation-repair')
+    expect(rows[`${ws}-p1`]!.turnIndex).toBe(7)
+    expect(rows[`${ws}-p2`]!.turnIndex).toBeNull()
+    expect(rows[`${ws}-p3`]!.phase).toBe('')
+    expect(rows[`${ws}-p3`]!.turnIndex).toBeNull()
+  })
+
+  it('carries the harness phase onto the row and the turn index off `seq`', async () => {
+    // The producing path for those columns: the harness stamps the phase it is IN when the
+    // call is emitted, and its job-scoped `seq` doubles as the turn ordinal — the same number
+    // the row id is minted from, so the two can never disagree. An older image that reports no
+    // phase must land in the unattributed slice rather than be guessed at from the agent kind.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    let n = 0
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+        clock: { now: () => 1 },
+      }),
+    )
+    const call = (seq: number, phase?: string): HarnessCallMetric => ({
+      model: 'claude-opus-4-8',
+      promptText: JSON.stringify(Array.from({ length: seq + 1 }, () => ({ role: 'user' }))),
+      messageCount: seq + 1,
+      responseText: `r${seq}`,
+      reasoningText: '',
+      inputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 5,
+      finishReason: 'end_turn',
+      seq,
+      ...(phase !== undefined ? { phase } : {}),
+    })
+    await record({
+      workspaceId: ws,
+      executionId: e1,
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: `${ws}-job`,
+      calls: [call(0, 'agent'), call(1, 'validation-repair'), call(2)],
+    })
+
+    const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
+    expect(rows[`${ws}-job-hc-0`]!.phase).toBe('agent')
+    expect(rows[`${ws}-job-hc-0`]!.turnIndex).toBe(0)
+    expect(rows[`${ws}-job-hc-1`]!.phase).toBe('validation-repair')
+    expect(rows[`${ws}-job-hc-1`]!.turnIndex).toBe(1)
+    expect(rows[`${ws}-job-hc-2`]!.phase).toBe('')
+    expect(rows[`${ws}-job-hc-2`]!.turnIndex).toBe(2)
+  })
+
+  it('ignores a re-recorded call instead of duplicating or overwriting its row', async () => {
+    // A harness call reaches the backend more than once BY DESIGN: live as the harness
+    // drains it mid-run, again in the job's terminal list, and again on a durable-driver
+    // replay. Each mints the same `<jobId>-hc-<seq>` id, so the store must ignore the
+    // repeat. Two ways this goes wrong on a real store, neither visible to a unit test: a
+    // plain INSERT throws (dropping every LATER call in the same batch), and an UPSERT
+    // rewrites the row's prompt delta against a chain tip that has since moved on.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    let n = 0
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+        clock: { now: () => 1 },
+      }),
+    )
+    // Each call's prompt extends the previous one, so the delta chain has something to
+    // compress and a rewritten row would show it. `seq` is the harness's job-scoped sequence:
+    // it — NOT the position in the batch — is what makes the two channels agree on a row id.
+    const call = (seq: number, responseText: string): HarnessCallMetric => ({
+      model: 'claude-opus-4-8',
+      promptText: JSON.stringify(
+        Array.from({ length: seq + 1 }, () => ({ role: 'user', content: 'u' })),
+      ),
+      messageCount: seq + 1,
+      responseText,
+      reasoningText: '',
+      inputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 5,
+      finishReason: 'end_turn',
+      seq,
+    })
+    const base = {
+      workspaceId: ws,
+      executionId: e1,
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: `${ws}-job`,
+    }
+    // The live drain records calls 0 and 1 as they happen...
+    await record({ ...base, calls: [call(0, 'first'), call(1, 'second')] })
+    // ...then the terminal write re-offers them ALONGSIDE the ones that never streamed —
+    // deliberately NOT in `seq` order, so a recorder that fell back to the batch index would
+    // mint `-hc-0` for 'third' and see it swallowed as a duplicate of 'first'.
+    await record({
+      ...base,
+      calls: [call(2, 'third'), call(0, 'first'), call(3, 'fourth'), call(1, 'second')],
+    })
+
+    const rows = await repo.listByExecution(ws, e1)
+    // Four calls, four rows: the repeats were ignored AND the new ones still landed — a
+    // throwing INSERT would have aborted the batch and lost 'third' and 'fourth'.
+    expect(rows).toHaveLength(4)
+    expect(rows.map((r) => r.responseText).sort()).toEqual(['first', 'fourth', 'second', 'third'])
+    // First write wins: the chain each row was stored against is intact, not recomputed
+    // against a later tip, and the newly-landed calls chained onto it in order.
+    const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
+    expect(byResponse['first']!.promptPrefixCount).toBe(0)
+    expect(byResponse['second']!.promptPrefixCount).toBe(1)
+    expect(byResponse['third']!.promptPrefixCount).toBe(2)
+    expect(byResponse['fourth']!.promptPrefixCount).toBe(3)
+  })
+
+  it('keeps a promptless subagent call out of the prompt-delta chain', async () => {
+    // Subagent calls carry no re-sendable request transcript (empty prompt, messageCount 0),
+    // and they interleave with the parent's in RECORD order now that telemetry streams live.
+    // If one becomes the chain tip, the next parent call can't chain onto it and stores its
+    // whole prompt — so a subagent-heavy run loses the compression this chain exists for. The
+    // clock advances per call here, which is what makes the subagent row the newest.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    let n = 0
+    let t = 0
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+        clock: { now: () => (t += 1) },
+      }),
+    )
+    const base = {
+      workspaceId: ws,
+      executionId: e1,
+      agentKind: 'pr-reviewer',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+    }
+    const tokens = { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 }
+    const parent = (messageCount: number, responseText: string): HarnessCallMetric => ({
+      model: 'claude-opus-4-8',
+      promptText: JSON.stringify(
+        Array.from({ length: messageCount }, () => ({ role: 'user', content: 'u' })),
+      ),
+      messageCount,
+      responseText,
+      reasoningText: '',
+      ...tokens,
+      finishReason: 'end_turn',
+    })
+    const subagent = (responseText: string): HarnessCallMetric => ({
+      model: 'claude-opus-4-8',
+      promptText: '',
+      messageCount: 0,
+      responseText,
+      reasoningText: '',
+      ...tokens,
+      finishReason: 'end_turn',
+    })
+
+    await record({ ...base, calls: [parent(1, 'p1')] })
+    await record({ ...base, calls: [subagent('s1')] })
+    await record({ ...base, calls: [parent(2, 'p2')] })
+
+    const rows = await repo.listByExecution(ws, e1)
+    const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
+    // The subagent row lands, as its own chain-less entry.
+    expect(byResponse['s1']!.promptPrefixCount).toBe(0)
+    // The parent call after it still chained onto the previous PARENT call (prefix 1), rather
+    // than falling back to storing its whole prompt (prefix 0) — so what it stores is the ONE
+    // new message, and the chain it hangs off is the parent's.
+    expect(byResponse['p2']!.promptPrefixCount).toBe(1)
+    expect(JSON.parse(byResponse['p2']!.promptText)).toHaveLength(1)
+  })
+
+  // --- the remote debugging surface's bounded page (`/api/v1/debug/*`) -----------------
+  // These are the assertions that keep the size guarantee honest across stores: the slice and
+  // every filter are pushed into SQL, so a runtime that implemented either in JavaScript (or
+  // sliced with a different offset convention — `substr` is 1-based, `slice` is 0-based) would
+  // hand a remote caller more bytes than it budgeted for, and only fail here.
 }
