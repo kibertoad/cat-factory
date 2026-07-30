@@ -32,8 +32,14 @@ export const PR_DESCRIPTION_FILE = '.cat-pr-description.md'
  * rejects a body over 65,536 with a 422, and the report publisher swallows its own failures —
  * so a briefing budget that does not leave the report room would surface as a report that
  * silently never publishes. 15,000 + 50,000 stays under the limit with room to join them.
+ *
+ * Exported because the PR-TEMPLATE note states it to the agent (`pr-template.ts`): a filled
+ * template is the one briefing shape whose length is dictated by a file the agent did not write,
+ * so an agent that does not know the ceiling can answer a long template past it and have
+ * {@link capBody} cut the repo's last sections — the very failure the inline budget avoids on the
+ * way IN.
  */
-const MAX_PR_BODY_CHARS = 15_000
+export const MAX_PR_BODY_CHARS = 15_000
 
 /** Ceiling on an agent-supplied title (GitHub truncates around 256; a title should be short). */
 const MAX_PR_TITLE_CHARS = 160
@@ -57,6 +63,24 @@ export interface AgentPrDescription {
   body?: string
 }
 
+/** How to read a sentinel. */
+export interface ReadPrDescriptionOptions {
+  /**
+   * Whether a lone leading `# <title>` heading may be lifted off as the PR title (see
+   * {@link splitTitle}). Default `true` — that is what the description guidance asks a free-form
+   * briefing for.
+   *
+   * FALSE when the briefing is a FILLED TEMPLATE (`pr-template.ts`): then the headings are the
+   * repo's, not the agent's, and a template whose first heading is its only level-1 one — `#
+   * Pull Request` above a set of `##` sections, an entirely ordinary shape — would have that
+   * heading silently become the pull request's title, so the PR reads "Pull Request" instead of
+   * `<block> (<pipeline>)` and the body loses the heading the repo asked for. The heuristic below
+   * is sound for the shape the guidance describes and cannot be made to cover both, so the caller
+   * that KNOWS which shape it asked for says so.
+   */
+  titleFromHeading?: boolean
+}
+
 /**
  * Read + parse + REMOVE the agent's PR-description sentinel from `dir`. Lenient: returns
  * undefined when the file is absent (the agent wrote none) or carries nothing usable. Never
@@ -64,16 +88,20 @@ export interface AgentPrDescription {
  * the dispatch-time text.
  *
  * A SINGLE `# <title>` heading on the first line sets the PR title; everything after it is the
- * body (see {@link splitTitle} for why a LONE heading is required). The whole text is
- * secret-scrubbed, an over-budget body is truncated WITH a visible note (a silent cut would
- * read as the complete briefing), and both halves are made inert for the host.
+ * body (see {@link splitTitle} for why a LONE heading is required, and
+ * {@link ReadPrDescriptionOptions.titleFromHeading} for the caller that must switch it off). The
+ * whole text is secret-scrubbed, an over-budget body is truncated WITH a visible note (a silent
+ * cut would read as the complete briefing), and both halves are made inert for the host.
  *
  * On scrubbing: `redactSecrets`'s credential-assignment rule is deliberately eager, so a
  * briefing sentence like "the token: handling changed" loses its next word. That is the right
  * trade for a surface this public — the rule is shared with every other redaction path, and
  * narrowing it so prose reads better would weaken all of them.
  */
-export async function readPrDescription(dir: string): Promise<AgentPrDescription | undefined> {
+export async function readPrDescription(
+  dir: string,
+  opts: ReadPrDescriptionOptions = {},
+): Promise<AgentPrDescription | undefined> {
   const path = join(dir, PR_DESCRIPTION_FILE)
   let raw: string
   try {
@@ -86,7 +114,8 @@ export async function readPrDescription(dir: string): Promise<AgentPrDescription
   const text = redactSecrets(raw).replace(MANAGED_SECTION_MARKER, '').trim()
   if (!text) return undefined
 
-  const split = splitTitle(text)
+  const split: { title?: string; body: string } =
+    opts.titleFromHeading === false ? { body: text } : splitTitle(text)
   // Cap BEFORE the escapes on both halves, so a numeric entity can never be sliced in half.
   const title = split.title ? inertInline(capTitle(split.title)) : undefined
   const body = split.body ? inertMarkdown(capBody(split.body)) : undefined
@@ -104,6 +133,11 @@ export async function readPrDescription(dir: string): Promise<AgentPrDescription
  * silently become the pull request's title, replacing `<block> (<pipeline>)` with the word
  * "Problem". Headings inside fenced code are not headings and are skipped, or a briefing
  * quoting a shell snippet (`# rebuild the image`) would lose its title to the snippet.
+ *
+ * The "single H1" test is what makes this safe for the free-form shape and is exactly what makes
+ * it WRONG for a filled template, whose H1 count is the repo's choice — hence
+ * {@link ReadPrDescriptionOptions.titleFromHeading}, which skips this entirely rather than piling
+ * another heuristic on top of one that cannot serve both shapes.
  */
 function splitTitle(text: string): { title?: string; body: string } {
   const lines = text.split('\n')

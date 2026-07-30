@@ -159,8 +159,13 @@ test.describe('initiative phase checkpoint', () => {
     // machine the whole phase-two run therefore reached `done` BEFORE the browser painted its card,
     // so the card never appeared and never would — the wait then burned its full budget on an
     // element that had already been removed. Parking the run keeps the block non-terminal, making
-    // its card a stable observable instead of a frame or two of transient state. The profile is read
-    // at DISPATCH, so this applies to phase two's run only — phase one has already settled.
+    // its card a stable observable instead of a frame or two of transient state.
+    //
+    // This is the suite's ONE mid-life profile write, and it works because a `/fake-profile` write
+    // RE-ARMS the workspace's fakes (see `FakeProfileRegistry`) — the per-workspace fake executor is
+    // otherwise built once, on the workspace's FIRST agent call, and would have read this profile
+    // never. The workspace is quiescent here (phase one settled, the initiative is paused at the
+    // checkpoint), which is what makes re-arming safe: no async job of its own is mid-poll.
     await setFakeProfile(request, workspaceId, { decisionOnSteps: [0] })
 
     // Resume (GO) from the banner. The loop clears the checkpoint and advances to phase two.

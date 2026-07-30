@@ -63,6 +63,11 @@ import {
   withDependencyNote,
   type DependencyInstallSpec,
 } from './dependency-install.js'
+import {
+  resolvePrTemplateNote,
+  withPrTemplateNote,
+  type PrTemplateResolution,
+} from './pr-template.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -114,6 +119,14 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * only for the implementer (`coder`) dispatch; absent ⇒ no tailing (e.g. the CI-fixer).
    */
   streamFollowUps?: boolean
+  /**
+   * Whether this dispatch OPENS a pull request (the caller passes `pr` to `openPullRequest`).
+   * Set, the harness looks for the repo's own pull-request template and asks the agent to fill it
+   * (see `pr-template.ts`). Absent for a dispatch that amends someone else's PR (the in-place
+   * fixers) — a template filled for a pull request nothing opens is wasted prompt and, worse,
+   * would have a CI-fixer rewrite the implementer's already-published description.
+   */
+  opensPr?: boolean
   /**
    * READ-ONLY reference branches of THIS repo (the apriori-branches reference mode): fetched
    * into `origin/<b>` after the checkout so the agent can inspect them but never commits to
@@ -365,13 +378,28 @@ export async function runCodingAgent(
         opts,
       })
 
+      // THE REPO'S OWN PR TEMPLATE: when this dispatch opens a pull request and the repo ships a
+      // template, the agent is asked to write its briefing AS that template rather than free-form
+      // (see `pr-template.ts` for why neither host applies it to an API-created PR for us).
+      // Discovered at the CHECKOUT ROOT, never `workDir`: a template is a fact about the
+      // repository, so a monorepo service dispatch reads the same one as any other.
+      const prTemplate = await resolvePrTemplateNote({
+        targets: spec.opensPr
+          ? [{ repoDir: dir, ...(spec.repo.provider ? { provider: spec.repo.provider } : {}) }]
+          : [],
+        logger,
+      })
+
       // One agent pass over this checkout, parameterised only by the prompt — so the pre-PR
       // validation loop below can re-run the agent with a repair instruction without
       // re-deriving (or drifting from) the dispatch's own settings.
       //
       // The dependency note rides EVERY pass, not just the first: a repair round starts a fresh
       // agent, and one that is not told the tree is already installed spends the round it was
-      // given to fix something reinstalling it instead.
+      // given to fix something reinstalling it instead. The PR-template note rides every pass for
+      // the mirror-image reason: a repair-round agent still carries the description guidance, so
+      // one that is not told about the template would replace the filled template with a
+      // free-form briefing.
       const runAgentPass = (
         userPrompt: string,
       ): Promise<Awaited<ReturnType<typeof runAgentInWorkspace>>> =>
@@ -379,7 +407,10 @@ export async function runCodingAgent(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
-            userPrompt: withDependencyNote(userPrompt, dependencyNote),
+            userPrompt: withDependencyNote(
+              withPrTemplateNote(userPrompt, prTemplate.note),
+              dependencyNote,
+            ),
             model: spec.model,
             harness: spec.harness,
             subscriptionToken: spec.subscriptionToken,
@@ -499,6 +530,7 @@ export async function runCodingAgent(
           pushWorkOnce,
           inFlightPush,
           agentRun,
+          prTemplate,
         })
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
@@ -651,6 +683,8 @@ async function finalizeCodingRun(args: {
   pushWorkOnce: () => Promise<void>
   inFlightPush: () => Promise<void> | null
   agentRun: Awaited<ReturnType<typeof runAgentInWorkspace>>
+  /** The repo's PR template, if it ships one — see the `titleFromHeading` read below. */
+  prTemplate: PrTemplateResolution
 }): Promise<CodingAgentOutcome> {
   const {
     validationReport,
@@ -668,6 +702,7 @@ async function finalizeCodingRun(args: {
     pushWorkOnce,
     inFlightPush,
     agentRun,
+    prTemplate,
   } = args
   const { signal } = opts
   const { summary, stats, stderrTail, usage, callMetrics, effortReport } = agentRun
@@ -686,9 +721,15 @@ async function finalizeCodingRun(args: {
   // changed what the briefing should say) and removed so it never lingers in the checkout. The
   // prompt asks for it at the top level of the checkout; a monorepo agent working in a service
   // subdirectory may drop it in its cwd instead, so probe the checkout root first, then the cwd.
+  //
+  // When the repo ships a template the briefing IS that template filled in, so its headings are
+  // the REPO's: a leading `# …` there is the template's own top heading, not the title line the
+  // description guidance asks a free-form briefing for, and lifting it would retitle the PR after
+  // the template and delete the heading from the body.
+  const readDescription = (from: string): Promise<AgentPrDescription | undefined> =>
+    readPrDescription(from, { titleFromHeading: !prTemplate.templated.has(dir) })
   const prDescription =
-    (await readPrDescription(dir)) ??
-    (workDir !== dir ? await readPrDescription(workDir) : undefined)
+    (await readDescription(dir)) ?? (workDir !== dir ? await readDescription(workDir) : undefined)
 
   // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
   // push, so the two never run a concurrent `git push` to the same branch (the
@@ -1093,6 +1134,21 @@ export async function runMultiRepoCoding(
         })
       : undefined
 
+    // THE REPOS' OWN PR TEMPLATES: one per leg that will actually open a pull request, each named
+    // by its sibling directory so the agent knows which checkout's briefing takes which shape —
+    // the repos in a workspace need not share a template, or ship one at all. A read-only
+    // reference leg is excluded by construction: it carries no `pr`, so nothing publishes for it.
+    const prTemplate = await resolvePrTemplateNote({
+      targets: legs
+        .filter((leg) => leg.pr)
+        .map((leg) => ({
+          repoDir: leg.dir,
+          repoLabel: leg.dirName,
+          ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),
+        })),
+      logger,
+    })
+
     // Run the agent ONCE with its cwd at the workspace root, so it sees every sibling checkout
     // and can change them coherently. No monorepo/service-directory scoping — the multi-repo
     // note + the backend system-prompt section explain the layout.
@@ -1103,7 +1159,10 @@ export async function runMultiRepoCoding(
         {
           dir: root,
           systemPrompt: job.systemPrompt,
-          userPrompt: withDependencyNote(job.userPrompt, dependencyNote),
+          userPrompt: withDependencyNote(
+            withPrTemplateNote(job.userPrompt, prTemplate.note),
+            dependencyNote,
+          ),
           model: job.model,
           harness: job.harness,
           subscriptionToken: job.subscriptionToken,
@@ -1132,6 +1191,7 @@ export async function runMultiRepoCoding(
       logger,
       opts,
       root,
+      prTemplate,
     )
 
     const anyWork = primaryPushed || peerPullRequests.length > 0
@@ -1307,6 +1367,8 @@ async function pushMultiRepoLegs(
   opts: RunOptions,
   /** The workspace root the agent ran in — the fallback probe for the primary's briefing. */
   root: string,
+  /** Which legs' briefings are filled templates — see the `titleFromHeading` read below. */
+  prTemplate: PrTemplateResolution,
 ): Promise<{
   primaryPushed: boolean
   primaryPrUrl: string | undefined
@@ -1327,9 +1389,14 @@ async function pushMultiRepoLegs(
     // read the prompt loosely may well have written a single briefing there instead. Fall back
     // to it for the PRIMARY leg only: at the root there is nothing to say which repo it
     // describes, and the primary is the one the run is actually about.
+    //
+    // Per-leg `titleFromHeading`: only a leg whose OWN repo ships a template has repo-authored
+    // headings in its sentinel, and the legs of a workspace need not agree about that — so this
+    // is keyed on the leg, never on whether the run found any template at all.
+    const readOptions = { titleFromHeading: !prTemplate.templated.has(leg.dir) }
     const agentPrDescription =
-      (await readPrDescription(leg.dir)) ??
-      (leg.primary ? await readPrDescription(root) : undefined)
+      (await readPrDescription(leg.dir, readOptions)) ??
+      (leg.primary ? await readPrDescription(root, readOptions) : undefined)
     await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
     const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
     let hasWork = advanced || leg.resumed
