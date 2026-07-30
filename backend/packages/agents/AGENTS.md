@@ -74,10 +74,17 @@
   `reportsOwnLlmCalls` so the middleware returns it untouched — two producers for one call would
   double every token of the step. Left to the middleware it would be one lumped row per step,
   written only once the subprocess exited, and zeroed whenever the run was killed (a rejection
-  carries no usage). A CLI that reports no call carrying tokens (`codex exec` narrates nothing) gets
-  the single aggregate row instead, and a failed run gets a zero-token row at the next ordinal for
-  the call that never completed. The model is ASKED rather than a facade told, because the
-  instrumentation sits OUTSIDE the wrap that substitutes it and cannot see what that wrap returned.
+  carries no usage). Alongside the per-call rows it files ONE step-level row for the SHORTFALL — the
+  terminal cumulative usage minus what those rows accounted for — so a CLI that narrates nothing
+  (`codex exec`) still gets the single row the SDK boundary knows, a fully-narrated step gets none,
+  and a part-narrated one gets the remainder instead of under-reporting in silence. A turn the CLI
+  costed at nothing is not filed at all (that rule lives here, so it holds for the host CLI's stream
+  and a container job's terminal metrics alike), and a failed run gets a zero-token row at the next
+  ordinal for the call that never completed. Each row names the model the CLI says SERVED it, since
+  cost is derived per row. The model is ASKED rather than a facade told, because the instrumentation
+  sits OUTSIDE the wrap that substitutes it and cannot see what that wrap returned. It also tells its
+  runner whether bodies are worth assembling (`reportBodies`): a harness CLI's are RECONSTRUCTED, so
+  a prompts-off deployment must refuse them at the source rather than via the usual thunk.
 - `fragmentLibrary/` — the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`) — the ONE

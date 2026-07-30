@@ -1016,12 +1016,21 @@ Rules that bind new work here:
   asks `reportsOwnLlmCalls(model)` and returns it unwrapped, because two producers for one call would double
   every token in the step's rollup. **The model is ASKED, never a facade told**: the instrumentation sits
   outside the wrap that substitutes the model (it has to — above), so it cannot know what the inner wrap
-  returned. A CLI that narrates nothing (`codex exec`), or a build that reports turns but no per-turn usage,
-  reports no call carrying tokens — the model then files the ONE aggregate row the SDK boundary knows, which
-  is what the middleware would have recorded. Only Claude Code's `stream-json` is parsed per call, through
-  the container harness's `createClaudeRunTelemetry` (`@cat-factory/executor-harness/claude-stream`) — the
-  ONE fold, imported rather than re-implemented, because folding per ENVELOPE instead of per `message.id`
-  inflated a measured 1.47M tokens to 5.53M and both paths had to learn that once.
+  returned. Each row carries the model the CLI says SERVED that call (`call.model ?? requested`, the same
+  precedence `makeHarnessCallRecorder` applies), because cost is derived per row from `(model, token classes)`
+  and a CLI serves some calls with a cheaper model of its own. **The step-level row carries the SHORTFALL, not
+  a lump**: the terminal cumulative usage minus what the per-call rows accounted for, so a CLI that narrates
+  nothing (`codex exec`) still gets the one row the SDK boundary knows, a fully-narrated step gets none (it
+  would double every token), and a PART-narrated one gets the remainder rather than silently under-reporting
+  — which is what an "aggregate only when nothing was costed" rule did. An uncosted turn is never filed as a
+  zero row, and that rule lives with the model, so it holds for both transports. Only Claude Code's
+  `stream-json` is parsed per call, through the container harness's `createClaudeRunTelemetry`
+  (`@cat-factory/executor-harness/claude-call-aggregator`) — the ONE fold, imported rather than
+  re-implemented, because folding per ENVELOPE instead of per `message.id` inflated a measured 1.47M tokens to
+  5.53M and both paths had to learn that once. **That fold reconstructs a transcript in the DRIVER's process,
+  so both of its bounds are load-bearing on the backend**: `MAX_TRANSCRIPT_CHARS` (which states what it
+  stopped retaining) and the `bodies` switch, off when `LLM_RECORD_PROMPTS` is — a body the store will drop
+  must not be assembled, since unlike every other body it is BUILT rather than merely passed as a thunk.
 - **Run attribution falls back to the credential SCOPE, which names the block's LAST run, not necessarily a
   live one.** A per-call `catFactoryObservability({ executionId })` wins; absent, the wrap threads
   `scope.executionId`, because most inline sites tag only the workspace and such a row is worse than

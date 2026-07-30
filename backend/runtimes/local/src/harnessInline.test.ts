@@ -399,6 +399,7 @@ describe('runnerForVendor', () => {
       )({
         ...req,
         reportCall: (call) => reported.push(call),
+        reportBodies: true,
       })
 
       // One call was already published mid-stream; the second only on close (nothing else had
@@ -429,6 +430,61 @@ describe('runnerForVendor', () => {
         runnerForVendor('claude', exec)({ ...req, reportCall: (call) => reported.push(call) }),
       ).rejects.toThrow(/timed out/)
       expect(reported.map((c) => c.inputTokens)).toEqual([10, 20])
+    })
+
+    // Reconstructing the request transcript means holding the loop's growing history in THIS
+    // process. A deployment whose store drops bodies must not pay for that, and `reportBodies` is
+    // how the model says so — the counts a rollup reads arrive either way.
+    it('reconstructs no transcript when the caller retains no bodies', async () => {
+      const reported: HarnessCallMetric[] = []
+      const { exec } = fakeExec(
+        [
+          envelope('msg_1', { input_tokens: 10, output_tokens: 2 }),
+          envelope('msg_2', { input_tokens: 20, output_tokens: 3 }),
+          event({
+            type: 'result',
+            subtype: 'success',
+            result: 'DONE',
+            usage: { input_tokens: 30 },
+          }),
+        ].join('\n'),
+      )
+      // `reportBodies` deliberately absent: a runner must not assemble bodies nobody asked for.
+      await runnerForVendor('claude', exec)({ ...req, reportCall: (call) => reported.push(call) })
+
+      expect(reported.map((c) => c.promptText)).toEqual(['', ''])
+      expect(reported.map((c) => c.inputTokens)).toEqual([10, 20])
+      expect(reported.map((c) => c.messageCount)).toEqual([2, 3])
+    })
+
+    // The fold runs inside the spawn's stdout listener (`onLine`), so anything it throws escapes
+    // into that listener and leaves the run unsettled — and on the killed path it runs BEFORE the
+    // failure is enriched, so a throw there replaces a `CliExecFailure` (losing its reason and its
+    // burn clause) with an unrelated telemetry error. A publish that throws is the reachable case:
+    // the reporter is caller-supplied, and the serialisation the fold does can exceed the engine's
+    // string limit on exactly the long loops this telemetry exists for.
+    it('survives a reporter that throws, on both the streaming and the killed path', async () => {
+      const boom = (): never => {
+        throw new Error('Invalid string length')
+      }
+      const stream = [
+        envelope('msg_1', { input_tokens: 10, output_tokens: 2 }),
+        envelope('msg_2', { input_tokens: 20, output_tokens: 3 }),
+      ]
+
+      const { exec } = fakeExec(
+        [...stream, event({ type: 'result', subtype: 'success', result: 'DONE' })].join('\n'),
+      )
+      // The LLM work still lands: telemetry may never break the call it observes.
+      const result = await runnerForVendor('claude', exec)({ ...req, reportCall: boom })
+      expect(result.text).toBe('DONE')
+
+      const dying = dyingExec(stream.join('\n'), new CliExecFailure('claude timed out', 'timeout'))
+      // Still the CLI's own failure — with its reason AND the burn clause folded from the same
+      // stream, which is what a masked telemetry throw would have cost.
+      await expect(runnerForVendor('claude', dying)({ ...req, reportCall: boom })).rejects.toThrow(
+        /timed out.*35 tokens.*across 2 model calls/,
+      )
     })
 
     // The breadcrumb is the HUMAN account of the same stream: a reader of the failure message gets

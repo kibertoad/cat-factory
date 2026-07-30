@@ -190,6 +190,18 @@ export interface ModelProviderResolverWrapDeps {
    * `InstrumentedModelProvider`'s `workspaceBodiesEnabled`.
    */
   recordInlineCall: InlineLlmCallRecorder | undefined
+  /**
+   * The deployment's `LLM_RECORD_PROMPTS` switch, for the same wrap.
+   *
+   * A harness CLI's per-call bodies are not handed to us, they are RECONSTRUCTED: the growing
+   * request transcript, re-serialised at every call, retained in this process. So unlike a body that
+   * merely travels as a thunk, one nobody will keep has to be refused at the SOURCE — hence a flag
+   * beside the recorder rather than a gate further down.
+   *
+   * REQUIRED for the same reason as {@link recordInlineCall}: `false` is a real answer, an omission
+   * is a wiring mistake, and only a required field tells them apart.
+   */
+  recordInlineBodies: boolean
 }
 
 // The composition-root options surface lives beside this builder in `container-options.ts` (a

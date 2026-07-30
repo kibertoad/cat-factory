@@ -19,7 +19,10 @@ import {
 // own rows and stands the middleware down — so what it files is the only account a run gets.
 
 /** A recorder that captures the rows the model files, in order. */
-function captureRecorder(): { rows: InlineLlmCall[]; telemetry: InlineCliTelemetry } {
+function captureRecorder(over: Partial<InlineCliTelemetry> = {}): {
+  rows: InlineLlmCall[]
+  telemetry: InlineCliTelemetry
+} {
   const rows: InlineLlmCall[] = []
   return {
     rows,
@@ -28,6 +31,8 @@ function captureRecorder(): { rows: InlineLlmCall[]; telemetry: InlineCliTelemet
         rows.push(call)
       },
       scope: { workspaceId: 'ws_scope', executionId: 'exec_scope' },
+      recordBodies: true,
+      ...over,
     },
   }
 }
@@ -211,7 +216,7 @@ describe('CliInlineLanguageModel', () => {
     // `codex exec` prints its final message and narrates nothing, so nothing else will ever
     // account for the step. A CLI build that narrates turns but no per-turn usage lands here too:
     // its cumulative total arrives only on the terminal event.
-    it('files one aggregate row when the CLI reported no call carrying tokens', async () => {
+    it('files one aggregate row and nothing else when no reported call carried tokens', async () => {
       const { rows, telemetry } = captureRecorder()
       const model = new CliInlineLanguageModel(
         'anthropic',
@@ -230,8 +235,13 @@ describe('CliInlineLanguageModel', () => {
       await generateText({ model, prompt: 'go' })
       await settle()
 
-      const aggregate = rows.find((r) => r.turnIndex === undefined)
-      expect(aggregate).toMatchObject({
+      // ONE row: the uncosted turn the CLI narrated is not filed on its own — a zero-token row is a
+      // claim about a call nothing can be said about, and it would leave the step reading as two
+      // calls where one is a duplicate of the other's spend.
+      expect(rows).toHaveLength(1)
+      // No ordinal: this row is not a turn within a sequence, it stands for the step.
+      expect(rows[0]!.turnIndex).toBeUndefined()
+      expect(rows[0]).toMatchObject({
         promptTokens: 40,
         cacheReadTokens: 400,
         completionTokens: 9,
@@ -254,6 +264,7 @@ describe('CliInlineLanguageModel', () => {
         },
         {
           recordCall: () => Promise.reject(new Error('should never be called')),
+          recordBodies: true,
           logger,
         },
       )
@@ -276,11 +287,126 @@ describe('CliInlineLanguageModel', () => {
         {
           recordCall: () => Promise.reject(new Error('store down')),
           scope: { workspaceId: 'ws_1' },
+          recordBodies: true,
         },
       )
       const result = await generateText({ model, prompt: 'go' })
       await settle()
       expect(result.text).toBe('done')
+    })
+
+    // Claude Code serves some calls with a model other than the one asked for (its own cheap
+    // side-calls, an auto-fallback under load), and cost is derived per row from
+    // `(model, token classes)`. Filing every call under the REQUESTED id prices those wrong — the
+    // container harness's recorder applies the same `call.model ?? requested` precedence.
+    it('files the model the CLI says served each call, falling back to the requested one', async () => {
+      const { rows, telemetry } = captureRecorder()
+      const model = new CliInlineLanguageModel(
+        'anthropic',
+        'claude-opus-4-8',
+        async (req) => {
+          req.reportCall?.(reported({ model: 'claude-haiku-4-5' }))
+          req.reportCall?.(reported())
+          return { text: 'done', usage: { inputTokens: 20, outputTokens: 10 } }
+        },
+        telemetry,
+      )
+      await generateText({ model, prompt: 'go' })
+      await settle()
+      expect(rows.map((r) => r.model)).toEqual(['claude-haiku-4-5', 'claude-opus-4-8'])
+    })
+
+    // The case a plain "aggregate only when NOTHING was costed" rule got wrong. An older CLI build,
+    // or a turn that errored before reporting usage, leaves a step part-narrated: the costed turns
+    // are filed and the rest of the terminal total simply vanished, under-counting the step with
+    // nothing saying so. What the per-call channel did not account for is now its own row.
+    it('files the unaccounted remainder when only some turns carried usage', async () => {
+      const logger = createRecordingLogger()
+      const { rows, telemetry } = captureRecorder({ logger })
+      const model = new CliInlineLanguageModel(
+        'anthropic',
+        'claude-opus-4-8',
+        async (req) => {
+          req.reportCall?.(reported()) // 10 + 900 + 90 + 5
+          req.reportCall?.(
+            reported({ inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }),
+          )
+          // The CLI's own cumulative account is larger than its per-call one: the uncosted turn.
+          return {
+            text: 'done',
+            usage: {
+              inputTokens: 30,
+              cacheReadTokens: 1500,
+              cacheWriteTokens: 90,
+              outputTokens: 12,
+            },
+          }
+        },
+        telemetry,
+      )
+      await generateText({ model, prompt: 'go' })
+      await settle()
+
+      // One row for the costed turn, and one for the remainder — nothing filed for the turn that
+      // reported no tokens, since a zero row is a claim about a call nothing can be said about.
+      expect(rows).toHaveLength(2)
+      expect(rows[0]).toMatchObject({ turnIndex: 0, totalTokens: 1005 })
+      expect(rows[1]!.turnIndex).toBeUndefined()
+      expect(rows[1]).toMatchObject({
+        promptTokens: 20,
+        cacheReadTokens: 600,
+        cacheWriteTokens: 0,
+        completionTokens: 7,
+        totalTokens: 627,
+      })
+      // Inconsistent narration is a cause worth naming, not a silent shortfall.
+      expect(logger.lines.map((l) => `${l.level}:${l.msg}`)).toEqual([
+        expect.stringMatching(/^warn:.*without usage/),
+      ])
+    })
+
+    // A terminal figure LOWER than the CLI's own per-call sum is the two channels disagreeing, not
+    // negative spend: nothing is filed on top of the calls that already spoke for themselves.
+    it('files nothing extra when the calls account for the whole step', async () => {
+      const { rows, telemetry } = captureRecorder()
+      const model = new CliInlineLanguageModel(
+        'anthropic',
+        'claude-opus-4-8',
+        async (req) => {
+          req.reportCall?.(reported())
+          return { text: 'done', usage: { inputTokens: 1, outputTokens: 1 } }
+        },
+        telemetry,
+      )
+      await generateText({ model, prompt: 'go' })
+      await settle()
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ turnIndex: 0 })
+    })
+
+    // Reconstructing a harness CLI's request transcript means holding the growing history in THIS
+    // process and re-serialising it per call. A prompts-off deployment's store drops every body it
+    // is handed, so the runner must be told not to assemble them — the counts still arrive.
+    it('tells the runner whether bodies are worth assembling', async () => {
+      const seen: (boolean | undefined)[] = []
+      const runner = async (req: InlineCliRequest) => {
+        seen.push(req.reportBodies)
+        return { text: 'done' }
+      }
+      await generateText({
+        model: new CliInlineLanguageModel(
+          'anthropic',
+          'm',
+          runner,
+          captureRecorder({ recordBodies: false }).telemetry,
+        ),
+        prompt: 'go',
+      })
+      await generateText({
+        model: new CliInlineLanguageModel('anthropic', 'm', runner, captureRecorder().telemetry),
+        prompt: 'go',
+      })
+      expect(seen).toEqual([false, true])
     })
   })
 })

@@ -44,20 +44,39 @@ calls and 117 — a measured 1.47M tokens inflated to 5.53M. The container harne
 that, along with the prompt-transcript reconstruction and the routing of subagent turns off the
 parent's chain; local carried a lesser copy of only the usage half, which is exactly why the two
 paths disagreed about how many calls a step had made. `@cat-factory/executor-harness` now exports
-that fold as the `./claude-stream` subpath and local drives it, so there is ONE implementation.
+that fold as the `./claude-call-aggregator` subpath and local drives it, so there is ONE
+implementation.
+
+**Sharing it made the backend a second DRIVER of a reconstruction that had only ever run in a
+container**, and two of its properties are memory rules there rather than niceties. The transcript is
+retained only to `MAX_TRANSCRIPT_CHARS` (512 KiB, the store's own body cap — past that the retention
+could only ever be thrown away), stating what it stopped retaining rather than ending mid-conversation;
+and assembling bodies at all is a switch, off when `LLM_RECORD_PROMPTS` is. Unlike every other body,
+these are BUILT rather than merely passed as a thunk — the growing history, re-serialised per call — so
+a body the store will drop has to be refused at the source. Unbounded, this is the same fault
+`OUTPUT_TAIL_RETAIN_CHARS` already refuses one screen away: hundreds of MB parked in the orchestrator
+process, on precisely the runs worth diagnosing.
 
 Also: the tag-then-scope attribution precedence is now one shared `resolveInlineAttribution`, since
 two producers apply it; `InlineLlmCall` carries an optional `turnIndex`, real for a harness-CLI call
-and absent for a plain `generateText`; and `ModelProviderResolverWrapDeps.recordInlineCall` is
-required-but-nullable, so a facade that FORGOT it fails at typecheck rather than shipping a
-deployment that silently reports no model activity.
+and absent for a plain `generateText`; every row names the model the CLI says SERVED that call
+(`call.model ?? requested`, as `makeHarnessCallRecorder` already did — cost is derived per row from
+`(model, token classes)`, and a CLI serves some calls with a cheaper model of its own); and
+`ModelProviderResolverWrapDeps.recordInlineCall` is required-but-nullable, so a facade that FORGOT it
+fails at typecheck rather than shipping a deployment that silently reports no model activity.
 
-Degradations are stated rather than papered over. A CLI that narrates nothing (`codex exec`), or a
-build that narrates turns without per-turn usage, reports no call carrying tokens — the model then
-files the single aggregate row the SDK boundary knows, carrying the terminal cumulative total, which
-mirrors the harness's own fallback. A killed step still gets one `ok: false` row at the ordinal after
-its last completed call, with zero tokens, which is now TRUE of it: it stands for the interrupted
-call, and everything the run really spent is already on record.
+Degradations are stated rather than papered over. The step-level row carries the SHORTFALL — the
+terminal cumulative usage minus what the per-call rows accounted for — which covers three cases with
+one rule: a CLI that narrates nothing (`codex exec`) gets the single row the SDK boundary knows, a
+fully-narrated step gets none (one there would double every token), and a PART-narrated step gets the
+remainder rather than losing it. That last case is why it is a shortfall and not a lump: an older CLI
+build, or a turn that errored before reporting usage, leaves a step whose uncosted turns would
+otherwise simply vanish. An uncosted turn is never filed as a zero-token row, and that rule lives with
+the model, so it holds for the host CLI's stream and a container job's terminal metrics alike. A killed
+step still gets one `ok: false` row at the ordinal after its last completed call, with zero tokens,
+which is now TRUE of it: it stands for the interrupted call, and everything the run really spent is
+already on record. Every fold step is isolated, because the reader runs inside the spawn's `stdout`
+listener and its flush on the killed path runs BEFORE the failure is enriched with the burn clause.
 
 **Deliberately still open:** the spend LEDGER. `token_usage` is written from the agent result on the
 success path only, so a failed step writes no ledger row on either transport and the budget rollups

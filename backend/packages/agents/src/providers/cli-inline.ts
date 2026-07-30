@@ -57,8 +57,22 @@ export interface InlineCliRequest {
    *
    * Absent when the deployment retains no metrics — a runner must then not bother assembling
    * bodies it has nowhere to send.
+   *
+   * A call the CLI reports with NO usable token counts is still published: deciding what is
+   * fileable belongs to the one place both runners converge on (see the model's `filed`), not to
+   * each runner separately.
    */
   reportCall?: (call: HarnessCallMetric) => void
+  /**
+   * Whether the published calls' prompt/response BODIES will be retained anywhere.
+   *
+   * Absent ⇒ FALSE: a runner must not assemble a body nobody keeps. Reconstructing a tool loop's
+   * request transcript means holding the growing history in the orchestrator's own process and
+   * re-serialising it per call, so on a `LLM_RECORD_PROMPTS`-off deployment — where the store drops
+   * every body it is handed — that work is pure cost. Token counts, `messageCount` and finish
+   * reasons are reported either way.
+   */
+  reportBodies?: boolean
 }
 
 /** What the CLI runner returns after one completion. */
@@ -95,6 +109,17 @@ export type InlineCliRunner = (request: InlineCliRequest) => Promise<InlineCliRe
 export interface InlineCliTelemetry {
   recordCall: InlineLlmCallRecorder
   scope?: InlineAttributionScope
+  /**
+   * The deployment's `LLM_RECORD_PROMPTS` switch, forwarded to the runner as
+   * {@link InlineCliRequest.reportBodies} so a body nobody retains is never assembled.
+   *
+   * REQUIRED, not optional: `false` is the real answer for a prompts-off deployment, but a caller
+   * that FORGOT it would look identical and silently pay the reconstruction cost this exists to
+   * avoid. The per-workspace `storeAgentContext` opt-out still applies on top, inside the service —
+   * it is resolved asynchronously and cannot gate a synchronous stream observer, so it costs the
+   * serialisation and drops the result, exactly as it did before.
+   */
+  recordBodies: boolean
   /** Injectable clock (tests); defaults to `Date.now`. */
   now?: () => number
   /** Where a dropped row reports itself. Absent ⇒ `noopLogger`. */
@@ -199,19 +224,35 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
     // Per GENERATE, not per model: the ordinal counts this step's calls, and one model instance
     // is resolved per scope and reused across steps.
     let reported = 0
-    // Whether ANY reported call carried tokens, which decides if the terminal cumulative figure is
-    // still needed — see the aggregate below.
-    let reportedTokens = false
-    const filed = this.telemetry
-      ? (call: HarnessCallMetric): void => {
-          if (
-            call.inputTokens ||
-            call.cacheReadTokens ||
-            call.cacheWriteTokens ||
-            call.outputTokens
-          )
-            reportedTokens = true
-          this.file(options, call, reported++)
+    // What the per-call channel ACCOUNTED FOR, so the step-level row below can carry exactly the
+    // remainder rather than either duplicating these or dropping what they missed.
+    const accounted = { prompt: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+    // Turns the CLI narrated but costed at nothing. Not fileable (a zero-token row is a claim about
+    // a call nothing can be said about, and it would read as "burned 0 tokens across 3 calls"), but
+    // remembered: alongside costed calls it means the CLI's narration is inconsistent, which is
+    // worth a word rather than a silent shortfall.
+    let uncosted = 0
+    const telemetry = this.telemetry
+    // The runner's whole telemetry contract, present or absent as ONE unit: a reporter with no
+    // answer about bodies would leave each runner guessing whether to assemble them.
+    const reporting: Pick<InlineCliRequest, 'reportCall' | 'reportBodies'> | undefined = telemetry
+      ? {
+          reportBodies: telemetry.recordBodies,
+          reportCall: (call) => {
+            const total =
+              call.inputTokens + call.cacheReadTokens + call.cacheWriteTokens + call.outputTokens
+            // Filtered HERE rather than in each runner, so the rule holds for every one of them —
+            // the host CLI's stream and a container inline job's terminal `callMetrics` alike.
+            if (!total) {
+              uncosted += 1
+              return
+            }
+            accounted.prompt += call.inputTokens
+            accounted.cacheRead += call.cacheReadTokens
+            accounted.cacheWrite += call.cacheWriteTokens
+            accounted.output += call.outputTokens
+            this.file(options, call, reported++)
+          },
         }
       : undefined
     try {
@@ -222,18 +263,12 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
         ...(options.maxOutputTokens != null ? { maxOutputTokens: options.maxOutputTokens } : {}),
         ...(options.temperature != null ? { temperature: options.temperature } : {}),
         ...(options.abortSignal ? { signal: options.abortSignal } : {}),
-        ...(filed ? { reportCall: filed } : {}),
+        ...reporting,
       })
-      const reason = result.finishReason ?? 'stop'
-      // Two cases still need the step-level row, and they are the same case: the per-call channel
-      // did not account for the spend. A CLI that narrated nothing (`codex exec`) reported no calls
-      // at all; a CLI build that narrates turns but no per-turn `usage` reported calls that are all
-      // zeros. Either way the run's cumulative total arrived only on the terminal event, so file it
-      // — the container harness's `attributeCumulativeUsage` pins it to the last call for the same
-      // reason. When the calls DID carry tokens this row would double every one of them.
-      if (this.telemetry && !reportedTokens) {
-        this.fileAggregate(options, result, this.now() - startedAt)
+      if (telemetry) {
+        this.fileUnaccounted(options, result, this.now() - startedAt, accounted, reported, uncosted)
       }
+      const reason = result.finishReason ?? 'stop'
       return {
         content: result.text ? [{ type: 'text', text: result.text }] : [],
         finishReason: { unified: reason, raw: reason },
@@ -245,7 +280,7 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       // they arrive. What is left to state is that the step itself died, and how long it had run:
       // a row of its own, at the next ordinal, carrying no tokens because the call it stands for
       // never reported any. (The runner has already folded what the run spent into the message.)
-      if (this.telemetry) {
+      if (telemetry) {
         this.fileFailure(options, reported, this.now() - startedAt, error)
       }
       throw error
@@ -260,9 +295,16 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
    * actually applied, and a plausible number here (this step's elapsed time, the caller's
    * `maxOutputTokens` the CLI ignores) would be fabricated. `toolCount` is 0 because the request
    * offered none — the tools this loop used are the CLI's own, not ours to claim.
+   *
+   * `model` is the one the CLI says SERVED this call, falling back to the one we asked for — the
+   * same precedence `makeHarnessCallRecorder` applies to the identical metric, and for the same
+   * reason: Claude Code serves some calls with a different model (its own cheap side-calls, an
+   * auto-fallback under load), and cost is derived per row from `(model, token classes)`. Filing
+   * every call under the requested id prices those wrong.
    */
   private file(options: LanguageModelV3CallOptions, call: HarnessCallMetric, turnIndex: number) {
     this.record(options, {
+      model: call.model ?? this.modelId,
       messageCount: call.messageCount,
       turnIndex,
       promptTokens: call.inputTokens,
@@ -282,26 +324,62 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
   }
 
   /**
-   * File the ONE row a CLI that reported no calls of its own leaves behind — everything the SDK
-   * boundary knows about the whole step, which is what the middleware would have recorded. No
-   * `turnIndex`: this is not a turn within a sequence, it IS the step.
+   * File the step-level row for whatever the per-call channel did NOT account for: the terminal
+   * cumulative usage minus the sum of the calls already filed, per input class.
+   *
+   * A shortfall is the only thing this row may carry, and it covers three cases with one rule
+   * instead of three:
+   *
+   * - **A CLI that narrates nothing** (`codex exec`) filed no calls, so the shortfall is the whole
+   *   step and this is the one aggregate row the SDK boundary knows. Filed even when the terminal
+   *   event carried no usage either — a zero-token row still records that a call HAPPENED, with its
+   *   bodies and its duration, which is the honest "we do not know what it cost".
+   * - **Every turn costed** ⇒ shortfall 0 ⇒ NO row, because one here would double every token of
+   *   the step in its rollup.
+   * - **Some turns costed and some not** — an older CLI build, a turn that errored before reporting
+   *   usage. This is the case a plain "aggregate only when nothing was costed" rule got wrong: the
+   *   uncosted turns' spend simply vanished, under-counting the step with nothing saying so. It is
+   *   NOT what the container harness does (`attributeCumulativeUsage` pins the run total onto the
+   *   last call, keeping a row per turn), so the shortfall is stated here as its own row and the
+   *   inconsistent narration is logged.
+   *
+   * No `turnIndex`: this is not a turn within the sequence, it stands for the step.
    */
-  private fileAggregate(
+  private fileUnaccounted(
     options: LanguageModelV3CallOptions,
     result: InlineCliResult,
     durationMs: number,
+    accounted: { prompt: number; cacheRead: number; cacheWrite: number; output: number },
+    reported: number,
+    uncosted: number,
   ) {
-    const fresh = result.usage?.inputTokens ?? 0
-    const cacheRead = result.usage?.cacheReadTokens ?? 0
-    const cacheWrite = result.usage?.cacheWriteTokens ?? 0
-    const output = result.usage?.outputTokens ?? 0
+    // Clamped at 0 per class: a CLI whose terminal figure is LOWER than its own per-call sum has
+    // simply reported the two inconsistently, and negative spend is not a thing to file.
+    const short = (terminal: number | undefined, already: number): number =>
+      Math.max(0, (terminal ?? 0) - already)
+    const fresh = short(result.usage?.inputTokens, accounted.prompt)
+    const cacheRead = short(result.usage?.cacheReadTokens, accounted.cacheRead)
+    const cacheWrite = short(result.usage?.cacheWriteTokens, accounted.cacheWrite)
+    const output = short(result.usage?.outputTokens, accounted.output)
+    const total = fresh + cacheRead + cacheWrite + output
+    // Nothing left over AND the calls spoke for themselves ⇒ the step is fully accounted for.
+    if (!total && reported > 0) return
+    if (total && reported > 0) {
+      this.log.warn('inline CLI reported some calls without usage; filing the unaccounted spend', {
+        model: this.modelId,
+        reportedCalls: reported,
+        uncostedCalls: uncosted,
+        unaccountedTokens: total,
+      })
+    }
     this.record(options, {
+      model: this.modelId,
       messageCount: options.prompt.length,
       promptTokens: fresh,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
       completionTokens: output,
-      totalTokens: fresh + cacheRead + cacheWrite + output,
+      totalTokens: total,
       finishReason: result.finishReason ?? 'stop',
       durationMs,
       ok: true,
@@ -330,6 +408,7 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
     error: unknown,
   ) {
     this.record(options, {
+      model: this.modelId,
       messageCount: options.prompt.length,
       turnIndex,
       promptTokens: 0,
@@ -363,7 +442,6 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       | 'executionId'
       | 'agentKind'
       | 'provider'
-      | 'model'
       // Constant across every row this model files — see the two below for why.
       | 'toolCount'
       | 'requestMaxTokens'
@@ -392,7 +470,6 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
           executionId,
           agentKind,
           provider: this.provider,
-          model: this.modelId,
           // 0 because the REQUEST offered none: the tools this loop used are the CLI's own, and
           // claiming them here would count an agentic run's toolbox as ours.
           toolCount: 0,

@@ -746,15 +746,38 @@ files each call the CLI reports, as it arrives, then declares `reportsOwnLlmCall
   31 calls and 117 (1.47M tokens inflated to 5.53M). The container harness had solved that, plus the
   prompt-transcript reconstruction and the routing of subagent turns off the parent's chain; local
   carried a lesser copy of just the usage half. It now drives `createClaudeRunTelemetry` through the
-  new `@cat-factory/executor-harness/claude-stream` subpath, so there is one implementation and both
-  transports agree on what a call is.
-- **The aggregate row survives where it is the honest answer.** `codex exec` narrates nothing, and an
-  older CLI build can narrate turns without per-turn usage; either way no reported call carries
-  tokens, and the model files the single row the SDK boundary knows — with the terminal cumulative
-  total, mirroring the harness's own `attributeCumulativeUsage` fallback.
+  new `@cat-factory/executor-harness/claude-call-aggregator` subpath, so there is one implementation
+  and both transports agree on what a call is.
+- **Sharing it made the backend a second DRIVER of that reconstruction, which had only ever run in a
+  container.** In a box sized for one job, holding the growing history and re-serialising it per call
+  costs nothing anyone notices; in the orchestrator process it is per concurrent inline step, on
+  exactly the long tool loops this work exists for — the fault `OUTPUT_TAIL_RETAIN_CHARS` already
+  refuses one screen away in the same file. So the transcript is retained only to
+  `MAX_TRANSCRIPT_CHARS` (512 KiB, the store's own `MAX_BODY_CHARS`: past that, retention could only
+  ever be thrown away), freezing the tail and STATING what it stopped retaining rather than ending
+  mid-conversation; and assembling bodies at all is a switch, off when `LLM_RECORD_PROMPTS` is. These
+  bodies are the one kind that is BUILT rather than passed as a thunk, so the usual "let the gate drop
+  it" answer does not apply — the refusal has to happen at the source.
+- **The step-level row carries the SHORTFALL, not a lump.** Terminal cumulative usage minus what the
+  per-call rows accounted for, per input class, which is one rule for three cases: `codex exec`
+  narrates nothing ⇒ the whole step, as the single row the SDK boundary knows; a fully-narrated step ⇒
+  nothing (a row there would double every token); a PART-narrated step ⇒ the remainder. That third
+  case is the one an "aggregate only when nothing was costed" rule got wrong — an older CLI build, or a
+  turn that errored before reporting usage, left its spend recorded by nothing at all. The container
+  harness answers the same case differently (`attributeCumulativeUsage` pins the run total onto the
+  last call, keeping a row per turn), so this is stated as its own row and the inconsistent narration
+  is logged rather than described as mirroring it. An uncosted turn is never filed as a zero-token row,
+  and that rule lives with the MODEL, so it holds for the host CLI's stream and a container inline
+  job's terminal `callMetrics` alike.
 - **A killed step still gets a failure row**, at the ordinal after the last completed call, with zero
   tokens — which is now TRUE of it (it stands for the interrupted call, and everything the run did
-  spend is already recorded call by call) rather than a claim about the whole step.
+  spend is already recorded call by call) rather than a claim about the whole step. Every fold step is
+  isolated for the same reason: the reader runs inside the spawn's `stdout` listener, and its flush on
+  the killed path runs BEFORE the failure is enriched with the burn clause, so a throw there would
+  replace the CLI's own failure with a telemetry error.
+- **Each row names the model that SERVED the call** (`call.model ?? requested`), matching
+  `makeHarnessCallRecorder`. Cost is derived per row from `(model, token classes)` and a CLI serves
+  some calls with a cheaper model of its own, so filing them all under the requested id misprices them.
 
 **Deliberately still open: the spend LEDGER.** `token_usage` is written from the agent result's
 `usage` on the success path only (`RunDispatcher`), so a failed step still writes no ledger row on

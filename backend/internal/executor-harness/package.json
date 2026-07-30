@@ -16,7 +16,7 @@
   "exports": {
     ".": "./dist/server.js",
     "./embed": "./src/embed.ts",
-    "./claude-stream": {
+    "./claude-call-aggregator": {
       "types": "./dist/claude-call-aggregator.d.ts",
       "default": "./dist/claude-call-aggregator.js"
     }

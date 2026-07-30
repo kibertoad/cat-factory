@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "comment": "Self-contained (does not extend the monorepo base) so the Docker build context can be just this package directory.",
-  "comment:declaration": "Declarations are emitted for the `./claude-stream` subpath: the BACKEND imports the Claude Code stream aggregator from `dist` at RUNTIME (unlike the compile-only `./embed`, which resolves to source), so it needs types beside the JS.",
+  "comment:declaration": "Declarations are emitted for the `./claude-call-aggregator` subpath: the BACKEND imports the Claude Code stream aggregator from `dist` at RUNTIME (unlike the compile-only `./embed`, which resolves to source), so it needs types beside the JS.",
+  "comment:buildOrder": "This package is NOT composite, so it is absent from the TS project-reference graph its consumers build through: `@cat-factory/local-server` resolves the subpath's `.d.ts` only because Turbo's `^build` edge builds every workspace dependency first. Correct under `turbo run <task>`; a bare `tsc -b --watch` inside runtimes/local will NOT rebuild this package, so run `pnpm --filter @cat-factory/executor-harness build` after editing the aggregator.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

@@ -269,6 +269,11 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
         // Not a conditional spread: the field is required-but-nullable precisely so omitting it here
         // is a typecheck failure rather than a deployment that silently reports no model activity.
         recordInlineCall: instrument?.recordCall,
+        // And whether that model's runner should assemble prompt/response BODIES at all. A harness
+        // CLI's per-call bodies are RECONSTRUCTED (the growing request transcript, re-serialised per
+        // call, held in this process), so a prompts-off deployment must not pay for what the store
+        // is about to drop — the same reason every other body reaches the recorder as a thunk.
+        recordInlineBodies: config.observability.recordPrompts,
       })
     : baseModelProviderResolver
   // Observe inline calls and cap their concurrency, both applied on top of the facade wrap above

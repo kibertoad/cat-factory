@@ -14,8 +14,9 @@ import {
   createClaudeRunTelemetry,
   subagentDispatchId,
   type ClaudeRunTelemetry,
-} from '@cat-factory/executor-harness/claude-stream'
+} from '@cat-factory/executor-harness/claude-call-aggregator'
 import {
+  describeError,
   describeProcessExit,
   type HarnessCallMetric,
   type HarnessKind,
@@ -458,9 +459,15 @@ const FALLBACK_BODY_MAX_CHARS = 64 * 1024
  * it), and this class's own account of the run — the terminal `result` event, the raw-text
  * fallback, and a running total for the failure breadcrumb.
  *
- * Fed line-by-line through {@link CliExecOptions.onLine}, so it holds a bounded summary instead of
- * the stream, and it stays readable after a REJECTION — which is what lets a killed run say what
- * it spent.
+ * Fed line-by-line through {@link CliExecOptions.onLine}, so it never holds the stream, and it stays
+ * readable after a REJECTION — which is what lets a killed run say what it spent.
+ *
+ * What it DOES retain is the aggregator's reconstructed request transcript, and that is retained in
+ * THIS process, so it is bounded on two axes rather than left to grow with the loop: the
+ * aggregator's own `MAX_TRANSCRIPT_CHARS` (which states what it stopped retaining), and the
+ * `bodies` switch, which skips the reconstruction entirely when the deployment retains no prompts.
+ * Without both, a stalled tool-using run parks the same hundreds of MB here that
+ * {@link OUTPUT_TAIL_RETAIN_CHARS} exists to refuse.
  *
  * The per-call fold is DELIBERATELY not implemented here. The stream emits one envelope per
  * CONTENT BLOCK of a response, each repeating that ONE call's `usage` — a turn that answers with
@@ -471,8 +478,9 @@ const FALLBACK_BODY_MAX_CHARS = 64 * 1024
  * carry a lesser copy of the same fold, which is exactly why the two paths disagreed about how
  * many calls a step had made. See docs/initiatives/token-burn-instrumentation.md.
  *
- * {@link line} is TOTAL: it parses defensively and returns rather than throwing, which is the
- * contract {@link CliExecOptions.onLine} demands of an observer running inside a stream handler.
+ * {@link line} and {@link end} are TOTAL: they parse defensively, and every fold step runs through
+ * {@link ClaudeStreamFold.fold}, which is the contract {@link CliExecOptions.onLine} demands of an
+ * observer running inside a stream handler.
  */
 class ClaudeStreamFold {
   private readonly telemetryStream: ClaudeRunTelemetry
@@ -481,16 +489,23 @@ class ClaudeStreamFold {
   private sawEvent = false
   private calls = 0
   private readonly total = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+  private readonly log = logger.child({ scope: 'claudeStreamFold' })
+  /** Whether a fold failure has already been reported — one line per run, not per line. */
+  private foldFailed = false
 
   /**
    * @param seed the turns the harness supplied and the stream therefore never shows (system +
    *   user), so a reconstructed prompt never claims a turn that was not sent.
-   * @param reportCall where each completed model call goes. Absent ⇒ the calls are still counted
-   *   for the breadcrumb, but nothing is published.
+   * @param reportCall where each model call the CLI reports goes. Absent ⇒ the calls are still
+   *   counted for the breadcrumb, but nothing is published.
+   * @param bodies whether the published metrics' bodies will be retained anywhere. False ⇒ the
+   *   transcript is not reconstructed at all (counts only), because assembling a body the store is
+   *   about to drop is pure cost in THIS process.
    */
   constructor(
     seed: { role: string; content: unknown }[],
     private readonly reportCall?: (call: HarnessCallMetric) => void,
+    bodies = false,
   ) {
     this.telemetryStream = createClaudeRunTelemetry({
       seed,
@@ -501,26 +516,30 @@ class ClaudeStreamFold {
       // No `subagents/*.jsonl` watcher runs against an ambient CLI — it has no isolated config
       // home to watch — so any subagent turns are billed HERE, on transcripts of their own.
       watcherOwnsSubagents: false,
+      bodies,
       publish: (metric) => {
-        // A turn the CLI reported with no usable usage is not evidence that a model call
-        // COMPLETED, so it is neither counted nor filed: it would read as "burned 0 tokens across
-        // 3 model calls", contradicting the `no model call completed` branch, and put rows in the
-        // store for turns nothing can be said about. What the run really spent then arrives only
-        // on the terminal event, which the model files as the step's one aggregate row.
+        // Only the calls that got as far as reporting a burn count toward the breadcrumb, so a
+        // stream of empty ones can't read as "burned 0 tokens across 3 model calls" and contradict
+        // the `no model call completed` branch. Every metric is still PUBLISHED: whether an
+        // uncosted turn is fileable is one rule for both transports, and it lives with the model
+        // that files them.
         if (
-          !metric.inputTokens &&
-          !metric.cacheReadTokens &&
-          !metric.cacheWriteTokens &&
-          !metric.outputTokens
+          metric.inputTokens ||
+          metric.cacheReadTokens ||
+          metric.cacheWriteTokens ||
+          metric.outputTokens
         ) {
-          return
+          this.calls += 1
+          this.total.input += metric.inputTokens
+          this.total.cacheRead += metric.cacheReadTokens
+          this.total.cacheWrite += metric.cacheWriteTokens
+          this.total.output += metric.outputTokens
         }
-        this.calls += 1
-        this.total.input += metric.inputTokens
-        this.total.cacheRead += metric.cacheReadTokens
-        this.total.cacheWrite += metric.cacheWriteTokens
-        this.total.output += metric.outputTokens
-        this.reportCall?.(metric)
+        // Isolated, because this is a CALLER's callback running in the middle of the aggregator's
+        // own state transition (a call completes when the next one's first envelope arrives). Left
+        // to propagate, one throwing report would abandon that transition and cost the telemetry of
+        // the call that was just starting — on top of escaping into the stream handler.
+        this.fold('publish', () => this.reportCall?.(metric))
       },
     })
   }
@@ -557,13 +576,15 @@ class ClaudeStreamFold {
     if (typeof message !== 'object' || message === null) return
     const m = message as Record<string, unknown>
     if (e.type === 'assistant') {
-      this.telemetryStream.onAssistant(dispatchId, m)
+      this.fold('assistant', () => this.telemetryStream.onAssistant(dispatchId, m))
       return
     }
     if (e.type === 'user') {
       // The tool_result blocks fed back to the model — part of the NEXT call's prompt.
       const content = m.content
-      if (Array.isArray(content)) this.telemetryStream.onToolResult(dispatchId, content)
+      if (Array.isArray(content)) {
+        this.fold('toolResult', () => this.telemetryStream.onToolResult(dispatchId, content))
+      }
     }
   }
 
@@ -573,7 +594,35 @@ class ClaudeStreamFold {
    * losing it with the subprocess.
    */
   end(): void {
-    this.telemetryStream.flush()
+    this.fold('flush', () => this.telemetryStream.flush())
+  }
+
+  /**
+   * Run one fold step, absorbing anything it throws.
+   *
+   * This is what keeps {@link line} TOTAL — the contract {@link CliExecOptions.onLine} demands of an
+   * observer running inside a stream handler, since a throw there escapes into the spawn's `stdout`
+   * listener. The fold is not trivially total: it serialises the reconstructed transcript, which can
+   * exceed the engine's string limit on exactly the long tool loops this telemetry exists for.
+   *
+   * It also keeps {@link end} total, which matters on the KILLED path: `end()` runs there before the
+   * failure is enriched with what the run had burned, so a throw would replace a `CliExecFailure`
+   * (losing its `reason` and its burn clause) with an unrelated telemetry error.
+   *
+   * Reported ONCE per run — a broken fold breaks on every line, and this observer must not turn a
+   * telemetry defect into thousands of log lines during a live run.
+   */
+  private fold(step: string, apply: () => void): void {
+    try {
+      apply()
+    } catch (error) {
+      if (this.foldFailed) return
+      this.foldFailed = true
+      this.log.warn('claude stream telemetry fold failed; per-call rows may be incomplete', {
+        step,
+        ...describeError(error),
+      })
+    }
   }
 
   private retainNonEvent(raw: string): void {
@@ -745,6 +794,7 @@ function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCl
         { role: 'user', content: req.prompt },
       ],
       req.reportCall,
+      req.reportBodies ?? false,
     )
     try {
       await exec('claude', args, req.prompt, {
@@ -933,6 +983,12 @@ export interface InlineHarnessResolverDeps extends InlineLeaseDeps {
    * deployment that retains no metrics keeps the middleware's single aggregate generation per step.
    */
   recordInlineCall?: InlineLlmCallRecorder
+  /**
+   * The deployment's `LLM_RECORD_PROMPTS` switch, threaded from the same instrumentation as
+   * {@link recordInlineCall}. Absent ⇒ false: the host-CLI reader then reports its calls' counts
+   * without reconstructing the request transcripts nothing will keep.
+   */
+  recordInlineBodies?: boolean
 }
 
 /**
@@ -1087,6 +1143,7 @@ class SubscriptionInlineModelProvider implements ModelProvider {
           workspaceId: this.scope.workspaceId,
           ...(this.scope.executionId ? { executionId: this.scope.executionId } : {}),
         },
+        recordBodies: this.deps.recordInlineBodies ?? false,
         logger,
       },
     ]
