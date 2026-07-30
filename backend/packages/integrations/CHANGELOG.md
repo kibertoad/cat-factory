@@ -1,5 +1,14 @@
 # @cat-factory/integrations
 
+## 0.113.2
+
+### Patch Changes
+
+- Updated dependencies [0bffe55]
+- Updated dependencies [1cd9d73]
+  - @cat-factory/contracts@0.201.0
+  - @cat-factory/kernel@0.199.0
+
 ## 0.113.1
 
 ### Patch Changes
@@ -110,6 +119,7 @@
   that explains the card.
 
   ## The wire contract and the banner
+
   - `infraSetupStatusSchema` gains **`unreachable`**, riding the existing setup projection rather than
     a second "your infra is broken" surface: the consequence is identical to `not_defined` (a class of
     agents cannot run) and the same operator surface fixes it, so the banner, deep-link and i18n are
