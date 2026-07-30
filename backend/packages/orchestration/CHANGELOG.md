@@ -1,5 +1,19 @@
 # @cat-factory/orchestration
 
+## 0.177.1
+
+### Patch Changes
+
+- 16fd126: Split the six files over 2,000 lines along cohesive seams so the oxlint `max-lines` ceiling can
+  drop to its floor: the engine's human decision surface into `StepDecisionController`, the
+  dispatcher's running-poll branch tree and one-shot engine steps into `PollRunningController` /
+  `OneShotStepController`, the Worker composition root into model-resolver / executor-deps /
+  vcs-identity modules, provisioning auto-detection's Kubernetes half into its own module, and the
+  Node schema's tenancy tables into `db/tables/identity.ts`. Every extraction is a behaviour-neutral
+  move behind unchanged public surfaces.
+- Updated dependencies [16fd126]
+  - @cat-factory/integrations@0.113.5
+
 ## 0.177.0
 
 ### Minor Changes
