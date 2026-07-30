@@ -5649,7 +5649,8 @@
       "approve": "Approve plan",
       "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
       "sendBack": "Send back to the planner",
-      "noDocument": "This plan was drafted before the platform rendered plans for review, so there is no document to navigate — the sections below are the plan.",
+      "noDocument": "This planning step left no plan document to review, so there is nothing to navigate here.",
+      "noDocumentSections": "The sections below are the plan.",
       "needsFeedback": "Add a comment or some feedback first — the planner re-plans from it.",
       "commentHint": "Click any part of the plan to comment on it."
     },

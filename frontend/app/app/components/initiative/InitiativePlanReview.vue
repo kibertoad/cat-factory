@@ -108,21 +108,37 @@ async function copyPlan() {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col lg:flex-row" data-testid="initiative-plan-review">
-    <!-- Outline: the navigation, OUTSIDE the document rather than splitting its width — a sidebar
-         of the window, as the step reader's is. Below `lg` the columns stack, and it is the piece
-         that goes: the document and the commands are what a narrow screen needs. -->
+    <!-- Navigation column: the outline OUTSIDE the document rather than splitting its width — a
+         sidebar of the window, as the step reader's is. Narrower than the reader's (`w-52` against
+         its `w-72`) and held back to `lg` rather than its `md`, because this is a THREE-column
+         layout: at 768px the document would be left ~240px between the outline and the review rail,
+         which reads worse than no outline at all. Below `lg` the whole column goes; the document and
+         the commands are what a narrow screen needs.
+
+         Its presence tracks its two contents INDEPENDENTLY rather than the outline alone. Gating the
+         run details on `outline.hasToc` would make whether this window still reports its model / run
+         id / token spend depend on whether the plan renderer happened to emit a heading — a fact
+         owned by `renderInitiativePlanForReview`, in another package, with nothing pinning it. The
+         step reader keeps the same document-level affordances out of its own `hasToc` guard for that
+         reason, in a main-column header this surface does not have. -->
     <aside
-      v-if="outline.hasToc"
-      data-testid="initiative-plan-toc"
+      v-if="outline.hasToc || $slots['run-details']"
       class="hidden w-52 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 lg:flex"
     >
       <div class="flex items-center gap-0.5 border-b border-slate-800 px-3 py-2">
         <span
+          v-if="outline.hasToc"
           class="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500"
         >
           {{ t('panels.stepDetail.contents') }}
         </span>
+        <span v-else class="flex-1" />
+        <!-- Collapse-all tracks the outline: with no headings the only section is the untitled
+             preamble, which renders no toggle of its own, so collapsing it would hide the whole
+             plan with nothing on screen to bring it back. Copying it does not — that is about the
+             document, which exists either way. -->
         <UButton
+          v-if="outline.hasToc"
           :icon="allCollapsed ? 'i-lucide-unfold-vertical' : 'i-lucide-fold-vertical'"
           color="neutral"
           variant="ghost"
@@ -141,7 +157,12 @@ async function copyPlan() {
           @click="copyPlan"
         />
       </div>
-      <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+      <nav
+        v-if="outline.hasToc"
+        data-testid="initiative-plan-toc"
+        :aria-label="t('panels.stepDetail.contents')"
+        class="flex-1 space-y-0.5 overflow-y-auto px-2 py-2"
+      >
         <button
           v-for="s in tocSections"
           :key="s.id"
@@ -162,10 +183,14 @@ async function copyPlan() {
            already resolves the bundle through `useResultViewRunMeta`; it keeps its home in a
            sidebar here rather than disappearing for the duration of the review. Open, but
            collapsible: it is a stack of seven labelled fields, and a reviewer navigating a long
-           plan should be able to give the outline the whole column. -->
+           plan should be able to give the outline the whole column. With no outline above it there
+           is no column to give back, so it takes the space instead of leaving 55% of it empty. -->
       <div
         v-if="$slots['run-details']"
-        class="flex max-h-[45%] shrink-0 flex-col border-t border-slate-800"
+        class="flex flex-col"
+        :class="
+          outline.hasToc ? 'max-h-[45%] shrink-0 border-t border-slate-800' : 'min-h-0 flex-1'
+        "
       >
         <button
           type="button"
@@ -199,58 +224,63 @@ async function copyPlan() {
       class="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4"
       @scroll="onScroll"
     >
-      <div class="mx-auto max-w-3xl">
-        <section
-          v-for="s in outline.sections"
-          :id="s.id"
-          :key="s.id"
-          :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
-          class="scroll-mt-2"
+      <!-- No `max-w-*` reading measure here: with the outline and the review rail both taking a
+           fixed column out of the shell's `5xl`, this one is ~490px wide at every size that renders
+           it, so a cap would only ever be dead markup. -->
+      <section
+        v-for="s in outline.sections"
+        :id="s.id"
+        :key="s.id"
+        :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
+        class="scroll-mt-2"
+      >
+        <button
+          v-if="s.depth > 0"
+          class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-white"
+          :aria-expanded="!collapsed[s.id]"
+          @click="toggle(s.id)"
         >
-          <button
-            v-if="s.depth > 0"
-            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-white"
-            @click="toggle(s.id)"
-          >
-            <UIcon
-              name="i-lucide-chevron-right"
-              class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
-              :class="collapsed[s.id] ? '' : 'rotate-90'"
-            />
-            <span
-              class="font-semibold text-slate-100"
-              :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-[13px]'"
-              v-html="s.titleHtml"
-            />
-          </button>
-          <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
-               gate the composer does — a viewer gets the document, not hover targets that lead
-               nowhere. -->
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div
-            v-show="!collapsed[s.id]"
-            class="reader-prose mt-0.5 text-[13px] leading-relaxed text-slate-300"
-            :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
-            @click="onProseClick"
-            v-html="s.bodyHtml"
+          <UIcon
+            name="i-lucide-chevron-right"
+            class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
+            :class="collapsed[s.id] ? '' : 'rotate-90'"
           />
-        </section>
-      </div>
+          <span
+            class="font-semibold text-slate-100"
+            :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-[13px]'"
+            v-html="s.titleHtml"
+          />
+        </button>
+        <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
+             gate the composer does — a viewer gets the document, not hover targets that lead
+             nowhere. -->
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div
+          v-show="!collapsed[s.id]"
+          class="reader-prose mt-0.5 text-[13px] leading-relaxed text-slate-300"
+          :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
+          @click="onProseClick"
+          v-html="s.bodyHtml"
+        />
+      </section>
     </div>
 
     <!-- Review rail: what the human is being asked, the anchored comments so far, and the two
          commands — the step reader's end-side rail. Below `lg` it drops under the document, capped
          so a long comment list can't crowd the plan off the screen. -->
     <aside
+      :aria-label="t('initiative.planReview.title')"
       class="flex max-h-[55%] w-full shrink-0 flex-col border-t border-slate-800 bg-slate-900/60 lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
     >
       <div class="border-b border-slate-800 px-4 py-3">
-        <div
+        <!-- A HEADING, not a styled div: this rail is what the window is now for, so the surface
+             that asks the human for a decision has to be reachable as one. -->
+        <h3
           class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-400"
         >
           <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('initiative.planReview.title') }}
-        </div>
+        </h3>
         <p class="mt-1 text-[12px] leading-relaxed text-slate-400">
           {{ t('initiative.planReview.body') }}
         </p>

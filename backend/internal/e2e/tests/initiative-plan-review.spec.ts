@@ -150,6 +150,10 @@ test.describe('initiative plan review', () => {
     // Taking the window does NOT cost the run details (model, run id, token telemetry): they move
     // into the outline sidebar rather than disappearing for the duration of the review.
     await expect(rail.getByTestId('initiative-plan-run-meta')).toBeVisible()
+    // The two shapes of this gate are mutually exclusive. The compact notice is for a gate whose
+    // step rendered nothing, and it points at the tracker's sections as the plan — printed over the
+    // takeover, which replaced those sections, it would be pointing at nothing.
+    await expect(tracker.getByTestId('initiative-plan-notice')).toHaveCount(0)
 
     // Send back is refused until there is something to re-plan FROM.
     await expect(rail.getByTestId('initiative-plan-send-back')).toBeDisabled()

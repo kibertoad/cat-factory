@@ -4430,7 +4430,8 @@
       "approve": "Approva il piano",
       "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
       "sendBack": "Rimanda al planner",
-      "noDocument": "Questo piano è stato redatto prima che la piattaforma generasse piani da revisionare, quindi non c'è un documento da percorrere: le sezioni qui sotto sono il piano.",
+      "noDocument": "Questo passaggio di pianificazione non ha lasciato alcun documento del piano da revisionare, quindi qui non c'è nulla da percorrere.",
+      "noDocumentSections": "Le sezioni qui sotto sono il piano.",
       "needsFeedback": "Aggiungi prima un commento o un riscontro: il pianificatore ripianifica a partire da questo.",
       "commentHint": "Fai clic su una parte del piano per commentarla."
     },

@@ -95,7 +95,21 @@ Key shape decisions:
   cannot exist until the plan is committed. The exception is a gate carrying no rendering at all,
   where the tracker's sections are the only view of the plan there is: that one keeps a compact
   notice above them (`planReviewDocument` decides which, so the surface and its host cannot disagree
-  about what is on screen).
+  about what is on screen). Two things about the takeover are easy to get wrong, and both were:
+  - **A document-level affordance may not hang off the OUTLINE's existence.** The review hosts the
+    window's run details (model, run id, token telemetry) in the outline column, so gating that
+    column on `outline.hasToc` silently made "does this window still report what the run spent"
+    depend on whether `renderInitiativePlanForReview` happened to emit a heading — an invariant in
+    another package with nothing pinning it. The column's presence tracks its two contents
+    independently; only the `<nav>` and collapse-all, which have nothing to act on without headings,
+    stay behind that guard. The step reader keeps the same affordances outside its own for the same
+    reason.
+  - **The no-document notice renders ABOVE the entity branch, and is told whether the sections
+    exist.** The gate lives on the RUN, so it is parked before `initiatives.load()` resolves; a
+    notice nested under "the entity loaded" left that gate with no resolving surface at all, which
+    is the bug the plan-review e2e spec exists for. Since it may then be sitting over a window with
+    no sections, the sentence pointing at them is a separate key it only renders when they are
+    really there.
 - **What is rendered is the INGESTED plan, which is why this does not ride the generic artifact
   seam.** `reviewableArtifactOutput` renders the agent's RAW result, and that is sound only while
   the committed artifact IS that result — true of the spec doc and the blueprint tree, whose files

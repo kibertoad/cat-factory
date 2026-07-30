@@ -286,25 +286,31 @@ async function savePolicy() {
 
     <div v-else class="flex min-h-0 flex-1">
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <!-- A parked gate whose step rendered no plan: the commands, plus a notice pointing at the
+             sections below — which in that case are the only rendering of the plan there is.
+             Deliberately OUTSIDE the entity branch: the gate lives on the RUN, so it is parked
+             before `initiatives.load()` has resolved (and stays parked if it fails), and a window
+             that answered such a gate with the empty state alone would leave it unresolvable from
+             the UI. `hasSections` is what keeps the notice honest about whether the sections it
+             points at are actually rendered underneath. -->
+        <InitiativePlanNotice
+          v-if="planApproval"
+          :approval="planApproval.approval"
+          :instance-id="planApproval.instanceId"
+          :can-execute="access.canExecuteRuns.value"
+          :has-sections="!!initiative"
+        />
+
         <!-- No entity yet (module unwired / still creating) -->
         <div
           v-if="!initiative"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+          class="flex flex-col items-center justify-center gap-2 py-16 text-center text-slate-400"
         >
           <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
         </div>
 
         <template v-else>
-          <!-- A parked gate whose step rendered no plan: the commands, plus a notice pointing at
-               the sections below — which in that case are the only rendering of the plan there is. -->
-          <InitiativePlanNotice
-            v-if="planApproval"
-            :approval="planApproval.approval"
-            :instance-id="planApproval.instanceId"
-            :can-execute="access.canExecuteRuns.value"
-          />
-
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
                    review before the next phase spawns. Read the phase's artifacts/PRs below,
                    then resume (continue) or cancel (stop) the initiative right here. -->
