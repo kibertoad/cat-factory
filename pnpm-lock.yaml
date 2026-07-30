@@ -1100,6 +1100,9 @@ importers:
         specifier: workspace:*
         version: link:../../backend/runtimes/local
     devDependencies:
+      '@cat-factory/cli':
+        specifier: workspace:*
+        version: link:../../backend/packages/cli
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1

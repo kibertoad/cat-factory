@@ -41,6 +41,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
+      cliSupervise: ${{ steps.filter.outputs.cliSupervise }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
       # Coarse test-lane gating (computed in the `scope` step below):
@@ -109,6 +110,20 @@ jobs:
               - 'backend/packages/cli/src/k3s*.ts'
               - 'backend/packages/cli/src/host-shell.ts'
               - 'backend/packages/cli/vitest.integration.config.ts'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+            # The `cat-factory supervise` suite drives the BUILT CLI out-of-process against a real
+            # child — the only way to catch a supervisor that exits 0 when its child dies. It needs
+            # a build but NO cluster, so it runs in the cluster-free `test-units` lane and carries
+            # its own filter: folding it into `kubernetes` above would both gate it behind an
+            # unrelated k3d spin-up and, since that list matches `k3s*.ts`, never run it for a
+            # change to `supervise*.ts` at all.
+            cliSupervise:
+              - 'backend/packages/cli/src/supervise*.ts'
+              - 'backend/packages/cli/src/host-shell.ts'
+              - 'backend/packages/cli/src/args.ts'
+              - 'backend/packages/cli/src/bin.ts'
+              - 'backend/packages/cli/vitest.supervise.config.ts'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
             # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`
@@ -637,6 +652,13 @@ jobs:
           --filter='!@cat-factory/node-server'
           --filter='!@cat-factory/local-server'
           -r run test:run
+
+      # `cat-factory supervise` driven as its own process against the `dist/bin.js` built above.
+      # It spawns a real child and binds an ephemeral port, but needs no cluster/DB/network — so it
+      # belongs in this lane rather than behind the k3d spin-up in `test-k8s`.
+      - name: CLI supervise integration test
+        if: ${{ needs.changes.outputs.cliSupervise == 'true' }}
+        run: pnpm --filter @cat-factory/cli run test:supervise
 
   # The Postgres-backed conformance + integration suites (Node + Local facades) — the
   # only tests that need a database. Each vitest worker gets its OWN database
