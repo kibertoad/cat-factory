@@ -90,11 +90,16 @@ The genuine hard dependencies are four, and each already has its own guard:
 So gatability is a **per-kind capability**, not a category test. Built-in kinds are not
 `AgentKindDefinition` entries (CLAUDE.md: "the built-in agents aren't migrated to this model"), so it
 follows the established per-concern idiom — a `BUILTIN_*` table beside a registry accessor, exactly
-like `read-only.ts` and `tuning.ts`:
+like `read-only.ts` and `tuning.ts`. The one departure from that idiom is WHERE the table lives: in
+`@cat-factory/contracts`, because the SPA needs the same answer and cannot see `@cat-factory/agents`
+(see the advisory gotcha below).
 
 ```ts
-// agents/kinds/gatable.ts
-export const BUILTIN_GATABLE_KINDS = new Set<string>([...])
+// contracts/agent-gating.ts — shared, so the engine and the SPA cannot disagree
+export const BUILTIN_GATABLE_KINDS: ReadonlySet<string> = new Set<string>([...])
+export function isBuiltinGatableKind(kind: AgentKind | string): boolean { ... }
+
+// agents/kinds/gatable.ts — the registry-aware form, backend only
 export function isGatableKind(kind: AgentKind, registry?: AgentKindRegistry): boolean {
   return registry?.gatable(kind) ?? BUILTIN_GATABLE_KINDS.has(kind)
 }
@@ -202,6 +207,19 @@ explicitly rather than papered over.
   ones. A skipped merger would leave delivering kinds (`spike`, `spec-writer`) opening a PR that
   nothing merges. Same reasoning applies to any future step whose presence is read off
   `instance.steps` rather than its outcome.
+- **The SPA re-derives the shape rules, and a stale copy is a BROKEN BOARD, not a stale warning.**
+  `usePipelineHealth.ts` mirrors `validatePipelineShape` client-side to tell a workspace which stored
+  pipelines would fail, and `pages/index.vue` AUTO-OPENS that advisory as a modal over the board.
+  Generalising gating past companions while leaving the SPA's own companion-only check in place made
+  the advisory declare `pl_simple` — a pipeline the product itself ships — invalid in every seeded
+  workspace, and the modal then swallowed every click on the canvas. Nothing in the backend suites
+  can catch this (they were all green); it surfaced as the whole Playwright suite timing out, because
+  attribute-only assertions still passed while every click-driven one hung. Hence
+  `BUILTIN_GATABLE_KINDS` living in `contracts` and read by both sides. **A future shape rule owes
+  the same treatment**: add it to `assertValidGating` AND `shapeProblem`, keyed off shared vocabulary.
+  Note the two are not perfectly symmetric and cannot be — the SPA has no `AgentKindRegistry`, so a
+  deployment-registered gatable kind is flagged by the advisory and accepted by the engine. That
+  direction is the safe one (a dismissible advisory, never a refused save).
 - **`pl_integrate` and `pl_spec` have no merge tail at all**, so `runOpensPr` is false and their
   committing agents write **straight to the base branch with no conflicts check and no CI**. For a
   spec increment that is arguably intended; for `pl_integrate` — whose `integrator` is a

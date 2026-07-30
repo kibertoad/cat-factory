@@ -22,6 +22,12 @@ may not. A skipped producer cascades onto its review companion, and a step may n
 a human approval gate and an estimate gate — the estimate may add a human checkpoint, never cancel
 one.
 
+The gatable-kind vocabulary is exported from `@cat-factory/contracts` (`BUILTIN_GATABLE_KINDS` /
+`isBuiltinGatableKind`) because two surfaces in different packages must answer identically: the
+engine's shape validation and the SPA's pipeline-health advisory, which re-derives the same verdict
+client-side. `isGatableKind` in `@cat-factory/agents` remains the registry-aware form a deployment's
+own kind overrides through.
+
 Pickers are scoped to the task's use-case: a `feature`/`bug` task no longer offers the
 document-authoring, PR-review or planning presets, and a new block-level rule keeps the planning
 presets on initiative blocks (they were previously offered on every task and then refused at start).
