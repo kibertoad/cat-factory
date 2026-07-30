@@ -115,6 +115,70 @@ hooks) the engine falls back to folding, so the standards are never lost through
 A `container-*` surface implies the container requirement automatically
 (`registeredKindRequiresContainer`), so `requiresContainer` need not be set alongside it.
 
+## Variations of an EXISTING kind (alternate prompts, programmatically)
+
+Not every deployment-specific agent is a new agent. "The Coder, but test-first", "the PR reviewer,
+but with our security lens", "the merger, but treat schema changes as high risk" are all the SAME
+kind told to be something else. For those, register a **variant** rather than a kind:
+
+```ts
+agentKindRegistry.registerVariant({
+  id: 'acme:coder-tdd',
+  baseKind: 'coder',
+  // APPENDED to whatever base prompt the step runs under. Prefer this.
+  promptAddition: 'House rule for this step: work test-first. …',
+  // …or REPLACE the shipped track prompt outright, when the role genuinely differs:
+  // systemPrompt: 'You are …',
+  presentation: { label: 'TDD-first', description: 'The Coder, required to land a failing test.' },
+})
+```
+
+A pipeline step selects one through its **step options**, parallel to `agentKinds` exactly like
+every other per-step knob — the step's kind is still `coder`:
+
+```ts
+pipelineRegistry.register({
+  id: 'pl_acme_apply',
+  name: 'Acme apply',
+  agentKinds: ['coder', 'conflicts', 'ci', 'merger'],
+  stepOptions: [{ agentVariantId: 'acme:coder-tdd' }, null, null, null],
+})
+```
+
+**A variant is deliberately NOT a kind, and that is the whole safety property.** A kind id is what
+every engine decision keys off — the harness dispatch shape, the read-only guardrail, companion
+targeting, gatability, multi-repo fan-out, the merger's terminal status, the SPA's palette entry
+and result view — and the built-in kinds are not registry entries yet (see Status / scope), so a
+brand-new id silently misses every switch that has not been migrated. It would not fail; it would
+dispatch down the generic path and quietly do the wrong thing. Because a varied step records the
+BASE kind, every one of those decisions is byte-for-byte what that kind always did.
+
+The corollary: **a variation that needs different BEHAVIOUR is a different kind**, and belongs on
+`register` above. If you find yourself wanting a variant to clone differently, return a different
+shape, or be picked up by a different resolver, you want a kind.
+
+What you get for free, because a variant's prompt rides the same seam a per-workspace prompt
+override does (`AgentRunContext.systemPromptOverride`, resolved once per dispatch by the engine):
+
+- **The engine invariants survive it.** The surface directives, the trait guidance and
+  `restoreShippedInvariants` are re-applied on top, so a variant can no more delete the read-only
+  guardrail or the answer-in-your-reply rule than a workspace can. A variant of a BESPOKE-prompt
+  kind (`merger`, `on-call`, the inline reviewers) replaces only its ROLE half, so its parsed
+  output contract is likewise untouchable.
+- **Every executor honours it identically** — container, inline and consensus alike — with no
+  branch of their own.
+- **A workspace override still wins**, being the narrower tier; a variant's `promptAddition` then
+  folds on top of the workspace's text rather than the shipped text, which is why an addition is
+  the safe default: it keeps applying as the product edits the prompt and as a workspace edits it.
+
+Boot validation refuses a variant whose `baseKind` is unknown, one that sets neither prompt field
+(it would run as the stock kind, silently), and a registered pipeline selecting a variant of the
+wrong kind. Pipeline save and run start apply the same rule to workspace-authored pipelines.
+
+Telemetry keeps them apart: the variant rides the step (`stepOptions.agentVariantId`), Kaizen folds
+it into the combo key so one variant's gradings can never verify another's prompt, and the run
+views report it beside the model as "Prompt variant".
+
 ## Capabilities: skills and tools
 
 Beyond its prompt, a kind declares WHAT IT KNOWS (skills — procedural playbooks) and WHAT IT CAN
@@ -337,6 +401,9 @@ Full design + the deliberate non-goals (the `merger` is NOT rewritten onto this)
 registers:
 
 - **`org-reviewer`** — an `inline` policy reviewer (no repo, no container).
+- **`org:coder-tdd`** — a VARIANT of the built-in `coder` (not a new kind): a `promptAddition`
+  requiring a failing test before the fix, selected by the `pl_org_apply` pipeline's Coder step
+  through its `stepOptions`.
 - **`security-auditor`** — a `container-explore` structured auditor whose `postOp` renders
   `compliance/REPORT.md` from the agent's JSON and commits it via `RepoFiles`, presenting
   through `generic-structured`. It also declares both CAPABILITIES: a bundled

@@ -1271,7 +1271,8 @@
         "url": "Adres",
         "copyId": "Kopiuj id kontenera",
         "copyUrl": "Kopiuj adres"
-      }
+      },
+      "promptVariant": "Wariant promptu"
     },
     "stepDetail": {
       "contents": "Zawartość",
@@ -3995,7 +3996,9 @@
       "consensusGroups": "Grupy konsensusu",
       "consensusGroupsHint": "Wybierz wielokrotnego użytku panele, do których ten krok może eskalować. Każdy ma własny próg oszacowania; uruchamia się najbardziej wymagający, który zadanie przekroczy.",
       "consensusGroupsActive": "Ten krok uruchamia wybraną grupę. Odznacz wszystkie grupy, aby skonfigurować uczestników tutaj.",
-      "consensusGroupAlways": "zawsze"
+      "consensusGroupAlways": "zawsze",
+      "variantLabel": "Wariant promptu",
+      "variantShipped": "Prompt wbudowany"
     },
     "progress": {
       "status": {

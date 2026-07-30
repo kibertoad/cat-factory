@@ -29,8 +29,21 @@
     `PLATFORM_IS_NOT_THE_PRODUCT` UNCONDITIONALLY (every kind can see the orchestrator's own
     mechanics, and a task with no product context of its own leaves the platform's name as the most
     salient subject in the prompt) — after the override, so it cannot be edited away.
+    `kinds/variants.ts` holds agent-kind VARIANTS — an alternate prompt for an EXISTING kind, which
+    a pipeline step selects through `stepOptions.agentVariantId`. A variant is NOT a kind (it never
+    appears in `all()`, never answers `get()`), because a kind id is what every un-migrated
+    `switch(agentKind)` keys off; a varied step records the BASE kind, so only the prompt changes.
+    `applyAgentVariant` is the pure composition the ENGINE runs once per dispatch, folding the
+    variant onto the workspace's own override and emitting the result through the SAME
+    `AgentRunContext.systemPromptOverride` seam — which is why no executor branches on variants.
     `prompts/bespoke.ts` holds `BespokeSystemPrompt`, the `{ role, directives }` split used by the
-    prompts that never reach `systemPromptFor`; `prompts/inline-engine.ts` maps the INLINE ENGINE
+    prompts that never reach `systemPromptFor`; `prompts/bespoke-kinds.ts` holds the two bespoke
+    CONTAINER prompts (`merger`, `on-call`, moved here from the server layer), the
+    `BESPOKE_SYSTEM_PROMPTS` map collecting every bespoke-prompt kind, and `shippedBasePromptFor` —
+    the ONE answer to "the shipped base prompt this kind runs under", which a workspace override and
+    a variant each replace and the prompt editor shows as the baseline. It lives below the HTTP
+    layer because the engine needs the same answer: for a bespoke kind that base is the ROLE half,
+    so resolving it anywhere else would fold a variant's addition onto text the kind never sends; `prompts/inline-engine.ts` maps the INLINE ENGINE
     kinds (the requirements + clarity reviewers, both brainstorm stages, their rework editors and the
     Requirement Writer) to theirs, which is what lets `IterativeReviewService` honour an override and
     the prompt editor show the text that actually runs.

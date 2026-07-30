@@ -111,8 +111,15 @@ export class KaizenService {
       // `promptRevision` is the workspace's own prompt for this kind, pinned onto the step at
       // dispatch (absent ⇒ it ran the shipped prompt). Read off the STEP rather than the prompt
       // log, which is append-only: a later revision would otherwise re-key gradings of text the
-      // step never saw.
-      const comboKey = comboKeyFor(step.agentKind, model, promptVersion, step.promptRevision)
+      // step never saw. The variant is the deployment's own alternate prompt for the step, which
+      // is likewise text this combo's gradings are about and no other combo's.
+      const comboKey = comboKeyFor(
+        step.agentKind,
+        model,
+        promptVersion,
+        step.promptRevision,
+        step.stepOptions?.agentVariantId,
+      )
       const combo = await this.deps.kaizenVerifiedComboRepository.getByKey(workspaceId, comboKey)
       if (isVerified(combo)) continue
       const existing = await this.deps.kaizenGradingRepository.getByStep(

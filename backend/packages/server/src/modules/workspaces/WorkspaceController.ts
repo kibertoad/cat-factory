@@ -16,6 +16,7 @@ import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-fac
 import type {
   BackendKindOption,
   BudgetCaps,
+  AgentKindVariant,
   CustomAgentKind,
   CustomTaskType,
   SkillSummary,
@@ -135,6 +136,24 @@ function snapshotCustomAgentKinds(
   )
   const all = [...kinds, ...judges]
   return all.length > 0 ? all : undefined
+}
+
+/**
+ * The registered agent-kind VARIANTS — a deployment's alternate prompts for EXISTING kinds —
+ * mapped to the wire shape the pipeline builder offers on a step of the matching kind and the
+ * run views name a varied step with. A variant with no `presentation` falls back to its id: it is
+ * still selectable, so hiding it would leave a configured pipeline showing a step option the SPA
+ * cannot name. Static (process-global registry), so identical for every workspace and every
+ * facade; undefined when none are registered, so the field is absent on the stock product.
+ */
+function snapshotAgentKindVariants(registry: AgentKindRegistry): AgentKindVariant[] | undefined {
+  const variants = registry.variants().map((variant) => ({
+    id: variant.id,
+    baseKind: variant.baseKind,
+    label: variant.presentation?.label ?? variant.id,
+    ...(variant.presentation?.description ? { description: variant.presentation.description } : {}),
+  }))
+  return variants.length > 0 ? variants : undefined
 }
 
 /**
@@ -481,6 +500,7 @@ export function workspaceController(): Hono<AppEnv> {
       snapshotSkills(container, accountId),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
+    const agentKindVariants = snapshotAgentKindVariants(container.agentKindRegistry)
     const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —
@@ -504,6 +524,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...(agentKindVariants ? { agentKindVariants } : {}),
         ...(customTaskTypes ? { customTaskTypes } : {}),
         ...(initiativePresets.length ? { initiativePresets } : {}),
         ...(skills ? { skills } : {}),
@@ -546,6 +567,7 @@ export function workspaceController(): Hono<AppEnv> {
       skills,
     } = await loadSnapshotSlices(container, workspaceId, budgetAccountId)
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
+    const agentKindVariants = snapshotAgentKindVariants(container.agentKindRegistry)
     const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —
@@ -623,6 +645,7 @@ export function workspaceController(): Hono<AppEnv> {
           mounts,
           serviceCatalog: redacted.services,
           customAgentKinds,
+          agentKindVariants,
           customTaskTypes,
           initiativePresets: initiativePresets.length ? initiativePresets : undefined,
           skills,

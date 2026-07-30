@@ -21,7 +21,7 @@ import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
-import { customAgentKindSchema } from './agent-presentation.js'
+import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
 import { customTaskTypeSchema } from './task-types.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
@@ -218,6 +218,14 @@ export const workspaceSnapshotSchema = v.object({
    * by the facade, so optional on the wire and omitted when no custom kind is registered.
    */
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
+  /**
+   * Registered VARIATIONS of existing agent kinds (id + base kind + label) a deployment mixed in
+   * via `AgentKindRegistry.registerVariant`. The pipeline builder offers the ones whose
+   * `baseKind` matches a step's kind as that step's alternate prompt, and the run views name the
+   * one a step ran under. Static (process-global registry), workspace-independent; attached by
+   * the facade, so optional on the wire and omitted when no variant is registered.
+   */
+  agentKindVariants: v.optional(v.array(agentKindVariantSchema)),
   /**
    * Registered CUSTOM task types (namespaced id + presentation + create-form fields) a
    * deployment mixed in via its app-owned `TaskTypeRegistry`. The SPA merges these into its

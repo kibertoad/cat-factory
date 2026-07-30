@@ -5,6 +5,7 @@ import {
   assertPipelineLaunchable,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidAgentVariants,
   assertValidSkillSteps,
   assertValidTesterQualityGating,
   validatePipelineShape,
@@ -444,5 +445,66 @@ describe('assertValidSkillSteps', () => {
 
   it('ignores stepOptions.skillId on a non-skill kind', () => {
     expect(() => assertValidSkillSteps({ agentKinds: ['coder'], stepOptions: [{}] })).not.toThrow()
+  })
+})
+
+describe('assertValidAgentVariants', () => {
+  /** A registry carrying one variant of `coder`, as a deployment package would register it. */
+  function registryWithVariant() {
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({ id: 'org:tdd', baseKind: 'coder', promptAddition: 'test-first' })
+    return registry
+  }
+
+  it('accepts a step selecting a variant of its own kind', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects a variant this deployment does not register', () => {
+    // Without this the step would silently run the SHIPPED prompt — it still works, so nothing
+    // surfaces except that it quietly stopped being the variation someone configured.
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:missing' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).toThrow(/does not register/)
+  })
+
+  it('rejects a variant of ANOTHER kind — it would run this step under the wrong role', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['architect'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).toThrow(/cannot be selected on a 'architect' step/)
+  })
+
+  it('imposes no requirement on a DISABLED step', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        enabled: [false],
+        stepOptions: [{ agentVariantId: 'org:missing' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+      }),
+    ).not.toThrow()
   })
 })

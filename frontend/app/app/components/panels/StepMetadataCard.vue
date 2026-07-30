@@ -22,6 +22,7 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
+const agents = useAgentsStore()
 const { t, d } = useI18n()
 
 const STATE_LABEL_KEYS: Record<AgentState, string> = {
@@ -47,6 +48,16 @@ const stateMeta = computed(() => {
 })
 
 const modelLabel = computed(() => (props.step.model ? models.labelForRef(props.step.model) : null))
+
+/**
+ * The deployment-registered VARIANT this step ran as — an alternate prompt for its agent kind.
+ * Reported beside the model because it is the other half of "what actually ran"; null on every
+ * step that ran the shipped prompt, so the field is simply absent on the stock product.
+ */
+const variantLabel = computed(() => {
+  const id = props.step.stepOptions?.agentVariantId
+  return id ? agents.variantLabel(id) : null
+})
 
 const ITEM_ICON: Record<string, string> = {
   completed: 'i-lucide-check-circle-2',
@@ -139,6 +150,12 @@ async function copyRunId() {
         <dd class="mt-0.5 truncate text-slate-300" :title="step.model">
           {{ modelLabel ?? t('panels.stepMeta.notRecorded') }}
         </dd>
+      </div>
+      <div v-if="variantLabel">
+        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.promptVariant') }}
+        </dt>
+        <dd class="mt-0.5 truncate text-slate-300">{{ variantLabel }}</dd>
       </div>
       <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
       <div class="col-span-2 sm:col-span-3">

@@ -124,6 +124,29 @@ function showOutputBudget(index: number): boolean {
 function inheritedOutputBudget(kind: AgentKind): number | undefined {
   return agentSettings.maxOutputTokensFor(kind)
 }
+/**
+ * Whether to offer the agent-kind VARIANT picker on this step: only when the deployment
+ * registered variants for its kind, and then only in advanced mode WHILE the step is still on the
+ * shipped prompt. Picking a variant is an OVERRIDE of what the kind ships, so `showOverrideField`
+ * keeps it visible the moment one is set — a step varied by a teammate (or by the API) must never
+ * become invisible to a basic-mode user who would then have no way to see, let alone undo, it.
+ */
+function showVariantPicker(index: number, kind: AgentKind): boolean {
+  if (!agents.variantsForKind(kind).length) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftAgentVariantId(index) ?? null)
+}
+
+/**
+ * The variants registered for a step's kind as USelect items, with an explicit "shipped prompt"
+ * entry so clearing the pick is a choice in the same list rather than a separate affordance.
+ */
+function variantSelectItems(kind: AgentKind) {
+  return [
+    { label: t('pipeline.builder.variantShipped'), value: '' },
+    ...agents.variantsForKind(kind).map((variant) => ({ label: variant.label, value: variant.id })),
+  ]
+}
+
 const releaseHealth = useReleaseHealthStore()
 const skills = useSkillsStore()
 
@@ -717,6 +740,29 @@ async function clone(p: Pipeline) {
                 <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-amber-400">
                   {{ t('pipeline.builder.skillMissing') }}
                 </p>
+              </div>
+
+              <!-- Agent-kind VARIANT picker: a deployment-registered alternate prompt for this
+                 step's kind (`stepOptions.agentVariantId`). The step still runs the kind — only
+                 the prompt changes — so this is an override of the shipped text, shown only where
+                 the deployment registered one. -->
+              <div
+                v-if="showVariantPicker(unit.index, unit.kind)"
+                class="ms-6 flex items-center gap-2"
+              >
+                <span class="text-[10px] text-slate-500">
+                  {{ t('pipeline.builder.variantLabel') }}
+                </span>
+                <USelect
+                  class="w-56"
+                  :model-value="pipelines.draftAgentVariantId(unit.index) ?? ''"
+                  :items="variantSelectItems(unit.kind)"
+                  value-key="value"
+                  size="xs"
+                  @update:model-value="
+                    pipelines.setDraftAgentVariantId(unit.index, $event || undefined)
+                  "
+                />
               </div>
 
               <!-- This step's own output-token ceiling. An OVERRIDE of the workspace's per-kind

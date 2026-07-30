@@ -1271,7 +1271,8 @@
         "url": "Adresse",
         "copyId": "Copier l'id du conteneur",
         "copyUrl": "Copier l'adresse"
-      }
+      },
+      "promptVariant": "Variante de prompt"
     },
     "stepDetail": {
       "contents": "Contenu",
@@ -3995,7 +3996,9 @@
       "consensusGroups": "Groupes de consensus",
       "consensusGroupsHint": "Choisis les panels réutilisables auxquels cette étape peut monter. Chacun porte son propre seuil d'estimation ; c'est le plus exigeant que la tâche franchit qui s'exécute.",
       "consensusGroupsActive": "Cette étape exécute le groupe sélectionné. Désélectionne tous les groupes pour configurer les participants ici.",
-      "consensusGroupAlways": "toujours"
+      "consensusGroupAlways": "toujours",
+      "variantLabel": "Variante de prompt",
+      "variantShipped": "Prompt fourni"
     },
     "progress": {
       "status": {

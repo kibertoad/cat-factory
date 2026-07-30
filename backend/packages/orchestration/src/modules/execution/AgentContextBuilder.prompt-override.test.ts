@@ -7,7 +7,11 @@ import type {
 } from '@cat-factory/kernel'
 import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import {
+  type AgentKindVariantDefinition,
+  defaultAgentKindRegistry,
+  shippedBasePromptFor,
+} from '@cat-factory/agents'
 
 // A workspace's edited system prompt for an agent kind is resolved ONCE per dispatch, here in
 // the engine, and folded onto the context every executor reads. These pin the three states the
@@ -15,8 +19,13 @@ import { defaultAgentKindRegistry } from '@cat-factory/agents'
 // `text` is null — which must fall back to the SHIPPED prompt, never to an empty one), and an
 // unwired store (the feature simply off).
 
-function step(agentKind = 'coder'): PipelineStep {
-  return { agentKind, state: 'running', progress: 0 } as unknown as PipelineStep
+function step(agentKind = 'coder', agentVariantId?: string): PipelineStep {
+  return {
+    agentKind,
+    state: 'running',
+    progress: 0,
+    ...(agentVariantId ? { stepOptions: { agentVariantId } } : {}),
+  } as unknown as PipelineStep
 }
 
 function instance(steps: PipelineStep[]): ExecutionInstance {
@@ -156,5 +165,89 @@ describe('AgentContextBuilder prompt-revision pin', () => {
       TASK,
     )
     expect(s.promptRevision).toBeUndefined()
+  })
+})
+
+describe('AgentContextBuilder agent-kind variant', () => {
+  const TDD: AgentKindVariantDefinition = {
+    id: 'org:tdd',
+    baseKind: 'coder',
+    promptAddition: 'Work test-first.',
+  }
+
+  /** A registry carrying the variant, as the facade injects it. */
+  function registryWith(variant: AgentKindVariantDefinition) {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant(variant)
+    return registry
+  }
+
+  /** Build the context for a step selecting `variant.id`, with an optional workspace override. */
+  async function contextForVariant(
+    variant: AgentKindVariantDefinition,
+    override?: string,
+    deps: Partial<AgentContextBuilderDeps> = {},
+  ) {
+    const s = step('coder', variant.id)
+    return makeBuilder({
+      agentKindRegistry: registryWith(variant),
+      ...(override ? { agentPrompts: promptsRepo({ agentKind: 'coder', text: override }) } : {}),
+      ...deps,
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+  }
+
+  it('folds an ADDITION onto the shipped prompt for the step kind', async () => {
+    const registry = registryWith(TDD)
+    const context = await contextForVariant(TDD)
+    expect(context.systemPromptOverride).toBe(
+      `${shippedBasePromptFor('coder', registry)}\n\nWork test-first.`,
+    )
+  })
+
+  it('folds an ADDITION onto the WORKSPACE override when the workspace edited the kind', async () => {
+    const context = await contextForVariant(TDD, 'Ship small changes.')
+    expect(context.systemPromptOverride).toBe('Ship small changes.\n\nWork test-first.')
+  })
+
+  it('lets the workspace override win over a variant REPLACEMENT — the narrower tier', async () => {
+    const replacing = { id: 'org:poet', baseKind: 'coder', systemPrompt: 'Be a poet.' }
+    expect((await contextForVariant(replacing)).systemPromptOverride).toBe('Be a poet.')
+    expect((await contextForVariant(replacing, 'Mine.')).systemPromptOverride).toBe('Mine.')
+  })
+
+  it('does NOT apply the step variant to a HELPER dispatched off that step', async () => {
+    // A gate's fixer / the fork proposer is a different agent; inheriting the step's alternate
+    // prompt would tell it to be something it is not.
+    const s = step('coder', TDD.id)
+    const context = await makeBuilder({ agentKindRegistry: registryWith(TDD) }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+      { agentKind: 'fork-proposer' },
+    )
+    expect(context.systemPromptOverride).toBeUndefined()
+  })
+
+  it('runs the shipped prompt, loudly, when the variant is no longer registered', async () => {
+    const warnings: string[] = []
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn: (msg: string) => warnings.push(msg),
+      error: () => {},
+      child: () => logger,
+    }
+    const s = step('coder', 'org:withdrawn')
+    const context = await makeBuilder({ logger: logger as never }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+    )
+    expect(context.systemPromptOverride).toBeUndefined()
+    expect(warnings.join(' ')).toMatch(/not registered/)
   })
 })

@@ -1335,7 +1335,8 @@
         "approved": "Approved",
         "changes_requested": "Changes requested",
         "rejected": "Rejected"
-      }
+      },
+      "promptVariant": "Prompt variant"
     },
     "stepDetail": {
       "contents": "Contents",
@@ -4110,7 +4111,9 @@
       "consensusGroups": "Consensus groups",
       "consensusGroupsHint": "Pick the reusable panels this step may escalate to. Each carries its own estimate bar; the most demanding one the task clears is the one that runs.",
       "consensusGroupsActive": "This step runs the selected group. Deselect every group to configure participants here instead.",
-      "consensusGroupAlways": "always"
+      "consensusGroupAlways": "always",
+      "variantLabel": "Prompt variant",
+      "variantShipped": "Shipped prompt"
     },
     "progress": {
       "status": {

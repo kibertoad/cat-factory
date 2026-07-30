@@ -1,5 +1,5 @@
 import { type AgentRunContext, hostMarkdown } from '@cat-factory/kernel'
-import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
+import { type AgentKindRegistry, userPromptFor } from '@cat-factory/agents'
 import {
   frameProfile,
   FRONTEND_WIREMOCK_PORT,
@@ -18,41 +18,11 @@ import type { RepoTarget } from './ContainerAgentExecutor.js'
  * definitions in `@cat-factory/agents` — `agents/kinds/spec-blueprints.ts`.)
  */
 
-// The two bespoke container prompts (`merger`, `on-call`) are each declared as a ROLE half and
-// a DIRECTIVES half rather than one string, because a workspace can replace the role from the
-// pipeline builder (see ./promptOverrides.ts). The directives half is what `applySurfaceDirectives`
-// is for every other kind — the read-only guardrail, the machine-parsed output contract, and the
-// answer-in-your-reply rule — so it must survive an override rather than be editable prose inside
-// it. Each `*_DIRECTIVES` string CARRIES ITS OWN LEADING SEPARATOR, exactly as the appended
-// directives do on the `systemPromptFor` path (where they are recovered by slicing the base off),
-// so `role + directives` is the shipped prompt byte for byte. `promptOverrides.spec.ts` pins that.
-
-/**
- * The EDITABLE half of the `merger` prompt: what the agent is for. Replaced wholesale by a
- * workspace override, so it must carry no invariant the engine depends on.
- */
-export const MERGER_ROLE_PROMPT =
-  'You are a release manager assessing a pull request before merge. Inspect the ' +
-  'change (the diff between the pull-request branch(es) and their base) and judge three axes, ' +
-  'each as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the ' +
-  'change is), risk (how likely it is to break something), and impact (blast radius ' +
-  'if it does). When the change spans several repositories, weigh the COMBINED cross-repo ' +
-  'change as one and return a single assessment. Be conservative.'
-
-/**
- * The NON-EDITABLE half: the JSON contract `resolveMergerStep` parses, and the rule that keeps a
- * reasoning model's answer out of its hidden channel. Re-appended on top of an override — an
- * override that could drop these fails the run in exactly the ways they exist to prevent (an
- * empty visible reply the harness reads as unusable; a merge decision with nothing to parse).
- */
-export const MERGER_DIRECTIVES =
-  ' Respond with ONLY a JSON ' +
-  'object of shape {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, ' +
-  'no code fences. ' +
-  FINAL_ANSWER_IN_REPLY
-
-/** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
-export const MERGER_SYSTEM_PROMPT = MERGER_ROLE_PROMPT + MERGER_DIRECTIVES
+// The two bespoke container prompts (`merger`, `on-call`) now live in `@cat-factory/agents`
+// (`agents/prompts/bespoke-kinds.ts`) beside the inline-engine ones, because the ENGINE needs
+// the same answer they encode — a variant's alternate prompt is resolved against the SHIPPED
+// base once per dispatch, and for these two kinds that base is the ROLE half. They are
+// re-exported from ./promptOverrides.ts, which is where this layer reads them.
 
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =
@@ -75,34 +45,6 @@ export const UI_TEST_REPORT_SHAPE_HINT =
   TEST_REPORT_SHAPE_HINT.replace(/\}\.$/, '') +
   ', "screenshots": [{"view": string, "artifactId": string, "hash"?: string}]}. Each ' +
   'screenshot must be a distinct view you captured and uploaded to the artifact store.'
-
-/**
- * The EDITABLE half of the `on-call` prompt: what the agent is investigating and how to weigh
- * it. Replaced wholesale by a workspace override — note that the read-only guardrail is
- * deliberately NOT here, since an on-call agent that could be told to commit is the specific
- * accident this split prevents.
- */
-export const ON_CALL_ROLE_PROMPT =
-  'You are an on-call engineer investigating a possible post-release regression. A ' +
-  'recently merged pull request shipped, and the evidence below (alerting Datadog ' +
-  'monitors/SLOs and recent error logs) suggests the service regressed afterward. Read ' +
-  'the PR diff on the head branch and weigh whether THIS change is the likely cause — ' +
-  'beware correlation vs causation; a coincident deploy is not proof.'
-
-/**
- * The NON-EDITABLE half: the read-only guardrail (this kind investigates, a human decides
- * whether to revert — see `resolveOnCallStep`), the JSON contract the engine parses, and the
- * answer-in-your-reply rule. Re-appended on top of an override.
- */
-export const ON_CALL_DIRECTIVES =
-  ' You may read and ' +
-  'inspect any file, but you MUST NOT modify, commit or revert anything; a human decides ' +
-  'whether to revert. Respond with ONLY a JSON object of shape ' +
-  '{"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…",' +
-  '"evidence":["…"]} — no prose, no code fences. ' +
-  FINAL_ANSWER_IN_REPLY
-
-export const ON_CALL_SYSTEM_PROMPT = ON_CALL_ROLE_PROMPT + ON_CALL_DIRECTIVES
 
 /**
  * The merger's task prompt — the instructions + diff guidance the bespoke harness `/merge`

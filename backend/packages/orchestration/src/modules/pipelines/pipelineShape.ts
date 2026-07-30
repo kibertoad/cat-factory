@@ -60,6 +60,9 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    structurally), must not also carry a human approval gate, must set at least one axis
  *    threshold (or it would always skip), and needs a `task-estimator` to have run before it (or
  *    the gate has nothing to consult).
+ *  - {@link assertValidAgentVariants}: a step selecting a registered agent-kind VARIANT must name
+ *    one that exists and that varies THIS step's kind — an unknown id would silently fall back to
+ *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
  *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
  *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
  *    separately — but under the same "threshold set + estimator earlier" rules, since a
@@ -96,6 +99,45 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidGating(pipeline)
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
+  assertValidAgentVariants(pipeline)
+}
+
+/**
+ * Every ENABLED step that selects an agent-kind VARIANT (`stepOptions[i].agentVariantId`) must
+ * name one the deployment registered, and that variant's `baseKind` must be the step's own kind.
+ *
+ * Both halves matter and neither fails loudly on its own. An unknown id would simply run the
+ * shipped prompt — the step still works, so nothing surfaces except that it silently stopped
+ * being the variation someone configured. A MISMATCHED one is worse: the variant's prompt is
+ * written for a different role, so the step would run a Coder told to be a reviewer and the
+ * output would look like a model failure rather than a configuration error.
+ *
+ * Skipped entirely when no registry is supplied — the caller is validating a built-in catalog
+ * with no deployment registrations in view (the kernel seed test), where refusing an id it
+ * cannot resolve would be wrong. Both real boundaries (builder save, run start) pass one.
+ */
+export function assertValidAgentVariants({
+  agentKinds,
+  enabled,
+  stepOptions,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!stepOptions || !agentKindRegistry) return
+  for (let i = 0; i < agentKinds.length; i++) {
+    const variantId = stepOptions[i]?.agentVariantId
+    if (!variantId || enabled?.[i] === false) continue
+    const variant = agentKindRegistry.variant(variantId)
+    if (!variant) {
+      throw new ValidationError(
+        `Step '${agentKinds[i]}' selects the agent variant '${variantId}', which this deployment does not register.`,
+      )
+    }
+    if (variant.baseKind !== agentKinds[i]) {
+      throw new ValidationError(
+        `Agent variant '${variantId}' varies '${variant.baseKind}', so it cannot be selected on a '${agentKinds[i]}' step.`,
+      )
+    }
+  }
 }
 
 /**

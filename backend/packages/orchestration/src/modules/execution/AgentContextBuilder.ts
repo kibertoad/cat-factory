@@ -38,6 +38,7 @@ import {
   selectConsensusGroup,
 } from '@cat-factory/kernel'
 import {
+  applyAgentVariant,
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
   DOC_FINALIZER_KIND,
@@ -46,6 +47,7 @@ import {
   PR_PRIOR_REVIEW_CONTEXT_FILE,
   PR_REVIEWER_KIND,
   renderPriorReviewContext,
+  shippedBasePromptFor,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -1184,8 +1186,12 @@ export class AgentContextBuilder {
   }
 
   /**
-   * The workspace's live system prompt for the kind being dispatched, or undefined to run the
-   * shipped one. One point read per dispatch, in the same wave as the rest of the context.
+   * The base system prompt this dispatch replaces the shipped one with, or undefined to run the
+   * shipped one. Two tiers converge here — the deployment's registered agent-kind VARIANT for
+   * this step and the WORKSPACE's edited prompt for the kind — because they are the same unit of
+   * text, and resolving them in one place is what keeps the container, inline and consensus paths
+   * from disagreeing about which prompt a step ran under. One point read per dispatch, in the
+   * same wave as the rest of the context.
    *
    * The head revision's `text` is `null` when the workspace deliberately went BACK to the
    * built-in — a real state, distinct from never having edited the kind, which is why it is
@@ -1195,7 +1201,8 @@ export class AgentContextBuilder {
    * Also PINS the resolved revision onto the step (like {@link resolveSkillsForStep} does for
    * catalog skills), because the log is append-only: re-reading it at any later point — a
    * Kaizen grading, a debug read, a post-mortem — would answer about whatever landed since,
-   * not about what this step actually ran.
+   * not about what this step actually ran. The variant needs no such pin: it is the step's own
+   * recorded option, not a moving target.
    */
   private async resolveSystemPromptOverride(
     workspaceId: string,
@@ -1206,9 +1213,30 @@ export class AgentContextBuilder {
     // Cleared, not left stale: a re-dispatch after the workspace reverted must not keep
     // reporting the revision the previous attempt ran under.
     step.promptRevision = head?.text ? head.revision : undefined
+    // The variant applies only when the kind being dispatched IS the step's own — a helper
+    // dispatched off this step (a gate's fixer, the fork proposer) is a different agent and must
+    // not inherit the step's alternate prompt. Same rule as `followUpCompanion`.
+    const variantId = agentKind === step.agentKind ? step.stepOptions?.agentVariantId : undefined
+    const variant = variantId ? this.deps.agentKindRegistry.variant(variantId) : undefined
+    // A variant the deployment has since withdrawn: the step runs the SHIPPED prompt, which is
+    // the safe disposition, but it is not what the pipeline asked for — so say so rather than
+    // let a step quietly stop being the variation someone configured.
+    if (variantId && !variant) {
+      this.deps.logger?.warn('Agent kind variant is not registered; running the shipped prompt', {
+        agentKind,
+        variantId,
+      })
+    }
+    const override = applyAgentVariant(
+      // Only paid for when a variant is actually selected; the shipped prompt is what its
+      // addition folds onto and what its replacement is measured against.
+      variant ? shippedBasePromptFor(agentKind, this.deps.agentKindRegistry) : '',
+      variant,
+      head?.text ?? undefined,
+    )
     // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
     // so the context literal stays a flat spread instead of gaining another conditional.
-    return head?.text ? { systemPromptOverride: head.text } : {}
+    return override ? { systemPromptOverride: override } : {}
   }
 
   /**

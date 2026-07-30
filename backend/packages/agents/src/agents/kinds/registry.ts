@@ -12,6 +12,7 @@ import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait, AgentTraitDefinition } from './traits.js'
 import { STANDARD_TRAIT_DEFINITIONS } from './traits.js'
 import type { AgentTuning } from './tuning.js'
+import type { AgentKindVariantDefinition } from './variants.js'
 import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
@@ -237,6 +238,11 @@ export class AgentKindRegistry {
   // its house playbook or its issue-tracker MCP server without redefining the kind's prompt.
   private readonly assignedSkills = new Map<AgentKind, AgentKindSkillRef[]>()
   private readonly assignedToolServers = new Map<AgentKind, AgentKindToolRef[]>()
+  // VARIANTS of existing kinds (id → definition) — an alternate prompt a step selects through
+  // `stepOptions.agentVariantId`. They live here beside the kinds and their capabilities for the
+  // same reason those do, but they are deliberately NOT kinds: a variant never appears in
+  // `all()`, never answers `get()`, and never changes a behavioural answer. See ./variants.
+  private readonly variantDefinitions = new Map<string, AgentKindVariantDefinition>()
 
   constructor() {
     for (const definition of STANDARD_TRAIT_DEFINITIONS) {
@@ -468,6 +474,43 @@ export class AgentKindRegistry {
    * resolved to definitions and deduplicated by server id. Unknown registered ids are reported,
    * not thrown on (see {@link skillsFor}).
    */
+  /**
+   * Register a VARIATION of an existing agent kind — an alternate prompt a pipeline step selects
+   * by id, running the base kind in every other respect. A later registration of the same id
+   * replaces the earlier one, which is also how a deployment RE-WORDS a variant an installed
+   * package shipped without forking it.
+   *
+   * Nothing is validated here (an id may legitimately be registered before its base kind is):
+   * `validateRegistrations` reports an unknown base, a collision with a kind id, and a variant
+   * that changes no text, as startup errors.
+   */
+  registerVariant(definition: AgentKindVariantDefinition): void {
+    this.variantDefinitions.set(definition.id, definition)
+  }
+
+  /** Register several variants at once. */
+  registerVariants(definitions: Iterable<AgentKindVariantDefinition>): void {
+    for (const definition of definitions) this.registerVariant(definition)
+  }
+
+  /** A registered variant, or undefined when the id is unknown. */
+  variant(id: string): AgentKindVariantDefinition | undefined {
+    return this.variantDefinitions.get(id)
+  }
+
+  /** All registered variants (registration order). */
+  variants(): AgentKindVariantDefinition[] {
+    return [...this.variantDefinitions.values()]
+  }
+
+  /**
+   * The variants registered for one kind — what the pipeline builder offers on a step of that
+   * kind. Empty when the kind has none, which is every kind on the stock product.
+   */
+  variantsForKind(kind: AgentKind): AgentKindVariantDefinition[] {
+    return this.variants().filter((variant) => variant.baseKind === kind)
+  }
+
   toolServersFor(kind: AgentKind): ReturnType<typeof normalizeToolRefs> {
     const own = this.registry.get(kind)?.toolServers ?? []
     const assigned = this.assignedToolServers.get(kind) ?? []

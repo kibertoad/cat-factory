@@ -584,3 +584,83 @@ describe('step-resolver registry', () => {
     expect(registry.factories()).toHaveLength(1)
   })
 })
+
+describe('agent-kind variant validation', () => {
+  const gates = defaultGateRegistry()
+
+  /** A registry carrying one variant of the BUILT-IN `coder`, as a deployment package ships it. */
+  function withCoderVariant() {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant({ id: 'org:tdd', baseKind: 'coder', promptAddition: 'test-first' })
+    return registry
+  }
+
+  it('accepts a variant of a known built-in kind', () => {
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: withCoderVariant(),
+        gateRegistry: gates,
+        knownAgentKinds: new Set(['coder']),
+      }),
+    ).toEqual([])
+  })
+
+  it('reports a variant of a kind nothing registers — no step could ever select it', () => {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant({ id: 'org:tdd', baseKind: 'ghost', promptAddition: 'x' })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        knownAgentKinds: new Set(['coder']),
+      }).some((p) => p.code === 'variant_unknown_base_kind'),
+    ).toBe(true)
+  })
+
+  it('reports a variant that changes no text — it runs as the stock kind, silently', () => {
+    const registry = defaultAgentKindRegistry()
+    registry.registerVariant({ id: 'org:noop', baseKind: 'coder' })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        knownAgentKinds: new Set(['coder']),
+      }).some((p) => p.code === 'variant_changes_nothing'),
+    ).toBe(true)
+  })
+
+  it('reports a REGISTERED pipeline whose step selects a variant of another kind', () => {
+    const pipelines = defaultPipelineRegistry()
+    pipelines.register({
+      id: 'pl_org_flow',
+      name: 'Org flow',
+      agentKinds: ['architect', 'coder'],
+      stepOptions: [{ agentVariantId: 'org:tdd' }, null],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: withCoderVariant(),
+      gateRegistry: gates,
+      pipelineRegistry: pipelines,
+      knownAgentKinds: new Set(['architect', 'coder']),
+    })
+    expect(problems.some((p) => p.code === 'pipeline_variant_unresolved')).toBe(true)
+  })
+
+  it('accepts a REGISTERED pipeline selecting a variant of the right step kind', () => {
+    const pipelines = defaultPipelineRegistry()
+    pipelines.register({
+      id: 'pl_org_flow',
+      name: 'Org flow',
+      agentKinds: ['architect', 'coder'],
+      stepOptions: [null, { agentVariantId: 'org:tdd' }],
+    })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: withCoderVariant(),
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+        knownAgentKinds: new Set(['architect', 'coder']),
+      }),
+    ).toEqual([])
+  })
+})
