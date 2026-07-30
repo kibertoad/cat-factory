@@ -417,7 +417,6 @@
       "mergedOfTotal": "{merged}/{total} merged",
       "noTasksYet": "No tasks yet",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implemented",
       "prReadyCount": "{count} PR ready",
       "taskCount": "{count} task | {count} tasks",
       "@taskCount": {

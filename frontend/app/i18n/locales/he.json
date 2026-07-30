@@ -384,7 +384,6 @@
       "mergedOfTotal": "{merged}/{total} מוזגו",
       "noTasksYet": "אין עדיין משימות",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} מומשו",
       "prReadyCount": "{count} PR מוכנים",
       "taskCount": "{count} משימה | {count} משימות",
       "moduleCount": "{count} מודול | {count} מודולים",

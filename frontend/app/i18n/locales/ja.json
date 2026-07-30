@@ -384,7 +384,6 @@
       "mergedOfTotal": "{merged}/{total} マージ済み",
       "noTasksYet": "タスクはまだありません",
       "prCount": "{count} 件の PR",
-      "implemented": "{merged}/{total} 実装済み",
       "prReadyCount": "{count} 件の PR が準備完了",
       "taskCount": "{count} 件のタスク | {count} 件のタスク",
       "moduleCount": "{count} 件のモジュール | {count} 件のモジュール",

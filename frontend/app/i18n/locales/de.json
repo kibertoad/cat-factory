@@ -2558,7 +2558,6 @@
       "mergedOfTotal": "{merged}/{total} gemergt",
       "noTasksYet": "Noch keine Aufgaben",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementiert",
       "prReadyCount": "{count} PR bereit",
       "taskCount": "{count} Aufgabe | {count} Aufgaben",
       "moduleCount": "{count} Modul | {count} Module",

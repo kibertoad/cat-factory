@@ -1,6 +1,13 @@
 import { ref } from 'vue'
 import type { Block } from '~/types/domain'
 
+/** The resize cursor held on `<body>` for the whole drag, per edge. */
+const EDGE_CURSOR: Record<'e' | 's' | 'se', string> = {
+  e: 'ew-resize',
+  s: 'ns-resize',
+  se: 'nwse-resize',
+}
+
 /**
  * Pointer-driven resizing for service frames (Miro-style border drag). The drag
  * delta is divided by the board zoom so the edge tracks the cursor, and the new
@@ -35,6 +42,16 @@ export function useFrameResize() {
     const start = board.containerSize(block.id)
     resizingId.value = block.id
 
+    // Hold the resize cursor on `<body>` (and kill text selection) for the whole
+    // drag: the pointer routinely outruns the 12px grip, and without this the
+    // cursor flips back to the default mid-drag, which reads as "the grab was
+    // dropped" even though the edge is still tracking.
+    const body = document.body
+    const priorCursor = body.style.cursor
+    const priorUserSelect = body.style.userSelect
+    body.style.cursor = EDGE_CURSOR[edge]
+    body.style.userSelect = 'none'
+
     const onMove = (ev: PointerEvent) => {
       const z = ui.zoom || 1
       const w = edge === 's' ? start.w : Math.max(min.w, start.w + (ev.clientX - startX) / z)
@@ -46,12 +63,19 @@ export function useFrameResize() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      body.style.cursor = priorCursor
+      body.style.userSelect = priorUserSelect
       resizingId.value = null
       // Persist the final size once (also re-applies it as the authoritative block).
       if (block.size) void board.updateBlock(block.id, { size: block.size })
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    // A cancelled pointer (touch interrupted by a gesture, window losing the pointer)
+    // never fires `pointerup`, so without this the body cursor stays stuck on
+    // `ew-resize` for the rest of the session.
+    window.addEventListener('pointercancel', onUp)
   }
 
   return { resizingId, startResize }

@@ -384,7 +384,6 @@
       "mergedOfTotal": "{merged}/{total} scalonych",
       "noTasksYet": "Brak zadań",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} wdrożonych",
       "prReadyCount": "{count} PR gotowych",
       "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
       "moduleCount": "{count} moduł | {count} moduły | {count} modułów",

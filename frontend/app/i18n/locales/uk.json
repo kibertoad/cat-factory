@@ -384,7 +384,6 @@
       "mergedOfTotal": "{merged}/{total} злито",
       "noTasksYet": "Поки немає завдань",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} реалізовано",
       "prReadyCount": "{count} PR готово",
       "taskCount": "{count} завдання | {count} завдання | {count} завдань",
       "moduleCount": "{count} модуль | {count} модулі | {count} модулів",

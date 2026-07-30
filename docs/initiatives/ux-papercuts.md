@@ -17,10 +17,11 @@ double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); the
 modal-safety cluster (UX-18/25 — the `useUnsavedGuard` confirm-before-discard seam on the
 content-heavy modals + DecisionModal double-submit protection); the pipeline/inspector
 surfaces cluster (UX-35/40/41/42 — live per-step elapsed clocks, a named reason on the locked
-Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button); and the
+Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button); the
 fragment/Slack form-integrity cluster (UX-21/23/29/30 — confirm before unlinking a fragment
 source, per-row loading spinners, stable+validated Slack member-map rows, a pending Slack OAuth
-button). This document catalogs UX papercuts
+button); and border-anchored frame resizing (UX-17 — grips moved onto the frame's own border
+with a cursor held for the drag). This document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
 verified against the code at the referenced `file:line` (line numbers drift as the
@@ -73,25 +74,25 @@ per-file patches:
 
 ## A. Board & canvas
 
-| ID    | Sev | Status      | Finding                                                                       |
-| ----- | --- | ----------- | ----------------------------------------------------------------------------- |
-| UX-01 | P1  | done (#737) | No undo after a successful block delete                                       |
-| UX-02 | P1  | done (#737) | Delete confirmation never states cascade scope                                |
-| UX-03 | P1  | done (#737) | Accidental drag-reparent commits silently, no undo                            |
-| UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                 |
-| UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
-| UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                 |
-| UX-07 | P2  | done (#847) | Pipeline dropped on blank canvas gives no feedback                            |
-| UX-08 | P2  | done (#847) | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
-| UX-09 | P2  | done (#847) | Double-clicking a frame/epic is a dead no-op                                  |
-| UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                   |
-| UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                      |
-| UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                            |
-| UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
-| UX-14 | P3  | done (#847) | No reset-zoom-to-100%; zoom readout not clickable                             |
-| UX-15 | P3  | done (#847) | Zoom/LOD readout hidden below `sm` breakpoint                                 |
-| UX-16 | P3  | done (#847) | Zoom buttons don't disable at min/max                                         |
-| UX-17 | P3  | todo        | Desktop frame-resize grips are an 8px hit target                              |
+| ID    | Sev | Status      | Finding                                                                        |
+| ----- | --- | ----------- | ------------------------------------------------------------------------------ |
+| UX-01 | P1  | done (#737) | No undo after a successful block delete                                        |
+| UX-02 | P1  | done (#737) | Delete confirmation never states cascade scope                                 |
+| UX-03 | P1  | done (#737) | Accidental drag-reparent commits silently, no undo                             |
+| UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                  |
+| UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop  |
+| UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                  |
+| UX-07 | P2  | done (#847) | Pipeline dropped on blank canvas gives no feedback                             |
+| UX-08 | P2  | done (#847) | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous      |
+| UX-09 | P2  | done (#847) | Double-clicking a frame/epic is a dead no-op                                   |
+| UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                    |
+| UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                       |
+| UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                             |
+| UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                      |
+| UX-14 | P3  | done (#847) | No reset-zoom-to-100%; zoom readout not clickable                              |
+| UX-15 | P3  | done (#847) | Zoom/LOD readout hidden below `sm` breakpoint                                  |
+| UX-16 | P3  | done (#847) | Zoom buttons don't disable at min/max                                          |
+| UX-17 | P2  | done        | Frame-resize grips sit inside the frame and read as scrollbars, 8px hit target |
 
 - **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
   **defers** the backend delete by a `UNDO_WINDOW_MS` (6s) window and shows a
@@ -159,9 +160,26 @@ per-file patches:
   `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants (now sourced from `useBoardFlow.ts` and
   consumed by `<VueFlow>` too, so the clamps can't drift from the button-disable logic)
   (UX-16).
-- **UX-17 — Tiny resize grips.** `components/board/nodes/ModuleFrame.vue:83-91`,
-  `BlockNode.vue:515-528` — `w-2`/`h-2` (8px) grips, widened only for
-  `pointer-coarse:`. Add a larger invisible hit area for fine pointers.
+- **UX-17 — Grips in the wrong place, and too small. DONE.** Re-graded to P2: the audit
+  caught the 8px hit target but missed the bigger half, which a user reported as "resizing is
+  done by dragging scrollbars inside the frame". On a service frame the grips were children of
+  the inner drop zone, so both 8px strips sat 16px INSIDE the visible border, flush against the
+  task canvas — geometry that reads as a pair of scrollbars, not as the frame's edge, so the
+  gesture had to be discovered rather than guessed. They now hang off the card itself
+  (`BlockNode.vue`) and off the module box (`ModuleFrame.vue`), STRADDLING the border: a 12px
+  hit band centred on the edge (24px on a coarse pointer) with the drawn affordance a 2px bar
+  that lights up ON the border, plus a corner grip that lights the same way. One predicate
+  (`gripLit`) drives that highlight for both the resting pointer and the drag, reading the
+  GRABBED edge while resizing rather than the hovered one — the pointer routinely leaves a
+  12px band mid-drag, and the edge being moved has to stay lit. `useFrameResize` also holds
+  the edge's cursor on `<body>` (and suppresses text selection) for the whole drag, so the
+  pointer outrunning the band no longer reads as a dropped grab, and it restores on
+  `pointercancel` as well as `pointerup` so an interrupted touch can't leave the cursor stuck.
+  The grips are `v-if`'d on `board.write`, which is what the composable's comment already
+  claimed but only `startResize` enforced. North/west edges are deliberately still not
+  resizable: a frame's stored position anchors its top-left and children are positioned
+  relative to that origin, so growing leftwards would have to write every child's position to
+  keep the content visually still.
 
 ## B. Modals, forms & inputs
 
@@ -715,6 +733,21 @@ group-hover:opacity-100` control is invisible to keyboard/touch; add
 - **A button that triggers a full-page navigation still needs a pending state.** `SlackPanel`'s
   OAuth button sets a `connectingOAuth` ref before `await`ing the redirect URL and clears it ONLY
   on the error path — the success path unloads the page, so there is nothing to reset (UX-30).
+- **A drag-to-resize grip straddles the border it moves; it never sits inside the content.**
+  A grip parked on an inner element's edge (the frame's drop zone) renders as a scrollbar and
+  is invisible as an affordance, however wide the hit area is (UX-17). Anchor it to the box
+  whose border the user sees, offset it by half its width so the band is centred ON that border,
+  and keep the DRAWN affordance thin (a 2px bar) so a generous hit target doesn't become a fat
+  visible stripe. Light that bar from component state, not a `hover:`/`group-hover:` utility:
+  the bar is a child of the hit band, and the same predicate then covers the drag — where it
+  must follow the GRABBED edge, since the pointer leaves a 12px band constantly. A pointer drag
+  that tracks past its handle holds its cursor on `<body>` for the duration and restores on
+  `pointercancel` too, not only `pointerup`.
+- **A frame-level tally that the cards below already answer is noise, not a summary.** The
+  service frame's "N/M implemented" line was removed: every task card carries its own status,
+  so the frame-level count restated it more coarsely and over the wrong denominator (every task
+  ever added, not the work in flight). What belongs on a container's meta line is what its
+  contents can't show at a glance (module count, PR-ready count).
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

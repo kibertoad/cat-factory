@@ -2558,7 +2558,6 @@
       "mergedOfTotal": "{merged}/{total} unite",
       "noTasksYet": "Ancora nessuna attività",
       "prCount": "{count} PR",
-      "implemented": "{merged}/{total} implementate",
       "prReadyCount": "{count} PR pronte",
       "taskCount": "{count} attività | {count} attività",
       "moduleCount": "{count} modulo | {count} moduli",
