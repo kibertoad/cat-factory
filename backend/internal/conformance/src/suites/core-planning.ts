@@ -142,7 +142,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       const auth = { authorization: `Bearer ${created.body.secret}` }
 
       // Pipeline discovery: the public inline pipeline is public + headless-startable; a
-      // container pipeline (pl_quick) is listed but neither. Closes the "start demands a
+      // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
       // pipelineId, nothing lists them" gap.
       const pipelines = await call<{
         pipelines: {
@@ -158,7 +158,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(breakdown?.public).toBe(true)
       expect(breakdown?.headlessStartable).toBe(true)
       expect(breakdown && breakdown.steps.length > 0).toBe(true)
-      const quick = byId.get('pl_quick')
+      const quick = byId.get('pl_simple')
       expect(quick).toBeTruthy()
       expect(quick?.headlessStartable).toBe(false)
 
@@ -195,7 +195,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       const started = await call<{ executionId: string | null }>(
         'POST',
         `/api/v1/tasks/${taskId}/start`,
-        { pipelineId: 'pl_quick' },
+        { pipelineId: 'pl_simple' },
         auth,
       )
       expect(started.status).toBe(202)
@@ -770,7 +770,11 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       const seeded = await before.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
       expect(seeded.body.pipelines.map((p) => p.id)).toContain('pl_org_flow')
       expect(seeded.body.pipelineCatalogVersions?.pl_org_flow).toBe(1)
-      expect(seeded.body.retiredPipelines ?? []).toEqual([])
+      // Scoped to THIS pipeline's id, never asserted as the whole list: the built-in catalog
+      // carries its own tombstones (the build-ladder collapse retired six presets), and this test
+      // is about a DEPLOYMENT's own retirement. Asserting emptiness here would couple every future
+      // built-in retirement to a test that has nothing to do with it.
+      expect((seeded.body.retiredPipelines ?? []).map((p) => p.id)).not.toContain('pl_org_flow')
 
       // The upgraded deployment withdraws it in favour of a live built-in.
       const withdrawn = new PipelineRegistry()
@@ -782,7 +786,10 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       // as retired, and — the property the SPA's "new pipelines" advisory depends on — it is GONE
       // from the catalog versions, so the two channels can never both claim it.
       expect(snap.body.pipelines.map((p) => p.id)).toContain('pl_org_flow')
-      expect(snap.body.retiredPipelines).toEqual([{ id: 'pl_org_flow', replacedBy: 'pl_simple' }])
+      expect(snap.body.retiredPipelines).toContainEqual({
+        id: 'pl_org_flow',
+        replacedBy: 'pl_simple',
+      })
       expect(snap.body.pipelineCatalogVersions).not.toHaveProperty('pl_org_flow')
 
       // Reseed has nothing left to restore from; removal is the action that applies.

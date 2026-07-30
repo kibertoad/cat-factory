@@ -370,6 +370,10 @@ const parkedState = (findings: PrReviewFinding[]): PrReviewStepState => ({
   status: 'awaiting_selection',
   summary: 'ok',
   slices: [],
+  // Both default on the schema, so a real parked state always carries them; the dismiss/challenge
+  // helpers under test never read either, so the empty/zero values are the honest baseline.
+  sliceReviews: [],
+  resumeAttempts: 0,
   findings,
   selectedFindingIds: findings.map((f) => f.id),
   resolution: null,

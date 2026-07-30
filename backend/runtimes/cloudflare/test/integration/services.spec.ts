@@ -240,7 +240,7 @@ describe('in-org shared services', () => {
     const schedule = await call<{ id: string; serviceId: string | null }>(
       'POST',
       `/workspaces/${a.workspace.id}/recurring-pipelines`,
-      { frameId: frame.body.id, pipelineId: 'pl_dep_update', name: 'Weekly deps', recurrence },
+      { frameId: frame.body.id, pipelineId: 'pl_simple', name: 'Weekly deps', recurrence },
     )
     expect(schedule.status).toBe(201)
     expect(schedule.body.serviceId).toBeTruthy()

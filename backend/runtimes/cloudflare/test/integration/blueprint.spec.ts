@@ -29,11 +29,13 @@ describe('blueprint pipeline step', () => {
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
 
-    // pl_quick is coder → blueprints → tester; task_login sits under frame blk_auth.
+    // `pl_blueprint` is the blueprints-ONLY preset — the focused fixture for this step (the build
+    // presets that merely happened to carry a blueprints step were retired in the catalog collapse).
+    // task_login sits under frame blk_auth.
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: 'pl_quick' },
+      { pipelineId: 'pl_blueprint' },
     )
     expect(start.status).toBe(201)
 
@@ -62,7 +64,7 @@ describe('blueprint pipeline step', () => {
 
     for (let i = 0; i < 2; i++) {
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_quick',
+        pipelineId: 'pl_blueprint',
       })
       await app.drive(wsId)
     }

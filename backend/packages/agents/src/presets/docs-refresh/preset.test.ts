@@ -130,7 +130,7 @@ function draftFixture(): InitiativePlanDraft {
       { id: 'c1', phaseId: 'comments', title: 'Comment the scheduler module' },
       { id: 'b1', phaseId: 'business-rules', title: 'Pricing rules' },
     ],
-    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_quick' },
+    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_simple' },
   })
 }
 

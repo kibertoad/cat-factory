@@ -30,12 +30,20 @@ const deps = computed(() =>
 )
 
 // Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
-// pipelines (a manual run of one is refused server-side), and — for a `document` task — every
-// non-document pipeline (per the `purpose` classifier) — see the backend gate.
+// pipelines (a manual run of one is refused server-side), and every pipeline whose purpose doesn't
+// match this block's task type or LEVEL (per the `purpose` classifier) — see the backend gate. The
+// level is what keeps the planning presets on initiative blocks and off everything else, in both
+// directions, so this menu never offers a run the engine answers with a 409.
 const runOptions = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines.filter((p) =>
-    pipelineAllowedForManualStart(p, frame, board.blocks, block.value?.taskType),
+    pipelineAllowedForManualStart(
+      p,
+      frame,
+      board.blocks,
+      block.value?.taskType,
+      block.value?.level,
+    ),
   )
 })
 

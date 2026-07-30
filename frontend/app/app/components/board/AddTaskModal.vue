@@ -387,13 +387,15 @@ const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 
 
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
-// hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and,
-// for a `document` / `review` task, every pipeline whose purpose doesn't match (a doc task authors
-// a doc, a review task reviews a PR — only document / review pipelines are relevant, per the
-// `purpose` classifier). Re-filters as the chosen task type changes.
+// hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and every
+// pipeline whose purpose doesn't match the chosen task type (a doc task authors a doc, a review task
+// reviews a PR, and a `feature`/`bug` task ships code — so it is offered build + research only, not
+// the doc/review/planning presets). `blockLevel: 'task'` is passed literally because this modal only
+// ever creates a task leaf, which also drops the three planning presets the backend would refuse.
+// Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>
-    pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value),
+    pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value, 'task'),
   ),
 )
 // Some task types want their type-default pipeline surfaced in the modal up front, so picking the

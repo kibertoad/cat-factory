@@ -34,7 +34,7 @@ import {
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
-import { shouldRunGatedStep } from './stepGating.logic.js'
+import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
   type HasPersonalSubscription,
@@ -1015,12 +1015,18 @@ export class ExecutionService {
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
 
-    // Estimate gating: a step gated on the task estimate (today a conditional companion)
-    // is transparently SKIPPED when the estimate — written by an earlier task-estimator
-    // step in this same run — falls below the threshold. No agent is spun up; the step
-    // finishes as `skipped` and the run advances. Evaluated here (not at build time)
-    // because the estimate only exists once the estimator step has run.
-    if (step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)) {
+    // Estimate gating: a step gated on the task estimate is transparently SKIPPED when the
+    // estimate — written by an earlier task-estimator step in this same run — falls below the
+    // threshold. No agent is spun up; the step finishes as `skipped` and the run advances.
+    // Evaluated here (not at build time) because the estimate only exists once the estimator
+    // step has run.
+    //
+    // A COMPANION whose producer was skipped is skipped for the second reason: with producers
+    // now gatable, it would otherwise grade whatever step happens to precede it. Checked
+    // alongside its own gate because either reason is sufficient and they need not agree — a
+    // companion with no gate of its own still cascades.
+    const gatedOut = step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)
+    if (gatedOut || producerWasSkipped(instance.steps, instance.currentStep)) {
       return this.runDispatcher.skipGatedStep(workspaceId, instance, step, isFinalStep)
     }
 

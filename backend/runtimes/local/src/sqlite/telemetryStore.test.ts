@@ -323,7 +323,7 @@ function snapshot(overrides: Partial<AgentContextSnapshot> = {}): AgentContextSn
         content: 'task',
       },
     ],
-    extras: { pipelineId: 'pl_quick' },
+    extras: { pipelineId: 'pl_simple' },
     ...overrides,
   }
 }
