@@ -476,6 +476,22 @@
     "importsOnAdd": "eklendiğinde içe aktarılır"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Ayrıntıları göster",
+      "requestId": "İstek kimliği {id}",
+      "description": {
+        "not_found": "Bu eylemin işaret ettiği şey artık yok. Güncel durumu görmek için sayfayı yeniden yükle.",
+        "validation": "Sunucu bu isteği geçersiz olduğu için reddetti. Girdiğin değerleri kontrol et, ardından yeniden dene.",
+        "credential_required": "Bu eylem, kilidi açılmamış kişisel bir kimlik bilgisi gerektiriyor. Aboneliğinin kilidini aç veya yeniden bağla, ardından tekrar dene.",
+        "forbidden": "Bu çalışma alanındaki rolün bu eyleme izin vermiyor. Bir çalışma alanı yöneticisinden bunu yapmasını veya rolünü yükseltmesini iste.",
+        "unavailable": "Bu dağıtımda bu eylemin gerektirdiği yetenek yapılandırılmamış. Dağıtım yöneticisinden yapılandırmasını iste.",
+        "unauthorized": "Oturumun artık geçerli değil. Yeniden oturum aç, ardından tekrar dene.",
+        "rate_limited": "Kısa sürede çok fazla istek yapıldı. Biraz bekle, ardından yeniden dene.",
+        "internal": "Sunucuda bir hata oluştu. Yeniden dene; sorun sürerse ayrıntıları dağıtım yöneticisiyle paylaş.",
+        "network": "Sunucuya ulaşılamadı. Bağlantını kontrol et, ardından yeniden dene.",
+        "unexpected": "Sunucu beklenmeyen bir yanıt döndürdü. Yeniden dene; sorun sürerse ayrıntıları dağıtım yöneticisiyle paylaş."
+      }
+    },
     "action": {
       "retryFailed": "Yeniden deneme başarısız oldu",
       "startFailed": "Başlatılamadı",

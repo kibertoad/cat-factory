@@ -476,6 +476,22 @@
     "importsOnAdd": "importowane przy dodaniu"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Pokaż szczegóły",
+      "requestId": "Identyfikator żądania {id}",
+      "description": {
+        "not_found": "To, do czego odnosi się ta akcja, już nie istnieje. Odśwież stronę, aby zobaczyć aktualny stan.",
+        "validation": "Serwer odrzucił to żądanie jako nieprawidłowe. Sprawdź wprowadzone wartości i spróbuj ponownie.",
+        "credential_required": "Ta akcja wymaga osobistych danych uwierzytelniających, które nie są odblokowane. Odblokuj lub połącz ponownie swoją subskrypcję, a potem spróbuj ponownie.",
+        "forbidden": "Twoja rola w tej przestrzeni roboczej nie pozwala na tę akcję. Poproś administratora przestrzeni roboczej, aby ją wykonał lub rozszerzył twoją rolę.",
+        "unavailable": "W tym wdrożeniu nie skonfigurowano funkcji wymaganej przez tę akcję. Poproś operatora wdrożenia o jej skonfigurowanie.",
+        "unauthorized": "Twoja sesja straciła ważność. Zaloguj się ponownie i spróbuj jeszcze raz.",
+        "rate_limited": "Zbyt wiele żądań w krótkim czasie. Odczekaj chwilę i spróbuj ponownie.",
+        "internal": "Na serwerze wystąpił błąd. Spróbuj ponownie, a jeśli problem się powtarza, przekaż szczegóły operatorowi wdrożenia.",
+        "network": "Nie udało się połączyć z serwerem. Sprawdź połączenie i spróbuj ponownie.",
+        "unexpected": "Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie, a jeśli problem się powtarza, przekaż szczegóły operatorowi wdrożenia."
+      }
+    },
     "action": {
       "retryFailed": "Ponowienie nie powiodło się",
       "startFailed": "Nie udało się uruchomić",

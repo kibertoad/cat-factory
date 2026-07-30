@@ -1,6 +1,40 @@
 // Wire-level error vocabulary shared by the backend (kernel `ConflictError`) and the SPA.
 
 /**
+ * The STATUS CLASS every error envelope carries as `error.code` — the coarse "what kind of
+ * refusal is this" axis, one step above the machine-readable `details.reason` that says WHY.
+ *
+ * Single source of truth lives HERE for the same reason {@link CONFLICT_REASONS} does: it is a
+ * wire shape both sides read. The kernel derives `DomainErrorCode` from it (so `DomainError`
+ * and `STATUS_BY_CODE` cannot drift from what the SPA can present), and the SPA keys an
+ * exhaustive `Record<…, string>` of generic translated descriptions off {@link API_ERROR_CODES}
+ * — adding a code without wording trips the frontend typecheck.
+ */
+export const DOMAIN_ERROR_CODES = [
+  'not_found',
+  'validation',
+  'conflict',
+  'credential_required',
+  'forbidden',
+  'unavailable',
+  'unauthorized',
+  'rate_limited',
+] as const
+
+export type DomainErrorCode = (typeof DOMAIN_ERROR_CODES)[number]
+
+/**
+ * Every `error.code` value that can reach a client: the domain codes above plus `internal`,
+ * which is NOT a `DomainError` — it is what the shared `handleError` emits for an unexpected
+ * fault (a 500 whose message is deliberately the fixed `Internal server error`, never the
+ * thrown text). A client presenting failures generically must handle both, so this — not
+ * {@link DOMAIN_ERROR_CODES} — is the union the SPA maps.
+ */
+export const API_ERROR_CODES = [...DOMAIN_ERROR_CODES, 'internal'] as const
+
+export type ApiErrorCode = (typeof API_ERROR_CODES)[number]
+
+/**
  * Machine-readable reason codes carried on a 409 conflict's `error.details.reason`, so a
  * client can react to a SPECIFIC conflict precisely (e.g. open the AI-provider setup for
  * `providers_unconfigured`) instead of string-matching the human message.

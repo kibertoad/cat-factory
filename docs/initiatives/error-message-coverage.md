@@ -17,7 +17,8 @@ one `llm-upstream` cause, image-bumped) · exhaustive execution failure-kind hin
 (G3, `preflight` was hint-less) · structured installation-token-gone code + first-wrap-point rule
 codified + string-fallback classifiers deleted (I7/I6/I5) · per-reason conflict-toast descriptions
 
-- jump actions across all locales (G1) ·
+- jump actions across all locales (G1) · status-class-keyed generic failure copy + raw-detail
+  disclosure (G2 — **sections A–G are now complete; only the H feature axis remains**) ·
   **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -191,11 +192,12 @@ that union change is itself image-affecting, so it batches into the same slice.
 
 ### G. Frontend surfacing
 
-| #   | Failure / misconfiguration                             | Current behaviour                                                                                                                 | Surface | Sev | Proposed fix                                                                                                                                                 | Doc URL to embed | Status  | PR       |
-| --- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | -------- |
-| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ✅ done | phase 18 |
-| G2  | Generic fallback toast surfaces raw backend strings    | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix) | —                | ⬜ todo |          |
-| G3  | `AgentFailureCard.failure.hint` rarely populated       | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                        | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                     | —                | ✅ done | phase 17 |
+| #   | Failure / misconfiguration                                       | Current behaviour                                                                                                                                                                                        | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                                                                                                     | Doc URL to embed | Status  | PR       |
+| --- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | -------- |
+| G1  | 14 title-only `ConflictReason`s show raw backend prose           | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)                                                                                  | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                                                                                                                                                                                                            | —                | ✅ done | phase 18 |
+| G2  | Generic fallback toast surfaces raw backend strings              | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above                                                                        | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix)                                                                                                                                                                                     | —                | ✅ done | phase 19 |
+| G4  | ~78 inline `error.message` render sites outside the toast funnel | Panels/modals/stores assign the raw prose to a local `error` ref rendered inline (`ApiKeysSection.vue`, `GitHubPanel.vue`, `stores/board/*`, …) — the same untranslated-English gap G2 closed for toasts | n/a     | P3  | Adopt G2's `describeGenericFailure` split per site (translated status-class line + the raw detail behind a disclosure). Deliberately NOT batched into phase 19: it is ~78 mechanical component edits with no shared render seam, so it wants its own slice (or a small shared `<ApiFailure>` component first) rather than burying the funnel fix | —                | ⬜ todo |          |
+| G3  | `AgentFailureCard.failure.hint` rarely populated                 | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                                                                                               | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                                                                                                                                                                                                         | —                | ✅ done | phase 17 |
 
 ### H. Provider UI configurability (feature work the UI-first remedies depend on)
 
@@ -558,6 +560,37 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   the path-based image-tag guard, forcing a byte-identical image republish + 3-pin bump for a
   comment-only change, so it is left to ride the next real harness image bump. The abort-message
   wording is nonetheless now free to change: no backend classifier reads it.
+- **The generic funnel describes from the STATUS CLASS; raw prose is DETAIL (phase 19 reference:
+  G2).** `usePipelineErrorToast` is where every non-409 failure lands, and it used to put the
+  backend's `message` straight into the toast description — so a non-English user read English, an
+  internal 500 was reported as the fixed `Internal server error`, and a request-validation 400 said
+  `Request failed validation` while its `issues` (the only informative part) were dropped. The split
+  now is: the DESCRIPTION is translated copy keyed off `error.code` through
+  `GENERIC_DESCRIPTION_KEYS`, and the untranslated DETAIL — the prose, the `issues`, and the
+  envelope's `requestId` — is revealed in place by a "Show details" action. Four things about it
+  matter for anything new:
+  - **The status class is now a CONTRACTS vocabulary, not a kernel one.** `DOMAIN_ERROR_CODES` /
+    `API_ERROR_CODES` live in `@cat-factory/contracts` and kernel's `DomainErrorCode` is derived
+    from the first (mirroring how `ConflictReason` already worked), so the exhaustive
+    `Record<Exclude<ApiErrorCode, 'conflict'>, string>` in the SPA is a real drift guard: adding a
+    status class without frontend wording fails the typecheck. `API_ERROR_CODES` adds `internal`,
+    which is NOT a `DomainError` — `handleError` mints it for an unexpected fault — so a client
+    mapping only the domain codes silently misses every 500. `conflict` is excluded because
+    `parseConflict` intercepts it upstream; wording it would be dead copy in ten locales.
+  - **The prose is kept, not dropped.** Eighteen phases of this initiative went into making those
+    backend messages good (a `configProblem` remedy, `describeVcsApiError`'s appended cause, a
+    harness `HarnessFailure` remedy). Hiding them behind a disclosure is the point — a raw string
+    must not be the FIRST thing a user reads, and it must still be one click away.
+  - **`requestId` finally has a UI.** `handleError` has stamped every envelope with the correlation
+    id since request logging landed, precisely so "a user can quote the id off a failed request",
+    and the SPA had never rendered it anywhere. The detail disclosure is where it belongs.
+  - **"Nothing answered" and "something answered unrecognisably" are separate verdicts**
+    (`network` vs `unexpected`), decided by whether an HTTP status exists at all — the remedies are
+    opposites (check your connection vs the server is broken), so folding them would be exactly the
+    degrade-loudly failure this repo bans elsewhere. The reveal is a `toast.update` of the SAME
+    toast (never a second one, which would leave two readings on screen disagreeing) and must pass
+    `actions: []` explicitly, because `update` MERGES over the existing toast and would otherwise
+    leave a now-dead button. No image bump, no backend behaviour change (types + SPA only).
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.
