@@ -17,6 +17,7 @@
 import { computed } from 'vue'
 import { JourneyHost, JourneyOutlet } from '@modular-vue/journeys'
 import { environmentSetupHandle } from '~/modular/journeys/environmentSetup'
+import EnvSetupStepper from '~/components/environments/EnvSetupStepper.vue'
 
 const ui = useUiStore()
 const { t } = useI18n()

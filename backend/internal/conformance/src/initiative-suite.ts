@@ -43,7 +43,7 @@ function initiative(
     ],
     policy: {
       maxConcurrent: 2,
-      rules: [{ pipelineId: 'pl_quick', minComplexity: 0 }],
+      rules: [{ pipelineId: 'pl_simple', minComplexity: 0 }],
       defaultPipelineId: 'pl_full',
       onMissingEstimate: 'default',
     },

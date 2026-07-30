@@ -8,9 +8,11 @@ import type {
 import {
   companionTargets,
   isCompanionKind,
+  isGatableKind,
   SKILL_AGENT_KIND,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isTesterKind } from '../execution/ci.logic.js'
 
 /**
@@ -53,28 +55,47 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    validation enforces exactly that adjacency: a companion's nearest preceding enabled step
  *    must be one of its targets. (The engine still reviews the nearest preceding target, but
  *    that target is now guaranteed to be the immediate predecessor.)
- *  - {@link assertValidGating}: a step gated on the task estimate must be a companion (the
- *    only kind it is safe to skip — skipping a producer would starve its downstream steps),
- *    must set at least one axis threshold (or it would always skip), and needs a
- *    `task-estimator` to have run before it (or the gate has nothing to consult).
+ *  - {@link assertValidGating}: a step gated on the task estimate must declare itself GATABLE
+ *    (`isGatableKind` — a kind whose output later steps read as context rather than depend on
+ *    structurally), must not also carry a human approval gate, must set at least one axis
+ *    threshold (or it would always skip), and needs a `task-estimator` to have run before it (or
+ *    the gate has nothing to consult).
  *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
  *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
  *    separately — but under the same "threshold set + estimator earlier" rules, since a
  *    QC gate with no estimator would silently never gate.
+ *
+ * Each check takes the whole shape rather than the two or three arrays it happens to read today:
+ * the gating check needed `gates` + the kind registry after the estimate-gating rules were
+ * generalised past companions, and threading those as further positional parameters through one
+ * of four otherwise-similar signatures is how these drift apart.
  */
 export interface PipelineShape {
   agentKinds: string[]
   enabled?: boolean[]
+  /**
+   * The per-step HUMAN approval gate flags. Read by {@link assertValidGating} to refuse a step
+   * that carries both a human gate and an estimate gate — the estimate may ADD a human
+   * checkpoint, never cancel one a pipeline author asked for.
+   */
+  gates?: boolean[]
   gating?: (StepGating | null)[]
   testerQuality?: (TesterQualityConfig | null)[]
   stepOptions?: (StepOptions | null)[]
+  /**
+   * The app-owned agent-kind registry, so a DEPLOYMENT-registered kind's own `gatable` flag is
+   * honoured. Absent ⇒ built-in kinds only, which is correct for a caller validating a built-in
+   * catalog (the kernel seed test) but would wrongly refuse a registered gatable kind at a
+   * boundary that has the registry — so both real boundaries (builder save, run start) pass it.
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
-  assertValidCompanionPlacement(pipeline.agentKinds, pipeline.enabled)
-  assertValidGating(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
-  assertValidTesterQualityGating(pipeline.agentKinds, pipeline.enabled, pipeline.testerQuality)
-  assertValidSkillSteps(pipeline.agentKinds, pipeline.enabled, pipeline.stepOptions)
+  assertValidCompanionPlacement(pipeline)
+  assertValidGating(pipeline)
+  assertValidTesterQualityGating(pipeline)
+  assertValidSkillSteps(pipeline)
 }
 
 /**
@@ -84,11 +105,7 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
  * since both boundaries share this validation) rather than failing deep in dispatch. A DISABLED
  * skill step never runs, so it imposes no requirement.
  */
-export function assertValidSkillSteps(
-  agentKinds: string[],
-  enabled?: boolean[],
-  stepOptions?: (StepOptions | null)[],
-): void {
+export function assertValidSkillSteps({ agentKinds, enabled, stepOptions }: PipelineShape): void {
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
     if (agentKinds[i] !== SKILL_AGENT_KIND || !isEnabled(i)) continue
@@ -109,7 +126,7 @@ export function assertValidSkillSteps(
  * producer and its companion". Companions are surfaced in the builder as toggles attached to
  * their producer and run immediately after it, so adjacency is required.
  */
-export function assertValidCompanionPlacement(agentKinds: string[], enabled?: boolean[]): void {
+export function assertValidCompanionPlacement({ agentKinds, enabled }: PipelineShape): void {
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
     const kind = agentKinds[i]
@@ -133,33 +150,52 @@ export function assertValidCompanionPlacement(agentKinds: string[], enabled?: bo
 
 /**
  * Validate every ENABLED step that carries enabled estimate gating. A disabled gated step
- * never runs, so it imposes no requirement; an enabled one must satisfy all three rules:
+ * never runs, so it imposes no requirement; an enabled one must satisfy all four rules:
  *
- *  1. The gated step must be a COMPANION kind. Gating means "skip this step when the task is
- *     light", and skipping is only safe for a dependent companion — skipping a producer
- *     (coder / spec-writer / architect) would leave its downstream steps (tester, merger,
- *     …) running against output that was never produced. (The consensus-gating sibling can
- *     degrade to the standard agent; step-gating removes the step, so it is companion-only.)
- *  2. It must set at least one axis threshold. With none, the axis loop in
+ *  1. The gated step's kind must be GATABLE ({@link isGatableKind}). Gating means "skip this
+ *     step when the task is light", which is safe for a kind whose output later steps read as
+ *     CONTEXT (a design proposal, a research note, an extra verification pass) and unsafe for one
+ *     some other mechanism reads STRUCTURALLY — `merger` (whose mere presence in `instance.steps`
+ *     is what makes a committing kind deliver via a PR), `deployer` (which provisions the
+ *     environment its consumer reads), `conflicts`/`ci` (the guards), `bug-intake` (the run's
+ *     subject). Gatability is declared per kind rather than derived from a category, because the
+ *     answer is a property of what the kind produces and who reads it.
+ *
+ *     This rule used to be "must be a COMPANION", on the reasoning that skipping a producer would
+ *     starve downstream steps. The old catalog disproved it: `pl_simple` shipped with no architect
+ *     and no spec-writer, `pl_quick` with no reviewer.
+ *  2. It must NOT also carry a human approval gate (`gates[i]`). The estimate may ADD a human
+ *     checkpoint — that is what gating a `human-review` step on risk does — but it may never
+ *     CANCEL an approval pause the pipeline author asked for, which is what an estimate-gated
+ *     human-gated step would do below its threshold. A model's own triage must not be able to
+ *     decide that nobody needs to look.
+ *  3. It must set at least one axis threshold. With none, the axis loop in
  *     `shouldRunGatedStep` never matches, so a step with an estimate would ALWAYS skip — the
  *     opposite of the usual intent — making the toggle a silent footgun.
- *  3. An enabled `task-estimator` must run earlier in the chain, or the gate has no estimate
+ *  4. An enabled `task-estimator` must run earlier in the chain, or the gate has no estimate
  *     to consult.
  */
-export function assertValidGating(
-  agentKinds: string[],
-  enabled?: boolean[],
-  gating?: (StepGating | null)[],
-): void {
+export function assertValidGating({
+  agentKinds,
+  enabled,
+  gates,
+  gating,
+  agentKindRegistry,
+}: PipelineShape): void {
   if (!gating) return
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
     const g = gating[i]
     if (!g?.enabled || !isEnabled(i)) continue
     const kind = agentKinds[i]
-    if (kind === undefined || !isCompanionKind(kind)) {
+    if (kind === undefined || !isGatableKind(kind, agentKindRegistry)) {
       throw new ValidationError(
-        `Step '${kind}' cannot be estimate-gated — only companion steps (reviewer / architect-companion / spec-companion) may be skipped on the estimate.`,
+        `Step '${kind}' cannot be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`,
+      )
+    }
+    if (gates?.[i] === true) {
+      throw new ValidationError(
+        `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one. Drop the approval gate to make the step conditional, or drop the estimate gate to keep it unconditional.`,
       )
     }
     if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
@@ -187,11 +223,11 @@ export function assertValidGating(
  * estimate to consult). The QC companion being enabled/disabled itself imposes no requirement —
  * only an enabled GATE does.
  */
-export function assertValidTesterQualityGating(
-  agentKinds: string[],
-  enabled?: boolean[],
-  testerQuality?: (TesterQualityConfig | null)[],
-): void {
+export function assertValidTesterQualityGating({
+  agentKinds,
+  enabled,
+  testerQuality,
+}: PipelineShape): void {
   if (!testerQuality) return
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {

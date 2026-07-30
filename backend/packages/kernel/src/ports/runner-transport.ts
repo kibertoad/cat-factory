@@ -402,6 +402,29 @@ export interface RunnerJobView {
    * an older harness image).
    */
   reproductionReport?: RunnerReproductionReport
+  /**
+   * A parallel PR review's per-slice reviews as they stand, republished whole on every poll as
+   * each slice's subagent returns. Latest-wins like the two reports above, but for a stronger
+   * reason: the reviewer emits its `slices`/`findings` only in the TERMINAL structured output, so
+   * this is the sole channel that makes finished slices durable while the run is still going — and
+   * therefore the sole thing a manual resume of a wedged review has to work from. Absent for a job
+   * that dispatched no subagents (and on an older harness image).
+   */
+  sliceReviews?: RunnerSliceReview[]
+}
+
+/**
+ * One slice's live review off a parallel PR reviewer. Mirrors the contracts
+ * `prReviewSliceReviewSchema` structurally (the kernel stays free of the contracts dependency).
+ * See {@link RunnerJobView.sliceReviews}.
+ */
+export interface RunnerSliceReview {
+  /** The slice label the reviewer dispatched its subagent with. */
+  label: string
+  /** Whether that subagent returned. An `in_progress` slice is one a resume must redo. */
+  status: 'in_progress' | 'completed'
+  /** The subagent's verbatim report; null while in flight, or when it returned no readable text. */
+  report?: string | null
 }
 
 /**

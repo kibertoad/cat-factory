@@ -412,7 +412,7 @@ export function makeMothershipConformanceApp(
     return (await ms.container.workspaceService.create(
       // Match the HTTP `POST /workspaces` default (`input.seed ?? true`) the other harnesses
       // get for free — most execution assertions reference the seeded demo board (`task_login`,
-      // `pl_quick`, `mod_sessions`). `createOrgWorkspace` overrides this to `false`.
+      // `pl_simple`, `mod_sessions`). `createOrgWorkspace` overrides this to `false`.
       { name: options.name ?? 'Board', seed: options.seed ?? true },
       CONF_USER.id,
       account.id,

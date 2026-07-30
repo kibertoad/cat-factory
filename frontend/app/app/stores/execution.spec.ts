@@ -186,3 +186,90 @@ describe('execution store metrics preservation (live-only rollup)', () => {
     expect(step.metrics?.calls).toBe(5)
   })
 })
+
+// Regression for the optimistic-echo CLOBBER. `upsert`/`hydrate` are monotonic by `rev`, but an
+// action store's echo used to reach into the cached run and assign a step's sub-state directly,
+// comparing nothing — so a slow HTTP response overwrote state the stream had already advanced, and
+// no later event restored it. `echoAfter` closes that by capturing the run's `rev` before the
+// request and re-reading it after.
+//
+// The fork-decision chat is the case that caught it in CI: `chat` emits the one-message `answering`
+// state and then wakes the driver, which appends the reply and emits again. With a canned (no-model)
+// reply the two-message thread routinely lands first, and echoing the response dropped the reply
+// permanently — a parked run emits nothing more.
+describe('execution store echoAfter (optimistic-echo guard)', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  const run = (rev: number, chat: unknown[]): ExecutionInstance =>
+    ({
+      id: 'e1',
+      blockId: 'b1',
+      rev,
+      currentStep: 0,
+      steps: [{ agentKind: 'coder', forkDecision: { status: 'answering', chat } }],
+    }) as unknown as ExecutionInstance
+
+  const chatOf = () =>
+    (store.getInstance('e1')!.steps[0] as unknown as { forkDecision: { chat: unknown[] } })
+      .forkDecision.chat
+
+  it('applies the echo when nothing newer arrived while the request was in flight', () => {
+    store.hydrate([run(1, ['human'])], 'ws1')
+    return store
+      .echoAfter(
+        'e1',
+        async () => ({ status: 'answering', chat: ['human', 'echoed'] }),
+        (state, instance) => {
+          ;(instance.steps[0] as unknown as { forkDecision: unknown }).forkDecision = state
+        },
+      )
+      .then(() => expect(chatOf()).toEqual(['human', 'echoed']))
+  })
+
+  it('DROPS the echo when the stream delivered a newer revision first', async () => {
+    store.hydrate([run(1, ['human'])], 'ws1')
+    // The driver's reply lands (rev 2, two messages) while the chat POST is still in flight...
+    await store.echoAfter(
+      'e1',
+      async () => {
+        store.upsert(run(2, ['human', 'assistant reply']))
+        return { status: 'answering', chat: ['human'] }
+      },
+      (state, instance) => {
+        ;(instance.steps[0] as unknown as { forkDecision: unknown }).forkDecision = state
+      },
+    )
+    // ...so the one-message response must not put the thread back. Unguarded, this was ['human'],
+    // the reply was gone, and the "thinking…" bubble spun forever.
+    expect(chatOf()).toEqual(['human', 'assistant reply'])
+  })
+
+  it('still returns the response body when the echo is dropped', async () => {
+    store.hydrate([run(1, [])], 'ws1')
+    const returned = await store.echoAfter(
+      'e1',
+      async () => {
+        store.upsert(run(5, ['newer']))
+        return 'body'
+      },
+      () => {
+        throw new Error('apply must not run')
+      },
+    )
+    expect(returned).toBe('body')
+  })
+
+  it('skips the echo for a run the cache does not hold, rather than throwing', async () => {
+    const returned = await store.echoAfter(
+      'missing',
+      async () => 'body',
+      () => {
+        throw new Error('apply must not run')
+      },
+    )
+    expect(returned).toBe('body')
+  })
+})

@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type { StepGating } from '~/types/consensus'
+import { isBuiltinGatableKind } from '@cat-factory/contracts'
 import { COMPANION_FOR_PRODUCER, isKnownAgentKind, isProducerCompanion } from '~/utils/catalog'
 import { usePipelinesStore } from '~/stores/pipelines'
 
@@ -78,6 +79,11 @@ const isEnabledAt = (p: Pipeline, i: number) => p.enabled?.[i] !== false
  * gating, over the ENABLED subset), collecting the first problem instead of throwing. Returns a
  * human message, or null when the shape is valid. Kept in step with
  * `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`.
+ *
+ * A rule here must be keyed off vocabulary SHARED with that module (`@cat-factory/contracts`)
+ * wherever one exists, never re-stated locally — see the gating note below for what a drifted copy
+ * costs. Adding a rule to `assertValidGating` without adding it here is the milder half of the same
+ * drift: a pipeline the engine refuses at save that this advisory calls healthy.
  */
 function shapeProblem(p: Pipeline): string | null {
   const kinds = p.agentKinds
@@ -102,16 +108,29 @@ function shapeProblem(p: Pipeline): string | null {
       return `Companion '${kind}' must run immediately after an enabled step it can review (${targets.join(', ')}).`
     }
   }
-  // Estimate gating: an enabled gated step must be a companion, set ≥1 threshold, and have an
-  // enabled task-estimator earlier in the chain.
+  // Estimate gating: an enabled gated step must be a GATABLE kind, must not also carry a human
+  // approval gate, must set ≥1 threshold, and must have an enabled task-estimator earlier in the
+  // chain. Gatability reads the SHARED `BUILTIN_GATABLE_KINDS` rather than a local rule, because
+  // this advisory auto-opens a modal over the board: a copy of the rule that drifts behind the
+  // engine's does not merely warn wrongly, it calls a pipeline the product SHIPS invalid and leaves
+  // the board unusable. A DEPLOYMENT-registered kind can override gatability for itself through the
+  // agent-kind registry, which the SPA cannot see, so the two are not perfectly symmetric: such a
+  // kind is reported here and accepted by the engine. That is the safe direction of the asymmetry —
+  // a dismissible advisory rather than a refused save — and the only one available without shipping
+  // the registry to the browser.
   const gating = p.gating
   if (gating) {
     for (let i = 0; i < kinds.length; i++) {
       const g = gating[i] as StepGating | null | undefined
       if (!g?.enabled || !isEnabledAt(p, i)) continue
       const kind = kinds[i]
-      if (!kind || !isProducerCompanion(kind)) {
-        return `Step '${kind}' cannot be estimate-gated — only companion steps may be skipped on the estimate.`
+      if (!kind || !isBuiltinGatableKind(kind)) {
+        return `Step '${kind}' may not be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`
+      }
+      // A human approval gate and an estimate gate on the same step contradict: the estimate may
+      // ADD a human checkpoint but never CANCEL a pause the pipeline author asked for.
+      if (p.gates?.[i] === true) {
+        return `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one.`
       }
       if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
         return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`

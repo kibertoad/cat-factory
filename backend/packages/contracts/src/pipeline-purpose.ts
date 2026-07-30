@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import type { AgentCategory } from './agent-presentation.js'
 import type { Pipeline } from './entities.js'
-import type { TaskType } from './primitives.js'
+import type { BlockLevel, TaskType } from './primitives.js'
 
 /**
  * The USE-CASE of a pipeline — what kind of work it exists to do. Chosen in the pipeline
@@ -58,13 +58,43 @@ export function purposeAllowsAgentCategory(
 }
 
 /**
+ * The purposes a PROGRAMMATIC task (`feature` / `bug`) may be offered. It ships code, so a
+ * `document` or `review` pipeline is meaningless for it — the reverse of the narrowing those task
+ * types already got. `research` is included because reaching for a spike before committing to an
+ * approach is a legitimate move on a feature someone has not yet scoped; `planning` is not, being
+ * initiative-level work that the block-level gate refuses anyway.
+ *
+ * Applied as a DENY list (everything not named here is hidden) rather than an allow list, which is
+ * the one place this narrowing differs in direction from `document` / `review` — see
+ * {@link pipelineAllowedForTaskType} for why an UNCLASSIFIED pipeline has to stay visible here.
+ */
+const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
+
+/**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.
- * A `document` task authors a document and a `review` task reviews an existing PR, so each narrows
- * the set to ONLY its matching purpose (`document` / `review`): every other pipeline writes/ships
- * code, which is meaningless for those tasks. Every OTHER task type (and an undefined `taskType`) is
- * unrestricted. A pipeline with no `purpose` is therefore hidden from a document/review task (it
- * requires the explicit classifier) and shown for every other. Composed with the launch-availability
- * / visual-frame filters at each picker.
+ *
+ * Each built-in task type narrows to the purposes that can actually do its work:
+ *
+ *  - `document` → only `document` pipelines (it authors a document; nothing else applies).
+ *  - `review` → only `review` pipelines (it reviews an existing PR and opens none).
+ *  - `feature` / `bug` → everything EXCEPT `document` / `review` / `planning`
+ *    ({@link PROGRAMMATIC_PURPOSES}). These ship code, so offering them a document-authoring or
+ *    PR-review preset was noise in the one picker people use most.
+ *  - anything else, including a CUSTOM (namespaced) type and an undefined `taskType`, is
+ *    unrestricted — a deployment's own task type has no purpose mapping we could infer.
+ *
+ * The two narrowings run in OPPOSITE directions, and the asymmetry is deliberate:
+ *
+ *  - `document` / `review` require the EXPLICIT classifier, because a build pipeline on a document
+ *    task is actively wrong — running it would author no document and open a code PR nobody asked
+ *    for. Guessing there costs more than hiding an unclassified preset.
+ *  - `feature` / `bug` merely EXCLUDE the purposes that cannot ship code. An unclassified pipeline
+ *    is not known-wrong for a feature, and `purpose` is optional at every write boundary — the
+ *    builder leaves it unset by default and a `PipelineRegistry` entry need not declare one — so
+ *    requiring it here would silently hide a workspace's own hand-built pipelines from the picker
+ *    they were built for, with nothing on screen to explain the absence.
+ *
+ * Composed with the launch-availability / block-level / visual-frame filters at each picker.
  */
 export function pipelineAllowedForTaskType(
   pipeline: Pick<Pipeline, 'purpose'>,
@@ -72,5 +102,34 @@ export function pipelineAllowedForTaskType(
 ): boolean {
   if (taskType === 'document') return pipeline.purpose === 'document'
   if (taskType === 'review') return pipeline.purpose === 'review'
+  if (taskType === 'feature' || taskType === 'bug') {
+    return pipeline.purpose === undefined || PROGRAMMATIC_PURPOSES.includes(pipeline.purpose)
+  }
   return true
+}
+
+/**
+ * Whether `pipeline` may run on a block at `blockLevel` — the surface counterpart to the engine's
+ * BIDIRECTIONAL initiative guard (`assertInitiativeShapeAllowed`): a planning pipeline may only
+ * start on an `initiative` block, and an initiative block accepts only a planning pipeline.
+ *
+ * Without this the three planning presets were offered on every ordinary task and then REFUSED at
+ * start with a 409 — the worst failure shape, since the user has already chosen before learning it
+ * cannot run.
+ *
+ * Keyed on `purpose: 'planning'` rather than on the initiative AGENT KINDS the engine tests, because
+ * the SPA cannot see the kernel's kind vocabulary (it depends on `@cat-factory/contracts` only) —
+ * and because a purpose is the more general classifier: a deployment's own planning pipeline is
+ * filtered correctly even if it uses kinds this repo has never heard of. For the built-in catalog
+ * the two coincide, and a kernel drift guard (`seed.test.ts`) pins that they keep coinciding.
+ *
+ * `blockLevel` undefined ⇒ unrestricted (an un-typed context shows everything).
+ */
+export function pipelineAllowedForBlockLevel(
+  pipeline: Pick<Pipeline, 'purpose'>,
+  blockLevel: BlockLevel | undefined,
+): boolean {
+  if (blockLevel === undefined) return true
+  if (blockLevel === 'initiative') return pipeline.purpose === 'planning'
+  return pipeline.purpose !== 'planning'
 }

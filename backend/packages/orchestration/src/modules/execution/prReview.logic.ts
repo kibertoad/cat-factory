@@ -57,6 +57,14 @@ export function initialPrReviewState(
     status: 'reviewing',
     summary: null,
     slices: [],
+    // Empty at dispatch and filled by the harness as each slice's subagent returns. A FRESH review
+    // deliberately starts clean: carrying a previous attempt's reports here would let a re-run
+    // inherit work it never did. A resume keeps them instead (see `PrReviewController.resume`),
+    // which is safe precisely because this seed only runs when the step carries no `prReview` yet.
+    sliceReviews: [],
+    // Nobody has nudged this review yet. A resume increments it, and the sum reaches the step's
+    // dispatch epoch so each resumed dispatch gets its own harness job id.
+    resumeAttempts: 0,
     findings: [],
     selectedFindingIds: [],
     resolution: null,

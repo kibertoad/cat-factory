@@ -23,7 +23,7 @@ function instance(
   return {
     id: 'exec_1',
     blockId: 'blk_1',
-    pipelineId: 'pl_quick',
+    pipelineId: 'pl_simple',
     pipelineName: 'Quick implement',
     steps,
     currentStep: steps.length - 1,

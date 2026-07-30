@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import {
   claudeAssistantContent,
   claudeCallUsage,
+  claudeToolResultText,
   isObject,
   redactBody,
   SUBAGENT_TOOL_NAMES,
@@ -54,20 +55,52 @@ import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './
 // Slice / progress tracking off the PARENT stream (D2.1)
 // ---------------------------------------------------------------------------
 
+/**
+ * How much of one slice's terminal report is kept. A slice review is prose (findings for a handful
+ * of files), not a transcript, so this is far above a real report while still bounding what a
+ * runaway subagent can push onto the step — the reports ride the job view on every poll and are
+ * persisted on the run.
+ */
+export const SLICE_REPORT_MAX_CHARS = 24_000
+
 interface TrackedSlice {
   /** The dispatch's tool_use id, used to pair the terminal tool_result. */
   toolUseId: string
   /** The subagent's description (`Review <slice> slice`), rendered as the progress label. */
   description: string
   done: boolean
+  /**
+   * The subagent's verbatim terminal report, captured from the paired `tool_result`; undefined
+   * until it lands. This is the slice's actual review work — the reason a stuck aggregation no
+   * longer costs the whole run (see `prReviewSliceReviewSchema`). Truncated to
+   * {@link SLICE_REPORT_MAX_CHARS} and scrubbed of leased credentials before it leaves here.
+   */
+  report?: string
+}
+
+/** One slice's live review, as published on the job view. Mirrors `prReviewSliceReviewSchema`. */
+export interface SliceReview {
+  label: string
+  status: 'in_progress' | 'completed'
+  report?: string | null
 }
 
 /** Tracks parallel subagents seen on the parent stream to derive slice progress. */
 export interface SliceTracker {
   /** Feed an `assistant` message's content blocks: registers any subagent dispatches. */
   onAssistant(content: unknown[]): void
-  /** Feed a `user` message's content blocks: marks the paired subagent(s) complete. */
+  /**
+   * Feed a `user` message's content blocks: marks the paired subagent(s) complete AND captures
+   * each one's terminal report (see {@link SliceTracker.sliceReviews}).
+   */
   onUser(content: unknown[]): void
+  /**
+   * Every dispatched slice with its status and captured report, in dispatch order — the durable
+   * half of this tracker. Published as a whole value on each poll (NOT drain-on-read): the set
+   * only grows, and a dropped poll response must never permanently lose a finished slice's
+   * review, which is the entire point of capturing it. Empty when nothing was dispatched.
+   */
+  sliceReviews(): SliceReview[]
   /** Whether any `Task` subagent has been dispatched (⇒ this run parallelised). */
   hasSlices(): boolean
   /**
@@ -80,7 +113,12 @@ export interface SliceTracker {
   progress(): TodoProgress | undefined
 }
 
-export function createSliceTracker(): SliceTracker {
+/**
+ * @param secrets Leased-credential strings scrubbed from every captured report. A subagent can
+ *   echo a token it saw in the checkout, and these reports are persisted on the run, so they are
+ *   redacted on the way in rather than trusting each consumer to do it.
+ */
+export function createSliceTracker(secrets: string[] = []): SliceTracker {
   // Insertion-ordered so the progress `items` render in dispatch order.
   const slices = new Map<string, TrackedSlice>()
 
@@ -106,8 +144,24 @@ export function createSliceTracker(): SliceTracker {
         if (!isObject(block) || block.type !== 'tool_result') continue
         const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
         const slice = id ? slices.get(id) : undefined
-        if (slice) slice.done = true
+        if (!slice) continue
+        slice.done = true
+        // The report is captured here or nowhere: this `tool_result` is the only place the
+        // subagent's findings appear on the parent stream, and the next poll may be the last one
+        // this job ever answers.
+        const report = redactBody(claudeToolResultText(block), secrets).trim()
+        if (report) slice.report = report.slice(0, SLICE_REPORT_MAX_CHARS)
       }
+    },
+    sliceReviews() {
+      return [...slices.values()].map((s) => ({
+        label: s.description,
+        status: (s.done ? 'completed' : 'in_progress') as 'completed' | 'in_progress',
+        // A slice that finished but whose result carried no readable text is reported as
+        // completed with a null report rather than being dropped: a resume must still know it
+        // does not need re-reviewing, and silently omitting it would send it round again.
+        report: s.report ?? null,
+      }))
     },
     hasSlices() {
       return slices.size > 0

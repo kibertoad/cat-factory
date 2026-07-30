@@ -64,6 +64,21 @@ describe('dispatchEpochFor', () => {
     expect(dispatchEpochFor({ ...secondRound, evictionRecoveries: 1 } as PipelineStep)).toBe(2)
   })
 
+  it('counts a manually resumed PR review, which carries none of the loop counters above', () => {
+    // The whole premise of a resume is that the previous job is WEDGED. A container-reusing
+    // transport re-attaches to a known job id rather than re-running, so a resume at the same
+    // epoch would hand the "recovery" straight back to the stuck job. The reviewer step has no
+    // test/gate/ralph counter, so without this term its epoch would stay 0 across every resume.
+    const review = (resumeAttempts: number): PipelineStep =>
+      step({
+        agentKind: 'pr-reviewer',
+        prReview: { status: 'reviewing', resumeAttempts } as PipelineStep['prReview'],
+      })
+    expect(dispatchEpochFor(review(0))).toBe(0)
+    expect(dispatchEpochFor(review(1))).toBe(1)
+    expect(dispatchEpochFor(review(2))).toBe(2)
+  })
+
   it('prefers the tester counter when both are present, and treats attempts 0 as 0 (not a fallthrough)', () => {
     // `??` must not fall through on a real 0 — a first-round tester step is epoch 0, never the gate count.
     expect(

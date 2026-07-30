@@ -223,7 +223,16 @@ export class RunRepoOpsController {
     // Surface any files a preOp prepared onto the SAME context object the executor dispatches
     // with (the caller passes one `context` to both preOps and `startJob`), so the executor
     // materialises them into the container's `.cat-context/`. Absent ⇒ nothing injected.
-    if (result.contextFiles?.length) context.injectedContextFiles = result.contextFiles
+    //
+    // APPENDED, never assigned: the context builder also injects files, from run state a preOp
+    // cannot reach (a resumed PR review's prior slice reports ride the STEP). Overwriting here
+    // would drop them, and the loss is silent — the reviewer just quietly starts over.
+    if (result.contextFiles?.length) {
+      context.injectedContextFiles = [
+        ...(context.injectedContextFiles ?? []),
+        ...result.contextFiles,
+      ]
+    }
   }
 
   /**

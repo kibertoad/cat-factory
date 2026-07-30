@@ -48,6 +48,11 @@ describe('initialPrReviewState', () => {
       status: 'reviewing',
       summary: null,
       slices: [],
+      // A fresh review starts with no captured slice reports: they accrue as the harness publishes
+      // each slice, and inheriting a previous attempt's would credit work this run never did.
+      sliceReviews: [],
+      // Nobody has resumed a fresh review, so it contributes nothing to the dispatch epoch.
+      resumeAttempts: 0,
       findings: [],
       selectedFindingIds: [],
       resolution: null,
@@ -365,6 +370,10 @@ const parkedState = (findings: PrReviewFinding[]): PrReviewStepState => ({
   status: 'awaiting_selection',
   summary: 'ok',
   slices: [],
+  // Both default on the schema, so a real parked state always carries them; the dismiss/challenge
+  // helpers under test never read either, so the empty/zero values are the honest baseline.
+  sliceReviews: [],
+  resumeAttempts: 0,
   findings,
   selectedFindingIds: findings.map((f) => f.id),
   resolution: null,

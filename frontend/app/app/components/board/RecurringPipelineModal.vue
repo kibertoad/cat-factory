@@ -74,9 +74,15 @@ const selectedPipeline = computed(() => pipelines.getPipeline(pipelineId.value))
 
 // Infer the template from the picked pipeline so the backend seeds the right block
 // description (and so we know to show the tracker config).
+//
+// Only the pipelines whose SHAPE is specific to one kind of recurring work can be inferred this
+// way. `dep-update` no longer can: its pipeline was retired in the catalog collapse (it was the
+// ordinary build tail under a recurring name), so a dependency-update schedule now runs an ordinary
+// build rung — which is also what every generic schedule runs, so inferring the template from it
+// would mislabel all of them. The template itself survives for an explicit API caller; see
+// `scheduleTemplateSchema`.
 const template = computed<ScheduleTemplate>(() => {
   if (pipelineId.value === 'pl_tech_debt') return 'tech-debt'
-  if (pipelineId.value === 'pl_dep_update') return 'dep-update'
   if (pipelineId.value === 'pl_bug_triage') return 'bug-triage'
   return 'custom'
 })
@@ -99,11 +105,10 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   name.value = ''
   description.value = ''
-  // Default to the Dependency-updates pipeline if present, else the first.
-  pipelineId.value =
-    pipelines.pipelines.find((p) => p.id === 'pl_dep_update')?.id ??
-    pipelines.pipelines[0]?.id ??
-    ''
+  // Default to the first schedulable pipeline, which is the ladder's own default rung. There is no
+  // longer a canned recurring build preset to prefer — the dependency-update pipeline was the
+  // ordinary build tail under another name — so the default build is the honest starting point.
+  pipelineId.value = selectablePipelines.value[0]?.id ?? pipelines.pipelines[0]?.id ?? ''
   recurrence.value = defaultRecurrence()
   onDemand.value = false
   saving.value = false

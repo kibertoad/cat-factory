@@ -58,6 +58,27 @@ export function claudeAssistantContent(content: unknown[]): {
 }
 
 /**
+ * The text a `tool_result` block carries. The CLI writes it either as a bare string or as an
+ * array of content blocks (the shape a subagent's terminal report arrives in), so both are read
+ * here rather than at each call site. Non-text blocks (an image a tool returned) contribute
+ * nothing. Returns '' when the block carries no readable text.
+ *
+ * This is what makes a parallel subagent's work observable to the harness at all: the parent
+ * stream shows a subagent's dispatch and its terminal `tool_result` and nothing in between, so
+ * this text is the ONLY place its findings surface outside its own untailed transcript.
+ */
+export function claudeToolResultText(block: Record<string, unknown>): string {
+  const content = block.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  let text = ''
+  for (const part of content) {
+    if (isObject(part) && part.type === 'text' && typeof part.text === 'string') text += part.text
+  }
+  return text
+}
+
+/**
  * Per-CALL token usage off a Claude `assistant` message's `usage` (this turn only, not
  * the cumulative `result` total).
  *

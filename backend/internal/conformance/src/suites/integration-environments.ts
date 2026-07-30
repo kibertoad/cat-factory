@@ -1114,13 +1114,13 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
       const res = await app.call<Block>(
         'POST',
         `/workspaces/${workspace.id}/blocks/blk_auth/tasks`,
-        { title: 'Add SSO login', description: 'Support SAML and OIDC.', pipelineId: 'pl_quick' },
+        { title: 'Add SSO login', description: 'Support SAML and OIDC.', pipelineId: 'pl_simple' },
       )
       expect(res.status).toBe(201)
       expect(res.body.level).toBe('task')
       expect(res.body.parentId).toBe('blk_auth')
       expect(res.body.title).toBe('Add SSO login')
-      expect(res.body.pipelineId).toBe('pl_quick')
+      expect(res.body.pipelineId).toBe('pl_simple')
     })
 
     it('rejects a task without a title', async () => {

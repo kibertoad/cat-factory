@@ -45,6 +45,7 @@ import type {
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import {
   detectHostInlineClis,
+  inlineCliBudgetFromEnv,
   makeInlineHarnessPredicate,
   wrapResolverWithInlineHarness,
 } from './harnessInline.js'
@@ -281,6 +282,10 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     localPreflightProbes,
     inProcessRunner,
   } = bundle
+  // How long a HOST-CLI inline run may STALL (`LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS`) and how long it
+  // may run at all (`LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`). Resolved beside the `detectHostInlineClis`
+  // read it is handed to, so the whole inline host-CLI env surface is visible in one place.
+  const inlineCliBudget = inlineCliBudgetFromEnv(env, (message) => logger.warn(message))
   return {
     ...options,
     env,
@@ -375,6 +380,7 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
             wrapResolverWithInlineHarness({
               inlineHarnesses,
               hostCliVendors: detectHostInlineClis(env),
+              cliBudget: inlineCliBudget,
               runInline: (req) => resolveContainerTransport().then((t) => t.runInline(req)),
               ...leaseDeps,
             })(inner),

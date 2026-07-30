@@ -16,7 +16,15 @@ import { taskSourceKindSchema } from './tasks.js'
 // run forward until it lands inside an allowed window.
 // ---------------------------------------------------------------------------
 
-/** Template a schedule was created from; drives the seeded block description. */
+/**
+ * Template a schedule was created from; drives the seeded block description.
+ *
+ * `tech-debt` and `bug-triage` are INFERRED by the SPA from the picked pipeline, whose shape is
+ * specific to that kind of work. `dep-update` is not: its pipeline was retired in the catalog
+ * collapse (it was the ordinary build tail under a recurring name), so a dependency-update schedule
+ * runs a plain build rung and there is nothing to infer from. It stays in the union because an
+ * explicit API caller can still name it to get the canned description.
+ */
 export const scheduleTemplateSchema = v.picklist([
   'dep-update',
   'tech-debt',

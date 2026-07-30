@@ -384,6 +384,7 @@ manifest just forwards everything; `{{input.kind}}` selects the path:
     "progressInProgressPath": "progress.inProgress",
     "progressTotalPath": "progress.total",
     "callMetricsPath": "callMetrics", // per-poll model-call telemetry (see the notes below)
+    "sliceReviewsPath": "sliceReviews", // a PR review's finished slices (see the notes below)
     "errorPath": "error",
   },
 }
@@ -491,6 +492,13 @@ manifest.
   costs nothing. Pass each call through VERBATIM — it also carries the `phase` that spent it
   (the agent's own loop vs a validation/reproduction repair round), which is what makes a run's
   burn attributable to the slice that caused it.
+- **Set `sliceReviewsPath` too** (it is `sliceReviews` on the harness view). A PR review fans its
+  slices out across parallel subagents and emits its findings only in the TERMINAL structured
+  output, so this channel is the only thing that makes a finished slice durable while the review is
+  still running. Leave it unset and a pool-backed review that wedges or dies has nothing for the
+  manual resume to work from: it can only be re-run from zero, discarding every slice that had
+  already been reviewed. It is a latest-value publish, not a drain buffer, so re-reading it on every
+  poll is free and a dropped poll response costs nothing.
 - Every request carries your auth automatically; per-call timeouts are bounded
   (`timeoutMs`, ≤60s, default 30s). Responses over ~200KB are rejected.
 

@@ -236,3 +236,132 @@ describe('workspace store cold-open speculative snapshot', () => {
     expect(ws.access).toBeNull()
   })
 })
+
+// The reachability watcher pushes ONE area's transition as an `infraSetup` event, which the stream
+// applies through `patchInfraSetup`. Two properties matter and neither is visible from the backend:
+// the patch is TARGETED (a full refresh here would pay the whole snapshot aggregate for a one-field
+// delta), and recovering an area drops its SESSION dismissal so a health state re-nags when it
+// recurs — without which dismissing one outage would silence every later one for the session.
+describe('workspace store infraSetup patching', () => {
+  /** A ui-store stub recording which areas had their session dismissal cleared. */
+  function stubUiStore() {
+    const cleared: string[] = []
+    vi.stubGlobal('useUiStore', () => ({
+      clearInfraSetupSessionDismissal: (area: string) => cleared.push(area),
+    }))
+    return cleared
+  }
+
+  async function openBoard(infraSetup: Record<string, string>) {
+    const snap = {
+      ...snapshot('ws1', [block('f1')]),
+      infraSetup,
+    } as unknown as WorkspaceSnapshot
+    const getWorkspace = vi.fn().mockResolvedValue(snap)
+    vi.stubGlobal('useApi', () => ({ getWorkspace }))
+    const ws = useWorkspaceStore()
+    await ws.switchTo('ws1')
+    return { ws, getWorkspace }
+  }
+
+  it('patches one area without refetching the snapshot', async () => {
+    stubUiStore()
+    const { ws, getWorkspace } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'not_defined',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable')
+    expect(ws.infraSetup).toEqual({
+      agentExecutor: 'unreachable',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'not_defined',
+    })
+    // One fetch: the initial switchTo. The live patch triggered no snapshot refresh.
+    expect(getWorkspace).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the area session dismissal on RECOVERY so the next outage re-nags', async () => {
+    const cleared = stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'unreachable',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'configured')
+    expect(ws.infraSetup?.agentExecutor).toBe('configured')
+    expect(cleared).toEqual(['agentExecutor'])
+  })
+
+  it('leaves the session dismissal alone while the area is still unreachable', async () => {
+    const cleared = stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable')
+    expect(cleared).toEqual([])
+  })
+
+  it('is a no-op before the first snapshot has landed', () => {
+    // An event can arrive before the projection exists; `hydrate` is about to set the authoritative
+    // one (which already folds the recorded outage), so inventing a partial projection here would
+    // render a banner from a single field with the other areas unknown.
+    stubUiStore()
+    const ws = useWorkspaceStore()
+    ws.patchInfraSetup('agentExecutor', 'unreachable')
+    expect(ws.infraSetup).toBeNull()
+  })
+
+  it('refuses to mark an area unreachable that the projection does not call configured', async () => {
+    // The live patch honours the SAME rule as the backend's snapshot fold
+    // (`applyInfraSetupTransition`). Assigning unconditionally rendered a red "check that the
+    // service is running" banner over a `not_applicable`/`not_defined` area — which then vanished on
+    // the next reload, because the projection out-ranks the probe. A banner that contradicts the
+    // projection is worse than a late one.
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'not_applicable',
+      ephemeralEnvironments: 'not_defined',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable')
+    ws.patchInfraSetup('ephemeralEnvironments', 'unreachable')
+    expect(ws.infraSetup?.agentExecutor).toBe('not_applicable')
+    expect(ws.infraSetup?.ephemeralEnvironments).toBe('not_defined')
+    // A refused patch must not caption its reason onto a status it does not describe.
+    expect(ws.infraSetupDetails).toEqual({})
+  })
+
+  it('keeps the probe reason for the banner, and drops it on recovery', async () => {
+    // The reason is the one thing on the banner that says WHY (a refused connection reads very
+    // differently from a rejected token), and it rides the live event only — the notification card
+    // is content-deduped, so persisting it there would re-toast the inbox for the whole outage.
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable', 'connect ECONNREFUSED 10.0.0.4:6443')
+    expect(ws.infraSetupDetails.agentExecutor).toBe('connect ECONNREFUSED 10.0.0.4:6443')
+    ws.patchInfraSetup('agentExecutor', 'configured')
+    expect(ws.infraSetupDetails.agentExecutor).toBeUndefined()
+  })
+
+  it('drops live probe reasons when an authoritative snapshot lands', async () => {
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable', 'HTTP 502')
+    expect(ws.infraSetupDetails.agentExecutor).toBe('HTTP 502')
+    await ws.refresh()
+    // A reload mid-outage renders the banner with no reason line, which is honest: this session
+    // never saw the probe, and captioning a fresh status with a stale reason would not be.
+    expect(ws.infraSetupDetails).toEqual({})
+  })
+})

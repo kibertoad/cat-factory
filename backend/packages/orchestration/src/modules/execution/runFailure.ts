@@ -1,4 +1,9 @@
-import { getErrorMessage, getErrorReason, type AgentFailureKind } from '@cat-factory/kernel'
+import {
+  DomainError,
+  getErrorMessage,
+  getErrorReason,
+  type AgentFailureKind,
+} from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 
 /**
@@ -37,11 +42,19 @@ export interface RunFailure {
  * `agent_backend_unconfigured`, a `ValidationError` naming `deploy_runner_unwired` — already
  * carries the cause code; without lifting it here the run's failure keeps only the prose and
  * the client is left to pattern-match it.
+ *
+ * It also fixes the KIND, and for the same reason `classifyDispatchFailure` does: a `DomainError`
+ * out of the engine is a PRECONDITION the run never satisfied (no connected repo, an attached
+ * document the platform could not open), so nothing ever reached an agent. Recording it as
+ * `agent` reads as "the agent failed" and sends a reader looking for a transcript that does not
+ * exist. The two seams classify throws from the same engine at different depths — inside
+ * `startJob` vs. out of `advanceInstance` — so they have to agree on the taxonomy, or which one
+ * happens to catch a refusal decides how the board describes it.
  */
 export function failureFromAdvanceError(error: unknown): RunFailure {
   return {
     message: getErrorMessage(error),
-    kind: 'agent',
+    kind: error instanceof DomainError ? 'preflight' : 'agent',
     detail: null,
     reason: getErrorReason(error) ?? null,
   }

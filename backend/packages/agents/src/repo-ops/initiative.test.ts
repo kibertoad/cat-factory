@@ -69,7 +69,7 @@ const PLAN = {
   ],
   policy: {
     maxConcurrent: 3,
-    rules: [{ pipelineId: 'pl_quick', minComplexity: 0.1 }],
+    rules: [{ pipelineId: 'pl_simple', minComplexity: 0.1 }],
     defaultPipelineId: 'pl_full',
   },
   decisions: [{ title: 'One registry per PR', detail: 'Keeps reviews small.' }],

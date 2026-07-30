@@ -26,7 +26,7 @@ import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
-import { createSliceTracker, startSubagentWatcher } from './subagents.js'
+import { createSliceTracker, startSubagentWatcher, type SliceReview } from './subagents.js'
 import {
   createTaskPlanTracker,
   mergeProgress,
@@ -123,6 +123,13 @@ export interface SubscriptionRunOptions {
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * Called with the FULL set of per-slice reviews each time one lands, so the backend can persist
+   * a parallel review's completed work as it happens instead of only from the terminal result.
+   * A whole value rather than a delta: the set only grows and losing a finished slice's report to
+   * a dropped poll would defeat the point (see `SliceTracker.sliceReviews`).
+   */
+  onSliceReviews?: (reviews: SliceReview[]) => void
   /**
    * Called with each per-call telemetry row as the CLI stream yields it, so the backend can
    * record the run's model calls WHILE it runs instead of only from its terminal result. The
@@ -542,7 +549,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // either/or; the plan then MERGES with the dispatch view (`mergeProgress`) rather than
   // competing with it — picking the further-along view collapsed the list to the dispatched
   // slices alone the moment the first subagent returned. See ./progress.ts.
-  const sliceTracker = createSliceTracker()
+  const sliceTracker = createSliceTracker(secrets)
   const planTracker = createTaskPlanTracker()
   let lastTodo: TodoProgress | undefined
   const emitProgress = (): void => {
@@ -552,6 +559,15 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       sliceTracker.progress(),
     )
     if (progress) opts.onProgress(progress)
+  }
+  // Publish the per-slice reviews the tracker has captured. Separate from `emitProgress` because
+  // the two answer different questions and have different lifetimes: progress is a disposable
+  // count the UI renders, while these carry the slices' actual review WORK and are persisted so a
+  // run that dies before its aggregation can be resumed from them.
+  const emitSliceReviews = (): void => {
+    if (!opts.onSliceReviews) return
+    const reviews = sliceTracker.sliceReviews()
+    if (reviews.length > 0) opts.onSliceReviews(reviews)
   }
 
   // No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
@@ -626,6 +642,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         sliceTracker.onUser(content)
         planTracker.onUser(content)
         emitProgress()
+        // A slice's report lands on exactly this turn, so publish here: waiting for the next
+        // progress tick would risk the job dying with the report captured but never surfaced.
+        emitSliceReviews()
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)

@@ -522,7 +522,10 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 
 - `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs` — bans `.catch(() => {})` in backend non-test source.
-  `node --test 'scripts/*.test.mjs'` runs that guard's own fixtures (CI runs both).
+- `node scripts/check-component-imports.mjs` — requires every layer component used in a Vue
+  template to be imported by path (a bare tag renders nothing, silently). See
+  [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
+- `node --test 'scripts/*.test.mjs'` runs both guards' own fixtures (CI runs all three).
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.
@@ -625,6 +628,31 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`. The public step-resolver seam is scoped to light
   follow-up; `ownsTerminalStatus` is built-in-only.
+
+**A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
+(`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
+`task-estimator`'s scores fall below its thresholds, and that is what lets ONE pipeline cover a range
+that would otherwise need several near-identical presets (see
+[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md)). Three rules bind it:
+
+- **Gatability is a per-kind CAPABILITY, declared, and OFF by default** — `isGatableKind`
+  (`agents/kinds/gatable.ts`), a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
+  override, since built-in kinds are not registry entries. Gate a kind whose output later steps read as
+  CONTEXT; never one some other mechanism reads STRUCTURALLY. `merger` is the sharpest case — its mere
+  presence in `instance.steps` is what makes a committing kind deliver via a PR (`runOpensPr`), so a
+  skipped merger opens a PR nothing merges. `deployer` provisions what its consumer reads,
+  `conflicts`/`ci` are the guards, `bug-intake` is the run's subject. **A new kind whose absence would
+  break rather than merely thin a run must stay unlisted**, and the default already does that for you.
+- **A skipped producer CASCADES onto its companion** (`producerWasSkipped`), evaluated at the
+  companion's own turn off the persisted `step.skipped` — a lookahead would not survive a durable
+  replay. Without it a companion grades whichever step happened to precede it, sounding confident
+  about the wrong artifact. So a companion needs no gate of its own to track its producer, and giving
+  it a duplicate threshold is a second copy to keep in sync.
+- **A step may not carry both `gates[i]` and enabled `gating`** (`assertValidGating`). The estimate may
+  ADD a human checkpoint — that is what gating a `human-review` step on risk does — but never cancel an
+  approval pause the author asked for, or a model's own triage decides nobody needs to look. Policy
+  floors belong on the merge preset's `classRules`, keyed on the COMPUTED change class rather than the
+  model's opinion.
 
 The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
 `runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing to
@@ -1087,8 +1115,16 @@ restore it.
   only after it settles (which is why e2e gates on `data-connected`).
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state into the
   snapshot or reconcile rather than replace.
-- **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order refreshes
-  and assert the fresher one wins.
+- **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store that awaits
+  a mutation and then assigns the returned sub-state onto the cached run (`step.forkDecision`,
+  `step.prReview`, `step.judge`, `step.followUps`) is writing straight past `upsert`'s `rev` check. Where
+  the mutation WAKES THE DRIVER, the driver's next emit routinely beats the HTTP response, so the echo puts
+  the run back — and if the run then parks, nothing emits again and the newer state is gone for good (the
+  fork-chat reply that vanished, leaving a "thinking…" bubble spinning). Every echo therefore goes through
+  `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the request and
+  drops the echo if anything advanced it. Never hand-roll the await-then-assign.
+- **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
+  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one wins.
 
 ## Basic vs advanced interface mode (frontend)
 

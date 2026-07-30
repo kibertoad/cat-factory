@@ -1979,6 +1979,7 @@
         "clarity_review": "Als gelesen markieren",
         "release_regression": "Bestätigen",
         "platform_health": "Bestätigen",
+        "infra_unreachable": "Bestätigen",
         "decision_required": "Als gelesen markieren",
         "human_test_ready": "Als gelesen markieren",
         "visual_confirmation_ready": "Als gelesen markieren",
@@ -2027,11 +2028,13 @@
     "infraSetupBanner": {
       "agentExecutor": {
         "title": "Agent-Executor nicht konfiguriert",
+        "unreachableTitle": "Agent-Executor ist nicht erreichbar",
         "body": "Dieses Deployment führt Agenten auf einem selbst gehosteten Runner-Pool aus, aber es ist keiner registriert, sodass kein Agent laufen kann, bis Sie einen verbinden.",
         "action": "Runner-Pool konfigurieren"
       },
       "ephemeralEnvironments": {
         "title": "Testumgebung nicht konfiguriert",
+        "unreachableTitle": "Anbieter für Testumgebungen ist nicht erreichbar",
         "body": "Es ist kein Anbieter für ephemere Umgebungen registriert, sodass Test-Agenten, die eine aktive Vorschau-Umgebung benötigen, nicht laufen können. Öffnen Sie unten „Testumgebungen“ und verbinden Sie einen Kubernetes-Cluster oder einen benutzerdefinierten HTTP-Umgebungsanbieter, um sie zu aktivieren.",
         "action": "Environment konfigurieren"
       },
@@ -2043,6 +2046,11 @@
       "dismiss": {
         "session": "Für diese Sitzung verwerfen",
         "permanent": "Ich bin mit den Einschränkungen einverstanden, nicht erneut benachrichtigen"
+      },
+      "unreachable": {
+        "body": "Die Verbindung ist eingerichtet, aber eine Live-Prüfung konnte sie gerade nicht erreichen. Damit ist das ein Ausfall und keine fehlende Einrichtung: Agenten, die darauf angewiesen sind, schlagen fehl, bis wieder eine Antwort kommt. Prüfen Sie, ob der Dienst läuft, und testen Sie die Verbindung dann erneut.",
+        "reason": "Letzte Prüfung: {detail}",
+        "action": "Verbindung prüfen"
       }
     },
     "spendWarningBanner": {
@@ -4737,6 +4745,7 @@
     },
     "routable": {
       "platform_health": "Plattformzustand",
+      "infra_unreachable": "Infrastrukturausfälle",
       "merge_review": "Merge-Review",
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",
@@ -5650,6 +5659,10 @@
         "in_progress": "Wird geprüft…",
         "pending": "In Warteschlange"
       }
+    },
+    "resume": {
+      "action": "Review fortsetzen",
+      "hint": "Hängt es? Beim Fortsetzen werden nur die Abschnitte erneut geprüft, die nie zurückgemeldet haben; die Ergebnisse der fertigen bleiben erhalten."
     },
     "phase": {
       "planning": "Wird geprüft…",

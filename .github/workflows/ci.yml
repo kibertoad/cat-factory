@@ -333,15 +333,23 @@ jobs:
       # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
       # the evidence; a genuinely-silent drop annotates itself. Pure node; no install.
       #
-      # The detector's own fixtures run first: this guard is the only thing stopping the idiom
-      # regrowing, so a silent regression in ITS logic (the first version had one) would disarm
-      # the guard while still reporting green. `node --test` is the built-in runner, so the
-      # install-free property of this job holds.
-      - name: Test the silent-drop detector
+      # Every guard's own fixtures run first: a guard is the only thing stopping the idiom it bans
+      # from regrowing, so a silent regression in ITS logic (the silent-drop detector's first
+      # version had one, and so did the component-import guard's) would disarm it while still
+      # reporting green. The glob picks up each `scripts/*.test.mjs` automatically. `node --test`
+      # is the built-in runner, so the install-free property of this job holds.
+      - name: Test the guard detectors
         run: node --test 'scripts/*.test.mjs'
 
       - name: Guard silent promise drops
         run: node scripts/check-silent-catch.mjs
+
+      # Requires every layer component used in a Vue template to be imported by path. Nuxt
+      # registers a component under its path-prefixed name, so a bare tag renders NOTHING —
+      # silently, with no typecheck error and no failing test. Seven had shipped that way. Its
+      # fixtures run in the `node --test` step above. Pure node, no install, no `.nuxt` build.
+      - name: Guard layer component imports
+        run: node scripts/check-component-imports.mjs
 
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
@@ -942,12 +950,36 @@ jobs:
       # Build the tiny mock-harness image (the in-pod HTTP server the runner suite drives) and
       # pre-pull nginx (the env suite's workload), then import BOTH into the cluster so no pod
       # has to pull from a registry — fast and flake-free.
+      # `k3d image import` is NOT trustworthy on its exit code: it can log
+      # `ERRO failed to import images in node ...` for the only node in the cluster and still print
+      # `Successfully imported image(s)` and exit 0. The pods then fall back to Docker Hub, where a
+      # locally-built tag does not exist, and the suite fails 30s later with three confusing
+      # `ErrImagePull`s that name a registry nothing was ever meant to reach. So VERIFY the images
+      # are really in the node's containerd and retry the import if not — the import is provisioning
+      # for the suite, not the thing under test, and a bounded retry here is what keeps the
+      # "no pod pulls from a registry" property this step exists to provide.
       - name: Build + import test images
         run: |
           docker build -t cat-factory-mock-harness:it \
             backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
           docker pull nginx:1.27-alpine
-          k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it
+          imported() {
+            docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
+              | grep -q "docker.io/library/cat-factory-mock-harness:it" \
+              && docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
+              | grep -q "docker.io/library/nginx:1.27-alpine"
+          }
+          for attempt in 1 2 3; do
+            k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it || true
+            if imported; then
+              echo "test images present in the cluster node (attempt ${attempt})"
+              exit 0
+            fi
+            echo "::warning::k3d reported success but an image is missing from the node (attempt ${attempt}/3); retrying"
+            sleep 5
+          done
+          echo "::error::test images could not be imported into the k3d node; the suite would fail with ErrImagePull"
+          exit 1
 
       # A namespace + ServiceAccount for the runner pods, bound to cluster-admin (an ephemeral
       # throwaway cluster), and a short-lived token. The env suite creates its own per-PR

@@ -206,7 +206,7 @@ const DESCRIPTOR: InitiativePresetRegistration['descriptor'] = {
   // escalate to the full pipeline, and an unestimated item fails SAFE to thoroughness.
   policyDefaults: {
     maxConcurrent: 2,
-    defaultPipelineId: 'pl_quick',
+    defaultPipelineId: 'pl_simple',
     rules: [{ pipelineId: 'pl_full', minRisk: 0.6, minComplexity: 0.6 }],
     onMissingEstimate: 'strongest',
   },
