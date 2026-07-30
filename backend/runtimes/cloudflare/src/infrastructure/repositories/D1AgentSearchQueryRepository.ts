@@ -32,6 +32,12 @@ function rowToQuery(row: SearchQueryRow): AgentSearchQuery {
 }
 
 /**
+ * Statements per `db.batch` in the batch append. D1 executes a batch in one round trip as an
+ * implicit transaction; chunking keeps a long run's ingest off any single-request ceiling.
+ */
+const INSERT_CHUNK_SIZE = 50
+
+/**
  * D1-backed sink for agent-search-query observability. Lives in the dedicated
  * TELEMETRY_DB database (see `telemetry-migrations/`), alongside `llm_call_metrics`
  * and `agent_context_snapshots`.
@@ -44,11 +50,27 @@ export class D1AgentSearchQueryRepository implements AgentSearchQueryRepository 
   }
 
   async record(query: AgentSearchQuery): Promise<void> {
-    await this.db
+    await this.insertStatement(query, false).run()
+  }
+
+  async recordMany(queries: AgentSearchQuery[]): Promise<void> {
+    // One `batch` per chunk — a single round trip and one implicit transaction each — never a
+    // `record` loop (the banned N+1 write). D1 caps bound parameters per statement, so a batch of
+    // single-row statements is the portable shape here rather than one multi-row VALUES.
+    // Idempotent by id (see the port): the mothership-mode telemetry ingest retries a chunk whose
+    // ack was lost, and one duplicate must not abort the rest of the batch.
+    const statements = queries.map((query) => this.insertStatement(query, true))
+    for (let i = 0; i < statements.length; i += INSERT_CHUNK_SIZE) {
+      await this.db.batch(statements.slice(i, i + INSERT_CHUNK_SIZE))
+    }
+  }
+
+  private insertStatement(query: AgentSearchQuery, ignoreDuplicateId: boolean) {
+    return this.db
       .prepare(
         `INSERT INTO agent_search_queries
            (id, workspace_id, execution_id, agent_kind, provider, query, result_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)${ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''}`,
       )
       .bind(
         query.id,
@@ -60,7 +82,6 @@ export class D1AgentSearchQueryRepository implements AgentSearchQueryRepository 
         query.resultCount,
         query.createdAt,
       )
-      .run()
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]> {

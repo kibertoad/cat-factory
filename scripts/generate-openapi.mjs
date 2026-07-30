@@ -52,6 +52,9 @@ const COMPONENT_SCHEMAS = {
   PublicPipelineList: 'publicPipelineListSchema',
   Notification: 'notificationSchema',
   PublicNotificationList: 'publicNotificationListSchema',
+  PublicUsageRow: 'publicUsageRowSchema',
+  PublicUsageBudget: 'publicUsageBudgetSchema',
+  PublicUsage: 'publicUsageSchema',
   // Parked decisions. `PublicDecisionList` is the response of ALL eight decision routes, and it
   // transitively carries the full finding + fork-option shapes — hoisting it (and the members of
   // its variant) keeps the spec from inlining ~21KB per operation.
@@ -158,6 +161,12 @@ const OPERATION_DOCS = {
     summary: 'Dismiss a notification',
     description: 'Dismiss a notification without acting on it.',
   },
+  getPublicUsage: {
+    tag: 'Usage',
+    summary: "Read the workspace's usage for the current period",
+    description:
+      'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
+  },
   cancelPublicJob: {
     tag: 'Initiatives',
     summary: 'Cancel an initiative job',
@@ -236,13 +245,24 @@ const STATUS_DESCRIPTIONS = {
   '5XX': 'Server error',
 }
 
-/** Rewrite `@valibot/to-json-schema`'s `#/$defs/<X>` refs to OpenAPI `#/components/schemas/<X>`, and drop `$schema`. */
+/**
+ * Rewrite `@valibot/to-json-schema`'s `#/$defs/<X>` refs to OpenAPI `#/components/schemas/<X>`, and
+ * drop `$schema` and `$defs`.
+ *
+ * Dropping `$defs` is what keeps the emitted spec proportional to the surface. `toJsonSchema` copies
+ * every definition it was handed into the `$defs` of EACH schema that references one, so a schema
+ * inlined into ten operations carried ten copies of the whole component set — every new public DTO
+ * cost ~10x its size in the committed file, which is churn a reviewer has to read past. Once the
+ * refs above point into `#/components/schemas`, nothing resolves through `$defs` any more and it is
+ * dead weight. `assertRefsResolve` below is the proof rather than the assumption: a `$ref` this drop
+ * would strand fails generation instead of shipping a dangling pointer.
+ */
 function normalizeJsonSchema(node) {
   if (Array.isArray(node)) return node.map(normalizeJsonSchema)
   if (node && typeof node === 'object') {
     const out = {}
     for (const [k, v] of Object.entries(node)) {
-      if (k === '$schema') continue
+      if (k === '$schema' || k === '$defs') continue
       if (k === '$ref' && typeof v === 'string') {
         out[k] = v.replace('#/$defs/', '#/components/schemas/')
       } else {
@@ -252,6 +272,36 @@ function normalizeJsonSchema(node) {
     return out
   }
   return node
+}
+
+/**
+ * Fail generation if any `$ref` in the document names a schema `components.schemas` does not carry.
+ * This is what makes dropping `$defs` safe rather than hopeful: every ref must have been rewritten
+ * into the components namespace and every target must actually be emitted, so a DTO that needs
+ * hoisting shows up here (add it to {@link COMPONENT_SCHEMAS}) instead of as a spec a client
+ * generator chokes on.
+ */
+function assertRefsResolve(doc) {
+  const known = new Set(Object.keys(doc.components?.schemas ?? {}))
+  const dangling = new Set()
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.forEach(walk)
+    if (!node || typeof node !== 'object') return
+    for (const [k, v] of Object.entries(node)) {
+      if (k === '$ref' && typeof v === 'string') {
+        const name = v.startsWith('#/components/schemas/') ? v.slice(21) : null
+        if (name === null || !known.has(name)) dangling.add(v)
+      } else walk(v)
+    }
+  }
+  walk(doc.paths)
+  walk(doc.components?.schemas)
+  if (dangling.size > 0) {
+    throw new Error(
+      `OpenAPI document has unresolvable $refs: ${[...dangling].sort().join(', ')}. ` +
+        'Hoist the schema into COMPONENT_SCHEMAS in scripts/generate-openapi.mjs.',
+    )
+  }
 }
 
 /** True when `v` is a route contract object (method + pathResolver + responses). */
@@ -453,6 +503,7 @@ export async function buildOpenApiDoc() {
       schemas: componentSchemas,
     },
   }
+  assertRefsResolve(doc)
   return sortDeep(doc)
 }
 

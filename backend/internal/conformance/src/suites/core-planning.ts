@@ -695,6 +695,50 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
           .status,
       ).toBe(404)
     })
+
+    it('serves the workspace usage + budget read to a read-scoped key', async () => {
+      const { call, createOrgWorkspace } = harness.makeApp()
+      const { workspace } = await createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+        label: 'usage',
+        scope: 'read',
+      })
+      const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+      const usage = await call<{
+        periodStart: number
+        currency: string
+        budget: {
+          inputTokens: number
+          outputTokens: number
+          costSpent: number
+          costLimit: number
+          exceeded: boolean
+        }
+        rows: { billing: string; model: string; calls: number }[]
+      }>('GET', '/api/v1/usage', undefined, auth)
+      expect(usage.status).toBe(200)
+      // The period is the current calendar month (UTC) and the currency is the deployment's,
+      // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
+      // facades serve the same resolved shape, not a particular number.
+      expect(usage.body.currency).toBeTruthy()
+      expect(usage.body.periodStart).toBeGreaterThan(0)
+      // A workspace that has spent nothing this period reports a real zero against a real
+      // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
+      // usage to group, which is distinct from a sink the deployment doesn't retain.
+      expect(usage.body.budget.inputTokens).toBe(0)
+      expect(usage.body.budget.outputTokens).toBe(0)
+      expect(usage.body.budget.costSpent).toBe(0)
+      expect(usage.body.budget.costLimit).toBeGreaterThan(0)
+      expect(usage.body.budget.exceeded).toBe(false)
+      expect(usage.body.rows).toEqual([])
+
+      // Read is the whole scope story — the aggregate names no resource ids — but a key is
+      // still required, and an unauthenticated caller learns nothing.
+      expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+    })
   })
 
   describe('pipeline versioning + reseed', () => {

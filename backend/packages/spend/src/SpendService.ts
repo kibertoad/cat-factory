@@ -275,6 +275,43 @@ export class SpendService {
     return { periodStart, currency: pricing.currency, rows }
   }
 
+  /**
+   * The workspace's period as ONE read: the metered budget position AND the breakdown behind it,
+   * resolved against a SINGLE `periodStart` and a single pricing lookup.
+   *
+   * This exists because {@link status} and {@link usageBreakdown} each derive their own period
+   * from the clock. Calling both to serve one resource is correct almost always and wrong exactly
+   * once a month: a pair of calls straddling the period roll would report a budget from one month
+   * beside a breakdown from the next, under whichever `periodStart` the caller happened to pick —
+   * the "read a period-roll apart" failure that serving them as one resource is meant to prevent.
+   * The two aggregates still issue concurrently, so it costs one round trip's latency, not two.
+   */
+  async periodUsage(workspaceId: string): Promise<{
+    periodStart: number
+    currency: string
+    budget: Omit<SpendStatus, 'periodStart' | 'currency'>
+    rows: UsageBreakdownRow[]
+  }> {
+    const pricing = await this.resolvePricing(workspaceId)
+    const periodStart = startOfMonthUtc(this.clock.now())
+    const [totals, rows] = await Promise.all([
+      this.tokenUsageRepository.totalsSinceForWorkspace(workspaceId, periodStart),
+      this.tokenUsageRepository.usageBreakdownForWorkspace(workspaceId, periodStart),
+    ])
+    return {
+      periodStart,
+      currency: pricing.currency,
+      budget: {
+        inputTokens: totals.inputTokens,
+        outputTokens: totals.outputTokens,
+        costSpent: totals.costEstimate,
+        costLimit: pricing.monthlyLimit,
+        exceeded: totals.costEstimate >= pricing.monthlyLimit,
+      },
+      rows,
+    }
+  }
+
   /** The current billing period's spend against the WORKSPACE budget. */
   async status(workspaceId: string): Promise<SpendStatus> {
     const pricing = await this.resolvePricing(workspaceId)

@@ -83,6 +83,21 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.status).toBe(403)
     })
 
+    it('serves /internal/telemetry/ingest with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The telemetry INGEST endpoint (a mothership-mode node uploading a finished run's locally
+      // captured observability so hosted teammates can read it and it outlives the node's local
+      // retention window). Mounted by the shared controller on both facades and machine-gated
+      // FIRST — before the "is this facade a mothership" 503 and before any body parsing — so an
+      // unauthenticated call is a 403 everywhere. The drift guard that the endpoint exists and
+      // cannot be probed without a token.
+      const res = await call('POST', '/internal/telemetry/ingest', {
+        workspaceId: 'ws_x',
+        executionId: 'exec_x',
+      })
+      expect(res.status).toBe(403)
+    })
+
     it('serves /internal/events/subscribe/:ws with the machine-token gate active', async () => {
       const { call } = harness.makeApp()
       // The INBOUND real-time leg (a mothership-mode node subscribing to a workspace's stream so

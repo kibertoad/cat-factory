@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   companionTargets,
+  INLINE_ENGINE_SYSTEM_PROMPTS,
   isCompanionKind,
   isGatableKind,
   SKILL_AGENT_KIND,
@@ -60,6 +61,9 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    structurally), must not also carry a human approval gate, must set at least one axis
  *    threshold (or it would always skip), and needs a `task-estimator` to have run before it (or
  *    the gate has nothing to consult).
+ *  - {@link assertValidAgentVariants}: a step selecting a registered agent-kind VARIANT must name
+ *    one that exists and that varies THIS step's kind — an unknown id would silently fall back to
+ *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
  *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
  *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
  *    separately — but under the same "threshold set + estimator earlier" rules, since a
@@ -96,6 +100,59 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidGating(pipeline)
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
+  assertValidAgentVariants(pipeline)
+}
+
+/**
+ * Every ENABLED step that selects an agent-kind VARIANT (`stepOptions[i].agentVariantId`) must
+ * name one the deployment registered, that variant's `baseKind` must be the step's own kind, and
+ * the step's kind must be one whose prompt the DISPATCH composes.
+ *
+ * None of the three fails loudly on its own. An unknown id would simply run the shipped prompt —
+ * the step still works, so nothing surfaces except that it silently stopped being the variation
+ * someone configured. A MISMATCHED one is worse: the variant's prompt is written for a different
+ * role, so the step would run a Coder told to be a reviewer and the output would look like a model
+ * failure rather than a configuration error.
+ *
+ * The third is {@link INLINE_ENGINE_SYSTEM_PROMPTS} — the requirements + clarity reviewers, both
+ * brainstorm stages and their rework editors. `IterativeReviewService` drives those as bare inline
+ * calls and composes their prompt from (workspace, kind) with no STEP in hand, so a variant
+ * selected on one of them cannot reach the model at all. Refusing it is the honest disposition
+ * until that path can resolve a step: a per-workspace prompt override is what varies those kinds
+ * today. Note this is NOT the whole bespoke-prompt family — `merger` and `on-call` dispatch through
+ * the engine like any container kind, so a variant works there and is covered by tests.
+ *
+ * Skipped entirely when no registry is supplied — the caller is validating a built-in catalog
+ * with no deployment registrations in view (the kernel seed test), where refusing an id it
+ * cannot resolve would be wrong. Both real boundaries (builder save, run start) pass one.
+ */
+export function assertValidAgentVariants({
+  agentKinds,
+  enabled,
+  stepOptions,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!stepOptions || !agentKindRegistry) return
+  for (let i = 0; i < agentKinds.length; i++) {
+    const variantId = stepOptions[i]?.agentVariantId
+    if (!variantId || enabled?.[i] === false) continue
+    const variant = agentKindRegistry.variant(variantId)
+    if (!variant) {
+      throw new ValidationError(
+        `Step '${agentKinds[i]}' selects the agent variant '${variantId}', which this deployment does not register.`,
+      )
+    }
+    if (variant.baseKind !== agentKinds[i]) {
+      throw new ValidationError(
+        `Agent variant '${variantId}' varies '${variant.baseKind}', so it cannot be selected on a '${agentKinds[i]}' step.`,
+      )
+    }
+    if (agentKinds[i] && agentKinds[i]! in INLINE_ENGINE_SYSTEM_PROMPTS) {
+      throw new ValidationError(
+        `Agent variant '${variantId}' cannot be selected on a '${agentKinds[i]}' step: that step runs inline in the engine, which composes its prompt without a step, so the variant would never reach the model. Edit the agent's prompt for this workspace instead.`,
+      )
+    }
+  }
 }
 
 /**

@@ -62,6 +62,7 @@ export type {
   AgentCategory,
   AgentTier,
   CustomAgentKind,
+  AgentKindVariant,
   CustomTaskType,
   TaskTypePresentation,
   TaskTypeFieldDescriptor,

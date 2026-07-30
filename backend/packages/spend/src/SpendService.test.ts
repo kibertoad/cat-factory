@@ -142,3 +142,42 @@ describe('SpendService budget-limit read-through (account/user slices)', () => {
     expect(userSettingsRepository.get).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('SpendService.periodUsage', () => {
+  it('resolves ONE period for both aggregates, even across a clock tick', async () => {
+    // Why the method exists. `status` and `usageBreakdown` each derive their own period from the
+    // clock, so serving the public `GET /api/v1/usage` from both would pair a budget from one
+    // period with a breakdown from the next for any request straddling the month roll — the exact
+    // skew that serving them as ONE resource is meant to prevent. A clock that advances on every
+    // read is what makes the difference observable at all: here both queries must still see the
+    // same `periodStart`, and it must be the one the response reports.
+    const seen: number[] = []
+    let ticks = 0
+    const tokenUsageRepository = {
+      record: async () => {},
+      totalsSinceForWorkspace: async (_ws: string, since: number) => {
+        seen.push(since)
+        return zeroTotals
+      },
+      totalsSinceForAccount: async () => zeroTotals,
+      totalsSinceForUser: async () => zeroTotals,
+      usageBreakdownForWorkspace: async (_ws: string, since: number) => {
+        seen.push(since)
+        return []
+      },
+    } as unknown as TokenUsageRepository
+
+    const svc = new SpendService({
+      tokenUsageRepository,
+      idGenerator,
+      // Every `now()` lands in a different month, so a second derivation could not agree.
+      clock: { now: () => Date.UTC(2026, ticks++, 15) },
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+
+    const usage = await svc.periodUsage('ws_a')
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toBe(seen[1])
+    expect(usage.periodStart).toBe(seen[0])
+  })
+})

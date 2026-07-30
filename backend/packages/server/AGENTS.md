@@ -22,7 +22,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   definition of a run's sort key so a cursor can never name a different value than the query
   orders by). See
   `docs/initiatives/headless-clarification-loop.md` and
-  `docs/initiatives/public-api-expansion.md`.
+  `backend/docs/adr/0030-public-api-surface.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/` — the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,
@@ -99,8 +99,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME
   `gateways.realtime.upgrade` seam the browser stream uses), and `notifications/machineNotifications.ts` +
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
-  external transports). Each pairs a mothership-side controller + `ServerContainer` seam with the
-  client half a mothership-mode node consumes.
+  external transports), and `telemetry/machineTelemetry.ts` +
+  `modules/telemetry/TelemetryIngestController.ts` (the batch upload of a finished run's
+  local-first telemetry — its own endpoint precisely because per-row remote writes are what the
+  local-first bucket exists to prevent). Each pairs a mothership-side controller + `ServerContainer`
+  seam with the client half a mothership-mode node consumes — except the telemetry ingest, which
+  needs no seam: it appends through the mothership's own `repositories` registry.
 - `github/FetchGitHubClient.ts` — the GitHub client. Its siblings implement the engine-facing
   VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
   deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,

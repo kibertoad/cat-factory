@@ -1647,7 +1647,11 @@
         "approved": "Freigegeben",
         "changes_requested": "Änderungen angefordert",
         "rejected": "Abgelehnt"
-      }
+      },
+      "promptVariant": "Prompt-Variante",
+      "promptVariantAdditionOnly": "Nur die Ergänzung dieser Variante wurde angewendet. Der Workspace-Prompt für diesen Agenten hat ihren Basistext ersetzt.",
+      "promptVariantSuperseded": "Diese Variante wurde nicht angewendet. Der Workspace-Prompt für diesen Agenten hatte Vorrang.",
+      "promptVariantWithdrawn": "Diese Variante ist nicht mehr registriert, daher lief der Schritt mit dem ausgelieferten Prompt."
     },
     "stepDetail": {
       "contents": "Inhalte",
@@ -3691,7 +3695,9 @@
       "consensusGroups": "Konsensgruppen",
       "consensusGroupsHint": "Wähle die wiederverwendbaren Panels, auf die dieser Schritt hochstufen darf. Jedes hat seine eigene Schätzungsschwelle; es läuft das anspruchsvollste, das die Aufgabe erreicht.",
       "consensusGroupsActive": "Dieser Schritt führt die ausgewählte Gruppe aus. Hebe die Auswahl aller Gruppen auf, um die Teilnehmer hier zu konfigurieren.",
-      "consensusGroupAlways": "immer"
+      "consensusGroupAlways": "immer",
+      "variantLabel": "Prompt-Variante",
+      "variantShipped": "Ausgelieferter Prompt"
     },
     "progress": {
       "status": {
@@ -4634,6 +4640,22 @@
     "reports": "Berichte"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Details anzeigen",
+      "requestId": "Anfrage-ID {id}",
+      "description": {
+        "not_found": "Das Objekt dieser Aktion existiert nicht mehr. Lade die Seite neu, um den aktuellen Stand zu sehen.",
+        "validation": "Der Server hat diese Anfrage als ungültig abgelehnt. Prüfe die eingegebenen Werte und versuche es erneut.",
+        "credential_required": "Diese Aktion benötigt einen persönlichen Zugang, der nicht entsperrt ist. Entsperre dein Abonnement oder verbinde es neu und versuche es dann erneut.",
+        "forbidden": "Deine Rolle in diesem Workspace erlaubt diese Aktion nicht. Bitte einen Workspace-Admin, sie auszuführen oder deine Rolle zu erweitern.",
+        "unavailable": "In diesem Deployment ist die für diese Aktion benötigte Funktion nicht konfiguriert. Bitte den Betreiber des Deployments, sie einzurichten.",
+        "unauthorized": "Deine Sitzung ist nicht mehr gültig. Melde dich erneut an und versuche es dann noch einmal.",
+        "rate_limited": "Zu viele Anfragen in kurzer Zeit. Warte einen Moment und versuche es erneut.",
+        "internal": "Auf dem Server ist ein Fehler aufgetreten. Versuche es erneut und gib die Details an den Betreiber des Deployments weiter, wenn es weiterhin auftritt.",
+        "network": "Der Server war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
+        "unexpected": "Der Server hat eine unerwartete Antwort zurückgegeben. Versuche es erneut und gib die Details an den Betreiber des Deployments weiter, wenn es weiterhin auftritt."
+      }
+    },
     "action": {
       "retryFailed": "Wiederholung fehlgeschlagen",
       "startFailed": "Start fehlgeschlagen",

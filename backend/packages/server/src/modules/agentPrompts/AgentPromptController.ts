@@ -15,7 +15,8 @@ import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
-import { builtInBaseSystemPrompt, builtInDirectivesFor } from '../../agents/promptOverrides.js'
+import { shippedBasePromptFor } from '@cat-factory/agents'
+import { builtInDirectivesFor } from '../../agents/promptOverrides.js'
 
 /** Resolve the agent-prompt module, or refuse with a 503 naming what isn't wired. */
 function requireAgentPrompts<E extends AppEnv>(c: Context<E>): AgentPromptsModule {
@@ -43,7 +44,7 @@ function detailFor<E extends AppEnv>(
   revisions: AgentPromptRevision[],
 ): AgentPromptDetail {
   const registry = c.get('container').agentKindRegistry
-  const builtinText = builtInBaseSystemPrompt(agentKind, registry)
+  const builtinText = shippedBasePromptFor(agentKind, registry)
   const head = revisions[0]
   const promptId = promptIdForKind(agentKind)
   return {

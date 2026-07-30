@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 // Cross-runtime parity for the outbound notification-webhook store — the per-workspace endpoint a
 // HEADLESS integration registers so a parked run reaches it by push instead of polling. Each
 // facade persists it in its own store (D1 on Cloudflare, Postgres on Node), and both encode the
-// `types` filter as a JSON column and `enabled` as an integer. This suite drives the SAME
+// `types`/`run_events` filters as JSON columns and `enabled` as an integer. This suite drives the SAME
 // put → get → overwrite → delete assertions through whichever real repository a runtime hands it,
 // so a column mapped differently (an unparsed filter, a boolean stored as text) fails a test
 // instead of shipping a webhook that silently delivers the wrong set — or nothing.
@@ -27,13 +27,14 @@ export function defineNotificationWebhookSuite(
       return `ws-${name}-${seq}-${Math.floor(Math.random() * 1e9)}`
     }
 
-    it('round-trips an endpoint with its type filter, enabled flag and sealed secret', async () => {
+    it('round-trips an endpoint with both filters, the enabled flag and a sealed secret', async () => {
       const repo = makeRepo()
       const ws = nextWorkspace()
       await repo.put({
         workspaceId: ws,
         url: 'https://example.test/hooks/cat-factory',
         types: ['requirement_review', 'fork_decision_pending'],
+        runEvents: ['run.completed', 'run.failed'],
         enabled: true,
         secretSealed: 'sealed-blob',
         updatedAt: 42,
@@ -44,6 +45,7 @@ export function defineNotificationWebhookSuite(
         workspaceId: ws,
         url: 'https://example.test/hooks/cat-factory',
         types: ['requirement_review', 'fork_decision_pending'],
+        runEvents: ['run.completed', 'run.failed'],
         enabled: true,
         secretSealed: 'sealed-blob',
         updatedAt: 42,
@@ -60,6 +62,7 @@ export function defineNotificationWebhookSuite(
         workspaceId: ws,
         url: 'https://example.test/quiet',
         types: [],
+        runEvents: [],
         enabled: false,
         secretSealed: null,
         updatedAt: 7,
@@ -67,6 +70,7 @@ export function defineNotificationWebhookSuite(
 
       const stored = await repo.get(ws)
       expect(stored?.types).toEqual([])
+      expect(stored?.runEvents).toEqual([])
       expect(stored?.enabled).toBe(false)
       expect(stored?.secretSealed).toBeNull()
     })
@@ -78,6 +82,7 @@ export function defineNotificationWebhookSuite(
         workspaceId: ws,
         url: 'https://old.test/hook',
         types: ['ci_failed'],
+        runEvents: ['run.started'],
         enabled: true,
         secretSealed: 'old',
         updatedAt: 1,
@@ -86,6 +91,7 @@ export function defineNotificationWebhookSuite(
         workspaceId: ws,
         url: 'https://new.test/hook',
         types: ['merge_review'],
+        runEvents: [],
         enabled: false,
         secretSealed: 'new',
         updatedAt: 2,
@@ -94,6 +100,9 @@ export function defineNotificationWebhookSuite(
       const stored = await repo.get(ws)
       expect(stored?.url).toBe('https://new.test/hook')
       expect(stored?.types).toEqual(['merge_review'])
+      // The run-event subscription is REPLACED, not merged: dropping every event must actually
+      // silence the endpoint rather than leaving the prior `run.started` behind.
+      expect(stored?.runEvents).toEqual([])
       expect(stored?.enabled).toBe(false)
       expect(stored?.secretSealed).toBe('new')
       expect(stored?.updatedAt).toBe(2)
@@ -111,6 +120,7 @@ export function defineNotificationWebhookSuite(
         workspaceId: ws,
         url: 'https://example.test/hook',
         types: [],
+        runEvents: [],
         enabled: true,
         secretSealed: null,
         updatedAt: 1,

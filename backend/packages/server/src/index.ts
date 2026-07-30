@@ -182,6 +182,16 @@ export {
   HttpMachineNotificationClient,
   RemoteNotificationChannel,
 } from './notifications/machineNotifications.js'
+export {
+  MAX_TELEMETRY_INGEST_CHARS,
+  TELEMETRY_INGEST_LIMITS,
+  type HttpMachineTelemetryClientOptions,
+  type MachineTelemetryClient,
+  type TelemetryIngestRequest,
+  type TelemetryIngestResult,
+  HttpMachineTelemetryClient,
+  MachineTokenUnavailableError,
+} from './telemetry/machineTelemetry.js'
 export { mountAuthGate } from './http/authGate.js'
 export {
   REQUEST_ID_HEADER,

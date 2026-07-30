@@ -108,11 +108,19 @@ export class KaizenService {
       if (!step || !this.isGradeable(step) || !step.model) continue
       const model = step.model
       const promptVersion = promptVersionForKind(step.agentKind)
-      // `promptRevision` is the workspace's own prompt for this kind, pinned onto the step at
-      // dispatch (absent ⇒ it ran the shipped prompt). Read off the STEP rather than the prompt
-      // log, which is append-only: a later revision would otherwise re-key gradings of text the
-      // step never saw.
-      const comboKey = comboKeyFor(step.agentKind, model, promptVersion, step.promptRevision)
+      // Both prompt-text facts are read off the STEP, where the dispatch pinned them, rather than
+      // re-resolved here: the prompt log is append-only, so a later revision would re-key
+      // gradings of text the step never saw, and the variant registry can have moved on too.
+      // `promptVariant` is deliberately the PIN and not `stepOptions.agentVariantId` — the option
+      // is what the pipeline asked for, while the pin says what actually reached the prompt, and
+      // keying on the ask would credit a variant whose text a workspace override displaced.
+      const comboKey = comboKeyFor(
+        step.agentKind,
+        model,
+        promptVersion,
+        step.promptRevision,
+        step.promptVariant,
+      )
       const combo = await this.deps.kaizenVerifiedComboRepository.getByKey(workspaceId, comboKey)
       if (isVerified(combo)) continue
       const existing = await this.deps.kaizenGradingRepository.getByStep(

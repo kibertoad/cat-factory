@@ -568,6 +568,10 @@ describe('environment-connection management surface (workspace-scoped)', () => {
     },
     { repo: 'customManifestTypeRepository', method: 'listByWorkspace', args: [], echoes: true },
     { repo: 'customManifestTypeRepository', method: 'remove', args: ['helm-app'] },
+    // The read BOTH delivery paths make — and the one the run-lifecycle sink makes on a run's
+    // terminal emit, where an un-routed method would surface only as a webhook that never fires.
+    { repo: 'notificationWebhookRepository', method: 'get', args: [], echoes: true },
+    { repo: 'notificationWebhookRepository', method: 'delete', args: [] },
   ]
 
   for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
@@ -593,6 +597,19 @@ describe('environment-connection management surface (workspace-scoped)', () => {
   // `workspaceField` rule): a connection / custom-type row can only ever land in an in-scope
   // workspace, and a missing/non-object arg fails closed before any repo write.
   const UPSERTS = ['environmentConnectionRepository', 'customManifestTypeRepository']
+
+  it('forwards notificationWebhookRepository.put for an in-scope workspace and refuses another', async () => {
+    // Same `workspaceField` rule as the upserts below, under the method name this repo uses.
+    await expect(
+      remoteRegistry().notificationWebhookRepository!.put!({ workspaceId: 'ws_in' }),
+    ).resolves.toBeUndefined()
+    await expect(
+      remoteRegistry().notificationWebhookRepository!.put!({ workspaceId: 'ws_out' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(remoteRegistry().notificationWebhookRepository!.put!({})).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
 
   for (const repo of UPSERTS) {
     it(`forwards ${repo}.upsert when the record targets an in-scope workspace`, async () => {

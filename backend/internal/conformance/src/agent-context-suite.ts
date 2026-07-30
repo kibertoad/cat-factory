@@ -212,6 +212,40 @@ export function defineAgentContextSuite(
       expect(await repo.get(ws, 'acs_nope')).toBeNull()
     })
 
+    it('batch-appends snapshots, ignoring ids it already stored', async () => {
+      // The mothership-mode telemetry ingest (docs/initiatives/mothership-mode.md, PR 5) uploads a
+      // finished run's snapshots through `recordMany` and RETRIES a chunk whose ack was lost, so
+      // both halves are load-bearing: the batch must land whole, and re-offering it must be inert
+      // rather than a duplicate-key failure that parks the run's upload forever.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      const batch = [
+        snapshot({ id: `${ws}-1`, workspaceId: ws, executionId: e1, createdAt: 10 }),
+        snapshot({ id: `${ws}-2`, workspaceId: ws, executionId: e1, createdAt: 20 }),
+      ]
+      await repo.recordMany(batch)
+      expect((await repo.listByExecution(ws, e1)).map((s) => s.id)).toEqual([`${ws}-2`, `${ws}-1`])
+
+      await repo.recordMany([
+        // The already-stored row, with a DIFFERENT body: first write wins, so the stored prompt
+        // must be untouched — an upsert here would rewrite history the reader already paged.
+        snapshot({
+          id: `${ws}-1`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          systemPrompt: 'rewritten',
+        }),
+        snapshot({ id: `${ws}-3`, workspaceId: ws, executionId: e1, createdAt: 30 }),
+      ])
+      const after = await repo.listByExecution(ws, e1)
+      expect(after.map((s) => s.id)).toEqual([`${ws}-3`, `${ws}-2`, `${ws}-1`])
+      expect(after.find((s) => s.id === `${ws}-1`)?.systemPrompt).toBe('system')
+
+      // An empty batch is a no-op, never an error — the drain posts until a page comes back empty.
+      await expect(repo.recordMany([])).resolves.toBeUndefined()
+    })
+
     it('prunes snapshots older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

@@ -476,6 +476,22 @@
     "importsOnAdd": "se importa al añadir"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Ver detalles",
+      "requestId": "ID de solicitud {id}",
+      "description": {
+        "not_found": "Lo que esta acción referencia ya no existe. Recarga la página para ver el estado actual.",
+        "validation": "El servidor rechazó esta solicitud por no ser válida. Revisa los valores que introdujiste y vuelve a intentarlo.",
+        "credential_required": "Esta acción necesita una credencial personal que no está desbloqueada. Desbloquea o vuelve a conectar tu suscripción y reinténtalo.",
+        "forbidden": "Tu rol en este espacio de trabajo no permite esta acción. Pide a un administrador del espacio de trabajo que la realice o que amplíe tu rol.",
+        "unavailable": "Este despliegue no tiene configurada la capacidad que necesita esta acción. Pide al operador del despliegue que la configure.",
+        "unauthorized": "Tu sesión ya no es válida. Inicia sesión de nuevo y vuelve a intentarlo.",
+        "rate_limited": "Demasiadas solicitudes en poco tiempo. Espera un momento y vuelve a intentarlo.",
+        "internal": "Algo falló en el servidor. Vuelve a intentarlo y comparte los detalles con el operador del despliegue si sigue ocurriendo.",
+        "network": "No se pudo contactar con el servidor. Comprueba tu conexión y vuelve a intentarlo.",
+        "unexpected": "El servidor devolvió una respuesta inesperada. Vuelve a intentarlo y comparte los detalles con el operador del despliegue si sigue ocurriendo."
+      }
+    },
     "action": {
       "retryFailed": "El reintento falló",
       "startFailed": "No se pudo iniciar",
@@ -1280,7 +1296,11 @@
         "url": "Dirección",
         "copyId": "Copiar id del contenedor",
         "copyUrl": "Copiar dirección"
-      }
+      },
+      "promptVariant": "Variante del prompt",
+      "promptVariantAdditionOnly": "Solo se aplicó el añadido de esta variante. El prompt del espacio de trabajo para este agente reemplazó su texto base.",
+      "promptVariantSuperseded": "Esta variante no se aplicó. El prompt del espacio de trabajo para este agente tuvo prioridad.",
+      "promptVariantWithdrawn": "Esta variante ya no está registrada, por lo que el paso se ejecutó con el prompt original."
     },
     "stepDetail": {
       "contents": "Contenidos",
@@ -4014,7 +4034,9 @@
       "consensusGroups": "Grupos de consenso",
       "consensusGroupsHint": "Elige los paneles reutilizables a los que este paso puede escalar. Cada uno lleva su propio umbral de estimación; se ejecuta el más exigente que la tarea supere.",
       "consensusGroupsActive": "Este paso ejecuta el grupo seleccionado. Deselecciona todos los grupos para configurar aquí los participantes.",
-      "consensusGroupAlways": "siempre"
+      "consensusGroupAlways": "siempre",
+      "variantLabel": "Variante del prompt",
+      "variantShipped": "Prompt original"
     },
     "progress": {
       "status": {

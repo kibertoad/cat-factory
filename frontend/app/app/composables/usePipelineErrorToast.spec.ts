@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { usePipelineErrorToast, parseConflict } from '~/composables/usePipelineErrorToast'
+import {
+  usePipelineErrorToast,
+  parseConflict,
+  describeGenericFailure,
+} from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
 import en from '../../i18n/locales/en.json'
 
@@ -9,6 +13,9 @@ import en from '../../i18n/locales/en.json'
  * title AND the description (G1) — and only ever shows raw backend prose as a last-resort
  * description (an unmapped reason). These specs assert the KEYS and params a code path
  * resolves (never the English text), so they stay locale-agnostic.
+ *
+ * The same holds for the NON-conflict funnel (G2): the description is keyed off the envelope's
+ * status class and the raw prose is only reachable behind the "Show details" disclosure.
  */
 
 /** Dot-path lookup into the real `en.json`, so `te` mirrors which keys actually ship. */
@@ -21,11 +28,15 @@ function hasKey(path: string): boolean {
 }
 
 let add: ReturnType<typeof vi.fn>
+let update: ReturnType<typeof vi.fn>
 let t: ReturnType<typeof vi.fn>
 let ui: Record<string, ReturnType<typeof vi.fn>>
 
 beforeEach(() => {
-  add = vi.fn()
+  // `add` returns the created toast (Nuxt UI hands back the generated id synchronously), which
+  // the detail disclosure needs in order to `update` the SAME toast in place.
+  add = vi.fn(() => ({ id: 'toast-1' }))
+  update = vi.fn()
   // `t` echoes the key so the toast's title/description IS the resolved key — assert on it.
   t = vi.fn((key: string) => key)
   // The ui-store deep-links a jump action may navigate to (each echoed as a spy).
@@ -36,7 +47,7 @@ beforeEach(() => {
     openModelConfig: vi.fn(),
     openProviderConnection: vi.fn(),
   }
-  vi.stubGlobal('useToast', () => ({ add }))
+  vi.stubGlobal('useToast', () => ({ add, update }))
   vi.stubGlobal('useUiStore', () => ui)
   vi.stubGlobal('useI18n', () => ({ t, te: (key: string) => hasKey(key) }))
 })
@@ -128,10 +139,113 @@ describe('usePipelineErrorToast', () => {
     expect(ui.openAiProviderSetup).toHaveBeenCalledOnce()
   })
 
-  it('uses the fallback title key + raw message for a non-conflict error', () => {
+  it('uses the fallback title key + a TRANSLATED description for a non-conflict error', () => {
+    // G2: the raw JS/backend prose is no longer the description — a bare throw with no HTTP
+    // answer at all is presented as the network case.
     usePipelineErrorToast().present(new Error('boom'), 'errors.action.startFailed')
     const arg = add.mock.calls[0]![0]
     expect(arg.title).toBe('errors.action.startFailed')
-    expect(arg.description).toBe('boom')
+    expect(arg.description).toBe('errors.generic.description.network')
+    expect(arg.description).not.toBe('boom')
+  })
+
+  it('keys the description off the envelope status class, not the backend prose', () => {
+    usePipelineErrorToast().present(
+      new ApiError(503, { error: { code: 'unavailable', message: 'Task sources not configured' } }),
+    )
+    expect(add.mock.calls[0]![0].description).toBe('errors.generic.description.unavailable')
+  })
+
+  it('reveals the raw detail in place when "Show details" is clicked, and makes it sticky', () => {
+    usePipelineErrorToast().present(
+      new ApiError(503, { error: { code: 'unavailable', message: 'Task sources not configured' } }),
+    )
+    const arg = add.mock.calls[0]![0]
+    // Auto-dismissing until the user asks for detail: no `duration` override up front.
+    expect(arg.duration).toBeUndefined()
+    expect(arg.actions[0].label).toBe('errors.generic.showDetail')
+    arg.actions[0].onClick()
+    // Same toast, not a second one; sticky, and the button is dropped so it can't be re-clicked.
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledWith('toast-1', {
+      description: 'Task sources not configured',
+      duration: 0,
+      actions: [],
+    })
+  })
+
+  it('folds validation issues and the requestId into the revealed detail', () => {
+    usePipelineErrorToast().present(
+      new ApiError(400, {
+        error: {
+          code: 'validation',
+          message: 'Request failed validation',
+          requestId: 'req-42',
+          issues: [{ path: 'body.title', message: 'Required' }, { message: 'Unexpected field' }],
+        },
+      }),
+    )
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe('errors.generic.description.validation')
+    arg.actions[0].onClick()
+    expect(t).toHaveBeenCalledWith('errors.generic.requestId', { id: 'req-42' })
+    // The issues carry the real information on a 422/400 (the message is the fixed
+    // `Request failed validation`), so they must reach the disclosure.
+    expect(update.mock.calls[0]![1].description).toBe(
+      'Request failed validation · body.title: Required, Unexpected field · errors.generic.requestId',
+    )
+  })
+
+  it('offers no disclosure when there is no detail to reveal', () => {
+    usePipelineErrorToast().present(new ApiError(503, { error: { code: 'unavailable' } }))
+    const arg = add.mock.calls[0]![0]
+    // `ApiError` synthesises `Request failed (HTTP 503)` when the envelope carries no message,
+    // so a truly detail-less case is a non-Error throw.
+    expect(arg.description).toBe('errors.generic.description.unavailable')
+    expect(arg.actions[0].label).toBe('errors.generic.showDetail')
+    usePipelineErrorToast().present(null)
+    expect(add.mock.calls[1]![0].actions).toBeUndefined()
+  })
+})
+
+describe('describeGenericFailure', () => {
+  it('maps each known status class to its own description key', () => {
+    for (const code of [
+      'not_found',
+      'validation',
+      'credential_required',
+      'forbidden',
+      'unavailable',
+      'unauthorized',
+      'rate_limited',
+      'internal',
+    ]) {
+      const failure = describeGenericFailure(new ApiError(500, { error: { code } }))
+      expect(failure.descriptionKey).toBe(`errors.generic.description.${code}`)
+      expect(hasKey(failure.descriptionKey)).toBe(true)
+    }
+  })
+
+  it('separates "nothing answered" from "something answered unrecognisably"', () => {
+    // No envelope AND no status: offline / DNS / dropped connection — the remedy is the user's.
+    expect(describeGenericFailure(new Error('Failed to fetch')).descriptionKey).toBe(
+      'errors.generic.description.network',
+    )
+    // A status but not our envelope (an edge 502 page) — the remedy is the server's.
+    expect(
+      describeGenericFailure(new ApiError(502, '<html>bad gateway</html>')).descriptionKey,
+    ).toBe('errors.generic.description.unexpected')
+    // Our envelope, but a code this build does not know.
+    expect(
+      describeGenericFailure(new ApiError(418, { error: { code: 'teapot' } })).descriptionKey,
+    ).toBe('errors.generic.description.unexpected')
+  })
+
+  it('never presents a conflict (parseConflict owns those) but still classifies safely', () => {
+    // `conflict` is deliberately absent from the map, so it reads as an unrecognised code rather
+    // than throwing — the conflict path intercepts it long before this function is reached.
+    expect(
+      describeGenericFailure(new ApiError(409, { error: { code: 'conflict' } })).descriptionKey,
+    ).toBe('errors.generic.description.unexpected')
   })
 })

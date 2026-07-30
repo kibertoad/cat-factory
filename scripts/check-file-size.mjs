@@ -64,6 +64,11 @@ const LEGACY_ALLOWANCES = new Map([
   // Then the HUMAN decision surface (resolve / approve / request-changes / reject / merge, plus
   // the human-review fix request and the gate guard they share) moved to
   // `StepDecisionController.ts` for the `max-lines` step-1 slice — ratcheted 2300 -> 2000.
+  // The two run-start funnels (the atomic live-run claim + the durable/SPA/outbound hand-off) then
+  // moved to `runStart.ts` when the run-lifecycle push needed the hand-off documented — the budget
+  // stays where the slice above put it, since that one had already left headroom. What separates
+  // them is that `start`/`retry`/`restartFrom` differ ONLY in the block patch they write between
+  // the two, so the ORDER across them is the thing worth owning in one place rather than three.
   ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2000],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its

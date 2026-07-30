@@ -10,25 +10,41 @@ export const HIGH_GRADE = 4
 export const VERIFICATION_STREAK = 5
 
 /**
- * `agentKind|model|promptVersion[|wN]` — the key a verified combo is tracked under.
+ * `agentKind|model|promptVersion[|vID@FP][|wN]` — the key a verified combo is tracked under.
  *
- * The optional `wN` suffix is the WORKSPACE's agent-prompt revision when the step ran an edited
- * prompt (`PipelineStep.promptRevision`). Without it a workspace that rewrote a kind's prompt
- * would share a key with the shipped one, so Kaizen would skip grading text it never graded —
- * inheriting a verification the shipped prompt earned — and, in the other direction, let an
- * edit's gradings advance the streak of a prompt that is not running anywhere. `promptVersion`
- * alone cannot express this: it numbers the PRODUCT's prompt, which an override replaces.
+ * Two optional suffixes, both naming text `promptVersion` cannot: it numbers the PRODUCT's
+ * prompt, and each of these replaces or extends it.
  *
- * Absent suffix ⇒ the shipped prompt, so an unedited workspace keeps the key it always had.
+ * - `vID@FP` is the deployment's registered agent-kind VARIANT the step ran under, taken from the
+ *   dispatch-time pin (`PipelineStep.promptVariant`). A variant runs the base kind under
+ *   different text, so sharing a key with the stock kind would let one's gradings verify the
+ *   other. `FP` fingerprints the text the variant actually CONTRIBUTED, because re-registering an
+ *   id is a supported way to re-word a variant — keyed on the id alone, a re-wording would
+ *   inherit the streak its previous wording earned, which is the very hazard `wN` exists for on
+ *   the workspace side. A variant that contributed NOTHING (withdrawn mid-run, or its
+ *   replacement displaced by a workspace override with no addition of its own) carries no
+ *   fingerprint and so does not enter the key at all: the key describes the text that ran, and
+ *   that text is the shipped or workspace prompt alone.
+ * - `wN` is the WORKSPACE's agent-prompt revision when the step ran an edited prompt
+ *   (`PipelineStep.promptRevision`). Without it a workspace that rewrote a kind's prompt would
+ *   share a key with the shipped one, so Kaizen would skip grading text it never graded —
+ *   inheriting a verification the shipped prompt earned — and, in the other direction, let an
+ *   edit's gradings advance the streak of a prompt that is not running anywhere.
+ *
+ * Neither suffix ⇒ the shipped prompt, so an unedited workspace keeps the key it always had.
  */
 export function comboKeyFor(
   agentKind: string,
   model: string,
   promptVersion: number,
   promptRevision?: number,
+  promptVariant?: { id: string; fingerprint?: string },
 ): string {
   const base = `${agentKind}|${model}|${promptVersion}`
-  return promptRevision === undefined ? base : `${base}|w${promptRevision}`
+  const varied = promptVariant?.fingerprint
+    ? `${base}|v${promptVariant.id}@${promptVariant.fingerprint}`
+    : base
+  return promptRevision === undefined ? varied : `${varied}|w${promptRevision}`
 }
 
 /**

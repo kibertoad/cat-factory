@@ -40,7 +40,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel } from '@cat-factory/kernel'
+import type { NotificationChannel, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -156,6 +156,8 @@ export interface WorkerContainerAssemblyInput {
   notificationWebhookSupport: {
     service: NotificationWebhookService
     channel: NotificationChannel
+    /** The run-lifecycle half — same endpoint, same secret, same guard. */
+    runLifecycleSink: RunLifecycleSink
   } | null
   localModelEndpoints: LocalModelEndpointService | undefined
   userSecrets: UserSecretService | undefined
@@ -389,6 +391,11 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
       providerRegistry,
       webhookChannel: notificationWebhookSupport?.channel,
     }),
+    // The run-lifecycle push: the terminal/started edges a headless integration would otherwise
+    // have to poll for. Absent (no encryption key ⇒ no webhook feature) ⇒ nothing is pushed.
+    ...(notificationWebhookSupport
+      ? { runLifecycleSink: notificationWebhookSupport.runLifecycleSink }
+      : {}),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
     // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
     // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s

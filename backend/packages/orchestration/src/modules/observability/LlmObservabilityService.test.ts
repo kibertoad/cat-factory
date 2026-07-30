@@ -27,6 +27,9 @@ class MemoryRepo implements LlmCallMetricRepository {
   async record(metric: LlmCallMetric): Promise<void> {
     this.recorded.push(metric)
   }
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    this.recorded.push(...metrics)
+  }
   async listByExecution(
     workspaceId: string,
     executionId: string,

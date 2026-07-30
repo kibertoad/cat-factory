@@ -29,10 +29,17 @@ export class ApiError extends Error {
 
 /** The error envelope every controller emits (`handleError` / contract request-validator). */
 export interface ApiErrorEnvelope {
+  /** The status class — an `ApiErrorCode` from `@cat-factory/contracts`, when recognised. */
   code?: string
   message?: string
   details?: unknown
   issues?: { path?: string; message: string }[]
+  /**
+   * The request's correlation id (`mountRequestLogging` mints or adopts `X-Request-Id` and
+   * `handleError` puts it on EVERY envelope). It is the join between what the user saw and the
+   * one server log line that explains it, so any surface showing failure detail should quote it.
+   */
+  requestId?: string
 }
 
 /** Read the `{ error: {...} }` envelope out of a parsed response body, else undefined. */

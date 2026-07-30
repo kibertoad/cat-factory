@@ -5,6 +5,7 @@ import {
   assertPipelineLaunchable,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidAgentVariants,
   assertValidSkillSteps,
   assertValidTesterQualityGating,
   validatePipelineShape,
@@ -444,5 +445,103 @@ describe('assertValidSkillSteps', () => {
 
   it('ignores stepOptions.skillId on a non-skill kind', () => {
     expect(() => assertValidSkillSteps({ agentKinds: ['coder'], stepOptions: [{}] })).not.toThrow()
+  })
+})
+
+describe('assertValidAgentVariants', () => {
+  /** A registry carrying one variant of `coder`, as a deployment package would register it. */
+  function registryWithVariant() {
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({ id: 'org:tdd', baseKind: 'coder', promptAddition: 'test-first' })
+    return registry
+  }
+
+  it('accepts a step selecting a variant of its own kind', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects a variant this deployment does not register', () => {
+    // Without this the step would silently run the SHIPPED prompt — it still works, so nothing
+    // surfaces except that it quietly stopped being the variation someone configured.
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:missing' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).toThrow(/does not register/)
+  })
+
+  it('rejects a variant of ANOTHER kind — it would run this step under the wrong role', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['architect'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).toThrow(/cannot be selected on a 'architect' step/)
+  })
+
+  it('refuses a variant on an INLINE-ENGINE step, which could never apply it', () => {
+    // `requirements-review` runs inline in the engine, which composes its prompt from
+    // (workspace, kind) with no step — so the selection would validate, save, run, and silently
+    // do nothing. Refusing is the honest disposition while that path has no step to read.
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:strict',
+      baseKind: 'requirements-review',
+      promptAddition: 'Be strict.',
+    })
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['requirements-review'],
+        stepOptions: [{ agentVariantId: 'org:strict' }],
+        agentKindRegistry: registry,
+      }),
+    ).toThrow(/runs inline in the engine/)
+  })
+
+  it('still accepts a variant on a BESPOKE-prompt CONTAINER kind', () => {
+    // The distinction the inline refusal must not over-reach on: `merger` also carries a bespoke
+    // prompt, but it dispatches through the engine like any container kind, so a variant applies.
+    const registry = new AgentKindRegistry()
+    registry.registerVariant({
+      id: 'org:cautious',
+      baseKind: 'merger',
+      promptAddition: 'Weigh migrations as high risk.',
+    })
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['merger'],
+        stepOptions: [{ agentVariantId: 'org:cautious' }],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+
+  it('imposes no requirement on a DISABLED step', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        enabled: [false],
+        stepOptions: [{ agentVariantId: 'org:missing' }],
+        agentKindRegistry: registryWithVariant(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
+    expect(() =>
+      assertValidAgentVariants({
+        agentKinds: ['coder'],
+        stepOptions: [{ agentVariantId: 'org:tdd' }],
+      }),
+    ).not.toThrow()
   })
 })

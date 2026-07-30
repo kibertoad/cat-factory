@@ -2,15 +2,14 @@
 // them to HTTP status codes. Keeping them framework-agnostic means the same core
 // can be wrapped by a different transport (queue consumer, RPC, CLI) unchanged.
 
-export type DomainErrorCode =
-  | 'not_found'
-  | 'validation'
-  | 'conflict'
-  | 'credential_required'
-  | 'forbidden'
-  | 'unavailable'
-  | 'unauthorized'
-  | 'rate_limited'
+/**
+ * The status class carried on the wire as `error.code`. Defined in `@cat-factory/contracts`
+ * and re-exported here, exactly like {@link ConflictReason} below: it is a shape the SPA also
+ * reads (to present a failure generically when no `details.reason` narrows it), so a code added
+ * on one side must be honoured on the other.
+ */
+export type { DomainErrorCode } from '@cat-factory/contracts'
+import type { DomainErrorCode } from '@cat-factory/contracts'
 
 export class DomainError extends Error {
   constructor(

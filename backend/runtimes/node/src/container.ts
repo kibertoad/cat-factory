@@ -776,6 +776,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     executionEventPublisher,
     agentExecutor,
     notificationChannel,
+    runLifecycleSink: notificationWebhookSupport?.runLifecycleSink,
     releaseHealthDeps,
     packageRegistryDeps,
     incidentEnrichmentDeps,

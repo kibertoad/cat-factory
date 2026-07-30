@@ -106,6 +106,28 @@ export {
 // A bespoke system prompt SPLIT at the boundary a workspace override may cross — the shape the
 // inline engine steps and the two bespoke container kinds declare their prompts in.
 export { type BespokeSystemPrompt, composeBespokePrompt } from './agents/prompts/bespoke.js'
+// The two bespoke CONTAINER prompts, the map collecting every bespoke-prompt kind, and the ONE
+// resolver for "the shipped base prompt this kind runs under" — what a workspace override and a
+// registered variant each replace, and what the prompt editor shows as the baseline.
+export {
+  BESPOKE_SYSTEM_PROMPTS,
+  MERGER_DIRECTIVES,
+  MERGER_ROLE_PROMPT,
+  MERGER_SYSTEM_PROMPT,
+  ON_CALL_DIRECTIVES,
+  ON_CALL_ROLE_PROMPT,
+  ON_CALL_SYSTEM_PROMPT,
+  shippedBasePromptFor,
+} from './agents/prompts/bespoke-kinds.js'
+// Agent-kind VARIANTS — an alternate prompt for an EXISTING kind, selected per step. Not a kind:
+// the step keeps the base kind, so every behavioural decision is unchanged. See ./kinds/variants.
+export {
+  type AgentKindVariantDefinition,
+  type AgentKindVariantPresentation,
+  type AgentVariantApplication,
+  type AppliedAgentVariant,
+  applyAgentVariant,
+} from './agents/kinds/variants.js'
 // The inline engine steps' prompts keyed by agent kind, so the prompt EDITOR shows the text that
 // actually runs (these kinds never reach `systemPromptFor`).
 export {

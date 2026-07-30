@@ -876,6 +876,20 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   the seam for other channels. `WebhookNotificationChannel` (per-workspace HTTPS, HMAC-signed with a sealed
   secret through the SSRF-guarded `safeFetch`) exists because a headless caller has no in-app inbox; being
   EXTERNAL, it composes into that set on both facades.
+- **A notification is NOT the run's lifecycle**, and the happy path raises none — a pipeline whose `merger`
+  merges its own PR settles with an empty inbox. So the same registered endpoint also carries run-lifecycle
+  events through the kernel `RunLifecycleSink` port (`run.started` / `run.completed` / `run.failed`), built
+  beside the channel by `buildNotificationWebhookSupport` from the SAME row and cipher so a facade cannot
+  wire one and forget the other, and driven through the ONE `signedDelivery.ts` retry/SSRF/signature core —
+  those are properties of the ENDPOINT, not of the payload, and a second copy is a second place to get the
+  SSRF guard wrong. **The started edge rides the ONE hand-off funnel every start path ends with
+  (`handOffLiveRun`) and is exactly once — announced LAST, after the block is committed and the durable
+  runner has the run, because an outbound call must never sit between a claim and the local write it
+  belongs to; the terminal edges hook the emit funnel and are AT-LEAST-ONCE by design**, carrying a
+  `<runId>:<event>` dedupe id — a run reaches `done` from four sites, and a claim table would buy
+  exactly-once for an effect a receiver collapses with one id comparison. **A receiver dedupes on that
+  id, never on the body**: a replay re-stamps `sentAt`/`occurredAt`, so two deliveries of one transition
+  are not byte-identical. Doc: [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **PR verification report** — the ENGINE, not the agent, keeps a report of captured facts on every run's
 PR, as a managed section of the PR BODY delimited by `<!-- cat-factory:verification-report:start -->` /
@@ -968,6 +982,29 @@ the full history of what it has run.
   "inheriting" is the row's ABSENCE, never a stored null. Ceilings are advisory on the
   subscription-CLI inline path. Doc:
   [`configurable-agent-output-budgets.md`](./docs/initiatives/configurable-agent-output-budgets.md).
+- **A code-registered VARIANT is the same unit of text, one tier out.**
+  `registerVariant({ id, baseKind, systemPrompt | promptAddition })` (`@cat-factory/agents`) gives a
+  deployment an alternate prompt for an EXISTING kind, selected per step via
+  `stepOptions.agentVariantId`. It is deliberately NOT a kind: a kind id is what every un-migrated
+  `switch(agentKind)` keys off, so a new id would dispatch down the generic path and quietly do the
+  wrong thing, whereas a varied step records the BASE kind and every behavioural decision is
+  unchanged. **A variation needing different BEHAVIOUR is a different kind.** The engine resolves it
+  in the SAME once-per-dispatch place as the workspace override and emits it through the SAME
+  `systemPromptOverride` field, so no executor branches on it and the invariants above hold for it
+  unchanged; the WORKSPACE override wins as the narrower tier, and a `promptAddition` then folds onto
+  the workspace's text rather than the shipped text — which is why an addition, not a replacement, is
+  the default a variant should reach for.
+- **A step is varied by ASKING; what the dispatch DID with the ask is a separate recorded fact.**
+  Because the workspace out-ranks the deployment on the same text, a selected variant routinely
+  reaches the prompt only partly (its addition survives, its replacement does not) or not at all
+  (displaced with no addition, or withdrawn mid-run). So the dispatch pins `step.promptVariant`
+  `{ id, applied, fingerprint? }` beside `promptRevision`, warns on every losing disposition, and
+  **every reader keys off the PIN, never off `stepOptions.agentVariantId`** — a panel or a metric
+  reading the ask reports a variation that never ran, which reads as confirmation rather than as the
+  absence it is. The `fingerprint` covers the text the variant CONTRIBUTED, so Kaizen cannot let a
+  re-worded variant inherit the verified streak its previous wording earned (re-registering an id is
+  a supported way to re-word one), and a variant that contributed nothing stays out of the key
+  entirely.
 - **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`** because `merger` and
   `on-call` dispatch a bespoke constant instead of their role prompt, bypassing `applySurfaceDirectives`.
   The role is editable; the directives (the JSON contract the engine parses, on-call's read-only
@@ -1275,8 +1312,15 @@ placeholder/format constraints, or plural-form requirements beyond English's two
 
 **Backend strings**: the backend does not localize prose. A localizable condition emits a machine-readable
 `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
-pattern); the raw `message` is an untranslated last resort. The wire vocabulary lives in
-`@cat-factory/contracts`, so the SPA imports the SAME source of truth.
+pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
+truth — `ApiErrorCode` (the status class on `error.code`) as well as the per-surface `reason` unions.
+
+**Raw backend prose is DETAIL, never the description.** Even with no `reason` to key off, a failure is
+described from its STATUS CLASS through an exhaustive `Record<ApiErrorCode, …>` of translated copy, and
+the untranslated `message` (plus a validation 400's `issues` and the envelope's `requestId`) is reached
+through a "Show details" disclosure that reveals it in place. So a non-English user is never handed
+English as the primary explanation, and the elaborate operator remedies the backend does write stay one
+click away rather than being dropped. A new failure-presenting surface copies that split.
 
 **Drift guards** (oxlint has no `no-raw-text` rule, so these replace it):
 

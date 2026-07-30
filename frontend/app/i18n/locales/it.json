@@ -1647,7 +1647,11 @@
         "approved": "Approvato",
         "changes_requested": "Modifiche richieste",
         "rejected": "Rifiutato"
-      }
+      },
+      "promptVariant": "Variante del prompt",
+      "promptVariantAdditionOnly": "È stata applicata solo l'aggiunta di questa variante. Il prompt dello spazio di lavoro per questo agente ne ha sostituito il testo di base.",
+      "promptVariantSuperseded": "Questa variante non è stata applicata. Il prompt dello spazio di lavoro per questo agente ha avuto la precedenza.",
+      "promptVariantWithdrawn": "Questa variante non è più registrata, quindi il passaggio ha usato il prompt predefinito."
     },
     "stepDetail": {
       "contents": "Contenuti",
@@ -3691,7 +3695,9 @@
       "consensusGroups": "Gruppi di consenso",
       "consensusGroupsHint": "Scegli i panel riutilizzabili a cui questo passo può salire. Ognuno porta la propria soglia di stima; viene eseguito il più esigente che il task supera.",
       "consensusGroupsActive": "Questo passo esegue il gruppo selezionato. Deseleziona tutti i gruppi per configurare qui i partecipanti.",
-      "consensusGroupAlways": "sempre"
+      "consensusGroupAlways": "sempre",
+      "variantLabel": "Variante del prompt",
+      "variantShipped": "Prompt predefinito"
     },
     "progress": {
       "status": {
@@ -4634,6 +4640,22 @@
     "reports": "Report"
   },
   "errors": {
+    "generic": {
+      "showDetail": "Mostra dettagli",
+      "requestId": "ID richiesta {id}",
+      "description": {
+        "not_found": "L'elemento a cui si riferisce questa azione non esiste più. Ricarica la pagina per vedere lo stato attuale.",
+        "validation": "Il server ha rifiutato questa richiesta perché non valida. Controlla i valori inseriti, poi riprova.",
+        "credential_required": "Questa azione richiede una credenziale personale non sbloccata. Sblocca o ricollega il tuo abbonamento, poi riprova.",
+        "forbidden": "Il tuo ruolo in questo workspace non consente questa azione. Chiedi a un amministratore del workspace di eseguirla o di ampliare il tuo ruolo.",
+        "unavailable": "Questo deployment non ha configurato la funzionalità richiesta da questa azione. Chiedi all'operatore del deployment di predisporla.",
+        "unauthorized": "La tua sessione non è più valida. Accedi di nuovo, poi riprova.",
+        "rate_limited": "Troppe richieste in poco tempo. Attendi un momento, poi riprova.",
+        "internal": "Si è verificato un errore sul server. Riprova e, se continua, condividi i dettagli con l'operatore del deployment.",
+        "network": "Non è stato possibile raggiungere il server. Controlla la connessione, poi riprova.",
+        "unexpected": "Il server ha restituito una risposta inattesa. Riprova e, se continua, condividi i dettagli con l'operatore del deployment."
+      }
+    },
     "action": {
       "retryFailed": "Nuovo tentativo non riuscito",
       "startFailed": "Avvio non riuscito",

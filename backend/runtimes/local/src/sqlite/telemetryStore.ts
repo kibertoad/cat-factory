@@ -2,8 +2,6 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   LLM_WARNING_FINISH_REASONS,
   escapeLikePattern,
-  type AgentContextFile,
-  type AgentContextFragment,
   type AgentContextIndexQuery,
   type AgentContextSnapshot,
   type AgentContextSnapshotIndex,
@@ -27,13 +25,21 @@ import {
   type SubscriptionQuotaScope,
   type SubscriptionQuotaWindowKind,
 } from '@cat-factory/kernel'
-import {
-  type SubscriptionVendor,
-  isWebSearchProvider,
-  subscriptionVendorSchema,
-} from '@cat-factory/contracts'
+import { type SubscriptionVendor, subscriptionVendorSchema } from '@cat-factory/contracts'
 import { decodeEnum } from '@cat-factory/server'
 import { openSqliteDb } from './db.js'
+import {
+  type LocalTelemetryIngestReader,
+  SqliteTelemetryIngestReader,
+} from './telemetryIngestReader.js'
+import {
+  type MetricRow,
+  type SearchQueryRow,
+  type SnapshotRow,
+  rowToMetric,
+  rowToQuery,
+  rowToSnapshot,
+} from './telemetryRows.js'
 
 // The mothership-mode LOCAL telemetry store (docs/initiatives/mothership-mode.md, PR 5).
 //
@@ -335,81 +341,32 @@ CREATE TABLE IF NOT EXISTS subscription_quota_cycles (
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_quota_cycles_window
   ON subscription_quota_cycles (window_started_at);
+
+-- Per-run high-water mark for the UPSTREAM telemetry ingest (docs/initiatives/mothership-mode.md,
+-- PR 5): which runs have already been uploaded to the mothership, and up to which capture time.
+-- Local-only bookkeeping -- it never leaves the laptop and has no mothership counterpart.
+CREATE TABLE IF NOT EXISTS telemetry_ingest_state (
+  workspace_id TEXT NOT NULL,
+  execution_id TEXT NOT NULL,
+  -- The newest captured row (across the three run-scoped sinks) this run was ingested through.
+  -- A later row moves the run's newest-write time past this and makes it a candidate again, which
+  -- is what covers a RESUMED run: the upload is idempotent by row id, so re-offering the
+  -- already-ingested prefix costs bandwidth and nothing else.
+  ingested_through INTEGER NOT NULL,
+  ingested_at INTEGER NOT NULL,
+  PRIMARY KEY (workspace_id, execution_id)
+);
 `
-
-interface MetricRow {
-  id: string
-  workspace_id: string
-  execution_id: string | null
-  agent_kind: string
-  provider: string
-  model: string
-  created_at: number
-  streaming: number
-  message_count: number
-  tool_count: number
-  request_max_tokens: number | null
-  prompt_tokens: number
-  cache_read_tokens: number
-  cache_write_tokens: number
-  completion_tokens: number
-  total_tokens: number
-  finish_reason: string | null
-  upstream_ms: number
-  overhead_ms: number
-  total_ms: number
-  ok: number
-  http_status: number | null
-  error_message: string | null
-  prompt_text: string
-  prompt_prefix_count: number
-  prompt_hash: string
-  response_text: string
-  reasoning_text: string
-  phase: string
-  turn_index: number | null
-}
-
-function rowToMetric(row: MetricRow): LlmCallMetric {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    executionId: row.execution_id,
-    agentKind: row.agent_kind,
-    provider: row.provider,
-    model: row.model,
-    createdAt: row.created_at,
-    streaming: row.streaming === 1,
-    messageCount: row.message_count,
-    toolCount: row.tool_count,
-    requestMaxTokens: row.request_max_tokens,
-    promptTokens: row.prompt_tokens,
-    cacheReadTokens: row.cache_read_tokens,
-    cacheWriteTokens: row.cache_write_tokens,
-    completionTokens: row.completion_tokens,
-    totalTokens: row.total_tokens,
-    finishReason: row.finish_reason,
-    upstreamMs: row.upstream_ms,
-    overheadMs: row.overhead_ms,
-    totalMs: row.total_ms,
-    ok: row.ok === 1,
-    httpStatus: row.http_status,
-    errorMessage: row.error_message,
-    promptText: row.prompt_text,
-    promptPrefixCount: row.prompt_prefix_count,
-    promptHash: row.prompt_hash,
-    responseText: row.response_text,
-    reasoningText: row.reasoning_text,
-    phase: row.phase,
-    turnIndex: row.turn_index,
-  }
-}
 
 /** The per-call LLM telemetry sink — the local-sqlite mirror of `D1LlmCallMetricRepository`. */
 class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async record(metric: LlmCallMetric): Promise<void> {
+    this.insert(metric)
+  }
+
+  private insert(metric: LlmCallMetric): void {
     // First write wins, and ONLY a duplicate id is ignored — `ON CONFLICT(id) DO NOTHING`, never
     // `INSERT OR IGNORE` (which would also swallow a NOT NULL/CHECK violation and silently drop a
     // malformed metric here while the other runtimes throw). The harness-call recorder deliberately
@@ -461,6 +418,28 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.phase,
         metric.turnIndex,
       )
+  }
+
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    // `DatabaseSync` is synchronous and single-process, so the loop below is one uninterrupted
+    // append rather than N round trips — this is the local mirror of the other runtimes' batch
+    // insert, not the N+1 the rule forbids. Wrapped in a transaction so a partially applied
+    // batch can't leave the run's rows interleaved with a concurrent writer's.
+    //
+    // The loop calls the SYNCHRONOUS `insert`, never `await this.record(...)`: an await inside the
+    // transaction yields the microtask queue, which is exactly what "uninterrupted" rules out — a
+    // concurrent recorder's insert would land inside this BEGIN and be rolled back with it, and a
+    // re-entrant `recordMany` would fail on a nested BEGIN. Same shape as the snapshot and
+    // search-query repos below.
+    if (metrics.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const metric of metrics) this.insert(metric)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   async latestChainTip(
@@ -650,42 +629,6 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
   }
 }
 
-function parseArray<T>(text: string): T[] {
-  try {
-    const parsed = JSON.parse(text) as unknown
-    return Array.isArray(parsed) ? (parsed as T[]) : []
-  } catch {
-    return []
-  }
-}
-
-function parseObject(text: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(text) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-interface SnapshotRow {
-  id: string
-  workspace_id: string
-  execution_id: string
-  agent_kind: string
-  step_index: number
-  created_at: number
-  model: string | null
-  harness: string | null
-  system_prompt: string
-  user_prompt: string
-  fragments: string
-  context_files: string
-  extras: string
-}
-
 /** Identity + the four body SIZES a bounded index page selects (never a body). */
 interface IndexRow {
   id: string
@@ -698,24 +641,6 @@ interface IndexRow {
   user_prompt_chars: number
   fragments_chars: number
   context_files_chars: number
-}
-
-function rowToSnapshot(row: SnapshotRow): AgentContextSnapshot {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    executionId: row.execution_id,
-    agentKind: row.agent_kind,
-    stepIndex: row.step_index,
-    createdAt: row.created_at,
-    model: row.model,
-    harness: row.harness,
-    systemPrompt: row.system_prompt,
-    userPrompt: row.user_prompt,
-    fragments: parseArray<AgentContextFragment>(row.fragments),
-    contextFiles: parseArray<AgentContextFile>(row.context_files),
-    extras: parseObject(row.extras),
-  }
 }
 
 function rowToIndex(row: IndexRow): AgentContextSnapshotIndex {
@@ -738,12 +663,33 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
   constructor(private readonly db: DatabaseSync) {}
 
   async record(snapshot: AgentContextSnapshot): Promise<void> {
+    this.insert(snapshot, false)
+  }
+
+  async recordMany(snapshots: AgentContextSnapshot[]): Promise<void> {
+    // Synchronous single-process appends inside one transaction — the local mirror of the other
+    // runtimes' batch insert. Duplicate ids are IGNORED here (unlike the single-row `record`),
+    // per the port: a batch append has to be retryable.
+    if (snapshots.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const snapshot of snapshots) this.insert(snapshot, true)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private insert(snapshot: AgentContextSnapshot, ignoreDuplicateId: boolean): void {
     this.db
       .prepare(
         `INSERT INTO agent_context_snapshots
            (id, workspace_id, execution_id, agent_kind, step_index, created_at,
             model, harness, system_prompt, user_prompt, fragments, context_files, extras)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)${
+           ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''
+         }`,
       )
       .run(
         snapshot.id,
@@ -830,41 +776,34 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
   }
 }
 
-interface SearchQueryRow {
-  id: string
-  workspace_id: string
-  execution_id: string
-  agent_kind: string
-  provider: string | null
-  query: string
-  result_count: number
-  created_at: number
-}
-
-function rowToQuery(row: SearchQueryRow): AgentSearchQuery {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    executionId: row.execution_id,
-    agentKind: row.agent_kind,
-    // The stored provider column is free-text TEXT; narrow it back to the wire union.
-    provider: isWebSearchProvider(row.provider) ? row.provider : null,
-    query: row.query,
-    resultCount: row.result_count,
-    createdAt: row.created_at,
-  }
-}
-
 /** The performed-web-search sink — the local-sqlite mirror of `D1AgentSearchQueryRepository`. */
 class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async record(query: AgentSearchQuery): Promise<void> {
+    this.insert(query, false)
+  }
+
+  async recordMany(queries: AgentSearchQuery[]): Promise<void> {
+    // See the snapshot repo's note: one transaction, duplicate ids ignored so the batch append
+    // stays retryable.
+    if (queries.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const query of queries) this.insert(query, true)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private insert(query: AgentSearchQuery, ignoreDuplicateId: boolean): void {
     this.db
       .prepare(
         `INSERT INTO agent_search_queries
            (id, workspace_id, execution_id, agent_kind, provider, query, result_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)${ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''}`,
       )
       .run(
         query.id,
@@ -1179,8 +1118,9 @@ export interface LocalTelemetryRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
 }
 
-/** The local telemetry repositories plus a handle to close the underlying db. */
+/** The local telemetry repositories plus the ingest reader and a handle to close the db. */
 export interface LocalTelemetryStore extends LocalTelemetryRepositories {
+  ingestReader: LocalTelemetryIngestReader
   close(): void
 }
 
@@ -1197,6 +1137,7 @@ export function createLocalTelemetryStore(path: string): LocalTelemetryStore {
     agentSearchQueryRepository: new SqliteAgentSearchQueryRepository(db),
     provisioningLogRepository: new SqliteProvisioningLogRepository(db),
     subscriptionQuotaCycleRepository: new SqliteSubscriptionQuotaCycleRepository(db),
+    ingestReader: new SqliteTelemetryIngestReader(db),
     close: () => db.close(),
   }
 }
