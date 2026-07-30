@@ -45,8 +45,15 @@ Copy this shape for every window. The pilot commit is the worked example.
    to surface the shared restart control (self-hides off-path); OMIT it on gates and
    block-keyed windows (no restart mid-gate / pre-run).
 6. **`variant` / `width`** — `variant="stretch"` (default) for the full-height windows;
-   `variant="centered"` (`p-4`, `max-h-[90dvh]`) for the review windows. `width` ∈
-   `3xl|4xl|5xl` matches the window's old `max-w-*`.
+   `variant="centered"` (`p-4`, `max-h-[90dvh]`) for the review windows. The `width` column
+   below records the bucket each window took AT CONVERSION, when `3xl|4xl|5xl` matched its
+   old `max-w-*`. The vocabulary has since gained **`full`** (viewport minus the shell's
+   gutter, the full-bleed step reader's shape), and the review/reading windows — the plan
+   review + tracker, requirements, clarity, brainstorm, PR review, tester report, service
+   spec — moved onto it; see the prop's own doc comment for what picks `full` over a bucket.
+   **Current state lives in `ResultWindowShell.logic.spec.ts`**, which pins every window's
+   bucket against a table naming its reason and holds each `full` window to the prose reading
+   measure — so read that table, not this column, for what a window takes today.
 7. **`data-testid`s** — the shell emits stable `result-window-backdrop` / `result-window` /
    `result-window-close` hooks. Pass `:testid="<old-id>"` to preserve a window's existing
    dialog id; window-specific inner testids are untouched. Add live-push e2e coverage per
@@ -72,7 +79,7 @@ window's subject; "extras" = header content beyond the standard row.
 | 10  | `ClarityReviewWindow`         | `clarity-review`      | block               | centered / 5xl  | no           | yes               | yes (flush)       | iteration badge     | —                                                    | ✅ done                                                         |
 | 11  | `BrainstormWindow`            | `brainstorm`          | block + stage       | centered / 5xl  | no           | yes               | no                | iteration badge     | —                                                    | ✅ done (stage-varied icon/title/subtitle)                      |
 | 12  | `RequirementsReviewWindow`    | `requirements-review` | step; data by block | centered / 5xl  | yes          | yes (reset+load)  | yes (flush)       | iteration badge     | —                                                    | ✅ done (biggest; `stepRef` + `onClose`)                        |
-| 13  | `InitiativeTrackerWindow`     | `initiative-tracker`  | block               | stretch / 4xl   | no           | yes               | —                 | progress + status   | `initiative-tracker-window`                          | ✅ done                                                         |
+| 13  | `InitiativeTrackerWindow`     | `initiative-tracker`  | block               | stretch / 5xl   | no           | yes               | —                 | progress + status   | `initiative-tracker-window`                          | ✅ done                                                         |
 | 14  | `InitiativePlanningWindow`    | `initiative-planning` | block               | stretch / 3xl   | no           | yes               | —                 | status badge        | `initiative-planning-window`                         | ✅ done                                                         |
 | 15  | `ServiceSpecWindow`           | `service-spec`        | block (frame)       | centered / 5xl  | no           | yes               | —                 | view toggle         | —                                                    | ✅ done                                                         |
 | 16  | `ConsensusSessionWindow`      | `consensus-session`   | block               | centered / 5xl  | no           | yes               | —                 | status badge        | —                                                    | ✅ done (composed title + subtitle)                             |

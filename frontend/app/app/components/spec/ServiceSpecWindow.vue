@@ -185,7 +185,7 @@ function kindLabel(item: RequirementItem): string {
     :title="t('spec.title')"
     :subtitle="block ? spec?.service || block.title : undefined"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <!-- view toggle: Gherkin only when the spec (and its feature files) are on main -->
@@ -318,7 +318,10 @@ function kindLabel(item: RequirementItem): string {
         <!-- service overview -->
         <template v-if="selected === null">
           <h2 class="text-lg font-semibold text-white">{{ spec?.service }}</h2>
-          <p v-if="spec?.summary" class="mt-2 whitespace-pre-line text-sm text-slate-300">
+          <!-- The service's own prose, so it takes the reading measure the shell's `full` width
+               obliges (see the `width` prop). The requirement rows and Gherkin blocks below keep
+               the full span — they are structure, not paragraphs. -->
+          <p v-if="spec?.summary" class="mt-2 max-w-3xl whitespace-pre-line text-sm text-slate-300">
             {{ spec.summary }}
           </p>
           <p v-else class="mt-2 text-sm text-slate-500">{{ t('spec.noSummary') }}</p>
@@ -352,7 +355,7 @@ function kindLabel(item: RequirementItem): string {
             {{ selectedModule?.name }}
           </div>
           <h2 class="text-lg font-semibold text-white">{{ selectedGroup.name }}</h2>
-          <p v-if="selectedGroup.summary" class="mt-1 text-sm text-slate-400">
+          <p v-if="selectedGroup.summary" class="mt-1 max-w-3xl text-sm text-slate-400">
             {{ selectedGroup.summary }}
           </p>
 
@@ -500,7 +503,7 @@ function kindLabel(item: RequirementItem): string {
                 <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5" />
                 {{ t('spec.domainRules') }}
               </div>
-              <ul class="space-y-1.5">
+              <ul class="max-w-3xl space-y-1.5">
                 <li
                   v-for="rule in selectedGroup.rules ?? []"
                   :key="rule.id"

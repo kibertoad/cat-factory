@@ -313,7 +313,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
     :title="headerTitle"
     :subtitle="t('testing.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
-    width="5xl"
+    width="full"
     testid="tester-report-window"
     @close="close"
   >
@@ -489,7 +489,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
                 :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
               />
-              <p v-if="a.summary" class="mt-1 text-[12px] leading-snug text-slate-400">
+              <p v-if="a.summary" class="mt-1 max-w-3xl text-[12px] leading-snug text-slate-400">
                 {{ a.summary }}
               </p>
               <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
@@ -607,8 +607,13 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </div>
 
         <template v-else>
-          <!-- Summary -->
-          <p v-if="report.summary" class="mb-4 text-[13px] leading-relaxed text-slate-300">
+          <!-- Summary — the tester's own prose, so it takes the reading measure the shell's `full`
+               width obliges (see the `width` prop). The scenario rows and log tails below keep the
+               full span. -->
+          <p
+            v-if="report.summary"
+            class="mb-4 max-w-3xl text-[13px] leading-relaxed text-slate-300"
+          >
             {{ report.summary }}
           </p>
 
@@ -675,7 +680,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   />
                   <div class="min-w-0">
                     <span class="text-[13px] text-slate-200">{{ o.name }}</span>
-                    <p v-if="o.detail" class="text-[12px] leading-snug text-slate-400">
+                    <p v-if="o.detail" class="max-w-3xl text-[12px] leading-snug text-slate-400">
                       {{ o.detail }}
                     </p>
                   </div>
@@ -705,7 +710,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                         {{ SEVERITY_LABELS[c.severity] }}
                       </span>
                     </div>
-                    <p v-if="c.detail" class="text-[12px] leading-snug text-slate-400">
+                    <p v-if="c.detail" class="max-w-3xl text-[12px] leading-snug text-slate-400">
                       {{ c.detail }}
                     </p>
                   </div>

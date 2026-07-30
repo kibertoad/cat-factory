@@ -26,6 +26,10 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
 import StepValidationReport from '~/components/panels/StepValidationReport.vue'
 import { effortBand, effortHint } from '~/utils/effort'
+import {
+  RESULT_WINDOW_WIDTH_CLASS,
+  type ResultWindowWidth,
+} from '~/components/panels/ResultWindowShell.logic'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
  *  "restart from here" control. `StepRestartControl` self-hides for an off-path open
@@ -42,8 +46,38 @@ const props = withDefaults(
     /** Header title (the accessible dialog name) + optional secondary line. */
     title: string
     subtitle?: string
-    /** Card width bucket + backdrop layout (the two pre-slice-5 chrome variants). */
-    width?: '3xl' | '4xl' | '5xl'
+    /**
+     * Card width bucket + backdrop layout (the two pre-slice-5 chrome variants).
+     *
+     * `full` is the REVIEW/READING bucket: the panel takes the whole viewport minus the
+     * shell's own gutter, the shape the full-bleed step reader (`AgentStepDetail`) already
+     * has. It is for a window whose body lays out in COLUMNS — rails plus a fluid main
+     * column — where the width buys visible layout: the outline and the review rail stop
+     * competing with the document, a findings list stops wrapping every card, a diff or a
+     * results table stops scrolling sideways. A window that is one column of prose or a
+     * short verdict keeps a bucket: stretching two paragraphs across an ultrawide reads
+     * worse, not better.
+     *
+     * The obligation that comes with it: CONTINUOUS PROSE inside a `full` window carries its
+     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same 13px
+     * `.reader-prose`), or the width lands as 200-character lines.
+     *
+     * The unit that obligation attaches to is the PARAGRAPH, not the section — which is the
+     * distinction to get right, because "a findings list reads better at the full span" is
+     * true of the LIST and false of the prose inside each row. A list's rows, badge rows,
+     * control rows, tables, Gherkin blocks, log tails and inputs all take the span; a
+     * finding's detail, a recorded answer, an investigator's justification and a summary
+     * paragraph are prose wherever they sit, and take the measure. Sizing by section is how a
+     * card whose answer control is STACKED under its question — every finding card here —
+     * ends up arguing that its question is "beside" something and keeping 200-character lines.
+     *
+     * What `full` costs: click-outside effectively goes, since the backdrop is then only the
+     * shell's own gutter. That is the same trade the full-bleed reader already makes (it has
+     * no backdrop close at all), and Escape plus the header's close button — the two paths a
+     * keyboard and a pointer user actually reach for — are untouched. A window that wants
+     * click-outside to stay hittable is a window that should have kept a bucket.
+     */
+    width?: ResultWindowWidth
     variant?: 'stretch' | 'centered'
     /** Provide on step-result windows to show the shared restart control; omit on gates
      *  and block-keyed windows (no restart mid-gate / pre-run). */
@@ -119,18 +153,13 @@ const chipClass = computed(() =>
   effortReport.value ? CHIP_CLASS[effortBand(effortReport.value.difficulty)] : '',
 )
 
-const WIDTH: Record<'3xl' | '4xl' | '5xl', string> = {
-  '3xl': 'max-w-3xl',
-  '4xl': 'max-w-4xl',
-  '5xl': 'max-w-5xl',
-}
 const backdropClass = computed(() => [
   'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-slate-950/70 backdrop-blur-sm',
   props.variant === 'centered' ? 'items-center p-4' : 'items-stretch',
 ])
 const panelClass = computed(() => [
   'flex w-full flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl',
-  WIDTH[props.width],
+  RESULT_WINDOW_WIDTH_CLASS[props.width],
   props.variant === 'centered' ? 'max-h-[90dvh]' : 'm-4',
 ])
 </script>

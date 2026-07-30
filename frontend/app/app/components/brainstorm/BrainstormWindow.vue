@@ -254,7 +254,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     "
     :subtitle="block?.title"
     variant="centered"
-    width="5xl"
+    width="full"
     @close="close"
   >
     <template v-if="session" #header-extras>
@@ -361,14 +361,18 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       {{ t(STATUS_LABELS[item.status]) }}
                     </UBadge>
                   </div>
-                  <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
+                  <!-- The proposal itself is prose, so it takes the measure even though the card
+                       around it takes the span (see the shell's `width` prop: the unit is the
+                       paragraph, not the section). The badge row above and the choose/dismiss
+                       control below are what the full width is actually for. -->
+                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-400">
                     {{ item.detail }}
                   </p>
 
                   <!-- recorded choice -->
                   <div
                     v-if="item.reply"
-                    class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                    class="mt-2 max-w-3xl rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                   >
                     <span class="text-[10px] uppercase tracking-wide text-slate-500">
                       {{ t('brainstorm.yourChoice') }}
@@ -446,7 +450,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
               </span>
             </div>
-            <div v-for="s in outline.sections" :key="s.id" class="mb-2">
+            <!-- The same reading measure the options' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. -->
+            <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
               <button
                 v-if="s.title"
                 class="group flex w-full items-center gap-2 text-start"

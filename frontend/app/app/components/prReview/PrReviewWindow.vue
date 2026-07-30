@@ -266,7 +266,7 @@ async function onDismiss(id: string): Promise<void> {
     icon-class="bg-indigo-500/15 text-indigo-300"
     :title="block ? t('prReview.titleWithBlock', { title: block.title }) : t('prReview.title')"
     :subtitle="t('prReview.subtitle')"
-    width="3xl"
+    width="full"
     testid="pr-review-window"
     @close="close"
   >
@@ -525,10 +525,11 @@ async function onDismiss(id: string): Promise<void> {
             </p>
           </div>
 
-          <!-- The reviewer's overall assessment. -->
+          <!-- The reviewer's overall assessment. Prose, so it takes the reading measure (see the
+               shell's `width` prop) — this window is `full`-width. -->
           <p
             v-if="state?.summary"
-            class="mb-3 rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
+            class="mb-3 max-w-3xl rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
           >
             <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
             {{ state.summary }}
@@ -579,7 +580,7 @@ async function onDismiss(id: string): Promise<void> {
               <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 {{ g.title }}
               </h3>
-              <p v-if="g.rationale" class="mb-1.5 text-[11px] text-slate-500">
+              <p v-if="g.rationale" class="mb-1.5 max-w-3xl text-[11px] text-slate-500">
                 {{ g.rationale }}
               </p>
               <article
@@ -672,15 +673,22 @@ async function onDismiss(id: string): Promise<void> {
                         · {{ t('prReview.line', { line: f.line }) }}</template
                       >
                     </p>
+                    <!-- The reviewer's prose — what the finding is, what to do about it, and the
+                         investigator's verdict below. Each takes the reading measure even though
+                         the card around it takes the span (see the shell's `width` prop: the unit
+                         is the paragraph, not the section). This window went from the NARROWEST
+                         bucket to `full`, so these are the three paragraphs the width would
+                         otherwise have stretched furthest; the path/line row, the badges and the
+                         per-finding actions are what it is actually for. -->
                     <p
-                      class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300"
+                      class="mt-1 max-w-3xl whitespace-pre-wrap text-[12px] text-slate-300"
                       :class="isRetracted(f) ? 'line-through' : ''"
                     >
                       {{ f.detail }}
                     </p>
                     <p
                       v-if="f.suggestedFix"
-                      class="mt-1 whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
+                      class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
                     >
                       <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
                       {{ f.suggestedFix }}
@@ -691,7 +699,7 @@ async function onDismiss(id: string): Promise<void> {
                     <p
                       v-if="f.challenge?.justification"
                       data-testid="pr-review-finding-justification"
-                      class="mt-1.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
+                      class="mt-1.5 max-w-3xl whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
                       :class="
                         isRetracted(f)
                           ? 'bg-rose-500/10 text-rose-200'
