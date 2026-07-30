@@ -109,3 +109,20 @@ export const customAgentKindSchema = v.object({
   container: v.boolean(),
 })
 export type CustomAgentKind = v.InferOutput<typeof customAgentKindSchema>
+
+/**
+ * A registered VARIATION of an existing agent kind — an alternate prompt a step selects through
+ * `stepOptions.agentVariantId`. Carried in the snapshot so the pipeline builder can offer the
+ * variants registered for a step's kind and the run views can name the one a step ran under.
+ *
+ * Deliberately NOT a {@link customAgentKindSchema} entry: a variant is not a placeable palette
+ * block and has no result view of its own — it runs as `baseKind` in every respect. So it needs
+ * only the label that distinguishes it, shown BESIDE the base kind's own.
+ */
+export const agentKindVariantSchema = v.object({
+  id: v.string(),
+  baseKind: agentKindSchema,
+  label: v.string(),
+  description: v.optional(v.string()),
+})
+export type AgentKindVariant = v.InferOutput<typeof agentKindVariantSchema>

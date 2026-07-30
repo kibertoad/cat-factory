@@ -1,4 +1,5 @@
 import type { NotificationType } from '../domain/types.js'
+import type { RunLifecycleEventKind } from './run-lifecycle.js'
 
 // Persistence port for a workspace's outbound notification webhook — the delivery endpoint a
 // HEADLESS integration registers so it learns about parked decisions (and the actionable run
@@ -21,6 +22,15 @@ export interface NotificationWebhookRecord {
    * "everything".
    */
   types: NotificationType[]
+  /**
+   * The RUN-LIFECYCLE events delivered to the same endpoint (`run.started` / `run.completed` /
+   * `run.failed`). EMPTY means NONE — the opposite of `types` above, deliberately: notifications
+   * are what the endpoint was built to deliver, so an unset filter there means "the sensible
+   * defaults", whereas lifecycle events are the later addition and an existing endpoint must not
+   * start receiving a new event family it never asked for. Unconfigured is byte-for-byte the
+   * prior behaviour.
+   */
+  runEvents: RunLifecycleEventKind[]
   /** Whether deliveries are currently attempted. */
   enabled: boolean
   /**

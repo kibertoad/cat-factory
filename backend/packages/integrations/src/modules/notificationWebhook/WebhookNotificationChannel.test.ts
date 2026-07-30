@@ -51,6 +51,7 @@ function webhook(overrides: Partial<NotificationWebhookRecord> = {}): Notificati
     workspaceId: 'ws1',
     url: 'https://example.test/hook',
     types: [],
+    runEvents: [],
     enabled: true,
     secretSealed: null,
     updatedAt: 1,

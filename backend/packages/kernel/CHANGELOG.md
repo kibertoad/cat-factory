@@ -1,5 +1,173 @@
 # @cat-factory/kernel
 
+## 0.202.0
+
+### Minor Changes
+
+- 9c6ce7a: Mothership mode: carry a finished run's telemetry up to the mothership.
+
+  Telemetry on a mothership-mode node is captured locally, which until now meant it stayed there: a
+  hosted teammate opening a run a developer drove saw an empty observability panel, zero token
+  rollups and no web-search log, and the rows vanished when the node's short retention window came
+  round. A new machine-authed `POST /internal/telemetry/ingest` (mounted on both facades, gated and
+  account-scoped exactly like the persistence RPC) accepts a bounded batch of a run's captured rows,
+  and a background sweep on the node uploads each run once it has gone quiet.
+
+  The mothership STAMPS the batch's scope-bound workspace and run onto every row it stores, so a node
+  can only ever file telemetry for a run in a workspace it can already reach. Appends are idempotent
+  by row id — a new `recordMany` on the three run-scoped telemetry ports, mirrored across D1, Drizzle
+  and the local `node:sqlite` store — which is what makes a lost-ack chunk safely retryable.
+
+  Note the deliberate asymmetry between `record` and `recordMany`: only the batch append ignores a
+  duplicate id, because only the batch is retried. A batch over the per-request caps is refused
+  rather than truncated, since the node treats a success as "this range is stored".
+
+  That last rule is what makes the sweep's success path load-bearing, so two things follow from it.
+  A node with no machine token yet rejects with the new `MachineTokenUnavailableError` instead of
+  resolving an empty result, which would have read as "this run had no rows" and let the local prune
+  delete telemetry that never left the laptop. And batches are budgeted by BYTES as well as row
+  count, because the mothership refuses on either — a page built to the row cap alone could sit
+  permanently over the body cap. A row too large to post even by itself is skipped and reported
+  rather than retried into a stall.
+
+## 0.201.1
+
+### Patch Changes
+
+- 54e6a45: Agent-kind variants: register an alternate prompt for an EXISTING kind programmatically
+
+  `AgentKindRegistry.registerVariant({ id, baseKind, systemPrompt | promptAddition })` lets a
+  deployment ship "the Coder, but test-first" without inventing an agent kind. A pipeline step
+  selects one through `stepOptions.agentVariantId`, so the step still records the base kind and every
+  behavioural decision — dispatch shape, guardrails, companions, gating, the palette — is unchanged;
+  only the prompt differs. The engine resolves the variant in the same once-per-dispatch place as a
+  per-workspace prompt override and emits it through the same field, so the engine-enforced
+  directives still apply on top and a workspace override still wins as the narrower tier.
+
+  Because the workspace wins on the same unit of text, selecting a variant is not proof it ran: the
+  dispatch pins what it actually did onto `PipelineStep.promptVariant` (`full` / `addition-only` /
+  `superseded` / `withdrawn`, plus a fingerprint of the text the variant contributed) and warns on
+  every losing disposition. The run views and Kaizen's combo key both read that pin rather than the
+  step's selection, so a step is never reported as running a variation whose text never reached it, and
+  re-wording a variant under the same id starts a fresh verification streak instead of inheriting the
+  previous wording's.
+
+  Varying an INLINE-ENGINE kind (the requirements + clarity reviewers, the brainstorm stages, their
+  rework editors) is refused at boot and at pipeline save rather than accepted and ignored: those kinds
+  compose their prompt without a step, so the variant could never reach the model. Vary them with a
+  per-workspace prompt override instead. `merger` and `on-call` are unaffected — they dispatch through
+  the engine, so a variant applies to their role half.
+
+  The two bespoke container prompts (`merger`, `on-call`) moved from `@cat-factory/server` into
+  `@cat-factory/agents` alongside the inline-engine ones, and `builtInBaseSystemPrompt` is now
+  `shippedBasePromptFor` exported from there.
+
+- 08e9bcc: Describe a non-conflict API failure from its STATUS CLASS in translated copy, and keep the raw
+  backend prose behind a "Show details" disclosure.
+
+  `usePipelineErrorToast` is the funnel every failure that is not a 409 drains into, and it put the
+  backend's `message` straight into the toast description. Three things followed from that, all of them
+  visible to a user:
+
+  - **A non-English user read English.** The whole point of the `reason`-code contract is that the
+    backend emits a code and the SPA translates it; every non-conflict failure sidestepped it.
+  - **An internal 500 explained nothing.** `handleError` deliberately answers a fault with the fixed
+    `Internal server error` and never the thrown text, so the description WAS that sentence.
+  - **A request-validation 400 dropped the only informative part.** Its message is the fixed
+    `Request failed validation`; the `issues` array naming the offending fields was parsed by nobody.
+
+  The description is now translated copy keyed off `error.code` through an exhaustive
+  `Record<Exclude<ApiErrorCode, 'conflict'>, string>`, and the untranslated detail — the prose, the
+  validation `issues`, and the envelope's `requestId` — is revealed in place by a button. Keeping the
+  prose reachable is the point rather than a concession: the elaborate operator remedies this initiative
+  spent eighteen slices adding (a `configProblem` remedy, `describeVcsApiError`'s appended cause, a
+  harness `HarnessFailure` remedy) are exactly what someone pastes into a bug report. What changed is
+  that a raw string is no longer the FIRST thing anyone reads.
+
+  `requestId` reaches a screen for the first time. `handleError` has stamped it on every envelope since
+  request logging landed, specifically so a user could quote it back and an operator could grep the one
+  line that explains their failure — and no SPA surface had ever rendered it.
+
+  **The status class moves to `@cat-factory/contracts`.** `DOMAIN_ERROR_CODES` is now declared there and
+  kernel's `DomainErrorCode` is derived from it, mirroring how `ConflictReason` already worked: it is a
+  shape both sides read, so a status class added on one side must be honoured on the other, and the
+  frontend `Record` becomes a real drift guard instead of a hand-kept list. `API_ERROR_CODES` adds
+  `internal` on top, because that code is minted by the error handler and produced by no `DomainError` —
+  a client mapping only the domain codes silently misses every 500, which is how this gap started.
+
+  Two verdicts are kept apart on purpose. "Nothing answered" (no envelope and no HTTP status: offline,
+  DNS, a dropped connection) and "something answered unrecognisably" (a proxy's 502 page, a `code` this
+  build does not know) get different copy, because their remedies are opposites — check your connection
+  versus the server is broken — and one wording for both would be a cause inferred rather than reported.
+
+  No backend behaviour changes: the wire shape, the codes and the messages are all untouched, and the
+  kernel change is a type re-export. Section H of the error-message-coverage initiative (making the
+  remaining providers UI-configurable) is the only part of it still open.
+
+- a7aae8a: Finish the `/api/v1` external surface: a workspace usage read, and an outbound run-lifecycle push
+  so an integration stops polling.
+
+  `GET /api/v1/usage` (a `read`-scope key) serves the current billing period as ONE resource: the
+  METERED budget position the spend safeguard itself acts on — including `exceeded`, which is what
+  pauses runs — plus the per-`(billing, vendor, provider, model)` breakdown behind it. Splitting it
+  into two endpoints would let a caller render a breakdown against a budget read a period-roll apart.
+  It reads through a new `SpendService.periodUsage`, which resolves ONE `periodStart` for both
+  aggregates and still issues them concurrently: composing the response from `status()` +
+  `usageBreakdown()` would have reintroduced the same skew inside one request, since each derives its
+  own period from the clock.
+  Rows keep their `billing` discriminator and are never summed for the caller: a `subscription` row's
+  `costEstimate` is illustrative (a flat-rate plan bills nothing per token), so adding it to metered
+  spend would report money nobody is billed for. Workspace tier only — the account and user budgets
+  are cross-workspace, and a workspace-scoped key must never learn a sibling workspace's spend.
+
+  The workspace's ONE registered outbound endpoint now also delivers run-lifecycle events —
+  `run.started`, `run.completed`, `run.failed` — beside the notification cards it already carried,
+  reaching the transport through a new kernel `RunLifecycleSink` port. This exists because the HAPPY
+  path raises no notification at all: a pipeline whose `merger` merges its own PR settles with an
+  empty inbox, which is exactly the outcome a CI system wants to hear about. Same row, same sealed
+  secret, same SSRF guard, same retry budget: the retry/signature/redirect core moved to a shared
+  `signedDelivery.ts` that both families drive, because everything interesting about a delivery is a
+  property of the endpoint rather than the payload.
+
+  **Subscribing is opt-in and empty means NONE**, deliberately the opposite of the sibling
+  notification `types` filter — an endpoint registered for parked decisions must not silently start
+  receiving an event per run — so an existing webhook keeps byte-for-byte its current behaviour until
+  someone sets `runEvents`.
+
+  Worth knowing when reviewing: the two edges hook different places on purpose. `run.started` fires
+  from `handOffLiveRun`, the one funnel every start path ends with, and is announced LAST — after the
+  block is committed and the durable runner has the run — so a slow or black-holing receiver costs the
+  announcement and never the run. It is still exactly once, because the claim that precedes the
+  hand-off (`insertLiveRunOrConflict`) is what mints a live run, and a start path added later inherits
+  it since skipping the funnel would also skip `startRun`. The terminal edges fire from the engine's
+  terminal-emit funnel, because a run reaches `done` from four independent sites and a hook at each
+  would compile, pass, and drift the day a fifth is added — the cost is that a durable replay can
+  re-emit a settled run, so delivery is **at-least-once** with a `<runId>:<event>` dedupe id in the
+  body. **Dedupe on that id, not on the body**: a replay re-stamps `sentAt`/`occurredAt`, so two
+  deliveries of one transition are not byte-identical even though everything a receiver routes on is.
+  That is a considered departure from the platform's atomic-claim rule: unlike a merge or a posted
+  review, a repeat here is collapsed by one id comparison, so it does not earn a claim table and the
+  sweeper that would come with it.
+
+  `docs/openapi.json` shrinks by ~17k lines in the same change, with no semantic difference beyond
+  the new endpoint. The generator copied every component definition into a `$defs` block on each
+  schema it inlined, so the whole component set was duplicated across ten operations and every new
+  public DTO cost roughly ten times its size in the committed file. Those `$defs` resolved nothing —
+  the refs are rewritten into `#/components/schemas` — and generation now asserts that every `$ref`
+  names an emitted component, so a DTO that actually needs hoisting fails the build instead of
+  shipping a dangling pointer.
+
+  Schema: `notification_webhooks` gains a `run_events` JSON column (D1 migration 0072 ⇄ Drizzle),
+  defaulting to `'[]'`. The webhook repository is now read on the run's terminal path, so it is
+  allow-listed for mothership mode (`get`/`put`/`delete`, workspace-scoped) — an un-routed method
+  there would have surfaced only as a webhook that silently never fires, since both delivery paths
+  are best-effort by contract.
+
+- Updated dependencies [54e6a45]
+- Updated dependencies [08e9bcc]
+- Updated dependencies [a7aae8a]
+  - @cat-factory/contracts@0.203.0
+
 ## 0.201.0
 
 ### Minor Changes

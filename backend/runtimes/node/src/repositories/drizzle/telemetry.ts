@@ -443,6 +443,55 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
   }
 }
 
+/**
+ * Rows per multi-row INSERT in the batch appends below. Postgres caps a statement at 65535 bind
+ * parameters and the widest of these rows binds ~30 columns, so 200 leaves generous headroom
+ * while keeping the mothership-mode telemetry ingest to a handful of statements per chunk.
+ */
+const INSERT_CHUNK_ROWS = 200
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/** One metric as its insert row — shared by the single-row and batch appends so they can't drift. */
+function metricValues(metric: LlmCallMetric) {
+  return {
+    id: metric.id,
+    workspace_id: metric.workspaceId,
+    execution_id: metric.executionId,
+    agent_kind: metric.agentKind,
+    provider: metric.provider,
+    model: metric.model,
+    created_at: metric.createdAt,
+    streaming: metric.streaming ? 1 : 0,
+    phase: metric.phase,
+    turn_index: metric.turnIndex,
+    message_count: metric.messageCount,
+    tool_count: metric.toolCount,
+    request_max_tokens: metric.requestMaxTokens,
+    prompt_tokens: metric.promptTokens,
+    cache_read_tokens: metric.cacheReadTokens,
+    cache_write_tokens: metric.cacheWriteTokens,
+    completion_tokens: metric.completionTokens,
+    total_tokens: metric.totalTokens,
+    finish_reason: metric.finishReason,
+    upstream_ms: metric.upstreamMs,
+    overhead_ms: metric.overheadMs,
+    total_ms: metric.totalMs,
+    ok: metric.ok ? 1 : 0,
+    http_status: metric.httpStatus,
+    error_message: metric.errorMessage,
+    prompt_text: metric.promptText,
+    prompt_prefix_count: metric.promptPrefixCount,
+    prompt_hash: metric.promptHash,
+    response_text: metric.responseText,
+    reasoning_text: metric.reasoningText,
+  }
+}
+
 export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -454,39 +503,19 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     // is only meaningful against the chain tip that preceded its FIRST write.
     await this.db
       .insert(llmCallMetrics)
-      .values({
-        id: metric.id,
-        workspace_id: metric.workspaceId,
-        execution_id: metric.executionId,
-        agent_kind: metric.agentKind,
-        provider: metric.provider,
-        model: metric.model,
-        created_at: metric.createdAt,
-        streaming: metric.streaming ? 1 : 0,
-        phase: metric.phase,
-        turn_index: metric.turnIndex,
-        message_count: metric.messageCount,
-        tool_count: metric.toolCount,
-        request_max_tokens: metric.requestMaxTokens,
-        prompt_tokens: metric.promptTokens,
-        cache_read_tokens: metric.cacheReadTokens,
-        cache_write_tokens: metric.cacheWriteTokens,
-        completion_tokens: metric.completionTokens,
-        total_tokens: metric.totalTokens,
-        finish_reason: metric.finishReason,
-        upstream_ms: metric.upstreamMs,
-        overhead_ms: metric.overheadMs,
-        total_ms: metric.totalMs,
-        ok: metric.ok ? 1 : 0,
-        http_status: metric.httpStatus,
-        error_message: metric.errorMessage,
-        prompt_text: metric.promptText,
-        prompt_prefix_count: metric.promptPrefixCount,
-        prompt_hash: metric.promptHash,
-        response_text: metric.responseText,
-        reasoning_text: metric.reasoningText,
-      })
+      .values(metricValues(metric))
       .onConflictDoNothing({ target: llmCallMetrics.id })
+  }
+
+  async recordMany(metrics: LlmCallMetric[]): Promise<void> {
+    // One multi-row insert per chunk (never `record` in a loop — that is the banned N+1 write).
+    // Chunked because Postgres caps a statement's bind parameters and these rows are wide.
+    for (const batch of chunks(metrics, INSERT_CHUNK_ROWS)) {
+      await this.db
+        .insert(llmCallMetrics)
+        .values(batch.map(metricValues))
+        .onConflictDoNothing({ target: llmCallMetrics.id })
+    }
   }
 
   async latestChainTip(
@@ -744,25 +773,49 @@ function parseAgentContextExtras(text: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Rows per multi-row snapshot INSERT — far smaller than {@link INSERT_CHUNK_ROWS} because a single
+ * snapshot row is routinely megabytes (the whole composed system prompt plus every injected
+ * `.cat-context/*` file's body), so the bind-parameter cap is never the binding constraint here.
+ */
+const SNAPSHOT_CHUNK_ROWS = 20
+
+/** One snapshot as its insert row — shared by the single-row and batch appends. */
+function snapshotValues(snapshot: AgentContextSnapshot) {
+  return {
+    id: snapshot.id,
+    workspace_id: snapshot.workspaceId,
+    execution_id: snapshot.executionId,
+    agent_kind: snapshot.agentKind,
+    step_index: snapshot.stepIndex,
+    created_at: snapshot.createdAt,
+    model: snapshot.model,
+    harness: snapshot.harness,
+    system_prompt: snapshot.systemPrompt,
+    user_prompt: snapshot.userPrompt,
+    fragments: JSON.stringify(snapshot.fragments),
+    context_files: JSON.stringify(snapshot.contextFiles),
+    extras: JSON.stringify(snapshot.extras),
+  }
+}
+
 export class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async record(snapshot: AgentContextSnapshot): Promise<void> {
-    await this.db.insert(agentContextSnapshots).values({
-      id: snapshot.id,
-      workspace_id: snapshot.workspaceId,
-      execution_id: snapshot.executionId,
-      agent_kind: snapshot.agentKind,
-      step_index: snapshot.stepIndex,
-      created_at: snapshot.createdAt,
-      model: snapshot.model,
-      harness: snapshot.harness,
-      system_prompt: snapshot.systemPrompt,
-      user_prompt: snapshot.userPrompt,
-      fragments: JSON.stringify(snapshot.fragments),
-      context_files: JSON.stringify(snapshot.contextFiles),
-      extras: JSON.stringify(snapshot.extras),
-    })
+    await this.db.insert(agentContextSnapshots).values(snapshotValues(snapshot))
+  }
+
+  async recordMany(snapshots: AgentContextSnapshot[]): Promise<void> {
+    // Idempotent by id (see the port): the ingest retries a chunk whose ack was lost. Chunked
+    // small because one snapshot row carries the whole composed prompt plus every injected
+    // context file's body.
+    for (const batch of chunks(snapshots, SNAPSHOT_CHUNK_ROWS)) {
+      await this.db
+        .insert(agentContextSnapshots)
+        .values(batch.map(snapshotValues))
+        .onConflictDoNothing({ target: agentContextSnapshots.id })
+    }
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {
@@ -881,20 +934,35 @@ function rowToAgentSearchQuery(row: AgentSearchQueryRow): AgentSearchQuery {
   }
 }
 
+/** One search query as its insert row — shared by the single-row and batch appends. */
+function searchQueryValues(query: AgentSearchQuery) {
+  return {
+    id: query.id,
+    workspace_id: query.workspaceId,
+    execution_id: query.executionId,
+    agent_kind: query.agentKind,
+    provider: query.provider,
+    query: query.query,
+    result_count: query.resultCount,
+    created_at: query.createdAt,
+  }
+}
+
 export class DrizzleAgentSearchQueryRepository implements AgentSearchQueryRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async record(query: AgentSearchQuery): Promise<void> {
-    await this.db.insert(agentSearchQueries).values({
-      id: query.id,
-      workspace_id: query.workspaceId,
-      execution_id: query.executionId,
-      agent_kind: query.agentKind,
-      provider: query.provider,
-      query: query.query,
-      result_count: query.resultCount,
-      created_at: query.createdAt,
-    })
+    await this.db.insert(agentSearchQueries).values(searchQueryValues(query))
+  }
+
+  async recordMany(queries: AgentSearchQuery[]): Promise<void> {
+    // Idempotent by id (see the port): the ingest retries a chunk whose ack was lost.
+    for (const batch of chunks(queries, INSERT_CHUNK_ROWS)) {
+      await this.db
+        .insert(agentSearchQueries)
+        .values(batch.map(searchQueryValues))
+        .onConflictDoNothing({ target: agentSearchQueries.id })
+    }
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]> {

@@ -1,0 +1,11 @@
+-- Run-lifecycle events on the workspace's outbound webhook (migration 0061). The endpoint that
+-- already receives notification cards can now also receive the lifecycle of the work itself —
+-- `run.started` / `run.completed` / `run.failed` — which raises no notification at all on the
+-- happy path (a pipeline with a `merger` merges its own PR and settles with an empty inbox), so
+-- a headless integration could previously only learn that its task finished by polling.
+--
+-- `run_events` is a JSON array, and EMPTY means NONE — the opposite of the sibling `types`
+-- column, deliberately: every existing row defaults to '[]' and therefore keeps byte-for-byte its
+-- current behaviour, rather than an endpoint registered for parked decisions suddenly receiving
+-- an event per run.
+ALTER TABLE notification_webhooks ADD COLUMN run_events TEXT NOT NULL DEFAULT '[]';

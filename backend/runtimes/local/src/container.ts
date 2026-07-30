@@ -26,7 +26,7 @@ import {
   createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
-import { startLocalTelemetryRetention } from './telemetryRetention.js'
+import { startMothershipTelemetrySweeps } from './telemetrySweeps.js'
 import { ConflictError, MODEL_PRESET_SEED_IDS, runBestEffort } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
@@ -1002,18 +1002,18 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     }),
   )
 
-  // Telemetry retention (docs/initiatives/mothership-mode.md, PR 5): the local telemetry store is
-  // written on every LLM call / dispatch / provisioning attempt and nothing else prunes it — the
-  // mothership's cron owns ITS tables, and the Node facade's retention sweeper runs from `start()`,
-  // which a mothership-mode boot never calls. Started here (not in the boot path) so it shares the
-  // store's lifecycle: opened by `composeMothership`, pruned here, closed in `onShutdown` below.
-  const stopTelemetryRetention = mothership
-    ? startLocalTelemetryRetention(
-        mothership.telemetryStore,
-        config.retention,
+  // The mothership-mode telemetry sweeps (docs/initiatives/mothership-mode.md, PR 5): the local
+  // prune that bounds the store, and the upstream ingest that carries a quiesced run's rows to the
+  // mothership so they survive it. Started here (not in the boot path) because they share the
+  // store's lifecycle — opened by `composeMothership`, closed in `onShutdown` below.
+  const stopTelemetrySweeps = mothership
+    ? startMothershipTelemetrySweeps({
+        store: mothership.telemetryStore,
+        client: mothership.telemetryClient,
+        retention: config.retention,
         clock,
-        container.logger,
-      )
+        log: container.logger,
+      })
     : undefined
 
   // Real-time INBOUND (docs/initiatives/mothership-mode.md, PR 2): hold one machine-authed
@@ -1053,15 +1053,15 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // On shutdown (the boot paths call this from their SIGTERM/SIGINT handlers): stop the
     // native host-process harnesses (agent + deploy) so a graceful exit tears them down —
     // aborting their in-flight CLI children — rather than relying on the parent-exit
-    // backstop kill; in mothership mode ALSO stop the work runner's recovery poll AND the
-    // telemetry retention sweep FIRST so neither can touch a store mid-close, then release
-    // the local SQLite handles.
+    // backstop kill; in mothership mode ALSO stop the work runner's recovery poll AND both
+    // telemetry sweeps (retention + upstream ingest) FIRST so neither can touch a store
+    // mid-close, then release the local SQLite handles.
     onShutdown: async () => {
       if (mothership) {
         inProcessRunner?.stop()
         // Awaited, not fire-and-forget: an in-flight prune must finish touching the SQLite
         // handle before `close()` pulls it out from under it.
-        await stopTelemetryRetention?.()
+        await stopTelemetrySweeps?.()
         mothership.close()
       }
       await getNativeProcessTransport()?.shutdown()

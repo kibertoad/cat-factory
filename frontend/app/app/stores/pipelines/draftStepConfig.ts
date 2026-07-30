@@ -6,7 +6,7 @@ import { defaultConsensusConfig, type PipelinesContext } from './context'
  * The pipeline-builder draft's PER-STEP CONFIG toggles: consensus (inline panel and the workspace
  * consensus-GROUP tier set), the human approval gate, the estimate gate on a companion step, the
  * follow-up and test-QC companions, the per-step enable flag, and the `StepOptions` bag
- * (requirements auto-recommendation, the picked skill).
+ * (requirements auto-recommendation, the picked skill, the picked agent-kind variant).
  *
  * Split out of `./draftActions`, which owns the draft's STRUCTURE (insert / remove / reorder /
  * units). Every function here reads and writes one of the parallel per-step arrays at an index and
@@ -140,6 +140,27 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
   }
 
   /**
+   * The agent-kind VARIANT picked for the draft step at `index` (its
+   * `stepOptions.agentVariantId`), or undefined when it runs the kind's shipped prompt.
+   */
+  function draftAgentVariantId(index: number): string | undefined {
+    return draftStepOptions.value[index]?.agentVariantId
+  }
+
+  /**
+   * Set (or clear) the picked variant on the draft step at `index`. Merges into the step's
+   * `StepOptions` bag rather than clobbering it; clearing drops the field and, if the bag
+   * empties, the whole entry — exactly like the other options here, so a step back on the
+   * shipped prompt persists nothing.
+   */
+  function setDraftAgentVariantId(index: number, agentVariantId: string | undefined) {
+    const next: StepOptions = { ...draftStepOptions.value[index] }
+    if (agentVariantId) next.agentVariantId = agentVariantId
+    else delete next.agentVariantId
+    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+  }
+
+  /**
    * The output-token ceiling pinned on the draft step at `index`, or undefined when the step
    * inherits (the workspace's per-kind setting, else the deployment default).
    */
@@ -174,6 +195,8 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     toggleDraftAutoRecommend,
     draftSkillId,
     setDraftSkillId,
+    draftAgentVariantId,
+    setDraftAgentVariantId,
     draftMaxOutputTokens,
     setDraftMaxOutputTokens,
   }

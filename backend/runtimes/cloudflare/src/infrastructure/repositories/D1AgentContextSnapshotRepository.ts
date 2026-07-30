@@ -91,6 +91,12 @@ function rowToSnapshot(row: SnapshotRow): AgentContextSnapshot {
 }
 
 /**
+ * Statements per `db.batch` in the batch append — small, because one snapshot row is routinely
+ * megabytes (the composed prompt plus every injected `.cat-context/*` file's body).
+ */
+const SNAPSHOT_CHUNK_SIZE = 10
+
+/**
  * D1-backed sink for agent-context observability. Lives in the dedicated TELEMETRY_DB
  * database (see `telemetry-migrations/`), alongside `llm_call_metrics`.
  */
@@ -102,12 +108,28 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
   }
 
   async record(snapshot: AgentContextSnapshot): Promise<void> {
-    await this.db
+    await this.insertStatement(snapshot, false).run()
+  }
+
+  async recordMany(snapshots: AgentContextSnapshot[]): Promise<void> {
+    // One `batch` per chunk (a single round trip each) — never a `record` loop. Chunked SMALL:
+    // one snapshot row carries the whole composed prompt plus every injected context file's body.
+    // Idempotent by id (see the port) because the ingest retries a chunk whose ack was lost.
+    const statements = snapshots.map((snapshot) => this.insertStatement(snapshot, true))
+    for (let i = 0; i < statements.length; i += SNAPSHOT_CHUNK_SIZE) {
+      await this.db.batch(statements.slice(i, i + SNAPSHOT_CHUNK_SIZE))
+    }
+  }
+
+  private insertStatement(snapshot: AgentContextSnapshot, ignoreDuplicateId: boolean) {
+    return this.db
       .prepare(
         `INSERT INTO agent_context_snapshots
            (id, workspace_id, execution_id, agent_kind, step_index, created_at,
             model, harness, system_prompt, user_prompt, fragments, context_files, extras)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)${
+           ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''
+         }`,
       )
       .bind(
         snapshot.id,
@@ -124,7 +146,6 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
         JSON.stringify(snapshot.contextFiles),
         JSON.stringify(snapshot.extras),
       )
-      .run()
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {

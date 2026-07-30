@@ -6,6 +6,7 @@ import {
   DelegatedAppTokenSource,
   HttpMachineEventClient,
   HttpMachineNotificationClient,
+  HttpMachineTelemetryClient,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
   type Logger,
@@ -136,6 +137,15 @@ export interface MothershipComposition {
    * relay. Reads the SAME per-request machine token as the persistence RPC.
    */
   notificationChannel: RemoteNotificationChannel
+  /**
+   * The telemetry INGEST client: uploads a quiesced run's locally captured rows to the mothership
+   * over `POST /internal/telemetry/ingest` (product decision 5's sync UP). Without it a run this
+   * laptop drove is observable ONLY on this laptop, and only until the local retention window
+   * passes. `buildLocalContainer` drives it from the background ingest sweep; a token-less node
+   * simply keeps the rows local until the login completes. Reads the SAME per-request machine
+   * token as the persistence RPC.
+   */
+  telemetryClient: HttpMachineTelemetryClient
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
   /**
@@ -224,6 +234,10 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
         ...ctx,
       }),
   })
+  // Telemetry sync UP: the local-first capture above stays on the laptop until this carries a
+  // quiesced run's rows to the mothership. Same base URL + per-request token again, so it follows
+  // the same connect/expiry lifecycle as the rest of the machine API.
+  const telemetryClient = new HttpMachineTelemetryClient({ baseUrl, token: machineToken })
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
@@ -237,6 +251,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,
+    telemetryClient,
     credentialStore,
     localSettingsStore,
     telemetryStore,

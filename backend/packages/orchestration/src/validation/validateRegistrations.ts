@@ -1,4 +1,5 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS } from '@cat-factory/agents'
 import type {
   AgentKind,
   GateRegistry,
@@ -175,6 +176,104 @@ export function collectRegistrationProblems(
   // 6. Agent capabilities: the skills + tool servers each kind declares.
   problems.push(...checkAgentCapabilities(agentKinds, registry))
 
+  // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
+  problems.push(...checkAgentKindVariants(opts, registeredKindIds))
+
+  return problems
+}
+
+/**
+ * Section 7 of {@link collectRegistrationProblems}: every registered agent-kind VARIANT must vary
+ * a kind that exists and must change something.
+ *
+ * Both failures are invisible at run time, which is why boot is the place to be loud. A variant of
+ * a kind nobody registers can never be selected by a step that passes pipeline validation, so it
+ * is simply dead configuration — the deployment believes a variation is available and no pipeline
+ * can use it. A variant that sets NEITHER prompt field is worse than dead: it validates, it is
+ * selectable, and the step runs exactly as if it were never configured, so the only symptom is
+ * that a deliberately varied step behaves like the stock one.
+ *
+ * The base-kind check needs the built-in catalog (`knownAgentKinds`) for the same reason the
+ * pipeline-kind check does — the backend has no runtime catalog of built-in kinds, so without it
+ * a variant of `coder` would false-positive. The empty-prompt check needs nothing and always runs.
+ */
+function checkAgentKindVariants(
+  opts: ValidateRegistrationsOptions,
+  registeredKindIds: ReadonlySet<string>,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const variant of opts.agentKindRegistry.variants()) {
+    if (!variant.systemPrompt?.trim() && !variant.promptAddition?.trim()) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_changes_nothing',
+        message:
+          `Agent variant "${variant.id}" sets neither systemPrompt nor promptAddition, so a step ` +
+          `selecting it runs exactly the shipped "${variant.baseKind}" prompt. Give it one, or ` +
+          `drop the registration.`,
+      })
+    }
+    // A kind whose prompt `IterativeReviewService` composes from (workspace, kind) with no step in
+    // hand: the variant could be selected on the step and would never reach the model. Refused at
+    // pipeline save too (`assertValidAgentVariants`), but a deployment that registers one should
+    // hear it at BOOT rather than the first time somebody tries to use it.
+    if (variant.baseKind in INLINE_ENGINE_SYSTEM_PROMPTS) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_inline_engine_kind',
+        message:
+          `Agent variant "${variant.id}" varies "${variant.baseKind}", which runs inline in the ` +
+          `engine and composes its prompt without a step, so no step could ever apply the ` +
+          `variant. Vary a dispatched kind, or edit that agent's prompt per workspace instead.`,
+      })
+    }
+    if (registeredKindIds.has(variant.baseKind)) continue
+    if (opts.knownAgentKinds && !opts.knownAgentKinds.has(variant.baseKind)) {
+      problems.push({
+        severity: 'error',
+        code: 'variant_unknown_base_kind',
+        message:
+          `Agent variant "${variant.id}" varies agent kind "${variant.baseKind}", which is ` +
+          `neither a known built-in nor a registered kind. No pipeline step can select it.`,
+      })
+    }
+  }
+  problems.push(...checkPipelineVariantSelections(opts))
+  return problems
+}
+
+/**
+ * A registered PIPELINE selecting a variant on one of its steps must select one that exists and
+ * that varies THAT step's kind — the same rule `assertValidAgentVariants` applies at pipeline save
+ * and run start, applied at BOOT for the pipelines a deployment ships in code, which reach neither
+ * of those boundaries until somebody starts a run.
+ *
+ * "The same rule" is load-bearing: a DISABLED step never runs, so it imposes no requirement here
+ * either. Refusing one at boot while the builder saves it happily would make a shape valid or
+ * invalid depending on which door it came through.
+ */
+function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
+    pipeline.stepOptions?.forEach((options, i) => {
+      const variantId = options?.agentVariantId
+      if (!variantId || pipeline.enabled?.[i] === false) return
+      const variant = opts.agentKindRegistry.variant(variantId)
+      const problem = !variant
+        ? 'which this deployment does not register'
+        : variant.baseKind !== pipeline.agentKinds[i]
+          ? `which varies "${variant.baseKind}", not this step's kind`
+          : undefined
+      if (!problem) return
+      problems.push({
+        severity: 'error',
+        code: 'pipeline_variant_unresolved',
+        message:
+          `Pipeline "${pipeline.id}" step ${i} ("${pipeline.agentKinds[i]}") selects agent ` +
+          `variant "${variantId}", ${problem}.`,
+      })
+    })
+  }
   return problems
 }
 

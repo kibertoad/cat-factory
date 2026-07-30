@@ -48,6 +48,8 @@ import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
+import type { RunStartDeps } from './runStart.js'
+import { claimLiveRunOrConflict, handOffLiveRun } from './runStart.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
@@ -280,6 +282,7 @@ export class ExecutionService {
       initiativeService,
       initiativeInterviewService,
       notificationService,
+      runLifecycleSink,
       resolveBinaryArtifactStore,
       llmObservability,
       pullRequestMerger,
@@ -334,6 +337,8 @@ export class ExecutionService {
       clock,
       stepGraph: this.stepGraph,
       notificationService,
+      runLifecycleSink,
+      logger,
       mergeTrackRecord,
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
@@ -775,7 +780,7 @@ export class ExecutionService {
       }
     }
 
-    // NB: do NOT `deleteByBlock` here — `insertLiveRunOrConflict` (below) atomically clears the
+    // NB: do NOT `deleteByBlock` here — `claimLiveRunOrConflict` (below) atomically clears the
     // block's terminal rows AND the `prior` run it replaces, then inserts the new live run, so a
     // concurrent double-start is rejected by the live-run index instead of both wiping each
     // other's row (see insertLive).
@@ -893,17 +898,13 @@ export class ExecutionService {
       ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }
-    await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'in_progress',
       progress: 0,
       executionId: instance.id,
     })
-    // Hand the run off to the durable runner so it progresses server-side without
-    // a browser open. With the no-op runner (tests) this does nothing and the run
-    // is advanced directly via advanceInstance.
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
@@ -1678,7 +1679,7 @@ export class ExecutionService {
     await activate?.(newId)
     // Replace the terminal failed run for this block with the resumed one (single run per
     // block, matching the board's by-block projection). This mints a FRESH run id; the
-    // atomic `insertLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
+    // atomic `claimLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
     // any terminal rows in the SAME transaction, so a concurrent double-retry is serialised by
     // the live-run index (the loser gets a 409) instead of both deleting-then-inserting.
     const instance = buildResumedInstance({
@@ -1688,15 +1689,14 @@ export class ExecutionService {
       initiatedBy,
       now: this.clock.now(),
     })
-    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
@@ -1779,7 +1779,7 @@ export class ExecutionService {
     const newId = this.idGenerator.next('exec')
     const replaceId = previous.id
     await activate?.(newId)
-    // Like retry(), this mints a FRESH run id. `insertLiveRunOrConflict` atomically supersedes
+    // Like retry(), this mints a FRESH run id. `claimLiveRunOrConflict` atomically supersedes
     // the torn-down source run (`replaceId`, which here may still be LIVE — running/paused/
     // blocked) and clears terminal rows in one transaction, so a concurrent start that already
     // created a NEW live run for the block loses (409) instead of being silently clobbered.
@@ -1790,40 +1790,31 @@ export class ExecutionService {
       initiatedBy,
       now: this.clock.now(),
     })
-    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
+    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
       progress: steps.length > 0 ? done / steps.length : 0,
       executionId: instance.id,
     })
-    await this.workRunner.startRun(workspaceId, instance.id)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
     return instance
   }
 
   /**
-   * Insert a freshly-built run, enforcing the one-live-run-per-block invariant at the DB in a
-   * single atomic write (see `ExecutionRepository.insertLive`). Callers must NOT `deleteByBlock`
-   * first: `insertLive` itself clears the block's terminal rows (and `replaceId`, the specific
-   * prior run a `retry`/`restart` is knowingly superseding) in the SAME transaction as the
-   * insert. A `false` return means a genuinely-concurrent start (double click,
-   * recurring-vs-manual, notification-vs-human retry) already created the block's live run — so
-   * we REFUSE this duplicate rather than materialise a second driver + container on the same
-   * branch. The winning run is untouched (the losing transaction only deletes terminal rows /
-   * its own `replaceId`, never the winner). Surfaces as a 409 the SPA shows as a toast.
+   * The bound callbacks the two run-start funnels (`runStart.ts`) need, so they depend on no
+   * concrete repository or service. Those funnels own the ORDER between a run's atomic claim and
+   * its hand-off and are documented there; every start path calls both, writing the block state
+   * that path owns in between.
    */
-  private async insertLiveRunOrConflict(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    replaceId?: string,
-  ): Promise<void> {
-    const inserted = await this.executionRepository.insertLive(workspaceId, instance, { replaceId })
-    if (!inserted) {
-      // No machine `reason`: this is a rare double-start edge, not a distinct client-handled
-      // conflict, so the human message drives the SPA's generic 409 toast (no new
-      // ConflictReason + exhaustive-Record/i18n cascade for a transient race).
-      throw new ConflictError('A run is already active for this block.')
+  private get runStartDeps(): RunStartDeps {
+    return {
+      insertLive: (ws, instance, options) =>
+        this.executionRepository.insertLive(ws, instance, options),
+      startRun: (ws, id) => this.workRunner.startRun(ws, id),
+      emitInstance: (ws, instance) => this.runStateMachine.emitInstance(ws, instance),
+      publishRunStarted: (ws, instance, block) =>
+        this.runStateMachine.publishRunStarted(ws, instance, block),
     }
   }
 

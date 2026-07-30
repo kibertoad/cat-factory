@@ -591,6 +591,13 @@ export type {
   NotificationWebhookRepository,
 } from './notification-webhook-repositories.js'
 export type {
+  RunLifecycleEvent,
+  RunLifecycleEventKind,
+  RunLifecycleFailure,
+  RunLifecycleSink,
+} from './run-lifecycle.js'
+export { RUN_LIFECYCLE_EVENTS, isRunLifecycleEventKind } from './run-lifecycle.js'
+export type {
   SlackConnectionRecord,
   SlackConnectionRepository,
   SlackSettingsRecord,

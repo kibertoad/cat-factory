@@ -1296,7 +1296,11 @@
         "approved": "Onaylandı",
         "changes_requested": "Değişiklik istendi",
         "rejected": "Reddedildi"
-      }
+      },
+      "promptVariant": "İstem varyantı",
+      "promptVariantAdditionOnly": "Bu varyantın yalnızca eklentisi uygulandı. Bu ajan için çalışma alanı istemi, temel metnini değiştirdi.",
+      "promptVariantSuperseded": "Bu varyant uygulanmadı. Bu ajan için çalışma alanı istemi öncelik kazandı.",
+      "promptVariantWithdrawn": "Bu varyant artık kayıtlı değil, bu nedenle adım varsayılan istemle çalıştı."
     },
     "stepDetail": {
       "contents": "İçerik",
@@ -4042,7 +4046,9 @@
       "consensusGroups": "Uzlaşı grupları",
       "consensusGroupsHint": "Bu adımın yükselebileceği yeniden kullanılabilir panelleri seç. Her birinin kendi tahmin eşiği vardır; görevin aştığı en zorlu olan çalışır.",
       "consensusGroupsActive": "Bu adım seçili grubu çalıştırır. Katılımcıları burada ayarlamak için tüm grupların seçimini kaldır.",
-      "consensusGroupAlways": "her zaman"
+      "consensusGroupAlways": "her zaman",
+      "variantLabel": "İstem varyantı",
+      "variantShipped": "Varsayılan istem"
     },
     "progress": {
       "status": {

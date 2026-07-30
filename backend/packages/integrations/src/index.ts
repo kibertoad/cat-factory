@@ -360,6 +360,10 @@ export {
   type WebhookNotificationChannelDependencies,
 } from './modules/notificationWebhook/WebhookNotificationChannel.js'
 export {
+  WebhookRunLifecycleSink,
+  type WebhookRunLifecycleSinkDependencies,
+} from './modules/notificationWebhook/WebhookRunLifecycleSink.js'
+export {
   NotificationWebhookService,
   type NotificationWebhookServiceDependencies,
 } from './modules/notificationWebhook/NotificationWebhookService.js'

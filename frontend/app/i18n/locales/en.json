@@ -1369,7 +1369,11 @@
         "approved": "Approved",
         "changes_requested": "Changes requested",
         "rejected": "Rejected"
-      }
+      },
+      "promptVariant": "Prompt variant",
+      "promptVariantAdditionOnly": "Only this variant's addition applied. The workspace prompt for this agent replaced its base text.",
+      "promptVariantSuperseded": "This variant did not apply. The workspace prompt for this agent took precedence.",
+      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt."
     },
     "stepDetail": {
       "contents": "Contents",
@@ -4154,7 +4158,9 @@
       "consensusGroups": "Consensus groups",
       "consensusGroupsHint": "Pick the reusable panels this step may escalate to. Each carries its own estimate bar; the most demanding one the task clears is the one that runs.",
       "consensusGroupsActive": "This step runs the selected group. Deselect every group to configure participants here instead.",
-      "consensusGroupAlways": "always"
+      "consensusGroupAlways": "always",
+      "variantLabel": "Prompt variant",
+      "variantShipped": "Shipped prompt"
     },
     "progress": {
       "status": {
