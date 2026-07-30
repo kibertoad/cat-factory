@@ -1,5 +1,86 @@
 # @cat-factory/app
 
+## 0.196.0
+
+### Minor Changes
+
+- 54e6a45: Agent-kind variants: register an alternate prompt for an EXISTING kind programmatically
+
+  `AgentKindRegistry.registerVariant({ id, baseKind, systemPrompt | promptAddition })` lets a
+  deployment ship "the Coder, but test-first" without inventing an agent kind. A pipeline step
+  selects one through `stepOptions.agentVariantId`, so the step still records the base kind and every
+  behavioural decision — dispatch shape, guardrails, companions, gating, the palette — is unchanged;
+  only the prompt differs. The engine resolves the variant in the same once-per-dispatch place as a
+  per-workspace prompt override and emits it through the same field, so the engine-enforced
+  directives still apply on top and a workspace override still wins as the narrower tier.
+
+  Because the workspace wins on the same unit of text, selecting a variant is not proof it ran: the
+  dispatch pins what it actually did onto `PipelineStep.promptVariant` (`full` / `addition-only` /
+  `superseded` / `withdrawn`, plus a fingerprint of the text the variant contributed) and warns on
+  every losing disposition. The run views and Kaizen's combo key both read that pin rather than the
+  step's selection, so a step is never reported as running a variation whose text never reached it, and
+  re-wording a variant under the same id starts a fresh verification streak instead of inheriting the
+  previous wording's.
+
+  Varying an INLINE-ENGINE kind (the requirements + clarity reviewers, the brainstorm stages, their
+  rework editors) is refused at boot and at pipeline save rather than accepted and ignored: those kinds
+  compose their prompt without a step, so the variant could never reach the model. Vary them with a
+  per-workspace prompt override instead. `merger` and `on-call` are unaffected — they dispatch through
+  the engine, so a variant applies to their role half.
+
+  The two bespoke container prompts (`merger`, `on-call`) moved from `@cat-factory/server` into
+  `@cat-factory/agents` alongside the inline-engine ones, and `builtInBaseSystemPrompt` is now
+  `shippedBasePromptFor` exported from there.
+
+- 08e9bcc: Describe a non-conflict API failure from its STATUS CLASS in translated copy, and keep the raw
+  backend prose behind a "Show details" disclosure.
+
+  `usePipelineErrorToast` is the funnel every failure that is not a 409 drains into, and it put the
+  backend's `message` straight into the toast description. Three things followed from that, all of them
+  visible to a user:
+
+  - **A non-English user read English.** The whole point of the `reason`-code contract is that the
+    backend emits a code and the SPA translates it; every non-conflict failure sidestepped it.
+  - **An internal 500 explained nothing.** `handleError` deliberately answers a fault with the fixed
+    `Internal server error` and never the thrown text, so the description WAS that sentence.
+  - **A request-validation 400 dropped the only informative part.** Its message is the fixed
+    `Request failed validation`; the `issues` array naming the offending fields was parsed by nobody.
+
+  The description is now translated copy keyed off `error.code` through an exhaustive
+  `Record<Exclude<ApiErrorCode, 'conflict'>, string>`, and the untranslated detail — the prose, the
+  validation `issues`, and the envelope's `requestId` — is revealed in place by a button. Keeping the
+  prose reachable is the point rather than a concession: the elaborate operator remedies this initiative
+  spent eighteen slices adding (a `configProblem` remedy, `describeVcsApiError`'s appended cause, a
+  harness `HarnessFailure` remedy) are exactly what someone pastes into a bug report. What changed is
+  that a raw string is no longer the FIRST thing anyone reads.
+
+  `requestId` reaches a screen for the first time. `handleError` has stamped it on every envelope since
+  request logging landed, specifically so a user could quote it back and an operator could grep the one
+  line that explains their failure — and no SPA surface had ever rendered it.
+
+  **The status class moves to `@cat-factory/contracts`.** `DOMAIN_ERROR_CODES` is now declared there and
+  kernel's `DomainErrorCode` is derived from it, mirroring how `ConflictReason` already worked: it is a
+  shape both sides read, so a status class added on one side must be honoured on the other, and the
+  frontend `Record` becomes a real drift guard instead of a hand-kept list. `API_ERROR_CODES` adds
+  `internal` on top, because that code is minted by the error handler and produced by no `DomainError` —
+  a client mapping only the domain codes silently misses every 500, which is how this gap started.
+
+  Two verdicts are kept apart on purpose. "Nothing answered" (no envelope and no HTTP status: offline,
+  DNS, a dropped connection) and "something answered unrecognisably" (a proxy's 502 page, a `code` this
+  build does not know) get different copy, because their remedies are opposites — check your connection
+  versus the server is broken — and one wording for both would be a cause inferred rather than reported.
+
+  No backend behaviour changes: the wire shape, the codes and the messages are all untouched, and the
+  kernel change is a type re-export. Section H of the error-message-coverage initiative (making the
+  remaining providers UI-configurable) is the only part of it still open.
+
+### Patch Changes
+
+- Updated dependencies [54e6a45]
+- Updated dependencies [08e9bcc]
+- Updated dependencies [a7aae8a]
+  - @cat-factory/contracts@0.203.0
+
 ## 0.195.2
 
 ### Patch Changes
