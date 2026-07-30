@@ -91,12 +91,49 @@ describe('decideReachability', () => {
     // An unresolvable connection / undecryptable secret is a LOCAL fault, so it must neither
     // invent an outage nor clear a real one.
     const healthy = decideReachability([], [probe('agentExecutor', 'indeterminate', 'no key')])
-    expect(healthy).toEqual({ unreachableAreas: [], transitions: [] })
+    expect(healthy).toEqual({ unreachableAreas: [], transitions: [], recordChanged: false })
     const failing = decideReachability(
       ['agentExecutor'],
       [probe('agentExecutor', 'indeterminate', 'no key')],
     )
-    expect(failing).toEqual({ unreachableAreas: ['agentExecutor'], transitions: [] })
+    expect(failing).toEqual({
+      unreachableAreas: ['agentExecutor'],
+      transitions: [],
+      recordChanged: false,
+    })
+  })
+
+  it('forgets a recorded outage for an area that is no longer configured, silently', () => {
+    // The fix for an outage card outliving its connection: an operator who un-registers a dead
+    // runner pool must not keep the card forever (nothing else ever clears it), but "gone" is not a
+    // recovery either — announcing `configured` would claim a connection that no longer exists is
+    // healthy. So the record drops and NOTHING is published; the snapshot's `not_defined` setup gap
+    // is the honest next state.
+    const decision = decideReachability(
+      ['agentExecutor'],
+      [probe('agentExecutor', 'not_configured')],
+    )
+    expect(decision.unreachableAreas).toEqual([])
+    expect(decision.transitions).toEqual([])
+    expect(decision.recordChanged).toBe(true)
+  })
+
+  it('is a no-op for an unconfigured area that was never recorded', () => {
+    const decision = decideReachability([], [probe('agentExecutor', 'not_configured')])
+    expect(decision).toEqual({ unreachableAreas: [], transitions: [], recordChanged: false })
+  })
+
+  it('reports recordChanged whenever the set moves, and only then', () => {
+    // The sweep gates its card write on this, so it must not be inferrable from `transitions`
+    // alone — a `not_configured` drop changes the record while announcing nothing.
+    expect(decideReachability([], [probe('agentExecutor', 'unreachable')]).recordChanged).toBe(true)
+    expect(
+      decideReachability(['agentExecutor'], [probe('agentExecutor', 'reachable')]).recordChanged,
+    ).toBe(true)
+    expect(
+      decideReachability(['agentExecutor'], [probe('agentExecutor', 'unreachable')]).recordChanged,
+    ).toBe(false)
+    expect(decideReachability(['agentExecutor'], []).recordChanged).toBe(false)
   })
 
   it('keeps an area that was not probed this pass', () => {

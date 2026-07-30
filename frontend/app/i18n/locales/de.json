@@ -2040,7 +2040,6 @@
       },
       "binaryStorage": {
         "title": "Inhaltsspeicher nicht konfiguriert",
-        "unreachableTitle": "Inhaltsspeicher ist nicht erreichbar",
         "body": "Für dieses Konto ist kein Binary-Storage-Backend konfiguriert, sodass UI-Screenshots und Referenzbilder keinen Speicherort haben und die visuellen Prüfungen übersprungen werden. Konfigurieren Sie einen Speicher, um sie zu aktivieren.",
         "action": "Speicher konfigurieren"
       },
@@ -2050,6 +2049,7 @@
       },
       "unreachable": {
         "body": "Die Verbindung ist eingerichtet, aber eine Live-Prüfung konnte sie gerade nicht erreichen. Damit ist das ein Ausfall und keine fehlende Einrichtung: Agenten, die darauf angewiesen sind, schlagen fehl, bis wieder eine Antwort kommt. Prüfen Sie, ob der Dienst läuft, und testen Sie die Verbindung dann erneut.",
+        "reason": "Letzte Prüfung: {detail}",
         "action": "Verbindung prüfen"
       }
     },

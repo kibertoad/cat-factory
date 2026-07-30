@@ -595,7 +595,12 @@ export interface Env {
    * that makes an OUTBOUND call per workspace per pass.
    */
   INFRA_REACHABILITY_WATCH?: string
-  /** Node-only sweep interval (ms, floor 30s, default 5min); the Worker is cron-driven and ignores it. */
+  /**
+   * Sweep interval (ms, floor 30s, default 5min). Honoured here too, even though the Worker is
+   * cron-driven: the every-2-min `scheduled` tick runs this sweep only when the tick opens a new
+   * interval window (`shouldRunReachabilityPass`), so the cadence of the one sweep that makes an
+   * outbound call per workspace is the operator's to set on Cloudflare as well as on Node.
+   */
   INFRA_REACHABILITY_INTERVAL_MS?: string
   /** Per-probe timeout (ms, 1s..60s, default 5s). A timeout counts as unreachable. */
   INFRA_REACHABILITY_PROBE_TIMEOUT_MS?: string

@@ -27,6 +27,7 @@ import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastr
 import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
+  shouldRunReachabilityPass,
   sweepInfraReachability,
   sweepPlatformHealth,
 } from '@cat-factory/server'
@@ -216,6 +217,15 @@ const TRACKER_SYNC_QUEUE_NAME = 'cat-factory-tracker-sync'
  * DELETEs ~720×/day against the single D1 writer. Routed by `controller.cron`.
  */
 const RETENTION_CRON = '0 3 * * *'
+
+/**
+ * How often the frequent `scheduled` tick fires (the every-2-minutes entry in wrangler.toml's
+ * `triggers.crons`). A sweep whose
+ * cadence is operator-configurable derives its own "is this tick mine" gate from this, since a cron
+ * isolate has no memory of the last pass — see `shouldRunReachabilityPass`. Keep in step with the
+ * crons list.
+ */
+const FREQUENT_CRON_PERIOD_MS = 2 * 60_000
 
 /**
  * Daily pass: prune the unbounded ledgers/projections to their retention
@@ -538,7 +548,12 @@ function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock
  * the initiative loop, Kaizen gradings, GitHub reconcile, environment teardown, and the
  * platform observability/health sweeps. Each is an independent, no-op-when-unwired sweep.
  */
-function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function runPeriodicBackstops(
+  env: Env,
+  ctx: ExecutionContext,
+  clock: SystemClock,
+  scheduledTime: number,
+): void {
   // Escalate long-waiting notifications yellow → red (every 2 min). Runs no longer
   // time out waiting for a human, so the escalating notification — past each
   // workspace's `waitingEscalationMinutes` threshold — is the overdue-human signal.
@@ -667,8 +682,15 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
   // `unreachable` — raising/clearing an `infra_unreachable` card and pushing an `infraSetup` event
   // on each transition, so the setup banner appears the moment a provider dies rather than on
   // whoever's next reload. Opt-in (`INFRA_REACHABILITY_WATCH`): it is the one sweep that makes an
-  // OUTBOUND call per workspace per pass, so the container is built only when opted in.
-  if (loadConfig(env).infraReachability.enabled) {
+  // OUTBOUND call per workspace per pass, so the container is built only when opted in — AND, for
+  // the same reason, it is the one backstop here that does not run on every tick: it honours
+  // `INFRA_REACHABILITY_INTERVAL_MS` through the stateless window gate, so the operator's cadence
+  // knob means the same thing on both facades instead of being silently Node-only.
+  const reachability = loadConfig(env).infraReachability
+  if (
+    reachability.enabled &&
+    shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, reachability.intervalMs)
+  ) {
     ctx.waitUntil(
       sweepInfraReachability(buildContainer(env), logger)
         .then(({ raised, cleared }) => {
@@ -744,7 +766,7 @@ export default {
     redriveStuckEnvTests(env, ctx, clock)
     reclaimExpiredActivations(env, ctx, clock)
     reapStaleContainers(env, ctx, clock)
-    runPeriodicBackstops(env, ctx, clock)
+    runPeriodicBackstops(env, ctx, clock, controller.scheduledTime)
   },
 
   async queue(

@@ -2040,7 +2040,6 @@
       },
       "binaryStorage": {
         "title": "Archiviazione dei contenuti non configurata",
-        "unreachableTitle": "L'archiviazione dei contenuti non è raggiungibile",
         "body": "Nessun backend di archiviazione binaria è configurato per questo account, quindi gli screenshot dell'UI e le immagini di riferimento non hanno dove risiedere e i controlli visivi vengono saltati. Configura l'archiviazione per abilitarli.",
         "action": "Configura l'archiviazione"
       },
@@ -2050,6 +2049,7 @@
       },
       "unreachable": {
         "body": "La connessione è configurata, ma una verifica in tempo reale non è riuscita a raggiungerla in questo momento. Si tratta quindi di un'interruzione e non di una configurazione mancante: gli agenti che ne dipendono falliranno finché non arriverà di nuovo una risposta. Controlla che il servizio sia attivo, poi riprova la connessione.",
+        "reason": "Ultima verifica: {detail}",
         "action": "Verifica connessione"
       }
     },

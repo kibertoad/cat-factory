@@ -1,6 +1,5 @@
 import { INFRA_SETUP_PROBED_AREAS, type InfraSetupArea } from '@cat-factory/contracts'
 import {
-  type ConnectionTestResult,
   decideReachability,
   describeError,
   type InfraSetupTransition,
@@ -9,8 +8,10 @@ import {
   recordedUnreachableAreas,
   redactSecrets,
   runBestEffort,
+  type SavedConnectionProbe,
 } from '@cat-factory/kernel'
 import type { ServerContainer } from '../http/env.js'
+import { infraSetupAreaApplies } from '../modules/workspaces/infraSetup.js'
 
 // Runtime-neutral infrastructure-REACHABILITY watcher — shared by both facades' periodic sweeps
 // (the Worker's cron `scheduled` handler and the Node `setInterval` sweeper), exactly like
@@ -33,8 +34,8 @@ import type { ServerContainer } from '../http/env.js'
 
 /** One workspace's probeable connection surface, as read off the request container. */
 interface ProbeSources {
-  ephemeralEnvironments?: (workspaceId: string) => Promise<ConnectionTestResult | null>
-  agentExecutor?: (workspaceId: string) => Promise<ConnectionTestResult | null>
+  ephemeralEnvironments?: (workspaceId: string) => Promise<SavedConnectionProbe>
+  agentExecutor?: (workspaceId: string) => Promise<SavedConnectionProbe>
 }
 
 /**
@@ -62,8 +63,8 @@ export async function sweepInfraReachability(
   if (container.config.localMode?.mothership) return { raised: 0, cleared: 0 }
 
   const sources = probeSources(container)
-  // Nothing on this deployment can be probed (neither integration is wired), so the pass would
-  // enumerate every board only to skip it. Bail before the workspace read.
+  // Nothing on this deployment can be probed (neither integration is wired, or neither area applies
+  // here), so the pass would enumerate every board only to skip it. Bail before the workspace read.
   if (!sources.ephemeralEnvironments && !sources.agentExecutor) return { raised: 0, cleared: 0 }
 
   const workspaces = await container.workspaceService.list(null)
@@ -81,22 +82,27 @@ export async function sweepInfraReachability(
       const previous = recordedUnreachableAreas(cards.get(workspaceId))
       const observed = await probeWorkspace(sources, workspaceId, cfg.probeTimeoutMs)
       const decision = decideReachability(previous, observed)
-      if (decision.transitions.length === 0) continue
+      // Gate on the RECORD, not on the transitions: an area that is no longer configured drops out
+      // of the record while announcing nothing, and short-circuiting on `transitions` would leave
+      // its card open forever (nothing else ever clears it).
+      if (!decision.recordChanged && decision.transitions.length === 0) continue
 
       // Persist FIRST, announce second. The card is the durable record the next pass compares
       // against, so a push that fails after it commits costs one live banner update (the board's
       // own snapshot still folds the card on next load); a push that succeeded against a record
       // that never landed would re-announce the same outage on every subsequent pass.
-      if (decision.unreachableAreas.length > 0) {
-        await notifications.service.raise(workspaceId, {
-          type: 'infra_unreachable',
-          blockId: null,
-          executionId: null,
-          ...cardContent(decision.unreachableAreas),
-          payload: { unreachableAreas: decision.unreachableAreas },
-        })
-      } else {
-        await notifications.service.clearByType(workspaceId, 'infra_unreachable')
+      if (decision.recordChanged) {
+        if (decision.unreachableAreas.length > 0) {
+          await notifications.service.raise(workspaceId, {
+            type: 'infra_unreachable',
+            blockId: null,
+            executionId: null,
+            ...cardContent(decision.unreachableAreas),
+            payload: { unreachableAreas: decision.unreachableAreas },
+          })
+        } else {
+          await notifications.service.clearByType(workspaceId, 'infra_unreachable')
+        }
       }
 
       for (const change of decision.transitions) {
@@ -116,18 +122,28 @@ export async function sweepInfraReachability(
 }
 
 /**
- * Bind the per-area probes this deployment can actually run. An area with no wired integration is
- * simply absent, which `decideReachability` treats as "not probed" — so it keeps whatever the card
- * recorded rather than being reported as recovered by a deployment that never asked.
+ * Bind the per-area probes this deployment can actually run. An area that is absent here is one
+ * `decideReachability` never hears about, so it keeps whatever the card recorded rather than being
+ * reported as recovered by a deployment that never asked.
+ *
+ * Wiring is necessary but NOT sufficient: each area must also APPLY to this deployment
+ * (`infraSetupAreaApplies`, the same predicate the snapshot projection reports `not_applicable`
+ * from). Gating on the wired module alone was strictly looser than the projection — on Cloudflare
+ * and local mode the runner pool is an optional alternate target, so a dead one raised a card and
+ * paged Slack for an area whose banner the projection then refused to render. Probe only what this
+ * deployment would actually nag about.
  */
 function probeSources(container: ServerContainer): ProbeSources {
   const environments = container.environments?.connectionService
   const runners = container.runners?.connectionService
+  const applies = (area: InfraSetupArea) => infraSetupAreaApplies(container, area)
   return {
-    ...(environments
+    ...(environments && applies('ephemeralEnvironments')
       ? { ephemeralEnvironments: (ws: string) => environments.probeSavedConnection(ws) }
       : {}),
-    ...(runners ? { agentExecutor: (ws: string) => runners.probeSavedConnection(ws) } : {}),
+    ...(runners && applies('agentExecutor')
+      ? { agentExecutor: (ws: string) => runners.probeSavedConnection(ws) }
+      : {}),
   }
 }
 
@@ -149,15 +165,24 @@ async function probeWorkspace(
 /**
  * Run one area's probe into a {@link ProbeOutcome}.
  *
- * The three results are deliberately distinct (degrade loudly): a probe that ANSWERED `ok: false`
- * — or didn't answer inside the budget — is a real outage; a probe that THREW, or that reported
- * nothing to test, is INDETERMINATE. A throw here is a local fault (the connection wouldn't
- * resolve, its secret bundle wouldn't decrypt — the classic case being a node with no access to the
- * sealing key), and blaming the operator's cluster for our own missing key is exactly the
- * "never infer a cause from the presence of an error" trap.
+ * FOUR results, deliberately distinct (degrade loudly), because they need four dispositions:
+ *  - a probe that ANSWERED `ok: false`, or didn't answer inside the budget ⇒ a real outage;
+ *  - a probe that THREW, or that could not be asked (`unprobeable`) ⇒ INDETERMINATE, leaving the
+ *    record untouched. A throw is a local fault (the connection wouldn't resolve, its secret bundle
+ *    wouldn't decrypt — classically a node with no access to the sealing key), and blaming the
+ *    operator's cluster for our own missing key is exactly the "never infer a cause from the
+ *    presence of an error" trap;
+ *  - nothing registered (`absent`) ⇒ NOT_CONFIGURED, which forgets a recorded outage without
+ *    announcing a recovery, so a card can't outlive the connection it reports on.
+ *
+ * NOTE the timeout only stops us WAITING: the underlying request keeps running to its own
+ * completion, because neither connection-test port takes an `AbortSignal` today. Threading one
+ * through both provider ports (and every backend that implements them) is the real fix and is out
+ * of this change's scope; the cost is a wasted in-flight request per timed-out probe, bounded by
+ * the interval.
  */
 async function probeArea(
-  probe: () => Promise<ConnectionTestResult | null>,
+  probe: () => Promise<SavedConnectionProbe>,
   area: InfraSetupArea,
   timeoutMs: number,
 ): Promise<ProbeOutcome> {
@@ -166,15 +191,18 @@ async function probeArea(
     const timeout = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => resolve('timeout'), timeoutMs)
     })
-    const result = await Promise.race([probe(), timeout])
-    if (result === 'timeout') {
+    const probed = await Promise.race([probe(), timeout])
+    if (probed === 'timeout') {
       return { area, verdict: 'unreachable', detail: `No answer within ${timeoutMs}ms` }
     }
-    if (result === null) return { area, verdict: 'indeterminate' }
-    if (result.ok) return { area, verdict: 'reachable' }
+    if (probed.state === 'absent') return { area, verdict: 'not_configured' }
+    if (probed.state === 'unprobeable') {
+      return { area, verdict: 'indeterminate', detail: probed.reason }
+    }
+    if (probed.result.ok) return { area, verdict: 'reachable' }
     // A provider's failure message routinely echoes the request URL it called, which can carry a
     // token in the query — so it is scrubbed here, at the point it becomes operator-facing text.
-    const detail = result.message ? redactSecrets(result.message) : null
+    const detail = probed.result.message ? redactSecrets(probed.result.message) : null
     return { area, verdict: 'unreachable', ...(detail ? { detail } : {}) }
   } catch {
     return { area, verdict: 'indeterminate' }

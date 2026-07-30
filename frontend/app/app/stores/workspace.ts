@@ -2,18 +2,15 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   BudgetCaps,
-  InfraSetup,
-  InfraSetupArea,
-  InfraSetupStatus,
   SpendStatus,
   WorkspaceAccess,
   WorkspaceListItem,
   WorkspaceSnapshot,
 } from '~/types/domain'
-import { isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
+import { createInfraSetupState } from '~/stores/workspace/infraSetup'
 import { markBoot } from '~/utils/bootMarks'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
@@ -53,12 +50,14 @@ export const useWorkspaceStore = defineStore(
     const userSpend = ref<SpendStatus | null>(null)
     /** Operator hard ceilings on the account/user budget tiers (null until first load). */
     const budgetCaps = ref<BudgetCaps | null>(null)
-    /**
-     * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
-     * storage) from the snapshot, driving the infra-setup banner. Null on an older backend that
-     * doesn't compute it (⇒ no banner).
-     */
-    const infraSetup = ref<InfraSetup | null>(null)
+    // The infra-setup slice (the banner's projection + the live reachability patch), extracted
+    // because it is the one slice with RULES rather than a plain assign-from-snapshot.
+    const {
+      infraSetup,
+      infraSetupDetails,
+      hydrate: hydrateInfraSetup,
+      patchInfraSetup,
+    } = createInfraSetupState()
     /**
      * The signed-in caller's resolved workspace-RBAC access to the ACTIVE board — their
      * effective role + the permission set it grants, from the auth gate's resolution
@@ -95,7 +94,7 @@ export const useWorkspaceStore = defineStore(
       accountSpend.value = snapshot.accountSpend ?? null
       userSpend.value = snapshot.userSpend ?? null
       budgetCaps.value = snapshot.budgetCaps ?? null
-      infraSetup.value = snapshot.infraSetup ?? null
+      hydrateInfraSetup(snapshot.infraSetup)
       access.value = snapshot.access ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename). The
       // snapshot's `workspace` carries no `viewerRole` (that's a `GET /workspaces` list
@@ -274,25 +273,6 @@ export const useWorkspaceStore = defineStore(
       await refresh()
     }
 
-    /**
-     * Patch ONE infra area's status from a live `infraSetup` event, so the setup banner appears (or
-     * clears) the moment the reachability watcher notices rather than on the next snapshot load.
-     *
-     * A targeted upsert, deliberately not a `refresh()`: this is a one-field delta on a projection
-     * the snapshot recomputes wholesale, and a coalesced full refresh here would pay the ~18-read
-     * aggregate for it. A no-op before the first snapshot has landed — `hydrate` is about to set the
-     * authoritative projection, which already carries the recorded outage.
-     *
-     * Recovering an area also drops its SESSION dismissal, so a health state re-nags when it
-     * recurs (see `isInfraSetupHealthStatus`): without this, dismissing one outage would silence
-     * the next one for the rest of the session.
-     */
-    function patchInfraSetup(area: InfraSetupArea, status: InfraSetupStatus) {
-      if (!infraSetup.value) return
-      infraSetup.value = { ...infraSetup.value, [area]: status }
-      if (!isInfraSetupHealthStatus(status)) useUiStore().clearInfraSetupSessionDismissal(area)
-    }
-
     return {
       workspaceId,
       workspaces,
@@ -305,6 +285,7 @@ export const useWorkspaceStore = defineStore(
       userSpend,
       budgetCaps,
       infraSetup,
+      infraSetupDetails,
       patchInfraSetup,
       access,
       init,

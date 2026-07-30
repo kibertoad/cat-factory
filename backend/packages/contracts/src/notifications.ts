@@ -127,9 +127,9 @@ export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
  * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
  * `release_regression`) — "the machine needs help", not "a human owes a review" — and
  * block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`, `key_drift`,
- * `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR it concerns has
- * ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review debt would
- * friction task authoring over work that is finished.
+ * `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR
+ * it concerns has ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review
+ * debt would friction task authoring over work that is finished.
  */
 export const REVIEW_WAIT_NOTIFICATION_TYPES = [
   'merge_review',

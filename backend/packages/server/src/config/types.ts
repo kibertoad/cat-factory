@@ -414,8 +414,11 @@ export interface InfraReachabilityConfig {
   /** Opt-in flag (`INFRA_REACHABILITY_WATCH=true`). */
   enabled: boolean
   /**
-   * How often the sweep runs (ms). Node reads `INFRA_REACHABILITY_INTERVAL_MS` (default 5min);
-   * the Worker is cron-driven (its 2-minute `scheduled` tick) and ignores this.
+   * How often the sweep runs (ms), from `INFRA_REACHABILITY_INTERVAL_MS` (default 5min). Node times
+   * it directly; the Worker, whose `scheduled` tick fires every 2 minutes for every backstop, gates
+   * this sweep on `shouldRunReachabilityPass` so the same setting means the same cadence there. It
+   * is the operator's only lever on the one sweep that calls OUT per workspace, so a facade that
+   * ignored it would make opting in an all-or-nothing choice.
    */
   intervalMs: number
   /**

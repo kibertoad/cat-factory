@@ -313,4 +313,55 @@ describe('workspace store infraSetup patching', () => {
     ws.patchInfraSetup('agentExecutor', 'unreachable')
     expect(ws.infraSetup).toBeNull()
   })
+
+  it('refuses to mark an area unreachable that the projection does not call configured', async () => {
+    // The live patch honours the SAME rule as the backend's snapshot fold
+    // (`applyInfraSetupTransition`). Assigning unconditionally rendered a red "check that the
+    // service is running" banner over a `not_applicable`/`not_defined` area — which then vanished on
+    // the next reload, because the projection out-ranks the probe. A banner that contradicts the
+    // projection is worse than a late one.
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'not_applicable',
+      ephemeralEnvironments: 'not_defined',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable')
+    ws.patchInfraSetup('ephemeralEnvironments', 'unreachable')
+    expect(ws.infraSetup?.agentExecutor).toBe('not_applicable')
+    expect(ws.infraSetup?.ephemeralEnvironments).toBe('not_defined')
+    // A refused patch must not caption its reason onto a status it does not describe.
+    expect(ws.infraSetupDetails).toEqual({})
+  })
+
+  it('keeps the probe reason for the banner, and drops it on recovery', async () => {
+    // The reason is the one thing on the banner that says WHY (a refused connection reads very
+    // differently from a rejected token), and it rides the live event only — the notification card
+    // is content-deduped, so persisting it there would re-toast the inbox for the whole outage.
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable', 'connect ECONNREFUSED 10.0.0.4:6443')
+    expect(ws.infraSetupDetails.agentExecutor).toBe('connect ECONNREFUSED 10.0.0.4:6443')
+    ws.patchInfraSetup('agentExecutor', 'configured')
+    expect(ws.infraSetupDetails.agentExecutor).toBeUndefined()
+  })
+
+  it('drops live probe reasons when an authoritative snapshot lands', async () => {
+    stubUiStore()
+    const { ws } = await openBoard({
+      agentExecutor: 'configured',
+      ephemeralEnvironments: 'configured',
+      binaryStorage: 'configured',
+    })
+    ws.patchInfraSetup('agentExecutor', 'unreachable', 'HTTP 502')
+    expect(ws.infraSetupDetails.agentExecutor).toBe('HTTP 502')
+    await ws.refresh()
+    // A reload mid-outage renders the banner with no reason line, which is honest: this session
+    // never saw the probe, and captioning a fresh status with a stale reason would not be.
+    expect(ws.infraSetupDetails).toEqual({})
+  })
 })

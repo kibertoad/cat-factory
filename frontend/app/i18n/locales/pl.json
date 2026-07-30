@@ -1953,7 +1953,6 @@
       },
       "binaryStorage": {
         "title": "Magazyn treści nie jest skonfigurowany",
-        "unreachableTitle": "Magazyn treści jest nieosiągalny",
         "body": "Dla tego konta nie skonfigurowano żadnego zaplecza magazynu binarnego, więc zrzuty ekranu interfejsu i obrazy referencyjne nie mają gdzie się zapisać, a kontrole wizualne są pomijane. Skonfiguruj magazyn, aby je włączyć.",
         "action": "Skonfiguruj magazyn"
       },
@@ -1963,6 +1962,7 @@
       },
       "unreachable": {
         "body": "Połączenie jest skonfigurowane, ale kontrola na żywo nie mogła go teraz uzyskać. To awaria, a nie brak konfiguracji: agenci, którzy od tego zależą, będą kończyć się błędem, dopóki nie pojawi się znowu odpowiedź. Sprawdź, czy usługa działa, a następnie ponownie przetestuj połączenie.",
+        "reason": "Ostatnia kontrola: {detail}",
         "action": "Sprawdź połączenie"
       }
     },

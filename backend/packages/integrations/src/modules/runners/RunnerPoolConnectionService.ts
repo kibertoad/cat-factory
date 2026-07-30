@@ -13,6 +13,7 @@ import type {
   RunnerPoolConnection,
   RunnerPoolProvider,
   RunnerTransport,
+  SavedConnectionProbe,
   TestRunnerPoolConnectionInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
@@ -324,23 +325,31 @@ export class RunnerPoolConnectionService {
    * the moment a deployment tightened its URL policy. The config warnings are irrelevant to
    * reachability, so unlike `testConnection` they are not folded in.
    *
-   * Returns null when there is nothing to probe — no backend registered, its kind is no longer in
-   * the registry, or its stored config blob won't parse. That is deliberately NOT `{ ok: false }`:
-   * the watcher must be able to tell "unreachable" from "unknowable", or a de-registered kind
-   * would show as permanently down.
+   * Never `{ ok: false }` for anything but a provider that actually ANSWERED negatively: the three
+   * {@link SavedConnectionProbe} states keep "no backend registered" (a fact — no outage to report,
+   * and any recorded one must be forgotten) apart from "we could not ask" (its kind is no longer in
+   * the registry, or its stored config blob won't parse — leave the record alone) apart from a real
+   * verdict. A de-registered kind that read as `{ ok: false }` would show as permanently down.
    */
-  async probeSavedConnection(workspaceId: string): Promise<ConnectionTestResult | null> {
+  async probeSavedConnection(workspaceId: string): Promise<SavedConnectionProbe> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
-    if (!record) return null
+    if (!record) return { state: 'absent' }
     const provider = this.deps.runnerBackendRegistry.get(record.kind)
-    if (!provider) return null
+    if (!provider) {
+      return { state: 'unprobeable', reason: `Runner backend kind '${record.kind}' is not wired.` }
+    }
     const config = this.parseConfig(record)
-    if (!config) return null
+    if (!config) {
+      return { state: 'unprobeable', reason: 'The stored runner-pool config could not be parsed.' }
+    }
     const bundle = await this.decryptSecrets(record)
-    return provider.testConnection(
-      config,
-      this.context((key) => bundle[key]),
-    )
+    return {
+      state: 'answered',
+      result: await provider.testConnection(
+        config,
+        this.context((key) => bundle[key]),
+      ),
+    }
   }
 
   /** Unregister the backend (tombstones the binding). */

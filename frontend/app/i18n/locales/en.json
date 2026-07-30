@@ -2023,7 +2023,6 @@
       },
       "binaryStorage": {
         "title": "Content storage not configured",
-        "unreachableTitle": "Content storage is unreachable",
         "body": "No binary storage backend is configured for this account, so UI screenshots and reference images have nowhere to live and the visual checks are skipped. Configure storage to enable them.",
         "action": "Configure storage"
       },
@@ -2033,6 +2032,7 @@
       },
       "unreachable": {
         "body": "The connection is set up, but a live check could not reach it just now. That makes this an outage rather than a missing setup: agents that depend on it will fail until it answers again. Check that the service is running, then retest the connection.",
+        "reason": "Last probe: {detail}",
         "action": "Check connection"
       }
     },

@@ -319,6 +319,7 @@ export type {
   ProbeOutcome,
   ProbeVerdict,
   ReachabilityDecision,
+  SavedConnectionProbe,
 } from './domain/infra-reachability.js'
 export {
   applyInfraReachability,

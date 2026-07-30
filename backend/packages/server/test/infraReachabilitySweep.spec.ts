@@ -21,8 +21,12 @@ const workspace = (id: string): Workspace => ({
   accountId: 'acc-1',
 })
 
-/** A probe outcome per workspace: a result, `null` ("nothing to probe"), or a thrown error. */
-type Probe = ConnectionTestResult | null | Error
+/**
+ * A probe outcome per workspace: a provider verdict, one of the two non-answers the connection
+ * services distinguish (`absent` = nothing registered, `unprobeable` = we could not ask), or a
+ * thrown error. Absent from the table ⇒ `absent`.
+ */
+type Probe = ConnectionTestResult | 'absent' | 'unprobeable' | Error
 
 function makeContainer(opts: {
   workspaces?: Workspace[]
@@ -41,6 +45,10 @@ function makeContainer(opts: {
   hangRunnerFor?: string
   /** Model a mothership-mode local node (no main database; org state over the machine RPC). */
   mothership?: boolean
+  /** Whether the runner pool is this deployment's SOLE agent executor (else `not_applicable`). */
+  agentExecutorApplies?: boolean
+  /** Whether an environment-provider connection is mandatory here (else `not_applicable`). */
+  ephemeralEnvironmentsApplies?: boolean
 }) {
   const raises: { workspaceId: string; areas: unknown }[] = []
   const clears: string[] = []
@@ -58,9 +66,12 @@ function makeContainer(opts: {
               if (label === 'pool' && workspaceId === opts.hangRunnerFor) {
                 return new Promise<ConnectionTestResult>(() => {})
               }
-              const outcome = table[workspaceId] ?? null
+              const outcome = table[workspaceId] ?? 'absent'
               if (outcome instanceof Error) throw outcome
-              return outcome
+              if (outcome === 'absent') return { state: 'absent' }
+              if (outcome === 'unprobeable')
+                return { state: 'unprobeable', reason: 'no connection test' }
+              return { state: 'answered', result: outcome }
             },
           },
         }
@@ -75,6 +86,11 @@ function makeContainer(opts: {
       },
       ...(opts.mothership ? { localMode: { enabled: true, mothership: true } } : {}),
     },
+    // The projection's applicability flags. The sweep gates its probes on the SAME predicate, so a
+    // deployment where the pool is an optional alternate target (Cloudflare, local mode) is never
+    // told it is down — see `infraSetupAreaApplies`.
+    agentExecutorRequiresRunnerPool: opts.agentExecutorApplies ?? true,
+    ephemeralEnvironmentsRequireProvider: opts.ephemeralEnvironmentsApplies ?? true,
     logger,
     workspaceService: { list: async () => opts.workspaces ?? [workspace('ws-1')] },
     environments: bindProbe(opts.environments, 'env'),
@@ -192,14 +208,63 @@ describe('sweepInfraReachability', () => {
     expect(published).toEqual([])
   })
 
-  it('treats a null probe (nothing to test) as indeterminate, not as a recovery', async () => {
+  it('treats an UNPROBEABLE connection as indeterminate, not as a recovery', async () => {
+    // "We could not ask" (a de-registered backend kind, an unparseable config) must leave the
+    // record exactly as it was — it is our own gap, not evidence the cluster came back.
     const { container, clears, raises } = makeContainer({
-      runners: { 'ws-1': null },
+      runners: { 'ws-1': 'unprobeable' },
       recorded: { 'ws-1': ['agentExecutor'] },
     })
     expect(await sweepInfraReachability(container)).toEqual({ raised: 0, cleared: 0 })
     expect(clears).toEqual([])
     expect(raises).toEqual([])
+  })
+
+  it('clears a recorded outage once the connection is GONE, announcing nothing', async () => {
+    // The stuck-card fix: an operator who fixes a dead runner pool by un-registering it must not
+    // keep an escalating `infra_unreachable` card forever. "Absent" is knowably not an outage, so
+    // the card clears — but no recovery is published, because nothing recovered.
+    const { container, clears, published } = makeContainer({
+      runners: { 'ws-1': 'absent' },
+      recorded: { 'ws-1': ['agentExecutor'] },
+    })
+    expect(await sweepInfraReachability(container)).toEqual({ raised: 0, cleared: 0 })
+    expect(clears).toEqual(['ws-1'])
+    expect(published).toEqual([])
+  })
+
+  it('re-raises with the reduced set when one of two recorded areas is gone', async () => {
+    const { container, raises, clears } = makeContainer({
+      environments: { 'ws-1': DOWN },
+      runners: { 'ws-1': 'absent' },
+      recorded: { 'ws-1': ['agentExecutor', 'ephemeralEnvironments'] },
+    })
+    await sweepInfraReachability(container)
+    expect(raises).toEqual([{ workspaceId: 'ws-1', areas: ['ephemeralEnvironments'] }])
+    expect(clears).toEqual([])
+  })
+
+  it('never probes an area this deployment reports as not_applicable', async () => {
+    // The runner pool is an optional alternate target on Cloudflare and local mode, where the
+    // projection says `not_applicable` — so a dead one must raise nothing. Probing it anyway paged
+    // Slack for an outage whose banner the snapshot fold then refused to render.
+    const { container, probeCalls, raises, published } = makeContainer({
+      runners: { 'ws-1': DOWN },
+      agentExecutorApplies: false,
+    })
+    expect(await sweepInfraReachability(container)).toEqual({ raised: 0, cleared: 0 })
+    expect(probeCalls).toEqual([])
+    expect(raises).toEqual([])
+    expect(published).toEqual([])
+  })
+
+  it('probes the environment provider only where a provider connection is mandatory', async () => {
+    const { container, probeCalls } = makeContainer({
+      environments: { 'ws-1': DOWN },
+      ephemeralEnvironmentsApplies: false,
+    })
+    expect(await sweepInfraReachability(container)).toEqual({ raised: 0, cleared: 0 })
+    expect(probeCalls).toEqual([])
   })
 
   it('counts a probe that never answers within the budget as unreachable', async () => {

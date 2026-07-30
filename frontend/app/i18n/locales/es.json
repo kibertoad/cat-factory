@@ -1953,7 +1953,6 @@
       },
       "binaryStorage": {
         "title": "Almacenamiento de contenido no configurado",
-        "unreachableTitle": "El almacenamiento de contenido no está accesible",
         "body": "No hay ningún backend de almacenamiento binario configurado para esta cuenta, así que las capturas de la interfaz y las imágenes de referencia no tienen dónde guardarse y las comprobaciones visuales se omiten. Configura el almacenamiento para habilitarlas.",
         "action": "Configurar almacenamiento"
       },
@@ -1963,6 +1962,7 @@
       },
       "unreachable": {
         "body": "La conexión está configurada, pero una comprobación en vivo no ha podido alcanzarla ahora mismo. Por eso se trata de una interrupción y no de una configuración pendiente: los agentes que dependen de ella fallarán hasta que vuelva a responder. Comprueba que el servicio esté en marcha y vuelve a probar la conexión.",
+        "reason": "Última comprobación: {detail}",
         "action": "Comprobar conexión"
       }
     },

@@ -1953,7 +1953,6 @@
       },
       "binaryStorage": {
         "title": "Stockage de contenu non configuré",
-        "unreachableTitle": "Le stockage de contenu est inaccessible",
         "body": "Aucun backend de stockage binaire n'est configuré pour ce compte, donc les captures d'écran de l'interface et les images de référence n'ont nulle part où être stockées et les contrôles visuels sont ignorés. Configurez le stockage pour les activer.",
         "action": "Configurer le stockage"
       },
@@ -1963,6 +1962,7 @@
       },
       "unreachable": {
         "body": "La connexion est configurée, mais une vérification en direct n'a pas pu l'atteindre à l'instant. Il s'agit donc d'une panne et non d'une configuration manquante : les agents qui en dépendent échoueront jusqu'à ce qu'une réponse revienne. Vérifiez que le service fonctionne, puis testez la connexion à nouveau.",
+        "reason": "Dernière vérification : {detail}",
         "action": "Vérifier la connexion"
       }
     },

@@ -351,6 +351,7 @@ export {
 } from './config/platformAlerts.js'
 export {
   resolveInfraReachabilityConfig,
+  shouldRunReachabilityPass,
   type InfraReachabilityEnvInput,
 } from './config/infraReachability.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'

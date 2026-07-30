@@ -24,6 +24,34 @@ const MIN_PROBE_TIMEOUT_MS = 1_000
  */
 const MAX_PROBE_TIMEOUT_MS = 60_000
 
+/**
+ * Whether a CRON-driven facade should run the sweep on this tick, so `INFRA_REACHABILITY_INTERVAL_MS`
+ * means the same thing on the Worker as the timer gives it on Node.
+ *
+ * The Worker's `scheduled` tick fires every 2 minutes for every backstop it drives, and this sweep
+ * used to run on all of them — so the one knob an operator has for the one sweep that makes an
+ * outbound call per workspace per pass did nothing on Cloudflare, and opting in bought a fixed
+ * 2-minute probe cadence. Since a cron tick runs in a fresh isolate there is no "last pass" in
+ * memory, and the whole design point is that this feature adds no persistence; so the gate is pure
+ * ARITHMETIC on the cron's own aligned timestamp: run only on the tick that opens a new
+ * `intervalMs` window. That yields at most one pass per window with no state at all, and is exact
+ * (not merely probabilistic) because `scheduledTime` is cron-aligned.
+ *
+ * An interval at or below the tick period means "every tick", which is what a Node deployment with
+ * the same setting gets.
+ */
+export function shouldRunReachabilityPass(
+  scheduledTime: number,
+  tickPeriodMs: number,
+  intervalMs: number,
+): boolean {
+  if (intervalMs <= tickPeriodMs) return true
+  return (
+    Math.floor(scheduledTime / intervalMs) !==
+    Math.floor((scheduledTime - tickPeriodMs) / intervalMs)
+  )
+}
+
 /** The raw env strings each facade feeds the parser (already extracted from its env source). */
 export interface InfraReachabilityEnvInput {
   /** Whether `INFRA_REACHABILITY_WATCH` opted the watcher in. */

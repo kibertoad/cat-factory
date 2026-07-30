@@ -152,7 +152,13 @@ export interface ExecutionEventPublisher {
  * as before — no events are pushed (tests, and any deployment without the
  * WORKSPACE_EVENTS binding).
  */
-export class NoopEventPublisher implements ExecutionEventPublisher {
+// `Required<…>` rather than the bare port, and that is load-bearing beyond this class: because
+// every publisher method is OPTIONAL, a new event added to the port compiles fine with no
+// implementation anywhere — and `FanOutEventPublisher` (which delegates method-by-method) would
+// then DROP it silently for every deployment wiring the in-org fan-out. Its drift guard reflects
+// this class's surface, so pinning this one to the port's FULL surface is what makes the next
+// added event fail at compile time here instead of in production.
+export class NoopEventPublisher implements Required<ExecutionEventPublisher> {
   async executionChanged(): Promise<void> {}
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}

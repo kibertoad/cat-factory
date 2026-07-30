@@ -24,6 +24,7 @@ import type {
   RepoValidationIssue,
   RepoValidationResult,
   RunRepoContext,
+  SavedConnectionProbe,
   ServiceProvisioning,
   TestEnvironmentConnectionInput,
   TestEnvironmentHandlerInput,
@@ -47,6 +48,7 @@ import {
 import { arbitrateCustomProviders, resolveCustomProvisioning } from './custom-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
+import { createEnvironmentConnectionProbes } from './connectionProbes.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -59,7 +61,6 @@ import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
   overlaySecrets,
-  resolveHandlerBackend,
   type ServiceProvisioningInputs,
   toManifestId,
 } from './infra-handler-build.js'
@@ -297,7 +298,28 @@ export interface ResolvedTypeProvider {
 }
 
 export class EnvironmentConnectionService {
-  constructor(private readonly deps: EnvironmentConnectionServiceDependencies) {}
+  /** The connection PROBES (candidate config / candidate handler / saved connection). */
+  private readonly probes: ReturnType<typeof createEnvironmentConnectionProbes>
+
+  constructor(private readonly deps: EnvironmentConnectionServiceDependencies) {
+    this.probes = createEnvironmentConnectionProbes({
+      workspaceRepository: deps.workspaceRepository,
+      environmentBackendRegistry: deps.environmentBackendRegistry,
+      ...(deps.environmentProvider ? { environmentProvider: deps.environmentProvider } : {}),
+      ...(deps.urlPolicy ? { urlPolicy: deps.urlPolicy } : {}),
+      ...(deps.customTlsSupported !== undefined
+        ? { customTlsSupported: deps.customTlsSupported }
+        : {}),
+      requireBackend: (kind) => this.requireBackend(kind),
+      buildProvider: (backend) => this.buildProvider(backend),
+      primaryRecord: (workspaceId) => this.primaryRecord(workspaceId),
+      buildFromRecord: (record) => this.buildFromRecord(record),
+      buildResolveSecret: (record) => this.buildResolveSecret(record),
+      storedSecretsFor: (workspaceId, provisionType, manifestId) =>
+        this.storedSecretsFor(workspaceId, provisionType, manifestId),
+      engineToProvisionType,
+    })
+  }
 
   // ---- per-type handlers (the final API) ---------------------------------
 
@@ -600,91 +622,31 @@ export class EnvironmentConnectionService {
   }
 
   /**
-   * Probe a candidate connection before saving (nothing is persisted). Builds the
-   * backend's provider from the candidate config + a resolver over the supplied
-   * (unsaved) secrets and delegates to the provider's `testConnection`.
+   * Probe a candidate connection before saving (nothing is persisted).
+   *
+   * The three connection PROBES live in `connectionProbes.ts` — they are the module's only
+   * liveness questions (as opposed to reads and writes of connection state), and the difference
+   * between probing a candidate config and probing a SAVED one is subtle enough to be stated in one
+   * place. These stay as the service's public surface.
    */
   async testConnection(
     workspaceId: string,
     input: TestEnvironmentConnectionInput,
   ): Promise<ConnectionTestResult> {
-    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    if (!input.config) return { ok: true, message: 'Nothing to test.' }
-    const backend = this.requireBackend(input.config.kind)
-    backend.assertConfigSafe(input.config, {
-      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
-      ...(this.deps.customTlsSupported !== undefined
-        ? { customTlsSupported: this.deps.customTlsSupported }
-        : {}),
-    })
-    const provider = this.buildProvider(backend)
-    if (!provider.testConnection) {
-      return { ok: true, message: 'This provider has no connection test.' }
-    }
-    const manifest = backend.toManifest(input.config)
-    const secrets = input.secrets ?? {}
-    return provider.testConnection({
-      manifest,
-      config: {},
-      resolveSecret: (key) => secrets[key],
-    })
+    return this.probes.testConnection(workspaceId, input)
   }
 
-  /**
-   * Probe the workspace's SAVED primary connection, for the reachability watcher.
-   *
-   * The sibling {@link testConnection} answers "would this config work" for an operator staring at
-   * a form; this answers "does what we already stored still answer", which is the question a
-   * background sweep asks. So it resolves the stored record + its own secret bundle rather than
-   * taking candidate values, and it makes NO safety assertion: `assertConfigSafe` guards what an
-   * operator may SAVE, and re-running it here would report an already-persisted connection as an
-   * outage the moment a deployment tightened its URL policy.
-   *
-   * Returns null when there is nothing to probe — no primary handler registered, or a provider with
-   * no connection test. That is deliberately NOT `{ ok: false }`: the watcher must be able to tell
-   * "unreachable" from "unknowable", or an unprobeable provider would show as permanently down.
-   */
-  async probeSavedConnection(workspaceId: string): Promise<ConnectionTestResult | null> {
-    const record = await this.primaryRecord(workspaceId)
-    if (!record) return null
-    const { provider, manifest } = this.buildFromRecord(record)
-    const live = this.deps.environmentProvider ?? provider
-    if (!live.testConnection) return null
-    return live.testConnection({
-      manifest,
-      config: {},
-      resolveSecret: await this.buildResolveSecret(record),
-    })
+  /** Probe the workspace's SAVED primary connection, for the reachability watcher. */
+  async probeSavedConnection(workspaceId: string): Promise<SavedConnectionProbe> {
+    return this.probes.probeSavedConnection(workspaceId)
   }
 
-  /**
-   * Probe a candidate per-type infra HANDLER connection before saving (nothing persisted).
-   * Lowers the engine-discriminated handler config to the backend config — with a placeholder
-   * manifest source, since a connectivity probe reads only the apiserver/token, never the
-   * (service-owned) source — and delegates to {@link testConnection}. So the per-type engine
-   * form (e.g. a `local-k3s` / `remote-kubernetes` Kubernetes engine) can verify the apiserver
-   * is reachable and the token authenticates before the operator commits the handler.
-   */
+  /** Probe a candidate per-type infra HANDLER connection before saving (nothing persisted). */
   async testHandler(
     workspaceId: string,
     input: TestEnvironmentHandlerInput,
   ): Promise<ConnectionTestResult> {
-    const backend = resolveHandlerBackend(
-      this.deps.environmentBackendRegistry,
-      input.config.engine,
-      input.backendKind,
-    )
-    const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
-    // Fall back to the SAVED handler's stored secrets so an operator can (re)test an existing
-    // connection — or edit a non-secret field and test it — WITHOUT re-entering the write-only
-    // token the edit form never surfaces. A freshly-typed secret still overrides the stored one;
-    // a blank/omitted value preserves it (see overlaySecrets).
-    const provisionType = engineToProvisionType(input.config.engine)
-    const manifestId =
-      input.config.engine === 'remote-custom' ? input.config.acceptsManifestId : null
-    const stored = await this.storedSecretsFor(workspaceId, provisionType, manifestId)
-    const secrets = overlaySecrets(stored, input.secrets)
-    return this.testConnection(workspaceId, { config: backendConfig, secrets })
+    return this.probes.testHandler(workspaceId, input)
   }
 
   /**
