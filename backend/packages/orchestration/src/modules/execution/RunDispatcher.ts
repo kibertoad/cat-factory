@@ -6,7 +6,6 @@ import type {
   ResolveJudgeInput,
   AgentExecutor,
   AgentJobHandle,
-  AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -29,7 +28,6 @@ import type {
   GateRegistry,
   StepResolverRegistry,
   ProviderRegistry,
-  GateHelperJobResult,
   IdGenerator,
   IssueWritebackProvider,
   Logger,
@@ -45,48 +43,28 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import {
-  ConflictError,
   getErrorMessage,
   isAsyncAgentExecutor,
   noopLogger,
-  NotFoundError,
   parseLocalModelId,
-  recordGateAttempt,
   runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
 import {
   applyContainerRunning,
-  applyLastActivity,
   applySubtaskProgress,
   recordDispatchAttribution,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
-import { applySliceReviews } from './prReviewSlices.logic.js'
-import { applyReproductionReport, recordReproductionOutcome } from './reproductionProof.logic.js'
-import {
-  commitInitiativeTracker,
-  FORK_PROPOSER_KIND,
-  PR_REVIEWER_KIND,
-  resolvePrNumber,
-} from '@cat-factory/agents'
+import { recordReproductionOutcome } from './reproductionProof.logic.js'
+import { FORK_PROPOSER_KIND, PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
-import type {
-  BugIntakeOutcome,
-  BugIntakeService,
-  EnvironmentProvisioningService,
-} from '@cat-factory/integrations'
+import type { BugIntakeService, EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
-import { ANALYSIS_AGENT_KIND, CONFLICTS_AGENT_KIND, HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
-import {
-  classifyDispatchFailure,
-  type ContainerFailureView,
-  evictionFailureDetail,
-  MAX_EVICTION_RECOVERIES,
-  MAX_TRANSIENT_EVICTION_RECOVERIES,
-} from './job.logic.js'
+import { HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
+import { classifyDispatchFailure } from './job.logic.js'
 import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
 import { FollowUpGateController } from './FollowUpGateController.js'
@@ -110,6 +88,8 @@ import type { PrVerificationReportController } from './PrVerificationReportContr
 import { initialPrReviewState } from './prReview.logic.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import { PollCompletionController } from './PollCompletionController.js'
+import { PollRunningController } from './PollRunningController.js'
+import { OneShotStepController } from './OneShotStepController.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   resolveForkTriState,
@@ -321,6 +301,10 @@ export class RunDispatcher {
   private readonly prReviewResolution: PrReviewResolutionController
   /** Settled-agent-poll completion (helper-phase branches + `failed` handling), extracted collaborator. */
   private readonly pollCompletion: PollCompletionController
+  /** The RUNNING half of the poll branch tree — the sibling of {@link pollCompletion}. */
+  private readonly pollRunning: PollRunningController
+  /** The one-shot engine steps (`tracker` / `bug-intake` / `initiative-committer`). */
+  private readonly oneShot: OneShotStepController
   /**
    * The Follow-up companion gate (the future-looking Coder's streamed items, the
    * park-until-decided gate, and the human-action API), extracted to
@@ -409,7 +393,7 @@ export class RunDispatcher {
       applyContainerRunning: (step, update) => applyContainerRunning(step, update),
       applySubtaskProgress: (step, counts) => applySubtaskProgress(step, counts),
       recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
-        this.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
+        this.pollRunning.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
       logger: deps.logger,
     })
     this.followUpGate = new FollowUpGateController({
@@ -441,6 +425,34 @@ export class RunDispatcher {
       handleAgentStep: (ctx, dispatchKind, augment) =>
         this.handleAgentStep(ctx, dispatchKind, augment),
     })
+    this.pollRunning = new PollRunningController({
+      blockRepository: deps.blockRepository,
+      clock: deps.clock,
+      runStateMachine: deps.runStateMachine,
+      deployer: this.deployer,
+      followUpGate: this.followUpGate,
+      runInitiatorScope: this.runInitiatorScope,
+      gateFor: (agentKind) => this.gateFor(agentKind),
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+      recordBackendDiagnostics: (instance, backend) =>
+        this.recordBackendDiagnostics(instance, backend),
+    })
+    this.oneShot = new OneShotStepController({
+      blockRepository: deps.blockRepository,
+      clock: deps.clock,
+      contextBuilder: deps.contextBuilder,
+      log: this.log,
+      repoOps: this.repoOps,
+      runStateMachine: deps.runStateMachine,
+      stepGraph: deps.stepGraph,
+      ...(deps.bugIntakeService ? { bugIntakeService: deps.bugIntakeService } : {}),
+      ...(deps.initiativeService ? { initiativeService: deps.initiativeService } : {}),
+      ...(deps.issueWriteback ? { issueWriteback: deps.issueWriteback } : {}),
+      ...(deps.ticketTrackerProvider ? { ticketTrackerProvider: deps.ticketTrackerProvider } : {}),
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+    })
     this.pollCompletion = new PollCompletionController({
       blockRepository: deps.blockRepository,
       clock: deps.clock,
@@ -452,8 +464,9 @@ export class RunDispatcher {
       recordBackendDiagnostics: (instance, backend) =>
         this.recordBackendDiagnostics(instance, backend),
       recoverContainerEviction: (ws, instance, step, failure) =>
-        this.recoverContainerEviction(ws, instance, step, failure),
-      markContainerErrored: (ws, instance, step) => this.markContainerErrored(ws, instance, step),
+        this.pollRunning.recoverContainerEviction(ws, instance, step, failure),
+      markContainerErrored: (ws, instance, step) =>
+        this.pollRunning.markContainerErrored(ws, instance, step),
     })
     this.gateStepController = new GateStepController(
       {
@@ -517,10 +530,10 @@ export class RunDispatcher {
       interviewControllers: this.interviewControllers,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
-      runTracker: (ws, instance, block) => this.runTracker(ws, instance, block),
+      runTracker: (ws, instance, block) => this.oneShot.runTracker(ws, instance, block),
       runBugIntake: (ws, instance, step, block, isFinalStep) =>
-        this.runBugIntake(ws, instance, step, block, isFinalStep),
-      runInitiativeCommitter: (ws, block) => this.runInitiativeCommitter(ws, block),
+        this.oneShot.runBugIntake(ws, instance, step, block, isFinalStep),
+      runInitiativeCommitter: (ws, block) => this.oneShot.runInitiativeCommitter(ws, block),
       evaluateGate: (ws, instance, step, block, isFinalStep, gate) =>
         this.evaluateGate(ws, instance, step, block, isFinalStep, gate),
       gateFor: (kind) => this.gateFor(kind),
@@ -908,7 +921,13 @@ export class RunDispatcher {
       initiatedByUserId: step.initiatedByUserId,
     })
     if (update.state === 'running') {
-      return this.handleRunningPoll(workspaceId, executionId, instance, update, step.jobId)
+      return this.pollRunning.handleRunningPoll(
+        workspaceId,
+        executionId,
+        instance,
+        update,
+        step.jobId,
+      )
     }
 
     // A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call)
@@ -918,7 +937,7 @@ export class RunDispatcher {
     // budget) and finish the gate step with the output it returns. The gate raises its own
     // `release_regression` notification + enriches any open incident inside the hook (from the
     // signals stashed at escalation); the run then completes for a human to act out-of-band.
-    const investigated = await this.resolveInvestigateHelperCompletion(
+    const investigated = await this.pollRunning.resolveInvestigateHelperCompletion(
       workspaceId,
       instance,
       step,
@@ -934,7 +953,12 @@ export class RunDispatcher {
     // negative, so the next check re-dispatches (until the attempt budget is spent).
     const reprobeGate = this.gateFor(step.agentKind)
     if (reprobeGate) {
-      return this.reprobeGateAfterHelper(reprobeGate, { workspaceId, instance, step, update })
+      return this.pollRunning.reprobeGateAfterHelper(reprobeGate, {
+        workspaceId,
+        instance,
+        step,
+        update,
+      })
     }
 
     // A helper job (Fixer / conflict-resolver) in flight for a tester / human-test /
@@ -962,316 +986,6 @@ export class RunDispatcher {
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
-  }
-
-  /**
-   * Handle a `running` poll: a successful poll proves the container is up, so surface live subtask
-   * progress (e.g. 3/8 todos) without advancing the step. Only persist + emit when something
-   * actually changed so an idle poll doesn't churn storage or the event stream. Folds the poll's
-   * delta via {@link applyRunningFold} — a cheap pre-check against the loaded snapshot, then the
-   * authoritative re-apply on fresh state under CAS (idempotent for the set-to-latest folds and
-   * correct for the drain-on-read follow-up append). Split from {@link pollAgentJobInner} to stay
-   * under the statement ceiling.
-   */
-  private async handleRunningPoll(
-    workspaceId: string,
-    executionId: string,
-    instance: ExecutionInstance,
-    update: Extract<AgentJobUpdate, { state: 'running' }>,
-    jobId: string,
-  ): Promise<AdvanceResult> {
-    const foldCtx = { jobId, update, workspaceId }
-    // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
-    // (the common case). The mutation is discarded — the authoritative write re-applies the
-    // same fold on fresh state under CAS below.
-    if (await this.applyRunningFold(instance, foldCtx)) {
-      try {
-        const persisted = await this.runStateMachine.mutateInstance(
-          workspaceId,
-          executionId,
-          async (fresh) => {
-            await this.applyRunningFold(fresh, foldCtx)
-          },
-        )
-        // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
-        // LLM-metrics GROUP BY so a live container's poll cadence doesn't re-aggregate
-        // the run on every tick. The rollup refreshes on the step-boundary/terminal emit.
-        await this.runStateMachine.emitInstance(workspaceId, persisted, { rollUpMetrics: false })
-      } catch (error) {
-        // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
-        // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
-        // failing the run; the next entry no-ops on a gone/terminal run.
-        if (error instanceof NotFoundError || error instanceof ConflictError) {
-          throw new RunContendedError(executionId)
-        }
-        throw error
-      }
-    }
-    return { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
-  }
-
-  /**
-   * A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call) declares a
-   * `resolveHelperCompletion` hook. When such a helper's job settles — done OR failed — call the
-   * hook INSTEAD of re-probing the precheck (re-probing an investigate-don't-fix helper would just
-   * regress again and burn the budget) and finish the gate step with the output it returns. Returns
-   * the resulting {@link AdvanceResult}, or `null` when this branch doesn't apply (the caller falls
-   * through to the re-probe / other completion paths).
-   */
-  private async resolveInvestigateHelperCompletion(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    update: AgentJobUpdate,
-  ): Promise<AdvanceResult | null> {
-    const completionGate = this.gateFor(step.agentKind)
-    if (
-      completionGate?.resolveHelperCompletion &&
-      step.gate?.phase === 'working' &&
-      (update.state === 'done' || update.state === 'failed')
-    ) {
-      const block = await this.blockRepository.get(workspaceId, instance.blockId)
-      step.jobId = undefined
-      step.subtasks = undefined
-      if (!block) return { kind: 'noop' }
-      const isFinalStep = instance.currentStep === instance.steps.length - 1
-      const jobResult: GateHelperJobResult =
-        update.state === 'done'
-          ? { state: 'done', result: update.result }
-          : { state: 'failed', error: update.error ?? null }
-      const resolution = await completionGate.resolveHelperCompletion({
-        workspaceId,
-        instance,
-        block,
-        step,
-        result: jobResult,
-      })
-      // Preserve the done-result's fields (usage metering etc.) while recording the gate's
-      // resolved output; a failed investigation has no result to carry.
-      const base: AgentRunResult = update.state === 'done' ? update.result : { output: '' }
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        ...base,
-        output: resolution.output,
-      })
-    }
-    return null
-  }
-
-  /**
-   * Fold a running poll's container signals into `step.container`: a successful poll
-   * proves the container is `up`, and the harness's live phase (clone / agent / push)
-   * plus the transport's container id/url enrich it. Returns whether anything changed,
-   * so the caller only persists + emits on a real transition (an idle poll is a no-op).
-   * Prior id/url/phase are preserved when a poll omits them (drain-on-read semantics).
-   */
-  /**
-   * Fold a running poll's live delta (container status/phase, subtask counts, backend, streamed
-   * follow-ups, env projection) onto `target`, returning whether anything changed. Idempotent for
-   * the set-to-latest folds and correct under CAS retry for the drain-on-read follow-up append —
-   * see the call site in {@link pollAgentJobInner}. A concurrent write that advanced the step (or
-   * superseded the job) makes it a no-op.
-   */
-  private async applyRunningFold(
-    target: ExecutionInstance,
-    ctx: {
-      jobId: string
-      update: Extract<AgentJobUpdate, { state: 'running' }>
-      workspaceId: string
-    },
-  ): Promise<boolean> {
-    const { jobId, update, workspaceId } = ctx
-    const s = target.steps[target.currentStep]
-    // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
-    if (!s || s.jobId !== jobId) return false
-    let changed = false
-    if (applyContainerRunning(s, update)) changed = true
-    if (applySubtaskProgress(s, update.subtasks)) changed = true
-    // Persist the harness liveness heartbeat (throttled) so a quiet-but-alive container keeps the
-    // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
-    // would otherwise never emit, leaving it indistinguishable from a wedged run to the sweeper + UI.
-    if (applyLastActivity(s, update.lastActivityAt)) changed = true
-    // Republish the latest pre-PR validation attempt so the repair loop is visible WHILE it
-    // runs ("lint failed, repairing — attempt 2 of 3") instead of only at the end.
-    if (applyValidationReport(s, update.validationReport)) changed = true
-    // Republish the reproduction proof so a failed verification is visible WHILE the repair loop
-    // still runs, for the same reason as the validation republish above.
-    if (applyReproductionReport(s, update.reproductionReport)) changed = true
-    // Persist each PR-review slice's captured report as its subagent returns. Unlike the two
-    // republishes above this is not for visibility: the reviewer emits findings only in its
-    // terminal output, so this is the one thing that makes finished slices survive a review that
-    // never gets there, and the only state a manual resume can preserve work from.
-    if (applySliceReviews(s, update.sliceReviews)) changed = true
-    // The transport reports WHICH backend served the job on the first poll (native host
-    // process vs. sandboxed container) — record it in the run diagnostics.
-    if (this.recordBackendDiagnostics(target, update.backend)) changed = true
-    // Append any forward-looking items the Coder streamed since the last poll so the
-    // Follow-up companion lights up + accrues items LIVE while the container still runs.
-    if (this.followUpGate.appendStreamedFollowUps(s, update.followUps)) changed = true
-    // Refresh the env projection so its status transitions (provisioning→ready→
-    // expired/torn_down) and any error stay live in the run details during the run.
-    if (await this.deployer.attachEnvironmentProjection(workspaceId, target.blockId, s)) {
-      changed = true
-    }
-    return changed
-  }
-
-  /**
-   * A polling gate step's in-flight job is its helper agent (ci-fixer / conflict-resolver / the
-   * human-review fixer), NOT the step's own work: when it finishes (or fails) we don't record a
-   * result or advance — we run any deterministic post-helper bookkeeping hook, record the attempt,
-   * drop the handle, return the gate to `checking`, and re-run the precheck (the helper's push
-   * triggers a fresh CI run / updates mergeability). A helper that failed without pushing leaves the
-   * precheck negative, so the next check re-dispatches (until the attempt budget is spent). Split
-   * from {@link pollAgentJobInner} to keep it under the complexity ceiling.
-   */
-  private async reprobeGateAfterHelper(
-    gate: GateDefinition,
-    ctx: {
-      workspaceId: string
-      instance: ExecutionInstance
-      step: PipelineStep
-      update: Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
-    },
-  ): Promise<AdvanceResult> {
-    const { workspaceId, instance, step, update } = ctx
-    // A gate may need deterministic GitHub-side bookkeeping to land BEFORE the re-probe
-    // reads it (the human-review gate replies to + RESOLVES the threads it handed the
-    // fixer, so the next probe counts them addressed). Run that side-effect hook first;
-    // it does NOT replace the re-probe (unlike resolveHelperCompletion).
-    if (gate.onHelperComplete && step.gate) {
-      const block = await this.blockRepository.get(workspaceId, instance.blockId)
-      if (block) {
-        const jobResult: GateHelperJobResult =
-          update.state === 'done'
-            ? { state: 'done', result: update.result }
-            : { state: 'failed', error: update.error ?? null }
-        await this.runInitiatorScope(instance.initiatedBy, () =>
-          gate.onHelperComplete!({
-            workspaceId,
-            instance,
-            block,
-            step,
-            result: jobResult,
-          }),
-        )
-      }
-    }
-    // Record the just-finished helper attempt before re-probing. The gate's next
-    // precheck stays the source of truth for pass/fail, but the helper's own account
-    // (what it did, and for the conflict-resolver which files it left conflicting) is
-    // otherwise discarded here — leaving the gate window with only a bare attempt
-    // count. Capture it so the UI can show what each attempt tried.
-    if (step.gate) {
-      const attempt = recordGateAttempt(
-        step.gate,
-        update.state === 'done'
-          ? { state: 'done', output: update.result.output ?? null }
-          : { state: 'failed', error: update.error ?? null },
-        this.clock.now(),
-      )
-      step.gate.attemptLog = [...(step.gate.attemptLog ?? []), attempt]
-      // Same reasoning for the helper's effort self-assessment: a gate step runs no agent of
-      // its own, so its report is its LAST helper's (what made fixing CI / resolving the
-      // conflicts hard). This path deliberately never records a result, so without this the
-      // gate window could only ever show a bare attempt count.
-      if (update.state === 'done' && update.result.effortReport) {
-        step.effortReport = update.result.effortReport
-      }
-      // The conflicts gate's precheck carries no failure detail of its own (GitHub
-      // reports mergeability as a single bit), so surface the resolver's account as
-      // the gate's last failure summary. CI's probe already sets a richer summary
-      // (the red checks) — don't clobber it with the fixer's push note.
-      if (step.agentKind === CONFLICTS_AGENT_KIND && attempt.summary) {
-        step.gate.lastFailureSummary = attempt.summary
-      }
-    }
-    step.jobId = undefined
-    step.subtasks = undefined
-    if (step.gate) step.gate.phase = 'checking'
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-  }
-
-  /**
-   * Shared container-eviction recovery for an async step (agent or deployer). When `error` is a
-   * container-eviction error and the per-flavour budget (transient vs genuine) isn't spent, resets
-   * the step so the driver re-dispatches a fresh container (returns `continue`); once the budget is
-   * spent, marks the container errored and returns the terminal `job_evicted`. Returns null when
-   * `error` is NOT an eviction, so the caller proceeds with its own genuine-failure handling.
-   * `onBeforeRedispatch` runs the kind-specific reclaim (the deployer releases its separately
-   * dispatched deploy-job runner) before the step state is reset. Keeps the eviction budgets +
-   * the user-facing "still evicting…" wording uniform across the agent and deployer paths.
-   */
-  private async recoverContainerEviction(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    failure: ContainerFailureView,
-    onBeforeRedispatch?: () => Promise<void>,
-  ): Promise<AdvanceResult | null> {
-    const { error, evicted, detail } = failure
-    // The eviction verdict rides the transport's STRUCTURED `evicted` field (every transport
-    // mints it). Absent ⇒ not an eviction, so the caller proceeds with genuine-failure handling.
-    const kind = evicted
-    if (!kind) return null
-    const transient = kind === 'transient'
-    const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
-    const recoveries = transient
-      ? (step.transientEvictionRecoveries ?? 0)
-      : (step.evictionRecoveries ?? 0)
-    if (recoveries < limit) {
-      if (transient) step.transientEvictionRecoveries = recoveries + 1
-      else step.evictionRecoveries = recoveries + 1
-      // Retain the FIRST death's post-mortem before re-dispatching: the dead container is
-      // removed right now, so this recovery is the last moment its evidence exists — and it is
-      // usually the informative one (the retry is a fresh container hitting the same wall).
-      // `evictionFailureDetail` folds it into the failure if the budget later runs out.
-      if (detail && !step.firstEvictionDetail) step.firstEvictionDetail = detail
-      if (onBeforeRedispatch) await onBeforeRedispatch()
-      step.jobId = undefined
-      step.subtasks = undefined
-      step.progress = 0
-      // The container vanished and a fresh one is about to boot for the re-dispatch, so the
-      // details show it spinning up again rather than a stale "up".
-      step.container = { status: 'starting' }
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'continue' }
-    }
-    // Eviction budget spent — the container is gone for good. Mark it errored and persist so the
-    // failed details show the errored container (failRun re-reads the run from storage, so an
-    // in-memory-only mutation would be lost; it emits the terminal frame, so markContainerErrored
-    // deliberately doesn't).
-    await this.markContainerErrored(workspaceId, instance, step)
-    // The transports' post-mortems of the containers that died (exit state + log tail). Each
-    // container is reclaimed as the run settles or re-dispatches, so this is the only place the
-    // cause survives — carry it onto the failure rather than reporting a bare "still evicting".
-    const evictionDetail = evictionFailureDetail(step.firstEvictionDetail, detail)
-    return {
-      kind: 'job_evicted',
-      error: transient
-        ? `${error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
-        : `${error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
-      ...(evictionDetail ? { detail: evictionDetail } : {}),
-    }
-  }
-
-  /**
-   * Mark a container step's container `errored` (preserving the id/url/phase it reached) and
-   * PERSIST it, so a failed run's details show the errored container. Called on the genuine
-   * job-failure / exhausted-eviction paths before the result funnels to `failRun`, which
-   * re-reads the run from storage (so an in-memory-only mutation here would be lost) and emits
-   * the terminal frame itself — so we deliberately persist WITHOUT emitting here, to avoid a
-   * redundant transient "errored but still running" broadcast right before the "failed" one.
-   */
-  private async markContainerErrored(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-  ): Promise<void> {
-    step.container = { ...step.container, status: 'errored' }
-    await this.runStateMachine.casPersist(workspaceId, instance)
   }
 
   /**
@@ -1780,230 +1494,6 @@ export class RunDispatcher {
     const resolution = await resolver.resolve({ workspaceId, instance, step, result, isFinalStep })
     if (resolution?.output !== undefined) step.output = resolution.output
     return resolution?.ownsTerminalStatus ?? false
-  }
-
-  /**
-   * File a tracking issue/ticket for a `tracker` step from the preceding `analysis`
-   * output. Non-LLM and best-effort: when no provider is wired or none is configured
-   * for the workspace it simply notes the skip; a filing error is folded into the
-   * step output rather than failing the run (the implementation still proceeds).
-   */
-  private async runTracker(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block,
-  ): Promise<AgentRunResult> {
-    if (!this.ticketTrackerProvider) {
-      return { output: 'No issue tracker configured; skipped ticket creation.' }
-    }
-    // The report to file is the closest preceding `analysis` output, falling back
-    // to the block description when the pipeline has no analysis step.
-    const analysis = instance.steps
-      .slice(0, instance.currentStep)
-      .filter((s) => s.agentKind === ANALYSIS_AGENT_KIND && s.output)
-      .map((s) => s.output as string)
-      .pop()
-    const body = (analysis ?? block.description ?? '').trim() || 'Automated tech-debt remediation.'
-    const frameId =
-      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
-    try {
-      const ticket = await this.ticketTrackerProvider.createTicket({
-        workspaceId,
-        frameId,
-        title: `Tech debt: ${block.title}`,
-        body,
-      })
-      if (!ticket) {
-        return { output: 'No issue tracker configured; skipped ticket creation.' }
-      }
-      return { output: `Filed tracking ticket ${ticket.externalId}: ${ticket.url}` }
-    } catch (error) {
-      return { output: `Could not file a tracking ticket: ${getErrorMessage(error)}` }
-    }
-  }
-
-  /**
-   * Run a `bug-intake` step — the recurring bug-triage pipeline's inbound dual of `tracker`
-   * (design §3). Pull ONE matching open issue from the schedule's configured tracker board,
-   * claim it (import + replace-link onto the reused block, mark it in-progress + comment), and
-   * seed the block's title/description from it so every downstream step works THAT bug. When
-   * nothing matches — or no task source is wired — the run completes SUCCESSFULLY with every
-   * remaining step skipped (there is nothing to investigate / reproduce / fix), no notification.
-   * Best-effort throughout: the intake helper never throws (a tracker outage resolves to a
-   * no-op), and the pickup writeback is fire-and-forget.
-   */
-  private async runBugIntake(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-  ): Promise<AdvanceResult> {
-    const outcome: BugIntakeOutcome = this.bugIntakeService
-      ? await this.bugIntakeService.pickForBlock(workspaceId, block.id)
-      : { picked: null, summary: 'Issue intake is not configured on this deployment.' }
-
-    if (!outcome.picked) {
-      return this.completeRunSkippingRemaining(workspaceId, instance, step, outcome.summary)
-    }
-
-    const pickup = outcome.picked
-    // Seed the reused recurring block from the picked issue so each fire works a different bug
-    // through the same block (the same block-seeding `createTaskFromIssue` does, applied in place).
-    // Clear the previous fire's peer PRs too — this fire works a DIFFERENT bug, so a prior bug's
-    // connected-repo PRs must not linger on the block. (The own-service `pullRequest` is overwritten
-    // by this run's coder step before any step reads it; it is a non-nullable `BlockPatch` field, so
-    // it cannot be cleared here anyway.)
-    await this.blockRepository.update(workspaceId, block.id, {
-      title: pickup.seedTitle,
-      description: pickup.seedDescription,
-      peerPullRequests: [],
-    })
-    // Best-effort: claim the issue where it was filed (in-progress mark + "taken by cat-factory"
-    // comment). Fire-and-forget — a tracker hiccup must never fail the run, mirroring the PR
-    // open/merge writeback hooks; and unlike them this is NOT gated on the writeback settings.
-    const writeback = this.issueWriteback
-    if (writeback) {
-      await runBestEffort(
-        this.log,
-        'writeback.onIssuePickedUp',
-        () =>
-          writeback.onIssuePickedUp(
-            workspaceId,
-            block.id,
-            pickup.inProgressLabel ? { inProgressLabel: pickup.inProgressLabel } : {},
-          ),
-        { workspaceId, executionId: instance.id, blockId: block.id },
-      )
-    }
-    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-      output: pickup.summary,
-    })
-  }
-
-  /**
-   * Complete the run successfully after a `bug-intake` step found no issue to work: record the
-   * intake step's own no-match output (it SUCCEEDED — it made the decision), then mark every
-   * REMAINING step `skipped` and finalize the reused block `done`, with NO notification (the
-   * outcome is visible in the schedule's run history).
-   *
-   * The block is finalized `done` DIRECTLY here rather than through `RunStateMachine.finalizeBlock`:
-   * for a mergerless task block (every bug-triage pipeline) finalizeBlock's terminal branch treats
-   * the run as "work complete but unmerged" — it flips the block `pr_ready` and raises a
-   * `pipeline_complete` "confirm + merge the PR" notification. This fire did NO work and opened NO
-   * PR, so that card would be spurious (and its payload would reference a STALE PR carried over from
-   * a prior fire). Setting the terminal status inline keeps the no-op silent, as documented.
-   */
-  private async completeRunSkippingRemaining(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    summary: string,
-  ): Promise<AdvanceResult> {
-    step.output = summary
-    step.progress = 1
-    step.subtasks = undefined
-    this.stepGraph.finishStep(step)
-    for (let i = instance.currentStep + 1; i < instance.steps.length; i++) {
-      const remaining = instance.steps[i]
-      if (!remaining) continue
-      remaining.skipped = true
-      remaining.output = ''
-      remaining.progress = 1
-      remaining.subtasks = undefined
-      this.stepGraph.finishStep(remaining)
-    }
-    instance.currentStep = instance.steps.length - 1
-    instance.status = 'done'
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (block && block.status !== 'done') {
-      await this.blockRepository.update(workspaceId, instance.blockId, {
-        status: 'done',
-        progress: 1,
-      })
-    }
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    await this.runStateMachine.stopRunContainer(workspaceId, instance)
-    return { kind: 'done' }
-  }
-
-  /**
-   * Persist an APPROVED initiative plan for an `initiative-committer` step: flip the
-   * entity to `executing` and mirror the tracker into the repo's default branch
-   * (`docs/initiatives/<slug>/`) via the checkout-free {@link RepoFiles}. Deterministic,
-   * no LLM. REPLAY-SAFE: the tracker commit hash-short-circuits (an unchanged entity
-   * commits nothing) and `markExecuting` is content-idempotent, so a durable-driver
-   * replay re-enters harmlessly. The repo mirror is skipped gracefully when GitHub
-   * isn't wired (the DB entity stays the source of truth); a missing entity or an
-   * empty plan is a REAL failure — completing the run would strand the initiative in
-   * `planning` behind a green run.
-   */
-  private async runInitiativeCommitter(
-    workspaceId: string,
-    block: Block,
-  ): Promise<{ kind: 'ok'; result: AgentRunResult } | { kind: 'failed'; error: string }> {
-    if (!this.initiativeService) {
-      return { kind: 'failed', error: 'Initiative module is not wired on this deployment.' }
-    }
-    const initiative = await this.initiativeService.getByBlock(workspaceId, block.id)
-    if (!initiative) {
-      return { kind: 'failed', error: 'No initiative entity found for this block.' }
-    }
-    if ((initiative.items ?? []).length === 0) {
-      return {
-        kind: 'failed',
-        error: 'No approved plan to commit — the planner produced no usable items.',
-      }
-    }
-
-    // Resolve the run repo BEFORE flipping status. `resolveRunRepo` returns null only when
-    // GitHub is entirely unwired (skip the mirror gracefully — the DB entity stays the source
-    // of truth), but it THROWS for a GitHub-connected workspace whose frame isn't linked to a
-    // repo (`resolveRepoTarget` fails loudly rather than guessing one). Doing it first means
-    // such a misconfiguration aborts the committer with the entity still truthfully
-    // `awaiting_approval` — instead of flipping to `executing` and THEN throwing, which would
-    // fail the run while leaving a committed status whose plan never got mirrored (a lie).
-    const runRepo = await this.repoOps.resolveRunRepo(workspaceId, block.id)
-
-    // Now flip to `executing` and render the tracker from the flipped entity — the committed
-    // mirror (and its content hash) must record the REAL `executing` status. Committing the
-    // pre-flip entity would bake a stale `awaiting_approval` status into
-    // `initiative.json`/`tracker.md` that nothing re-commits in this slice, AND would break
-    // replay-safety: a durable-driver replay re-reads the now-`executing` entity, whose hash
-    // no longer matches the committed `version.json`, so the no-change short-circuit would miss
-    // and re-commit. `markExecuting` is a committed CAS write that still runs before the git
-    // side effect, so a CAS conflict aborts before any commit lands (no orphaned tracker commit).
-    const executing =
-      (await this.initiativeService.markExecuting(workspaceId, block.id, null)) ?? initiative
-
-    let doc: { version: number; hash: string } | null = null
-    let mirror = 'Repo tracker mirror skipped (GitHub not connected).'
-    if (runRepo) {
-      doc = await commitInitiativeTracker(
-        runRepo.repo,
-        runRepo.baseBranch,
-        executing,
-        new Date(this.clock.now()),
-      )
-      mirror = doc
-        ? `Committed docs/initiatives/${executing.slug}/ (v${doc.version}) to ${runRepo.baseBranch}.`
-        : `Tracker already up to date in docs/initiatives/${executing.slug}/.`
-      // Stamp the committed version/hash back onto the entity (content-unchanged tick ⇒
-      // no commit ⇒ nothing to stamp, so a replay skips this second write too).
-      if (doc) await this.initiativeService.markExecuting(workspaceId, block.id, doc)
-    }
-
-    const phases = (executing.phases ?? []).length
-    const items = (executing.items ?? []).length
-    return {
-      kind: 'ok',
-      result: {
-        output:
-          `Initiative plan approved: ${phases} phase${phases === 1 ? '' : 's'}, ` +
-          `${items} item${items === 1 ? '' : 's'}. ${mirror}`,
-      },
-    }
   }
 
   /**
