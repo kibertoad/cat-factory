@@ -340,19 +340,17 @@ export class BoardService {
     const services = this.serviceRepository
     const mounts = this.workspaceMountRepository
     if (!services || !mounts) return null
-    // Resolved from THIS board's mounts, in the same DIRECTION the snapshot read resolves them
-    // (`WorkspaceService.composeBoard`): mounts of this workspace → their services → the one whose
-    // frame is this block. Going the other way, `getByFrameBlock(block.id)`, looks a frame block id
-    // up GLOBALLY, and every seeded board carries the same block ids (`blk_auth`, …) — so on a
-    // deployment with two seeded boards it can answer with ANOTHER board's service, this returns
-    // null, and the write lands on the block row that every read then overrides with this board's
-    // mount. Silent, and only in the direction that loses the write. Two batched queries, both
-    // workspace-sized, matching what the snapshot already pays.
-    const mine = await mounts.listByWorkspace(workspaceId)
-    if (mine.length === 0) return null
-    const mounted = await services.listByIds(mine.map((m) => m.serviceId))
-    const serviceId = mounted.find((s) => s.frameBlockId === block.id)?.id
-    return serviceId ? (mine.find((m) => m.serviceId === serviceId) ?? null) : null
+    // A frame block id does NOT uniquely identify a service: every seeded board carries the same
+    // ids (`blk_auth`, …), so `getByFrameBlock` answers with an arbitrary one of them. Paired with
+    // `mounts.get(thisWorkspace, thatServiceId)` that reads as "this frame has no mount here" on a
+    // deployment with two seeded boards — and then a frame write lands on the block row that every
+    // READ overrides with this board's mount (`WorkspaceService.composeBoard`), silently, in the
+    // one direction that loses the write. So resolve the candidates for this frame id and keep the
+    // one mounted HERE: two batched queries, no per-candidate round-trip.
+    const candidates = await services.listByFrameBlocks([block.id])
+    if (candidates.length === 0) return null
+    const mounted = await mounts.listByServiceIds(candidates.map((s) => s.id))
+    return mounted.find((m) => m.workspaceId === workspaceId) ?? null
   }
 
   /**
