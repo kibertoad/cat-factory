@@ -179,6 +179,18 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     })
   })
 
+  registerCiGateTests(harness)
+  registerDocAndHealthGateTests(harness)
+}
+
+/**
+ * The built-in `ci` and `conflicts` gates: pass-through on green, escalation to the helper
+ * agent on red, and the multi-repo aggregation a peer PR takes part in.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerCiGateTests(harness: ConformanceHarness): void {
   describe('built-in ci gate (externalized to @cat-factory/gates)', () => {
     // The platform's OWN `ci` gate is now authored as an external package through the public
     // `registerGate` seam — no longer inline in the engine. Driving it here over a faked
@@ -464,7 +476,15 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
       // job-body unit test, since the gate resets `conflictTarget` to null on the passing probe.)
     })
   })
+}
 
+/**
+ * The built-in doc-quality, post-release-health and human-review gates.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
   describe('built-in doc-quality gate (externalized to @cat-factory/gates)', () => {
     // The forward document pipelines' structural gate: a deterministic precheck of the drafted
     // document that passes through when well-formed and escalates to the registered `doc-fixer`

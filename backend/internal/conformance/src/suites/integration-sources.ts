@@ -294,6 +294,17 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
     })
   })
 
+  registerDocumentSourceTests(harness)
+}
+
+/**
+ * Document sources: connect / list (secret-free) / disconnect per provider, the workspace +
+ * DocKind role links, the interactive document-interview session, and batch ref resolution.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerDocumentSourceTests(harness: ConformanceHarness): void {
   describe('document sources', () => {
     // GitHub docs are an IMPLICIT connection: they ride the workspace's installed GitHub
     // App/PAT, so a facade that carries an installation (local mode always does, via its

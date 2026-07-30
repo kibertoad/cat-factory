@@ -242,6 +242,17 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
     })
   })
 
+  registerCustomBackendKindTests(harness)
+}
+
+/**
+ * Programmatically-registered custom backend kinds (environment + runner), the reserved-kind
+ * guard, and the per-user locally-run model endpoints with their anti-SSRF write boundary.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerCustomBackendKindTests(harness: ConformanceHarness): void {
   describe('custom backend kinds (programmatic registration)', () => {
     // A single-tenant / self-hosted deployment registers a bespoke environment or runner
     // backend programmatically (an import side effect) — the public extension seam that
