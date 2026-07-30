@@ -87,7 +87,10 @@ function pick(effort: ReviewEffort) {
 <template>
   <div data-testid="merge-effort-chips" class="mt-2">
     <div class="flex items-center gap-1.5">
-      <span class="text-[10px] uppercase tracking-wide text-slate-500">
+      <span
+        class="text-[10px] uppercase tracking-wide text-slate-500"
+        :title="t('merge.effort.promptHint')"
+      >
         {{ t('merge.effort.prompt') }}
       </span>
       <UBadge
@@ -96,6 +99,7 @@ function pick(effort: ReviewEffort) {
         color="neutral"
         variant="subtle"
         size="sm"
+        :title="t('merge.changeClass.hint')"
       >
         {{ classLabel }}
       </UBadge>

@@ -376,6 +376,14 @@
         "pr_ready": "Actif",
         "done": "En ligne"
       },
+      "statusHint": {
+        "planned": "Aucune tache sur ce service pour l'instant. Un service ne se termine jamais : c'est donc son point de depart, pas un blocage.",
+        "ready": "Toutes les taches de ce service sont inactives ou fusionnees. Rien ne s'execute et rien n'attend apres vous.",
+        "in_progress": "Au moins une tache de ce service s'execute ou a une pull request ouverte.",
+        "blocked": "Au moins une tache ou initiative de ce service attend une decision de votre part.",
+        "pr_ready": "Au moins une tache de ce service s'execute ou a une pull request ouverte.",
+        "done": "Toutes les taches de ce service sont inactives ou fusionnees. Rien ne s'execute et rien n'attend apres vous."
+      },
       "shared": "Partagé",
       "sharedTitle": "Partagé entre les espaces de travail de cette organisation",
       "bootstrapping": "Initialisation…",
@@ -1235,6 +1243,7 @@
       "spinningUpContainer": "Démarrage du conteneur…",
       "subtasks": "Sous-tâches · {completed}/{total}",
       "standardsApplied": "Standards appliqués",
+      "standardsAppliedHint": "Les standards de bonnes pratiques integres au prompt systeme de cette etape. Un agent qui implemente en recoit une version condensee ; les relecteurs et les planificateurs recoivent le texte complet.",
       "decision": "Décision",
       "awaitingChoice": "En attente d'un choix humain",
       "approvalGate": "Gate d'approbation",
@@ -1321,13 +1330,16 @@
       "effort": {
         "heading": "Effort de l'agent",
         "difficulty": "Difficulté",
+        "difficultyHint": "L'evaluation par l'agent lui-meme de la difficulte de cette etape, sur dix. Declaree par l'agent, non mesuree.",
         "outOfTen": "{value}/10",
         "reduced": "Ce qui a réduit l'efficacité",
         "obstacles": "Principaux obstacles"
       },
       "adherence": {
         "heading": "Respect des bonnes pratiques",
+        "headingHint": "Les standards de bonnes pratiques integres au prompt de ce relecteur, et le degre de respect de chacun qu'il a estime pour la modification.",
         "outOfTen": "{value}/10",
+        "ratingHint": "L'evaluation par le relecteur lui-meme du respect de ce standard par la modification, sur dix. Declaree par le relecteur, non mesuree.",
         "relatedFindings": "Constats associés",
         "unnamed": "Standard"
       },
@@ -1599,7 +1611,9 @@
     },
     "legend": {
       "metered": "Facturé",
-      "subscription": "Abonnement"
+      "meteredHint": "Facture au token par le fournisseur. Il s'agit d'argent reel.",
+      "subscription": "Abonnement",
+      "subscriptionHint": "A titre indicatif uniquement. Ces appels ont ete passes sur un forfait : ce montant correspond a ce que les memes tokens auraient coute via une API facturee. Il n'a jamais ete facture et ne compte jamais comme depense."
     },
     "spend": {
       "byModel": "Dépense par modèle",
@@ -3921,9 +3935,14 @@
       "companionGateTooltip": "N'exécuter ce compagnon que lorsque l'estimation de la tâche dépasse un seuil (nécessite un Task Estimator en amont)",
       "consensusGateTooltip": "N'exécuter le consensus que lorsque l'estimation de la tâche dépasse un seuil (sinon l'agent standard s'exécute)",
       "runWhenAny": "exécuter quand (l'un de) :",
+      "gatingRunWhenAnyHint": "L'etape s'execute des qu'un de ces axes est atteint ou depasse, et est ignoree sinon. En l'absence d'estimation, elle s'execute quand meme.",
+      "gatingRunWhenAnyConsensusHint": "Le panel se reunit des qu'un de ces axes est atteint ou depasse ; en dessous, c'est l'agent unique qui s'execute. En l'absence d'estimation, le panel se reunit quand meme.",
       "complexityThreshold": "complexité ≥",
+      "complexityThresholdHint": "La difficulte de realisation du travail, notee par le Task Estimator situe plus haut dans le pipeline. L'echelle va de 0 a 1, pas de 1 a 10. Laissez vide pour ignorer cet axe.",
       "riskThreshold": "risque ≥",
+      "riskThresholdHint": "Ce que la modification risque de casser, note par le Task Estimator situe plus haut dans le pipeline. L'echelle va de 0 a 1, pas de 1 a 10. Laissez vide pour ignorer cet axe.",
       "impactThreshold": "impact ≥",
+      "impactThresholdHint": "L'etendue de la modification dans le systeme, notee par le Task Estimator situe plus haut dans le pipeline. L'echelle va de 0 a 1, pas de 1 a 10. Laissez vide pour ignorer cet axe.",
       "strategy": "Stratégie",
       "rounds": "Tours",
       "purposeLabel": "Objectif",
@@ -4078,6 +4097,7 @@
       "stepLabel": "Budget de sortie",
       "kindLabel": "Budget de sortie",
       "kindHint": "S'applique à chaque exécution de cet agent. Une étape du pipeline peut le remplacer.",
+      "hint": "La longueur maximale d'une seule reponse de cet agent. Laisser vide herite du niveau superieur, cela ne leve pas la limite. La valeur propre a une etape du pipeline l'emporte sur la valeur par defaut de l'espace de travail.",
       "inherits": "Hérité",
       "inheritsValue": "Hérité ({tokens})"
     }
@@ -4207,6 +4227,7 @@
     "empty": "Cette étape n'a pas encore produit de verdict.",
     "notScored": "Non noté",
     "threshold": "seuil {threshold}",
+    "thresholdHint": "Le score que cette etape devait atteindre, issu de la politique de fusion de la tache. En dessous, le juge renvoie le travail a l'etape qui l'a produit avec ses constats a reprendre, ou met l'execution en attente pour vous quand il ne reste plus de budget de tentatives.",
     "rubricOverridden": "grille de l'espace de travail",
     "reworkRounds": "reprise {spent}/{budget}",
     "findingsHeading": "Ce que la grille a signalé",
@@ -5804,10 +5825,12 @@
       "config": "Configuration et CI",
       "source": "Code source",
       "schema": "Schéma et migrations",
-      "unknown": "Non classé"
+      "unknown": "Non classé",
+      "hint": "Ce que le diff a touche, deduit des fichiers modifies. La politique de fusion peut definir sa propre regle par classe, et un diff couvrant plusieurs classes prend la plus lourde."
     },
     "effort": {
       "prompt": "Effort de revue",
+      "promptHint": "Enregistre la quantite de relecture dont cette pull request a reellement eu besoin. Votre reponse sert de reference pour calibrer les seuils de fusion automatique. Le marquage est facultatif et vous pouvez fusionner sans.",
       "none": "Aucun commentaire",
       "minor": "Remarques mineures",
       "major": "Reprise importante",

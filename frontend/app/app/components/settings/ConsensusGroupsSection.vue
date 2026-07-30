@@ -427,7 +427,10 @@ function fail(title: string, e: unknown) {
           {{ t('settings.consensusGroups.editor.gatedHint') }}
         </p>
         <div v-if="editor.gated" class="flex flex-wrap items-center gap-3 text-xs">
-          <label class="flex items-center gap-1.5 text-slate-400">
+          <label
+            class="flex items-center gap-1.5 text-slate-400"
+            :title="t('pipeline.builder.riskThresholdHint')"
+          >
             {{ t('pipeline.builder.riskThreshold') }}
             <UInput
               v-model.number="editor.minRisk"
@@ -439,7 +442,10 @@ function fail(title: string, e: unknown) {
               class="w-20"
             />
           </label>
-          <label class="flex items-center gap-1.5 text-slate-400">
+          <label
+            class="flex items-center gap-1.5 text-slate-400"
+            :title="t('pipeline.builder.impactThresholdHint')"
+          >
             {{ t('pipeline.builder.impactThreshold') }}
             <UInput
               v-model.number="editor.minImpact"
@@ -451,7 +457,10 @@ function fail(title: string, e: unknown) {
               class="w-20"
             />
           </label>
-          <label class="flex items-center gap-1.5 text-slate-400">
+          <label
+            class="flex items-center gap-1.5 text-slate-400"
+            :title="t('pipeline.builder.complexityThresholdHint')"
+          >
             {{ t('settings.consensusGroups.editor.complexityThreshold') }}
             <UInput
               v-model.number="editor.minComplexity"
