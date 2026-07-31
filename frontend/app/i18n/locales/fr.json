@@ -5944,9 +5944,39 @@
             "title": "Contrôles du tableau",
             "body": "Ces contrôles permettent de zoomer ou d'ajuster tout le tableau à la vue."
           },
+          "interfaceTier": {
+            "title": "Simple et avancé",
+            "body": "L'interface démarre en mode simple, qui montre les surfaces de travail quotidiennes. Passez en avancé ici lorsque vous voulez aussi les surfaces d'expérimentation, d'amorçage et d'exploitation."
+          },
           "finish": {
             "title": "Voilà pour la disposition",
             "body": "Vous savez maintenant vous repérer. Essayez la visite suivante pour créer et lancer votre première tâche, ou revenez plus tard via la palette de commandes."
+          }
+        }
+      },
+      "addService": {
+        "title": "Ajoutez votre premier dépôt",
+        "description": "Liez un dépôt pour que le tableau ait un service sur lequel planifier du travail.",
+        "steps": {
+          "intro": {
+            "title": "Commencez par un dépôt",
+            "body": "Le travail se fait sur du code, donc un tableau a besoin d'au moins un service avant qu'un agent ait un endroit où travailler. Cette visite en lie un."
+          },
+          "open": {
+            "title": "Ajouter un service depuis un dépôt",
+            "body": "Ceci ouvre le sélecteur de dépôts. Il liste les dépôts que la connexion de cet espace de travail peut voir."
+          },
+          "search": {
+            "title": "Choisissez un dépôt",
+            "body": "Cherchez l'un de vos propres dépôts. Si vous préférez vous entraîner sur quelque chose de petit, {repo} est un service d'exemple laissé volontairement inachevé pour ces visites."
+          },
+          "add": {
+            "title": "Ajoutez-le",
+            "body": "Le dépôt devient un cadre de service sur le tableau. Vous pourrez en ajouter d'autres plus tard, y compris un service par dossier dans un monorepo."
+          },
+          "finish": {
+            "title": "Vous avez un service",
+            "body": "C'est dans ce cadre que vivent les tâches. La visite suivante y en place une."
           }
         }
       },
@@ -5977,6 +6007,96 @@
           "finish": {
             "title": "Bien joué",
             "body": "C'est la boucle principale : décrire une tâche, la lancer, vérifier le résultat. Explorez les autres visites quand vous voulez."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Lancer une tâche",
+        "description": "Ouvrez une tâche, choisissez son pipeline et mettez les agents au travail.",
+        "steps": {
+          "intro": {
+            "title": "De la tâche à l'exécution",
+            "body": "Une tâche sur le tableau est une demande. En l'ouvrant, vous voyez le pipeline qui la livrera et les commandes qui le démarrent."
+          },
+          "openTask": {
+            "title": "Ouvrez une tâche",
+            "body": "Cliquer sur une carte ouvre son inspecteur, où se trouve tout ce qui concerne cette tâche."
+          },
+          "inspector": {
+            "title": "L'inspecteur",
+            "body": "Statut, dépôt, pipeline et l'exécution elle-même : ce panneau raconte toute l'histoire de la tâche."
+          },
+          "pipeline": {
+            "title": "Choisissez un pipeline",
+            "body": "Un pipeline est la suite d'agents qui feront le travail : écrire une spécification, la réaliser, la relire, lancer les vérifications, fusionner. Prenez celui qui convient à la tâche."
+          },
+          "start": {
+            "title": "Démarrer une exécution",
+            "body": "Ceci démarre réellement le pipeline, et les agents consomment du budget de modèle. Le clic vous revient donc : appuyez quand vous êtes prêt, pendant cette visite ou après."
+          },
+          "steps": {
+            "title": "Suivre le travail",
+            "body": "Chaque étape rapporte ici sa propre progression, en direct. Cliquez sur une étape pour lire ce que l'agent a réellement produit."
+          },
+          "finish": {
+            "title": "Voilà la boucle",
+            "body": "Planifier une tâche, choisir un pipeline, la lancer, la suivre. Quand une exécution a besoin de vous, elle s'arrête et le dit, ce que couvre la visite suivante."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Répondre à une exécution en attente",
+        "description": "Une exécution s'est arrêtée pour attendre un humain. Voyez où elle demande, et comment répondre.",
+        "steps": {
+          "intro": {
+            "title": "Une exécution vous attend",
+            "body": "Certaines étapes s'arrêtent et posent une question : une précision sur les besoins, un plan à valider, un choix entre plusieurs approches. Une exécution en pause attend une réponse indéfiniment, donc rien n'avance tant que vous n'avez pas répondu."
+          },
+          "resolve": {
+            "title": "Où elle demande",
+            "body": "Une tâche qui attend un humain le signale sur sa carte et propose cette action. Elle vous emmène directement à ce qui est demandé."
+          },
+          "decide": {
+            "title": "Choisir une réponse",
+            "body": "Chaque option est une véritable instruction donnée à l'exécution : choisissez-en une et le pipeline repart avec votre choix."
+          },
+          "approve": {
+            "title": "Valider le travail",
+            "body": "Validez pour laisser l'exécution continuer, ou demandez des modifications pour renvoyer l'étape avec vos remarques. Les deux sont des réponses, et l'exécution repart dans les deux cas."
+          },
+          "finish": {
+            "title": "Rien n'attend en silence",
+            "body": "Les tâches en attente sont marquées sur le tableau et comptées dans la barre d'outils, pour que vous les trouviez sans chercher."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Relire et fusionner",
+        "description": "Lisez ce qu'une exécution terminée a produit, et faites-le fusionner.",
+        "steps": {
+          "intro": {
+            "title": "Une exécution est terminée",
+            "body": "Terminé n'est pas livré. Une tâche est faite quand sa pull request est fusionnée : cette visite est le dernier kilomètre."
+          },
+          "openTask": {
+            "title": "Ouvrez la tâche",
+            "body": "Ouvrez une tâche dont l'exécution est terminée. Son inspecteur contient la liste complète des étapes."
+          },
+          "openStep": {
+            "title": "Ouvrez une étape",
+            "body": "Cliquer sur une étape montre ce que cet agent a produit : son rapport, ses constats et ce qu'il a changé."
+          },
+          "result": {
+            "title": "Lire le résultat",
+            "body": "C'est le compte rendu de l'agent lui-même. Les étapes de relecture listent des constats, un testeur rend des verdicts, le fusionneur explique comment il a noté le changement."
+          },
+          "merge": {
+            "title": "Fusionner",
+            "body": "Quand une exécution ouvre une pull request, l'inspecteur propose la fusion ici. Un pipeline avec une étape de fusion peut aussi fusionner tout seul si le changement dépasse votre seuil."
+          },
+          "finish": {
+            "title": "Livré",
+            "body": "Le travail fusionné marque la tâche comme faite sur le tableau. Voilà la boucle entière : planifier, exécuter, répondre, relire, fusionner."
           }
         }
       }

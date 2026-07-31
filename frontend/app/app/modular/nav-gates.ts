@@ -26,9 +26,15 @@ export function createNavGates(): NavGates {
   const providerConnections = useProviderConnectionsStore()
   const uiMode = useUiModeStore()
   const board = useBoardStore()
+  const execution = useExecutionStore()
 
   // A top-level frame IS a service (see `app/types/domain.ts`); modules are sub-frames.
   const hasService = computed(() => board.blocks.some((b) => b.level === 'frame' && !b.parentId))
+  const hasTask = computed(() => board.blocks.some((b) => b.level === 'task'))
+  const hasRun = computed(() => execution.instances.length > 0)
+  // A run that finished successfully. `done` only: see `NavGates.boardHasFinishedRun` for
+  // why a `failed` run is not a subject for the review/merge tour.
+  const hasFinishedRun = computed(() => execution.instances.some((e) => e.status === 'done'))
 
   const infrastructureAvailable = computed(
     () =>
@@ -71,6 +77,25 @@ export function createNavGates(): NavGates {
     },
     get boardHasService() {
       return hasService.value
+    },
+    get boardHasTask() {
+      return hasTask.value
+    },
+    get boardHasRun() {
+      return hasRun.value
+    },
+    // The two park kinds read the execution store's existing pending-gate projections rather
+    // than re-scanning `instances` here: they are the same counts the board badges and the
+    // notification queue render, so a tour can never disagree with the badge that sent the
+    // user looking for it.
+    get boardHasOpenDecision() {
+      return execution.pendingDecisionCount > 0
+    },
+    get boardHasPendingApproval() {
+      return execution.pendingApprovalCount > 0
+    },
+    get boardHasFinishedRun() {
+      return hasFinishedRun.value
     },
   }
 }

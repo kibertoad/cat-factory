@@ -1,5 +1,13 @@
 import { test, expect } from './fixtures'
-import { LIVE_TIMEOUT, createSeededWorkspace, openBoard, pinWorkspace } from './helpers'
+import {
+  LIVE_TIMEOUT,
+  createSeededWorkspace,
+  createSimplePipeline,
+  openBoard,
+  pinWorkspace,
+  startRun,
+  taskCard,
+} from './helpers'
 
 // The in-app tutorial is the one surface whose whole subject is the FIRST launch, so it is
 // also the one spec that must NOT use the `seededBoard` fixture: that fixture pre-answers the
@@ -64,5 +72,54 @@ test.describe('in-app tutorial', () => {
     await pinWorkspace(page, snapshot.workspace.id)
     await openBoard(page)
     await expect(page.getByTestId('tutorial-prompt')).toBeHidden()
+  })
+})
+
+// The tours that key off RUN state are the only ones whose availability the unit tests
+// cannot reach: those drive `navSlotFilter` with a fixture gate object, while what decides
+// this in production is `createNavGates` reading the live execution store. So the assertion
+// that matters is the assembled one — a run really parks, and the tour about answering it
+// really appears, with no reload between the two.
+test.describe('tutorial tours that follow a live run', () => {
+  test.slow()
+
+  test('offers the parked-run tour once a real run parks, anchored to the real control', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const { workspaceId } = seededBoard
+    const pipeline = await createSimplePipeline(request, workspaceId)
+    const card = taskCard(page, 'task_login')
+
+    // Nothing is waiting yet, so the tour has nothing to teach and is not on offer.
+    await page.getByTestId('command-bar-launcher').click()
+    await expect(page.getByTestId('command-bar')).toBeVisible()
+    await page.getByTestId('command-tutorial').click()
+    await expect(page.getByTestId('tutorial-prompt')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('tutorial-start-answer-park')).toBeHidden()
+    await page.getByTestId('tutorial-close').click()
+
+    // The fake agent parks the first step on a human decision, pushed live.
+    await startRun(request, workspaceId, 'task_login', pipeline.id)
+    await expect(page.getByTestId('decision-badge')).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // LIVE: the gate flipped with no reload, so the tour is now offered.
+    await page.getByTestId('command-bar-launcher').click()
+    await page.getByTestId('command-tutorial').click()
+    const start = page.getByTestId('tutorial-start-answer-park')
+    await expect(start).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await start.click()
+
+    // Step 1 is the untargeted intro; Next moves onto the card's own Resolve affordance,
+    // whose highlight proves the tour anchored to the control this park really rendered.
+    const tooltip = page.getByTestId('tutorial-tooltip')
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await tooltip.getByTestId('tutorial-next').click()
+    await expect(page.getByTestId('tutorial-highlight')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(card.getByTestId('task-resolve')).toBeVisible()
+
+    await tooltip.getByTestId('tutorial-skip').click()
+    await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
   })
 })

@@ -26,6 +26,11 @@ const NO_GATES: NavGates = {
   // so a dropped item is unambiguously an RBAC/availability drop, not a tier drop.
   advancedMode: true,
   boardHasService: false,
+  boardHasTask: false,
+  boardHasRun: false,
+  boardHasOpenDecision: false,
+  boardHasPendingApproval: false,
+  boardHasFinishedRun: false,
 }
 
 const ALL_GATES: NavGates = {
@@ -39,6 +44,11 @@ const ALL_GATES: NavGates = {
   isAccountAdmin: true,
   advancedMode: true,
   boardHasService: true,
+  boardHasTask: true,
+  boardHasRun: true,
+  boardHasOpenDecision: true,
+  boardHasPendingApproval: true,
+  boardHasFinishedRun: true,
 }
 
 const slots = (): AppSlots => ({

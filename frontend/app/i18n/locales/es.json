@@ -5944,9 +5944,39 @@
             "title": "Controles del tablero",
             "body": "Con estos controles acercas, alejas o ajustas todo el tablero a la vista."
           },
+          "interfaceTier": {
+            "title": "Básico y avanzado",
+            "body": "La interfaz arranca en modo básico, que muestra las superficies del trabajo diario. Cambia aquí a avanzado cuando también quieras las de experimentación, arranque de repositorios y operación."
+          },
           "finish": {
             "title": "Eso es todo",
             "body": "Ya sabes orientarte. Prueba el siguiente recorrido para crear y ejecutar tu primera tarea, o vuelve más tarde desde la paleta de comandos."
+          }
+        }
+      },
+      "addService": {
+        "title": "Añade tu primer repositorio",
+        "description": "Vincula un repositorio para que el tablero tenga un servicio sobre el que planificar trabajo.",
+        "steps": {
+          "intro": {
+            "title": "Empieza por un repositorio",
+            "body": "El trabajo ocurre sobre código, así que un tablero necesita al menos un servicio antes de que un agente tenga dónde trabajar. Este recorrido vincula uno."
+          },
+          "open": {
+            "title": "Añadir servicio desde repositorio",
+            "body": "Esto abre el selector de repositorios. Lista los repositorios que la conexión de este espacio de trabajo puede ver."
+          },
+          "search": {
+            "title": "Elige un repositorio",
+            "body": "Busca uno de tus propios repositorios. Si prefieres practicar con algo pequeño, {repo} es un servicio de ejemplo que se mantiene sin terminar a propósito para estos recorridos."
+          },
+          "add": {
+            "title": "Añádelo",
+            "body": "El repositorio pasa a ser un marco de servicio en el tablero. Después puedes añadir más, incluido un servicio por carpeta en un monorrepo."
+          },
+          "finish": {
+            "title": "Ya tienes un servicio",
+            "body": "En ese marco viven las tareas. El siguiente recorrido coloca una dentro."
           }
         }
       },
@@ -5977,6 +6007,96 @@
           "finish": {
             "title": "Buen trabajo",
             "body": "Ese es el ciclo principal: describir una tarea, ejecutarla y revisar el resultado. Explora los demás recorridos cuando quieras."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Ejecutar una tarea",
+        "description": "Abre una tarea, elige su pipeline y pon a trabajar a los agentes.",
+        "steps": {
+          "intro": {
+            "title": "De la tarea a la ejecución",
+            "body": "Una tarea en el tablero es una petición. Al abrirla verás el pipeline que la entregará y los controles que lo arrancan."
+          },
+          "openTask": {
+            "title": "Abre una tarea",
+            "body": "Al hacer clic en una tarjeta se abre su inspector, donde está todo lo relativo a esa tarea."
+          },
+          "inspector": {
+            "title": "El inspector",
+            "body": "Estado, repositorio, pipeline y la propia ejecución: este panel es la historia completa de la tarea."
+          },
+          "pipeline": {
+            "title": "Elige un pipeline",
+            "body": "Un pipeline es la secuencia de agentes que hará el trabajo: escribir una especificación, construirla, revisarla, pasar las comprobaciones y fusionarla. Elige el que encaje con la tarea."
+          },
+          "start": {
+            "title": "Arrancar una ejecución",
+            "body": "Esto arranca el pipeline de verdad, y los agentes gastan presupuesto de modelo. Por eso el clic es tuyo: púlsalo cuando quieras, durante este recorrido o después."
+          },
+          "steps": {
+            "title": "Ver cómo avanza",
+            "body": "Cada paso informa aquí de su propio progreso, en directo. Haz clic en un paso para leer lo que el agente produjo realmente."
+          },
+          "finish": {
+            "title": "Ese es el ciclo",
+            "body": "Planificar una tarea, elegir un pipeline, arrancarla y seguirla. Cuando una ejecución necesita algo de ti se detiene y lo dice, que es lo que cubre el siguiente recorrido."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Responder a una ejecución en espera",
+        "description": "Una ejecución se ha detenido a esperar a una persona. Mira dónde pregunta y cómo responder.",
+        "steps": {
+          "intro": {
+            "title": "Una ejecución te está esperando",
+            "body": "Algunos pasos se detienen y preguntan: una duda sobre los requisitos, un plan que aprobar, una elección entre enfoques. Una ejecución en pausa espera respuesta indefinidamente, así que nada avanza hasta que contestes."
+          },
+          "resolve": {
+            "title": "Dónde pregunta",
+            "body": "Una tarea que espera a una persona lo indica en su tarjeta y ofrece esta acción. Te lleva directo a lo que se está preguntando."
+          },
+          "decide": {
+            "title": "Elegir una respuesta",
+            "body": "Cada opción es una instrucción real para la ejecución: elige una y el pipeline continúa desde ahí con tu decisión."
+          },
+          "approve": {
+            "title": "Aprobar el trabajo",
+            "body": "Aprueba para que la ejecución siga, o pide cambios para devolver el paso con tus notas. Ambas son respuestas, y la ejecución se reanuda en cualquier caso."
+          },
+          "finish": {
+            "title": "Nada espera en silencio",
+            "body": "Las tareas en espera se marcan en el tablero y se cuentan en la barra de herramientas, para que las encuentres sin buscarlas."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Revisar y fusionar",
+        "description": "Lee lo que produjo una ejecución terminada y consigue fusionarlo.",
+        "steps": {
+          "intro": {
+            "title": "Una ejecución ha terminado",
+            "body": "Terminado no es lo mismo que entregado. Una tarea está hecha cuando su pull request se fusiona, así que este recorrido es la última milla."
+          },
+          "openTask": {
+            "title": "Abre la tarea",
+            "body": "Abre una tarea cuya ejecución haya terminado. Su inspector contiene la lista completa de pasos."
+          },
+          "openStep": {
+            "title": "Abre un paso",
+            "body": "Al hacer clic en un paso se abre lo que produjo ese agente: su informe, sus hallazgos y lo que cambió."
+          },
+          "result": {
+            "title": "Leer el resultado",
+            "body": "Este es el relato del propio agente. Los pasos de revisión listan hallazgos, un tester informa de veredictos y el fusionador explica cómo puntuó el cambio."
+          },
+          "merge": {
+            "title": "Fusionar",
+            "body": "Cuando una ejecución abre una pull request, el inspector ofrece aquí la fusión. Un pipeline con paso de fusión también puede fusionar por su cuenta si el cambio supera tu umbral."
+          },
+          "finish": {
+            "title": "Entregado",
+            "body": "El trabajo fusionado marca la tarea como hecha en el tablero. Ese es el ciclo completo: planificar, ejecutar, responder, revisar y fusionar."
           }
         }
       }

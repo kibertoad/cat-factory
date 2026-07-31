@@ -184,6 +184,28 @@ congratulating the user on a walkthrough they did not see — and a tour that co
 be abridged should not be offered at all, which is what each tour's `when(gates)` is for (the
 task-creation tour requires board write AND a service frame to add a task to).
 
+**A step carries its own `when(gates)` when its BRANCH, not its control, is the thing that
+may not apply.** The two are different facts and only one of them is a defect: a skip means
+the control should be here and isn't, while a `when` means this board is not on that branch
+of the flow (a run parked on a decision has no approval gate, and the reverse). Reporting the
+second as an abridged tour would tell a user who saw exactly the right walkthrough that they
+missed half of it, every time. `resolveTours` (in `utils/tutorial.ts`, applied by
+`navSlotFilter`) drops the rejected steps and then drops a tour left with none, so a tour
+whose every step is branch-specific can never open on an empty cursor.
+
+**Fixed proper nouns ride `bodyParams`, not the catalogs.** A step naming the sample
+repository slug (`SAMPLE_REPO` in `modular/tutorial-tours.ts`) passes it as a `{repo}`
+interpolation, so it is written once in code rather than translated into ten catalogs that
+each drift on their own — the same split components make for inline placeholders.
+
+The built-ins walk the delivery loop end to end, each gated on the state the previous one
+leaves behind, so the launch prompt only ever offers what this board can demonstrate: board
+basics, add a repository (`add-service`), create a task (`first-task`), run it (`run-task`),
+answer it when it parks (`answer-park`), review and merge the result (`review-merge`). One
+deliberate asymmetry: `run-task` points at Start without click-to-advance, because starting a
+run spends real model budget and nobody should discover they agreed to that by following a
+tutorial.
+
 Two runtime constraints worth knowing before changing the overlay: it must keep
 `pointer-events-auto` and swallow `pointerdown`, because Nuxt UI modals are reka-ui
 dismissable layers that set `body { pointer-events: none }` and dismiss on an outside

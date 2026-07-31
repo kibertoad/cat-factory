@@ -208,7 +208,10 @@ onUnmounted(() => {
             {{ t('tutorial.overlay.progress', { current: tutorial.stepIndex + 1, total }) }}
           </span>
         </div>
-        <p class="text-sm text-slate-300">{{ t(step.bodyKey) }}</p>
+        <!-- `bodyParams` carries the fixed proper nouns a step names (a repository slug),
+             which live in the catalog's `{named}` placeholders rather than in nine
+             translations of the same literal. Absent for most steps. -->
+        <p class="text-sm text-slate-300">{{ t(step.bodyKey, step.bodyParams ?? {}) }}</p>
         <p
           v-if="searching"
           class="mt-2 flex items-center gap-1.5 text-xs text-slate-400"

@@ -6163,9 +6163,42 @@
             "title": "Board controls",
             "body": "Zoom in and out or fit the whole board into view with these controls."
           },
+          "interfaceTier": {
+            "title": "Basic and advanced",
+            "body": "The interface starts in basic mode, which shows the everyday delivery surfaces. Switch to advanced here when you also want the experimentation, bootstrap and operator surfaces."
+          },
           "finish": {
             "title": "That's the layout",
             "body": "You know your way around now. Try the next tour to create and run your first task, or come back later via the command palette."
+          }
+        }
+      },
+      "addService": {
+        "title": "Add your first repository",
+        "description": "Link a repository so the board has a service to plan work against.",
+        "steps": {
+          "intro": {
+            "title": "Start with a repository",
+            "body": "Work happens against code, so a board needs at least one service before an agent has anywhere to do it. This tour links one."
+          },
+          "open": {
+            "title": "Add service from repo",
+            "body": "This opens the repository picker. It lists the repositories this workspace's connection can see."
+          },
+          "search": {
+            "title": "Pick a repository",
+            "body": "Search for one of your own repositories. If you would rather practise on something small, {repo} is a sample service kept deliberately unfinished for these tours.",
+            "@body": {
+              "description": "{repo} is a repository slug (owner/name). Keep it verbatim, do not translate or reformat it."
+            }
+          },
+          "add": {
+            "title": "Add it",
+            "body": "The repository becomes a service frame on the board. You can add more later, including one service per folder of a monorepo."
+          },
+          "finish": {
+            "title": "You have a service",
+            "body": "That frame is where tasks live. The next tour puts one in it."
           }
         }
       },
@@ -6196,6 +6229,96 @@
           "finish": {
             "title": "Nice work",
             "body": "That is the core loop: describe a task, run it, review the result. Explore the other tours whenever you like."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Run a task",
+        "description": "Open a task, choose its pipeline and start the agents working.",
+        "steps": {
+          "intro": {
+            "title": "From task to run",
+            "body": "A task on the board is a request. Opening it shows the pipeline that will deliver it and the controls that start it."
+          },
+          "openTask": {
+            "title": "Open a task",
+            "body": "Clicking a card opens its inspector, which is where everything about that task lives."
+          },
+          "inspector": {
+            "title": "The inspector",
+            "body": "Status, repository, pipeline and the run itself: this panel is the task's whole story."
+          },
+          "pipeline": {
+            "title": "Choose a pipeline",
+            "body": "A pipeline is the sequence of agents that will do the work: write a spec, build it, review it, run the checks, merge it. Pick the one that fits the task."
+          },
+          "start": {
+            "title": "Starting a run",
+            "body": "This starts the pipeline for real, and agents spend model budget. So the click is yours to make: press it whenever you are ready, during this tour or after it."
+          },
+          "steps": {
+            "title": "Watching it work",
+            "body": "Every step reports its own progress here as it runs, pushed live. Click a step to read what the agent actually produced."
+          },
+          "finish": {
+            "title": "That is the loop",
+            "body": "Plan a task, pick a pipeline, start it, watch it. When a run needs something from you it pauses and says so, which the next tour covers."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Answer a waiting run",
+        "description": "A run has paused for a human. See where it asks, and how to reply.",
+        "steps": {
+          "intro": {
+            "title": "A run is waiting for you",
+            "body": "Some steps stop and ask: a question about the requirements, a plan to approve, a choice between approaches. A paused run waits for an answer indefinitely, so nothing moves until you reply."
+          },
+          "resolve": {
+            "title": "Where it asks",
+            "body": "A task waiting on a human says so on its card and offers this action. It takes you straight to whatever is being asked."
+          },
+          "decide": {
+            "title": "Choosing an answer",
+            "body": "Each option is a real instruction to the run: pick one and the pipeline carries on from there with your choice."
+          },
+          "approve": {
+            "title": "Approving the work",
+            "body": "Approve to let the run continue, or request changes to send the step back with your notes. Both are answers, and the run resumes either way."
+          },
+          "finish": {
+            "title": "Nothing waits silently",
+            "body": "Waiting tasks are marked on the board and counted in the toolbar, so you can find them without hunting."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Review and merge",
+        "description": "Read what a finished run produced, and get it merged.",
+        "steps": {
+          "intro": {
+            "title": "A run finished",
+            "body": "Finished is not the same as shipped. A task is done when its pull request is merged, so this tour is the last mile."
+          },
+          "openTask": {
+            "title": "Open the task",
+            "body": "Open a task whose run has finished. Its inspector holds the full step list."
+          },
+          "openStep": {
+            "title": "Open a step",
+            "body": "Clicking a step opens what that agent produced: its report, its findings and what it changed."
+          },
+          "result": {
+            "title": "Reading the result",
+            "body": "This is the agent's own account of the work. Review steps list findings, a tester reports verdicts, the merger explains how it scored the change."
+          },
+          "merge": {
+            "title": "Merging",
+            "body": "When a run opens a pull request, the inspector offers the merge here. A pipeline with a merger step can also merge for itself when the change scores above your threshold."
+          },
+          "finish": {
+            "title": "Shipped",
+            "body": "Merged work marks the task done on the board. That is the whole loop: plan, run, answer, review, merge."
           }
         }
       }

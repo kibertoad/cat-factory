@@ -14,6 +14,11 @@ const NO_GATES: NavGates = {
   isAccountAdmin: false,
   advancedMode: false,
   boardHasService: false,
+  boardHasTask: false,
+  boardHasRun: false,
+  boardHasOpenDecision: false,
+  boardHasPendingApproval: false,
+  boardHasFinishedRun: false,
 }
 
 describe('app modular registry', () => {
