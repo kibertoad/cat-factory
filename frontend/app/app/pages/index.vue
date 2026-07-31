@@ -282,34 +282,51 @@ watch(
 // first; when one of those is open, the flip of its flag re-fires this watcher and the
 // prompt appears then. The store guards the rest: only a user who never answered is
 // asked, at most once per session.
+//
+// The watcher exists only while it can still do something. A saved decision (hydrated
+// synchronously from the persisted store) means it never registers, and once the
+// once-per-session offer has fired — or a decision lands — it stops itself, so the
+// steady state pays nothing for the launch offer: no watcher, no mounted component
+// (the v-ifs below), no store reads.
 const tutorial = useTutorialStore()
-watch(
-  () => [
-    workspace.ready,
-    needsGitHubInstall.value,
-    githubProbePending.value,
-    ui.pipelineHealthOpen,
-    ui.riskPolicyHealthOpen,
-    ui.modelPresetHealthOpen,
-    ui.aiProviderSetupOpen,
-    ui.aiPresetMismatchOpen,
-  ],
-  () => {
-    if (
-      workspace.ready &&
-      !needsGitHubInstall.value &&
-      !githubProbePending.value &&
-      !ui.pipelineHealthOpen &&
-      !ui.riskPolicyHealthOpen &&
-      !ui.modelPresetHealthOpen &&
-      !ui.aiProviderSetupOpen &&
-      !ui.aiPresetMismatchOpen
-    ) {
-      tutorial.maybeOfferOnLaunch()
-    }
-  },
-  { immediate: true },
-)
+const tutorialOfferSettled = () => tutorial.decision !== null || tutorial.promptAutoOpened
+if (!tutorialOfferSettled()) {
+  // `let` + optional call: with `immediate: true` the first run happens synchronously
+  // inside `watch(...)`, before the handle is assigned — the trailing check covers it.
+  let stopTutorialOffer: (() => void) | undefined
+  stopTutorialOffer = watch(
+    () => [
+      workspace.ready,
+      needsGitHubInstall.value,
+      githubProbePending.value,
+      ui.pipelineHealthOpen,
+      ui.riskPolicyHealthOpen,
+      ui.modelPresetHealthOpen,
+      ui.aiProviderSetupOpen,
+      ui.aiPresetMismatchOpen,
+    ],
+    () => {
+      if (
+        workspace.ready &&
+        !needsGitHubInstall.value &&
+        !githubProbePending.value &&
+        !ui.pipelineHealthOpen &&
+        !ui.riskPolicyHealthOpen &&
+        !ui.modelPresetHealthOpen &&
+        !ui.aiProviderSetupOpen &&
+        !ui.aiPresetMismatchOpen
+      ) {
+        tutorial.maybeOfferOnLaunch()
+      }
+      // Both settle signals only ever transition one way, so a settled watcher can never
+      // act again — drop it instead of re-evaluating eight sources on every advisory
+      // flip for the rest of the session.
+      if (tutorialOfferSettled()) stopTutorialOffer?.()
+    },
+    { immediate: true },
+  )
+  if (tutorialOfferSettled()) stopTutorialOffer()
+}
 
 // Probe the GitHub integration as soon as a board is active (re-probe per board —
 // connections are per workspace). The result drives the onboarding gate below
