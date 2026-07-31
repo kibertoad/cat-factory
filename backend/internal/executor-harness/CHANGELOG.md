@@ -1,5 +1,14 @@
 # @cat-factory/executor-harness
 
+## 1.84.0
+
+### Minor Changes
+
+- b816b6d: Split the work-branch push machinery and the claude-code no-progress guard out of
+  `runCodingAgent` / `runClaudeCode` into their own factories. Behaviour-neutral, but it is a
+  change to the runner image's sources, so the harness version and its three pinned tags move
+  together.
+
 ## 1.82.0
 
 ### Minor Changes
