@@ -2132,7 +2132,8 @@
         "sandbox": "Sandbox öffnen",
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
-        "toggleUiMode": "Oberflächenmodus wechseln"
+        "toggleUiMode": "Oberflächenmodus wechseln",
+        "tutorial": "Tour starten"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2154,7 +2155,8 @@
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
-        "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden"
+        "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden",
+        "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen"
       }
     },
     "shortcuts": {
@@ -5905,6 +5907,91 @@
       "title": "cat-factory mit {provider} verbinden",
       "titleAny": "cat-factory mit Ihren Repositorys verbinden",
       "intro": "cat-factory funktioniert, indem es Pull Requests in Ihren Repositorys öffnet. Verbinden Sie Ihren Repository-Anbieter, um fortzufahren."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "Eine kurze Tour machen?",
+      "intro": "Geführte Touren zeigen dir die App direkt auf diesem Bildschirm: Sie heben die echten Bedienelemente hervor und sagen dir, was du anklicken sollst.",
+      "start": "Starten",
+      "restart": "Wiederholen",
+      "completed": "Abgeschlossen",
+      "decline": "Nein danke",
+      "later": "Vielleicht später",
+      "empty": "Für deine Rolle auf diesem Board sind noch keine Touren verfügbar."
+    },
+    "overlay": {
+      "next": "Weiter",
+      "back": "Zurück",
+      "skip": "Tour beenden",
+      "done": "Fertig",
+      "progress": "Schritt {current} von {total}",
+      "ariaLabel": "Tutorial-Schritt",
+      "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
+      "searching": "Suche das hervorgehobene Element...",
+      "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Board-Grundlagen",
+        "description": "Orientierung: das Board, die Seitenleiste und die Befehlspalette.",
+        "steps": {
+          "welcome": {
+            "title": "Willkommen!",
+            "body": "Das ist dein Delivery-Board: Hier planst du Arbeit, Agenten übernehmen sie, und du prüfst die Ergebnisse. Diese kurze Tour zeigt dir die wichtigsten Bedienelemente."
+          },
+          "canvas": {
+            "title": "Das Board",
+            "body": "Services, Module und Aufgaben liegen auf dieser Fläche. Ziehe zum Verschieben, scrolle zum Zoomen und klicke auf eine Karte, um Details zu sehen."
+          },
+          "sidebar": {
+            "title": "Die Seitenleiste",
+            "body": "Alles Weitere findest du hier: Pipelines erstellen, Repositories und Integrationen verbinden, Workspace-Einstellungen."
+          },
+          "commandBar": {
+            "title": "Die Befehlspalette",
+            "body": "Der schnellste Weg zu jeder Aktion: öffnen und lostippen. Von dort kannst du dieses Tutorial jederzeit neu starten."
+          },
+          "toolbar": {
+            "title": "Board-Steuerung",
+            "body": "Mit diesen Steuerelementen zoomst du hinein und heraus oder bringst das ganze Board ins Bild."
+          },
+          "finish": {
+            "title": "Das war die Übersicht",
+            "body": "Jetzt kennst du dich aus. Probiere die nächste Tour, um deine erste Aufgabe zu erstellen und auszuführen, oder komm später über die Befehlspalette zurück."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "Erstelle deine erste Aufgabe",
+        "description": "Füge einem Service eine Aufgabe hinzu und sieh zu, wie sie auf dem Board erscheint.",
+        "steps": {
+          "intro": {
+            "title": "Lass uns eine Aufgabe erstellen",
+            "body": "Eine Aufgabe beschreibt ein gewünschtes Ergebnis; eine Agenten-Pipeline liefert es. Diese Tour führt dich Schritt für Schritt durch das Erstellen einer echten Aufgabe."
+          },
+          "addTask": {
+            "title": "Aufgabe hinzufügen",
+            "body": "Jeder Service-Rahmen hat einen Hinzufügen-Button in seiner Kopfzeile."
+          },
+          "describe": {
+            "title": "Beschreibe das Ergebnis",
+            "body": "Gib der Aufgabe einen kurzen Titel, der sagt, was am Ende erreicht sein soll. Normale Sprache genügt."
+          },
+          "create": {
+            "title": "Erstelle die Aufgabe",
+            "body": "Wenn die Beschreibung passt, erstelle die Aufgabe."
+          },
+          "card": {
+            "title": "Aufgabenkarten",
+            "body": "Das ist eine Aufgabenkarte. Von ihr aus startest du die Pipeline, verfolgst den Fortschritt und öffnest Ergebnisse."
+          },
+          "finish": {
+            "title": "Gut gemacht",
+            "body": "Das ist der Kernablauf: Aufgabe beschreiben, ausführen, Ergebnis prüfen. Entdecke die weiteren Touren, wann immer du magst."
+          }
+        }
+      }
     }
   }
 }

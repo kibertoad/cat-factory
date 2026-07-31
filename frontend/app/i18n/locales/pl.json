@@ -2072,7 +2072,8 @@
         "sandbox": "Otwórz piaskownicę",
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
-        "toggleUiMode": "Zmień tryb interfejsu"
+        "toggleUiMode": "Zmień tryb interfejsu",
+        "tutorial": "Rozpocznij przewodnik"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2094,7 +2095,8 @@
         "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
         "shortcuts": "skróty klawiatura klawisze pomoc",
         "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
-        "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj"
+        "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj",
+        "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie"
       }
     },
     "integrationsHub": {
@@ -5893,6 +5895,91 @@
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
       "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "Chcesz krótki przewodnik?",
+      "intro": "Interaktywne przewodniki pokazują aplikację bezpośrednio na tym ekranie: podświetlają prawdziwe elementy interfejsu i mówią, co kliknąć.",
+      "start": "Rozpocznij",
+      "restart": "Powtórz",
+      "completed": "Ukończono",
+      "decline": "Nie, dziękuję",
+      "later": "Może później",
+      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników."
+    },
+    "overlay": {
+      "next": "Dalej",
+      "back": "Wstecz",
+      "skip": "Zakończ przewodnik",
+      "done": "Zakończ",
+      "progress": "Krok {current} z {total}",
+      "ariaLabel": "Krok samouczka",
+      "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
+      "searching": "Szukanie podświetlonego elementu...",
+      "clickHint": "Kliknij podświetlony element, aby kontynuować"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Podstawy tablicy",
+        "description": "Poznaj układ: tablicę, pasek boczny i paletę poleceń.",
+        "steps": {
+          "welcome": {
+            "title": "Witaj!",
+            "body": "To twoja tablica dostarczania: tutaj planujesz pracę, agenci ją wykonują, a ty przeglądasz wyniki. Ten krótki przewodnik pokazuje najważniejsze elementy."
+          },
+          "canvas": {
+            "title": "Tablica",
+            "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
+          },
+          "sidebar": {
+            "title": "Pasek boczny",
+            "body": "Tu znajdziesz całą resztę: budowanie potoków, podłączanie repozytoriów i integracji oraz ustawienia obszaru roboczego."
+          },
+          "commandBar": {
+            "title": "Paleta poleceń",
+            "body": "Najszybsza droga do każdej akcji: otwórz i zacznij pisać. Możesz stamtąd w każdej chwili ponownie uruchomić ten samouczek."
+          },
+          "toolbar": {
+            "title": "Sterowanie tablicą",
+            "body": "Tymi przyciskami przybliżasz, oddalasz lub dopasowujesz całą tablicę do widoku."
+          },
+          "finish": {
+            "title": "To cały układ",
+            "body": "Znasz już rozmieszczenie. Wypróbuj kolejny przewodnik, aby utworzyć i uruchomić pierwsze zadanie, albo wróć później przez paletę poleceń."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "Utwórz pierwsze zadanie",
+        "description": "Dodaj zadanie do usługi i zobacz, jak pojawia się na tablicy.",
+        "steps": {
+          "intro": {
+            "title": "Utwórzmy zadanie",
+            "body": "Zadanie opisuje oczekiwany rezultat; potok agentów go dostarcza. Ten przewodnik przeprowadzi cię przez utworzenie prawdziwego zadania."
+          },
+          "addTask": {
+            "title": "Dodaj zadanie",
+            "body": "Każda ramka usługi ma przycisk dodawania w nagłówku."
+          },
+          "describe": {
+            "title": "Opisz rezultat",
+            "body": "Nadaj zadaniu krótki tytuł mówiący, co ma być prawdą, gdy zostanie ukończone. Zwykły język wystarczy."
+          },
+          "create": {
+            "title": "Utwórz je",
+            "body": "Gdy opis będzie gotowy, utwórz zadanie."
+          },
+          "card": {
+            "title": "Karty zadań",
+            "body": "To jest karta zadania. Z karty uruchamiasz potok, śledzisz postęp i otwierasz wyniki."
+          },
+          "finish": {
+            "title": "Dobra robota",
+            "body": "To główna pętla: opisz zadanie, uruchom je, przejrzyj wynik. Odkrywaj pozostałe przewodniki, kiedy chcesz."
+          }
+        }
+      }
     }
   }
 }

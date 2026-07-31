@@ -25,6 +25,10 @@ export function createNavGates(): NavGates {
   const auth = useAuthStore()
   const providerConnections = useProviderConnectionsStore()
   const uiMode = useUiModeStore()
+  const board = useBoardStore()
+
+  // A top-level frame IS a service (see `app/types/domain.ts`); modules are sub-frames.
+  const hasService = computed(() => board.blocks.some((b) => b.level === 'frame' && !b.parentId))
 
   const infrastructureAvailable = computed(
     () =>
@@ -64,6 +68,9 @@ export function createNavGates(): NavGates {
     },
     get advancedMode() {
       return uiMode.isAdvanced
+    },
+    get boardHasService() {
+      return hasService.value
     },
   }
 }

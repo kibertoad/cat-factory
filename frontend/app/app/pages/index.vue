@@ -138,6 +138,15 @@ const AiProviderOnboardingModal = defineAsyncComponent(
 const AiPresetMismatchDialog = defineAsyncComponent(
   () => import('~/components/providers/AiPresetMismatchDialog.vue'),
 )
+// The in-app tutorial: the launch prompt (auto-opened once for a user who never answered
+// it) and the coach-mark overlay that runs a tour. Both mount only while their store flag
+// is set, so they cost the initial bundle nothing.
+const TutorialPrompt = defineAsyncComponent(
+  () => import('~/components/tutorial/TutorialPrompt.vue'),
+)
+const TutorialOverlay = defineAsyncComponent(
+  () => import('~/components/tutorial/TutorialOverlay.vue'),
+)
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -266,6 +275,56 @@ watch(
   },
   { immediate: true },
 )
+
+// Offer the tutorial on launch, once the board is up. Yields to every other startup
+// surface — the GitHub onboarding gate and the advisory/onboarding modals above — so a
+// first launch never stacks the tour prompt on top of a dialog that needs answering
+// first; when one of those is open, the flip of its flag re-fires this watcher and the
+// prompt appears then. The store guards the rest: only a user who never answered is
+// asked, at most once per session.
+//
+// Yielding runs in BOTH directions: an advisory that opens LATER (a health probe that
+// resolves a beat after the board) would otherwise land on top of an open tour prompt,
+// which is the stacking this ordering exists to prevent. So the same watcher withdraws
+// an unanswered prompt and re-arms the offer, and the user is asked once the advisory
+// they actually have to answer is gone.
+//
+// The watcher exists only while it can still do something. A saved decision (hydrated
+// synchronously from the persisted store) means it never registers, and once a decision
+// lands — or the offer has been made and left standing — it stops itself, so the steady
+// state pays nothing for the launch offer: no watcher, no mounted component (the v-ifs
+// below), no store reads.
+const tutorial = useTutorialStore()
+const startupAdvisoryOpen = computed(
+  () =>
+    needsGitHubInstall.value ||
+    githubProbePending.value ||
+    ui.pipelineHealthOpen ||
+    ui.riskPolicyHealthOpen ||
+    ui.modelPresetHealthOpen ||
+    ui.aiProviderSetupOpen ||
+    ui.aiPresetMismatchOpen,
+)
+// Settled = the offer can never need to act again: a decision exists, or the prompt was
+// auto-opened and is still standing (a deferral clears `promptAutoOpened`, which is
+// exactly what keeps the watcher alive to re-offer).
+const tutorialOfferSettled = () =>
+  tutorial.decision !== null || (tutorial.promptAutoOpened && !tutorial.promptOpen)
+if (!tutorialOfferSettled()) {
+  // `let` + optional call: with `immediate: true` the first run happens synchronously
+  // inside `watch(...)`, before the handle is assigned — the trailing check covers it.
+  let stopTutorialOffer: (() => void) | undefined
+  stopTutorialOffer = watch(
+    () => [workspace.ready, startupAdvisoryOpen.value, tutorial.promptOpen],
+    () => {
+      if (startupAdvisoryOpen.value) tutorial.deferPrompt()
+      else if (workspace.ready) tutorial.maybeOfferOnLaunch()
+      if (tutorialOfferSettled()) stopTutorialOffer?.()
+    },
+    { immediate: true },
+  )
+  if (tutorialOfferSettled()) stopTutorialOffer()
+}
 
 // Probe the GitHub integration as soon as a board is active (re-probe per board —
 // connections are per workspace). The result drives the onboarding gate below
@@ -448,6 +507,8 @@ watch(
       <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
       <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
       <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
+      <TutorialPrompt v-if="tutorial.promptOpen" />
+      <TutorialOverlay v-if="tutorial.touring" />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

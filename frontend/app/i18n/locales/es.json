@@ -2072,7 +2072,8 @@
         "sandbox": "Abrir el entorno de pruebas",
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
-        "toggleUiMode": "Cambiar el modo de interfaz"
+        "toggleUiMode": "Cambiar el modo de interfaz",
+        "tutorial": "Hacer un recorrido"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -2094,7 +2095,8 @@
         "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
         "shortcuts": "atajos teclado teclas ayuda",
         "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
-        "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar"
+        "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar",
+        "tutorial": "tutorial recorrido guía ayuda aprender introducción"
       }
     },
     "integrationsHub": {
@@ -5893,6 +5895,91 @@
       "title": "Conecta cat-factory con {provider}",
       "titleAny": "Conecta cat-factory con tus repositorios",
       "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Conecta tu proveedor de repositorios para continuar."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "¿Hacer un recorrido rápido?",
+      "intro": "Los recorridos guiados te muestran la aplicación directamente en esta pantalla: resaltan los controles reales y te dicen dónde hacer clic.",
+      "start": "Empezar",
+      "restart": "Repetir",
+      "completed": "Completado",
+      "decline": "No, gracias",
+      "later": "Quizás más tarde",
+      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero."
+    },
+    "overlay": {
+      "next": "Siguiente",
+      "back": "Atrás",
+      "skip": "Terminar recorrido",
+      "done": "Finalizar",
+      "progress": "Paso {current} de {total}",
+      "ariaLabel": "Paso del tutorial",
+      "abridged": "Se omitió 1 paso: ese control no forma parte de este tablero. | Se omitieron {count} pasos: esos controles no forman parte de este tablero.",
+      "searching": "Buscando el control resaltado...",
+      "clickHint": "Haz clic en el control resaltado para continuar"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Conceptos básicos del tablero",
+        "description": "Orientación básica: el tablero, la barra lateral y la paleta de comandos.",
+        "steps": {
+          "welcome": {
+            "title": "Te damos la bienvenida",
+            "body": "Este es tu tablero de entrega: aquí planificas el trabajo, los agentes lo ejecutan y tú revisas los resultados. Este breve recorrido muestra los controles principales."
+          },
+          "canvas": {
+            "title": "El tablero",
+            "body": "Los servicios, módulos y tareas viven en este lienzo. Arrastra para desplazarte, usa la rueda para hacer zoom y haz clic en cualquier tarjeta para inspeccionarla."
+          },
+          "sidebar": {
+            "title": "La barra lateral",
+            "body": "Aquí está todo lo demás: crear canalizaciones, conectar repositorios e integraciones y los ajustes del espacio de trabajo."
+          },
+          "commandBar": {
+            "title": "La paleta de comandos",
+            "body": "La forma más rápida de llegar a cualquier acción: ábrela y empieza a escribir. Desde ahí puedes reiniciar este tutorial en cualquier momento."
+          },
+          "toolbar": {
+            "title": "Controles del tablero",
+            "body": "Con estos controles acercas, alejas o ajustas todo el tablero a la vista."
+          },
+          "finish": {
+            "title": "Eso es todo",
+            "body": "Ya sabes orientarte. Prueba el siguiente recorrido para crear y ejecutar tu primera tarea, o vuelve más tarde desde la paleta de comandos."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "Crea tu primera tarea",
+        "description": "Añade una tarea a un servicio y mírala aparecer en el tablero.",
+        "steps": {
+          "intro": {
+            "title": "Vamos a crear una tarea",
+            "body": "Una tarea describe un resultado que quieres; una canalización de agentes lo entrega. Este recorrido te guía para crear una de verdad."
+          },
+          "addTask": {
+            "title": "Añadir una tarea",
+            "body": "Cada marco de servicio tiene un botón de añadir en su cabecera."
+          },
+          "describe": {
+            "title": "Describe el resultado",
+            "body": "Da a la tarea un título corto que diga qué debe cumplirse cuando esté terminada. El lenguaje normal es suficiente."
+          },
+          "create": {
+            "title": "Créala",
+            "body": "Cuando la descripción te convenza, crea la tarea."
+          },
+          "card": {
+            "title": "Tarjetas de tarea",
+            "body": "Esta es una tarjeta de tarea. Desde ella puedes iniciar la canalización, seguir el progreso y abrir los resultados."
+          },
+          "finish": {
+            "title": "Buen trabajo",
+            "body": "Ese es el ciclo principal: describir una tarea, ejecutarla y revisar el resultado. Explora los demás recorridos cuando quieras."
+          }
+        }
+      }
     }
   }
 }

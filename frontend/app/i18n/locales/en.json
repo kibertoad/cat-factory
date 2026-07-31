@@ -2154,7 +2154,8 @@
         "sandbox": "Open Sandbox",
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
-        "toggleUiMode": "Switch interface mode"
+        "toggleUiMode": "Switch interface mode",
+        "tutorial": "Take a tour"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2176,7 +2177,8 @@
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "bug hunt triage backlog issue tracker unassigned",
-        "toggleUiMode": "interface mode basic advanced simple expert show hide"
+        "toggleUiMode": "interface mode basic advanced simple expert show hide",
+        "tutorial": "tutorial onboarding tour guide help learn basics"
       }
     },
     "shortcuts": {
@@ -6109,6 +6111,94 @@
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
       "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "Take a quick tour?",
+      "intro": "Guided tours walk you through the app right on this screen: they highlight the actual controls and tell you what to click.",
+      "start": "Start",
+      "restart": "Repeat",
+      "completed": "Completed",
+      "decline": "No thanks",
+      "later": "Maybe later",
+      "empty": "No tours are available for your role on this board yet."
+    },
+    "overlay": {
+      "next": "Next",
+      "back": "Back",
+      "skip": "End tour",
+      "done": "Finish",
+      "progress": "Step {current} of {total}",
+      "ariaLabel": "Tutorial step",
+      "abridged": "1 step was skipped: that control is not part of this board. | {count} steps were skipped: those controls are not part of this board.",
+      "@abridged": {
+        "description": "Shown on a tour's final card when steps were skipped. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of skipped steps."
+      },
+      "searching": "Looking for the highlighted control...",
+      "clickHint": "Click the highlighted control to continue"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Board basics",
+        "description": "Find your way around: the board, the sidebar, and the command palette.",
+        "steps": {
+          "welcome": {
+            "title": "Welcome!",
+            "body": "This is your delivery board: you plan work here, agents pick it up, and you review the results. This short tour points out the main controls."
+          },
+          "canvas": {
+            "title": "The board",
+            "body": "Services, modules, and tasks live on this canvas. Drag to pan, scroll to zoom, and click any card to inspect it."
+          },
+          "sidebar": {
+            "title": "The sidebar",
+            "body": "Everything else lives here: building pipelines, connecting repositories and integrations, and workspace settings."
+          },
+          "commandBar": {
+            "title": "The command palette",
+            "body": "The fastest way to reach any action: open it and start typing. You can restart this tutorial from there at any time."
+          },
+          "toolbar": {
+            "title": "Board controls",
+            "body": "Zoom in and out or fit the whole board into view with these controls."
+          },
+          "finish": {
+            "title": "That's the layout",
+            "body": "You know your way around now. Try the next tour to create and run your first task, or come back later via the command palette."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "Create your first task",
+        "description": "Add a task to a service and see it appear on the board.",
+        "steps": {
+          "intro": {
+            "title": "Let's create a task",
+            "body": "A task describes an outcome you want; an agent pipeline delivers it. This tour walks you through creating one for real."
+          },
+          "addTask": {
+            "title": "Add a task",
+            "body": "Every service frame has an add button in its header."
+          },
+          "describe": {
+            "title": "Describe the outcome",
+            "body": "Give the task a short title that says what should be true when it is done. Plain language is fine."
+          },
+          "create": {
+            "title": "Create it",
+            "body": "When the description feels right, create the task."
+          },
+          "card": {
+            "title": "Task cards",
+            "body": "This is a task card. From one you can start the pipeline, watch progress, and open the results."
+          },
+          "finish": {
+            "title": "Nice work",
+            "body": "That is the core loop: describe a task, run it, review the result. Explore the other tours whenever you like."
+          }
+        }
+      }
     }
   }
 }

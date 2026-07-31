@@ -47,6 +47,7 @@ export function useNavContributions() {
     operatorDashboard: () => ui.openOperatorDashboard(),
     reports: () => ui.openReports(),
     shortcuts: () => ui.openShortcutsHelp(),
+    tutorial: () => useTutorialStore().openPrompt(),
     // No-op under an env pin (`setMode` refuses), so the palette entry matches the sidebar
     // switcher's read-only state rather than pretending to flip a tier the resolver fixes.
     toggleUiMode: () => useUiModeStore().toggleMode(),
