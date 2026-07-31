@@ -52,6 +52,19 @@ export interface TutorialStep {
   altTargets?: readonly string[]
   titleKey: string
   bodyKey: string
+  /**
+   * Interpolation values for {@link bodyKey}'s `{named}` placeholders.
+   *
+   * The reason this exists rather than the value living in the catalogs: a step that names
+   * something FIXED and untranslatable — the sample repository a tour tells you to search
+   * for — would otherwise be spelled out in `en.json` and copied into nine other locales,
+   * where it reads as prose to translate and drifts the moment the value changes. Declared
+   * here it is written once, in code, beside the tour that needs it.
+   *
+   * Prose still belongs in the catalog: this is for proper nouns and code-shaped literals,
+   * the same split `frontend/app/README.md` states for inline placeholders in components.
+   */
+  bodyParams?: Record<string, string | number>
   placement?: TutorialPlacement
   /** Defaults to `'next'`. */
   advanceOn?: TutorialAdvance
@@ -64,6 +77,22 @@ export interface TutorialStep {
    * longer wait.
    */
   waitForTargetMs?: number
+  /**
+   * Applicability gate over the same reactive {@link NavGates} the tour's own `when` reads.
+   * A step this rejects is DROPPED from the tour before it runs; absent = always included.
+   *
+   * Deliberately distinct from the anchor skip above, because the two are different facts
+   * and only one of them is a defect in the tour. A skip means "this step's control should
+   * be here and isn't", which is what the final card reports as an abridged walkthrough. A
+   * `when` says "this branch of the flow is not what this board is doing" — a run parked on
+   * a decision has no approval gate to point at, and vice versa. Rendering the second as
+   * the first would tell a user who saw exactly the right walkthrough that they missed
+   * half of it, every single time.
+   *
+   * Use it only for a step whose ABSENCE is expected on a legitimate board; an anchor that
+   * merely might be slow keeps the wait budget instead.
+   */
+  when?: (gates: NavGates) => boolean
 }
 
 export interface TutorialTour {
@@ -92,6 +121,31 @@ export const TARGET_TRACK_INTERVAL_MS = 150
 /** Deterministic tour-list order: `order`, then `id`. */
 export function sortTours(tours: readonly TutorialTour[]): TutorialTour[] {
   return [...tours].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+}
+
+/**
+ * Resolve every tour against the gates: drop the tours whose own `when` rejects them, drop
+ * the steps whose `when` rejects them, and then drop a tour left with no steps at all.
+ *
+ * That last rule is what makes per-step gating safe to reach for. A tour whose every step
+ * is branch-specific (the parked-run tour: some boards have a decision waiting, some an
+ * approval) would otherwise survive its own `when` and open on an empty cursor — which the
+ * overlay ends immediately, so the user presses Start and nothing happens.
+ *
+ * Pure and total, so `navSlotFilter` (which runs inside a reactive computed, once per gate
+ * flip) stays a straight fold and the rules above are unit-testable without a Vue runtime.
+ */
+export function resolveTours(tours: readonly TutorialTour[], gates: NavGates): TutorialTour[] {
+  const out: TutorialTour[] = []
+  for (const tour of tours) {
+    if (tour.when && !tour.when(gates)) continue
+    const steps = tour.steps.filter((s) => (s.when ? s.when(gates) : true))
+    if (steps.length === 0) continue
+    // Reuse the original object when nothing was dropped: the prompt keys its list on the
+    // tour, and a fresh object per gate read would re-render it on every unrelated flip.
+    out.push(steps.length === tour.steps.length ? tour : { ...tour, steps })
+  }
+  return out
 }
 
 /** A DOMRect-shaped box, structurally typed so the geometry below is unit-testable. */

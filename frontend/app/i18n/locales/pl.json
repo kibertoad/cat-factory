@@ -5944,9 +5944,39 @@
             "title": "Sterowanie tablicą",
             "body": "Tymi przyciskami przybliżasz, oddalasz lub dopasowujesz całą tablicę do widoku."
           },
+          "interfaceTier": {
+            "title": "Tryb podstawowy i zaawansowany",
+            "body": "Interfejs startuje w trybie podstawowym, który pokazuje codzienne powierzchnie pracy. Przełącz się tutaj na zaawansowany, gdy potrzebujesz także powierzchni do eksperymentów, zakładania repozytoriów i pracy operacyjnej."
+          },
           "finish": {
             "title": "To cały układ",
             "body": "Znasz już rozmieszczenie. Wypróbuj kolejny przewodnik, aby utworzyć i uruchomić pierwsze zadanie, albo wróć później przez paletę poleceń."
+          }
+        }
+      },
+      "addService": {
+        "title": "Dodaj pierwsze repozytorium",
+        "description": "Podłącz repozytorium, żeby tablica miała usługę, dla której można planować pracę.",
+        "steps": {
+          "intro": {
+            "title": "Zacznij od repozytorium",
+            "body": "Praca dzieje się na kodzie, więc tablica potrzebuje co najmniej jednej usługi, zanim agent będzie miał gdzie pracować. Ta wycieczka podłącza jedną."
+          },
+          "open": {
+            "title": "Dodaj usługę z repozytorium",
+            "body": "To otwiera wybór repozytoriów. Lista pokazuje repozytoria, które widzi połączenie tej przestrzeni roboczej."
+          },
+          "search": {
+            "title": "Wybierz repozytorium",
+            "body": "Poszukaj jednego ze swoich repozytoriów. Jeśli wolisz poćwiczyć na czymś małym, {repo} to przykładowa usługa celowo pozostawiona niedokończoną na potrzeby tych wycieczek."
+          },
+          "add": {
+            "title": "Dodaj je",
+            "body": "Repozytorium staje się ramką usługi na tablicy. Później możesz dodać kolejne, w monorepo nawet po jednej usłudze na katalog."
+          },
+          "finish": {
+            "title": "Masz usługę",
+            "body": "W tej ramce mieszkają zadania. Następna wycieczka umieszcza w niej pierwsze."
           }
         }
       },
@@ -5977,6 +6007,96 @@
           "finish": {
             "title": "Dobra robota",
             "body": "To główna pętla: opisz zadanie, uruchom je, przejrzyj wynik. Odkrywaj pozostałe przewodniki, kiedy chcesz."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Uruchom zadanie",
+        "description": "Otwórz zadanie, wybierz jego potok i pozwól agentom działać.",
+        "steps": {
+          "intro": {
+            "title": "Od zadania do uruchomienia",
+            "body": "Zadanie na tablicy to prośba. Po otwarciu widzisz potok, który ją zrealizuje, oraz przyciski, które go uruchamiają."
+          },
+          "openTask": {
+            "title": "Otwórz zadanie",
+            "body": "Kliknięcie karty otwiera jej inspektora, w którym jest wszystko, co dotyczy tego zadania."
+          },
+          "inspector": {
+            "title": "Inspektor",
+            "body": "Status, repozytorium, potok i samo uruchomienie: ten panel to cała historia zadania."
+          },
+          "pipeline": {
+            "title": "Wybierz potok",
+            "body": "Potok to sekwencja agentów, którzy wykonają pracę: napiszą specyfikację, zbudują ją, zrecenzują, uruchomią testy i scalą zmiany. Wybierz ten pasujący do zadania."
+          },
+          "start": {
+            "title": "Uruchomienie",
+            "body": "To naprawdę uruchamia potok, a agenci zużywają budżet modeli. Dlatego kliknięcie należy do ciebie: naciśnij, kiedy będziesz gotowy, w trakcie tej wycieczki albo po niej."
+          },
+          "steps": {
+            "title": "Podglądanie pracy",
+            "body": "Każdy krok raportuje tutaj swój postęp, przesyłany na żywo. Kliknij krok, żeby przeczytać, co agent faktycznie wytworzył."
+          },
+          "finish": {
+            "title": "To jest cała pętla",
+            "body": "Zaplanuj zadanie, wybierz potok, uruchom je, obserwuj. Kiedy uruchomienie czegoś od ciebie potrzebuje, zatrzymuje się i mówi o tym, czym zajmuje się następna wycieczka."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Odpowiedz czekającemu uruchomieniu",
+        "description": "Uruchomienie zatrzymało się i czeka na człowieka. Zobacz, gdzie pyta i jak odpowiedzieć.",
+        "steps": {
+          "intro": {
+            "title": "Uruchomienie czeka na ciebie",
+            "body": "Niektóre kroki zatrzymują się i pytają: o doprecyzowanie wymagań, o zatwierdzenie planu, o wybór jednego z podejść. Zatrzymane uruchomienie czeka na odpowiedź bez końca, więc nic nie ruszy, dopóki nie odpowiesz."
+          },
+          "resolve": {
+            "title": "Gdzie pyta",
+            "body": "Zadanie czekające na człowieka mówi o tym na swojej karcie i oferuje tę akcję. Prowadzi prosto do tego, o co pyta."
+          },
+          "decide": {
+            "title": "Wybór odpowiedzi",
+            "body": "Każda opcja to prawdziwa instrukcja dla uruchomienia: wybierz jedną, a potok ruszy dalej z twoim wyborem."
+          },
+          "approve": {
+            "title": "Zatwierdzanie pracy",
+            "body": "Zatwierdź, żeby uruchomienie szło dalej, albo poproś o zmiany, żeby odesłać krok ze swoimi uwagami. Jedno i drugie jest odpowiedzią, a uruchomienie w obu przypadkach wznawia pracę."
+          },
+          "finish": {
+            "title": "Nic nie czeka po cichu",
+            "body": "Czekające zadania są oznaczone na tablicy i policzone na pasku narzędzi, więc znajdziesz je bez szukania."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Przejrzyj i scal",
+        "description": "Przeczytaj, co wytworzyło zakończone uruchomienie, i doprowadź to do scalenia.",
+        "steps": {
+          "intro": {
+            "title": "Uruchomienie się zakończyło",
+            "body": "Zakończone to nie to samo co dostarczone. Zadanie jest zrobione, gdy jego pull request zostanie scalony, więc ta wycieczka to ostatnia prosta."
+          },
+          "openTask": {
+            "title": "Otwórz zadanie",
+            "body": "Otwórz zadanie, którego uruchomienie się zakończyło. Jego inspektor zawiera pełną listę kroków."
+          },
+          "openStep": {
+            "title": "Otwórz krok",
+            "body": "Kliknięcie kroku pokazuje, co ten agent wytworzył: jego raport, jego ustalenia i to, co zmienił."
+          },
+          "result": {
+            "title": "Czytanie wyniku",
+            "body": "To relacja samego agenta. Kroki recenzji wypisują ustalenia, tester podaje werdykty, a scalający tłumaczy, jak ocenił zmianę."
+          },
+          "merge": {
+            "title": "Scalanie",
+            "body": "Kiedy uruchomienie otworzy pull request, inspektor proponuje tutaj scalenie. Potok z krokiem scalającym może też scalić sam, jeśli zmiana przekroczy twój próg."
+          },
+          "finish": {
+            "title": "Dostarczone",
+            "body": "Scalona praca oznacza zadanie na tablicy jako zrobione. To cała pętla: zaplanuj, uruchom, odpowiedz, przejrzyj, scal."
           }
         }
       }

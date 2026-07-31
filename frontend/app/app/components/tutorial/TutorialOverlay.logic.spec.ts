@@ -5,7 +5,7 @@ import {
   resolveSkip,
   stepTargetIds,
   stepTargetSelectors,
-  tourWasAbridged,
+  unexpectedlySkippedSteps,
   waitBudgetMs,
 } from '~/components/tutorial/TutorialOverlay.logic'
 import { DEFAULT_TARGET_WAIT_MS } from '~/utils/tutorial'
@@ -99,28 +99,66 @@ describe('resolveSkip', () => {
 })
 
 describe('isTargetClickAdvance', () => {
-  const el = document.createElement('button')
-  const child = document.createElement('span')
-  el.appendChild(child)
+  /** A control carrying `id`, with a nested span, mounted so `closest` can walk to it. */
+  const control = (id: string) => {
+    const el = document.createElement('button')
+    el.setAttribute('data-testid', id)
+    el.appendChild(document.createElement('span'))
+    document.body.appendChild(el)
+    return el
+  }
 
-  it('advances on a real click on the highlighted control, or inside it', () => {
+  it('advances on a real click on the control, or inside it', () => {
+    const el = control('add-task-submit')
     const s = step({ target: 'add-task-submit', advanceOn: 'target-click' })
-    expect(isTargetClickAdvance(s, el, el)).toBe(true)
-    expect(isTargetClickAdvance(s, el, child)).toBe(true)
+    expect(isTargetClickAdvance(s, el)).toBe(true)
+    expect(isTargetClickAdvance(s, el.firstChild)).toBe(true)
   })
 
-  it('ignores clicks elsewhere, on a Next-advanced step, or with no anchor', () => {
+  it('advances on ANY instance of a control the board renders per item', () => {
+    // `task-card` / `task-resolve` / `run-step` exist once per board item, and the ring can
+    // only sit on one of them. Requiring the click to land on THAT one left a user who
+    // clicked the card the step's copy asked for with no way forward — a click-to-advance
+    // step renders no Next button.
+    control('task-card')
+    const second = control('task-card')
+    const s = step({ target: 'task-card', advanceOn: 'target-click' })
+    expect(isTargetClickAdvance(s, second)).toBe(true)
+  })
+
+  it('advances on a fallback anchor too, since either is the control the step named', () => {
+    const s = step({ target: 'ui-mode-switcher', altTargets: ['ui-mode-toggle'] })
+    expect(
+      isTargetClickAdvance({ ...s, advanceOn: 'target-click' }, control('ui-mode-toggle')),
+    ).toBe(true)
+  })
+
+  it('ignores clicks elsewhere, on a Next-advanced step, or on a non-element', () => {
     const s = step({ target: 'add-task-submit', advanceOn: 'target-click' })
-    expect(isTargetClickAdvance(s, el, document.createElement('div'))).toBe(false)
-    expect(isTargetClickAdvance(s, null, el)).toBe(false)
-    expect(isTargetClickAdvance(step({ target: 'x' }), el, el)).toBe(false)
-    expect(isTargetClickAdvance(null, el, el)).toBe(false)
+    expect(isTargetClickAdvance(s, control('run-start'))).toBe(false)
+    expect(isTargetClickAdvance(s, null)).toBe(false)
+    expect(isTargetClickAdvance(s, document.createTextNode('stray'))).toBe(false)
+    expect(isTargetClickAdvance(step({ target: 'add-task-submit' }), control('x'))).toBe(false)
+    expect(isTargetClickAdvance(null, control('y'))).toBe(false)
   })
 })
 
-describe('tourWasAbridged', () => {
-  it('is true once any step was skipped, so the finish card can say so', () => {
-    expect(tourWasAbridged(new Set())).toBe(false)
-    expect(tourWasAbridged(new Set(['addTask']))).toBe(true)
+describe('unexpectedlySkippedSteps', () => {
+  const plain = step({ id: 'addTask', target: 'frame-add-task' })
+  const branch = step({ id: 'approve', target: 'step-approve', when: () => true })
+
+  it('counts a skipped step whose control simply was not there', () => {
+    expect(unexpectedlySkippedSteps(new Set(['addTask']), [plain, branch])).toEqual([plain])
+  })
+
+  it('does not count a branch-gated step, whose absence it already declared legitimate', () => {
+    // The gates-absent case (a bare install withholds nothing, so BOTH branches of a tour
+    // are kept and only one can ever anchor). Reporting that as abridged would put a
+    // permanent "you missed some of this" on a tour that showed exactly the right branch.
+    expect(unexpectedlySkippedSteps(new Set(['approve']), [plain, branch])).toEqual([])
+  })
+
+  it('is empty for a tour that skipped nothing', () => {
+    expect(unexpectedlySkippedSteps(new Set(), [plain, branch])).toEqual([])
   })
 })

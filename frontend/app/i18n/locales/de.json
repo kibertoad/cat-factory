@@ -5956,9 +5956,39 @@
             "title": "Board-Steuerung",
             "body": "Mit diesen Steuerelementen zoomst du hinein und heraus oder bringst das ganze Board ins Bild."
           },
+          "interfaceTier": {
+            "title": "Einfach und erweitert",
+            "body": "Die Oberfläche startet im einfachen Modus, der die alltäglichen Arbeitsflächen zeigt. Wechsle hier auf erweitert, wenn du zusätzlich die Flächen für Experimente, Bootstrap und Betrieb brauchst."
+          },
           "finish": {
             "title": "Das war die Übersicht",
             "body": "Jetzt kennst du dich aus. Probiere die nächste Tour, um deine erste Aufgabe zu erstellen und auszuführen, oder komm später über die Befehlspalette zurück."
+          }
+        }
+      },
+      "addService": {
+        "title": "Erstes Repository hinzufügen",
+        "description": "Verknüpfe ein Repository, damit das Board einen Service hat, für den du Arbeit planen kannst.",
+        "steps": {
+          "intro": {
+            "title": "Beginne mit einem Repository",
+            "body": "Arbeit passiert am Code, also braucht ein Board mindestens einen Service, bevor ein Agent irgendwo arbeiten kann. Diese Tour verknüpft einen."
+          },
+          "open": {
+            "title": "Service aus Repository",
+            "body": "Das öffnet die Repository-Auswahl. Sie listet die Repositories, die die Verbindung dieses Workspace sehen kann."
+          },
+          "search": {
+            "title": "Repository auswählen",
+            "body": "Suche nach einem deiner eigenen Repositories. Wenn du lieber an etwas Kleinem üben möchtest: {repo} ist ein Beispiel-Service, der für diese Touren absichtlich unfertig bleibt."
+          },
+          "add": {
+            "title": "Hinzufügen",
+            "body": "Das Repository wird zu einem Service-Rahmen auf dem Board. Später kannst du weitere hinzufügen, in einem Monorepo auch einen Service pro Ordner."
+          },
+          "finish": {
+            "title": "Du hast einen Service",
+            "body": "In diesem Rahmen leben die Aufgaben. Die nächste Tour legt eine hinein."
           }
         }
       },
@@ -5989,6 +6019,96 @@
           "finish": {
             "title": "Gut gemacht",
             "body": "Das ist der Kernablauf: Aufgabe beschreiben, ausführen, Ergebnis prüfen. Entdecke die weiteren Touren, wann immer du magst."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Aufgabe ausführen",
+        "description": "Öffne eine Aufgabe, wähle ihre Pipeline und lass die Agenten loslegen.",
+        "steps": {
+          "intro": {
+            "title": "Von der Aufgabe zum Lauf",
+            "body": "Eine Aufgabe auf dem Board ist eine Anfrage. Wenn du sie öffnest, siehst du die Pipeline, die sie liefert, und die Bedienelemente, die sie starten."
+          },
+          "openTask": {
+            "title": "Aufgabe öffnen",
+            "body": "Ein Klick auf eine Karte öffnet ihren Inspektor, in dem alles zu dieser Aufgabe steht."
+          },
+          "inspector": {
+            "title": "Der Inspektor",
+            "body": "Status, Repository, Pipeline und der Lauf selbst: dieses Panel ist die ganze Geschichte der Aufgabe."
+          },
+          "pipeline": {
+            "title": "Pipeline wählen",
+            "body": "Eine Pipeline ist die Abfolge von Agenten, die die Arbeit erledigen: Spezifikation schreiben, umsetzen, prüfen, Checks laufen lassen, mergen. Wähle die, die zur Aufgabe passt."
+          },
+          "start": {
+            "title": "Einen Lauf starten",
+            "body": "Das startet die Pipeline wirklich, und Agenten verbrauchen Modellbudget. Deshalb bleibt der Klick bei dir: drücke ihn, wann du bereit bist, während dieser Tour oder danach."
+          },
+          "steps": {
+            "title": "Beim Arbeiten zusehen",
+            "body": "Jeder Schritt meldet seinen Fortschritt hier, live übertragen. Klicke einen Schritt an, um zu lesen, was der Agent tatsächlich produziert hat."
+          },
+          "finish": {
+            "title": "Das ist der Kreislauf",
+            "body": "Aufgabe planen, Pipeline wählen, starten, zusehen. Wenn ein Lauf etwas von dir braucht, hält er an und sagt es, was die nächste Tour behandelt."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Wartenden Lauf beantworten",
+        "description": "Ein Lauf pausiert und wartet auf einen Menschen. Sieh, wo er fragt und wie du antwortest.",
+        "steps": {
+          "intro": {
+            "title": "Ein Lauf wartet auf dich",
+            "body": "Manche Schritte halten an und fragen: eine Rückfrage zu den Anforderungen, ein Plan zur Freigabe, eine Wahl zwischen Ansätzen. Ein pausierter Lauf wartet unbegrenzt auf eine Antwort, also bewegt sich nichts, bis du antwortest."
+          },
+          "resolve": {
+            "title": "Wo er fragt",
+            "body": "Eine Aufgabe, die auf einen Menschen wartet, zeigt das auf ihrer Karte und bietet diese Aktion an. Sie bringt dich direkt zu dem, was gefragt wird."
+          },
+          "decide": {
+            "title": "Eine Antwort wählen",
+            "body": "Jede Option ist eine echte Anweisung an den Lauf: wähle eine, und die Pipeline macht mit deiner Wahl weiter."
+          },
+          "approve": {
+            "title": "Die Arbeit freigeben",
+            "body": "Gib frei, damit der Lauf weitergeht, oder fordere Änderungen an, um den Schritt mit deinen Anmerkungen zurückzuschicken. Beides sind Antworten, und der Lauf läuft so oder so weiter."
+          },
+          "finish": {
+            "title": "Nichts wartet stillschweigend",
+            "body": "Wartende Aufgaben sind auf dem Board markiert und in der Werkzeugleiste gezählt, damit du sie findest, ohne zu suchen."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Prüfen und mergen",
+        "description": "Lies, was ein fertiger Lauf produziert hat, und bring es in den Hauptzweig.",
+        "steps": {
+          "intro": {
+            "title": "Ein Lauf ist fertig",
+            "body": "Fertig ist nicht dasselbe wie ausgeliefert. Eine Aufgabe ist erledigt, wenn ihr Pull Request gemergt ist, also geht es hier um die letzte Meile."
+          },
+          "openTask": {
+            "title": "Aufgabe öffnen",
+            "body": "Öffne eine Aufgabe, deren Lauf fertig ist. Ihr Inspektor enthält die vollständige Schrittliste."
+          },
+          "openStep": {
+            "title": "Schritt öffnen",
+            "body": "Ein Klick auf einen Schritt zeigt, was dieser Agent produziert hat: seinen Bericht, seine Befunde und was er geändert hat."
+          },
+          "result": {
+            "title": "Das Ergebnis lesen",
+            "body": "Das ist die eigene Darstellung des Agenten. Review-Schritte listen Befunde, ein Tester meldet Urteile, der Merger erklärt, wie er die Änderung bewertet hat."
+          },
+          "merge": {
+            "title": "Mergen",
+            "body": "Wenn ein Lauf einen Pull Request öffnet, bietet der Inspektor hier den Merge an. Eine Pipeline mit Merger-Schritt kann auch selbst mergen, wenn die Änderung über deinem Schwellenwert liegt."
+          },
+          "finish": {
+            "title": "Ausgeliefert",
+            "body": "Gemergte Arbeit markiert die Aufgabe auf dem Board als erledigt. Das ist der ganze Kreislauf: planen, ausführen, antworten, prüfen, mergen."
           }
         }
       }

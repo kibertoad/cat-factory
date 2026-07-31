@@ -55,6 +55,27 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+### A store must be instantiable outside a component `setup`
+
+A Pinia setup store runs its body on the FIRST `useStore()` anywhere in the app, and that
+caller is not always a component: `plugins/modular.client.ts` builds the nav gates
+(`createNavGates`) during plugin setup, which instantiates a handful of stores before any
+component exists. So nothing a store reaches for at setup time may require an active
+component instance.
+
+The one that bites is **`useI18n()`, which throws `MUST_BE_CALL_SETUP_TOP` outside a
+component** — and because it happens inside a plugin, Nuxt's error boundary replaces the
+whole app with its 500 page rather than surfacing a broken feature. Resolve translations
+through the Nuxt app's global i18n instance instead (`useNuxtApp().$i18n`, typed as
+`ReturnType<typeof useI18n>`), as `stores/board.ts`, `stores/recurringPipelines.ts` and
+`composables/usePipelineErrorToast.ts` do. This costs no typed-message-key coverage: tier 1
+only sees literal keys written in a `<script setup>`, never in a `.ts` store or composable.
+
+The blast radius is why this is a rule rather than a preference — a store reached one call
+earlier than before takes the entire SPA down at boot, and the unit suite cannot see it
+(nothing there installs the plugin). Every e2e spec does, because every one of them boots
+the app.
+
 ### Always import a layer component explicitly
 
 **Import a component under `components/` by path before using it in a template.** Do not lean on Nuxt's auto-registration. This layer sets no `components` config, so the default `pathPrefix: true` applies and a component is registered under its path-prefixed name: `components/panels/StepEffortReport.vue` becomes `PanelsStepEffortReport`, and a bare `<StepEffortReport>` matches nothing.
@@ -184,13 +205,58 @@ congratulating the user on a walkthrough they did not see — and a tour that co
 be abridged should not be offered at all, which is what each tour's `when(gates)` is for (the
 task-creation tour requires board write AND a service frame to add a task to).
 
+**A step carries its own `when(gates)` when its BRANCH, not its control, is the thing that
+may not apply.** The two are different facts and only one of them is a defect: a skip means
+the control should be here and isn't, while a `when` means this board is not on that branch
+of the flow (a run parked on a decision has no approval gate, and the reverse). Reporting the
+second as an abridged tour would tell a user who saw exactly the right walkthrough that they
+missed half of it, every time. `resolveTours` (in `utils/tutorial.ts`, applied by
+`navSlotFilter`) drops the rejected steps and then drops a tour left with none, so a tour
+whose every step is branch-specific can never open on an empty cursor. With no gates service
+wired at all (a bare install withholds nothing) every branch survives instead, and only one
+of them can anchor — so the abridged notice ignores any skipped step that carries a `when`,
+which has already declared that not applying is legitimate.
+
+**Gates decide what is OFFERED; the running tour's script is resolved once and HELD.** The
+overlay snapshots its tour when it starts rather than re-reading the gated slot on every
+flip. This is not an optimisation: gates over live run state flip as a direct result of
+following the tour — `answer-park` is offered while something waits for a human, so the
+moment the user answers, its `when` goes false. A re-reading overlay tore itself down there,
+one step short of its own finish card and with nothing recorded as completed, at exactly the
+moment the user succeeded. Holding the script also freezes the branch `resolveTours` chose,
+so a step can't be swapped underneath a stationary cursor.
+
+**Gates must mean what the board RENDERS, not what the store holds.** `boardHasOpenDecision`
+/ `boardHasPendingApproval` are not the store's raw pending counts: a park on a frame block
+has no task card, and a reviewer gate mid-cycle is deliberately suppressed by the card
+(`useReviewStage().isBackground`), so either would offer a tour onto a control that isn't
+there. `hasActionablePark` (`modular/nav-gates.logic.ts`) is the shared rule; the run gates
+are task-scoped for the same reason.
+
+**Fixed proper nouns ride `bodyParams`, not the catalogs.** A step naming the sample
+repository slug (`SAMPLE_REPO` in `modular/tutorial-tours.ts`) passes it as a `{repo}`
+interpolation, so it is written once in code rather than translated into ten catalogs that
+each drift on their own — the same split components make for inline placeholders.
+
+The built-ins walk the delivery loop end to end, each gated on the state the previous one
+leaves behind, so the launch prompt only ever offers what this board can demonstrate: board
+basics, add a repository (`add-service`), create a task (`first-task`), run it (`run-task`),
+answer it when it parks (`answer-park`), review and merge the result (`review-merge`). One
+deliberate asymmetry: `run-task` points at Start without click-to-advance, because starting a
+run spends real model budget and nobody should discover they agreed to that by following a
+tutorial.
+
 Two runtime constraints worth knowing before changing the overlay: it must keep
 `pointer-events-auto` and swallow `pointerdown`, because Nuxt UI modals are reka-ui
 dismissable layers that set `body { pointer-events: none }` and dismiss on an outside
 pointerdown — without both, the tooltip's own buttons go inert and pressing one closes the
 user's half-filled form. And everything that DECIDES (skip direction, wait budget,
-target-click matching) lives in `components/tutorial/TutorialOverlay.logic.ts` so it is
-unit-tested; the SFC keeps only the DOM work.
+target-click matching, which skips count as abridged) lives in
+`components/tutorial/TutorialOverlay.logic.ts` so it is unit-tested; the SFC keeps only the
+DOM work. Note that target-click matching is by SELECTOR, not by the highlighted element:
+several anchors (`task-card`, `task-resolve`, `run-step`) render once per board item and the
+ring can only sit on one of them, so requiring the click to land on that one left a user who
+clicked the card the copy asked for with no way forward — such a step renders no Next.
 
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through

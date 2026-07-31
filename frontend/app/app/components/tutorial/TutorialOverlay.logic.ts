@@ -71,22 +71,55 @@ export function resolveSkip(
   return index + 1 < total ? { kind: 'move', index: index + 1 } : { kind: 'complete' }
 }
 
-/** Does this real click count as the "now click this" step's advance? */
-export function isTargetClickAdvance(
-  step: TutorialStep | null,
-  targetEl: { contains: (node: Node) => boolean } | null,
-  eventTarget: EventTarget | null,
-): boolean {
-  if (!step || step.advanceOn !== 'target-click' || !targetEl) return false
-  return eventTarget instanceof Node && targetEl.contains(eventTarget)
+/** The part of a clicked node this check needs: CSS-selector ancestry. */
+interface ClickedNode {
+  closest(selector: string): unknown
+}
+
+/** The clicked node as something we can ask about ancestry, or null (a text node, `document`). */
+function asClickedNode(eventTarget: EventTarget | null): ClickedNode | null {
+  const node = eventTarget as ClickedNode | null
+  return node && typeof node.closest === 'function' ? node : null
 }
 
 /**
- * A tour is ABRIDGED when it reached its end having skipped steps: the controls those
- * steps point at aren't part of this board/role/deployment. The final card says so
- * instead of congratulating the user on a walkthrough they never saw — absent and
- * complete must not render the same.
+ * Does this real click count as the "now click this" step's advance?
+ *
+ * Matched against the step's SELECTORS rather than against the one element the tracker
+ * happened to highlight, because several of the controls a tour points at are rendered once
+ * PER BOARD ITEM: `task-card`, `task-resolve`, `run-step`. The tracker anchors its ring to
+ * the first match in the DOM, which is not necessarily the card the step's own copy is
+ * asking for ("open a task whose run has finished"). Requiring the click to land inside THAT
+ * element meant a user who clicked the right card got no advance at all — and a
+ * click-to-advance step renders no Next button, so the tour had no way forward but Skip.
+ * Any instance of the control the step names is the action the step asked for.
  */
-export function tourWasAbridged(skippedStepIds: ReadonlySet<string>): boolean {
-  return skippedStepIds.size > 0
+export function isTargetClickAdvance(
+  step: TutorialStep | null,
+  eventTarget: EventTarget | null,
+): boolean {
+  if (!step || step.advanceOn !== 'target-click') return false
+  const node = asClickedNode(eventTarget)
+  if (!node) return false
+  return stepTargetSelectors(step).some((selector) => node.closest(selector) != null)
+}
+
+/**
+ * The skipped steps whose absence is a DEFECT — which is what the final card's "abridged"
+ * notice is about: the controls those steps point at aren't part of this board/role/
+ * deployment, so saying nothing would congratulate the user on a walkthrough they never saw.
+ *
+ * A step carrying a `when` is excluded, because it has already declared that not applying is
+ * a legitimate state rather than a missing control. Normally such a step is DROPPED before
+ * the tour runs (see `resolveTours`), so it never reaches the skip path at all — but with no
+ * gates service wired (a bare install, where nothing is withheld) every branch of a tour is
+ * kept, and exactly one of them can ever anchor. Counting the other as abridged would put a
+ * permanent "you missed some of this" on a tour that showed the user precisely the branch
+ * their board is on.
+ */
+export function unexpectedlySkippedSteps(
+  skippedStepIds: ReadonlySet<string>,
+  steps: readonly TutorialStep[],
+): TutorialStep[] {
+  return steps.filter((s) => skippedStepIds.has(s.id) && s.when === undefined)
 }

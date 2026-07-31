@@ -5956,9 +5956,39 @@
             "title": "Pano denetimleri",
             "body": "Bu denetimlerle yakınlaşır, uzaklaşır veya tüm panoyu görünüme sığdırırsınız."
           },
+          "interfaceTier": {
+            "title": "Temel ve gelişmiş",
+            "body": "Arayüz, günlük çalışma yüzeylerini gösteren temel modda başlar. Deneme, depo kurma ve işletme yüzeylerini de istediğinizde buradan gelişmiş moda geçin."
+          },
           "finish": {
             "title": "Düzen bu kadar",
             "body": "Artık yolunuzu biliyorsunuz. İlk görevinizi oluşturup çalıştırmak için sonraki turu deneyin veya daha sonra komut paletinden geri dönün."
+          }
+        }
+      },
+      "addService": {
+        "title": "İlk deponuzu ekleyin",
+        "description": "Bir depo bağlayın ki panonun üzerinde iş planlayabileceğiniz bir servis olsun.",
+        "steps": {
+          "intro": {
+            "title": "Bir depoyla başlayın",
+            "body": "İş kod üzerinde yapılır, yani bir ajanın çalışacağı bir yer olması için panonun en az bir servise ihtiyacı vardır. Bu tur bir tane bağlar."
+          },
+          "open": {
+            "title": "Depodan servis ekle",
+            "body": "Bu, depo seçiciyi açar. Bu çalışma alanının bağlantısının görebildiği depoları listeler."
+          },
+          "search": {
+            "title": "Bir depo seçin",
+            "body": "Kendi depolarınızdan birini arayın. Küçük bir şey üzerinde pratik yapmayı tercih ederseniz, {repo} bu turlar için bilerek yarım bırakılmış örnek bir servistir."
+          },
+          "add": {
+            "title": "Ekleyin",
+            "body": "Depo, panoda bir servis çerçevesine dönüşür. Sonradan başkalarını da ekleyebilirsiniz; monorepoda her klasör için ayrı bir servis bile olabilir."
+          },
+          "finish": {
+            "title": "Artık bir servisiniz var",
+            "body": "Görevler bu çerçevenin içinde yaşar. Bir sonraki tur oraya bir görev koyuyor."
           }
         }
       },
@@ -5989,6 +6019,96 @@
           "finish": {
             "title": "Tebrikler",
             "body": "Ana döngü bu: bir görevi tanımlayın, çalıştırın, sonucu inceleyin. Diğer turları dilediğiniz zaman keşfedin."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Bir görevi çalıştırın",
+        "description": "Bir görevi açın, hattını seçin ve ajanları işe koyun.",
+        "steps": {
+          "intro": {
+            "title": "Görevden çalışmaya",
+            "body": "Panodaki bir görev bir taleptir. Açtığınızda onu teslim edecek hattı ve çalıştıran denetimleri görürsünüz."
+          },
+          "openTask": {
+            "title": "Bir görevi açın",
+            "body": "Bir karta tıklamak denetçisini açar; o göreve dair her şey oradadır."
+          },
+          "inspector": {
+            "title": "Denetçi",
+            "body": "Durum, depo, hat ve çalışmanın kendisi: bu panel görevin bütün hikayesidir."
+          },
+          "pipeline": {
+            "title": "Bir hat seçin",
+            "body": "Hat, işi yapacak ajanların sırasıdır: bir şartname yazmak, geliştirmek, gözden geçirmek, kontrolleri çalıştırmak, birleştirmek. Göreve uyanı seçin."
+          },
+          "start": {
+            "title": "Çalıştırmaya başlamak",
+            "body": "Bu, hattı gerçekten başlatır ve ajanlar model bütçesi harcar. Bu yüzden tıklama size ait: hazır olduğunuzda, bu turun sırasında ya da sonrasında basın."
+          },
+          "steps": {
+            "title": "Çalışmayı izlemek",
+            "body": "Her adım kendi ilerlemesini burada canlı olarak bildirir. Ajanın gerçekte ne ürettiğini okumak için bir adıma tıklayın."
+          },
+          "finish": {
+            "title": "Döngü bu",
+            "body": "Görevi planlayın, hattı seçin, başlatın, izleyin. Bir çalışma sizden bir şey istediğinde durur ve söyler; bir sonraki tur bunu anlatıyor."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Bekleyen bir çalışmaya yanıt verin",
+        "description": "Bir çalışma insan beklemek için durdu. Nerede sorduğunu ve nasıl yanıtlayacağınızı görün.",
+        "steps": {
+          "intro": {
+            "title": "Bir çalışma sizi bekliyor",
+            "body": "Bazı adımlar durup sorar: gereksinimlerle ilgili bir soru, onaylanacak bir plan, yaklaşımlar arasında bir seçim. Duraklamış bir çalışma yanıtı süresiz bekler, yani siz yanıtlayana kadar hiçbir şey ilerlemez."
+          },
+          "resolve": {
+            "title": "Nerede soruyor",
+            "body": "İnsan bekleyen bir görev bunu kartında belirtir ve bu eylemi sunar. Sizi doğrudan sorulan şeye götürür."
+          },
+          "decide": {
+            "title": "Bir yanıt seçmek",
+            "body": "Her seçenek çalışmaya verilen gerçek bir talimattır: birini seçin, hat sizin seçiminizle oradan devam etsin."
+          },
+          "approve": {
+            "title": "İşi onaylamak",
+            "body": "Çalışmanın sürmesi için onaylayın ya da adımı notlarınızla geri göndermek için değişiklik isteyin. İkisi de birer yanıttır ve çalışma her iki durumda da devam eder."
+          },
+          "finish": {
+            "title": "Hiçbir şey sessizce beklemez",
+            "body": "Bekleyen görevler panoda işaretlenir ve araç çubuğunda sayılır, böylece aramadan bulursunuz."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Gözden geçirin ve birleştirin",
+        "description": "Biten bir çalışmanın ne ürettiğini okuyun ve birleştirilmesini sağlayın.",
+        "steps": {
+          "intro": {
+            "title": "Bir çalışma bitti",
+            "body": "Bitmiş olmak teslim edilmiş olmak değildir. Bir görev, pull request'i birleştirildiğinde tamamlanır; bu tur son adımı anlatıyor."
+          },
+          "openTask": {
+            "title": "Görevi açın",
+            "body": "Çalışması bitmiş bir görevi açın. Denetçisi adımların tam listesini tutar."
+          },
+          "openStep": {
+            "title": "Bir adımı açın",
+            "body": "Bir adıma tıklamak o ajanın ürettiğini açar: raporu, bulguları ve neyi değiştirdiği."
+          },
+          "result": {
+            "title": "Sonucu okumak",
+            "body": "Bu, ajanın kendi anlatımıdır. Gözden geçirme adımları bulguları sıralar, bir test ajanı hüküm bildirir, birleştirici değişikliği nasıl puanladığını açıklar."
+          },
+          "merge": {
+            "title": "Birleştirmek",
+            "body": "Bir çalışma pull request açtığında denetçi birleştirmeyi burada sunar. Birleştirici adımı olan bir hat, değişiklik eşiğinizin üzerinde puan alırsa kendi başına da birleştirebilir."
+          },
+          "finish": {
+            "title": "Teslim edildi",
+            "body": "Birleştirilen iş, görevi panoda tamamlandı olarak işaretler. Bütün döngü bu: planla, çalıştır, yanıtla, gözden geçir, birleştir."
           }
         }
       }

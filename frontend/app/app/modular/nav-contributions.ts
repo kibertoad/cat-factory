@@ -1,4 +1,5 @@
 import { defineModule } from '@modular-vue/core'
+import { resolveTours } from '~/utils/tutorial'
 import type { AppSlots } from './slots'
 
 // Re-exported for the slice-1 importers that reach `AppSlots` through this
@@ -89,6 +90,41 @@ export interface NavGates {
    * service lands on the board.
    */
   boardHasService: boolean
+  /**
+   * The open board has at least one task block. The service frame that {@link boardHasService}
+   * reports is where a task GOES; this is whether one is actually there to run, which is what
+   * a tour about the run controls needs — they live in the inspector of a task, and a board of
+   * empty frames offers nothing to open.
+   */
+  boardHasTask: boolean
+  /**
+   * Some run on a TASK block is cached for this board, in any state. Availability for the
+   * steps that explain a run's ANATOMY (the step list, its live progress), which have nothing
+   * to anchor to until a run has been started at least once.
+   *
+   * Task-scoped, like the three below: every surface these gates open is reached through a
+   * task card and its inspector, and a frame-level run (a blueprint pass, an initiative plan)
+   * renders none of them.
+   */
+  boardHasRun: boolean
+  /**
+   * Some task card is offering a human an unanswered DECISION to resolve.
+   *
+   * "Offering" rather than "exists": these two report what the board actually RENDERS, which
+   * is what a tour anchoring on the card's action can point at — see `hasActionablePark` for
+   * the two ways a park can exist with no control to show for it.
+   */
+  boardHasOpenDecision: boolean
+  /** Some task card is offering a human an unanswered APPROVAL gate. See above. */
+  boardHasPendingApproval: boolean
+  /**
+   * Some run on a task block has finished successfully. Availability for the review/merge
+   * tour: its subject is the OUTPUT of a run, so there has to be one that produced output. A
+   * FAILED run deliberately does not count — the failure banner is its own surface, and a
+   * tour about reading a result and merging it would spend its steps pointing at controls a
+   * failed run never renders.
+   */
+  boardHasFinishedRun: boolean
 }
 
 /** Command-palette placement + copy for a contribution that appears in the palette. */
@@ -542,11 +578,10 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
         )
       : nav,
     // Tutorial tours gate over the same reactive service, so a tour about a surface the
-    // caller can't reach (e.g. creating tasks without board write) never shows. Same
-    // gates-absent pass-through as `nav`.
-    tutorialTours: gates
-      ? tutorialTours.filter((t) => (t.when ? t.when(gates) : true))
-      : tutorialTours,
+    // caller can't reach (e.g. creating tasks without board write) never shows, and a step
+    // about a branch this board isn't on is dropped rather than skipped (see `resolveTours`).
+    // Same gates-absent pass-through as `nav`.
+    tutorialTours: gates ? resolveTours(tutorialTours, gates) : tutorialTours,
   }
 }
 

@@ -380,7 +380,11 @@ function done() {
             :description="t('github.addService.repositoryHint')"
             required
           >
-            <div class="space-y-1.5">
+            <!-- The wrapper, not the UInputMenu itself, carries the anchor: a tutorial tour
+                 stop needs an element that is present the moment the modal mounts, and it
+                 highlights the whole field rather than whichever inner node Nuxt UI happens
+                 to forward the attribute to. -->
+            <div class="space-y-1.5" data-testid="add-service-repo-search">
               <UInputMenu
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
@@ -553,6 +557,7 @@ function done() {
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"
+              data-testid="add-service-submit"
               @click="add"
             >
               {{ t('github.addService.add') }}

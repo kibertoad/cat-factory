@@ -5956,9 +5956,39 @@
             "title": "Controlli della board",
             "body": "Con questi controlli ingrandisci, riduci o adatti l’intera board alla vista."
           },
+          "interfaceTier": {
+            "title": "Base e avanzata",
+            "body": "L'interfaccia parte in modalità base, che mostra le superfici di lavoro quotidiane. Passa qui ad avanzata quando vuoi anche quelle di sperimentazione, avvio dei repository e gestione operativa."
+          },
           "finish": {
             "title": "Questo è il layout",
             "body": "Ora sai orientarti. Prova il prossimo tour per creare ed eseguire la tua prima attività, oppure torna più tardi dalla palette dei comandi."
+          }
+        }
+      },
+      "addService": {
+        "title": "Aggiungi il primo repository",
+        "description": "Collega un repository così la lavagna ha un servizio su cui pianificare il lavoro.",
+        "steps": {
+          "intro": {
+            "title": "Parti da un repository",
+            "body": "Il lavoro avviene sul codice, quindi una lavagna ha bisogno di almeno un servizio prima che un agente abbia un posto dove lavorare. Questo tour ne collega uno."
+          },
+          "open": {
+            "title": "Aggiungi servizio da repository",
+            "body": "Questo apre il selettore dei repository. Elenca i repository che la connessione di questo workspace riesce a vedere."
+          },
+          "search": {
+            "title": "Scegli un repository",
+            "body": "Cerca uno dei tuoi repository. Se preferisci esercitarti su qualcosa di piccolo, {repo} è un servizio di esempio lasciato incompleto apposta per questi tour."
+          },
+          "add": {
+            "title": "Aggiungilo",
+            "body": "Il repository diventa una cornice di servizio sulla lavagna. Più avanti puoi aggiungerne altri, incluso un servizio per ogni cartella di un monorepo."
+          },
+          "finish": {
+            "title": "Ora hai un servizio",
+            "body": "In quella cornice vivono le attività. Il tour successivo ne mette una dentro."
           }
         }
       },
@@ -5989,6 +6019,96 @@
           "finish": {
             "title": "Ottimo lavoro",
             "body": "Questo è il ciclo principale: descrivere un’attività, eseguirla, verificare il risultato. Esplora gli altri tour quando vuoi."
+          }
+        }
+      },
+      "runTask": {
+        "title": "Esegui un'attività",
+        "description": "Apri un'attività, scegli la sua pipeline e metti al lavoro gli agenti.",
+        "steps": {
+          "intro": {
+            "title": "Dall'attività all'esecuzione",
+            "body": "Un'attività sulla lavagna è una richiesta. Aprendola vedi la pipeline che la realizzerà e i controlli che la avviano."
+          },
+          "openTask": {
+            "title": "Apri un'attività",
+            "body": "Un clic su una scheda apre il suo ispettore, dove sta tutto ciò che riguarda quell'attività."
+          },
+          "inspector": {
+            "title": "L'ispettore",
+            "body": "Stato, repository, pipeline e l'esecuzione stessa: questo pannello è l'intera storia dell'attività."
+          },
+          "pipeline": {
+            "title": "Scegli una pipeline",
+            "body": "Una pipeline è la sequenza di agenti che farà il lavoro: scrivere una specifica, realizzarla, revisionarla, eseguire i controlli, fare il merge. Scegli quella adatta all'attività."
+          },
+          "start": {
+            "title": "Avviare un'esecuzione",
+            "body": "Questo avvia la pipeline sul serio, e gli agenti consumano budget dei modelli. Perciò il clic spetta a te: premilo quando sei pronto, durante questo tour o dopo."
+          },
+          "steps": {
+            "title": "Seguire il lavoro",
+            "body": "Ogni passo riporta qui il proprio avanzamento, in diretta. Clicca un passo per leggere cosa ha davvero prodotto l'agente."
+          },
+          "finish": {
+            "title": "Questo è il ciclo",
+            "body": "Pianifica un'attività, scegli una pipeline, avviala, seguila. Quando un'esecuzione ha bisogno di te si ferma e lo dice, ed è quello che copre il tour successivo."
+          }
+        }
+      },
+      "answerPark": {
+        "title": "Rispondere a un'esecuzione in attesa",
+        "description": "Un'esecuzione si è fermata in attesa di una persona. Guarda dove chiede e come rispondere.",
+        "steps": {
+          "intro": {
+            "title": "Un'esecuzione ti sta aspettando",
+            "body": "Alcuni passi si fermano e chiedono: un chiarimento sui requisiti, un piano da approvare, una scelta tra approcci. Un'esecuzione in pausa aspetta una risposta a tempo indeterminato, quindi nulla si muove finché non rispondi."
+          },
+          "resolve": {
+            "title": "Dove chiede",
+            "body": "Un'attività che aspetta una persona lo dichiara sulla sua scheda e offre questa azione. Ti porta direttamente a ciò che viene chiesto."
+          },
+          "decide": {
+            "title": "Scegliere una risposta",
+            "body": "Ogni opzione è una vera istruzione per l'esecuzione: scegline una e la pipeline riparte da lì con la tua scelta."
+          },
+          "approve": {
+            "title": "Approvare il lavoro",
+            "body": "Approva per far proseguire l'esecuzione, oppure chiedi modifiche per rimandare indietro il passo con le tue note. Sono entrambe risposte, e in ogni caso l'esecuzione riprende."
+          },
+          "finish": {
+            "title": "Niente aspetta in silenzio",
+            "body": "Le attività in attesa sono segnalate sulla lavagna e contate nella barra degli strumenti, così le trovi senza cercarle."
+          }
+        }
+      },
+      "reviewMerge": {
+        "title": "Revisionare e fare merge",
+        "description": "Leggi cosa ha prodotto un'esecuzione conclusa e portalo nel ramo principale.",
+        "steps": {
+          "intro": {
+            "title": "Un'esecuzione è finita",
+            "body": "Finita non vuol dire consegnata. Un'attività è conclusa quando la sua pull request viene unita, quindi questo tour è l'ultimo miglio."
+          },
+          "openTask": {
+            "title": "Apri l'attività",
+            "body": "Apri un'attività la cui esecuzione è finita. Il suo ispettore contiene l'elenco completo dei passi."
+          },
+          "openStep": {
+            "title": "Apri un passo",
+            "body": "Cliccando un passo si apre ciò che quell'agente ha prodotto: il suo resoconto, i suoi rilievi e cosa ha cambiato."
+          },
+          "result": {
+            "title": "Leggere il risultato",
+            "body": "Questo è il racconto dell'agente stesso. I passi di revisione elencano rilievi, un tester riporta verdetti, il merger spiega come ha valutato la modifica."
+          },
+          "merge": {
+            "title": "Fare il merge",
+            "body": "Quando un'esecuzione apre una pull request, l'ispettore offre qui il merge. Una pipeline con un passo di merge può anche unire da sola, se la modifica supera la tua soglia."
+          },
+          "finish": {
+            "title": "Consegnato",
+            "body": "Il lavoro unito segna l'attività come conclusa sulla lavagna. Questo è il ciclo intero: pianificare, eseguire, rispondere, revisionare, unire."
           }
         }
       }
