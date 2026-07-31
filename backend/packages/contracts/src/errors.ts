@@ -133,6 +133,11 @@ export const CONFLICT_REASONS = [
   //    attached schedule carries no `issueIntake` config, so every fire would no-op. Configure
   //    issue intake ON THE SCHEDULE first — the remedy is a different panel from the two above.
   'pipeline_schedule_intake_unconfigured',
+  // A foundational service with this id is already registered at the addressed scope. The SPA
+  // steers the user to the existing entry (edit it) rather than to a retry with a new id: the
+  // id IS what an Architect names in its design, so two rows competing for one id is exactly
+  // the ambiguity the catalog exists to prevent.
+  'foundational_service_exists',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

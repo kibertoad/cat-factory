@@ -51,6 +51,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'assertAgentBackendConfigured'
   | 'logger'
   | 'workspaceAgentSettingsRepository'
+  | 'foundationalServiceResolver'
 >
 
 export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
@@ -79,6 +80,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     resolveValidationChecks: deps.resolveValidationChecks,
     fragmentResolver: deps.fragmentResolver,
     skillResolver: deps.skillResolver,
+    foundationalServiceResolver: deps.foundationalServiceResolver,
     logger: deps.logger,
   })
   // The run-admission preflights (the shared start/retry/restart `assert*` gate family).

@@ -61,6 +61,10 @@ export {
 export { defineAgentSearchQuerySuite } from './agent-search-queries-suite.js'
 export { defineCacheSuite } from './cache-suite.js'
 export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library-suite.js'
+export {
+  defineFoundationalServicesSuite,
+  type FoundationalServiceRepos,
+} from './foundational-services-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineSharedStackSuite } from './shared-stack-suite.js'

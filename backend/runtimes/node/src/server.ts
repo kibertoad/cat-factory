@@ -47,6 +47,7 @@ import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
+import { startFoundationalSourceSweeper } from './foundationalServices.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
 import { startInfraReachabilitySweeper } from './infraReachability.js'
 import { buildRealtimePropagator } from './propagator.js'
@@ -505,6 +506,10 @@ function startBackgroundSweepers(deps: {
   // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
   // `unreachable` (the Worker uses cron). No-op unless `INFRA_REACHABILITY_WATCH` is opted in.
   const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger)
+  // Refresh repo-linked foundational-service sources so a merged contract change reaches the
+  // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
+  // the catalog + GitHub are both wired.
+  const stopFoundationalSources = startFoundationalSourceSweeper(container, logger)
   return {
     stopSweeper,
     stopEnvTestSweeper,
@@ -519,6 +524,7 @@ function startBackgroundSweepers(deps: {
     stopPlatformMetrics,
     stopPlatformHealth,
     stopInfraReachability,
+    stopFoundationalSources,
   }
 }
 
@@ -719,6 +725,7 @@ async function bootServer(
     stopPlatformMetrics,
     stopPlatformHealth,
     stopInfraReachability,
+    stopFoundationalSources,
   } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
 
   // Backfill the deployment's declared environment-handler seeds onto every existing workspace
@@ -751,6 +758,7 @@ async function bootServer(
     stopPlatformMetrics()
     stopPlatformHealth()
     stopInfraReachability()
+    stopFoundationalSources()
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()

@@ -53,6 +53,8 @@ export const telemetry = pgSchema('telemetry')
 // module inside its size budget — and are re-exported below. `users` is also imported by
 // name at the top of this file, because the two per-user credential tables reference it.
 export * from './tables/identity.js'
+// The foundational-services catalog (docs/initiatives/foundational-services.md).
+export * from './tables/foundational-services.js'
 
 // Local-mode operational settings — a per-DEPLOYMENT SINGLETON (one developer's machine),
 // addressed by a fixed `id` ('local'). `config` is non-secret tuning JSON (warm-pool

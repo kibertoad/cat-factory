@@ -767,6 +767,21 @@ pinned structurally by `dependency-install.coverage.test.ts`; what it materialis
 DIFFING untracked paths either side, never by naming well-known directories. Doc:
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
+**Foundational services** — a tiered (account ⊕ workspace) catalog of the shared capabilities an org
+already runs, each with a description and its API contracts (OpenAPI 3.x / `@toad-contracts/core` /
+`@lokalise/api-contract`), uploaded directly or synced from a linked repo through the SAME
+`repoSourceSync` engine the fragment + skill libraries use. **The catalog and the CONTRACTS are two
+separate reads and two separate tables, and that split IS the feature**: a `foundational-catalog`
+kind (the architect) is folded identity + capability tags + indexed operation NAMES with no document
+bodies, while a `foundational-contracts` kind (the researcher, the coder) gets the full documents for
+exactly the ids the design DECLARED in its machine-read fenced block. Both arrive as injected
+`.cat-context/` files, so the container, inline and consensus paths need no new prompt field. Three
+downstream states are kept apart because each needs a different reaction — no declaration at all
+("nothing was checked"), an empty one ("no shared service applies") and an id the catalog does not
+know (named, with "do not guess at its API"). **Routing is by TRAIT, never a kind-id list**, so a
+deployment's own design/implementer kinds opt in by declaring one. Doc:
+[`foundational-services.md`](./docs/initiatives/foundational-services.md).
+
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
 `ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read
 checkout-free through the workspace's VCS connection. That is what lets a deployment declare infra

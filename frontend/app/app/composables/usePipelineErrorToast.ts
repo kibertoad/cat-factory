@@ -220,6 +220,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.pipeline_schedule_requires_recurring',
     descriptionKey: 'errors.conflict.description.pipeline_schedule_requires_recurring',
   },
+  foundational_service_exists: {
+    titleKey: 'errors.conflict.title.foundational_service_exists',
+    descriptionKey: 'errors.conflict.description.foundational_service_exists',
+  },
   pipeline_schedule_intake_unconfigured: {
     titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
     descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',

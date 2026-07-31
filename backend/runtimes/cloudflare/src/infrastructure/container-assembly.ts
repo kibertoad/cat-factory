@@ -110,6 +110,7 @@ import {
   selectRequirementsDeps,
   selectRunnersDeps,
   selectSandboxDeps,
+  selectFoundationalServiceDeps,
   selectSkillLibraryDeps,
   selectSlackDeps,
   selectTasksDeps,
@@ -435,6 +436,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
     ...selectSkillLibraryDeps(env, config, db),
+    // The foundational-services catalog: ungated (a service's contracts can be uploaded
+    // directly, so it is useful without either repo-sourced library) — see the selector's note.
+    ...selectFoundationalServiceDeps(db),
     // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
     // sync Queue. No queue bound (local/dev) ⇒ no proactive resync; the dispatch-time probe
     // is the freshness backstop.
