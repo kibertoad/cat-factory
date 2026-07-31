@@ -472,7 +472,12 @@ export async function startBootstrap(
  * through) keeps the suite deterministic without a test-only branch in product code. The key + area
  * list come from `@cat-factory/contracts`, the same source the banner reads, so they can't drift.
  */
-export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
+export async function pinWorkspace(
+  page: Page,
+  workspaceId: string,
+  opts: { tutorial?: 'declined' | 'unanswered' } = {},
+): Promise<void> {
+  await answerTutorialPrompt(page, opts.tutorial === 'unanswered' ? null : 'declined')
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -484,6 +489,36 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
       areas: [...INFRA_SETUP_AREAS],
     },
   )
+}
+
+/**
+ * Pre-answer the in-app tutorial's launch prompt, so the board opens as it does for a
+ * RETURNING user instead of a first-ever one.
+ *
+ * Same class of problem as the infra-setup banner above, and the same fix: a fresh
+ * Playwright context has no persisted state, so `tutorial.decision` is `null` and the app
+ * correctly offers a guided tour — a `UModal`, which (being a reka-ui dismissable layer)
+ * sets `body { pointer-events: none }` and would make every spec's clicks unactionable.
+ * Seeding a saved answer before `goto` keeps that real first-run behaviour intact in the
+ * product while every OTHER spec drives a board nobody is being onboarded onto.
+ *
+ * Pass `null` to leave the prompt unanswered — what `pinWorkspace(…, { tutorial:
+ * 'unanswered' })` does for `tutorial.spec.ts`, since the first-launch offer is exactly its
+ * subject. Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}), so this
+ * seeds the `tutorial` cookie the store picks. Must run BEFORE `page.goto`.
+ */
+export async function answerTutorialPrompt(
+  page: Page,
+  decision: 'accepted' | 'declined' | null,
+): Promise<void> {
+  if (decision === null) return
+  await page.context().addCookies([
+    {
+      name: 'tutorial',
+      value: encodeURIComponent(JSON.stringify({ decision, completedTourIds: [] })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
 }
 
 /**
@@ -508,6 +543,7 @@ export async function pinAuthedWorkspace(
   userId: string,
   accountId: string,
 ): Promise<void> {
+  await answerTutorialPrompt(page, 'declined')
   const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
   const cookie = (name: string, value: unknown) => ({
     name,

@@ -5926,6 +5926,8 @@
       "skip": "Termina tour",
       "done": "Fine",
       "progress": "Passaggio {current} di {total}",
+      "ariaLabel": "Passaggio del tutorial",
+      "abridged": "1 passaggio è stato saltato: quel controllo non fa parte di questa board. | {count} passaggi sono stati saltati: quei controlli non fanno parte di questa board.",
       "searching": "Ricerca del controllo evidenziato...",
       "clickHint": "Clicca sul controllo evidenziato per continuare"
     },
@@ -5981,8 +5983,8 @@
             "body": "Quando la descrizione ti convince, crea l’attività."
           },
           "card": {
-            "title": "La tua scheda attività",
-            "body": "Eccola sulla board. Da questa scheda puoi avviare la pipeline, seguire i progressi e aprire i risultati."
+            "title": "Schede attività",
+            "body": "Questa è una scheda attività. Da una scheda puoi avviare la pipeline, seguire i progressi e aprire i risultati."
           },
           "finish": {
             "title": "Ottimo lavoro",

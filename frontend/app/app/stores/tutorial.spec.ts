@@ -37,6 +37,25 @@ describe('useTutorialStore launch prompt', () => {
     expect(tutorial.promptOpen).toBe(false)
   })
 
+  it('defers an offer an advisory landed on top of, and re-offers when it clears', () => {
+    const tutorial = useTutorialStore()
+    tutorial.maybeOfferOnLaunch()
+    // A startup advisory opened after the prompt: withdraw rather than stack.
+    tutorial.deferPrompt()
+    expect(tutorial.promptOpen).toBe(false)
+    expect(tutorial.decision).toBeNull()
+    // A deferral is not the user's answer, so it must not consume the session's offer.
+    tutorial.maybeOfferOnLaunch()
+    expect(tutorial.promptOpen).toBe(true)
+  })
+
+  it('never withdraws a prompt the user opened themselves', () => {
+    const tutorial = useTutorialStore()
+    tutorial.openPrompt()
+    tutorial.deferPrompt()
+    expect(tutorial.promptOpen).toBe(true)
+  })
+
   it('a user-driven open works regardless of a saved decision', () => {
     const tutorial = useTutorialStore()
     tutorial.decline()

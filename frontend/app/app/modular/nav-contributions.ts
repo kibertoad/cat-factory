@@ -81,6 +81,14 @@ export interface NavGates {
    * available to a `gate` predicate that needs to combine it with something else.
    */
   advancedMode: boolean
+  /**
+   * The open board has at least one service frame. Availability, not permission: a
+   * surface that operates ON a service (today the task-creation tutorial tour) has
+   * nothing to point at until one exists, and offering it anyway means a walkthrough
+   * that hunts for absent controls. Reactive like the rest, so it flips the moment a
+   * service lands on the board.
+   */
+  boardHasService: boolean
 }
 
 /** Command-palette placement + copy for a contribution that appears in the palette. */

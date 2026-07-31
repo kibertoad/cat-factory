@@ -35,6 +35,13 @@ export interface TutorialStep {
    * wrap-up steps). Reusing the e2e anchor vocabulary is deliberate: those ids are already
    * the stable, behaviour-neutral way to name a control, and a tour stop is the same kind
    * of consumer as a spec.
+   *
+   * A target names a KIND of control, not one instance: where several are on screen (one
+   * `task-card` per task, one `frame-add-task` per service) the first VISIBLE match wins,
+   * which may not be the one the user just produced. That is accepted rather than worked
+   * around — a tour teaches an affordance, and every match demonstrates the same one — so
+   * step copy must read correctly against any of them ("this is a task card", not "this is
+   * the task you just made").
    */
   target?: string
   /**

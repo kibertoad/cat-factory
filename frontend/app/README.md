@@ -175,9 +175,22 @@ adding the test id first) and carrying i18n keys for its copy. One shared runtim
 step's control, places the tooltip (`utils/tutorial.ts` owns the pure geometry + types),
 advances on Next or — for `advanceOn: 'target-click'` steps — on the user really clicking
 the control, so the app's real response (the actual modal, the actual task) is what the next
-step anchors to. A step whose anchor never appears within its wait is SKIPPED, because
-controls come and go with RBAC, tier, and deployment wiring: a tour is a set of
-opportunities, not a fixed script.
+step anchors to. `target-click` is for BUTTONS, where the click is the completed action; a
+text field keeps Next, or the tooltip would leave the instruction the moment the user clicked
+in to type. A step whose anchor never appears within its wait is SKIPPED, because controls
+come and go with RBAC, tier, and deployment wiring: a tour is a set of opportunities, not a
+fixed script. Reaching the end having skipped steps is reported on the final card rather than
+congratulating the user on a walkthrough they did not see — and a tour that could only ever
+be abridged should not be offered at all, which is what each tour's `when(gates)` is for (the
+task-creation tour requires board write AND a service frame to add a task to).
+
+Two runtime constraints worth knowing before changing the overlay: it must keep
+`pointer-events-auto` and swallow `pointerdown`, because Nuxt UI modals are reka-ui
+dismissable layers that set `body { pointer-events: none }` and dismiss on an outside
+pointerdown — without both, the tooltip's own buttons go inert and pressing one closes the
+user's half-filled form. And everything that DECIDES (skip direction, wait budget,
+target-click matching) lives in `components/tutorial/TutorialOverlay.logic.ts` so it is
+unit-tested; the SFC keeps only the DOM work.
 
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through

@@ -5914,6 +5914,8 @@
       "skip": "Terminar recorrido",
       "done": "Finalizar",
       "progress": "Paso {current} de {total}",
+      "ariaLabel": "Paso del tutorial",
+      "abridged": "Se omitió 1 paso: ese control no forma parte de este tablero. | Se omitieron {count} pasos: esos controles no forman parte de este tablero.",
       "searching": "Buscando el control resaltado...",
       "clickHint": "Haz clic en el control resaltado para continuar"
     },
@@ -5969,8 +5971,8 @@
             "body": "Cuando la descripción te convenza, crea la tarea."
           },
           "card": {
-            "title": "Tu tarjeta de tarea",
-            "body": "Aquí está, en el tablero. Desde esta tarjeta puedes iniciar la canalización, seguir el progreso y abrir los resultados."
+            "title": "Tarjetas de tarea",
+            "body": "Esta es una tarjeta de tarea. Desde ella puedes iniciar la canalización, seguir el progreso y abrir los resultados."
           },
           "finish": {
             "title": "Buen trabajo",

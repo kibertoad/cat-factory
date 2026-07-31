@@ -5914,6 +5914,8 @@
       "skip": "Terminer la visite",
       "done": "Terminer",
       "progress": "Étape {current} sur {total}",
+      "ariaLabel": "Étape du tutoriel",
+      "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
       "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer"
     },
@@ -5969,8 +5971,8 @@
             "body": "Quand la description vous convient, créez la tâche."
           },
           "card": {
-            "title": "Votre carte de tâche",
-            "body": "La voici sur le tableau. Depuis cette carte, vous pouvez lancer le pipeline, suivre la progression et ouvrir les résultats."
+            "title": "Cartes de tâche",
+            "body": "Voici une carte de tâche. Depuis une carte, vous pouvez lancer le pipeline, suivre la progression et ouvrir les résultats."
           },
           "finish": {
             "title": "Bien joué",

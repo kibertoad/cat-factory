@@ -25,6 +25,7 @@ const NO_GATES: NavGates = {
   // The permission axis is what these cases vary; keep the interface tier at `advanced`
   // so a dropped item is unambiguously an RBAC/availability drop, not a tier drop.
   advancedMode: true,
+  boardHasService: false,
 }
 
 const ALL_GATES: NavGates = {
@@ -37,6 +38,7 @@ const ALL_GATES: NavGates = {
   accountsEnabled: true,
   isAccountAdmin: true,
   advancedMode: true,
+  boardHasService: true,
 }
 
 const slots = (): AppSlots => ({

@@ -78,7 +78,12 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     titleKey: 'tutorial.tours.firstTask.title',
     descriptionKey: 'tutorial.tours.firstTask.description',
     // Creating a task is a board WRITE; a viewer has no add-task button to point at.
-    when: (gates) => gates.canWriteBoard,
+    // It also needs somewhere to PUT the task: on a board with no service frame every
+    // targeted step below would time out in turn, so the tour would spend half a minute
+    // hunting for controls and then claim to have taught the core loop. Offering it only
+    // once a service exists is the honest version — and the launch prompt still lists
+    // `board-basics`, which is the tour an empty board can actually deliver.
+    when: (gates) => gates.canWriteBoard && gates.boardHasService,
     steps: [
       {
         id: 'intro',
@@ -98,7 +103,10 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
       {
         id: 'describe',
         target: 'add-task-title',
-        advanceOn: 'target-click',
+        // Deliberately NOT `target-click`: clicking a text field is how you START typing,
+        // so click-to-advance would move the tooltip off the instruction the moment the
+        // user acted on it. The user reads, types, and presses Next when they are ready;
+        // `target-click` is for buttons, where the click IS the completed action.
         placement: 'right',
         // The anchor lives inside the modal the previous click opens; allow it to mount.
         waitForTargetMs: 8000,

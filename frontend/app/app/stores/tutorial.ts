@@ -58,6 +58,22 @@ export const useTutorialStore = defineStore(
       promptOpen.value = true
     }
 
+    /**
+     * Withdraw an offer this store made, because something the user actually has to answer
+     * (a startup advisory, the GitHub onboarding gate) opened on top of it — and re-arm, so
+     * the offer returns once that surface is gone. Distinct from {@link closePrompt}: no
+     * decision is written EITHER way, but a deferral was not the user's doing, so it must
+     * not consume this session's one offer.
+     *
+     * Only ever withdraws the auto-opened prompt; a prompt the user opened themselves from
+     * the palette is theirs to close.
+     */
+    function deferPrompt() {
+      if (!promptAutoOpened.value) return
+      promptOpen.value = false
+      promptAutoOpened.value = false
+    }
+
     /** Close without answering: no decision is written, so the next launch asks again. */
     function closePrompt() {
       promptOpen.value = false
@@ -116,6 +132,7 @@ export const useTutorialStore = defineStore(
       maybeOfferOnLaunch,
       openPrompt,
       closePrompt,
+      deferPrompt,
       decline,
       startTour,
       setStepIndex,

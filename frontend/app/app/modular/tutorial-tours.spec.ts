@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import en from '../../i18n/locales/en.json'
 import { TUTORIAL_TOURS, tutorialToursModule } from '~/modular/tutorial-tours'
 import { NAV_CONTRIBUTIONS, navSlotFilter } from '~/modular/nav-contributions'
+import { isSafeTargetId } from '~/components/tutorial/TutorialOverlay.logic'
 import type { AppSlots, NavGates } from '~/modular/nav-contributions'
 
 const ALL_GATES: NavGates = {
@@ -14,6 +15,7 @@ const ALL_GATES: NavGates = {
   accountsEnabled: true,
   isAccountAdmin: true,
   advancedMode: true,
+  boardHasService: true,
 }
 
 const slots = (): AppSlots =>
@@ -61,9 +63,10 @@ describe('the built-in tutorial tour catalog', () => {
       for (const s of tour.steps) {
         for (const target of [s.target, ...(s.altTargets ?? [])]) {
           if (target === undefined) continue
-          // The overlay wraps the value in [data-testid="…"]; selector syntax here would
-          // break the query silently.
-          expect(target, `${tour.id}/${s.id}`).toMatch(/^[a-z0-9-]+$/)
+          // Asserted through the runtime's OWN guard, not a copy of its regex: the overlay
+          // drops an id this rejects, so a built-in tour that tripped it would silently
+          // lose the step rather than fail here.
+          expect(isSafeTargetId(target), `${tour.id}/${s.id}: ${target}`).toBe(true)
         }
       }
     }
@@ -86,6 +89,15 @@ describe('navSlotFilter over tutorialTours', () => {
     const ids = filtered.tutorialTours.map((t) => t.id)
     expect(ids).toContain('board-basics')
     expect(ids).not.toContain('first-task')
+  })
+
+  it('drops the task-creating tour on a board with no service to add a task to', () => {
+    // Every targeted step of that tour would time out in turn and it would then claim to
+    // have taught the core loop; `board-basics` is what an empty board can deliver.
+    const emptyBoard: NavGates = { ...ALL_GATES, boardHasService: false }
+    const filtered = navSlotFilter(slots(), { gates: emptyBoard })
+    const ids = filtered.tutorialTours.map((t) => t.id)
+    expect(ids).toEqual(['board-basics'])
   })
 
   it('passes tours through untouched when no gates service is wired', () => {

@@ -5926,6 +5926,8 @@
       "skip": "Turu bitir",
       "done": "Bitir",
       "progress": "Adım {current} / {total}",
+      "ariaLabel": "Eğitim adımı",
+      "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
       "clickHint": "Devam etmek için vurgulanan denetime tıklayın"
     },
@@ -5981,8 +5983,8 @@
             "body": "Açıklama hazır olduğunda görevi oluşturun."
           },
           "card": {
-            "title": "Görev kartınız",
-            "body": "İşte panoda. Bu karttan işlem hattını başlatabilir, ilerlemeyi izleyebilir ve sonuçları açabilirsiniz."
+            "title": "Görev kartları",
+            "body": "Bu bir görev kartıdır. Karttan işlem hattını başlatabilir, ilerlemeyi izleyebilir ve sonuçları açabilirsiniz."
           },
           "finish": {
             "title": "Tebrikler",

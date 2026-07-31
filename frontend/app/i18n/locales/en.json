@@ -6130,6 +6130,11 @@
       "skip": "End tour",
       "done": "Finish",
       "progress": "Step {current} of {total}",
+      "ariaLabel": "Tutorial step",
+      "abridged": "1 step was skipped: that control is not part of this board. | {count} steps were skipped: those controls are not part of this board.",
+      "@abridged": {
+        "description": "Shown on a tour's final card when steps were skipped. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of skipped steps."
+      },
       "searching": "Looking for the highlighted control...",
       "clickHint": "Click the highlighted control to continue"
     },
@@ -6185,8 +6190,8 @@
             "body": "When the description feels right, create the task."
           },
           "card": {
-            "title": "Your task card",
-            "body": "Here it is on the board. From this card you can start the pipeline, watch progress, and open results."
+            "title": "Task cards",
+            "body": "This is a task card. From one you can start the pipeline, watch progress, and open the results."
           },
           "finish": {
             "title": "Nice work",

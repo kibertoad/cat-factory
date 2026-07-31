@@ -5914,6 +5914,8 @@
       "skip": "Zakończ przewodnik",
       "done": "Zakończ",
       "progress": "Krok {current} z {total}",
+      "ariaLabel": "Krok samouczka",
+      "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
       "searching": "Szukanie podświetlonego elementu...",
       "clickHint": "Kliknij podświetlony element, aby kontynuować"
     },
@@ -5969,8 +5971,8 @@
             "body": "Gdy opis będzie gotowy, utwórz zadanie."
           },
           "card": {
-            "title": "Karta zadania",
-            "body": "Oto ono na tablicy. Z tej karty uruchamiasz potok, śledzisz postęp i otwierasz wyniki."
+            "title": "Karty zadań",
+            "body": "To jest karta zadania. Z karty uruchamiasz potok, śledzisz postęp i otwierasz wyniki."
           },
           "finish": {
             "title": "Dobra robota",

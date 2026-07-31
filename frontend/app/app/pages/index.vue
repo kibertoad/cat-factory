@@ -283,44 +283,42 @@ watch(
 // prompt appears then. The store guards the rest: only a user who never answered is
 // asked, at most once per session.
 //
+// Yielding runs in BOTH directions: an advisory that opens LATER (a health probe that
+// resolves a beat after the board) would otherwise land on top of an open tour prompt,
+// which is the stacking this ordering exists to prevent. So the same watcher withdraws
+// an unanswered prompt and re-arms the offer, and the user is asked once the advisory
+// they actually have to answer is gone.
+//
 // The watcher exists only while it can still do something. A saved decision (hydrated
-// synchronously from the persisted store) means it never registers, and once the
-// once-per-session offer has fired — or a decision lands — it stops itself, so the
-// steady state pays nothing for the launch offer: no watcher, no mounted component
-// (the v-ifs below), no store reads.
+// synchronously from the persisted store) means it never registers, and once a decision
+// lands — or the offer has been made and left standing — it stops itself, so the steady
+// state pays nothing for the launch offer: no watcher, no mounted component (the v-ifs
+// below), no store reads.
 const tutorial = useTutorialStore()
-const tutorialOfferSettled = () => tutorial.decision !== null || tutorial.promptAutoOpened
+const startupAdvisoryOpen = computed(
+  () =>
+    needsGitHubInstall.value ||
+    githubProbePending.value ||
+    ui.pipelineHealthOpen ||
+    ui.riskPolicyHealthOpen ||
+    ui.modelPresetHealthOpen ||
+    ui.aiProviderSetupOpen ||
+    ui.aiPresetMismatchOpen,
+)
+// Settled = the offer can never need to act again: a decision exists, or the prompt was
+// auto-opened and is still standing (a deferral clears `promptAutoOpened`, which is
+// exactly what keeps the watcher alive to re-offer).
+const tutorialOfferSettled = () =>
+  tutorial.decision !== null || (tutorial.promptAutoOpened && !tutorial.promptOpen)
 if (!tutorialOfferSettled()) {
   // `let` + optional call: with `immediate: true` the first run happens synchronously
   // inside `watch(...)`, before the handle is assigned — the trailing check covers it.
   let stopTutorialOffer: (() => void) | undefined
   stopTutorialOffer = watch(
-    () => [
-      workspace.ready,
-      needsGitHubInstall.value,
-      githubProbePending.value,
-      ui.pipelineHealthOpen,
-      ui.riskPolicyHealthOpen,
-      ui.modelPresetHealthOpen,
-      ui.aiProviderSetupOpen,
-      ui.aiPresetMismatchOpen,
-    ],
+    () => [workspace.ready, startupAdvisoryOpen.value, tutorial.promptOpen],
     () => {
-      if (
-        workspace.ready &&
-        !needsGitHubInstall.value &&
-        !githubProbePending.value &&
-        !ui.pipelineHealthOpen &&
-        !ui.riskPolicyHealthOpen &&
-        !ui.modelPresetHealthOpen &&
-        !ui.aiProviderSetupOpen &&
-        !ui.aiPresetMismatchOpen
-      ) {
-        tutorial.maybeOfferOnLaunch()
-      }
-      // Both settle signals only ever transition one way, so a settled watcher can never
-      // act again — drop it instead of re-evaluating eight sources on every advisory
-      // flip for the rest of the session.
+      if (startupAdvisoryOpen.value) tutorial.deferPrompt()
+      else if (workspace.ready) tutorial.maybeOfferOnLaunch()
       if (tutorialOfferSettled()) stopTutorialOffer?.()
     },
     { immediate: true },
