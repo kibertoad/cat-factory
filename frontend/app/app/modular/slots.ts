@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import type { ComponentEntry, PanelEntry } from '@modular-vue/core'
 import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
+import type { TutorialTour } from '~/utils/tutorial'
 import type { NavContribution } from './nav-contributions'
 
 /**
@@ -31,6 +32,11 @@ import type { NavContribution } from './nav-contributions'
  *    per custom task type, addressed by the type's `formPanel` id and paired via
  *    `resolveComponentRegistry` (same shape as `resultViews`); shown INSTEAD of the
  *    descriptor-driven `fields`. An unpaired id degrades to the descriptor fields.
+ *  - `tutorialTours` — the in-app tutorial catalog ({@link TutorialTour}: data-only
+ *    guided tours anchored to `data-testid`s, no components). First-party tours come
+ *    from `modular/tutorial-tours.ts`; a consumer contributes its own to the same slot
+ *    and they appear in the launch prompt beside the built-ins, gated per tour by its
+ *    `when(gates)` predicate in the same reactive `slotFilter` that gates `nav`.
  *  - `appOverlays` (extension slice D) — top-level modals/overlays a consumer module
  *    contributes ({@link OverlayContribution}, an id → component `ComponentEntry`),
  *    opened by `ui.openOverlay(id, subject?)` / `useAppOverlays().open(...)` and
@@ -52,6 +58,7 @@ export interface AppSlots {
   taskTypes: CustomTaskType[]
   taskTypeFormPanels: ResultViewContribution[]
   appOverlays: OverlayContribution[]
+  tutorialTours: TutorialTour[]
   [key: string]: unknown[]
 }
 

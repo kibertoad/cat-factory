@@ -2,6 +2,7 @@ import type { AnyModuleDescriptor } from '@modular-vue/core'
 import { createRegistry } from '@modular-vue/runtime'
 import { journeysPlugin } from '@modular-vue/journeys'
 import { navigationModule } from '~/modular/nav-contributions'
+import { tutorialToursModule } from '~/modular/tutorial-tours'
 import type { NavGates } from '~/modular/nav-contributions'
 import type { AppSlots } from '~/modular/slots'
 
@@ -37,7 +38,7 @@ export type AppDeps = {
  * First-party modules the layer always registers. Real feature modules land
  * here as each area is converted; slice 1 adds the navigation catalog.
  */
-const FIRST_PARTY_MODULES: readonly AnyModuleDescriptor[] = [navigationModule]
+const FIRST_PARTY_MODULES: readonly AnyModuleDescriptor[] = [navigationModule, tutorialToursModule]
 
 /**
  * Consumer-contributed modules, collected before the layer resolves its
@@ -109,6 +110,7 @@ export function createAppRegistry(
       taskTypes: [],
       taskTypeFormPanels: [],
       appOverlays: [],
+      tutorialTours: [],
     },
   }).use(journeysPlugin())
   for (const mod of [...FIRST_PARTY_MODULES, ...extraModules, ...consumerModules]) {

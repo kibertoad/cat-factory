@@ -119,6 +119,7 @@ export const NAV_ACTIONS = [
   'operatorDashboard',
   'reports',
   'shortcuts',
+  'tutorial',
   'toggleUiMode',
 ] as const
 
@@ -446,6 +447,25 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'configuration', order: 45 },
   },
   {
+    // Deliberately NOT `advanced`: the tours exist for exactly the users basic mode serves,
+    // and the palette entry is the way back to them after the launch prompt was declined
+    // or dismissed. Ungated: every tour gates itself via its own `when` predicate, and the
+    // prompt is worth reaching even when it can only list some tours.
+    id: 'tutorial',
+    labelKey: 'layout.commandBar.cmd.tutorial',
+    icon: 'i-lucide-graduation-cap',
+    surfaces: S('command'),
+    action: 'tutorial',
+    testId: 'nav-tutorial',
+    command: {
+      // After the pre-slice-1 tail (the workspace group pins that order): genuinely new
+      // entries append rather than interleave.
+      group: 'workspace',
+      order: 100,
+      keywordsKey: 'layout.commandBar.keywords.tutorial',
+    },
+  },
+  {
     id: 'keyboard-shortcuts',
     labelKey: 'layout.commandBar.cmd.shortcuts',
     icon: 'i-lucide-keyboard',
@@ -503,6 +523,7 @@ export const navigationModule = defineModule({
 export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppSlots {
   const gates = deps.gates
   const nav = slots.nav ?? []
+  const tutorialTours = slots.tutorialTours ?? []
   return {
     ...slots,
     // No gates service wired (tests / bare install) ⇒ show everything, matching
@@ -512,6 +533,12 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
           (i) => (i.advanced ? gates.advancedMode : true) && (i.gate ? i.gate(gates) : true),
         )
       : nav,
+    // Tutorial tours gate over the same reactive service, so a tour about a surface the
+    // caller can't reach (e.g. creating tasks without board write) never shows. Same
+    // gates-absent pass-through as `nav`.
+    tutorialTours: gates
+      ? tutorialTours.filter((t) => (t.when ? t.when(gates) : true))
+      : tutorialTours,
   }
 }
 

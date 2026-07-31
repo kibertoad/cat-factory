@@ -138,6 +138,15 @@ const AiProviderOnboardingModal = defineAsyncComponent(
 const AiPresetMismatchDialog = defineAsyncComponent(
   () => import('~/components/providers/AiPresetMismatchDialog.vue'),
 )
+// The in-app tutorial: the launch prompt (auto-opened once for a user who never answered
+// it) and the coach-mark overlay that runs a tour. Both mount only while their store flag
+// is set, so they cost the initial bundle nothing.
+const TutorialPrompt = defineAsyncComponent(
+  () => import('~/components/tutorial/TutorialPrompt.vue'),
+)
+const TutorialOverlay = defineAsyncComponent(
+  () => import('~/components/tutorial/TutorialOverlay.vue'),
+)
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -262,6 +271,41 @@ watch(
         autoOpenedPreset.value = true
         ui.openAiPresetMismatch()
       }
+    }
+  },
+  { immediate: true },
+)
+
+// Offer the tutorial on launch, once the board is up. Yields to every other startup
+// surface — the GitHub onboarding gate and the advisory/onboarding modals above — so a
+// first launch never stacks the tour prompt on top of a dialog that needs answering
+// first; when one of those is open, the flip of its flag re-fires this watcher and the
+// prompt appears then. The store guards the rest: only a user who never answered is
+// asked, at most once per session.
+const tutorial = useTutorialStore()
+watch(
+  () => [
+    workspace.ready,
+    needsGitHubInstall.value,
+    githubProbePending.value,
+    ui.pipelineHealthOpen,
+    ui.riskPolicyHealthOpen,
+    ui.modelPresetHealthOpen,
+    ui.aiProviderSetupOpen,
+    ui.aiPresetMismatchOpen,
+  ],
+  () => {
+    if (
+      workspace.ready &&
+      !needsGitHubInstall.value &&
+      !githubProbePending.value &&
+      !ui.pipelineHealthOpen &&
+      !ui.riskPolicyHealthOpen &&
+      !ui.modelPresetHealthOpen &&
+      !ui.aiProviderSetupOpen &&
+      !ui.aiPresetMismatchOpen
+    ) {
+      tutorial.maybeOfferOnLaunch()
     }
   },
   { immediate: true },
@@ -448,6 +492,8 @@ watch(
       <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
       <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
       <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
+      <TutorialPrompt v-if="tutorial.promptOpen" />
+      <TutorialOverlay v-if="tutorial.touring" />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

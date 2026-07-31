@@ -2132,7 +2132,8 @@
         "sandbox": "Apri Sandbox",
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
-        "toggleUiMode": "Cambia modalità interfaccia"
+        "toggleUiMode": "Cambia modalità interfaccia",
+        "tutorial": "Fai un tour"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2154,7 +2155,8 @@
         "sandbox": "sandbox prompt modello test esperimento giudice fixture benchmark valuta",
         "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
         "bugHunt": "bug caccia triage backlog ticket non assegnati",
-        "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi"
+        "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi",
+        "tutorial": "tutorial tour guida aiuto imparare introduzione"
       }
     },
     "shortcuts": {
@@ -5905,6 +5907,89 @@
       "title": "Collega cat-factory a {provider}",
       "titleAny": "Collega cat-factory ai tuoi repository",
       "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "Fare un rapido tour?",
+      "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
+      "start": "Inizia",
+      "restart": "Ripeti",
+      "completed": "Completato",
+      "decline": "No grazie",
+      "later": "Forse più tardi",
+      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board."
+    },
+    "overlay": {
+      "next": "Avanti",
+      "back": "Indietro",
+      "skip": "Termina tour",
+      "done": "Fine",
+      "progress": "Passaggio {current} di {total}",
+      "searching": "Ricerca del controllo evidenziato...",
+      "clickHint": "Clicca sul controllo evidenziato per continuare"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Nozioni di base della board",
+        "description": "Orientati: la board, la barra laterale e la palette dei comandi.",
+        "steps": {
+          "welcome": {
+            "title": "Benvenuto!",
+            "body": "Questa è la tua board di consegna: qui pianifichi il lavoro, gli agenti lo eseguono e tu ne verifichi i risultati. Questo breve tour mostra i controlli principali."
+          },
+          "canvas": {
+            "title": "La board",
+            "body": "Servizi, moduli e attività vivono su questo canvas. Trascina per spostarti, scorri per lo zoom e clicca su una scheda per esaminarla."
+          },
+          "sidebar": {
+            "title": "La barra laterale",
+            "body": "Tutto il resto è qui: creare pipeline, collegare repository e integrazioni, e le impostazioni dello workspace."
+          },
+          "commandBar": {
+            "title": "La palette dei comandi",
+            "body": "Il modo più rapido per raggiungere qualsiasi azione: aprila e inizia a digitare. Da lì puoi riavviare questo tutorial in qualsiasi momento."
+          },
+          "toolbar": {
+            "title": "Controlli della board",
+            "body": "Con questi controlli ingrandisci, riduci o adatti l’intera board alla vista."
+          },
+          "finish": {
+            "title": "Questo è il layout",
+            "body": "Ora sai orientarti. Prova il prossimo tour per creare ed eseguire la tua prima attività, oppure torna più tardi dalla palette dei comandi."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "Crea la tua prima attività",
+        "description": "Aggiungi un’attività a un servizio e guardala comparire sulla board.",
+        "steps": {
+          "intro": {
+            "title": "Creiamo un’attività",
+            "body": "Un’attività descrive un risultato che vuoi; una pipeline di agenti lo consegna. Questo tour ti guida nella creazione di una vera."
+          },
+          "addTask": {
+            "title": "Aggiungi un’attività",
+            "body": "Ogni riquadro di servizio ha un pulsante di aggiunta nell’intestazione."
+          },
+          "describe": {
+            "title": "Descrivi il risultato",
+            "body": "Dai all’attività un titolo breve che dica cosa deve essere vero quando è conclusa. Il linguaggio comune va benissimo."
+          },
+          "create": {
+            "title": "Creala",
+            "body": "Quando la descrizione ti convince, crea l’attività."
+          },
+          "card": {
+            "title": "La tua scheda attività",
+            "body": "Eccola sulla board. Da questa scheda puoi avviare la pipeline, seguire i progressi e aprire i risultati."
+          },
+          "finish": {
+            "title": "Ottimo lavoro",
+            "body": "Questo è il ciclo principale: descrivere un’attività, eseguirla, verificare il risultato. Esplora gli altri tour quando vuoi."
+          }
+        }
+      }
     }
   }
 }

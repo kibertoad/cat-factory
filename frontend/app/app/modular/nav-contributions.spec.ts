@@ -47,6 +47,7 @@ const slots = (): AppSlots => ({
   taskTypes: [],
   taskTypeFormPanels: [],
   appOverlays: [],
+  tutorialTours: [],
 })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 
@@ -312,6 +313,7 @@ describe('nav grouping helpers', () => {
       'sandbox',
       'keyboard-shortcuts',
       'ui-mode',
+      'tutorial',
     ])
   })
 

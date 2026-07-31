@@ -2072,7 +2072,8 @@
         "sandbox": "Sandbox'ı aç",
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
-        "toggleUiMode": "Arayüz modunu değiştir"
+        "toggleUiMode": "Arayüz modunu değiştir",
+        "tutorial": "Tura başla"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2094,7 +2095,8 @@
         "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir",
         "shortcuts": "kısayollar klavye tuşlar yardım",
         "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
-        "toggleUiMode": "arayüz mod temel gelişmiş göster gizle"
+        "toggleUiMode": "arayüz mod temel gelişmiş göster gizle",
+        "tutorial": "eğitim tur rehber yardım öğren tanıtım"
       }
     },
     "integrationsHub": {
@@ -5905,6 +5907,89 @@
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
       "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+    }
+  },
+  "tutorial": {
+    "prompt": {
+      "title": "Hızlı bir tur ister misiniz?",
+      "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
+      "start": "Başla",
+      "restart": "Tekrarla",
+      "completed": "Tamamlandı",
+      "decline": "Hayır, teşekkürler",
+      "later": "Belki daha sonra",
+      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok."
+    },
+    "overlay": {
+      "next": "İleri",
+      "back": "Geri",
+      "skip": "Turu bitir",
+      "done": "Bitir",
+      "progress": "Adım {current} / {total}",
+      "searching": "Vurgulanan denetim aranıyor...",
+      "clickHint": "Devam etmek için vurgulanan denetime tıklayın"
+    },
+    "tours": {
+      "boardBasics": {
+        "title": "Pano temelleri",
+        "description": "Yolunuzu bulun: pano, kenar çubuğu ve komut paleti.",
+        "steps": {
+          "welcome": {
+            "title": "Hoş geldiniz!",
+            "body": "Bu sizin teslimat panonuz: işi burada planlarsınız, ajanlar yürütür ve sonuçları siz incelersiniz. Bu kısa tur ana denetimleri gösterir."
+          },
+          "canvas": {
+            "title": "Pano",
+            "body": "Servisler, modüller ve görevler bu tuval üzerinde yaşar. Kaydırmak için sürükleyin, yakınlaştırmak için kaydırın ve incelemek için herhangi bir karta tıklayın."
+          },
+          "sidebar": {
+            "title": "Kenar çubuğu",
+            "body": "Geri kalan her şey burada: işlem hattı oluşturma, depoları ve entegrasyonları bağlama ve çalışma alanı ayarları."
+          },
+          "commandBar": {
+            "title": "Komut paleti",
+            "body": "Herhangi bir eyleme ulaşmanın en hızlı yolu: açın ve yazmaya başlayın. Bu eğitimi oradan istediğiniz zaman yeniden başlatabilirsiniz."
+          },
+          "toolbar": {
+            "title": "Pano denetimleri",
+            "body": "Bu denetimlerle yakınlaşır, uzaklaşır veya tüm panoyu görünüme sığdırırsınız."
+          },
+          "finish": {
+            "title": "Düzen bu kadar",
+            "body": "Artık yolunuzu biliyorsunuz. İlk görevinizi oluşturup çalıştırmak için sonraki turu deneyin veya daha sonra komut paletinden geri dönün."
+          }
+        }
+      },
+      "firstTask": {
+        "title": "İlk görevinizi oluşturun",
+        "description": "Bir servise görev ekleyin ve panoda belirmesini izleyin.",
+        "steps": {
+          "intro": {
+            "title": "Bir görev oluşturalım",
+            "body": "Görev, istediğiniz bir sonucu tanımlar; bir ajan işlem hattı onu teslim eder. Bu tur, gerçek bir görev oluşturmanız için size rehberlik eder."
+          },
+          "addTask": {
+            "title": "Görev ekle",
+            "body": "Her servis çerçevesinin başlığında bir ekleme düğmesi vardır."
+          },
+          "describe": {
+            "title": "Sonucu tanımlayın",
+            "body": "Göreve, tamamlandığında neyin doğru olması gerektiğini söyleyen kısa bir başlık verin. Sade bir dil yeterli."
+          },
+          "create": {
+            "title": "Oluşturun",
+            "body": "Açıklama hazır olduğunda görevi oluşturun."
+          },
+          "card": {
+            "title": "Görev kartınız",
+            "body": "İşte panoda. Bu karttan işlem hattını başlatabilir, ilerlemeyi izleyebilir ve sonuçları açabilirsiniz."
+          },
+          "finish": {
+            "title": "Tebrikler",
+            "body": "Ana döngü bu: bir görevi tanımlayın, çalıştırın, sonucu inceleyin. Diğer turları dilediğiniz zaman keşfedin."
+          }
+        }
+      }
     }
   }
 }

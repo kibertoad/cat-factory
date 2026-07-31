@@ -17,6 +17,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [Layout](#layout)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
+- [In-app tutorial tours](#in-app-tutorial-tours)
 - [Key UI surfaces](#key-ui-surfaces)
 - [Develop & test](#develop--test)
 
@@ -158,6 +159,31 @@ picking what each of them runs on are halves of the same job.
   the model preset list **always keeps a kind the edited preset already pins a model for**,
   whatever the tier — the same rule `showOverrideField` states for a single field: a row the
   user can neither read nor clear is worse than a longer list.
+
+## In-app tutorial tours
+
+On first launch (once the board is up and no other startup advisory is open) the app asks
+whether the user wants a guided tour. The answer is SAVED per browser (`stores/tutorial.ts`,
+persisted like the interface tier): "no thanks" stops the prompt for good, closing without
+answering defers it to the next launch, and the command palette's "Take a tour" entry is the
+way back either way.
+
+A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
+control by its `data-testid` (the e2e anchor vocabulary — cover a control that has none by
+adding the test id first) and carrying i18n keys for its copy. One shared runtime
+(`components/tutorial/TutorialOverlay.vue`) renders every tour: it highlights the current
+step's control, places the tooltip (`utils/tutorial.ts` owns the pure geometry + types),
+advances on Next or — for `advanceOn: 'target-click'` steps — on the user really clicking
+the control, so the app's real response (the actual modal, the actual task) is what the next
+step anchors to. A step whose anchor never appears within its wait is SKIPPED, because
+controls come and go with RBAC, tier, and deployment wiring: a tour is a set of
+opportunities, not a fixed script.
+
+The catalog is the `tutorialTours` slot: first-party tours live in
+`modular/tutorial-tours.ts`, and a consumer deployment contributes its own through
+`registerAppModule` — they appear in the launch prompt beside the built-ins, gated per tour
+by its `when(gates)` predicate (the same reactive gates service the nav uses, filtered in
+`navSlotFilter`). Completion is persisted per tour id, so renaming an id resets its state.
 
 ## Extending the layer (consumer modules)
 
