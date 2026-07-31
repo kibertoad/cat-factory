@@ -23,6 +23,10 @@ const undecided = computed(() => tutorial.decision === null)
 <template>
   <UModal v-model:open="open" :title="t('tutorial.prompt.title')" :ui="{ content: 'max-w-lg' }">
     <template #body>
+      <!-- NOTE for spec authors: this marks the modal's BODY, so it is the "prompt is
+           showing" signal, not a container for everything in the prompt. The footer's
+           decline/close buttons are in a SIBLING slot — address them from the page by
+           their own test ids rather than scoping a locator under this one. -->
       <div class="space-y-4" data-testid="tutorial-prompt">
         <p class="text-sm text-slate-300">{{ t('tutorial.prompt.intro') }}</p>
         <ul class="space-y-2">

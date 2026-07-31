@@ -46,7 +46,9 @@ test.describe('in-app tutorial', () => {
 
     const prompt = page.getByTestId('tutorial-prompt')
     await expect(prompt).toBeVisible({ timeout: LIVE_TIMEOUT })
-    await prompt.getByTestId('tutorial-decline').click()
+    // Page-scoped, NOT scoped under `prompt`: `tutorial-prompt` marks the modal's BODY, and
+    // the decline/close buttons live in the footer slot — a sibling of it, not a descendant.
+    await page.getByTestId('tutorial-decline').click()
     await expect(prompt).toBeHidden({ timeout: LIVE_TIMEOUT })
 
     // The decision is persisted, so the next launch opens straight onto the board. This is
