@@ -191,7 +191,26 @@ of the flow (a run parked on a decision has no approval gate, and the reverse). 
 second as an abridged tour would tell a user who saw exactly the right walkthrough that they
 missed half of it, every time. `resolveTours` (in `utils/tutorial.ts`, applied by
 `navSlotFilter`) drops the rejected steps and then drops a tour left with none, so a tour
-whose every step is branch-specific can never open on an empty cursor.
+whose every step is branch-specific can never open on an empty cursor. With no gates service
+wired at all (a bare install withholds nothing) every branch survives instead, and only one
+of them can anchor — so the abridged notice ignores any skipped step that carries a `when`,
+which has already declared that not applying is legitimate.
+
+**Gates decide what is OFFERED; the running tour's script is resolved once and HELD.** The
+overlay snapshots its tour when it starts rather than re-reading the gated slot on every
+flip. This is not an optimisation: gates over live run state flip as a direct result of
+following the tour — `answer-park` is offered while something waits for a human, so the
+moment the user answers, its `when` goes false. A re-reading overlay tore itself down there,
+one step short of its own finish card and with nothing recorded as completed, at exactly the
+moment the user succeeded. Holding the script also freezes the branch `resolveTours` chose,
+so a step can't be swapped underneath a stationary cursor.
+
+**Gates must mean what the board RENDERS, not what the store holds.** `boardHasOpenDecision`
+/ `boardHasPendingApproval` are not the store's raw pending counts: a park on a frame block
+has no task card, and a reviewer gate mid-cycle is deliberately suppressed by the card
+(`useReviewStage().isBackground`), so either would offer a tour onto a control that isn't
+there. `hasActionablePark` (`modular/nav-gates.logic.ts`) is the shared rule; the run gates
+are task-scoped for the same reason.
 
 **Fixed proper nouns ride `bodyParams`, not the catalogs.** A step naming the sample
 repository slug (`SAMPLE_REPO` in `modular/tutorial-tours.ts`) passes it as a `{repo}`
@@ -211,8 +230,12 @@ Two runtime constraints worth knowing before changing the overlay: it must keep
 dismissable layers that set `body { pointer-events: none }` and dismiss on an outside
 pointerdown — without both, the tooltip's own buttons go inert and pressing one closes the
 user's half-filled form. And everything that DECIDES (skip direction, wait budget,
-target-click matching) lives in `components/tutorial/TutorialOverlay.logic.ts` so it is
-unit-tested; the SFC keeps only the DOM work.
+target-click matching, which skips count as abridged) lives in
+`components/tutorial/TutorialOverlay.logic.ts` so it is unit-tested; the SFC keeps only the
+DOM work. Note that target-click matching is by SELECTOR, not by the highlighted element:
+several anchors (`task-card`, `task-resolve`, `run-step`) render once per board item and the
+ring can only sit on one of them, so requiring the click to land on that one left a user who
+clicked the card the copy asked for with no way forward — such a step renders no Next.
 
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through

@@ -98,21 +98,31 @@ export interface NavGates {
    */
   boardHasTask: boolean
   /**
-   * Some run is cached for this board, in any state. Availability for the steps that explain
-   * a run's ANATOMY (the step list, its live progress), which have nothing to anchor to until
-   * a run has been started at least once.
+   * Some run on a TASK block is cached for this board, in any state. Availability for the
+   * steps that explain a run's ANATOMY (the step list, its live progress), which have nothing
+   * to anchor to until a run has been started at least once.
+   *
+   * Task-scoped, like the three below: every surface these gates open is reached through a
+   * task card and its inspector, and a frame-level run (a blueprint pass, an initiative plan)
+   * renders none of them.
    */
   boardHasRun: boolean
-  /** Some cached run is parked on a decision nobody has answered yet. */
+  /**
+   * Some task card is offering a human an unanswered DECISION to resolve.
+   *
+   * "Offering" rather than "exists": these two report what the board actually RENDERS, which
+   * is what a tour anchoring on the card's action can point at — see `hasActionablePark` for
+   * the two ways a park can exist with no control to show for it.
+   */
   boardHasOpenDecision: boolean
-  /** Some cached run is parked on an approval gate nobody has answered yet. */
+  /** Some task card is offering a human an unanswered APPROVAL gate. See above. */
   boardHasPendingApproval: boolean
   /**
-   * Some cached run has finished successfully. Availability for the review/merge tour: its
-   * subject is the OUTPUT of a run, so there has to be one that produced output. A FAILED run
-   * deliberately does not count — the failure banner is its own surface, and a tour about
-   * reading a result and merging it would spend its steps pointing at controls a failed run
-   * never renders.
+   * Some run on a task block has finished successfully. Availability for the review/merge
+   * tour: its subject is the OUTPUT of a run, so there has to be one that produced output. A
+   * FAILED run deliberately does not count — the failure banner is its own surface, and a
+   * tour about reading a result and merging it would spend its steps pointing at controls a
+   * failed run never renders.
    */
   boardHasFinishedRun: boolean
 }

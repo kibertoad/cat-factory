@@ -4,12 +4,12 @@ import {
   DEFAULT_TARGET_WAIT_MS,
   TARGET_TRACK_INTERVAL_MS,
 } from '~/utils/tutorial'
-import type { CoachMarkLayout, TutorialRect, TutorialStep } from '~/utils/tutorial'
+import type { CoachMarkLayout, TutorialRect, TutorialStep, TutorialTour } from '~/utils/tutorial'
 import {
   isTargetClickAdvance,
   resolveSkip,
   stepTargetSelectors,
-  tourWasAbridged,
+  unexpectedlySkippedSteps,
   waitBudgetMs,
 } from './TutorialOverlay.logic'
 import type { TutorialDirection } from './TutorialOverlay.logic'
@@ -29,13 +29,38 @@ const { t } = useI18n()
 const tutorial = useTutorialStore()
 const { tours } = useTutorialTours()
 
-const tour = computed(() => tours.value.find((x) => x.id === tutorial.activeTourId) ?? null)
+/**
+ * The running tour's script, resolved ONCE from the slot when the tour starts and then HELD
+ * for its duration. Gates decide what is OFFERED; they do not get to rewrite a walkthrough
+ * that is already under way.
+ *
+ * Re-reading the gated slot on every flip was fine while the gates were slow-moving facts
+ * (a permission, a connection). Gates over live RUN state flip as a DIRECT RESULT of
+ * following the tour: `answer-park` is offered while something is waiting for a human, so
+ * the moment the user answered — the very thing the tour teaches — its `when` went false,
+ * the slot dropped the tour, and the watch below tore the overlay down one step short of its
+ * own finish card, with no completion recorded. Holding the script also freezes the branch
+ * `resolveTours` picked, so a step can't be swapped underneath a stationary cursor when a
+ * board that had both a decision and an approval loses one of them mid-tour.
+ */
+const tour = shallowRef<TutorialTour | null>(null)
+watch(
+  () => tutorial.activeTourId,
+  (id) => {
+    // Read untracked (a watch callback registers no dependencies), which is what pins the
+    // script: only starting a DIFFERENT tour re-resolves it.
+    tour.value = id ? (tours.value.find((x) => x.id === id) ?? null) : null
+  },
+  { immediate: true },
+)
+
 const step = computed<TutorialStep | null>(() => tour.value?.steps[tutorial.stepIndex] ?? null)
 const total = computed(() => tour.value?.steps.length ?? 0)
 const isLast = computed(() => tour.value !== null && tutorial.stepIndex >= total.value - 1)
 
-// The running tour vanished from the slot (a gate flipped, a consumer module withdrew it)
-// or the cursor ran past the end: end the tour instead of rendering a dead overlay.
+// The tour could not be resolved when it started (a stale persisted id, or a tour this board
+// is not offered at all) or the cursor ran past the end: end it instead of rendering a dead
+// overlay. Since the script is held, this can no longer fire because a gate flipped mid-tour.
 watch(
   () => [tour.value, step.value] as const,
   ([tr, st]) => {
@@ -44,7 +69,6 @@ watch(
   { immediate: true },
 )
 
-const targetEl = ref<HTMLElement | null>(null)
 const targetRect = ref<TutorialRect | null>(null)
 const cardEl = ref<HTMLElement | null>(null)
 const layout = ref<CoachMarkLayout>({ top: -9999, left: -9999, placement: 'center' })
@@ -62,7 +86,11 @@ const skippedStepIds = ref<Set<string>>(new Set())
 
 /** A targeted step whose anchor hasn't been found yet (renders the waiting note). */
 const searching = computed(() => step.value?.target !== undefined && targetRect.value === null)
-const abridged = computed(() => tourWasAbridged(skippedStepIds.value))
+/** The skips the final card must own up to — a branch-gated step's absence is not one. */
+const unexpectedSkips = computed(() =>
+  unexpectedlySkippedSteps(skippedStepIds.value, tour.value?.steps ?? []),
+)
+const abridged = computed(() => unexpectedSkips.value.length > 0)
 
 const viewport = () => ({ width: window.innerWidth, height: window.innerHeight })
 /** The tooltip's own size, or a sensible guess before it has rendered once. */
@@ -93,11 +121,9 @@ function measure() {
   const s = step.value
   if (!s) return
   if (!s.target) {
-    targetEl.value = null
     targetRect.value = null
   } else {
     const el = queryTarget(s)
-    targetEl.value = el
     if (!el) {
       targetRect.value = null
       // Centered while searching: the card must not sit at the PREVIOUS step's anchor —
@@ -122,7 +148,6 @@ function measure() {
 // the card has re-rendered its new copy (its size feeds the layout).
 watch(step, async (s) => {
   searchDeadline.value = performance.now() + (s ? waitBudgetMs(s) : DEFAULT_TARGET_WAIT_MS)
-  targetEl.value = null
   targetRect.value = null
   await nextTick()
   measure()
@@ -143,7 +168,7 @@ function back() {
 // control can't hide them) and follow along AFTER the app has reacted — the deferral lets
 // the real handler open its modal/submit its form before the tour moves its anchor.
 function onDocumentClick(event: MouseEvent) {
-  if (isTargetClickAdvance(step.value, targetEl.value, event.target)) {
+  if (isTargetClickAdvance(step.value, event.target)) {
     window.setTimeout(advance, 0)
   }
 }
@@ -234,7 +259,13 @@ onUnmounted(() => {
           class="mt-2 text-xs text-amber-300/90"
           data-testid="tutorial-abridged"
         >
-          {{ t('tutorial.overlay.abridged', { count: skippedStepIds.size }, skippedStepIds.size) }}
+          {{
+            t(
+              'tutorial.overlay.abridged',
+              { count: unexpectedSkips.length },
+              unexpectedSkips.length,
+            )
+          }}
         </p>
         <div class="mt-3 flex items-center justify-between gap-2">
           <UButton

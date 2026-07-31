@@ -119,7 +119,35 @@ test.describe('tutorial tours that follow a live run', () => {
     await expect(page.getByTestId('tutorial-highlight')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(card.getByTestId('task-resolve')).toBeVisible()
 
-    await tooltip.getByTestId('tutorial-skip').click()
+    // Deliberately a single click rather than the `openAttention` retry every other spec
+    // uses: that helper re-clicks to survive a card remounting mid-flight, and each click
+    // ALSO advances the tour, which would carry it past the step under test. Safe here
+    // because a run parked on a decision is quiescent — nothing remounts that button until
+    // the decision is answered.
+    await card.getByTestId('task-resolve').click()
+    const modal = page.getByTestId('decision-modal')
+    await expect(modal).toBeVisible({ timeout: LIVE_TIMEOUT })
+    const option = modal.getByTestId('decision-option').first()
+    await expect(option).toBeVisible()
+
+    // Onto the untargeted finish card BEFORE answering, so what follows can never be
+    // confused with an anchor timing out: a step with no target cannot be skipped.
+    await tooltip.getByTestId('tutorial-next').click()
+
+    // The tour must survive its own SUCCESS. Answering is the thing it teaches, and it
+    // clears the very gate that offers the tour — so a script re-read from the gated slot on
+    // every flip vanishes right here, with no completion recorded and no finish card. This
+    // is the one place that wiring is exercised end to end.
+    await option.click()
+    await expect(modal).toBeHidden({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('decision-badge')).toBeHidden({ timeout: LIVE_TIMEOUT })
+    await expect(tooltip).toBeVisible()
+
+    // And it ends as a COMPLETE walkthrough: the approval branch was dropped by its own
+    // `when` before the tour ran, which is not the same as a control that should have been
+    // on this board and wasn't.
+    await expect(tooltip.getByTestId('tutorial-abridged')).toBeHidden()
+    await tooltip.getByTestId('tutorial-next').click()
     await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
   })
 })

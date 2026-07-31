@@ -1,4 +1,5 @@
 import { computed } from 'vue'
+import { hasActionablePark } from '~/modular/nav-gates.logic'
 import type { NavGates } from '~/modular/nav-contributions'
 
 /**
@@ -27,14 +28,35 @@ export function createNavGates(): NavGates {
   const uiMode = useUiModeStore()
   const board = useBoardStore()
   const execution = useExecutionStore()
+  const reviews = useReviewStage()
 
   // A top-level frame IS a service (see `app/types/domain.ts`); modules are sub-frames.
   const hasService = computed(() => board.blocks.some((b) => b.level === 'frame' && !b.parentId))
   const hasTask = computed(() => board.blocks.some((b) => b.level === 'task'))
-  const hasRun = computed(() => execution.instances.length > 0)
+
+  // Every run gate below is scoped to runs on TASK blocks, because every surface they gate is
+  // reached through a task card and its inspector (the card's Resolve action, the inspector's
+  // step list and result views). A frame-level run — a blueprint pass, an initiative plan —
+  // renders none of those, so counting it would offer a tour onto controls that do not exist.
+  const taskBlockIds = computed(
+    () => new Set(board.blocks.filter((b) => b.level === 'task').map((b) => b.id)),
+  )
+  const isTaskBlock = (blockId: string) => taskBlockIds.value.has(blockId)
+
+  const hasRun = computed(() => execution.instances.some((e) => isTaskBlock(e.blockId)))
   // A run that finished successfully. `done` only: see `NavGates.boardHasFinishedRun` for
   // why a `failed` run is not a subject for the review/merge tour.
-  const hasFinishedRun = computed(() => execution.instances.some((e) => e.status === 'done'))
+  const hasFinishedRun = computed(() =>
+    execution.instances.some((e) => e.status === 'done' && isTaskBlock(e.blockId)),
+  )
+  // Not the store's raw pending counts: those answer "is anything parked", while the tour
+  // these gate anchors on the card affordance a park RENDERS. See `hasActionablePark`.
+  const hasOpenDecision = computed(() =>
+    hasActionablePark(execution.openDecisions, isTaskBlock, reviews.isBackground),
+  )
+  const hasPendingApproval = computed(() =>
+    hasActionablePark(execution.openApprovals, isTaskBlock, reviews.isBackground),
+  )
 
   const infrastructureAvailable = computed(
     () =>
@@ -84,15 +106,15 @@ export function createNavGates(): NavGates {
     get boardHasRun() {
       return hasRun.value
     },
-    // The two park kinds read the execution store's existing pending-gate projections rather
-    // than re-scanning `instances` here: they are the same counts the board badges and the
-    // notification queue render, so a tour can never disagree with the badge that sent the
-    // user looking for it.
+    // The two park kinds read the execution store's existing open-decision / open-approval
+    // projections rather than re-scanning `instances` here, so a tour can never disagree with
+    // the queue that sent the user looking for it — then narrowed to the parks a task card
+    // actually offers an action for (`hasActionablePark`).
     get boardHasOpenDecision() {
-      return execution.pendingDecisionCount > 0
+      return hasOpenDecision.value
     },
     get boardHasPendingApproval() {
-      return execution.pendingApprovalCount > 0
+      return hasPendingApproval.value
     },
     get boardHasFinishedRun() {
       return hasFinishedRun.value
