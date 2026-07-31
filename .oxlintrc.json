@@ -11,7 +11,7 @@
     "max-params": ["error", { "max": 6 }],
     "max-statements": ["error", { "max": 49 }],
     "max-lines": ["error", { "max": 1956 }],
-    "max-lines-per-function": ["error", { "max": 300 }]
+    "max-lines-per-function": ["error", { "max": 250 }]
   },
   "overrides": [
     {
@@ -22,7 +22,7 @@
         "backend/internal/e2e/**"
       ],
       "rules": {
-        "max-lines-per-function": ["error", { "max": 1323 }]
+        "max-lines-per-function": ["error", { "max": 400 }]
       }
     }
   ],

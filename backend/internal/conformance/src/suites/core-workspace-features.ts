@@ -257,6 +257,18 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
     })
   })
 
+  registerEpicDependencyTests(harness)
+
+  registerNotificationAndPresetTests(harness)
+}
+
+/**
+ * Epics and the block dependency graph.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerEpicDependencyTests(harness: ConformanceHarness): void {
   describe('epics + dependency graph', () => {
     it('round-trips an epic node + a task’s epic membership identically on every store', async () => {
       const { call, createWorkspace } = harness.makeApp()
@@ -647,7 +659,15 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       expect(await repo.findByIds([])).toEqual([])
     })
   })
+}
 
+/**
+ * The notification inbox and the per-workspace model-preset library.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
   describe('notifications', () => {
     it('escalateStaleOpen flips exactly the overdue open normal cards in one statement', async () => {
       const app = harness.makeApp()

@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
-  RequestRecommendationItem,
   RequirementReview,
   ResolveRequirementsExceededChoice,
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { createRecommendationCommands } from '~/stores/requirements/recommendations'
 
 /**
  * Requirements-review state. On the pipeline path the reviewer runs as the first gate
@@ -204,48 +204,22 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return updated
   }
 
-  function isRecommending(blockId: string): boolean {
-    return recommending.value.has(blockId) || hasPendingRecommendations(blockId)
-  }
-
-  /**
-   * Ask the Requirement Writer to recommend answers for a batch of findings. Each item carries
-   * its finding id plus optional per-finding guidance (the note the human typed before choosing
-   * "recommend something"). ASYNCHRONOUS: returns at once with `pending` placeholder
-   * recommendations (the Writer runs per finding in the durable driver), which fill in (`ready`)
-   * via live `requirements` stream events; a notification calls the user back when the batch is
-   * ready. The board shows the `recommending` background stage while any placeholder is pending.
-   */
-  async function requestRecommendations(blockId: string, items: RequestRecommendationItem[]) {
-    withFlag(recommending, blockId, true)
-    try {
-      const updated = await api.requestRecommendations(workspace.requireId(), blockId, items)
-      if (updated) store(updated)
-      return updated
-    } finally {
-      withFlag(recommending, blockId, false)
-    }
-  }
-
-  /** Accept a recommendation (becomes the finding's answer, folded into the next incorporation). */
-  async function acceptRecommendation(review: RequirementReview, recId: string) {
-    store(await api.acceptRecommendation(workspace.requireId(), review.id, recId))
-  }
-
-  /** Reject a recommendation (the human then dismisses / answers manually / re-requests). */
-  async function rejectRecommendation(review: RequirementReview, recId: string) {
-    store(await api.rejectRecommendation(workspace.requireId(), review.id, recId))
-  }
-
-  /** Re-request a recommendation with a "do it differently" note. */
-  async function reRequestRecommendation(review: RequirementReview, recId: string, note: string) {
-    withFlag(recommending, review.blockId, true)
-    try {
-      store(await api.reRequestRecommendation(workspace.requireId(), review.id, recId, note))
-    } finally {
-      withFlag(recommending, review.blockId, false)
-    }
-  }
+  // The Requirement Writer recommendation slice (request / accept / reject / re-request),
+  // extracted into a cohesive factory over the state above — a size-only split.
+  const {
+    isRecommending,
+    requestRecommendations,
+    acceptRecommendation,
+    rejectRecommendation,
+    reRequestRecommendation,
+  } = createRecommendationCommands({
+    api,
+    workspace,
+    recommending,
+    withFlag,
+    store,
+    hasPendingRecommendations,
+  })
 
   /** Resolve a capped review: extra-round / proceed / stop-reset. */
   async function resolveExceeded(

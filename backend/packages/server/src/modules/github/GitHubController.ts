@@ -234,8 +234,20 @@ export function githubController(): Hono<AppEnv> {
     return c.json(await github.service.listIssues(param(c, 'workspaceId')), 200)
   })
 
-  // ---- writes -------------------------------------------------------------
+  // The repo/branch/PR/issue WRITE routes, registered by a sibling so this controller stays
+  // within the per-function line budget. Same `app`, so the permission middleware above still
+  // covers them.
+  registerGitHubWriteRoutes(app)
 
+  return app
+}
+
+/**
+ * The GitHub WRITE surface: create a repo (privileged App tier) / branch / commit / PR, merge a
+ * PR and comment on an issue. Split out of {@link githubController} purely for size; it registers
+ * onto the SAME app instance, so the workspace-permission middleware mounted there still applies.
+ */
+function registerGitHubWriteRoutes(app: Hono<AppEnv>): void {
   // Programmatically create a repository under the connected account (privileged
   // App tier, ADR 0005). 503 when no privileged App is configured; 409 when the
   // account isn't actually privileged, so the caller can fall back.
@@ -323,6 +335,4 @@ export function githubController(): Hono<AppEnv> {
     )
     return c.body(null, 204)
   })
-
-  return app
 }

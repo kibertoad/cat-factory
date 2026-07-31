@@ -24,11 +24,14 @@ const base = {
   branch: 'main',
 }
 
-describe('parseAgentJob', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
+// Shared by every suite below: hoisted to module scope when the one long `describe` was
+// split into siblings, so each still sees the same fixtures (a module-level `beforeEach`
+// runs for every suite in the file, exactly as the in-describe one did).
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
+describe('parseAgentJob — repo legs', () => {
   it('parses the optional repo.provider discriminator', () => {
     // The GitLab host must be allow-listed or the clone-URL host check rejects it first.
     vi.stubEnv('GITHUB_ALLOWED_HOSTS', 'gitlab.com')
@@ -257,7 +260,9 @@ describe('parseAgentJob', () => {
       /referenceBranches/,
     )
   })
+})
 
+describe('parseAgentJob — job knobs and infra specs', () => {
   it('parses reviewPrNumber (the pr-reviewer PR-head prefetch target)', () => {
     const job = parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 4558 })
     expect(job.reviewPrNumber).toBe(4558)

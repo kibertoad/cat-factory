@@ -274,6 +274,17 @@ export function defineCoreRunsConformance(harness: ConformanceHarness): void {
     })
   })
 
+  registerLiveRunInvariantTests(harness)
+}
+
+/**
+ * The one-live-run-per-block invariant (with its replaceId supersede for retry/restart) and
+ * the stale-run sweeper's read primitives.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerLiveRunInvariantTests(harness: ConformanceHarness): void {
   describe('one live execution run per block (insertLive)', () => {
     // Two concurrent starts (double-click, recurring-vs-manual, notification-vs-human retry)
     // must never create two live runs for one block. `insertLive` enforces it atomically via

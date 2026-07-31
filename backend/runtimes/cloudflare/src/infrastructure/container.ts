@@ -57,6 +57,7 @@ import {
 import { resolveWorkerRegistries } from './container-registries.js'
 import { selectTraceSink } from './container-trace-sinks.js'
 export { selectTraceSink }
+import { buildWorkerSharedServices } from './container-shared-services.js'
 import { assembleWorkerContainer } from './container-assembly.js'
 import { buildAppRegistry, buildResolveRepoTarget } from './container-vcs-identity.js'
 // The App registry + repo-target resolvers moved to `container-vcs-identity.ts`; re-exported so
@@ -64,7 +65,6 @@ import { buildAppRegistry, buildResolveRepoTarget } from './container-vcs-identi
 export { buildAppRegistry, buildResolveRepoTarget }
 import { buildModelProviderResolver } from './container-model-resolver.js'
 import {
-  buildDefaultWebSearchUpstream,
   buildResolveTransport,
   maybeWrapConsensus,
   selectAgentExecutor,
@@ -74,8 +74,6 @@ import {
 export { maybeWrapConsensus, selectAgentExecutor }
 export type { WorkerExecutorDeps } from './container-executor-deps.js'
 import {
-  AgentContextObservabilityService,
-  SearchQueryObservabilityService,
   type CoreDependencies,
   PACKAGE_REGISTRY_CIPHER_INFO,
   resolvePackageRegistriesForDispatch,
@@ -100,7 +98,6 @@ import {
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { requireDb, requireTelemetryDb } from './env'
-import { CfGitHubWebhookIngest } from './gateways/GitHubGateways'
 import { type ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
@@ -111,8 +108,6 @@ import { DurableObjectEventPublisher } from './events/DurableObjectEventPublishe
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
-import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
-import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
@@ -206,18 +201,7 @@ import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepos
 import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
 import { D1SkillSourceRepository } from './repositories/D1SkillSourceRepository'
 import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
-import {
-  buildApiKeyService,
-  buildLocalModelEndpointService,
-  buildOpenRouterCatalogService,
-  buildPersonalSubscriptionService,
-  buildPublicApiKeyService,
-  buildResolveUserGitHubToken,
-  buildSubscriptionService,
-  buildTestSecretsService,
-  buildUserSecretService,
-  buildValidationConfigService,
-} from './wireCredentialServices'
+import { buildResolveUserGitHubToken } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -459,7 +443,7 @@ export function selectPackageRegistryDeps(env: Env, db: D1Database): Partial<Cor
  * same repo + cipher the management API uses; undefined when the encryption key is
  * absent (no registry auth is forwarded).
  */
-function buildResolvePackageRegistries(
+export function buildResolvePackageRegistries(
   env: Env,
   db: D1Database,
 ): ((workspaceId: string) => Promise<JobPackageRegistrySpec[]>) | undefined {
@@ -515,7 +499,7 @@ export function selectIncidentEnrichmentDeps(
  * short-TTL cache spans requests; the facade also derives the Slack OAuth resolver +
  * web-search proxy resolution from it.
  */
-function buildAccountSettings(
+export function buildAccountSettings(
   env: Env,
   db: D1Database,
   clock: Clock,
@@ -544,7 +528,7 @@ function buildAccountSettings(
  * the Node/local facade. Shared by the container wiring and the retention cron so both build
  * the same backend.
  */
-function cloudflareContentStorage(env: Env): {
+export function cloudflareContentStorage(env: Env): {
   capability: ContentStorageCapability
   buildBlobBackend: BuildBlobBackend
 } {
@@ -633,7 +617,7 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
  * one builder so they can't drift onto different repositories/ciphers. Null when no key is set;
  * then the management surface 503s and no deliveries are attempted.
  */
-function buildNotificationWebhookSupportForWorker(
+export function buildNotificationWebhookSupportForWorker(
   env: Env,
   config: AppConfig,
   db: D1Database,
@@ -787,7 +771,10 @@ export function selectWorkRunner(env: Env): WorkRunner {
  *   - otherwise                        → undefined (core falls back to a no-op)
  * Tests leave the binding unset; the engine simply pushes nothing.
  */
-function selectEventPublisher(env: Env, db: D1Database): ExecutionEventPublisher | undefined {
+export function selectEventPublisher(
+  env: Env,
+  db: D1Database,
+): ExecutionEventPublisher | undefined {
   if (!env.WORKSPACE_EVENTS) return undefined
   // Fan a shared service's live events out to EVERY workspace that mounts it, not just the
   // one the engine addressed (in-org real-time sharing).
@@ -1424,134 +1411,27 @@ export function buildContainer(
     injectedPoolProvider: overrides.runnerPoolProvider,
   })
 
-  // The subscription-token pool (Claude Code / Codex credentials) — built once and
-  // shared by the container executor (lease + usage feedback) and the
-  // vendor-credential controller, so both read the same pool.
-  const subscriptions = buildSubscriptionService(env, db, clock)
-
-  // The sensitive per-service test-credential store (sealed) — shared by the test-secrets
-  // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
-  const testSecretsService = buildTestSecretsService(env, db, clock)
-
-  const validationConfigService = buildValidationConfigService(db, clock)
-
-  // The per-user individual-usage subscription store (Claude) — shared by the
-  // personal-subscription controller and the container executor's personal lease.
-  const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
-
-  // The direct-provider API-key pool (account/workspace/user) — shared by the
-  // API-key controller, the model-provider resolver, and the LLM proxy key lease.
-  const apiKeys = buildApiKeyService(env, db, clock)
-
-  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
-  const publicApiKeys = buildPublicApiKeyService(env, db, clock)
-
-  // The per-user locally-run model endpoints store (Ollama / LM Studio / …) — shared by
-  // the local-runner controller, the per-user model catalog, and the LLM proxy.
-  const localModelEndpoints = buildLocalModelEndpointService(env, db, clock)
-
-  // The per-user generic secret store (a GitHub PAT today) — shared by the user-secret
-  // controller; also backs the run-initiator PAT resolver used by the executor + gates.
-  const userSecrets = buildUserSecretService(
-    env,
-    db,
-    clock,
-    userSecretKindRegistry,
-    caches.viewerRepos,
-  )
-
-  // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
-  // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
-  const openRouterCatalog = buildOpenRouterCatalogService(
-    env,
-    db,
-    clock,
-    apiKeys,
-    config.spend.currency,
-  )
-
-  // Cloudflare Workers AI is opt-in: enabled when the `AI` binding is present. A caller
-  // (the cross-runtime conformance suite) may force it off to assert key-driven
-  // selectability + the provider guard uniformly across runtimes.
-  const cloudflareModelsEnabled = opts.cloudflareModelsEnabled ?? !!env.AI
-
-  // Built once so the consensus executor and the engine share the same publisher (live
-  // consensus transcript pushes ride the same hub as run/board events).
-  const eventPublisher = selectEventPublisher(env, db)
-
-  // Agent-context observability sink: records the complete, redacted context provided
-  // to each container agent (composed prompts + folded-in fragments + injected files).
-  // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
-  // setting. Wired into the executor (write) AND createCore (read). Telemetry rows live
-  // in the dedicated TELEMETRY_DB database.
-  const agentContextObservability = new AgentContextObservabilityService({
-    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
-    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-    idGenerator,
-    clock,
-    recordPrompts: config.observability.recordPrompts,
-  })
-
-  // Agent-search-query observability sink: records each web search a container agent
-  // performed through the search proxy. Same double gate + retention window as the
-  // agent-context sink. Wired into the search proxy (write, via the container) AND
-  // createCore (read). Telemetry rows live in the dedicated TELEMETRY_DB database.
-  const searchQueryObservability = new SearchQueryObservabilityService({
-    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
-    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-    idGenerator,
-    clock,
-    recordPrompts: config.observability.recordPrompts,
-  })
-
-  // Per-account deployment settings (Slack OAuth + web-search keys + content-storage). Built
-  // once so the service's short-TTL cache is shared across requests; the Slack OAuth +
-  // content-storage resolvers are derived from it in the domain composition root.
-  const accountSettings = buildAccountSettings(
-    env,
-    db,
-    clock,
-    contentStorageCapability,
-    caches.accountSettings,
-  )
-
-  // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
-  // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
-  // Kept symmetric with the Node facade; absent unless the operator sets a `WEB_SEARCH_*` var.
-  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
-
-  // Resolve the binary-artifact store for a workspace's account from its content-storage
-  // settings (the blob backend is per-account; the metadata is the shared D1 store). Without
-  // `accountSettings` (no encryption key) every workspace falls back to the runtime default
-  // (R2 when bound), with no per-account override. Caches per account, so an R2→S3 switch
-  // rebuilds and the many workspaces under one account share a store.
-  const resolveBinaryArtifactStore = makeResolveBinaryArtifactStore({
-    accountSettings,
-    accountOf: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
-    metadata: new D1BinaryArtifactMetadataStore({ db }),
-    idGenerator,
-    clock,
-    buildBlobBackend: buildCfBlobBackend,
-    defaultBackend: contentStorageCapability.defaultBackend,
-    logger,
-  })
-
-  // GitHub webhook/resync/backfill ingest via the sync Queue (absent → inline handling). Built
-  // once so the engine's skill-freshness fan-out (slice 4) enqueues through the SAME seam the
-  // gateway exposes, rather than reaching for the queue binding a second time.
-  const githubWebhookIngest = new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE)
-
-  // The outbound notification webhook: management service + delivery channel from ONE builder, so
-  // the surface that reports an endpoint as configured and the channel that delivers to it can
-  // never end up on different repositories/ciphers.
-  const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(
+  // The deployment-wide stores and sinks every controller and the engine share: the credential
+  // pools, the per-run telemetry sinks, the account-settings reader and the derived
+  // artifact-store / web-search / webhook seams. Extracted so this root stays within the
+  // per-function line budget; every field is consumed by `assembleWorkerContainer`, so it is
+  // SPREAD there rather than re-listed.
+  const shared = buildWorkerSharedServices({
     env,
     config,
     db,
+    telemetryDb,
     clock,
-  )
+    idGenerator,
+    caches,
+    userSecretKindRegistry,
+    contentStorageCapability,
+    buildCfBlobBackend,
+    cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
+  })
 
   return assembleWorkerContainer({
+    ...shared,
     env,
     config,
     db,
@@ -1561,7 +1441,6 @@ export function buildContainer(
     caches,
     overrides,
     gateProviders: opts.gateProviders,
-    cloudflareModelsEnabled,
     registries: {
       environmentBackendRegistry,
       runnerBackendRegistry,
@@ -1577,27 +1456,5 @@ export function buildContainer(
     },
     provisioningLogRepository,
     resolveTransport,
-    subscriptions,
-    testSecretsService,
-    validationConfigService,
-    personalSubscriptions,
-    apiKeys,
-    publicApiKeys,
-    localModelEndpoints,
-    userSecrets,
-    openRouterCatalog,
-    eventPublisher,
-    agentContextObservability,
-    searchQueryObservability,
-    accountSettings,
-    // The executor's own two handles. `webSearchAccountSettings` is a SECOND, deliberately
-    // uncached account-settings reader (see `WorkerExecutorDeps`); building both here keeps the
-    // module graph one-way — `container-executor-deps.ts` never imports the root.
-    executorPackageRegistries: buildResolvePackageRegistries(env, db),
-    webSearchAccountSettings: buildAccountSettings(env, db, clock),
-    defaultWebSearchUpstream,
-    resolveBinaryArtifactStore,
-    githubWebhookIngest,
-    notificationWebhookSupport,
   })
 }

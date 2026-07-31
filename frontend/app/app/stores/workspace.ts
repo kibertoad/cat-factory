@@ -10,6 +10,7 @@ import type {
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
+import { createWorkspaceCommands } from '~/stores/workspace/commands'
 import { createInfraSetupState } from '~/stores/workspace/infraSetup'
 import { markBoot } from '~/utils/bootMarks'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
@@ -184,56 +185,16 @@ export const useWorkspaceStore = defineStore(
       }
     }
 
-    /** Switch to another board (within reach of the active account). */
-    async function switchTo(id: string) {
-      if (id === workspaceId.value) return
-      hydrate(await api.getWorkspace(id))
-    }
-
-    /** Switch the active account, then open one of its boards (creating one if needed). */
-    async function selectAccount(id: string) {
-      const accounts = useAccountsStore()
-      if (id === accounts.activeAccountId) return
-      accounts.switchTo(id)
-      workspaceId.value = null
-      await resolveActiveBoard()
-    }
-
-    /** Create a new board in the active account and open it. */
-    async function create(name?: string, description?: string) {
-      const accounts = useAccountsStore()
-      const snapshot = await api.createWorkspace({
-        seed: false,
-        name,
-        description,
-        accountId: accounts.activeAccountId ?? undefined,
-      })
-      hydrate(snapshot)
-      return snapshot.workspace
-    }
-
-    /** Rename a board and/or update its description. */
-    async function update(id: string, patch: { name?: string; description?: string | null }) {
-      const updated = await api.updateWorkspace(id, patch)
-      const i = workspaces.value.findIndex((w) => w.id === id)
-      if (i >= 0) workspaces.value[i] = updated
-      return updated
-    }
-
-    /** Rename a board (kept for the existing rename callers). */
-    async function rename(id: string, name: string) {
-      return update(id, { name })
-    }
-
-    /** Delete a board; if it was active, fall back to another in the account. */
-    async function remove(id: string) {
-      await api.deleteWorkspace(id)
-      workspaces.value = workspaces.value.filter((w) => w.id !== id)
-      if (workspaceId.value === id) {
-        workspaceId.value = null
-        await resolveActiveBoard()
-      }
-    }
+    // Board CRUD (open / create / rename / delete) + the account switch, extracted into a
+    // cohesive factory over the state above — a size-only split mirroring `hydrate.ts` and
+    // `infraSetup.ts`.
+    const { switchTo, selectAccount, create, update, rename, remove } = createWorkspaceCommands({
+      api,
+      workspaceId,
+      workspaces,
+      hydrate,
+      resolveActiveBoard,
+    })
 
     // Monotonic guard for {@link refresh}: `board`-type stream events (and the on-connect resync)
     // each fire a full-snapshot refresh, and {@link hydrate} REPLACES the block list. Without

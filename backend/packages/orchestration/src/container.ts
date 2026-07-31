@@ -2,7 +2,6 @@ import type {} from '@cat-factory/kernel'
 import type { AppCaches, Logger } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
-  createTesterQualityReviewer,
   createSlackModule,
   createMergeTrackRecordModule,
   createRiskPoliciesModule,
@@ -22,6 +21,7 @@ import { createPlatformModules } from './container/platform-modules.js'
 import { createCoreFoundation } from './container/foundation.js'
 import { createEngineCollaborators } from './container/engine-collaborators.js'
 import { registerEngineDependentModules } from './container/engine-dependent-modules.js'
+import { buildExecutionService } from './container/execution-service.js'
 
 import type {} from '@cat-factory/kernel'
 
@@ -49,7 +49,6 @@ import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
-import { makeDocumentUrlResolver } from './modules/execution/linked-context.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
@@ -94,7 +93,6 @@ import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepai
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
-import { resolvePresetModelForKind } from './modules/modelPresets/ModelPresetService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import type { FragmentLibraryModule, SkillLibraryModule } from './container-content-libraries.js'
 import type {
@@ -506,20 +504,18 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
 }
 
 export function createCore(injected: CoreDependencies): Core {
+  const runtime = resolveCoreRuntime(injected)
   const {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
-    stepResolverRegistry,
-    providerRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     initiativePresetRegistry,
-    workRunner,
     executionEventPublisher,
     caches,
     logger,
-  } = resolveCoreRuntime(injected)
+  } = runtime
   // `logger` is required on `CoreDependencies`, so `injected` already carries it; aliasing the
   // bag here keeps the rest of this function reading against one name and makes it explicit that
   // every service below is threaded the SAME resolved instance.
@@ -601,20 +597,14 @@ export function createCore(injected: CoreDependencies): Core {
   // `container/platform-modules.ts` for the per-function line budget; it registers in the SAME
   // order — which IS dependency order for the module registry — and returns only what the engine
   // below consumes.
-  const {
-    llmObservability,
-    environments,
-    environmentHandlerSeeder,
-    sharedStackSeeder,
-    fragmentLibrary,
-    skillLibrary,
-  } = createPlatformModules({
+  const platform = createPlatformModules({
     dependencies,
     modules,
     caches,
     executionEventPublisher,
     boardService,
   })
+  const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
   environmentHandlerSeederRef = environmentHandlerSeeder
   sharedStackSeederRef = sharedStackSeeder
 
@@ -639,20 +629,7 @@ export function createCore(injected: CoreDependencies): Core {
   // review surfaces, and the task module), plus the late-bound initiative-loop poke. Lifted
   // into `container/engine-collaborators.ts` for the per-function line budget; the
   // registration order — which IS dependency order for the module registry — is preserved.
-  const {
-    initiativeService,
-    initiativeInterviewService,
-    requirements,
-    docInterview,
-    forkChat,
-    judgeAssessor,
-    clarity,
-    brainstorm,
-    kaizen,
-    tasks,
-    pokeInitiativeLoop,
-    setInitiativeLoop,
-  } = createEngineCollaborators({
+  const collaborators = createEngineCollaborators({
     dependencies,
     modules,
     initiativePresetRegistry,
@@ -662,79 +639,23 @@ export function createCore(injected: CoreDependencies): Core {
     boardService,
     spend: spendService,
   })
+  const { initiativeService, tasks, setInitiativeLoop } = collaborators
 
-  const executionService = new ExecutionService({
-    ...dependencies,
-    agentKindRegistry,
-    gateRegistry,
-    judgeRegistry,
-    judgeAssessor,
-    stepResolverRegistry,
-    providerRegistry,
-    initiativePresetRegistry,
-    workRunner,
-    executionEventPublisher,
+  // The engine itself. Its wiring literal — the largest in this root — lives beside it in
+  // `container/execution-service.ts` for the per-function line budget; every field is threaded
+  // exactly as it was, from the spine / modules / collaborators already resolved above.
+  const executionService = buildExecutionService({
+    dependencies,
+    runtime,
+    caches,
     boardService,
-    pokeInitiativeLoop,
-    bugIntakeService: tasks?.bugIntakeService,
     spendService,
-    // Read-through slice for `resolveRiskPolicy` (the merge preset re-read on every gate
-    // evaluation); `RiskPolicyService` invalidates it on every preset write.
-    riskPolicyCache: caches.riskPolicy,
-    // The per-class change classification the merge policy's rules key off, plus the best-effort
-    // record of every merge decision. Absent ⇒ `unknown` class, no rule matches, nothing stored.
-    mergeTrackRecord: mergeTrackRecords?.service,
-    // Route runtime fragment-id resolution through the merged tenant catalog (so
-    // managed + document-backed fragments reach a run), present only when the
-    // library is configured; otherwise the engine falls back to the static pool.
-    fragmentResolver: fragmentLibrary?.libraryService,
-    // Route a `skill` step's skill resolution (instructions + resource bodies at the pinned
-    // commit) through the skill library, present only when it's configured; a skill step
-    // dispatched without it fails loudly rather than running blank.
-    skillResolver: skillLibrary?.runResolver,
-    // Canonicalise a URL pasted into a block description to the document's stable
-    // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
-    // auto-matches its imported page even with a title segment or tracking params the
-    // stored canonical url omits. Absent providers → undefined (url-string match only).
-    documentUrlResolver: makeDocumentUrlResolver(dependencies.documentSourceProviders),
-    requirementReviewService: requirements?.service,
-    docInterviewService: docInterview,
-    forkChatService: forkChat,
-    // The test quality-control companion's inline reviewer, resolved like every other inline
-    // review (block pin → workspace preset → routing default). Built only when a model
-    // provider is available; absent → the Tester gate's QC step is a pass-through.
-    testerQualityReviewer:
-      dependencies.testerQualityReviewer ?? createTesterQualityReviewer(dependencies),
-    clarityReviewService: clarity?.service,
-    brainstormServices: brainstorm?.services,
-    kaizenScheduler: kaizen?.service,
-    environmentProvisioning: environments?.provisioningService,
-    resolveTestSecretRefs: dependencies.resolveTestSecretRefs,
-    resolveValidationChecks: dependencies.resolveValidationChecks,
-    environmentTeardown: environments?.teardownService,
-    branchUpdater: dependencies.branchUpdater,
+    settings,
+    notifications,
+    mergeTrackRecords,
     blueprintReconciler,
-    initiativeService,
-    initiativeRepository: dependencies.initiativeRepository,
-    initiativeInterviewService,
-    notificationService: notifications?.service,
-    runLifecycleSink: dependencies.runLifecycleSink,
-    workspaceSettingsService: settings?.service,
-    llmObservability,
-    ticketTrackerProvider: dependencies.ticketTrackerProvider,
-    issueWriteback: dependencies.issueWritebackProvider,
-    // Let the personal-credential gate + start guard resolve the model the same way
-    // dispatch does, so a run whose block has no pin but resolves (via its preset) to an
-    // individual-usage model is still gated up-front. Reuses the model-preset repository.
-    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            dependencies.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    platform,
+    collaborators,
   })
 
   // The modules that depend on the assembled engine (they drive `executionService`, or feed the

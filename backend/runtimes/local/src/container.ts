@@ -518,30 +518,26 @@ function buildLocalAppConfig(params: {
  * host-process transport is created lazily inside the router, so it is surfaced to the caller's
  * `onShutdown` via `getNativeProcessTransport` (read at shutdown time) rather than a snapshot.
  */
-function resolveLocalRunnerTransports(params: {
+/**
+ * The AGENT-side half of local dispatch: the lazily-built serving container transport (with its
+ * DB-backed warm-pool / checkout settings and boot housekeeping) plus the native-mode router that
+ * sends only ambient-CLI steps to the host process. Split out of
+ * {@link resolveLocalRunnerTransports}, which keeps the deploy / runner-pool / provisioning-log
+ * halves, so each stays within the per-function line budget.
+ */
+function buildLocalAgentTransports(params: {
   env: NodeJS.ProcessEnv
   options: NodeContainerOptions
   mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
   repos: ReturnType<typeof resolveLocalPersistence>['repos']
-  wsSettings: WorkspaceSettingsService
-  config: AppConfig
-  clock: SystemClock
-  idGenerator: CryptoIdGenerator
   nativeAgents: boolean
 }): {
-  resolveTransport: ResolveRunnerTransport
-  resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
-  assertAgentBackendConfigured: (workspaceId: string) => Promise<void>
-  deployJobClient: NodeContainerOptions['deployJobClient']
-  backendRegistries: ReturnType<typeof createBackendRegistries>
-  localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
-  localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
   localSettingsService: LocalSettingsService | undefined
-  localDeployTransport: ReturnType<typeof buildLocalDeployTransport>
+  resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
+  localAgentsResolve: ResolveRunnerTransport
   getNativeProcessTransport: () => LocalProcessRunnerTransport | undefined
 } {
-  const { env, options, mothership, repos, wsSettings, config, clock, idGenerator, nativeAgents } =
-    params
+  const { env, options, mothership, repos, nativeAgents } = params
 
   // The local container transport is constructed LAZILY on first dispatch, so the service
   // still boots to serve the board (and inline kinds) even when no container runtime is up.
@@ -636,7 +632,7 @@ function resolveLocalRunnerTransports(params: {
   // to the host process, the rest to a container), otherwise the warm-pool container
   // transport directly.
   let routed: RunnerTransport | undefined
-  // Held at this scope (not inside the resolver closure) so `onShutdown` below can stop the
+  // Held at this scope (not inside the resolver closure) so `onShutdown` can stop the
   // harness host process gracefully instead of relying on the parent-exit backstop kill.
   let nativeProcessTransport: LocalProcessRunnerTransport | undefined
   const localAgentsResolve: ResolveRunnerTransport = () => {
@@ -651,6 +647,46 @@ function resolveLocalRunnerTransports(params: {
     }
     return resolveContainerTransport()
   }
+
+  return {
+    localSettingsService,
+    resolveContainerTransport,
+    localAgentsResolve,
+    getNativeProcessTransport: () => nativeProcessTransport,
+  }
+}
+
+function resolveLocalRunnerTransports(params: {
+  env: NodeJS.ProcessEnv
+  options: NodeContainerOptions
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  repos: ReturnType<typeof resolveLocalPersistence>['repos']
+  wsSettings: WorkspaceSettingsService
+  config: AppConfig
+  clock: SystemClock
+  idGenerator: CryptoIdGenerator
+  nativeAgents: boolean
+}): {
+  resolveTransport: ResolveRunnerTransport
+  resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
+  assertAgentBackendConfigured: (workspaceId: string) => Promise<void>
+  deployJobClient: NodeContainerOptions['deployJobClient']
+  backendRegistries: ReturnType<typeof createBackendRegistries>
+  localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
+  localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
+  localSettingsService: LocalSettingsService | undefined
+  localDeployTransport: ReturnType<typeof buildLocalDeployTransport>
+  getNativeProcessTransport: () => LocalProcessRunnerTransport | undefined
+} {
+  const { env, options, mothership, repos, wsSettings, config, clock, idGenerator, nativeAgents } =
+    params
+
+  const {
+    localSettingsService,
+    resolveContainerTransport,
+    localAgentsResolve,
+    getNativeProcessTransport,
+  } = buildLocalAgentTransports({ env, options, mothership, repos, nativeAgents })
 
   // Eagerly kick off the serving transport's boot housekeeping (reap + pre-warm), so a warm
   // pool is ready before the first run rather than warming on first dispatch. The harness image
@@ -774,8 +810,115 @@ function resolveLocalRunnerTransports(params: {
     localPreflightProbes,
     localSettingsService,
     localDeployTransport,
-    getNativeProcessTransport: () => nativeProcessTransport,
+    getNativeProcessTransport,
   }
+}
+
+/**
+ * Declare what this local deployment can execute, so the SPA renders a truthful backend selector.
+ * Mutates `config.infrastructure` in place, exactly where `buildLocalContainer` used to inline it.
+ */
+function applyLocalInfrastructureCapabilities(params: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  nativeAgents: boolean
+}): void {
+  const { env, config, mothership, nativeAgents } = params
+  // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
+  // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
+  // Apple `container` (one VM per container) cannot. Surface that capability to the
+  // engine so it refuses a local-infra Tester run on an incapable runtime ("limited
+  // mode") instead of dispatching a job that can't stand its dependencies up. Building
+  // the adapter is pure (no IO), so this is cheap even though the transport stays lazy.
+  // Native mode runs agents on the host with no per-run Docker container; the Tester's
+  // local docker-compose infra (host compose with per-run project names) is a later phase,
+  // so it's reported unsupported for now (the engine steers to "limited mode"). The
+  // container path keeps the runtime's real Docker-in-Docker capability.
+  const localTestInfraSupported = nativeAgents
+    ? false
+    : createRuntimeAdapter(env).capabilities.localDind
+
+  // Surface the local deployment's execution backends so the SPA renders a clear selector.
+  // Agents run on host Docker (`local-docker`) by default, flipping to the self-hosted pool
+  // per-workspace via `delegateAgentsToRunnerPool` (the SPA derives the effective active).
+  // The Tester's in-container docker-compose infra (`local-compose`) is offered ONLY when the
+  // runtime can nest containers — Apple `container` can't, so it's omitted there (the one
+  // legitimate per-runtime asymmetry, gated by `localTestInfraSupported`/`localDind`).
+  config.infrastructure = buildInfrastructureCapabilities({
+    execution: {
+      available: ['local-docker', 'runner-pool'],
+      active: 'local-docker',
+      // Prefill the image of a low-config k3s runner preset — local mode knows its harness ref
+      // (an explicit LOCAL_HARNESS_IMAGE, else the backend-matched RECOMMENDED_HARNESS_IMAGE).
+      suggestedExecutorImage: resolveHarnessImage(env),
+    },
+    testEnv: {
+      available: localTestInfraSupported
+        ? ['local-compose', 'environment-provider']
+        : ['environment-provider'],
+      active: localTestInfraSupported ? 'local-compose' : 'environment-provider',
+    },
+    // Local mode runs on the developer's own machine, so a built frontend can be served on a
+    // host-reachable URL for a browsable preview — the genuine local/node differentiator over
+    // the Worker's self-contained UI-test container.
+    frontendPreview: { supported: true },
+    // The account-wide model policy needs an account admin governing a shared tenant. Plain
+    // local mode is a single developer on their own machine (no such governance), so it is
+    // unsupported there; mothership mode delegates org state to a hosted account, so it is on.
+    modelPolicy: { supported: !!mothership },
+  })
+}
+
+/**
+ * The mothership-only runtime seams, split out of {@link buildLocalContainer} to keep that root
+ * within the per-function line budget. Plain local mode gets `{ inProcessRunner: undefined }` and
+ * its injected sink back unchanged.
+ */
+function buildLocalMothershipRuntime(params: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  realtimeSink: LocalEventSink | undefined
+}): { inProcessRunner: SqliteWorkRunner | undefined; realtimeSink: LocalEventSink | undefined } {
+  const { env, config, mothership } = params
+  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with
+  // real timer-backed sleeps, backed by the durable local-sqlite work queue (so a crash/restart
+  // re-drives what was in flight — the durability pg-boss gives the Node facade). Bound to the
+  // execution service AFTER the container is built (the service doesn't exist yet — chicken-and-egg
+  // with createCore). The lease/sweeper timings reuse the same execution-runtime derivation the
+  // pg-boss queue/sweeper use, so durable recovery behaves consistently across the two runners.
+  const runtime = mothership ? executionRuntime(config, env) : undefined
+  const inProcessRunner =
+    mothership && runtime
+      ? new SqliteWorkRunner(
+          mothership.workQueue,
+          {
+            drive: runtime.drive,
+            leaseMs: runtime.queue.expireInSeconds * 1000,
+            reArmDelayMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
+            errorBackoffMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
+            sweepIntervalMs: runtime.sweeper.intervalMs,
+            maxAttempts: runtime.queue.retryLimit,
+            concurrency: runtime.concurrency,
+          },
+          logger,
+        )
+      : undefined
+
+  // Real-time UPSTREAM (docs/initiatives/mothership-mode.md, PR 2): in mothership mode, fan every
+  // engine event to the laptop's own SPA (the injected local hub) AND to the mothership over
+  // `POST /internal/events/publish`, so a hosted teammate on the shared board sees the local node's
+  // activity live. This layers the mothership adapter over the hub via the SAME WebSocketPropagator
+  // seam the Redis cross-node adapter uses — `LayeredEventPropagator.broadcast` already fans to the
+  // hub + each adapter, so no engine change is needed. Off (or no hub wired) → the hub is passed
+  // straight through unchanged, exactly as before.
+  const realtimeSink: LocalEventSink | undefined =
+    mothership && params.realtimeSink
+      ? new LayeredEventPropagator(params.realtimeSink, [mothership.realtimeAdapter])
+      : params.realtimeSink
+
+  return { inProcessRunner, realtimeSink }
 }
 
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
@@ -896,85 +1039,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     nativeAgents,
   })
 
-  // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
-  // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
-  // Apple `container` (one VM per container) cannot. Surface that capability to the
-  // engine so it refuses a local-infra Tester run on an incapable runtime ("limited
-  // mode") instead of dispatching a job that can't stand its dependencies up. Building
-  // the adapter is pure (no IO), so this is cheap even though the transport stays lazy.
-  // Native mode runs agents on the host with no per-run Docker container; the Tester's
-  // local docker-compose infra (host compose with per-run project names) is a later phase,
-  // so it's reported unsupported for now (the engine steers to "limited mode"). The
-  // container path keeps the runtime's real Docker-in-Docker capability.
-  const localTestInfraSupported = nativeAgents
-    ? false
-    : createRuntimeAdapter(env).capabilities.localDind
+  applyLocalInfrastructureCapabilities({ env, config, mothership, nativeAgents })
 
-  // Surface the local deployment's execution backends so the SPA renders a clear selector.
-  // Agents run on host Docker (`local-docker`) by default, flipping to the self-hosted pool
-  // per-workspace via `delegateAgentsToRunnerPool` (the SPA derives the effective active).
-  // The Tester's in-container docker-compose infra (`local-compose`) is offered ONLY when the
-  // runtime can nest containers — Apple `container` can't, so it's omitted there (the one
-  // legitimate per-runtime asymmetry, gated by `localTestInfraSupported`/`localDind`).
-  config.infrastructure = buildInfrastructureCapabilities({
-    execution: {
-      available: ['local-docker', 'runner-pool'],
-      active: 'local-docker',
-      // Prefill the image of a low-config k3s runner preset — local mode knows its harness ref
-      // (an explicit LOCAL_HARNESS_IMAGE, else the backend-matched RECOMMENDED_HARNESS_IMAGE).
-      suggestedExecutorImage: resolveHarnessImage(env),
-    },
-    testEnv: {
-      available: localTestInfraSupported
-        ? ['local-compose', 'environment-provider']
-        : ['environment-provider'],
-      active: localTestInfraSupported ? 'local-compose' : 'environment-provider',
-    },
-    // Local mode runs on the developer's own machine, so a built frontend can be served on a
-    // host-reachable URL for a browsable preview — the genuine local/node differentiator over
-    // the Worker's self-contained UI-test container.
-    frontendPreview: { supported: true },
-    // The account-wide model policy needs an account admin governing a shared tenant. Plain
-    // local mode is a single developer on their own machine (no such governance), so it is
-    // unsupported there; mothership mode delegates org state to a hosted account, so it is on.
-    modelPolicy: { supported: !!mothership },
+  // The two mothership-only runtime seams: the in-process durable work runner that stands in for
+  // pg-boss, and the upstream-layered real-time sink. Both are `undefined` (the sink passed
+  // through unchanged) in plain local mode.
+  const { inProcessRunner, realtimeSink } = buildLocalMothershipRuntime({
+    env,
+    config,
+    mothership,
+    realtimeSink: options.realtimeSink,
   })
-
-  // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with
-  // real timer-backed sleeps, backed by the durable local-sqlite work queue (so a crash/restart
-  // re-drives what was in flight — the durability pg-boss gives the Node facade). Bound to the
-  // execution service AFTER the container is built (the service doesn't exist yet — chicken-and-egg
-  // with createCore). The lease/sweeper timings reuse the same execution-runtime derivation the
-  // pg-boss queue/sweeper use, so durable recovery behaves consistently across the two runners.
-  const runtime = mothership ? executionRuntime(config, env) : undefined
-  const inProcessRunner =
-    mothership && runtime
-      ? new SqliteWorkRunner(
-          mothership.workQueue,
-          {
-            drive: runtime.drive,
-            leaseMs: runtime.queue.expireInSeconds * 1000,
-            reArmDelayMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
-            errorBackoffMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
-            sweepIntervalMs: runtime.sweeper.intervalMs,
-            maxAttempts: runtime.queue.retryLimit,
-            concurrency: runtime.concurrency,
-          },
-          logger,
-        )
-      : undefined
-
-  // Real-time UPSTREAM (docs/initiatives/mothership-mode.md, PR 2): in mothership mode, fan every
-  // engine event to the laptop's own SPA (the injected local hub) AND to the mothership over
-  // `POST /internal/events/publish`, so a hosted teammate on the shared board sees the local node's
-  // activity live. This layers the mothership adapter over the hub via the SAME WebSocketPropagator
-  // seam the Redis cross-node adapter uses — `LayeredEventPropagator.broadcast` already fans to the
-  // hub + each adapter, so no engine change is needed. Off (or no hub wired) → the hub is passed
-  // straight through unchanged, exactly as before.
-  const realtimeSink: LocalEventSink | undefined =
-    mothership && options.realtimeSink
-      ? new LayeredEventPropagator(options.realtimeSink, [mothership.realtimeAdapter])
-      : options.realtimeSink
 
   const container = buildNodeContainer(
     buildLocalNodeOptions({

@@ -93,7 +93,10 @@ const LEGACY_ALLOWANCES = new Map([
   // selection, the container executor, the composite + consensus wrap) and
   // `container-vcs-identity.ts` (the App registry + repo-target resolvers three sibling modules
   // already read off the root) — ratcheted 2300 -> 1650.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1650],
+  // The `max-lines-per-function` 300 -> 250 step then took the deployment-wide credential /
+  // telemetry / account-settings stores out to `container-shared-services.ts`, so `buildContainer`
+  // is the ordering of its four phases and nothing else — ratcheted 1650 -> 1500.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1500],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

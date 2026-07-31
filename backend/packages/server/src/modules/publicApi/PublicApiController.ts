@@ -999,6 +999,14 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     return c.body(null, 204)
   })
 
+  registerTaskRunStreamRoute(app)
+}
+
+/**
+ * The task run SSE stream. Split out of {@link registerTaskLifecycleRoutes} purely for size — the
+ * bounded-poll loop is the bulk of that registrar — and registered onto the SAME app instance.
+ */
+function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
   // Stream a task's run over SSE: the same bounded-poll pattern as the jobs stream (runtime-
   // symmetric by construction — no per-facade event-hub wiring), re-reading the persisted run
   // + its block each tick so a mid-run PR-open surfaces. Terminal on `done`/`failed`; a parked

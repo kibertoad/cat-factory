@@ -17,730 +17,568 @@ import { definePrReviewSuite } from './execution-pr-review.js'
 // (test tree unchanged).
 export function defineCorePlanningConformance(harness: ConformanceHarness): void {
   describe('public API (break down an initiative)', () => {
-    it('authenticates a public-API key, runs a public inline pipeline headlessly, persists a retrievable result, and hides the anchor block', async () => {
-      const { call, createOrgWorkspace, drive } = harness.makeApp()
-      // Account-scoped: public-API keys are only minted for an account-owning workspace, so use a
-      // seeded ORG workspace (the seed brings the built-in `pl_initiative_breakdown` pipeline).
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
+    registerPublicApiTests(harness)
+    registerPublicApiScopeTests(harness)
+  })
+  registerPipelineCatalogTests(harness)
 
-      // Mint an inbound public-API key (needs ENCRYPTION_KEY, which both harnesses configure).
-      const created = await call<{ key: { id: string }; secret: string }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: 'external' },
-      )
-      expect(created.status).toBe(201)
-      const secret = created.body.secret
-      expect(secret).toMatch(/^cf_live_/)
-      const auth = { authorization: `Bearer ${secret}` }
-
-      // A missing key is refused; a valid key starts the run.
-      expect(
-        (
-          await call('POST', '/api/v1/initiatives', {
-            pipelineId: 'pl_initiative_breakdown',
-            input: 'x',
-          })
-        ).status,
-      ).toBe(401)
-      const started = await call<{ jobId: string; status: string }>(
-        'POST',
-        '/api/v1/initiatives',
-        { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
-        auth,
-      )
-      expect(started.status).toBe(202)
-      const jobId = started.body.jobId
-
-      // Drive the run to completion and read back the DB-persisted result.
-      await drive(wsId)
-      const job = await call<{ status: string; result: { output: string } | null }>(
+  describe('service spec read', () => {
+    it('serves an empty service-spec view when GitHub is not wired', async () => {
+      // The "View Requirements" window reads the sharded `spec/` artifact off the repo
+      // default branch via the shared controller, resolved through the same
+      // `resolveRunRepoContext` seam on both facades. With no GitHub wired (the
+      // conformance harness), the route must be mounted and return an empty (present:false)
+      // view identically — proving the symmetric wiring rather than one facade 404-ing.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const res = await call<{ present: boolean; spec: unknown; features: unknown[] }>(
         'GET',
-        `/api/v1/jobs/${jobId}`,
-        undefined,
-        auth,
+        `/workspaces/${workspace.id}/blocks/blk_auth/spec`,
       )
-      expect(job.status).toBe(200)
-      expect(job.body.status).toBe('succeeded')
-      expect(job.body.result?.output).toBeTruthy()
-
-      // The headless anchor block AND its execution are excluded from the board snapshot on both
-      // stores — neither the hidden block nor the external run's brief/output reaches the SPA.
-      const board = await call<{
-        blocks: { title: string; internal?: boolean }[]
-        executions: { id: string }[]
-      }>('GET', `/workspaces/${wsId}`)
-      expect(board.body.blocks.some((b) => b.internal)).toBe(false)
-      expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
-      expect(board.body.executions.some((e) => e.id === jobId)).toBe(false)
-
-      // A key can read ONLY the initiative runs it created, never an arbitrary board run in the
-      // same workspace: start the SAME public pipeline on a NORMAL seeded task, and the key gets
-      // a 404 (its anchor block isn't internal), even though the run exists and shares the scope.
-      const normalStart = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_initiative_breakdown',
-      })
-      expect(normalStart.status).toBe(201)
-      const normalExec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
-      expect((await call('GET', `/api/v1/jobs/${normalExec.id}`, undefined, auth)).status).toBe(404)
-
-      // Concurrency backstop (both stores): a workspace may only have 5 initiative runs in
-      // flight; leaving them undriven, the 6th start is refused with 429.
-      for (let i = 0; i < 5; i++) {
-        expect(
-          (
-            await call(
-              'POST',
-              '/api/v1/initiatives',
-              { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
-              auth,
-            )
-          ).status,
-        ).toBe(202)
-      }
-      expect(
-        (
-          await call(
-            'POST',
-            '/api/v1/initiatives',
-            { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
-            auth,
-          )
-        ).status,
-      ).toBe(429)
-      await drive(wsId) // let the in-flight runs finish so none dangle
-
-      // A non-public pipeline id is refused; a revoked key no longer authenticates.
-      expect(
-        (
-          await call(
-            'POST',
-            '/api/v1/initiatives',
-            { pipelineId: 'pl_blueprint', input: 'x' },
-            auth,
-          )
-        ).status,
-      ).toBe(400)
-      expect(
-        (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`)).status,
-      ).toBe(204)
-      expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
-    })
-
-    it('serves the full task lifecycle (edit / stop / retry / rich run) + pipeline discovery, workspace-scoped', async () => {
-      const { call, createOrgWorkspace, drive } = harness.makeApp()
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-
-      const created = await call<{ secret: string }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: 'external' },
-      )
-      expect(created.status).toBe(201)
-      const auth = { authorization: `Bearer ${created.body.secret}` }
-
-      // Pipeline discovery: the public inline pipeline is public + headless-startable; a
-      // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
-      // pipelineId, nothing lists them" gap.
-      const pipelines = await call<{
-        pipelines: {
-          pipelineId: string
-          steps: string[]
-          public: boolean
-          headlessStartable: boolean
-        }[]
-      }>('GET', '/api/v1/pipelines', undefined, auth)
-      expect(pipelines.status).toBe(200)
-      const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
-      const breakdown = byId.get('pl_initiative_breakdown')
-      expect(breakdown?.public).toBe(true)
-      expect(breakdown?.headlessStartable).toBe(true)
-      expect(breakdown && breakdown.steps.length > 0).toBe(true)
-      const quick = byId.get('pl_simple')
-      expect(quick).toBeTruthy()
-      expect(quick?.headlessStartable).toBe(false)
-
-      // Create a task under a fresh service frame (via the dev-open session board route).
-      const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
-        type: 'service',
-        position: { x: 500, y: 500 },
-      })
-      const task = await call<{ taskId: string }>(
-        'POST',
-        `/api/v1/services/${frame.body.id}/tasks`,
-        { title: 'Lifecycle task', description: 'original' },
-        auth,
-      )
-      expect(task.status).toBe(201)
-      const taskId = task.body.taskId
-
-      // Edit (PATCH) the title/description before it runs.
-      const edited = await call<{ title: string; description: string }>(
-        'PATCH',
-        `/api/v1/tasks/${taskId}`,
-        { title: 'Lifecycle task (edited)', description: 'reworded' },
-        auth,
-      )
-      expect(edited.status).toBe(200)
-      expect(edited.body.title).toBe('Lifecycle task (edited)')
-      expect(edited.body.description).toBe('reworded')
-
-      // A not-yet-started task has no run to read or stop.
-      expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)).status).toBe(404)
-      expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(409)
-
-      // Start it (async — left running until driven), then read the rich run projection.
-      const started = await call<{ executionId: string | null }>(
-        'POST',
-        `/api/v1/tasks/${taskId}/start`,
-        { pipelineId: 'pl_simple' },
-        auth,
-      )
-      expect(started.status).toBe(202)
-      const run = await call<{
-        runId: string
-        taskId: string
-        status: string
-        steps: { agentKind: string; state: string; progress: number }[]
-      }>('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)
-      expect(run.status).toBe(200)
-      expect(run.body.taskId).toBe(taskId)
-      expect(run.body.steps.length).toBeGreaterThan(0)
-      expect(['running', 'blocked', 'paused', 'done']).toContain(run.body.status)
-
-      // Stop the run → it settles `failed` with a `cancelled` error, and stays retryable.
-      expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(200)
-      const stopped = await call<{ status: string; error: { code: string } | null }>(
-        'GET',
-        `/api/v1/tasks/${taskId}/run`,
-        undefined,
-        auth,
-      )
-      expect(stopped.body.status).toBe('failed')
-      expect(stopped.body.error?.code).toBe('cancelled')
-
-      // Retry the failed run, then drive it to completion.
-      expect((await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, auth)).status).toBe(
-        202,
-      )
-      await drive(wsId)
-      const finished = await call<{ status: string }>(
-        'GET',
-        `/api/v1/tasks/${taskId}/run`,
-        undefined,
-        auth,
-      )
-      expect(finished.body.status).toBe('done')
-
-      // Every lifecycle route double-scopes to the key's workspace: a key from ANOTHER
-      // workspace 404s on this task (never edits/stops/retries/reads it).
-      const other = await createOrgWorkspace({ seed: true })
-      const otherKey = await call<{ secret: string }>(
-        'POST',
-        `/workspaces/${other.workspace.id}/public-api-keys`,
-        { label: 'other' },
-      )
-      const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
-      expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, otherAuth)).status).toBe(
-        404,
-      )
-      expect(
-        (await call('PATCH', `/api/v1/tasks/${taskId}`, { title: 'x' }, otherAuth)).status,
-      ).toBe(404)
-      expect(
-        (await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, otherAuth)).status,
-      ).toBe(404)
-      expect(
-        (await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, otherAuth)).status,
-      ).toBe(404)
-    })
-
-    // Tier 2 of the public-API initiative: the two list reads that used to be unbounded (the
-    // service-task list read the WHOLE board and filtered in JS) or absent entirely (the job
-    // list). Both now push their bound, subtree, filters and ordering into SQL through new
-    // repository ports, so these assert the D1 and Drizzle implementations page identically — a
-    // store that ordered differently, dropped the `internal` join, or mishandled the keyset fails
-    // here rather than silently mis-serving an external integration. Split in two (one per list)
-    // to stay within the per-function statement budget.
-    it('serves the bounded, keyset-paginated JOB list identically on every store', async () => {
-      const { call, createOrgWorkspace, drive } = harness.makeApp()
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-      const created = await call<{ secret: string }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: 'external' },
-      )
-      const auth = { authorization: `Bearer ${created.body.secret}` }
-
-      // Three headless initiative runs, driven to completion so they settle `succeeded`.
-      for (const input of ['job one', 'job two', 'job three']) {
-        expect(
-          (
-            await call(
-              'POST',
-              '/api/v1/initiatives',
-              { pipelineId: 'pl_initiative_breakdown', input },
-              auth,
-            )
-          ).status,
-        ).toBe(202)
-      }
-      await drive(wsId)
-
-      type JobPage = { jobs: { jobId: string; status: string }[]; nextCursor: string | null }
-      const all = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
-      expect(all.status).toBe(200)
-      expect(all.body.jobs.length).toBe(3)
-      // Newest first, and the last page reports no further cursor.
-      expect(all.body.nextCursor).toBeNull()
-      expect(all.body.jobs.every((j) => j.status === 'succeeded')).toBe(true)
-      const order = all.body.jobs.map((j) => j.jobId)
-
-      // Keyset paging: two pages of 2 + 1 reproduce the single-page order exactly, with no row
-      // skipped or repeated (the composite `(createdAt, id)` cursor is what makes this hold for
-      // runs that share a millisecond — a timestamp-only cursor would drop the ties).
-      const first = await call<JobPage>('GET', '/api/v1/jobs?limit=2', undefined, auth)
-      expect(first.body.jobs.map((j) => j.jobId)).toEqual(order.slice(0, 2))
-      expect(first.body.nextCursor).toBeTruthy()
-      const second = await call<JobPage>(
-        'GET',
-        `/api/v1/jobs?limit=2&cursor=${encodeURIComponent(first.body.nextCursor!)}`,
-        undefined,
-        auth,
-      )
-      expect(second.body.jobs.map((j) => j.jobId)).toEqual(order.slice(2))
-      expect(second.body.nextCursor).toBeNull()
-
-      // Walk the whole list one row at a time: every job must be visited EXACTLY once, in the
-      // same order, and the walk must terminate. This is the general keyset guard — a cursor
-      // minted from anything other than the value the query orders by (the `agent_runs.created_at`
-      // COLUMN, which `rowToExecution` projects onto `createdAt` for exactly this reason) skips or
-      // repeats rows here. The same-millisecond tie is pinned at the mapper/unit level, since a
-      // conformance run cannot force two inserts into one clock tick.
-      const walked: string[] = []
-      let cursor: string | null = null
-      for (let guard = 0; guard <= order.length; guard++) {
-        const url: string = `/api/v1/jobs?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
-        const page: { status: number; body: JobPage } = await call<JobPage>(
-          'GET',
-          url,
-          undefined,
-          auth,
-        )
-        walked.push(...page.body.jobs.map((j) => j.jobId))
-        cursor = page.body.nextCursor
-        if (!cursor) break
-      }
-      expect(cursor).toBeNull()
-      expect(walked).toEqual(order)
-
-      // Filters: a status nothing matches comes back empty; a future `since` likewise.
-      const failedOnly = await call<JobPage>('GET', '/api/v1/jobs?status=failed', undefined, auth)
-      expect(failedOnly.body.jobs).toEqual([])
-      const future = await call<JobPage>(
-        'GET',
-        `/api/v1/jobs?since=${Date.now() + 60_000}`,
-        undefined,
-        auth,
-      )
-      expect(future.body.jobs).toEqual([])
-
-      // A malformed cursor is an explicit 400, never a silent re-serve of page 1.
-      const bad = await call<{ error: { code: string } }>(
-        'GET',
-        '/api/v1/jobs?cursor=!!!not-base64!!!',
-        undefined,
-        auth,
-      )
-      expect(bad.status).toBe(400)
-      expect(bad.body.error.code).toBe('invalid_cursor')
-
-      // A junk `limit`/`since` is rejected at the contract, not silently coerced: `Number()` would
-      // read `1e9` and `0x64` as plausible page sizes and blow straight past the hard ceiling.
-      for (const query of ['limit=abc', 'limit=0', 'limit=101', 'limit=1e2', 'since=yesterday']) {
-        expect((await call('GET', `/api/v1/jobs?${query}`, undefined, auth)).status).toBe(400)
-      }
-
-      // The `internal` scope is enforced in SQL: an ORDINARY board run in the same workspace is
-      // never enumerated, mirroring the single-job read's 404. This is the list form of the
-      // double-scope, and the assertion that would catch a store that dropped the anchor join.
-      expect(
-        (
-          await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-            pipelineId: 'pl_initiative_breakdown',
-          })
-        ).status,
-      ).toBe(201)
-      const boardRun = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
-      const afterBoardRun = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
-      expect(afterBoardRun.body.jobs.some((j) => j.jobId === boardRun.id)).toBe(false)
-      expect(afterBoardRun.body.jobs.length).toBe(3)
-    })
-
-    it('serves the bounded, keyset-paginated SERVICE-TASK list identically on every store', async () => {
-      const { call, createOrgWorkspace } = harness.makeApp()
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-      const created = await call<{ secret: string }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: 'external' },
-      )
-      const auth = { authorization: `Bearer ${created.body.secret}` }
-
-      const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
-        type: 'service',
-        position: { x: 900, y: 900 },
-      })
-      const serviceId = frame.body.id
-      // A module under the frame, so the page covers the WHOLE subtree — a task directly under
-      // the frame AND one nested in a module. That two-level walk is exactly what the new
-      // `listChildIds` + `listTasksUnder` pair replaces the old whole-board read with.
-      const module = await call<{ id: string }>(
-        'POST',
-        `/workspaces/${wsId}/blocks/${serviceId}/modules`,
-        { name: 'Module A' },
-      )
-      const underFrame = await call<{ taskId: string }>(
-        'POST',
-        `/api/v1/services/${serviceId}/tasks`,
-        { title: 'Task under frame' },
-        auth,
-      )
-      const underModule = await call<{ id: string }>(
-        'POST',
-        `/workspaces/${wsId}/blocks/${module.body.id}/tasks`,
-        { title: 'Task under module' },
-      )
-
-      type TaskPage = {
-        tasks: { taskId: string; status: string }[]
-        nextCursor: string | null
-      }
-      const tasks = await call<TaskPage>(
-        'GET',
-        `/api/v1/services/${serviceId}/tasks`,
-        undefined,
-        auth,
-      )
-      expect(tasks.status).toBe(200)
-      expect(new Set(tasks.body.tasks.map((t) => t.taskId))).toEqual(
-        new Set([underFrame.body.taskId, underModule.body.id]),
-      )
-      expect(tasks.body.nextCursor).toBeNull()
-      // Both stores order by the same stable key, so the paged sequence must equal the unpaged one.
-      const taskOrder = tasks.body.tasks.map((t) => t.taskId)
-
-      const tFirst = await call<TaskPage>(
-        'GET',
-        `/api/v1/services/${serviceId}/tasks?limit=1`,
-        undefined,
-        auth,
-      )
-      expect(tFirst.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(0, 1))
-      expect(tFirst.body.nextCursor).toBeTruthy()
-      const tSecond = await call<TaskPage>(
-        'GET',
-        `/api/v1/services/${serviceId}/tasks?limit=1&cursor=${encodeURIComponent(tFirst.body.nextCursor!)}`,
-        undefined,
-        auth,
-      )
-      expect(tSecond.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(1))
-      expect(tSecond.body.nextCursor).toBeNull()
-
-      // The status filter is pushed into SQL: both fresh tasks are `planned`, none are `done`.
-      const planned = await call<TaskPage>(
-        'GET',
-        `/api/v1/services/${serviceId}/tasks?status=planned`,
-        undefined,
-        auth,
-      )
-      expect(planned.body.tasks.length).toBe(2)
-      const done = await call<TaskPage>(
-        'GET',
-        `/api/v1/services/${serviceId}/tasks?status=done`,
-        undefined,
-        auth,
-      )
-      expect(done.body.tasks).toEqual([])
-
-      // A missing / non-service target still 404s (the guard survives the move to a paged read).
-      expect((await call('GET', `/api/v1/services/nope/tasks`, undefined, auth)).status).toBe(404)
-    })
-
-    it('gates each route on the key scope ladder (read ⊂ write ⊂ admin) and deletes with admin', async () => {
-      const { call, createOrgWorkspace } = harness.makeApp()
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-
-      // Mint one key per scope. An omitted scope defaults to `write`.
-      const mint = async (scope: 'read' | 'write' | 'admin') => {
-        const res = await call<{ key: { scope: string }; secret: string }>(
-          'POST',
-          `/workspaces/${wsId}/public-api-keys`,
-          { label: scope, scope },
-        )
-        expect(res.status).toBe(201)
-        expect(res.body.key.scope).toBe(scope)
-        return { authorization: `Bearer ${res.body.secret}` }
-      }
-      const readAuth = await mint('read')
-      const writeAuth = await mint('write')
-      const adminAuth = await mint('admin')
-      // The default (no scope in the body) is `write`.
-      const defaulted = await call<{ key: { scope: string } }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: 'defaulted' },
-      )
-      expect(defaulted.body.key.scope).toBe('write')
-
-      const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
-        type: 'service',
-        position: { x: 400, y: 400 },
-      })
-      const serviceId = frame.body.id
-
-      // A `read` key can read (list services) but is refused (403 insufficient_scope) on any
-      // write — e.g. creating a task.
-      expect((await call('GET', '/api/v1/services', undefined, readAuth)).status).toBe(200)
-      const readCreate = await call<{ error: { code: string } }>(
-        'POST',
-        `/api/v1/services/${serviceId}/tasks`,
-        { title: 'nope', description: 'x' },
-        readAuth,
-      )
-      expect(readCreate.status).toBe(403)
-      expect(readCreate.body.error.code).toBe('insufficient_scope')
-
-      // A `write` key creates the task (and can read it) but is refused on the destructive DELETE.
-      const created = await call<{ taskId: string }>(
-        'POST',
-        `/api/v1/services/${serviceId}/tasks`,
-        { title: 'Scoped task', description: 'x' },
-        writeAuth,
-      )
-      expect(created.status).toBe(201)
-      const taskId = created.body.taskId
-      expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
-      const writeDelete = await call<{ error: { code: string } }>(
-        'DELETE',
-        `/api/v1/tasks/${taskId}`,
-        undefined,
-        writeAuth,
-      )
-      expect(writeDelete.status).toBe(403)
-      expect(writeDelete.body.error.code).toBe('insufficient_scope')
-      // Still present after the refused delete.
-      expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
-
-      // An `admin` key deletes it; the task is then gone (404) for every scope.
-      expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(
-        204,
-      )
-      expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(404)
-      // Deleting an already-gone task is idempotent-but-scoped: a real task no longer resolves,
-      // so it 404s (never a 5xx) even for admin.
-      expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(
-        404,
-      )
-    })
-
-    it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
-      const app = harness.makeApp()
-      const { call, createOrgWorkspace } = app
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-
-      const mint = async (scope: 'read' | 'write' | 'admin') => {
-        const res = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
-          label: scope,
-          scope,
-        })
-        expect(res.status).toBe(201)
-        return { authorization: `Bearer ${res.body.secret}` }
-      }
-      const readAuth = await mint('read')
-      const writeAuth = await mint('write')
-      const adminAuth = await mint('admin')
-
-      // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
-      // persisted rows keeps the test targeted at the public routes, not the run machinery).
-      // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
-      // (it has an automated merge side-effect) but the null block short-circuits the merge, so
-      // the card settles `acted` without needing a real block/run/PR.
-      const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
-        app.notificationRepository().upsert(wsId, {
-          id,
-          type,
-          status: 'open',
-          severity: 'normal',
-          blockId: null,
-          executionId: null,
-          title: id,
-          body: 'body',
-          payload: null,
-          createdAt: 1,
-          resolvedAt: null,
-        })
-      await seed('ntf_dismiss')
-      await seed('ntf_act')
-
-      // An informational card (`requirement_review`) — it parks a run on an interactive human
-      // decision, so it has NO automated action and `act` must refuse it (→ dismiss instead).
-      await seed('ntf_info', 'requirement_review')
-
-      // list: a `read` key sees all three open cards.
-      const listed = await call<{ notifications: { id: string; status: string }[] }>(
-        'GET',
-        '/api/v1/notifications',
-        undefined,
-        readAuth,
-      )
-      expect(listed.status).toBe(200)
-      expect(new Set(listed.body.notifications.map((n) => n.id))).toEqual(
-        new Set(['ntf_dismiss', 'ntf_act', 'ntf_info']),
-      )
-
-      // Scope ladder: a `read` key can't dismiss/act; a `write` key can dismiss but not act
-      // (act performs a real merge → admin only).
-      const readDismiss = await call<{ error: { code: string } }>(
-        'POST',
-        '/api/v1/notifications/ntf_dismiss/dismiss',
-        undefined,
-        readAuth,
-      )
-      expect(readDismiss.status).toBe(403)
-      expect(readDismiss.body.error.code).toBe('insufficient_scope')
-      const writeAct = await call<{ error: { code: string } }>(
-        'POST',
-        '/api/v1/notifications/ntf_act/act',
-        undefined,
-        writeAuth,
-      )
-      expect(writeAct.status).toBe(403)
-      expect(writeAct.body.error.code).toBe('insufficient_scope')
-
-      // dismiss (write) resolves the card as `dismissed`; act (admin) resolves it as `acted`.
-      const dismissed = await call<{ status: string }>(
-        'POST',
-        '/api/v1/notifications/ntf_dismiss/dismiss',
-        undefined,
-        writeAuth,
-      )
-      expect(dismissed.status).toBe(200)
-      expect(dismissed.body.status).toBe('dismissed')
-      const acted = await call<{ status: string }>(
-        'POST',
-        '/api/v1/notifications/ntf_act/act',
-        undefined,
-        adminAuth,
-      )
-      expect(acted.status).toBe(200)
-      expect(acted.body.status).toBe('acted')
-
-      // `act` refuses an informational card (no automated action) with 409, even for an admin
-      // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
-      const actInfo = await call<{ error: { code: string } }>(
-        'POST',
-        '/api/v1/notifications/ntf_info/act',
-        undefined,
-        adminAuth,
-      )
-      expect(actInfo.status).toBe(409)
-      expect(actInfo.body.error.code).toBe('notification_not_actionable')
-      const dismissInfo = await call<{ status: string }>(
-        'POST',
-        '/api/v1/notifications/ntf_info/dismiss',
-        undefined,
-        writeAuth,
-      )
-      expect(dismissInfo.status).toBe(200)
-      expect(dismissInfo.body.status).toBe('dismissed')
-
-      // All resolved, so the inbox is now empty (list is open-only).
-      const after = await call<{ notifications: unknown[] }>(
-        'GET',
-        '/api/v1/notifications',
-        undefined,
-        readAuth,
-      )
-      expect(after.body.notifications).toEqual([])
-
-      // Workspace-scoped: a key from ANOTHER workspace never sees or resolves this
-      // workspace's notifications (an unknown/foreign id is a 404 on both act and dismiss).
-      await seed('ntf_foreign')
-      const other = await createOrgWorkspace({ seed: true })
-      const otherKey = await call<{ secret: string }>(
-        'POST',
-        `/workspaces/${other.workspace.id}/public-api-keys`,
-        { label: 'admin', scope: 'admin' },
-      )
-      const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
-      const otherList = await call<{ notifications: unknown[] }>(
-        'GET',
-        '/api/v1/notifications',
-        undefined,
-        otherAuth,
-      )
-      expect(otherList.body.notifications).toEqual([])
-      expect(
-        (await call('POST', '/api/v1/notifications/ntf_foreign/act', undefined, otherAuth)).status,
-      ).toBe(404)
-      expect(
-        (await call('POST', '/api/v1/notifications/ntf_foreign/dismiss', undefined, otherAuth))
-          .status,
-      ).toBe(404)
-    })
-
-    it('serves the workspace usage + budget read to a read-scoped key', async () => {
-      const { call, createOrgWorkspace } = harness.makeApp()
-      const { workspace } = await createOrgWorkspace({ seed: true })
-      const wsId = workspace.id
-
-      const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
-        label: 'usage',
-        scope: 'read',
-      })
-      const auth = { authorization: `Bearer ${minted.body.secret}` }
-
-      const usage = await call<{
-        periodStart: number
-        currency: string
-        budget: {
-          inputTokens: number
-          outputTokens: number
-          costSpent: number
-          costLimit: number
-          exceeded: boolean
-        }
-        rows: { billing: string; model: string; calls: number }[]
-      }>('GET', '/api/v1/usage', undefined, auth)
-      expect(usage.status).toBe(200)
-      // The period is the current calendar month (UTC) and the currency is the deployment's,
-      // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
-      // facades serve the same resolved shape, not a particular number.
-      expect(usage.body.currency).toBeTruthy()
-      expect(usage.body.periodStart).toBeGreaterThan(0)
-      // A workspace that has spent nothing this period reports a real zero against a real
-      // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
-      // usage to group, which is distinct from a sink the deployment doesn't retain.
-      expect(usage.body.budget.inputTokens).toBe(0)
-      expect(usage.body.budget.outputTokens).toBe(0)
-      expect(usage.body.budget.costSpent).toBe(0)
-      expect(usage.body.budget.costLimit).toBeGreaterThan(0)
-      expect(usage.body.budget.exceeded).toBe(false)
-      expect(usage.body.rows).toEqual([])
-
-      // Read is the whole scope story — the aggregate names no resource ids — but a key is
-      // still required, and an unauthenticated caller learns nothing.
-      expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+      expect(res.status).toBe(200)
+      expect(res.body.present).toBe(false)
+      expect(res.body.spec).toBeNull()
+      expect(res.body.features).toEqual([])
     })
   })
 
+  registerBoardPlanningTests(harness)
+
+  // PR deep-review park → select → resolve — extracted to keep this function within its
+  // line budget (see CLAUDE.md: split, never raise the budget).
+  definePrReviewSuite(harness)
+}
+
+/**
+ * The headless `/api/v1` surface: key authentication, the task lifecycle, and the bounded
+ * keyset-paginated job + service-task lists.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicApiTests(harness: ConformanceHarness): void {
+  it('authenticates a public-API key, runs a public inline pipeline headlessly, persists a retrievable result, and hides the anchor block', async () => {
+    const { call, createOrgWorkspace, drive } = harness.makeApp()
+    // Account-scoped: public-API keys are only minted for an account-owning workspace, so use a
+    // seeded ORG workspace (the seed brings the built-in `pl_initiative_breakdown` pipeline).
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    // Mint an inbound public-API key (needs ENCRYPTION_KEY, which both harnesses configure).
+    const created = await call<{ key: { id: string }; secret: string }>(
+      'POST',
+      `/workspaces/${wsId}/public-api-keys`,
+      { label: 'external' },
+    )
+    expect(created.status).toBe(201)
+    const secret = created.body.secret
+    expect(secret).toMatch(/^cf_live_/)
+    const auth = { authorization: `Bearer ${secret}` }
+
+    // A missing key is refused; a valid key starts the run.
+    expect(
+      (
+        await call('POST', '/api/v1/initiatives', {
+          pipelineId: 'pl_initiative_breakdown',
+          input: 'x',
+        })
+      ).status,
+    ).toBe(401)
+    const started = await call<{ jobId: string; status: string }>(
+      'POST',
+      '/api/v1/initiatives',
+      { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
+      auth,
+    )
+    expect(started.status).toBe(202)
+    const jobId = started.body.jobId
+
+    // Drive the run to completion and read back the DB-persisted result.
+    await drive(wsId)
+    const job = await call<{ status: string; result: { output: string } | null }>(
+      'GET',
+      `/api/v1/jobs/${jobId}`,
+      undefined,
+      auth,
+    )
+    expect(job.status).toBe(200)
+    expect(job.body.status).toBe('succeeded')
+    expect(job.body.result?.output).toBeTruthy()
+
+    // The headless anchor block AND its execution are excluded from the board snapshot on both
+    // stores — neither the hidden block nor the external run's brief/output reaches the SPA.
+    const board = await call<{
+      blocks: { title: string; internal?: boolean }[]
+      executions: { id: string }[]
+    }>('GET', `/workspaces/${wsId}`)
+    expect(board.body.blocks.some((b) => b.internal)).toBe(false)
+    expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
+    expect(board.body.executions.some((e) => e.id === jobId)).toBe(false)
+
+    // A key can read ONLY the initiative runs it created, never an arbitrary board run in the
+    // same workspace: start the SAME public pipeline on a NORMAL seeded task, and the key gets
+    // a 404 (its anchor block isn't internal), even though the run exists and shares the scope.
+    const normalStart = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: 'pl_initiative_breakdown',
+    })
+    expect(normalStart.status).toBe(201)
+    const normalExec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect((await call('GET', `/api/v1/jobs/${normalExec.id}`, undefined, auth)).status).toBe(404)
+
+    // Concurrency backstop (both stores): a workspace may only have 5 initiative runs in
+    // flight; leaving them undriven, the 6th start is refused with 429.
+    for (let i = 0; i < 5; i++) {
+      expect(
+        (
+          await call(
+            'POST',
+            '/api/v1/initiatives',
+            { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
+            auth,
+          )
+        ).status,
+      ).toBe(202)
+    }
+    expect(
+      (
+        await call(
+          'POST',
+          '/api/v1/initiatives',
+          { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
+          auth,
+        )
+      ).status,
+    ).toBe(429)
+    await drive(wsId) // let the in-flight runs finish so none dangle
+
+    // A non-public pipeline id is refused; a revoked key no longer authenticates.
+    expect(
+      (await call('POST', '/api/v1/initiatives', { pipelineId: 'pl_blueprint', input: 'x' }, auth))
+        .status,
+    ).toBe(400)
+    expect(
+      (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`)).status,
+    ).toBe(204)
+    expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
+  })
+
+  it('serves the full task lifecycle (edit / stop / retry / rich run) + pipeline discovery, workspace-scoped', async () => {
+    const { call, createOrgWorkspace, drive } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const created = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+    })
+    expect(created.status).toBe(201)
+    const auth = { authorization: `Bearer ${created.body.secret}` }
+
+    // Pipeline discovery: the public inline pipeline is public + headless-startable; a
+    // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
+    // pipelineId, nothing lists them" gap.
+    const pipelines = await call<{
+      pipelines: {
+        pipelineId: string
+        steps: string[]
+        public: boolean
+        headlessStartable: boolean
+      }[]
+    }>('GET', '/api/v1/pipelines', undefined, auth)
+    expect(pipelines.status).toBe(200)
+    const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
+    const breakdown = byId.get('pl_initiative_breakdown')
+    expect(breakdown?.public).toBe(true)
+    expect(breakdown?.headlessStartable).toBe(true)
+    expect(breakdown && breakdown.steps.length > 0).toBe(true)
+    const quick = byId.get('pl_simple')
+    expect(quick).toBeTruthy()
+    expect(quick?.headlessStartable).toBe(false)
+
+    // Create a task under a fresh service frame (via the dev-open session board route).
+    const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+      type: 'service',
+      position: { x: 500, y: 500 },
+    })
+    const task = await call<{ taskId: string }>(
+      'POST',
+      `/api/v1/services/${frame.body.id}/tasks`,
+      { title: 'Lifecycle task', description: 'original' },
+      auth,
+    )
+    expect(task.status).toBe(201)
+    const taskId = task.body.taskId
+
+    // Edit (PATCH) the title/description before it runs.
+    const edited = await call<{ title: string; description: string }>(
+      'PATCH',
+      `/api/v1/tasks/${taskId}`,
+      { title: 'Lifecycle task (edited)', description: 'reworded' },
+      auth,
+    )
+    expect(edited.status).toBe(200)
+    expect(edited.body.title).toBe('Lifecycle task (edited)')
+    expect(edited.body.description).toBe('reworded')
+
+    // A not-yet-started task has no run to read or stop.
+    expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)).status).toBe(404)
+    expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(409)
+
+    // Start it (async — left running until driven), then read the rich run projection.
+    const started = await call<{ executionId: string | null }>(
+      'POST',
+      `/api/v1/tasks/${taskId}/start`,
+      { pipelineId: 'pl_simple' },
+      auth,
+    )
+    expect(started.status).toBe(202)
+    const run = await call<{
+      runId: string
+      taskId: string
+      status: string
+      steps: { agentKind: string; state: string; progress: number }[]
+    }>('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)
+    expect(run.status).toBe(200)
+    expect(run.body.taskId).toBe(taskId)
+    expect(run.body.steps.length).toBeGreaterThan(0)
+    expect(['running', 'blocked', 'paused', 'done']).toContain(run.body.status)
+
+    // Stop the run → it settles `failed` with a `cancelled` error, and stays retryable.
+    expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(200)
+    const stopped = await call<{ status: string; error: { code: string } | null }>(
+      'GET',
+      `/api/v1/tasks/${taskId}/run`,
+      undefined,
+      auth,
+    )
+    expect(stopped.body.status).toBe('failed')
+    expect(stopped.body.error?.code).toBe('cancelled')
+
+    // Retry the failed run, then drive it to completion.
+    expect((await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, auth)).status).toBe(202)
+    await drive(wsId)
+    const finished = await call<{ status: string }>(
+      'GET',
+      `/api/v1/tasks/${taskId}/run`,
+      undefined,
+      auth,
+    )
+    expect(finished.body.status).toBe('done')
+
+    // Every lifecycle route double-scopes to the key's workspace: a key from ANOTHER
+    // workspace 404s on this task (never edits/stops/retries/reads it).
+    const other = await createOrgWorkspace({ seed: true })
+    const otherKey = await call<{ secret: string }>(
+      'POST',
+      `/workspaces/${other.workspace.id}/public-api-keys`,
+      { label: 'other' },
+    )
+    const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
+    expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, otherAuth)).status).toBe(
+      404,
+    )
+    expect((await call('PATCH', `/api/v1/tasks/${taskId}`, { title: 'x' }, otherAuth)).status).toBe(
+      404,
+    )
+    expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, otherAuth)).status).toBe(
+      404,
+    )
+    expect((await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, otherAuth)).status).toBe(
+      404,
+    )
+  })
+
+  // Tier 2 of the public-API initiative: the two list reads that used to be unbounded (the
+  // service-task list read the WHOLE board and filtered in JS) or absent entirely (the job
+  // list). Both now push their bound, subtree, filters and ordering into SQL through new
+  // repository ports, so these assert the D1 and Drizzle implementations page identically — a
+  // store that ordered differently, dropped the `internal` join, or mishandled the keyset fails
+  // here rather than silently mis-serving an external integration. Split in two (one per list)
+  // to stay within the per-function statement budget.
+  registerPublicApiListTests(harness)
+}
+
+/**
+ * The public API's scope ladder (read ⊂ write ⊂ decide ⊂ admin), the notification inbox
+ * it serves, and the workspace usage + budget read.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicApiScopeTests(harness: ConformanceHarness): void {
+  it('gates each route on the key scope ladder (read ⊂ write ⊂ admin) and deletes with admin', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    // Mint one key per scope. An omitted scope defaults to `write`.
+    const mint = async (scope: 'read' | 'write' | 'admin') => {
+      const res = await call<{ key: { scope: string }; secret: string }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: scope, scope },
+      )
+      expect(res.status).toBe(201)
+      expect(res.body.key.scope).toBe(scope)
+      return { authorization: `Bearer ${res.body.secret}` }
+    }
+    const readAuth = await mint('read')
+    const writeAuth = await mint('write')
+    const adminAuth = await mint('admin')
+    // The default (no scope in the body) is `write`.
+    const defaulted = await call<{ key: { scope: string } }>(
+      'POST',
+      `/workspaces/${wsId}/public-api-keys`,
+      { label: 'defaulted' },
+    )
+    expect(defaulted.body.key.scope).toBe('write')
+
+    const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+      type: 'service',
+      position: { x: 400, y: 400 },
+    })
+    const serviceId = frame.body.id
+
+    // A `read` key can read (list services) but is refused (403 insufficient_scope) on any
+    // write — e.g. creating a task.
+    expect((await call('GET', '/api/v1/services', undefined, readAuth)).status).toBe(200)
+    const readCreate = await call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      { title: 'nope', description: 'x' },
+      readAuth,
+    )
+    expect(readCreate.status).toBe(403)
+    expect(readCreate.body.error.code).toBe('insufficient_scope')
+
+    // A `write` key creates the task (and can read it) but is refused on the destructive DELETE.
+    const created = await call<{ taskId: string }>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      { title: 'Scoped task', description: 'x' },
+      writeAuth,
+    )
+    expect(created.status).toBe(201)
+    const taskId = created.body.taskId
+    expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
+    const writeDelete = await call<{ error: { code: string } }>(
+      'DELETE',
+      `/api/v1/tasks/${taskId}`,
+      undefined,
+      writeAuth,
+    )
+    expect(writeDelete.status).toBe(403)
+    expect(writeDelete.body.error.code).toBe('insufficient_scope')
+    // Still present after the refused delete.
+    expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
+
+    // An `admin` key deletes it; the task is then gone (404) for every scope.
+    expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(204)
+    expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(404)
+    // Deleting an already-gone task is idempotent-but-scoped: a real task no longer resolves,
+    // so it 404s (never a 5xx) even for admin.
+    expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(404)
+  })
+
+  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+    const app = harness.makeApp()
+    const { call, createOrgWorkspace } = app
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const mint = async (scope: 'read' | 'write' | 'admin') => {
+      const res = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+        label: scope,
+        scope,
+      })
+      expect(res.status).toBe(201)
+      return { authorization: `Bearer ${res.body.secret}` }
+    }
+    const readAuth = await mint('read')
+    const writeAuth = await mint('write')
+    const adminAuth = await mint('admin')
+
+    // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
+    // persisted rows keeps the test targeted at the public routes, not the run machinery).
+    // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
+    // (it has an automated merge side-effect) but the null block short-circuits the merge, so
+    // the card settles `acted` without needing a real block/run/PR.
+    const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
+      app.notificationRepository().upsert(wsId, {
+        id,
+        type,
+        status: 'open',
+        severity: 'normal',
+        blockId: null,
+        executionId: null,
+        title: id,
+        body: 'body',
+        payload: null,
+        createdAt: 1,
+        resolvedAt: null,
+      })
+    await seed('ntf_dismiss')
+    await seed('ntf_act')
+
+    // An informational card (`requirement_review`) — it parks a run on an interactive human
+    // decision, so it has NO automated action and `act` must refuse it (→ dismiss instead).
+    await seed('ntf_info', 'requirement_review')
+
+    // list: a `read` key sees all three open cards.
+    const listed = await call<{ notifications: { id: string; status: string }[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      readAuth,
+    )
+    expect(listed.status).toBe(200)
+    expect(new Set(listed.body.notifications.map((n) => n.id))).toEqual(
+      new Set(['ntf_dismiss', 'ntf_act', 'ntf_info']),
+    )
+
+    // Scope ladder: a `read` key can't dismiss/act; a `write` key can dismiss but not act
+    // (act performs a real merge → admin only).
+    const readDismiss = await call<{ error: { code: string } }>(
+      'POST',
+      '/api/v1/notifications/ntf_dismiss/dismiss',
+      undefined,
+      readAuth,
+    )
+    expect(readDismiss.status).toBe(403)
+    expect(readDismiss.body.error.code).toBe('insufficient_scope')
+    const writeAct = await call<{ error: { code: string } }>(
+      'POST',
+      '/api/v1/notifications/ntf_act/act',
+      undefined,
+      writeAuth,
+    )
+    expect(writeAct.status).toBe(403)
+    expect(writeAct.body.error.code).toBe('insufficient_scope')
+
+    // dismiss (write) resolves the card as `dismissed`; act (admin) resolves it as `acted`.
+    const dismissed = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_dismiss/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(dismissed.status).toBe(200)
+    expect(dismissed.body.status).toBe('dismissed')
+    const acted = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_act/act',
+      undefined,
+      adminAuth,
+    )
+    expect(acted.status).toBe(200)
+    expect(acted.body.status).toBe('acted')
+
+    // `act` refuses an informational card (no automated action) with 409, even for an admin
+    // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
+    const actInfo = await call<{ error: { code: string } }>(
+      'POST',
+      '/api/v1/notifications/ntf_info/act',
+      undefined,
+      adminAuth,
+    )
+    expect(actInfo.status).toBe(409)
+    expect(actInfo.body.error.code).toBe('notification_not_actionable')
+    const dismissInfo = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_info/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(dismissInfo.status).toBe(200)
+    expect(dismissInfo.body.status).toBe('dismissed')
+
+    // All resolved, so the inbox is now empty (list is open-only).
+    const after = await call<{ notifications: unknown[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      readAuth,
+    )
+    expect(after.body.notifications).toEqual([])
+
+    // Workspace-scoped: a key from ANOTHER workspace never sees or resolves this
+    // workspace's notifications (an unknown/foreign id is a 404 on both act and dismiss).
+    await seed('ntf_foreign')
+    const other = await createOrgWorkspace({ seed: true })
+    const otherKey = await call<{ secret: string }>(
+      'POST',
+      `/workspaces/${other.workspace.id}/public-api-keys`,
+      { label: 'admin', scope: 'admin' },
+    )
+    const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
+    const otherList = await call<{ notifications: unknown[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      otherAuth,
+    )
+    expect(otherList.body.notifications).toEqual([])
+    expect(
+      (await call('POST', '/api/v1/notifications/ntf_foreign/act', undefined, otherAuth)).status,
+    ).toBe(404)
+    expect(
+      (await call('POST', '/api/v1/notifications/ntf_foreign/dismiss', undefined, otherAuth))
+        .status,
+    ).toBe(404)
+  })
+
+  it('serves the workspace usage + budget read to a read-scoped key', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'usage',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    const usage = await call<{
+      periodStart: number
+      currency: string
+      budget: {
+        inputTokens: number
+        outputTokens: number
+        costSpent: number
+        costLimit: number
+        exceeded: boolean
+      }
+      rows: { billing: string; model: string; calls: number }[]
+    }>('GET', '/api/v1/usage', undefined, auth)
+    expect(usage.status).toBe(200)
+    // The period is the current calendar month (UTC) and the currency is the deployment's,
+    // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
+    // facades serve the same resolved shape, not a particular number.
+    expect(usage.body.currency).toBeTruthy()
+    expect(usage.body.periodStart).toBeGreaterThan(0)
+    // A workspace that has spent nothing this period reports a real zero against a real
+    // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
+    // usage to group, which is distinct from a sink the deployment doesn't retain.
+    expect(usage.body.budget.inputTokens).toBe(0)
+    expect(usage.body.budget.outputTokens).toBe(0)
+    expect(usage.body.budget.costSpent).toBe(0)
+    expect(usage.body.budget.costLimit).toBeGreaterThan(0)
+    expect(usage.body.budget.exceeded).toBe(false)
+    expect(usage.body.rows).toEqual([])
+
+    // Read is the whole scope story — the aggregate names no resource ids — but a key is
+    // still required, and an unauthenticated caller learns nothing.
+    expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+  })
+}
+
+/**
+ * The built-in pipeline catalog's lifecycle: versioned reseed, retire-and-replace, and the
+ * two refusals (a built-in the catalog still ships, one a recurring schedule points at).
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPipelineCatalogTests(harness: ConformanceHarness): void {
   describe('pipeline versioning + reseed', () => {
     it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
       const { call, createWorkspace } = harness.makeApp()
@@ -950,27 +788,16 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(stored.stepOptions?.[1]).toEqual({ autoRecommend: false })
     })
   })
+}
 
-  describe('service spec read', () => {
-    it('serves an empty service-spec view when GitHub is not wired', async () => {
-      // The "View Requirements" window reads the sharded `spec/` artifact off the repo
-      // default branch via the shared controller, resolved through the same
-      // `resolveRunRepoContext` seam on both facades. With no GitHub wired (the
-      // conformance harness), the route must be mounted and return an empty (present:false)
-      // view identically — proving the symmetric wiring rather than one facade 404-ing.
-      const { call, createWorkspace } = harness.makeApp()
-      const { workspace } = await createWorkspace()
-      const res = await call<{ present: boolean; spec: unknown; features: unknown[] }>(
-        'GET',
-        `/workspaces/${workspace.id}/blocks/blk_auth/spec`,
-      )
-      expect(res.status).toBe(200)
-      expect(res.body.present).toBe(false)
-      expect(res.body.spec).toBeNull()
-      expect(res.body.features).toEqual([])
-    })
-  })
-
+/**
+ * Task types, the real-time board event a human mutation pushes, and the per-service
+ * running-task limit.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerBoardPlanningTests(harness: ConformanceHarness): void {
   describe('task types + per-service running-task limit', () => {
     it('persists a task type + per-type fields, surfaced on the snapshot identically', async () => {
       const { call, createWorkspace } = harness.makeApp()
@@ -1067,8 +894,216 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(allowed.status).toBe(201)
     })
   })
+}
 
-  // PR deep-review park → select → resolve — extracted to keep this function within its
-  // line budget (see CLAUDE.md: split, never raise the budget).
-  definePrReviewSuite(harness)
+/**
+ * The bounded, keyset-paginated JOB and SERVICE-TASK lists, whose page size and cursor shape
+ * must be identical on every store.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicApiListTests(harness: ConformanceHarness): void {
+  it('serves the bounded, keyset-paginated JOB list identically on every store', async () => {
+    const { call, createOrgWorkspace, drive } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const created = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+    })
+    const auth = { authorization: `Bearer ${created.body.secret}` }
+
+    // Three headless initiative runs, driven to completion so they settle `succeeded`.
+    for (const input of ['job one', 'job two', 'job three']) {
+      expect(
+        (
+          await call(
+            'POST',
+            '/api/v1/initiatives',
+            { pipelineId: 'pl_initiative_breakdown', input },
+            auth,
+          )
+        ).status,
+      ).toBe(202)
+    }
+    await drive(wsId)
+
+    type JobPage = { jobs: { jobId: string; status: string }[]; nextCursor: string | null }
+    const all = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
+    expect(all.status).toBe(200)
+    expect(all.body.jobs.length).toBe(3)
+    // Newest first, and the last page reports no further cursor.
+    expect(all.body.nextCursor).toBeNull()
+    expect(all.body.jobs.every((j) => j.status === 'succeeded')).toBe(true)
+    const order = all.body.jobs.map((j) => j.jobId)
+
+    // Keyset paging: two pages of 2 + 1 reproduce the single-page order exactly, with no row
+    // skipped or repeated (the composite `(createdAt, id)` cursor is what makes this hold for
+    // runs that share a millisecond — a timestamp-only cursor would drop the ties).
+    const first = await call<JobPage>('GET', '/api/v1/jobs?limit=2', undefined, auth)
+    expect(first.body.jobs.map((j) => j.jobId)).toEqual(order.slice(0, 2))
+    expect(first.body.nextCursor).toBeTruthy()
+    const second = await call<JobPage>(
+      'GET',
+      `/api/v1/jobs?limit=2&cursor=${encodeURIComponent(first.body.nextCursor!)}`,
+      undefined,
+      auth,
+    )
+    expect(second.body.jobs.map((j) => j.jobId)).toEqual(order.slice(2))
+    expect(second.body.nextCursor).toBeNull()
+
+    // Walk the whole list one row at a time: every job must be visited EXACTLY once, in the
+    // same order, and the walk must terminate. This is the general keyset guard — a cursor
+    // minted from anything other than the value the query orders by (the `agent_runs.created_at`
+    // COLUMN, which `rowToExecution` projects onto `createdAt` for exactly this reason) skips or
+    // repeats rows here. The same-millisecond tie is pinned at the mapper/unit level, since a
+    // conformance run cannot force two inserts into one clock tick.
+    const walked: string[] = []
+    let cursor: string | null = null
+    for (let guard = 0; guard <= order.length; guard++) {
+      const url: string = `/api/v1/jobs?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      const page: { status: number; body: JobPage } = await call<JobPage>(
+        'GET',
+        url,
+        undefined,
+        auth,
+      )
+      walked.push(...page.body.jobs.map((j) => j.jobId))
+      cursor = page.body.nextCursor
+      if (!cursor) break
+    }
+    expect(cursor).toBeNull()
+    expect(walked).toEqual(order)
+
+    // Filters: a status nothing matches comes back empty; a future `since` likewise.
+    const failedOnly = await call<JobPage>('GET', '/api/v1/jobs?status=failed', undefined, auth)
+    expect(failedOnly.body.jobs).toEqual([])
+    const future = await call<JobPage>(
+      'GET',
+      `/api/v1/jobs?since=${Date.now() + 60_000}`,
+      undefined,
+      auth,
+    )
+    expect(future.body.jobs).toEqual([])
+
+    // A malformed cursor is an explicit 400, never a silent re-serve of page 1.
+    const bad = await call<{ error: { code: string } }>(
+      'GET',
+      '/api/v1/jobs?cursor=!!!not-base64!!!',
+      undefined,
+      auth,
+    )
+    expect(bad.status).toBe(400)
+    expect(bad.body.error.code).toBe('invalid_cursor')
+
+    // A junk `limit`/`since` is rejected at the contract, not silently coerced: `Number()` would
+    // read `1e9` and `0x64` as plausible page sizes and blow straight past the hard ceiling.
+    for (const query of ['limit=abc', 'limit=0', 'limit=101', 'limit=1e2', 'since=yesterday']) {
+      expect((await call('GET', `/api/v1/jobs?${query}`, undefined, auth)).status).toBe(400)
+    }
+
+    // The `internal` scope is enforced in SQL: an ORDINARY board run in the same workspace is
+    // never enumerated, mirroring the single-job read's 404. This is the list form of the
+    // double-scope, and the assertion that would catch a store that dropped the anchor join.
+    expect(
+      (
+        await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_initiative_breakdown',
+        })
+      ).status,
+    ).toBe(201)
+    const boardRun = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+    const afterBoardRun = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
+    expect(afterBoardRun.body.jobs.some((j) => j.jobId === boardRun.id)).toBe(false)
+    expect(afterBoardRun.body.jobs.length).toBe(3)
+  })
+
+  it('serves the bounded, keyset-paginated SERVICE-TASK list identically on every store', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const created = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+    })
+    const auth = { authorization: `Bearer ${created.body.secret}` }
+
+    const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+      type: 'service',
+      position: { x: 900, y: 900 },
+    })
+    const serviceId = frame.body.id
+    // A module under the frame, so the page covers the WHOLE subtree — a task directly under
+    // the frame AND one nested in a module. That two-level walk is exactly what the new
+    // `listChildIds` + `listTasksUnder` pair replaces the old whole-board read with.
+    const module = await call<{ id: string }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/${serviceId}/modules`,
+      { name: 'Module A' },
+    )
+    const underFrame = await call<{ taskId: string }>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      { title: 'Task under frame' },
+      auth,
+    )
+    const underModule = await call<{ id: string }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/${module.body.id}/tasks`,
+      { title: 'Task under module' },
+    )
+
+    type TaskPage = {
+      tasks: { taskId: string; status: string }[]
+      nextCursor: string | null
+    }
+    const tasks = await call<TaskPage>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks`,
+      undefined,
+      auth,
+    )
+    expect(tasks.status).toBe(200)
+    expect(new Set(tasks.body.tasks.map((t) => t.taskId))).toEqual(
+      new Set([underFrame.body.taskId, underModule.body.id]),
+    )
+    expect(tasks.body.nextCursor).toBeNull()
+    // Both stores order by the same stable key, so the paged sequence must equal the unpaged one.
+    const taskOrder = tasks.body.tasks.map((t) => t.taskId)
+
+    const tFirst = await call<TaskPage>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks?limit=1`,
+      undefined,
+      auth,
+    )
+    expect(tFirst.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(0, 1))
+    expect(tFirst.body.nextCursor).toBeTruthy()
+    const tSecond = await call<TaskPage>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks?limit=1&cursor=${encodeURIComponent(tFirst.body.nextCursor!)}`,
+      undefined,
+      auth,
+    )
+    expect(tSecond.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(1))
+    expect(tSecond.body.nextCursor).toBeNull()
+
+    // The status filter is pushed into SQL: both fresh tasks are `planned`, none are `done`.
+    const planned = await call<TaskPage>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks?status=planned`,
+      undefined,
+      auth,
+    )
+    expect(planned.body.tasks.length).toBe(2)
+    const done = await call<TaskPage>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks?status=done`,
+      undefined,
+      auth,
+    )
+    expect(done.body.tasks).toEqual([])
+
+    // A missing / non-service target still 404s (the guard survives the move to a paged read).
+    expect((await call('GET', `/api/v1/services/nope/tasks`, undefined, auth)).status).toBe(404)
+  })
 }

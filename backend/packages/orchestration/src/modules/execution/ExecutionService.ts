@@ -267,7 +267,7 @@ export class ExecutionService {
       executionEventPublisher,
       boardService,
       spendService,
-      taskRepository,
+      environmentProvisioning,
       requirementReviewService,
       docInterviewService,
       forkChatService,
@@ -275,10 +275,8 @@ export class ExecutionService {
       kaizenScheduler,
       clarityReviewService,
       brainstormServices,
-      environmentProvisioning,
       environmentTeardown,
       branchUpdater,
-      blueprintReconciler,
       initiativeService,
       initiativeInterviewService,
       notificationService,
@@ -289,24 +287,12 @@ export class ExecutionService {
       riskPolicyRepository,
       mergeTrackRecord,
       riskPolicyCache,
-      ticketTrackerProvider,
       issueWriteback,
-      bugIntakeService,
       subscriptionActivationRepository,
       resolveWorkspaceModelDefault,
-      resolveProviderCapabilities,
-      resolveRunRepoContext,
       runInitiatorScope,
       pokeInitiativeLoop,
       agentKindRegistry,
-      gateRegistry,
-      judgeRegistry,
-      judgeAssessor,
-      stepResolverRegistry,
-      providerRegistry,
-      prVerificationReportPublisher,
-      workspaceSettingsRepository,
-      appBaseUrl,
       logger,
     } = dependencies
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
@@ -440,73 +426,7 @@ export class ExecutionService {
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
     // controllers' `runAgent`/`previewStepModel`/`deployInputs`/`deployContext` closures resolve
     // through `this.runDispatcher` lazily, so this assignment trailing their construction is safe.
-    this.runDispatcher = new RunDispatcher({
-      blockRepository,
-      executionRepository,
-      agentExecutor,
-      agentKindRegistry,
-      gateRegistry,
-      judgeRegistry,
-      judgeAssessor,
-      stepResolverRegistry,
-      providerRegistry,
-      workRunner,
-      events: executionEventPublisher,
-      idGenerator,
-      clock,
-      logger,
-      spend: spendService,
-      stepGraph: this.stepGraph,
-      runStateMachine: this.runStateMachine,
-      contextBuilder: this.contextBuilder,
-      mergeResolver: this.mergeResolver,
-      companionController: this.companionController,
-      testerController: this.testerController,
-      ralphController: this.ralphController,
-      humanTestController: this.humanTestController,
-      visualConfirmationController: this.visualConfirmationController,
-      reviewGate: this.reviewGate,
-      forkDecisionController: this.forkDecisionController,
-      prReviewController: this.prReviewController,
-      requirementsKind: this.requirementsKind,
-      clarityKind: this.clarityKind,
-      requirementsBrainstormKind: this.requirementsBrainstormKind,
-      architectureBrainstormKind: this.architectureBrainstormKind,
-      // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
-      // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
-      interviewControllers: [
-        this.initiativeInterviewController,
-        this.docInterviewController,
-      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
-      // Keeps the run's verification report on its PR as each step settles (a hook, not a
-      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
-      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
-      prVerificationReport: buildPrReportController({
-        blockRepository,
-        clock,
-        publisher: prVerificationReportPublisher,
-        taskRepository,
-        workspaceSettingsRepository,
-        // Same seam the repo-ops controller uses, so the report reads the run's `spec/`
-        // through the repo access the engine has already resolved. Unwired ⇒ the requirement
-        // section reports `absent` with a note.
-        resolveRunRepoContext,
-        appBaseUrl,
-        logger,
-      }),
-      runInitiatorScope: runInitiatorScopeFn,
-      environmentProvisioning,
-      ticketTrackerProvider,
-      issueWriteback,
-      bugIntakeService,
-      notificationService,
-      blueprintReconciler,
-      initiativeService,
-      resolveRunRepoContext,
-      resolveProviderCapabilities,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
-      modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
-    })
+    this.runDispatcher = this.buildRunDispatcher(dependencies, runInitiatorScopeFn)
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
@@ -538,6 +458,63 @@ export class ExecutionService {
    * because everything it reads is already a field by the time it runs, so it needs no destructured
    * parameter threaded through — and the constructor is a god-function against its size budget.
    */
+  /**
+   * The per-step dispatch + completion spine. Built from the deps OBJECT rather than a
+   * hand-maintained forwarding list, for the reason the constructor states: a field dropped from
+   * such a list turns a feature off silently. Split out of the constructor purely for size.
+   */
+  private buildRunDispatcher(
+    deps: ExecutionServiceDependencies,
+    runInitiatorScopeFn: NonNullable<ExecutionServiceDependencies['runInitiatorScope']>,
+  ): RunDispatcher {
+    return new RunDispatcher({
+      ...deps,
+      events: deps.executionEventPublisher,
+      spend: deps.spendService,
+      stepGraph: this.stepGraph,
+      runStateMachine: this.runStateMachine,
+      contextBuilder: this.contextBuilder,
+      mergeResolver: this.mergeResolver,
+      companionController: this.companionController,
+      testerController: this.testerController,
+      ralphController: this.ralphController,
+      humanTestController: this.humanTestController,
+      visualConfirmationController: this.visualConfirmationController,
+      reviewGate: this.reviewGate,
+      forkDecisionController: this.forkDecisionController,
+      prReviewController: this.prReviewController,
+      requirementsKind: this.requirementsKind,
+      clarityKind: this.clarityKind,
+      requirementsBrainstormKind: this.requirementsBrainstormKind,
+      architectureBrainstormKind: this.architectureBrainstormKind,
+      // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
+      // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
+      interviewControllers: [
+        this.initiativeInterviewController,
+        this.docInterviewController,
+      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
+      // Keeps the run's verification report on its PR as each step settles (a hook, not a
+      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
+      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
+      prVerificationReport: buildPrReportController({
+        blockRepository: deps.blockRepository,
+        clock: deps.clock,
+        publisher: deps.prVerificationReportPublisher,
+        taskRepository: deps.taskRepository,
+        workspaceSettingsRepository: deps.workspaceSettingsRepository,
+        // Same seam the repo-ops controller uses, so the report reads the run's `spec/`
+        // through the repo access the engine has already resolved. Unwired ⇒ the requirement
+        // section reports `absent` with a note.
+        resolveRunRepoContext: deps.resolveRunRepoContext,
+        appBaseUrl: deps.appBaseUrl,
+        logger: deps.logger,
+      }),
+      runInitiatorScope: runInitiatorScopeFn,
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
+    })
+  }
+
   private buildPostMergeBoard(): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
     // structurally incompatible with the interface even from inside it.
