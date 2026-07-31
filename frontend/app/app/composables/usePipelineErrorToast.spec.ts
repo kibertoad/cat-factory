@@ -49,7 +49,10 @@ beforeEach(() => {
   }
   vi.stubGlobal('useToast', () => ({ add, update }))
   vi.stubGlobal('useUiStore', () => ui)
-  vi.stubGlobal('useI18n', () => ({ t, te: (key: string) => hasKey(key) }))
+  // Stubbed on the Nuxt app's GLOBAL i18n instance, which is what this composable resolves
+  // (never `useI18n()`): it is called from store setup, where no component instance exists.
+  // See `frontend/app/README.md` — "A store must be instantiable outside a component setup".
+  vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t, te: (key: string) => hasKey(key) } }))
 })
 
 function conflict(reason?: string, details: Record<string, unknown> = {}, message?: string) {

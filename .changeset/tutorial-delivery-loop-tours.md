@@ -26,6 +26,16 @@ on a frame block has no card to point at, and a reviewer gate mid-cycle is suppr
 card as background work — so a tour is never offered onto a control that isn't there. The
 add-service modal gained `data-testid` anchors for its repository field and add button.
 
+Reading run state from the nav gates means the modular plugin now instantiates the execution
+store during plugin setup, and that exposed a latent boot-killer: `usePipelineErrorToast`
+called `useI18n()`, which throws outside a component instance. A Pinia setup store runs its
+body on the FIRST `useStore()` anywhere, and that had always happened to be a component — so
+the moment anything reached it earlier, vue-i18n threw, the plugin threw, and Nuxt's error
+boundary replaced the whole SPA with its 500 page. It now resolves translations through the
+app's global i18n instance, like the board and recurring-pipelines stores already did. A
+store has to be instantiable outside a component `setup`; `frontend/app/README.md` states the
+rule.
+
 Three fixes to the tour runtime that these run-state gates surfaced:
 
 - **A running tour's script is now resolved once and held, not re-read from the gated slot on

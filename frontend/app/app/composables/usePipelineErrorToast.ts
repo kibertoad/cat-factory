@@ -331,7 +331,24 @@ export function describeGenericFailure(error: unknown): GenericFailure {
 export function usePipelineErrorToast() {
   const toast = useToast()
   const ui = useUiStore()
-  const { t, te } = useI18n()
+  // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which
+  // requires an active component instance — the same pattern (and the same reason) as the
+  // board / recurring-pipelines stores.
+  //
+  // This composable is called from STORE SETUP (`stores/execution.ts`, `stores/agentRuns.ts`),
+  // and a Pinia setup store runs its body on the FIRST `useStore()` anywhere. That used to be
+  // a component, so `useI18n()` happened to be legal; the moment anything instantiated one of
+  // those stores earlier — `createNavGates()` does, from the `enforce: 'post'` modular plugin —
+  // vue-i18n threw `MUST_BE_CALL_SETUP_TOP`, the plugin threw, and Nuxt's error boundary
+  // replaced the entire app with its 500 page. Every single e2e spec failed on a blank board.
+  // A store must be instantiable outside a component, so the i18n handle it reaches for has
+  // to be too.
+  //
+  // Typed as `useI18n`'s own return (`$i18n` IS that global Composer in composition mode), so
+  // `t`/`te` keep their real signatures. No typed-message-key coverage is lost by the switch:
+  // tier 1 only sees literal keys written in a `<script setup>`, never in a `.ts` composable —
+  // the drift guard here is the exhaustive `CONFLICT_INFO` / `ApiErrorCode` records above.
+  const { t, te } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
 
   // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
   // live in a sibling factory over the same toast/ui/i18n handles, so this composable stays

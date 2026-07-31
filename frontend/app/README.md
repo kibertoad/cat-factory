@@ -55,6 +55,27 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+### A store must be instantiable outside a component `setup`
+
+A Pinia setup store runs its body on the FIRST `useStore()` anywhere in the app, and that
+caller is not always a component: `plugins/modular.client.ts` builds the nav gates
+(`createNavGates`) during plugin setup, which instantiates a handful of stores before any
+component exists. So nothing a store reaches for at setup time may require an active
+component instance.
+
+The one that bites is **`useI18n()`, which throws `MUST_BE_CALL_SETUP_TOP` outside a
+component** — and because it happens inside a plugin, Nuxt's error boundary replaces the
+whole app with its 500 page rather than surfacing a broken feature. Resolve translations
+through the Nuxt app's global i18n instance instead (`useNuxtApp().$i18n`, typed as
+`ReturnType<typeof useI18n>`), as `stores/board.ts`, `stores/recurringPipelines.ts` and
+`composables/usePipelineErrorToast.ts` do. This costs no typed-message-key coverage: tier 1
+only sees literal keys written in a `<script setup>`, never in a `.ts` store or composable.
+
+The blast radius is why this is a rule rather than a preference — a store reached one call
+earlier than before takes the entire SPA down at boot, and the unit suite cannot see it
+(nothing there installs the plugin). Every e2e spec does, because every one of them boots
+the app.
+
 ### Always import a layer component explicitly
 
 **Import a component under `components/` by path before using it in a template.** Do not lean on Nuxt's auto-registration. This layer sets no `components` config, so the default `pathPrefix: true` applies and a component is registered under its path-prefixed name: `components/panels/StepEffortReport.vue` becomes `PanelsStepEffortReport`, and a bare `<StepEffortReport>` matches nothing.
