@@ -25,6 +25,9 @@ const DEFAULTS: WorkspaceSettings = {
   // banner on every board before the snapshot even lands.
   defaultProvisionType: null,
   defaultProvisionManifestId: null,
+  // The custom metadata bag: empty until someone fills a declared field in. Never null — an
+  // external-tool resolver indexes it (`ctx.metadata.gameId`) with no guard.
+  metadata: {},
 }
 
 /**

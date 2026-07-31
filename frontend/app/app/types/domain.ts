@@ -82,6 +82,7 @@ export type {
   TaskLimitMode,
   ReviewFrictionMode,
   WorkspaceSettings,
+  WorkspaceMetadata,
   UpdateWorkspaceSettingsInput,
   UserSettings,
   UpdateUserSettingsInput,

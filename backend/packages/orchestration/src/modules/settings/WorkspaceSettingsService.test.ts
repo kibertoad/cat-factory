@@ -211,3 +211,47 @@ describe('WorkspaceSettingsService default provisioning', () => {
     expect(next.defaultProvisionType).toBe('docker-compose')
   })
 })
+
+// The custom metadata bag: values for the fields a deployment declares in its app (read by
+// external-tool URL resolvers, among others). The two rules below are what make a saved bag
+// mean exactly what the editor showed.
+describe('WorkspaceSettingsService custom metadata', () => {
+  function service(stored = new Map<string, WorkspaceSettings>()) {
+    return new WorkspaceSettingsService({
+      workspaceSettingsRepository: fakeRepo(stored),
+      workspaceRepository: presentWorkspaceRepository,
+    })
+  }
+
+  it('starts empty, so an unconfigured field reads as absent rather than blank', async () => {
+    expect((await service().get('ws_a')).metadata).toEqual({})
+  })
+
+  it('replaces the whole bag, so a field the editor cleared is gone', async () => {
+    const svc = service()
+    await svc.update('ws_a', { metadata: { gameId: 'zork', region: 'eu' } })
+
+    const next = await svc.update('ws_a', { metadata: { gameId: 'zork' } })
+
+    // A merge would keep `region` forever: the editor has no way to say "remove this key"
+    // other than by not submitting it.
+    expect(next.metadata).toEqual({ gameId: 'zork' })
+  })
+
+  it('drops a cleared value instead of storing an empty string', async () => {
+    const next = await service().update('ws_a', { metadata: { gameId: '  ', region: ' eu ' } })
+
+    // `gameId` absent (not ''), so a resolver reports the field as missing rather than
+    // building a tool URL with an empty game id; the kept value is trimmed.
+    expect(next.metadata).toEqual({ region: 'eu' })
+  })
+
+  it('leaves the stored bag alone when a patch touches something else', async () => {
+    const svc = service()
+    await svc.update('ws_a', { metadata: { gameId: 'zork' } })
+
+    const next = await svc.update('ws_a', { waitingEscalationMinutes: 30 })
+
+    expect(next.metadata).toEqual({ gameId: 'zork' })
+  })
+})

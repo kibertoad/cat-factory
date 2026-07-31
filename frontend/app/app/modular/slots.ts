@@ -3,6 +3,8 @@ import type { ComponentEntry, PanelEntry } from '@modular-vue/core'
 import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 import type { TutorialTour } from '~/utils/tutorial'
 import type { NavContribution } from './nav-contributions'
+import type { ExternalToolContribution } from './external-tools'
+import type { WorkspaceMetadataFieldDefinition } from './workspace-metadata'
 
 /**
  * The layer's aggregated slot map — the single home for every slot key the
@@ -37,6 +39,17 @@ import type { NavContribution } from './nav-contributions'
  *    from `modular/tutorial-tours.ts`; a consumer contributes its own to the same slot
  *    and they appear in the launch prompt beside the built-ins, gated per tour by its
  *    `when(gates)` predicate in the same reactive `slotFilter` that gates `nav`.
+ *  - `externalTools` — the deployment's OWN web applications, listed in their own
+ *    "External tools" sidebar section ({@link ExternalToolContribution}). Each entry resolves
+ *    its URL from the invocation context (user, workspace, the custom metadata below), so the
+ *    tool opens already scoped to what the user is looking at; `useNavContributions` projects
+ *    the gated slot onto the nav catalog, so the three shells render them like any other
+ *    destination. Data-only, like `tutorialTours` — no components.
+ *  - `workspaceMetadataFields` — the CUSTOM workspace metadata fields a deployment declares
+ *    ({@link WorkspaceMetadataFieldDefinition}). The definitions are code-shipped here; the
+ *    VALUES are per-workspace, typed into the settings panel and persisted on the workspace
+ *    settings row. The pair exists so an external tool can be handed a workspace-specific id
+ *    (`gameId`) the platform itself has no opinion about.
  *  - `appOverlays` (extension slice D) — top-level modals/overlays a consumer module
  *    contributes ({@link OverlayContribution}, an id → component `ComponentEntry`),
  *    opened by `ui.openOverlay(id, subject?)` / `useAppOverlays().open(...)` and
@@ -59,6 +72,8 @@ export interface AppSlots {
   taskTypeFormPanels: ResultViewContribution[]
   appOverlays: OverlayContribution[]
   tutorialTours: TutorialTour[]
+  externalTools: ExternalToolContribution[]
+  workspaceMetadataFields: WorkspaceMetadataFieldDefinition[]
   [key: string]: unknown[]
 }
 

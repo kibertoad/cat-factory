@@ -21,6 +21,17 @@
 //                         surface a consumer could not extend before; it reuses the layer's
 //                         shared `ResultWindowShell` chrome with ZERO host edits.
 //   - `inspectorPanels` — an extra inspector body panel for task blocks.
+//   - `externalTools`   — the deployment's OWN web applications, listed under the "External
+//                         tools" sidebar section. Each resolves its URL from the invocation
+//                         CONTEXT (user, workspace, and the custom workspace metadata below),
+//                         so a click lands on the right state instead of the tool's front door.
+//                         This is the case the seam exists for: a map editor opened already
+//                         switched to the game this board is about.
+//   - `workspaceMetadataFields` — the CUSTOM workspace fields whose values an operator types
+//                         into Workspace settings -> Metadata (a tab that exists only where a
+//                         deployment declares fields), and which the resolver above reads. The
+//                         platform has no opinion about `gameId`; this pair is what lets a
+//                         deployment give it one.
 //   - `taskTypes`       — a CODE-shipped CUSTOM task type (`acme:incident`, extension slice B)
 //                         with descriptor-driven create-form fields. It becomes a first-class
 //                         create-task choice + card badge with ZERO host edits — the frontend
@@ -49,6 +60,40 @@ const SECURITY_AUDITOR_KIND = 'security-auditor'
 
 /** The CUSTOM task type this deployment contributes (a namespaced `<ns>:<name>` id). */
 export const ACME_INCIDENT_TASK_TYPE = 'acme:incident'
+
+/**
+ * The registration shapes for the two slots this module adds, copied structurally so the example
+ * needs no deep import of the layer's `modular/*` types (the reachable public type is slice G's
+ * work) — the same treatment `CustomTaskTypeContribution` below gets.
+ */
+interface ExternalToolContribution {
+  id: string
+  title: string
+  description?: string
+  icon: string
+  url: string | ((context: ExternalToolInvocation) => string | null)
+  requiredMetadata?: readonly string[]
+  order?: number
+}
+
+/** What a resolver may read about the click: who, which board, and the board's custom fields. */
+interface ExternalToolInvocation {
+  userId: string | null
+  userEmail: string | null
+  workspaceId: string
+  workspaceName: string
+  metadata: Readonly<Record<string, string>>
+}
+
+interface WorkspaceMetadataFieldDefinition {
+  key: string
+  label: string
+  description?: string
+  placeholder?: string
+  type?: 'text' | 'number' | 'select'
+  options?: readonly { value: string; label: string }[]
+  order?: number
+}
 
 /** The subject the inspector panel filters on — typed structurally so the example needs no
  *  deep import of the layer's `Block` type (the reachable public type is slice G's work). */
@@ -150,6 +195,61 @@ export const acmeSecurityModule = defineModule({
         order: 55,
       },
     ] satisfies PanelEntry<InspectedBlock>[],
+    // The deployment's own applications. A tool declares a RESOLVER rather than a link, so the
+    // invocation context rides along: this one opens the map editor already switched to the game
+    // this board is about (`gameId`, declared below) and scoped to the acting user, which is the
+    // difference between a bookmark and an integration.
+    //
+    // `requiredMetadata` is what turns an unconfigured workspace from "the tool is broken" into
+    // "somebody has to fill in gameId": the item stays listed and, on click, says exactly that.
+    externalTools: [
+      {
+        id: 'acme:map-editor',
+        title: 'Map editor',
+        description: 'Edit the level geometry for this project.',
+        icon: 'i-lucide-map',
+        requiredMetadata: ['gameId'],
+        url: (ctx) => {
+          const url = new URL('https://maps.acme.dev/edit')
+          url.searchParams.set('game', ctx.metadata.gameId ?? '')
+          url.searchParams.set('workspace', ctx.workspaceId)
+          if (ctx.userId) url.searchParams.set('user', ctx.userId)
+          return url.toString()
+        },
+      },
+      {
+        // A tool needing no context at all is just a static URL — the resolver is optional.
+        id: 'acme:asset-pipeline',
+        title: 'Asset pipeline',
+        description: 'Build status for the shared art assets.',
+        icon: 'i-lucide-boxes',
+        url: 'https://assets.acme.dev',
+        order: 10,
+      },
+    ] satisfies ExternalToolContribution[],
+    // The custom workspace fields the tool above reads. Declared in CODE (a deployment adds,
+    // renames and retires them without a migration); the VALUES are per workspace and typed in
+    // under Workspace settings -> Metadata, which is the tab this slot brings into existence.
+    workspaceMetadataFields: [
+      {
+        key: 'gameId',
+        label: 'Game id',
+        description:
+          'Which game this board builds. Used to open the map editor on the right project.',
+        placeholder: 'zork',
+        order: 0,
+      },
+      {
+        key: 'region',
+        label: 'Deployment region',
+        type: 'select',
+        options: [
+          { value: 'eu', label: 'Europe' },
+          { value: 'us', label: 'North America' },
+        ],
+        order: 10,
+      },
+    ] satisfies WorkspaceMetadataFieldDefinition[],
     // A CODE-shipped CUSTOM task type (extension slice B). The SPA merges it into the create-task
     // picker + the card-badge catalog, and renders its descriptor `fields` in the create form —
     // their values land in the task's `taskTypeFields.custom` bag. `defaultPipelineId`/`formPanel`

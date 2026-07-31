@@ -52,6 +52,7 @@ export function defineWorkspaceSettingsSuite(
           spendMonthlyLimit: 12.5,
           defaultProvisionType: 'custom',
           defaultProvisionManifestId: 'acme-preview',
+          metadata: { gameId: 'zork', region: 'eu' },
         }),
       )
 
@@ -69,7 +70,21 @@ export function defineWorkspaceSettingsSuite(
         spendMonthlyLimit: 12.5,
         defaultProvisionType: 'custom',
         defaultProvisionManifestId: 'acme-preview',
+        metadata: { gameId: 'zork', region: 'eu' },
       })
+    })
+
+    // The custom-metadata bag is a JSON column on both stores, and an EMPTY one is the common
+    // case (nobody has filled a field in). It must read back as `{}` — a null would make every
+    // reader, above all an external-tool URL resolver indexing `metadata.gameId`, need a guard
+    // the total settings type says it doesn't.
+    it('reads an empty metadata bag back as an empty object on both stores', async () => {
+      const repo = makeRepo()
+      const { a } = ids()
+      await repo.upsert(a, settings({ waitingEscalationMinutes: 60 }))
+
+      expect((await repo.get(a))?.metadata).toEqual({})
+      expect((await repo.listByWorkspaceIds([a])).get(a)?.metadata).toEqual({})
     })
 
     // The default-provisioning pair is NULLABLE on purpose: null means "the operator never

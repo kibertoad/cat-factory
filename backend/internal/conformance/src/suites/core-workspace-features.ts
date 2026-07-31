@@ -220,6 +220,51 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       expect(partial.body.kaizenEnabled).toBe(false)
     })
 
+    it('round-trips the custom workspace metadata bag (D1 ⇄ Postgres)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      type Settings = { metadata: Record<string, string>; kaizenEnabled: boolean }
+      // A fresh workspace has filled nothing in — an empty object, never null: every reader
+      // (an external-tool URL resolver above all) indexes it without a null check.
+      const initial = await call<Settings>('GET', `/workspaces/${wsId}/settings`)
+      expect(initial.status).toBe(200)
+      expect(initial.body.metadata).toEqual({})
+
+      // The bag is a JSON column on both stores, so this is where a store that stringified
+      // or parsed it differently would diverge.
+      const put = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { gameId: 'zork', region: 'eu' },
+      })
+      expect(put.status).toBe(200)
+      expect(put.body.metadata).toEqual({ gameId: 'zork', region: 'eu' })
+      expect((await call<Settings>('GET', `/workspaces/${wsId}/settings`)).body.metadata).toEqual({
+        gameId: 'zork',
+        region: 'eu',
+      })
+
+      // Supplied ⇒ REPLACED: a field the editor cleared has to disappear, and a cleared value
+      // drops its key rather than persisting as `''` (which would read as "set to nothing").
+      const replaced = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { gameId: 'myst', region: '  ' },
+      })
+      expect(replaced.body.metadata).toEqual({ gameId: 'myst' })
+
+      // Omitted ⇒ untouched, like every other field's partial patch.
+      const untouched = await call<Settings>('PUT', `/workspaces/${wsId}/settings`, {
+        kaizenEnabled: false,
+      })
+      expect(untouched.body.metadata).toEqual({ gameId: 'myst' })
+
+      // A key that isn't identifier-shaped is refused at the boundary rather than encoded on
+      // its way into a tool URL.
+      const rejected = await call('PUT', `/workspaces/${wsId}/settings`, {
+        metadata: { 'not a key': 'x' },
+      })
+      expect(rejected.status).toBe(400)
+    })
+
     it('round-trips incident-enrichment credentials, redacted + sealed (D1 ⇄ Postgres)', async () => {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()
