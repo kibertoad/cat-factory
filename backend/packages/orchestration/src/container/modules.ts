@@ -222,6 +222,10 @@ export function createGitHubModule(
     // a runtime has a sync queue); unwired ⇒ the dispatch-time probe is the freshness backstop.
     skillSourceRepository: deps.skillSourceRepository,
     enqueueSkillResync: deps.enqueueSkillResync,
+    // The same fan-out for repo-sourced foundational services: a pushed API contract reaches
+    // the catalog in seconds rather than waiting out the autorefresh sweep.
+    foundationalServiceSourceRepository: deps.foundationalServiceSourceRepository,
+    enqueueFoundationalResync: deps.enqueueFoundationalResync,
     // Attribute a PR merged directly on the provider to its merge track record + nudge for the
     // reviewer-effort tag the merge card would have collected. Unwired ⇒ no-op.
     externalMergeObserver,

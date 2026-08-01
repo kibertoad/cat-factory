@@ -73,6 +73,9 @@ const SlackPanel = defineAsyncComponent(() => import('~/components/slack/SlackPa
 const FragmentLibraryPanel = defineAsyncComponent(
   () => import('~/components/fragments/FragmentLibraryPanel.vue'),
 )
+const FoundationalServicePanel = defineAsyncComponent(
+  () => import('~/components/foundational/FoundationalServicePanel.vue'),
+)
 // Startup advisory for invalid / outdated pipelines — only mounted while open (auto-opened
 // at most once per session by the watcher below), so it stays out of the initial bundle.
 const PipelineHealthModal = defineAsyncComponent(
@@ -487,6 +490,7 @@ watch(
       <GitHubPanel v-if="ui.githubOpen" />
       <SlackPanel v-if="ui.slackOpen" />
       <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
+      <FoundationalServicePanel v-if="ui.foundationalServicesOpen" />
       <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
       <RiskPolicyHealthModal v-if="ui.riskPolicyHealthOpen" />
       <ModelPresetHealthModal v-if="ui.modelPresetHealthOpen" />

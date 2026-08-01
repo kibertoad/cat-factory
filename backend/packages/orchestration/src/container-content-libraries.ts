@@ -66,7 +66,7 @@ export interface SkillLibraryModule {
 
 /**
  * The foundational-services catalog's services, present only when configured
- * (docs/initiatives/foundational-services.md). Assembles whenever the service + contract
+ * (backend/docs/adr/0031-foundational-services.md). Assembles whenever the service + contract
  * repositories are wired.
  */
 export interface FoundationalServiceModule {

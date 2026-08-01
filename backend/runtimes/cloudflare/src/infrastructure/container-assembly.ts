@@ -445,6 +445,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     enqueueSkillResync: async ({ accountId, sourceId }) => {
       await githubWebhookIngest.queueSkillResync(accountId, sourceId)
     },
+    // The same fan-out for repo-sourced foundational services.
+    enqueueFoundationalResync: async ({ sourceId }) => {
+      await githubWebhookIngest.queueFoundationalResync(sourceId)
+    },
     // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.

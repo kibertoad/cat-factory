@@ -1023,7 +1023,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     updateSyncState: { scope: { kind: 'skillSource', arg: 0 } },
     softDelete: { scope: { kind: 'skillSource', arg: 0 } },
   },
-  // --- Foundational services (docs/initiatives/foundational-services.md) -----------
+  // --- Foundational services (backend/docs/adr/0031-foundational-services.md) -----------
   // The tiered catalog of shared capabilities an Architect designs against, and the API contract
   // documents its consumers lazily read. Both are `(ownerKind, ownerId)`-keyed org/durable state
   // — the `remote` bucket by default — and every method here binds with the same `owner` /
@@ -1048,6 +1048,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
     softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    // Lifting a board's suppression of an inherited service. Same owner rule as `softDelete` and
+    // the same management surface, so it belongs on the same side of the boundary: leaving it off
+    // would let a mothership-mode board opt OUT of an account service with no way back in.
+    hardDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
   },
   apiContractRepository: {
     listManifestByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },

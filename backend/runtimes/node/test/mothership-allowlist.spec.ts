@@ -496,7 +496,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSyncState: 'pending',
     softDelete: 'pending',
   },
-  // Foundational services (docs/initiatives/foundational-services.md). The owner-scoped
+  // Foundational services (backend/docs/adr/0031-foundational-services.md). The owner-scoped
   // catalog + contract reads/writes ARE allow-listed (org/durable state a RUN reads: a
   // mothership-mode architect resolves the catalog and its coder resolves the declared
   // services' contracts over the RPC). What stays off is the repo-SYNC surface, for exactly the
@@ -512,6 +512,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     softDelete: 'pending',
     // The autorefresh sweep's query: global (across every tier) and unscoped by construction.
     listStale: 'sweeper',
+    // The push-webhook freshness fan-out's query, keyed on the repo a delivery names and
+    // deliberately global across tiers. It runs where the webhook is RECEIVED — never on a
+    // mothership-mode node, which has neither the delivery nor the GitHub client the resync
+    // it triggers would need.
+    listByRepo: 'sweeper',
   },
   // `listByOwner`/`get`/`upsert`/`softDelete` are now allow-listed (the prompt-fragment library
   // management surface, owner scoped, member-level, no secrets). The `sourceId`-keyed `listBySource`

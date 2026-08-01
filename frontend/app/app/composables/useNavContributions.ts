@@ -49,6 +49,7 @@ export function useNavContributions() {
     kaizen: () => ui.openKaizen(),
     infrastructure: () => ui.openInfrastructure(),
     fragmentLibrary: () => ui.openFragmentLibrary(),
+    foundationalServices: () => ui.openFoundationalServices(),
     mergeThresholds: () => ui.openWorkspaceSettings('merge'),
     workspaceSettings: () => ui.openWorkspaceSettings(),
     modelConfiguration: () => ui.openModelConfig(),

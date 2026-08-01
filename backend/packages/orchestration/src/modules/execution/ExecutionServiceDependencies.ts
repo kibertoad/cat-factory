@@ -270,7 +270,7 @@ export interface ExecutionServiceDependencies {
    */
   skillResolver?: SkillResolver
   /**
-   * Optional: the FOUNDATIONAL SERVICES catalog seam (docs/initiatives/foundational-services.md).
+   * Optional: the FOUNDATIONAL SERVICES catalog seam (backend/docs/adr/0031-foundational-services.md).
    * Supplies a design kind its catalog and a consumer kind the API contracts of the services that
    * design declared, both as injected `.cat-context/` files. Absent ⇒ neither is injected.
    */

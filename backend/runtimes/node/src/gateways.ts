@@ -72,6 +72,10 @@ class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   queueSkillResync(): Promise<boolean> {
     return Promise.resolve(false)
   }
+
+  queueFoundationalResync(): Promise<boolean> {
+    return Promise.resolve(false)
+  }
 }
 
 // `baseUrl` is the built-in default; LiteLLM has none (operator-hosted), so it relies

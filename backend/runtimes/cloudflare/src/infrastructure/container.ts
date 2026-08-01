@@ -1258,7 +1258,7 @@ export function selectSkillLibraryDeps(
 
 /**
  * Build the foundational-services catalog's concrete ports (migration 0073,
- * docs/initiatives/foundational-services.md).
+ * backend/docs/adr/0031-foundational-services.md).
  *
  * Deliberately UNGATED, unlike the two libraries above: a service can be registered with its
  * contracts uploaded directly, so the catalog is useful on a deployment that wants neither

@@ -568,6 +568,34 @@ function buildLibraryAndCommsRepos() {
       // spans every account by construction and runs on the mothership. Must be refused.
       listByRepo: async (repoOwner: string, repoName: string) => [{ repoOwner, repoName }],
     },
+    // The foundational-services catalog + its contract documents — the same (ownerKind, ownerId)
+    // pair as the fragment library, so the same `owner` / `ownerField` rules bind them. The reads
+    // echo the pair; the void writes resolve. `listBySource`/`softDeleteBySource` and the source
+    // repo's `listByRepo` are wired but unscoped by construction (absent from the allow-list).
+    foundationalServiceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      get: async (ownerKind: string, ownerId: string, serviceId: string) => ({
+        ownerKind,
+        ownerId,
+        serviceId,
+      }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      hardDelete: async () => undefined,
+      listBySource: async () => [],
+      softDeleteBySource: async () => undefined,
+    },
+    apiContractRepository: {
+      listManifestByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      listByServiceIds: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      replaceForService: async () => undefined,
+      deleteForService: async () => undefined,
+    },
+    foundationalServiceSourceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      upsert: async () => undefined,
+      listByRepo: async () => [],
+    },
     // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
     // the call reached the bound account. `create` is wired but admin-gated (absent from the allow-list).
     invitationRepository: {

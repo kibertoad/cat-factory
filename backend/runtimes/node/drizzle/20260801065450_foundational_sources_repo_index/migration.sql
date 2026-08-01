@@ -1,0 +1,1 @@
+CREATE INDEX "idx_foundational_sources_repo" ON "foundational_service_sources" ("repo_owner","repo_name") WHERE "deleted_at" IS NULL;

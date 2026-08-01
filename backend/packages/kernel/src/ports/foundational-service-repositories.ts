@@ -6,7 +6,7 @@ import type {
 
 // ---------------------------------------------------------------------------
 // Persistence ports for the FOUNDATIONAL SERVICES catalog
-// (docs/initiatives/foundational-services.md). Rows are scoped by an
+// (backend/docs/adr/0031-foundational-services.md). Rows are scoped by an
 // `(ownerKind, ownerId)` pair — an account id or a workspace id — so one table
 // backs both tenancy tiers, exactly like the prompt-fragment library, and carry a
 // tombstone so a workspace can suppress an inherited account service.
@@ -145,6 +145,18 @@ export interface FoundationalServiceRepository {
     serviceId: string,
     at: number,
   ): Promise<void>
+  /**
+   * Remove a row OUTRIGHT rather than tombstoning it. The tombstone is a positive assertion —
+   * "this tier suppresses that id" — so restoring an inherited service cannot be expressed as
+   * another write: clearing `deleted_at` would revive a suppression row that carries no name or
+   * summary and let it WIN the merge as an empty override. Deleting the row is the only shape
+   * that returns the tier to "says nothing about this id".
+   */
+  hardDelete(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceId: string,
+  ): Promise<void>
   /** Live services produced by a given source, for resync diffing/tombstoning. */
   listBySource(sourceId: string): Promise<FoundationalServiceRecord[]>
   /** Tombstone EVERY live service a source produced, in one write (used on unlink). */
@@ -185,6 +197,14 @@ export interface FoundationalServiceSourceRepository {
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
   ): Promise<FoundationalServiceSourceRecord[]>
+  /**
+   * Live sources pointing at one repo, across every tier — the PUSH-webhook fan-out's only
+   * query. A delivery names `owner/name` and nothing else, so this is indexed on that pair
+   * rather than on an owner: the whole point is to find the handful of tiers that linked the
+   * repo without enumerating accounts and workspaces (which would be a deployment-wide N+1 on
+   * every push).
+   */
+  listByRepo(repoOwner: string, repoName: string): Promise<FoundationalServiceSourceRecord[]>
   get(id: string): Promise<FoundationalServiceSourceRecord | null>
   upsert(record: FoundationalServiceSourceRecord): Promise<void>
   updateSyncState(id: string, lastSyncedCommit: string | null, lastSyncedAt: number): Promise<void>
@@ -196,4 +216,18 @@ export interface FoundationalServiceSourceRepository {
    * sources refreshes them over successive ticks instead of in one unbounded pass.
    */
   listStale(staleBefore: number, limit: number): Promise<FoundationalServiceSourceRecord[]>
+}
+
+/**
+ * A targeted foundational-source resync, enqueued by the push-webhook fan-out onto the runtime's
+ * GitHub-sync queue, so a contract changed upstream reaches the catalog in seconds rather than
+ * waiting out the autorefresh sweep's staleness window.
+ *
+ * It carries only the source id, unlike the skill library's account-keyed twin: a foundational
+ * source belongs to an `(ownerKind, ownerId)` PAIR, and `syncById` already resolves that pair off
+ * the stored row. Restating it on the message would put a second copy of the ownership on the
+ * queue — one that a re-tiered source could contradict by the time the job runs.
+ */
+export interface FoundationalSourceResyncRequest {
+  sourceId: string
 }

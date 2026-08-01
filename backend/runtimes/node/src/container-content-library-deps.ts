@@ -96,7 +96,7 @@ export function selectNodeSkillLibraryDeps(
 }
 
 /**
- * Wire the foundational-services catalog (docs/initiatives/foundational-services.md) for the
+ * Wire the foundational-services catalog (backend/docs/adr/0031-foundational-services.md) for the
  * Node facade — the mirror of the Worker's `selectFoundationalServiceDeps`.
  *
  * Deliberately UNGATED, unlike the two libraries above: a service's contracts can be uploaded

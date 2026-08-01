@@ -17,7 +17,7 @@ import type { DrizzleDb } from '../db/client.js'
 import { apiContracts, foundationalServiceSources, foundationalServices } from '../db/schema.js'
 
 // Drizzle/Postgres mirrors of the foundational-services D1 repositories
-// (docs/initiatives/foundational-services.md; D1 migration 0073). Behaviourally identical to
+// (backend/docs/adr/0031-foundational-services.md; D1 migration 0073). Behaviourally identical to
 // the D1 repos, so the cross-runtime conformance suite asserts the same catalog against both.
 
 /**
@@ -153,6 +153,22 @@ export class DrizzleFoundationalServiceRepository implements FoundationalService
     await this.db
       .update(foundationalServices)
       .set({ deleted_at: at, updated_at: at })
+      .where(
+        and(
+          eq(foundationalServices.owner_kind, ownerKind),
+          eq(foundationalServices.owner_id, ownerId),
+          eq(foundationalServices.service_id, serviceId),
+        ),
+      )
+  }
+
+  async hardDelete(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceId: string,
+  ): Promise<void> {
+    await this.db
+      .delete(foundationalServices)
       .where(
         and(
           eq(foundationalServices.owner_kind, ownerKind),
@@ -362,6 +378,24 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
         and(
           eq(foundationalServiceSources.owner_kind, ownerKind),
           eq(foundationalServiceSources.owner_id, ownerId),
+          isNull(foundationalServiceSources.deleted_at),
+        ),
+      )
+      .orderBy(desc(foundationalServiceSources.created_at))
+    return rows.map(rowToSource)
+  }
+
+  async listByRepo(
+    repoOwner: string,
+    repoName: string,
+  ): Promise<FoundationalServiceSourceRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(foundationalServiceSources)
+      .where(
+        and(
+          eq(foundationalServiceSources.repo_owner, repoOwner),
+          eq(foundationalServiceSources.repo_name, repoName),
           isNull(foundationalServiceSources.deleted_at),
         ),
       )

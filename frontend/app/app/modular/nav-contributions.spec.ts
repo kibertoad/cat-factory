@@ -124,6 +124,7 @@ describe('navSlotFilter', () => {
     expect(kept).not.toContain('bootstrap-repo')
     expect(kept).not.toContain('operator-dashboard')
     expect(kept).not.toContain('reports')
+    expect(kept).not.toContain('foundational-services')
   })
 
   it('states, per advanced item, whether basic mode still reaches its capability', () => {
@@ -165,6 +166,10 @@ describe('navSlotFilter', () => {
       reports: {
         kind: 'out-of-tier',
         why: 'deployment-wide spend/activity rollup - an operator job, not a delivery one',
+      },
+      'foundational-services': {
+        kind: 'out-of-tier',
+        why: 'org-wide platform inventory, set up once - a board delivers fine with none',
       },
     }
     const advanced = NAV_CONTRIBUTIONS.filter((i) => i.advanced).map((i) => i.id)
@@ -344,6 +349,7 @@ describe('nav grouping helpers', () => {
       'keyboard-shortcuts',
       'ui-mode',
       'tutorial',
+      'foundational-services',
     ])
   })
 
