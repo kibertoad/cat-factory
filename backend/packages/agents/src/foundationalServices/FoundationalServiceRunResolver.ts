@@ -1,8 +1,11 @@
-import type { FoundationalServiceSelection } from '@cat-factory/contracts'
+import type { BinaryOutputConfig, FoundationalServiceSelection } from '@cat-factory/contracts'
 import type { FoundationalCatalogView, InjectedContextFile } from '@cat-factory/kernel'
 import {
+  BINARY_OUTPUT_BRIEF_FILE,
   FOUNDATIONAL_INDEX_FILE,
+  binaryContextFileFor,
   contextFileFor,
+  renderBinaryOutputBrief,
   renderContractDocument,
   renderFoundationalIndex,
 } from '@cat-factory/kernel'
@@ -94,6 +97,83 @@ export class FoundationalServiceRunResolver {
     ]
     for (const bundle of bundles) {
       files.push({ path: contextFileFor(bundle.id), content: renderContractDocument(bundle) })
+    }
+    return files
+  }
+
+  /**
+   * The injected context files a BINARY-GENERATING kind receives for its step's selection
+   * (`stepOptions.binaryOutput`): the brief naming the storage + context services, plus one
+   * contract file per RESOLVED service under `binary-output/`.
+   *
+   * The brief is ALWAYS produced, even for a missing selection or ids the catalog no longer
+   * resolves — that is the "degrade loudly" half: a generator handed nothing would guess at a
+   * storage endpoint, and an asset stored against a guessed API lands where nobody can find it.
+   * Run admission refuses the bad selections it can see up front; this read is what a run that
+   * outlives a catalog edit still gets, so it re-states rather than assumes.
+   */
+  async binaryOutputContextFilesFor(
+    workspaceId: string,
+    config: BinaryOutputConfig | undefined,
+  ): Promise<InjectedContextFile[]> {
+    if (!config) {
+      return [
+        {
+          path: BINARY_OUTPUT_BRIEF_FILE,
+          content: renderBinaryOutputBrief({
+            config,
+            storage: null,
+            contextServices: [],
+            unresolvedContextIds: [],
+          }),
+        },
+      ]
+    }
+    const catalog = await this.catalogFor(workspaceId)
+    const byId = new Map(catalog.map((service) => [service.id, service]))
+    const storage = byId.get(config.storageServiceId) ?? null
+    const contextIds = config.contextServiceIds ?? []
+    const contextServices = contextIds
+      .map((id) => byId.get(id))
+      .filter((service): service is FoundationalCatalogView => service !== undefined)
+    const unresolvedContextIds = contextIds.filter((id) => !byId.has(id))
+
+    const involved = [...(storage ? [storage] : []), ...contextServices]
+    const documents = await this.catalog.contractsFor(
+      workspaceId,
+      involved.map((service) => service.id),
+    )
+    const files: InjectedContextFile[] = [
+      {
+        path: BINARY_OUTPUT_BRIEF_FILE,
+        content: renderBinaryOutputBrief({
+          config,
+          storage,
+          contextServices,
+          unresolvedContextIds,
+        }),
+      },
+    ]
+    for (const service of involved) {
+      const contracts = (documents.get(service.id) ?? []).map((doc) => ({
+        contractId: doc.contractId,
+        format: doc.format,
+        title: doc.title,
+        body: doc.body,
+      }))
+      // A service with no registered contract gets no file — the brief already states that
+      // apart, and an empty document would read as an API with no operations.
+      if (contracts.length === 0) continue
+      files.push({
+        path: binaryContextFileFor(service.id),
+        content: renderContractDocument({
+          id: service.id,
+          name: service.name,
+          summary: service.summary,
+          description: service.description,
+          contracts,
+        }),
+      })
     }
     return files
   }

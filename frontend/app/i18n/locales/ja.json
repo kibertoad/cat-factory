@@ -546,6 +546,7 @@
         "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
         "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません",
         "foundational_service_exists": "その基盤サービスはすでに存在します",
+        "binary_output_service_invalid": "バイナリ出力用のサービスを解決できません",
         "foundational_service_not_inherited": "このボードが登録したサービスです"
       },
       "description": {
@@ -576,6 +577,7 @@
         "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
         "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。",
         "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。",
+        "binary_output_service_invalid": "バイナリ出力を生成するステップが、このワークスペースのカタログでは解決できない基盤サービスを選択しています。ID が不明か、選択した保存先サービスに asset-storage ケイパビリティがありません。ステップの選択を修正するかサービスを登録して、もう一度開始してください。",
         "foundational_service_not_inherited": "除外はアカウントから継承したサービスに対する操作です。この ID はこのボード自身が登録しているため、除外するものがありません。代わりにボード自身のエントリを削除してください。"
       },
       "action": {

@@ -4855,6 +4855,7 @@
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
         "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket",
         "foundational_service_exists": "Il servizio fondamentale esiste già",
+        "binary_output_service_invalid": "Impossibile risolvere il servizio per gli output binari",
         "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio"
       },
       "description": {
@@ -4885,6 +4886,7 @@
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",
         "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione.",
         "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione.",
+        "binary_output_service_invalid": "Un passaggio che genera output binari seleziona un servizio fondamentale che il catalogo di questo workspace non riesce a risolvere: l'identificatore è sconosciuto, oppure il servizio di archiviazione scelto non ha la capacità asset-storage. Correggi la selezione del passaggio o registra il servizio, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca."
       },
       "action": {
