@@ -97,11 +97,16 @@ export const resolvedFoundationalServicesContract = defineApiContract({
  * reversible, which is exactly why the two cannot share a verb.
  *
  * The LIST is what makes the pair usable at all: a suppressed id is by construction absent from
- * the merged catalog, so a surface offering suppression could otherwise offer no way back.
+ * the merged catalog, so a surface offering suppression could otherwise offer no way back. It is
+ * a SIBLING top-level resource (`/foundational-service-suppressions`) rather than a literal
+ * `/foundational-services/suppressions` segment, for the same reason the repo sources below are:
+ * a literal segment sharing a namespace with `:serviceId` is a collision waiting for the first
+ * single-segment by-id route, and a service id is a lower-kebab slug that could legitimately BE
+ * `suppressions`. Keeping them apart costs nothing and needs no reserved-word list.
  */
 export const listFoundationalServiceSuppressionsContract = defineApiContract({
   method: 'get',
-  pathResolver: () => '/foundational-services/suppressions',
+  pathResolver: () => '/foundational-service-suppressions',
   responsesByStatusCode: {
     200: v.array(foundationalServiceSuppressionSchema),
     ...errorResponses,

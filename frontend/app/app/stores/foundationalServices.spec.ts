@@ -84,6 +84,25 @@ describe('foundational-services store', () => {
     expect(store.contractBodies['file-storage']?.[0]?.body).toBe('openapi: 3.0.3')
   })
 
+  it('resets the repo-source flag too when a re-probe finds the catalog gone', async () => {
+    // `sourcesAvailable` gates an affordance rather than content, so a probe that leaves it at a
+    // previous `true` would offer repo-source linking against an owner whose catalog is now
+    // unreachable. Every view the probe owns has to come back down together.
+    const client = api()
+    vi.stubGlobal('useApi', () => client)
+    const store = useFoundationalServicesStore()
+    await store.probe()
+    expect(store.sourcesAvailable).toBe(true)
+
+    client.listFoundationalServices.mockRejectedValueOnce(new Error('503'))
+    useWorkspaceStore().workspaceId = 'ws2'
+    await store.probe()
+
+    expect(store.available).toBe(false)
+    expect(store.sourcesAvailable).toBe(false)
+    expect(store.sources).toEqual([])
+  })
+
   it('refreshes the opt-out list alongside the catalog on suppress and restore', async () => {
     const client = api()
     vi.stubGlobal('useApi', () => client)

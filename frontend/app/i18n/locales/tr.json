@@ -5290,6 +5290,7 @@
     "confirmDelete": {
       "title": "Bu hizmet silinsin mi?",
       "body": "\"{name}\" ve yüklenen sözleşme belgeleri bu kapsamdan kaldırılacak.",
+      "bodyWorkspace": "\"{name}\" ve yüklenen sözleşme belgeleri bu panodan kaldırılacak. Hesapta aynı id ile bir servis kayıtlıysa, bu pano onu devralmayı da bırakacak; bunu \"Bu panoda devre dışı\" bölümünden geri alabilirsiniz.",
       "confirm": "Sil"
     },
     "toast": {

@@ -4,8 +4,10 @@ import type {
   ApiContractRepository,
   FoundationalServiceRecord,
   FoundationalServiceRepository,
+  GroupCacheHandle,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
@@ -364,6 +366,38 @@ describe('FoundationalServiceCatalogService suppression', () => {
     const restored = await service.resolve('ws')
     expect(restored).toHaveLength(1)
     expect(restored[0]).toMatchObject({ id: 'file-storage', name: 'Org storage', tier: 'account' })
+  })
+
+  it('decides both refusals against a FRESH merge, never the cached one agents read', async () => {
+    // A cache pinned to an EMPTY catalog, standing in for a TTL'd entry that has not yet caught
+    // up with the account registering the service. Deciding off it would 404 a legitimate opt-out
+    // — and in the mirror case, write a tombstone against an id the account has since withdrawn,
+    // which is the shadows-nothing row the 404 exists to prevent.
+    let cacheReads = 0
+    const stale: GroupCacheHandle<ResolvedFoundationalService[]> = {
+      get: async () => {
+        cacheReads++
+        return []
+      },
+      invalidate: async () => undefined,
+      invalidateGroup: async () => undefined,
+      invalidateAll: async () => undefined,
+    }
+    const repository = serviceRepo([record('account', 'acct', 'file-storage')])
+    const service = new FoundationalServiceCatalogService({
+      foundationalServiceRepository: repository,
+      apiContractRepository: contractRepo(),
+      workspaceRepository: workspaces('acct'),
+      clock,
+      catalogCache: stale,
+    })
+
+    await expect(service.suppressForWorkspace('ws', 'file-storage')).resolves.toBeUndefined()
+    expect(await repository.get('workspace', 'ws', 'file-storage')).toMatchObject({
+      deletedAt: clock.now(),
+    })
+    // The cache was never consulted for the decision; `resolve` remains free to use it.
+    expect(cacheReads).toBe(0)
   })
 
   it('refuses to restore where the tier is not suppressing anything', async () => {

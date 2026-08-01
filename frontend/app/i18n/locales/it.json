@@ -4321,6 +4321,7 @@
     "confirmDelete": {
       "title": "Eliminare questo servizio?",
       "body": "\"{name}\" e i suoi documenti di contratto caricati saranno rimossi da questo ambito.",
+      "bodyWorkspace": "\"{name}\" e i suoi documenti di contratto caricati saranno rimossi da questa bacheca. Se l'account registra un servizio con lo stesso id, anche questa bacheca smetterà di ereditarlo; puoi annullarlo in \"Esclusi su questa bacheca\".",
       "confirm": "Elimina"
     },
     "toast": {

@@ -5527,6 +5527,7 @@
     "confirmDelete": {
       "title": "Delete this service?",
       "body": "\"{name}\" and its uploaded contract documents will be removed from this scope.",
+      "bodyWorkspace": "\"{name}\" and its uploaded contract documents will be removed from this board. If the account registers a service under the same id, this board will also stop inheriting it; you can undo that under \"Opted out on this board\".",
       "confirm": "Delete"
     },
     "toast": {

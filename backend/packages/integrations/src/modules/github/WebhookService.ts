@@ -132,6 +132,32 @@ function pushAffectsTrackedRef(
   return tracked === pushedBranch
 }
 
+/**
+ * Enqueue a targeted resync for every source of ONE repo-sourced library that tracks the pushed
+ * branch. Shared by the skill library and the foundational-services catalog so the branch-match
+ * rule and the dispatch shape cannot drift apart between them; each caller supplies only its own
+ * indexed lookup and the message its consumer expects.
+ *
+ * Sources tracking a different branch are dropped here: a source's directory cannot have moved on
+ * a branch it does not follow, so enqueuing them would only queue guaranteed no-op resyncs.
+ * Skipping is always safe — the dispatch-time head-commit probe is the correctness backstop, so a
+ * wrong skip costs at most a warm-up, never a stale run.
+ *
+ * The sends run CONCURRENTLY rather than in sequence. They are independent, and this is the
+ * hottest inbound path in the deployment: a shared contracts repo is legitimately linked by an
+ * account tier AND many boards, so serialising would put a queue round-trip per board between the
+ * delivery and its ack. A rejection still propagates so the batch retries — an enqueue that
+ * silently dropped would cost exactly the freshness this fan-out exists to provide.
+ */
+async function fanOutRepoSourceResync<S extends { id: string; gitRef: string }>(
+  list: () => Promise<S[]>,
+  affects: (gitRef: string | undefined) => boolean,
+  enqueue: (source: S) => Promise<void>,
+): Promise<void> {
+  const sources = (await list()).filter((source) => affects(source.gitRef))
+  await Promise.all(sources.map(enqueue))
+}
+
 export class WebhookService {
   constructor(private readonly deps: WebhookServiceDependencies) {}
 
@@ -251,34 +277,35 @@ export class WebhookService {
     }
     // Repo-source freshness fan-out (slice 4): a branch push may have changed a linked skill
     // directory or foundational-service contract, so resync every source that TRACKS the pushed
-    // branch. One indexed lookup PER LIBRARY, then a targeted async resync per matching source
-    // (typically zero or one). Sources that track a different branch are skipped here — a
-    // source's dir can't have moved on a branch it doesn't follow, so enqueuing them would only
-    // queue guaranteed no-op resyncs. Skipping is always safe: the dispatch-time head-commit
-    // probe is the correctness backstop, so a missed enqueue costs at most a warm-up, never a
-    // stale run.
+    // branch. One indexed lookup PER LIBRARY, then a targeted async resync per matching source.
+    // Each library is wired independently (a deployment can run either, or both), so an unwired
+    // pair must never suppress the other's fan-out.
     const pushedBranch = ref.slice('refs/heads/'.length)
     const defaultBranch = typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
     const affects = (gitRef: string | undefined) =>
       pushAffectsTrackedRef(gitRef, pushedBranch, defaultBranch)
 
-    if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
-      const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
-      for (const source of sources) {
-        if (!affects(source.gitRef)) continue
-        await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
-      }
+    const skillSources = this.deps.skillSourceRepository
+    const enqueueSkill = this.deps.enqueueSkillResync
+    if (skillSources && enqueueSkill) {
+      await fanOutRepoSourceResync(
+        () => skillSources.listByRepo(owner, name),
+        affects,
+        (source) => enqueueSkill({ accountId: source.accountId, sourceId: source.id }),
+      )
     }
 
     // The foundational-services twin. Its sources span BOTH tiers, so one repo can legitimately
     // fan out to an account source and several workspace ones; the message carries only the
     // source id, since the consumer resolves the owning tier off the row.
-    if (this.deps.foundationalServiceSourceRepository && this.deps.enqueueFoundationalResync) {
-      const sources = await this.deps.foundationalServiceSourceRepository.listByRepo(owner, name)
-      for (const source of sources) {
-        if (!affects(source.gitRef)) continue
-        await this.deps.enqueueFoundationalResync({ sourceId: source.id })
-      }
+    const foundationalSources = this.deps.foundationalServiceSourceRepository
+    const enqueueFoundational = this.deps.enqueueFoundationalResync
+    if (foundationalSources && enqueueFoundational) {
+      await fanOutRepoSourceResync(
+        () => foundationalSources.listByRepo(owner, name),
+        affects,
+        (source) => enqueueFoundational({ sourceId: source.id }),
+      )
     }
   }
 

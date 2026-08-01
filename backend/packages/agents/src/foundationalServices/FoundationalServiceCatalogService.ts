@@ -192,7 +192,13 @@ export class FoundationalServiceCatalogService {
     // below could not answer this case anyway — a suppressed id is exactly one the merged
     // catalog no longer carries.
     if (existing?.deletedAt) return
-    const inherited = (await this.resolve(workspaceId)).find((entry) => entry.id === serviceId)
+    // Deliberately `loadCatalog` rather than the cached {@link resolve}: both refusals below are
+    // decisions ABOUT persisted state, and a TTL'd merge can be behind it. Reading the cache
+    // would 404 an opt-out for a service the account registered moments ago, and — worse —
+    // write a tombstone against an id the account has since withdrawn, which is exactly the
+    // shadows-nothing row the 404 exists to prevent. This is a rare, human-driven write, so the
+    // four batched reads it costs are not worth trading for a refusal that can be wrong.
+    const inherited = (await this.loadCatalog(workspaceId)).find((entry) => entry.id === serviceId)
     if (!inherited) throw new NotFoundError('FoundationalService', serviceId)
     if (inherited.tier === 'workspace') {
       throw new ConflictError(

@@ -103,11 +103,16 @@ function foundationalServicesSetup(
       suppressions.value = opted
       available.value = true
     } catch {
+      // Reset EVERY view, `sourcesAvailable` included. Leaving it at its previous value would
+      // let a re-probe of an owner whose catalog is now unreachable keep claiming the repo-source
+      // half is wired, which is the one flag here that gates an affordance rather than content.
       available.value = false
       services.value = []
       resolved.value = []
       suppressions.value = []
       sources.value = []
+      sourceChanges.value = {}
+      sourcesAvailable.value = false
       return
     }
     // Repo sources need the GitHub integration; a 503 here hides only the linking UI — the

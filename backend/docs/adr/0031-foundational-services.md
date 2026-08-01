@@ -98,7 +98,21 @@ Three rules make the pair usable rather than a trap:
 The suppression LIST is its own read for the same reason: a suppressed id is by construction absent
 from the merged catalog, so without it the surface offering suppression could offer no way back.
 Its `inherited: false` case is kept distinct, because a tombstone that shadows nothing today must
-not read as a capability being withheld.
+not read as a capability being withheld — and that case is not hypothetical: `remove` at the
+workspace tier leaves a tombstone too, so a board that deletes its own registration lands in this
+list. The board's delete confirmation says so, since the opt-out is otherwise a silent side effect
+of a delete.
+
+The list is mounted as a SIBLING resource (`GET /foundational-service-suppressions`), the way the
+repo sources are, rather than as a literal `/foundational-services/suppressions` segment: a service
+id is a lower-kebab slug that could legitimately be `suppressions`, and a literal segment sharing a
+namespace with `:serviceId` is a collision waiting for the first single-segment by-id route. The
+two mutating verbs stay on the sub-resource, where `:serviceId` is a real path parameter.
+
+Both refusals are decided against a FRESH tier merge, not the cached one the agents read. They are
+decisions about persisted state, so a TTL'd view can 404 an opt-out for a service the account
+registered moments ago, or write a tombstone against an id it has since withdrawn — precisely the
+shadows-nothing row the 404 exists to prevent.
 
 ### Runtime symmetry
 

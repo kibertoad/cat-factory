@@ -4321,6 +4321,7 @@
     "confirmDelete": {
       "title": "Diesen Dienst löschen?",
       "body": "\"{name}\" und die hochgeladenen Vertragsdokumente werden aus diesem Bereich entfernt.",
+      "bodyWorkspace": "\"{name}\" und die hochgeladenen Vertragsdokumente werden von diesem Board entfernt. Falls das Konto einen Dienst unter derselben ID führt, erbt dieses Board ihn ebenfalls nicht mehr; rückgängig machen kannst du das unter \"Auf diesem Board abgewählt\".",
       "confirm": "Löschen"
     },
     "toast": {

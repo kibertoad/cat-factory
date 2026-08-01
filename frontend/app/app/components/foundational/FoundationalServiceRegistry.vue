@@ -154,10 +154,20 @@ async function save() {
   }
 }
 
+// Deleting at the WORKSPACE tier leaves a tombstone, and that tombstone also suppresses an
+// account service registered under the same id — the board lands in the opt-out list without ever
+// having opted out. That is the intended model (a workspace tombstone IS the suppression), but it
+// is invisible at the point of the click, so the confirmation says it and names where to undo it.
+// An account tier has nothing above it to shadow, so it keeps the plain wording.
+const deleteBody = (service: FoundationalService) =>
+  props.kind === 'workspace'
+    ? t('foundational.confirmDelete.bodyWorkspace', { name: service.name })
+    : t('foundational.confirmDelete.body', { name: service.name })
+
 async function remove(service: FoundationalService) {
   const ok = await confirm({
     title: t('foundational.confirmDelete.title'),
-    description: t('foundational.confirmDelete.body', { name: service.name }),
+    description: deleteBody(service),
     variant: 'destructive',
     confirmLabel: t('foundational.confirmDelete.confirm'),
     icon: 'i-lucide-trash-2',

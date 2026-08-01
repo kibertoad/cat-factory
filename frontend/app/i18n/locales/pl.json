@@ -5278,6 +5278,7 @@
     "confirmDelete": {
       "title": "Usunąć tę usługę?",
       "body": "\"{name}\" i przesłane dla niej dokumenty kontraktów zostaną usunięte z tego zakresu.",
+      "bodyWorkspace": "\"{name}\" i przesłane dla niej dokumenty kontraktów zostaną usunięte z tej tablicy. Jeśli konto rejestruje usługę o tym samym id, ta tablica przestanie ją także dziedziczyć; możesz to cofnąć w sekcji \"Wyłączone na tej tablicy\".",
       "confirm": "Usuń"
     },
     "toast": {

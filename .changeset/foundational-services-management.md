@@ -21,7 +21,8 @@ handed, expanding a contract document through the same lazy read a consumer disp
 the catalog still transfers no document body.
 
 A board opts out of an inherited account service through a new suppression sub-resource
-(`POST`/`DELETE /workspaces/:ws/foundational-services/:id/suppression`, plus a list read). It is
+(`POST`/`DELETE /workspaces/:ws/foundational-services/:id/suppression`, plus a
+`GET /workspaces/:ws/foundational-service-suppressions` list read). It is
 deliberately not a delete: deleting removes the board's own registration and its documents, where a
 suppression destroys nothing and is reversible. Suppressing an id the catalog does not carry, or one
 the board registered itself, is refused rather than silently written.
