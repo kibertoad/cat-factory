@@ -4,6 +4,7 @@ import type {
   ApiContractSummary,
   FoundationalServiceSelection,
 } from '@cat-factory/contracts'
+import { fencedBlock } from '../shared/markdown.logic.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for the FOUNDATIONAL SERVICES catalog
@@ -35,8 +36,41 @@ export const MAX_CATALOG_OPERATIONS = 40
  */
 export const MAX_CONTRACT_BODY_CHARS = 120_000
 
-/** The `.cat-context/` directory the resolved contract documents are injected under. */
+/**
+ * How many characters of DESCRIPTION one service contributes to the catalog. The description is
+ * the catalog's relevance signal ("what this covers, and what it does NOT"), not the service's
+ * documentation — that is what the contract documents are for — so a long one is truncated with
+ * a stated note rather than allowed to crowd out the services below it.
+ */
+export const MAX_CATALOG_DESCRIPTION_CHARS = 2_000
+
+/**
+ * The whole rendered catalog's budget. Unlike {@link MAX_CATALOG_OPERATIONS}, which bounds ONE
+ * document, this bounds the catalog as a whole — without it a deployment's context cost grows
+ * without limit in the number of registered services, which is the axis this feature exists to
+ * let an organisation grow along.
+ *
+ * Overflow is NOT dropped: the services that do not fit are still listed by id and name (see
+ * {@link renderFoundationalCatalog}), because an id is all a design needs in order to declare a
+ * service and be handed its full contracts. Dropping them silently would instead teach the
+ * Architect that a capability the org runs does not exist.
+ */
+export const MAX_CATALOG_CHARS = 60_000
+
+/** The `.cat-context/` directory the foundational-services files are injected under. */
 export const FOUNDATIONAL_CONTEXT_DIR = 'foundational-services'
+
+/**
+ * The sub-directory one service's contract bundle is injected in.
+ *
+ * Contract files sit one level BELOW the fixed files rather than beside them so that no service
+ * id can ever collide with one: `index` and `catalog` are both legal slugs under the id schema
+ * and under the repo-directory slugging, and a service named either would otherwise overwrite —
+ * or be overwritten by — the very file that describes what was injected. Reserving the two ids
+ * instead would put a naming rule on the org's services to suit our file layout, and would have
+ * to be enforced at three write boundaries; a directory enforces it structurally at none.
+ */
+export const FOUNDATIONAL_CONTRACTS_DIR = `${FOUNDATIONAL_CONTEXT_DIR}/contracts`
 
 /** The index file listing what was injected (and what was asked for but could not be). */
 export const FOUNDATIONAL_INDEX_FILE = `${FOUNDATIONAL_CONTEXT_DIR}/index.md`
@@ -148,6 +182,40 @@ export function indexOpenApiOperations(content: string): {
   }
 }
 
+/**
+ * The title an OpenAPI document gives ITSELF (`info.title`), or null when it is not OpenAPI or
+ * declares none.
+ *
+ * Preferred over a filename wherever a document carries one: a repo-sourced contract would
+ * otherwise reach the catalog as `openapi.yaml`, which is the same string for every service in
+ * the deployment and so identifies nothing at exactly the moment the Architect is comparing
+ * services. A hand-uploaded contract keeps the title its uploader typed — they chose it
+ * deliberately, and this is only ever a fallback for a derived one.
+ */
+export function openApiTitle(content: string): string | null {
+  const info = parseOpenApiDocument(content)?.info
+  if (!info || typeof info !== 'object') return null
+  const title = (info as Record<string, unknown>).title
+  return typeof title === 'string' && title.trim() ? title.trim() : null
+}
+
+/**
+ * The size a contract document REPORTS — its length in Unicode code points.
+ *
+ * Deliberately not `body.length`. The manifest read derives this in SQL (`length(body)`, which
+ * counts code points on both SQLite and Postgres) while a create/update response derives it in
+ * JS from the body it just wrote, and JS string length counts UTF-16 CODE UNITS — so a document
+ * carrying one astral character (an emoji in an OpenAPI `description:`) would be reported as one
+ * size when written and a different one when listed, for the same unchanged row. Counting code
+ * points here is what makes the two paths agree by construction, with no denormalised column to
+ * keep in step.
+ */
+export function documentSize(body: string): number {
+  let size = 0
+  for (const _ of body) size++
+  return size
+}
+
 /** Build the catalog-facing summary of one stored contract document. */
 export function summarizeContract(input: {
   contractId: string
@@ -162,7 +230,7 @@ export function summarizeContract(input: {
     contractId: input.contractId,
     format: input.format,
     title: input.title,
-    size: input.body.length,
+    size: documentSize(input.body),
     path: input.path,
     operations: indexed.operations,
     omittedOperations: indexed.omitted,
@@ -182,6 +250,11 @@ export function summarizeContract(input: {
  *
  * Ids are matched against `known` so an invented one lands in `unknown` rather than
  * disappearing — see {@link FoundationalServiceSelection}.
+ *
+ * The LAST such block wins. The guidance asks the agent to END its reply with the declaration,
+ * and a model that first restates the instruction it was given — or that reconsiders and writes
+ * a corrected block — leaves an earlier block that is an example or a superseded draft, not the
+ * answer. Reading the first would hand the coder the contracts for a design that was revised.
  */
 export function parseFoundationalDeclaration(
   output: string | undefined,
@@ -191,9 +264,10 @@ export function parseFoundationalDeclaration(
   if (!output) return empty
   const fence = new RegExp(
     `\`\`\`${FOUNDATIONAL_DECLARATION_TAG}\\s*\\r?\\n([\\s\\S]*?)\`\`\``,
-    'i',
+    'gi',
   )
-  const match = output.match(fence)
+  const matches = [...output.matchAll(fence)]
+  const match = matches[matches.length - 1]
   if (!match) return empty
   const knownIds = new Set(known)
   const declared: string[] = []
@@ -244,33 +318,68 @@ export function renderFoundationalCatalog(services: FoundationalCatalogView[]): 
   if (services.length === 0) {
     return 'FOUNDATIONAL SERVICES: none are registered for this workspace. Design the capability yourself, and say so.'
   }
-  const lines: string[] = [
+  const header = [
     'FOUNDATIONAL SERVICES available to this system (shared capabilities that already exist — prefer consuming one over building your own):',
     '',
   ]
+  const lines: string[] = [...header]
+  let used = header.join('\n').length
+  const overflow: FoundationalCatalogView[] = []
   for (const service of services) {
-    lines.push(`- id: ${service.id} — ${service.name}`)
-    lines.push(`  ${service.summary}`)
-    if (service.capabilities.length > 0) {
-      lines.push(`  capabilities: ${service.capabilities.join(', ')}`)
+    // Budget the catalog as a whole, not just each document's operation list. Once the budget is
+    // spent every REMAINING service goes to the overflow list rather than being detailed — and
+    // deliberately not "the ones that happened to be big", so the detailed set stays a prefix of
+    // the (id-sorted, hence stable) catalog and a design re-dispatch sees the same thing.
+    if (overflow.length > 0) {
+      overflow.push(service)
+      continue
     }
-    if (service.description.trim()) {
-      lines.push(`  ${service.description.trim().replace(/\r?\n/g, '\n  ')}`)
+    const entry = renderCatalogEntry(service)
+    if (used + entry.length > MAX_CATALOG_CHARS && lines.length > header.length) {
+      overflow.push(service)
+      continue
     }
-    for (const contract of service.contracts) {
-      const ops =
-        contract.operations.length > 0
-          ? ` — ${contract.operations.join(', ')}${
-              contract.omittedOperations > 0
-                ? ` (+${contract.omittedOperations} more operations not listed here)`
-                : ''
-            }`
-          : ''
-      lines.push(`  contract (${contract.format}): ${contract.title}${ops}`)
-    }
-    lines.push('')
+    lines.push(entry, '')
+    used += entry.length + 1
+  }
+  if (overflow.length > 0) {
+    // Named, never dropped: an id is all a design needs in order to declare a service and be
+    // handed its full contracts, so the honest degradation is "here is what exists, in less
+    // detail" rather than a catalog that silently claims these capabilities do not exist.
+    lines.push(
+      `${overflow.length} further registered ${overflow.length === 1 ? 'service is' : 'services are'} not detailed above because the catalog reached its ${MAX_CATALOG_CHARS}-character budget. They exist and may be declared by id:`,
+      ...overflow.map((service) => `- id: ${service.id} — ${service.name}: ${service.summary}`),
+      '',
+      'If one of them looks relevant, declare it — you will be told what it offers when its contracts are resolved.',
+    )
   }
   return lines.join('\n').trimEnd()
+}
+
+/** One service's catalog entry. Kept separate so the budget above can measure before committing. */
+function renderCatalogEntry(service: FoundationalCatalogView): string {
+  const lines = [`- id: ${service.id} — ${service.name}`, `  ${service.summary}`]
+  if (service.capabilities.length > 0) {
+    lines.push(`  capabilities: ${service.capabilities.join(', ')}`)
+  }
+  const description = service.description.trim()
+  if (description) {
+    const { text, omitted } = capText(description, MAX_CATALOG_DESCRIPTION_CHARS)
+    const note = omitted > 0 ? `\n  (description truncated: ${omitted} further characters)` : ''
+    lines.push(`  ${text.replace(/\r?\n/g, '\n  ')}${note}`)
+  }
+  for (const contract of service.contracts) {
+    const ops =
+      contract.operations.length > 0
+        ? ` — ${contract.operations.join(', ')}${
+            contract.omittedOperations > 0
+              ? ` (+${contract.omittedOperations} more operations not listed here)`
+              : ''
+          }`
+        : ''
+    lines.push(`  contract (${contract.format}): ${contract.title}${ops}`)
+  }
+  return lines.join('\n')
 }
 
 /** One contract document as the lazy read hands it downstream. */
@@ -287,6 +396,13 @@ export interface FoundationalContractBundle {
  * document is fenced with a language matching its format so the agent reads it as the
  * artifact it is, and an over-long body is cut with an explicit note naming how much was
  * dropped.
+ *
+ * The fence is sized to the document ({@link fencedBlock}), never a fixed three ticks. A
+ * contract document routinely CONTAINS a fenced block — an OpenAPI `description:` holding a
+ * request sample, a TypeScript contract's JSDoc example — and a fixed fence closes on the first
+ * one, spilling the rest of the spec, the truncation note and the next document into what the
+ * agent reads as prose. The truncation happens BEFORE the fence is sized, so a cut that lands
+ * mid-run cannot widen what the closing fence has to clear either.
  */
 export function renderContractDocument(bundle: FoundationalContractBundle): string {
   const lines: string[] = [
@@ -299,9 +415,9 @@ export function renderContractDocument(bundle: FoundationalContractBundle): stri
   ]
   for (const contract of bundle.contracts) {
     lines.push(`## ${contract.title} (${contract.format})`, '')
-    const fence = contract.format === 'openapi' ? 'yaml' : 'ts'
-    const { text, omitted } = capBody(contract.body)
-    lines.push(`\`\`\`${fence}`, text, '```')
+    const info = contract.format === 'openapi' ? 'yaml' : 'ts'
+    const { text, omitted } = capText(contract.body, MAX_CONTRACT_BODY_CHARS)
+    lines.push(fencedBlock(text, info))
     if (omitted > 0) {
       lines.push(
         '',
@@ -313,12 +429,10 @@ export function renderContractDocument(bundle: FoundationalContractBundle): stri
   return lines.join('\n').trimEnd()
 }
 
-function capBody(body: string): { text: string; omitted: number } {
-  if (body.length <= MAX_CONTRACT_BODY_CHARS) return { text: body, omitted: 0 }
-  return {
-    text: body.slice(0, MAX_CONTRACT_BODY_CHARS),
-    omitted: body.length - MAX_CONTRACT_BODY_CHARS,
-  }
+/** Cut `text` to `max`, reporting how much was dropped so the caller can STATE it. */
+function capText(text: string, max: number): { text: string; omitted: number } {
+  if (text.length <= max) return { text, omitted: 0 }
+  return { text: text.slice(0, max), omitted: text.length - max }
 }
 
 /**
@@ -344,7 +458,7 @@ export function renderFoundationalIndex(input: {
   }
   if (input.bundles.length > 0) {
     lines.push(
-      'The design declared the services below. Their API contracts are in this directory — treat them as the authoritative interface and do not invent endpoints:',
+      `The design declared the services below. Their API contracts are in \`${FOUNDATIONAL_CONTRACTS_DIR}/\` — treat them as the authoritative interface and do not invent endpoints:`,
       '',
     )
     for (const bundle of input.bundles) {
@@ -367,5 +481,5 @@ export function renderFoundationalIndex(input: {
 
 /** The `.cat-context/` path one service's contract bundle is injected at. */
 export function contextFileFor(serviceId: string): string {
-  return `${FOUNDATIONAL_CONTEXT_DIR}/${serviceId}.md`
+  return `${FOUNDATIONAL_CONTRACTS_DIR}/${serviceId}.md`
 }

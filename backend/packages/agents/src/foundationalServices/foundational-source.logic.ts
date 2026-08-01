@@ -86,9 +86,10 @@ export function contractIdFromPath(path: string): string {
 }
 
 /**
- * A human title for a contract file, derived from its path. Used only when the document
- * itself offers none (the TypeScript formats never do; an OpenAPI document's `info.title` is
- * preferred by the caller).
+ * A human title for a contract file, derived from its path. The FALLBACK only: the caller
+ * prefers an OpenAPI document's own `info.title` (kernel's `openApiTitle`), and reaches for this
+ * when the document offers none — which the two TypeScript formats never do, since they are not
+ * parsed.
  */
 export function contractTitleFromPath(path: string): string {
   return path.split('/').pop() ?? path

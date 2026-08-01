@@ -174,8 +174,19 @@ export interface FoundationalServiceSourceRecord {
   serviceId: string | null
   serviceName: string | null
   serviceSummary: string | null
+  /** The last SUCCESSFUL sync's pinned commit and time. Untouched by a failed attempt. */
   lastSyncedCommit: string | null
   lastSyncedAt: number | null
+  /**
+   * When a sync was last ATTEMPTED, whichever way it went, and the cause when it failed
+   * (`null` once one succeeds). Deliberately separate from {@link lastSyncedAt}: the autorefresh
+   * sweep orders on the ATTEMPT so a source that keeps throwing cannot remain the stalest row
+   * forever and re-occupy every bounded batch, while `lastSyncedAt` stays honest about how old
+   * the catalog's content really is. Reporting a failed attempt as a sync would buy fairness by
+   * making a week-long outage read as "synced a minute ago".
+   */
+  lastAttemptedAt: number | null
+  lastError: string | null
   createdAt: number
   deletedAt: number | null
 }
@@ -186,14 +197,43 @@ export interface FoundationalServiceSourceRepository {
     ownerId: string,
   ): Promise<FoundationalServiceSourceRecord[]>
   get(id: string): Promise<FoundationalServiceSourceRecord | null>
+  /**
+   * The LIVE source at a location, or null. The link path reads this to revive a previously
+   * unlinked source rather than inserting a second row for the same
+   * `(owner, repo, ref, dirPath)` — which the unique index refuses, since an unlink only
+   * tombstones. Returns tombstoned rows too (`includeDeleted`), because reviving one is the
+   * whole point.
+   */
+  getByLocation(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    location: { repoOwner: string; repoName: string; gitRef: string; dirPath: string },
+  ): Promise<FoundationalServiceSourceRecord | null>
   upsert(record: FoundationalServiceSourceRecord): Promise<void>
+  /**
+   * Record a SUCCESSFUL sync: pin the commit, and stamp both the sync and the attempt while
+   * clearing any prior error. One method rather than a separate "record attempt" call on the
+   * success path, so the two timestamps cannot drift apart in the direction that matters (an
+   * attempt older than its own sync).
+   */
   updateSyncState(id: string, lastSyncedCommit: string | null, lastSyncedAt: number): Promise<void>
+  /**
+   * Record a FAILED sync attempt: stamp the attempt and store its cause, leaving the pinned
+   * commit and `lastSyncedAt` alone. This is what keeps the sweep fair — see
+   * {@link FoundationalServiceSourceRecord.lastAttemptedAt}.
+   */
+  recordSyncFailure(id: string, at: number, error: string): Promise<void>
   softDelete(id: string, at: number): Promise<void>
   /**
-   * Live sources across every tier whose last sync is older than `staleBefore` (or which have
-   * never synced), oldest first and bounded. This is the AUTOREFRESH sweep's only query: the
-   * cron pass on each facade drains a bounded batch, so a deployment with a thousand linked
-   * sources refreshes them over successive ticks instead of in one unbounded pass.
+   * Live sources across every tier whose last ATTEMPT is older than `staleBefore` (or which have
+   * never been attempted), least-recently-attempted first and bounded. This is the AUTOREFRESH
+   * sweep's only query: the cron pass on each facade drains a bounded batch, so a deployment with
+   * a thousand linked sources refreshes them over successive ticks instead of in one unbounded
+   * pass.
+   *
+   * Ordered on the ATTEMPT, not the sync, so a permanently failing source rotates to the back of
+   * the queue like any other. Ordering on the sync would let a handful of broken sources hold the
+   * head of the batch forever and silently stop every healthy source from ever refreshing.
    */
   listStale(staleBefore: number, limit: number): Promise<FoundationalServiceSourceRecord[]>
 }

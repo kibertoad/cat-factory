@@ -356,6 +356,8 @@ interface SourceRow {
   service_summary: string | null
   last_synced_commit: string | null
   last_synced_at: number | null
+  last_attempted_at: number | null
+  last_error: string | null
   created_at: number
   deleted_at: number | null
 }
@@ -376,6 +378,8 @@ function toSourceRecord(row: SourceRow): FoundationalServiceSourceRecord {
     serviceSummary: row.service_summary,
     lastSyncedCommit: row.last_synced_commit,
     lastSyncedAt: row.last_synced_at,
+    lastAttemptedAt: row.last_attempted_at,
+    lastError: row.last_error,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
@@ -409,14 +413,38 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
     return row ? toSourceRecord(row) : null
   }
 
+  async getByLocation(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    location: { repoOwner: string; repoName: string; gitRef: string; dirPath: string },
+  ): Promise<FoundationalServiceSourceRecord | null> {
+    // The exact tuple the unique index covers, tombstones included — the caller revives one.
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM foundational_service_sources
+          WHERE owner_kind = ? AND owner_id = ? AND repo_owner = ? AND repo_name = ?
+            AND git_ref = ? AND dir_path = ?`,
+      )
+      .bind(
+        ownerKind,
+        ownerId,
+        location.repoOwner,
+        location.repoName,
+        location.gitRef,
+        location.dirPath,
+      )
+      .first<SourceRow>()
+    return row ? toSourceRecord(row) : null
+  }
+
   async upsert(record: FoundationalServiceSourceRecord): Promise<void> {
     await this.db
       .prepare(
         `INSERT INTO foundational_service_sources
           (id, owner_kind, owner_id, repo_owner, repo_name, git_ref, mode, dir_path, file_paths,
            service_id, service_name, service_summary, last_synced_commit, last_synced_at,
-           created_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           last_attempted_at, last_error, created_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            repo_owner = excluded.repo_owner,
            repo_name = excluded.repo_name,
@@ -429,6 +457,8 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
            service_summary = excluded.service_summary,
            last_synced_commit = excluded.last_synced_commit,
            last_synced_at = excluded.last_synced_at,
+           last_attempted_at = excluded.last_attempted_at,
+           last_error = excluded.last_error,
            deleted_at = excluded.deleted_at`,
       )
       .bind(
@@ -446,6 +476,8 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
         record.serviceSummary,
         record.lastSyncedCommit,
         record.lastSyncedAt,
+        record.lastAttemptedAt,
+        record.lastError,
         record.createdAt,
         record.deletedAt,
       )
@@ -457,11 +489,25 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
     lastSyncedCommit: string | null,
     lastSyncedAt: number,
   ): Promise<void> {
+    // A success is also an attempt, and it clears the previous failure's cause.
     await this.db
       .prepare(
-        'UPDATE foundational_service_sources SET last_synced_commit = ?, last_synced_at = ? WHERE id = ?',
+        `UPDATE foundational_service_sources
+           SET last_synced_commit = ?, last_synced_at = ?, last_attempted_at = ?, last_error = NULL
+          WHERE id = ?`,
       )
-      .bind(lastSyncedCommit, lastSyncedAt, id)
+      .bind(lastSyncedCommit, lastSyncedAt, lastSyncedAt, id)
+      .run()
+  }
+
+  async recordSyncFailure(id: string, at: number, error: string): Promise<void> {
+    // Only the attempt columns: the pinned commit and `last_synced_at` stay as the last SUCCESS
+    // left them, so a failing source reads as stale-and-broken rather than freshly synced.
+    await this.db
+      .prepare(
+        'UPDATE foundational_service_sources SET last_attempted_at = ?, last_error = ? WHERE id = ?',
+      )
+      .bind(at, error, id)
       .run()
   }
 
@@ -473,13 +519,17 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
   }
 
   async listStale(staleBefore: number, limit: number): Promise<FoundationalServiceSourceRecord[]> {
-    // `last_synced_at IS NULL` first: a source linked but never synced is the stalest thing there
-    // is, and ordering by a nullable column alone would sort it unpredictably across engines.
+    // Ordered on the ATTEMPT, not the sync: a source that keeps failing gets its attempt stamped
+    // and rotates to the back like any other, so it cannot hold the head of every bounded batch
+    // and starve the healthy sources (see the port's `listStale` note).
+    //
+    // `last_attempted_at IS NULL` first: a source linked but never attempted is the stalest thing
+    // there is, and ordering by a nullable column alone would sort it unpredictably across engines.
     const { results } = await this.db
       .prepare(
         `SELECT * FROM foundational_service_sources
-          WHERE deleted_at IS NULL AND (last_synced_at IS NULL OR last_synced_at < ?)
-          ORDER BY (last_synced_at IS NULL) DESC, last_synced_at ASC
+          WHERE deleted_at IS NULL AND (last_attempted_at IS NULL OR last_attempted_at < ?)
+          ORDER BY (last_attempted_at IS NULL) DESC, last_attempted_at ASC
           LIMIT ?`,
       )
       .bind(staleBefore, limit)

@@ -543,7 +543,8 @@
         "pipeline_schedule_attached": "Yinelenen bir zamanlama bu hattı kullanıyor",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama bu hatta ihtiyaç duyuyor",
         "pipeline_schedule_intake_unconfigured": "Zamanlamada sorun alımı yok",
-        "foundational_service_exists": "Temel hizmet zaten var"
+        "foundational_service_exists": "Temel hizmet zaten var",
+        "foundational_source_exists": "Depo zaten bağlı"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -572,7 +573,8 @@
         "pipeline_schedule_attached": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor ve başlattığı her çalışma hattı kimliğiyle çözümlüyor. Önce o zamanlamayı ayırın veya silin, sonra hattı kaldırın.",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor, bu yüzden yalnızca tek seferlik yapmak gelecekteki her çalışmayı bozar. Önce o zamanlamayı ayırın.",
         "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın.",
-        "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır."
+        "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
+        "foundational_source_exists": "Bu depo klasörü bu kapsamda zaten temel hizmet kaynağı olarak bağlı. Yeniden eşitlemek veya değiştirmek için mevcut bağlantıyı açın — aynı konuma ikinci bir bağlantı aynı hizmetleri iki kez oluşturur."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

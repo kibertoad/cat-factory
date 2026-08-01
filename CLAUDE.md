@@ -308,9 +308,12 @@ surfaces, not inert string sinks.
 - **Model-authored strings that become shell or git arguments are validated for MAGIC, not just
   traversal**: `--` stops a path being read as a revision but does nothing about `:(glob)**` or `*`. A
   refused input counts as an omission that is REPORTED, never a silent shortening.
-- **Captured command output reaching a model is fenced through `fencedOutput`** (`captured-command.ts`),
-  sized one tick longer than the longest backtick run in the body — a fixed ``` fence closes mid-tail and
-  spills the rest, plus the instructions after it, into what the model reads as prose.
+- **ANY text a model reads inside a fenced block is fenced through kernel's `fencedBlock`**, sized one
+  tick longer than the longest backtick run in the body — a fixed ``` fence closes mid-body and spills
+  the rest, plus the instructions after it, into what the model reads as prose. It binds captured command
+  output (the harness's `fencedOutput` in `captured-command.ts`, the pinned copy) AND any document we
+  hand an agent verbatim: an API contract's OpenAPI `description:` routinely holds a fenced sample. Size
+  the fence from the text that SURVIVES truncation, never the original.
 
 ## Degrade loudly: state what is missing, derive what is computable
 
@@ -779,8 +782,11 @@ exactly the ids the design DECLARED in its machine-read fenced block. Both arriv
 downstream states are kept apart because each needs a different reaction — no declaration at all
 ("nothing was checked"), an empty one ("no shared service applies") and an id the catalog does not
 know (named, with "do not guess at its API"). **Routing is by TRAIT, never a kind-id list**, so a
-deployment's own design/implementer kinds opt in by declaring one. Doc:
-[`foundational-services.md`](./docs/initiatives/foundational-services.md).
+deployment's own design/implementer kinds opt in by declaring one. **The repo-source sweep orders on
+the last ATTEMPT, never the last SYNC** — a source that keeps throwing is stamped and rotates to the
+back, or a handful of revoked installations hold the head of every bounded batch and silently stop the
+whole deployment refreshing, while `lastSyncedAt` stays honest so a week of failures never reads as
+fresh. Doc: [`foundational-services.md`](./docs/initiatives/foundational-services.md).
 
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
 `ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read

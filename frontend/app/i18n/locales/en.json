@@ -600,7 +600,8 @@
         "pipeline_schedule_attached": "Recurring schedule uses this pipeline",
         "pipeline_schedule_requires_recurring": "Recurring schedule needs this pipeline",
         "pipeline_schedule_intake_unconfigured": "Schedule has no issue intake",
-        "foundational_service_exists": "Foundational service already exists"
+        "foundational_service_exists": "Foundational service already exists",
+        "foundational_source_exists": "Repository already linked"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -632,7 +633,8 @@
         "pipeline_schedule_attached": "A recurring schedule still points at this pipeline, and every run it starts resolves the pipeline by id. Detach or delete that schedule first, then remove the pipeline.",
         "pipeline_schedule_requires_recurring": "A recurring schedule still points at this pipeline, so making it one-off only would break every future run it starts. Detach that schedule first.",
         "pipeline_schedule_intake_unconfigured": "A bug intake step draws its work from the schedule issue intake settings, and the attached schedule has none. Configure issue intake on the schedule first.",
-        "foundational_service_exists": "A foundational service with this id is already registered at this scope. Open the existing entry and edit it — two services cannot share an id, because the id is what an architect names in its design."
+        "foundational_service_exists": "A foundational service with this id is already registered at this scope. Open the existing entry and edit it — two services cannot share an id, because the id is what an architect names in its design.",
+        "foundational_source_exists": "This repository folder is already linked as a foundational-service source at this scope. Open the existing link to resync or change it — a second link to the same location would produce the same services twice."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

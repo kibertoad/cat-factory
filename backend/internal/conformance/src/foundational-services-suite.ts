@@ -6,6 +6,7 @@ import type {
   FoundationalServiceSourceRecord,
   FoundationalServiceSourceRepository,
 } from '@cat-factory/kernel'
+import { documentSize } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the foundational-services catalog (docs/initiatives/
@@ -125,8 +126,11 @@ export function defineFoundationalServicesSuite(
     it('serves the contract MANIFEST without bodies, with a size matching the lazy read', async () => {
       const { contracts } = makeRepos()
       const ownerId = scope()
-      // A multi-byte body: a store measuring BYTES rather than characters disagrees here.
-      const body = 'openapi: 3.0.3\n# ünïcødé — description\npaths: {}\n'
+      // A body carrying BOTH a BMP multi-byte character and an ASTRAL one. Bytes disagree with
+      // the first; JS string units (UTF-16 code units) disagree with the second. Only code
+      // points — what SQL `length()` counts and what kernel's `documentSize` counts — match on
+      // every path, which is the property this pins.
+      const body = 'openapi: 3.0.3\n# ünïcødé — description 🐱\npaths: {}\n'
       await contracts.replaceForService('account', ownerId, 'file-storage', [
         contract(ownerId, 'file-storage', 'openapi', {
           body,
@@ -137,7 +141,10 @@ export function defineFoundationalServicesSuite(
 
       const manifest = await contracts.listManifestByOwner('account', ownerId)
       expect(manifest).toHaveLength(1)
-      expect(manifest[0]?.size).toBe(body.length)
+      expect(manifest[0]?.size).toBe(documentSize(body))
+      // The astral character makes this a real assertion rather than a tautology: were the store
+      // (or the service) counting UTF-16 units, the two would differ by exactly one here.
+      expect(documentSize(body)).not.toBe(body.length)
       expect(manifest[0]?.omittedOperations).toBe(3)
       expect(manifest[0]?.sourcePath).toBe('services/file-storage/openapi.yaml')
       // The manifest carries no body at all — the property the whole two-table split exists for.
@@ -145,7 +152,7 @@ export function defineFoundationalServicesSuite(
 
       const [document] = await contracts.listByServiceIds('account', ownerId, ['file-storage'])
       expect(document?.body).toBe(body)
-      expect(document?.body.length).toBe(manifest[0]?.size)
+      expect(documentSize(document?.body ?? '')).toBe(manifest[0]?.size)
     })
 
     it('reads documents for a SET of services and ignores ids outside the tier', async () => {
@@ -211,6 +218,8 @@ export function defineFoundationalServicesSuite(
         serviceSummary: null,
         lastSyncedCommit: null,
         lastSyncedAt: null,
+        lastAttemptedAt: null,
+        lastError: null,
         createdAt: 1_000,
         deletedAt: null,
       }
@@ -225,6 +234,7 @@ export function defineFoundationalServicesSuite(
         dirPath: 'other',
         lastSyncedCommit: 'c1',
         lastSyncedAt: 10,
+        lastAttemptedAt: 10,
       }
       const fresh: FoundationalServiceSourceRecord = {
         ...base,
@@ -238,6 +248,7 @@ export function defineFoundationalServicesSuite(
         serviceSummary: 'Append-only audit trail.',
         lastSyncedCommit: 'c2',
         lastSyncedAt: 10_000,
+        lastAttemptedAt: 10_000,
       }
       await sources.upsert(never)
       await sources.upsert(old)
@@ -248,16 +259,20 @@ export function defineFoundationalServicesSuite(
         [never.id, old.id, fresh.id].sort(),
       )
 
-      // The sweep's query: never-synced first, then oldest-synced. The freshly-synced one is
-      // outside the window entirely.
+      // The sweep's query: never-ATTEMPTED first, then least-recently-attempted. The freshly
+      // attempted one is outside the window entirely.
       const stale = await sources.listStale(1_000, 10)
       const ids = stale.filter((s) => s.ownerId === ownerId).map((s) => s.id)
       expect(ids).toEqual([never.id, old.id])
 
+      // A success stamps BOTH clocks and clears any prior error.
+      await sources.recordSyncFailure(never.id, 40_000, 'installation revoked')
       await sources.updateSyncState(never.id, 'c3', 50_000)
       const synced = await sources.get(never.id)
       expect(synced?.lastSyncedCommit).toBe('c3')
       expect(synced?.lastSyncedAt).toBe(50_000)
+      expect(synced?.lastAttemptedAt).toBe(50_000)
+      expect(synced?.lastError).toBeNull()
 
       await sources.softDelete(old.id, 60_000)
       expect((await sources.listByOwner('account', ownerId)).map((s) => s.id).sort()).toEqual(
@@ -265,6 +280,106 @@ export function defineFoundationalServicesSuite(
       )
       // A tombstoned source is never handed to the sweep, however stale it looks.
       expect((await sources.listStale(70_000, 10)).map((s) => s.id)).not.toContain(old.id)
+    })
+
+    it('a FAILED attempt rotates a source out of the batch without faking a sync', async () => {
+      // The starvation property. `listStale` orders on the ATTEMPT, so a source that keeps
+      // throwing gets stamped and moves behind its healthy peers instead of re-occupying the
+      // head of every bounded batch forever — while `lastSyncedAt` stays where the last real
+      // success left it, so the failing source reads as stale-and-broken rather than fresh.
+      const { sources } = makeRepos()
+      const ownerId = scope()
+      const base: Omit<FoundationalServiceSourceRecord, 'id' | 'dirPath'> = {
+        ownerKind: 'account',
+        ownerId,
+        repoOwner: 'acme',
+        repoName: 'platform',
+        gitRef: 'HEAD',
+        mode: 'directory',
+        filePaths: [],
+        serviceId: null,
+        serviceName: null,
+        serviceSummary: null,
+        lastSyncedCommit: 'c0',
+        lastSyncedAt: 100,
+        lastAttemptedAt: 100,
+        lastError: null,
+        createdAt: 1_000,
+        deletedAt: null,
+      }
+      const broken: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-broken`,
+        dirPath: 'broken',
+      }
+      const healthy: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-healthy`,
+        dirPath: 'healthy',
+        lastAttemptedAt: 200,
+      }
+      await sources.upsert(broken)
+      await sources.upsert(healthy)
+
+      const mine = async (before: number) =>
+        (await sources.listStale(before, 10)).filter((s) => s.ownerId === ownerId).map((s) => s.id)
+      // The broken one is least-recently-attempted, so it leads the batch.
+      expect(await mine(1_000)).toEqual([broken.id, healthy.id])
+
+      await sources.recordSyncFailure(broken.id, 300, 'installation revoked')
+      // …and after its failed attempt it is BEHIND the healthy one, which now leads.
+      expect(await mine(1_000)).toEqual([healthy.id, broken.id])
+
+      const after = await sources.get(broken.id)
+      expect(after?.lastAttemptedAt).toBe(300)
+      expect(after?.lastError).toBe('installation revoked')
+      // The failure did NOT advance the sync state: a week of failures must not read as fresh.
+      expect(after?.lastSyncedAt).toBe(100)
+      expect(after?.lastSyncedCommit).toBe('c0')
+    })
+
+    it('finds a source by LOCATION, tombstones included, so a re-link revives it', async () => {
+      // `link` reads this to revive a previously unlinked source. The unique index covers exactly
+      // this tuple, so inserting a second row for it would fail — the read has to see the
+      // tombstone in order to reuse its id.
+      const { sources } = makeRepos()
+      const ownerId = scope()
+      const location = {
+        repoOwner: 'acme',
+        repoName: 'platform',
+        gitRef: 'HEAD',
+        dirPath: 'foundational',
+      }
+      const record: FoundationalServiceSourceRecord = {
+        ownerKind: 'account',
+        ownerId,
+        ...location,
+        id: `${ownerId}-loc`,
+        mode: 'directory',
+        filePaths: [],
+        serviceId: null,
+        serviceName: null,
+        serviceSummary: null,
+        lastSyncedCommit: null,
+        lastSyncedAt: null,
+        lastAttemptedAt: null,
+        lastError: null,
+        createdAt: 1_000,
+        deletedAt: null,
+      }
+      await sources.upsert(record)
+      expect(await sources.getByLocation('account', ownerId, location)).toEqual(record)
+
+      await sources.softDelete(record.id, 2_000)
+      const tombstoned = await sources.getByLocation('account', ownerId, location)
+      expect(tombstoned?.id).toBe(record.id)
+      expect(tombstoned?.deletedAt).toBe(2_000)
+
+      // Scoped by owner and by every component of the location.
+      expect(await sources.getByLocation('workspace', ownerId, location)).toBeNull()
+      expect(
+        await sources.getByLocation('account', ownerId, { ...location, dirPath: 'elsewhere' }),
+      ).toBeNull()
     })
   })
 }

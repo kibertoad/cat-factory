@@ -543,7 +543,8 @@
         "pipeline_schedule_attached": "Harmonogram cykliczny używa tego potoku",
         "pipeline_schedule_requires_recurring": "Harmonogram cykliczny wymaga tego potoku",
         "pipeline_schedule_intake_unconfigured": "Harmonogram nie ma pobierania zgłoszeń",
-        "foundational_service_exists": "Usługa fundamentalna już istnieje"
+        "foundational_service_exists": "Usługa fundamentalna już istnieje",
+        "foundational_source_exists": "Repozytorium jest już połączone"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -572,7 +573,8 @@
         "pipeline_schedule_attached": "Harmonogram cykliczny nadal wskazuje ten potok, a każde uruchomienie odnajduje go po identyfikatorze. Najpierw odłącz lub usuń ten harmonogram, a dopiero potem usuń potok.",
         "pipeline_schedule_requires_recurring": "Harmonogram cykliczny nadal wskazuje ten potok, więc ograniczenie go do jednorazowego zepsułoby każde przyszłe uruchomienie. Najpierw odłącz ten harmonogram.",
         "pipeline_schedule_intake_unconfigured": "Krok pobierania błędów czerpie pracę z ustawień pobierania zgłoszeń harmonogramu, a powiązany harmonogram ich nie ma. Najpierw skonfiguruj pobieranie zgłoszeń w harmonogramie.",
-        "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie."
+        "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie.",
+        "foundational_source_exists": "Ten folder repozytorium jest już połączony jako źródło usług podstawowych w tym zakresie. Otwórz istniejące połączenie, aby je zsynchronizować lub zmienić — drugie połączenie z tą samą lokalizacją utworzyłoby te same usługi dwukrotnie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

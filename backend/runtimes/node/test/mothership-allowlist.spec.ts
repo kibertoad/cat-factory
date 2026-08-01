@@ -504,7 +504,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   foundationalServiceSourceRepository: {
     get: 'pending',
+    // Owner-scoped, but part of the same mothership-owned sync surface: only `link` reads it,
+    // to revive a tombstoned source rather than collide with the unique index.
+    getByLocation: 'pending',
     updateSyncState: 'pending',
+    recordSyncFailure: 'pending',
     softDelete: 'pending',
     // The autorefresh sweep's query: global (across every tier) and unscoped by construction.
     listStale: 'sweeper',

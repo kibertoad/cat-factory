@@ -146,6 +146,11 @@ export async function runCapturedCommand(args: {
  * output, and worse, the INSTRUCTIONS that follow the block. Sizing the fence one tick longer than
  * the longest run in the body is what CommonMark specifies for exactly this, so the block always
  * spans the whole tail.
+ *
+ * A deliberate COPY of kernel's `fencedBlock` (the container image builds from `src/` plus
+ * typescript alone, so the harness can depend on no workspace package), pinned byte-for-byte by
+ * `test/fenced-block.conformity.test.ts` — the same arrangement `src/host-markdown.ts` has.
+ * Changing one means changing the other.
  */
 export function fencedOutput(text: string): string {
   const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length))

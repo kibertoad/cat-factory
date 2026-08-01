@@ -53,7 +53,12 @@ export const apiContractSummarySchema = v.object({
   contractId: v.string(),
   format: apiContractFormatSchema,
   title: v.string(),
-  /** Byte length of the stored document — the cost signal for a lazy read. */
+  /**
+   * The document's length in Unicode code points — the cost signal for a lazy read. Code
+   * points, not bytes and not JS string units, because this value is derived in SQL on the
+   * listing path and in JS on the write path, and only that unit makes the two agree for the
+   * same row (see kernel's `documentSize`).
+   */
   size: v.number(),
   /** Repo provenance (`path`), or null when uploaded directly. */
   path: v.nullable(v.string()),
@@ -118,6 +123,16 @@ const slug = v.pipe(
   v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
 )
 
+/**
+ * How many contract documents ONE service may carry. A service exposes an interface, not a
+ * library of them, and the bound is what stops a single request from being 1 MB × unbounded —
+ * the per-document cap alone bounds neither the request nor the tier's manifest read.
+ */
+export const MAX_SERVICE_CONTRACTS = 25
+
+/** How many capability tags ONE service may carry. They ride the catalog for every service. */
+export const MAX_SERVICE_CAPABILITIES = 25
+
 /** One contract supplied by DIRECT UPLOAD (body inline on the request). */
 export const uploadApiContractSchema = v.object({
   contractId: slug,
@@ -134,8 +149,15 @@ export const createFoundationalServiceSchema = v.object({
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
   description: v.pipe(v.string(), v.trim(), v.maxLength(20_000)),
-  capabilities: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)))),
-  contracts: v.optional(v.array(uploadApiContractSchema)),
+  capabilities: v.optional(
+    v.pipe(
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))),
+      v.maxLength(MAX_SERVICE_CAPABILITIES),
+    ),
+  ),
+  contracts: v.optional(
+    v.pipe(v.array(uploadApiContractSchema), v.maxLength(MAX_SERVICE_CONTRACTS)),
+  ),
 })
 export type CreateFoundationalServiceInput = v.InferOutput<typeof createFoundationalServiceSchema>
 
@@ -148,8 +170,15 @@ export const updateFoundationalServiceSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
   summary: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
-  capabilities: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)))),
-  contracts: v.optional(v.array(uploadApiContractSchema)),
+  capabilities: v.optional(
+    v.pipe(
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))),
+      v.maxLength(MAX_SERVICE_CAPABILITIES),
+    ),
+  ),
+  contracts: v.optional(
+    v.pipe(v.array(uploadApiContractSchema), v.maxLength(MAX_SERVICE_CONTRACTS)),
+  ),
 })
 export type UpdateFoundationalServiceInput = v.InferOutput<typeof updateFoundationalServiceSchema>
 
@@ -184,8 +213,17 @@ export const foundationalServiceSourceSchema = v.object({
   serviceId: v.nullable(v.string()),
   serviceName: v.nullable(v.string()),
   serviceSummary: v.nullable(v.string()),
+  /** The last SUCCESSFUL sync. Untouched by a failed attempt, so it stays honest about age. */
   lastSyncedCommit: v.nullable(v.string()),
   lastSyncedAt: v.nullable(v.number()),
+  /**
+   * The last ATTEMPT, and the cause when it failed (null once one succeeds). Reported beside
+   * the sync state because the two answer different questions: `lastSyncedAt` says how old the
+   * catalog's content is, and `lastError` says whether anyone is still able to refresh it. A
+   * source whose repo was deleted looks merely stale without this.
+   */
+  lastAttemptedAt: v.nullable(v.number()),
+  lastError: v.nullable(v.string()),
   createdAt: v.number(),
 })
 export type FoundationalServiceSource = v.InferOutput<typeof foundationalServiceSourceSchema>

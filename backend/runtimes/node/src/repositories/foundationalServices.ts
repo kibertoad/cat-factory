@@ -343,6 +343,8 @@ function rowToSource(row: SourceRow): FoundationalServiceSourceRecord {
     serviceSummary: row.service_summary,
     lastSyncedCommit: row.last_synced_commit,
     lastSyncedAt: row.last_synced_at,
+    lastAttemptedAt: row.last_attempted_at,
+    lastError: row.last_error,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
@@ -378,6 +380,29 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
     return row ? rowToSource(row) : null
   }
 
+  async getByLocation(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    location: { repoOwner: string; repoName: string; gitRef: string; dirPath: string },
+  ): Promise<FoundationalServiceSourceRecord | null> {
+    // The exact tuple the unique index covers, tombstones included — the caller revives one.
+    const [row] = await this.db
+      .select()
+      .from(foundationalServiceSources)
+      .where(
+        and(
+          eq(foundationalServiceSources.owner_kind, ownerKind),
+          eq(foundationalServiceSources.owner_id, ownerId),
+          eq(foundationalServiceSources.repo_owner, location.repoOwner),
+          eq(foundationalServiceSources.repo_name, location.repoName),
+          eq(foundationalServiceSources.git_ref, location.gitRef),
+          eq(foundationalServiceSources.dir_path, location.dirPath),
+        ),
+      )
+      .limit(1)
+    return row ? rowToSource(row) : null
+  }
+
   async upsert(record: FoundationalServiceSourceRecord): Promise<void> {
     const values = {
       id: record.id,
@@ -394,6 +419,8 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
       service_summary: record.serviceSummary,
       last_synced_commit: record.lastSyncedCommit,
       last_synced_at: record.lastSyncedAt,
+      last_attempted_at: record.lastAttemptedAt,
+      last_error: record.lastError,
       created_at: record.createdAt,
       deleted_at: record.deletedAt,
     }
@@ -414,6 +441,8 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
           service_summary: values.service_summary,
           last_synced_commit: values.last_synced_commit,
           last_synced_at: values.last_synced_at,
+          last_attempted_at: values.last_attempted_at,
+          last_error: values.last_error,
           deleted_at: values.deleted_at,
         },
       })
@@ -426,7 +455,22 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
   ): Promise<void> {
     await this.db
       .update(foundationalServiceSources)
-      .set({ last_synced_commit: lastSyncedCommit, last_synced_at: lastSyncedAt })
+      .set({
+        last_synced_commit: lastSyncedCommit,
+        last_synced_at: lastSyncedAt,
+        // A success is also an attempt, and it clears the previous failure's cause.
+        last_attempted_at: lastSyncedAt,
+        last_error: null,
+      })
+      .where(eq(foundationalServiceSources.id, id))
+  }
+
+  async recordSyncFailure(id: string, at: number, error: string): Promise<void> {
+    // Only the attempt columns: the pinned commit and `last_synced_at` stay as the last SUCCESS
+    // left them, so a failing source reads as stale-and-broken rather than freshly synced.
+    await this.db
+      .update(foundationalServiceSources)
+      .set({ last_attempted_at: at, last_error: error })
       .where(eq(foundationalServiceSources.id, id))
   }
 
@@ -438,8 +482,12 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
   }
 
   async listStale(staleBefore: number, limit: number): Promise<FoundationalServiceSourceRecord[]> {
-    // A source linked but NEVER synced is the stalest thing there is, so it is matched
-    // explicitly and ordered first — `ORDER BY last_synced_at` alone puts NULLs last on
+    // Ordered on the ATTEMPT, not the sync: a source that keeps failing gets its attempt stamped
+    // and rotates to the back like any other, so it cannot hold the head of every bounded batch
+    // and starve the healthy sources (see the port's `listStale` note).
+    //
+    // A source linked but NEVER attempted is the stalest thing there is, so it is matched
+    // explicitly and ordered first — `ORDER BY last_attempted_at` alone puts NULLs last on
     // Postgres and first on SQLite, which would make the two runtimes drain different sources.
     const rows = await this.db
       .select()
@@ -448,14 +496,14 @@ export class DrizzleFoundationalServiceSourceRepository implements FoundationalS
         and(
           isNull(foundationalServiceSources.deleted_at),
           or(
-            isNull(foundationalServiceSources.last_synced_at),
-            lt(foundationalServiceSources.last_synced_at, staleBefore),
+            isNull(foundationalServiceSources.last_attempted_at),
+            lt(foundationalServiceSources.last_attempted_at, staleBefore),
           ),
         ),
       )
       .orderBy(
-        sql`${foundationalServiceSources.last_synced_at} IS NULL DESC`,
-        asc(foundationalServiceSources.last_synced_at),
+        sql`${foundationalServiceSources.last_attempted_at} IS NULL DESC`,
+        asc(foundationalServiceSources.last_attempted_at),
       )
       .limit(limit)
     return rows.map(rowToSource)

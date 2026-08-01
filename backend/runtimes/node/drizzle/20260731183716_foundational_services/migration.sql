@@ -30,6 +30,8 @@ CREATE TABLE "foundational_service_sources" (
 	"service_summary" text,
 	"last_synced_commit" text,
 	"last_synced_at" bigint,
+	"last_attempted_at" bigint,
+	"last_error" text,
 	"created_at" bigint NOT NULL,
 	"deleted_at" bigint
 );
@@ -54,6 +56,6 @@ CREATE TABLE "foundational_services" (
 CREATE INDEX "idx_api_contracts_owner" ON "api_contracts" ("owner_kind","owner_id","service_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_foundational_sources_unique" ON "foundational_service_sources" ("owner_kind","owner_id","repo_owner","repo_name","git_ref","dir_path");--> statement-breakpoint
 CREATE INDEX "idx_foundational_sources_owner" ON "foundational_service_sources" ("owner_kind","owner_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_foundational_sources_stale" ON "foundational_service_sources" ("last_synced_at") WHERE "deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_foundational_sources_stale" ON "foundational_service_sources" ("last_attempted_at") WHERE "deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_foundational_services_owner" ON "foundational_services" ("owner_kind","owner_id") WHERE "deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_foundational_services_source" ON "foundational_services" ("source_id") WHERE "deleted_at" IS NULL;

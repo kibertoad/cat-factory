@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_CATALOG_CHARS,
+  MAX_CATALOG_DESCRIPTION_CHARS,
   MAX_CATALOG_OPERATIONS,
   MAX_CONTRACT_BODY_CHARS,
   detectContractFormat,
+  documentSize,
   indexOpenApiOperations,
+  openApiTitle,
   parseFoundationalDeclaration,
   renderContractDocument,
   renderFoundationalCatalog,
@@ -89,8 +93,32 @@ describe('indexOpenApiOperations', () => {
   })
 })
 
+describe('documentSize', () => {
+  it('counts CODE POINTS, so the JS write path agrees with the SQL listing path', () => {
+    // SQL `length()` counts code points on both SQLite and Postgres; JS `.length` counts UTF-16
+    // code units. An astral character is where they part, and where the same unchanged row would
+    // otherwise report one size when written and another when listed.
+    expect(documentSize('abc')).toBe(3)
+    expect(documentSize('ünïcødé')).toBe('ünïcødé'.length)
+    expect(documentSize('a🐱b')).toBe(3)
+    expect('a🐱b'.length).toBe(4)
+  })
+})
+
+describe('openApiTitle', () => {
+  it("prefers the document's own title, since every service's file is called openapi.yaml", () => {
+    expect(openApiTitle(OPENAPI_YAML)).toBe('File storage')
+  })
+
+  it('returns null when the document is not OpenAPI or declares no title', () => {
+    expect(openApiTitle("import '@toad-contracts/core'")).toBeNull()
+    expect(openApiTitle(JSON.stringify({ openapi: '3.0.0', info: {}, paths: {} }))).toBeNull()
+    expect(openApiTitle(JSON.stringify({ openapi: '3.0.0', info: { title: '  ' } }))).toBeNull()
+  })
+})
+
 describe('summarizeContract', () => {
-  it('carries the byte size and operation index but never the body', () => {
+  it('carries the document size and operation index but never the body', () => {
     const summary = summarizeContract({
       contractId: 'openapi',
       format: 'openapi',
@@ -98,7 +126,7 @@ describe('summarizeContract', () => {
       path: 'services/file-storage/openapi.yaml',
       body: OPENAPI_YAML,
     })
-    expect(summary.size).toBe(OPENAPI_YAML.length)
+    expect(summary.size).toBe(documentSize(OPENAPI_YAML))
     expect(summary.operations).toContain('POST /files')
     expect(Object.keys(summary)).not.toContain('body')
   })
@@ -127,6 +155,30 @@ describe('parseFoundationalDeclaration', () => {
     expect(parseFoundationalDeclaration(output, known)).toEqual({
       declared: ['file-storage'],
       unknown: ['imaginary-bus'],
+    })
+  })
+
+  it('takes the LAST block, so an echoed example or a revised draft cannot win', () => {
+    // The guidance asks the agent to END its reply with the declaration. A model that first
+    // restates the instruction it was given, or that reconsiders and writes a corrected block,
+    // leaves an earlier block that is an example or a superseded draft — reading it would hand
+    // the coder the contracts for a design that was revised away.
+    const output = [
+      'The format I was asked for looks like this:',
+      '',
+      '```foundational-services',
+      'notifications',
+      '```',
+      '',
+      'On reflection this design consumes only:',
+      '',
+      '```foundational-services',
+      'file-storage',
+      '```',
+    ].join('\n')
+    expect(parseFoundationalDeclaration(output, known)).toEqual({
+      declared: ['file-storage'],
+      unknown: [],
     })
   })
 
@@ -200,6 +252,41 @@ describe('renderFoundationalCatalog', () => {
     ])
     expect(rendered).toContain('+3 more operations not listed here')
   })
+
+  it('budgets the WHOLE catalog and still names what it could not detail', () => {
+    // Without a total budget the catalog grows without limit in the number of services — the
+    // very axis this feature exists to let an org grow along.
+    const services = Array.from({ length: 60 }, (_, i) => ({
+      id: `svc-${String(i).padStart(2, '0')}`,
+      name: `Service ${i}`,
+      summary: 'A shared capability.',
+      description: 'd'.repeat(MAX_CATALOG_DESCRIPTION_CHARS),
+      capabilities: ['x'],
+      contracts: [],
+    }))
+    const rendered = renderFoundationalCatalog(services)
+    expect(rendered.length).toBeLessThan(MAX_CATALOG_CHARS * 1.2)
+    // Overflow is NAMED, never dropped: an id is all a design needs to declare a service.
+    expect(rendered).toContain('further registered services are not detailed above')
+    expect(rendered).toContain('svc-59')
+    // …and the detailed set is a PREFIX of the id-sorted catalog, so a re-dispatch of the same
+    // design sees the same thing rather than a different arbitrary subset.
+    expect(rendered.indexOf('svc-00')).toBeLessThan(rendered.indexOf('svc-59'))
+  })
+
+  it('truncates a long DESCRIPTION with a stated note rather than crowding out other services', () => {
+    const rendered = renderFoundationalCatalog([
+      {
+        id: 'file-storage',
+        name: 'File Storage',
+        summary: 'Stores uploads.',
+        description: 'd'.repeat(MAX_CATALOG_DESCRIPTION_CHARS + 500),
+        capabilities: [],
+        contracts: [],
+      },
+    ])
+    expect(rendered).toContain('description truncated: 500 further characters')
+  })
 })
 
 describe('renderContractDocument', () => {
@@ -214,6 +301,56 @@ describe('renderContractDocument', () => {
     })
     expect(rendered).toContain('```yaml')
     expect(rendered).toContain('100 characters of the original')
+  })
+
+  it('sizes the fence past any run the DOCUMENT contains, so it cannot break out', () => {
+    // The realistic shape: an OpenAPI `description:` carrying a fenced request sample. A fixed
+    // three-tick fence closes on that sample, and everything after it — the rest of the spec and
+    // the instructions that follow the block — reads to the agent as prose.
+    const body = [
+      'openapi: 3.0.3',
+      'info:',
+      '  title: Files',
+      '  description: |',
+      '    Upload a file:',
+      '    ```bash',
+      '    curl -F file=@x /files',
+      '    ```',
+      'paths: {}',
+    ].join('\n')
+    const rendered = renderContractDocument({
+      id: 'file-storage',
+      name: 'File Storage',
+      summary: 's',
+      description: 'd',
+      contracts: [
+        { contractId: 'c', format: 'openapi', title: 'HTTP API', body },
+        { contractId: 'd', format: 'toad-contract', title: 'Typed', body: 'const a = 1' },
+      ],
+    })
+    expect(rendered).toContain('````yaml')
+    // The whole document is inside the block: the last line of the spec still precedes the
+    // SECOND document's heading, which a broken-out fence would have swallowed into the first.
+    expect(rendered).toContain('paths: {}\n````')
+    expect(rendered).toContain('## Typed (toad-contract)')
+    // A body with no backticks still gets the ordinary three.
+    expect(rendered).toContain('```ts\nconst a = 1\n```')
+  })
+
+  it('sizes the fence from the TRUNCATED text, so a cut mid-run cannot leave it open', () => {
+    // The cut lands inside a long backtick run: the fence must clear what SURVIVES, not what
+    // the original body happened to contain.
+    const body = `${'x'.repeat(MAX_CONTRACT_BODY_CHARS - 2)}\`\`\`\`\`\`\`\`\`\``
+    const rendered = renderContractDocument({
+      id: 'file-storage',
+      name: 'File Storage',
+      summary: 's',
+      description: 'd',
+      contracts: [{ contractId: 'c', format: 'openapi', title: 'HTTP API', body }],
+    })
+    const fence = rendered.match(/^(`{3,})yaml$/m)?.[1] ?? ''
+    expect(fence.length).toBe(3) // only two ticks survived the cut
+    expect(rendered).toContain(`\n${fence}\n`)
   })
 })
 
@@ -244,7 +381,9 @@ describe('renderFoundationalIndex', () => {
       unknown: ['imaginary-bus'],
       noDeclaration: false,
     })
-    expect(rendered).toContain('foundational-services/file-storage.md')
+    // Contract files live one level below the fixed files, so no service id can collide with
+    // `index.md` or `catalog.md` (both are legal slugs).
+    expect(rendered).toContain('foundational-services/contracts/file-storage.md')
     expect(rendered).toContain('imaginary-bus')
     expect(rendered).toContain('Do not guess')
   })

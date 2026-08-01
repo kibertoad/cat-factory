@@ -20,6 +20,7 @@ import {
   ConflictError,
   NotFoundError,
   ValidationError,
+  documentSize,
   summarizeContract,
 } from '@cat-factory/kernel'
 import { mergeFoundationalTiers, toWire } from './foundational-catalog.js'
@@ -153,9 +154,16 @@ export class FoundationalServiceCatalogService {
   }
 
   /**
-   * Remove a service from a tier. A WORKSPACE removal writes a tombstone (which is also how a
-   * board suppresses an inherited account service); an ACCOUNT removal drops the row and its
-   * documents outright, since there is no higher tier for it to shadow.
+   * Remove a service from a tier: TOMBSTONE the row, drop its contract documents.
+   *
+   * A tombstone at either tier, deliberately. At the workspace tier it is load-bearing — it is
+   * also how a board suppresses an inherited account service, which needs a row that survives to
+   * lose the merge. At the account tier it carries no such meaning, but keeping one shape means
+   * the merge has one rule (`deletedAt` ⇒ gone) rather than a tier-dependent one, and re-creating
+   * a removed id later revives the row instead of colliding with a hard-deleted primary key.
+   *
+   * The DOCUMENTS are dropped outright either way: nothing reads the contracts of a service that
+   * is not in the catalog, and they are the only part of this that is measured in megabytes.
    */
   async remove(
     ownerKind: FoundationalServiceOwnerKind,
@@ -347,7 +355,9 @@ function manifestOf(record: ApiContractRecord): ApiContractManifestEntry {
     contractId: record.contractId,
     format: record.format,
     title: record.title,
-    size: record.body.length,
+    // `documentSize`, never `body.length` — the listing path derives this in SQL and the two
+    // must agree for the same row (see the helper's note).
+    size: documentSize(record.body),
     operations: record.operations,
     omittedOperations: record.omittedOperations,
     sourcePath: record.sourcePath,
@@ -364,7 +374,7 @@ function documentOf(record: ApiContractRecord): ApiContractDocument {
     contractId: record.contractId,
     format: record.format,
     title: record.title,
-    size: record.body.length,
+    size: documentSize(record.body),
     path: record.sourcePath,
     operations: record.operations,
     omittedOperations: record.omittedOperations,

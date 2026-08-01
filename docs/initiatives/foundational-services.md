@@ -53,10 +53,30 @@ the org's specs rather than with the number of its services. Hence:
 - **operations are indexed ONCE at write time** and stored on the contract row, so the catalog can
   show an agent what an interface offers without loading a body.
 
-Both reads are delivered as injected `.cat-context/` files (`foundational-services/catalog.md`,
-`foundational-services/index.md`, `foundational-services/<id>.md`) rather than as new prompt
-fields — one mechanism that already works for container dispatches, inline calls and consensus
-participants, and one stable path the trait guidance can name.
+Both reads are delivered as injected `.cat-context/` files rather than as new prompt fields — one
+mechanism that already works for container dispatches, inline calls and consensus participants, and
+one stable path the trait guidance can name:
+
+```
+.cat-context/foundational-services/
+  catalog.md              # the design-time read
+  index.md                # what was injected, and what was asked for but could not be
+  contracts/<id>.md       # one per declared service
+```
+
+The contract files sit one level BELOW the two fixed files deliberately. `index` and `catalog` are
+both legal service ids (under the upload schema and under the repo-directory slugging alike), so a
+flat layout lets a service called `index` overwrite — or be overwritten by — the file describing what
+was injected. Reserving the two ids instead would impose a naming rule on the org's own services to
+suit our file layout, and would need enforcing at three write boundaries; a directory enforces it
+structurally at none.
+
+The catalog carries a whole-catalog character budget on top of the per-document operation cap.
+Without it a design prompt grows without limit in the number of registered services — the very axis
+this feature exists to let an organisation grow along. Services that do not fit are still listed by
+id, name and summary rather than dropped: an id is all a design needs in order to declare a service
+and be handed its full contracts, whereas a silent drop teaches the Architect that a capability the
+org runs does not exist.
 
 ## The declaration is the join between them
 
@@ -101,16 +121,41 @@ for a scope rule to bind.
 - **A workspace override that ships no contract of its own must NOT inherit the account's
   documents.** The winning TIER is decided by the catalog merge, and the lazy read takes that
   tier's documents — otherwise an override reads as partially applied.
-- **`length()` counts characters on both stores**, which is what makes the manifest's `size`
-  comparable to the `body.length` the service works in. A bytes-vs-characters difference would pass
-  a naive round-trip and disagree about every non-ASCII document; the conformance suite pins it with
-  a multi-byte body.
+- **`size` is counted in CODE POINTS on every path.** `length()` counts code points on both stores,
+  but JS `.length` counts UTF-16 code units — so a create/update response (which derives the size in
+  JS from the body it just wrote) and a list response (which derives it in SQL) would report
+  different sizes for the same unchanged row as soon as one astral character appeared, e.g. an emoji
+  in an OpenAPI `description:`. Kernel's `documentSize` is the single JS-side counter, and the
+  conformance suite pins it with a body carrying both a BMP multi-byte character and an astral one,
+  so the assertion is not a tautology.
+- **A contract document is fenced with a fence sized to the document**, via kernel's `fencedBlock`.
+  An OpenAPI `description:` routinely holds a fenced request sample, and a fixed ``` fence closes on
+  it — spilling the rest of the spec, the truncation note and the NEXT document into what the agent
+  reads as prose. The fence is sized from the text that survives truncation, never the original.
 - **A `files`-mode source anchors its head-commit probe on the linked files' deepest common
   directory**, so a dozen linked files still cost ONE cheap read per freshness check.
 - **A directory that loses its `service.md` retires the service it described**, but a manifest that
   reads back unparseable this round keeps the prior row alive AND leaves the pinned commit behind,
   so the next pass re-reads it. Retiring a service over a transient read would silently strip a
   capability from every subsequent design.
+- **The autorefresh sweep orders on the last ATTEMPT, not the last SYNC.** `syncRepoSource` stamps
+  the sync state only once it completes, so a source that THROWS — a revoked installation, a deleted
+  repo, a rate limit — would keep its old timestamp, stay permanently the least-recently-synced row,
+  and re-occupy the head of every bounded batch. Twenty such sources and no healthy source in the
+  deployment ever refreshes again, with nothing to show for it but a warn line per tick. So
+  `lastAttemptedAt` is stamped either way and drives `listStale`, while `lastSyncedAt` stays where
+  the last real success left it — reporting a failed attempt as a sync would buy fairness by making
+  a week-long outage read as "synced a minute ago". The cause is persisted as `lastError` (scrubbed
+  through `describeError`) rather than only logged, so a broken source is visibly broken.
+- **Re-linking a previously unlinked location REVIVES its row.** A source location
+  (`owner × repo × ref × dirPath`) is unique per tier and an unlink only tombstones, so inserting a
+  fresh row on re-link is a constraint violation — a 500 on an ordinary unlink/relink. The revival
+  resets the pin to zero: `unlink` tombstoned every service the source produced, so a retained pin
+  would make the next pass short-circuit on an unchanged head commit and re-create none of them,
+  leaving a source that reports itself synced while producing nothing.
+- **A repo-sourced contract is titled from the document's own `info.title`** where it has one. Every
+  service's file is called `openapi.yaml`, so the filename is the same string for every service in
+  the deployment and identifies nothing at exactly the moment the Architect is comparing them.
 - **The traits are the dispatch key, never a kind id list.** A deployment's own design kind gets the
   catalog by declaring `foundational-catalog`; its own implementer kinds get the contracts by
   declaring `foundational-contracts`.

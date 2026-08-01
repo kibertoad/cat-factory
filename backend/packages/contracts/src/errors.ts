@@ -138,6 +138,11 @@ export const CONFLICT_REASONS = [
   // id IS what an Architect names in its design, so two rows competing for one id is exactly
   // the ambiguity the catalog exists to prevent.
   'foundational_service_exists',
+  // The addressed repo location (owner × repo × ref × directory) is already linked as a
+  // foundational-service source at this scope. A distinct reason from the one above because the
+  // remedy is different: there is nothing to rename — the existing link already covers exactly
+  // this location, so the SPA points at it rather than suggesting a second one.
+  'foundational_source_exists',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

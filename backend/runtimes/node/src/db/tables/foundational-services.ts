@@ -91,6 +91,12 @@ export const foundationalServiceSources = pgTable(
     service_summary: text('service_summary'),
     last_synced_commit: text('last_synced_commit'),
     last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    // When a sync was last ATTEMPTED, success or failure, and why the last one failed. Distinct
+    // from `last_synced_at` (which stays the truth about the last SUCCESS) because the sweep
+    // orders on the attempt: a source that keeps throwing would otherwise stay permanently the
+    // stalest row and re-occupy the batch on every tick, starving every healthy source.
+    last_attempted_at: bigint('last_attempted_at', { mode: 'number' }),
+    last_error: text('last_error'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
@@ -106,9 +112,9 @@ export const foundationalServiceSources = pgTable(
     index('idx_foundational_sources_owner')
       .on(t.owner_kind, t.owner_id)
       .where(sql`${t.deleted_at} IS NULL`),
-    // The autorefresh sweep drains the oldest-synced live sources in bounded batches.
+    // The autorefresh sweep drains the least-recently-ATTEMPTED live sources in bounded batches.
     index('idx_foundational_sources_stale')
-      .on(t.last_synced_at)
+      .on(t.last_attempted_at)
       .where(sql`${t.deleted_at} IS NULL`),
   ],
 )

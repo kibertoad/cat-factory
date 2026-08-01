@@ -73,12 +73,18 @@ CREATE TABLE foundational_service_sources (
   service_summary    TEXT,
   last_synced_commit TEXT,
   last_synced_at     INTEGER,
+  -- When a sync was last ATTEMPTED (success or failure) and why the last one failed. Distinct
+  -- from last_synced_at, which stays the truth about the last SUCCESS: the sweep orders on the
+  -- ATTEMPT, so a source that keeps throwing (a revoked installation, a deleted repo) cannot
+  -- stay permanently the stalest row and re-occupy every batch, starving the healthy sources.
+  last_attempted_at  INTEGER,
+  last_error         TEXT,
   created_at         INTEGER NOT NULL,
   deleted_at         INTEGER,
   UNIQUE (owner_kind, owner_id, repo_owner, repo_name, git_ref, dir_path)
 );
 CREATE INDEX idx_foundational_sources_owner
   ON foundational_service_sources (owner_kind, owner_id) WHERE deleted_at IS NULL;
--- The autorefresh sweep drains the oldest-synced live sources in bounded batches.
+-- The autorefresh sweep drains the least-recently-ATTEMPTED live sources in bounded batches.
 CREATE INDEX idx_foundational_sources_stale
-  ON foundational_service_sources (last_synced_at) WHERE deleted_at IS NULL;
+  ON foundational_service_sources (last_attempted_at) WHERE deleted_at IS NULL;

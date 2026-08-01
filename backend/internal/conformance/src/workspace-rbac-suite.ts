@@ -358,6 +358,15 @@ function registerRbacMemberManagementTests(
       { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/prompt-fragments/none') }, // fragment library (workspace scope)
+      // Foundational services (workspace scope). The catalog decides what an Architect is told
+      // the org already runs, so a member editing it silently redirects every future design;
+      // and the source link is a repo read through the workspace's installation.
+      { perm: 'settings.manage', method: 'DELETE', path: w('/foundational-services/none') },
+      {
+        perm: 'settings.manage',
+        method: 'DELETE',
+        path: w('/foundational-service-sources/none'),
+      },
       // Pre-PR validation checks are operator-authored SHELL COMMANDS that run in the run's
       // container, so the write is admin-tier even though the values are not secrets.
       { perm: 'settings.manage', method: 'DELETE', path: w('/services/none/validation-checks') },

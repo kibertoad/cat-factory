@@ -21,3 +21,8 @@ The Architect is folded the catalog (identity, capability tags and indexed opera
 document body) and must declare the service ids its design consumes; the Researcher and Coder are
 then handed the full API contracts of exactly those services, plus an explicit statement of anything
 the design named that the catalog does not contain.
+
+Also adds `fencedBlock`/`fenceFor` to `@cat-factory/kernel` — the canonical, self-sizing markdown
+fence that a contract document (or any other body we hand an agent verbatim) cannot break out of.
+The executor harness's `fencedOutput` becomes a pinned copy of it, in the same arrangement its
+`host-markdown` copy already has.

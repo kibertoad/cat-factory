@@ -19,11 +19,14 @@ import type {
   RepoContentEntry,
 } from '@cat-factory/kernel'
 import {
+  ConflictError,
   NotFoundError,
   ValidationError,
   assertFound,
+  describeError,
   detectContractFormat,
   noopLogger,
+  openApiTitle,
   runBestEffort,
   summarizeContract,
 } from '@cat-factory/kernel'
@@ -101,7 +104,15 @@ export class FoundationalServiceSourceService {
     return rows.map(toWire)
   }
 
-  /** Link a repo folder (or file list) as a source. Does not sync (call {@link sync}). */
+  /**
+   * Link a repo folder (or file list) as a source. Does not sync (call {@link sync}).
+   *
+   * A location is UNIQUE per tier (`owner × repo × ref × dirPath`), and an unlink only
+   * tombstones, so re-linking somewhere previously unlinked REVIVES that row rather than
+   * inserting a second one — inserting would hit the unique index and surface as a 500 on a
+   * perfectly ordinary unlink/relink. A location that is still LIVE is a 409, not a silent
+   * re-configure of the source someone else is relying on.
+   */
   async link(
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
@@ -114,22 +125,43 @@ export class FoundationalServiceSourceService {
     // on the scanned subtree itself.
     const dirPath =
       input.mode === 'files' ? commonDirectory(filePaths) : normalizeDirPath(input.dirPath)
-    const record: FoundationalServiceSourceRecord = {
-      id: this.deps.idGenerator.next('fndsrc'),
-      ownerKind,
-      ownerId,
+    const location = {
       repoOwner: input.repoOwner.trim(),
       repoName: input.repoName.trim(),
       gitRef: input.gitRef?.trim() || 'HEAD',
-      mode: input.mode,
       dirPath,
+    }
+    const existing = await this.deps.foundationalServiceSourceRepository.getByLocation(
+      ownerKind,
+      ownerId,
+      location,
+    )
+    if (existing && existing.deletedAt === null) {
+      throw new ConflictError(
+        'This repository location is already linked as a foundational-service source',
+        'foundational_source_exists',
+        { sourceId: existing.id },
+      )
+    }
+    const record: FoundationalServiceSourceRecord = {
+      id: existing?.id ?? this.deps.idGenerator.next('fndsrc'),
+      ownerKind,
+      ownerId,
+      ...location,
+      mode: input.mode,
       filePaths,
       serviceId: input.mode === 'files' ? (input.serviceId ?? null) : null,
       serviceName: input.mode === 'files' ? (input.serviceName ?? null) : null,
       serviceSummary: input.mode === 'files' ? (input.serviceSummary ?? null) : null,
+      // A revived link starts from ZERO sync state, never the pin it carried when it was
+      // unlinked. `unlink` tombstoned every service the source had produced, so a retained pin
+      // would make the next pass short-circuit on `!commitMoved` — an unchanged repo — and
+      // re-create none of them, leaving a source that reports itself synced and produces nothing.
       lastSyncedCommit: null,
       lastSyncedAt: null,
-      createdAt: now,
+      lastAttemptedAt: null,
+      lastError: null,
+      createdAt: existing?.createdAt ?? now,
       deletedAt: null,
     }
     await this.deps.foundationalServiceSourceRepository.upsert(record)
@@ -221,7 +253,47 @@ export class FoundationalServiceSourceService {
 
   // --- internals ----------------------------------------------------------
 
+  /**
+   * Run a sync, recording the ATTEMPT either way.
+   *
+   * The failure branch is what keeps the autorefresh sweep fair. `syncRepoSource` stamps the
+   * sync state only once it completes, so a source that THROWS — a revoked installation, a
+   * deleted repo, a rate limit — would otherwise keep its old timestamp, stay permanently the
+   * least-recently-attempted row, and re-occupy the head of every bounded batch. Twenty such
+   * sources and no healthy source in the deployment ever refreshes again, with nothing to show
+   * for it but a warn line per tick.
+   *
+   * The cause is PERSISTED rather than only logged, so a source broken for a week is visible as
+   * broken on the management surface instead of merely looking old. It is scrubbed through
+   * `describeError`, because a GitHub client error routinely echoes the request URL.
+   *
+   * The error still propagates: an operator who pressed "sync" gets the failure, and the
+   * sweep's own `runBestEffort` is what turns it into a logged-and-continue there. Recording is
+   * itself best-effort, because the ONE cause worth surfacing is the sync's — a store that is
+   * also down must not replace "your installation was revoked" with its own write error.
+   */
   private async runSync(
+    source: FoundationalServiceSourceRecord,
+  ): Promise<FoundationalServiceSyncResult> {
+    try {
+      return await this.attemptSync(source)
+    } catch (error) {
+      await runBestEffort(
+        this.log,
+        'foundationalServices.recordSyncFailure',
+        () =>
+          this.deps.foundationalServiceSourceRepository.recordSyncFailure(
+            source.id,
+            this.deps.clock.now(),
+            syncFailureCause(error),
+          ),
+        { sourceId: source.id },
+      )
+      throw error
+    }
+  }
+
+  private async attemptSync(
     source: FoundationalServiceSourceRecord,
   ): Promise<FoundationalServiceSyncResult> {
     // Invariant across the whole sync — resolved ONCE, never per file.
@@ -427,7 +499,9 @@ export class FoundationalServiceSourceService {
       const summary = summarizeContract({
         contractId,
         format,
-        title: contractTitleFromPath(path),
+        // The document's own `info.title` when it has one — every service's OpenAPI file is
+        // called `openapi.yaml`, so the filename identifies nothing in a catalog of them.
+        title: openApiTitle(file.content) ?? contractTitleFromPath(path),
         path,
         body: file.content,
       })
@@ -546,6 +620,19 @@ export class FoundationalServiceSourceService {
   }
 }
 
+/** How much of a failure cause is retained on the row. Enough to diagnose, bounded for a column. */
+const MAX_SYNC_ERROR_CHARS = 500
+
+/**
+ * The stored cause of a failed sync: scrubbed (a GitHub client error routinely echoes the request
+ * URL, and `describeError` runs it through `redactSecrets`) and bounded, since the message is
+ * model- and vendor-authored text landing in a column every source listing reads.
+ */
+function syncFailureCause(error: unknown): string {
+  const cause = String(describeError(error).err ?? '')
+  return cause.length > MAX_SYNC_ERROR_CHARS ? `${cause.slice(0, MAX_SYNC_ERROR_CHARS)}…` : cause
+}
+
 function toWire(record: FoundationalServiceSourceRecord): FoundationalServiceSource {
   return {
     id: record.id,
@@ -562,6 +649,11 @@ function toWire(record: FoundationalServiceSourceRecord): FoundationalServiceSou
     serviceSummary: record.serviceSummary,
     lastSyncedCommit: record.lastSyncedCommit,
     lastSyncedAt: record.lastSyncedAt,
+    // Surfaced so a source that has been failing for a week reads as BROKEN rather than merely
+    // old: `lastSyncedAt` alone cannot tell "nothing upstream changed" from "every attempt since
+    // Tuesday threw", and those need very different reactions from an operator.
+    lastAttemptedAt: record.lastAttemptedAt,
+    lastError: record.lastError,
     createdAt: record.createdAt,
   }
 }

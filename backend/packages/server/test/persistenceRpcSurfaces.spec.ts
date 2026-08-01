@@ -1233,6 +1233,112 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
     })
   }
 
+  // The foundational-services catalog rides the SAME two rules, so it is asserted here rather
+  // than in a suite of its own: the same `owner` pair for its reads and owner-keyed writes, the
+  // same `ownerField` for its record-based upserts. What is specific to it is that a mothership
+  // node reads this on the RUN path — an architect resolving the catalog, its coder resolving
+  // the declared services' contract documents — so a gap here is not a dead management panel but
+  // a design that silently sees an empty catalog and rebuilds what the org already runs.
+  const FOUNDATIONAL_OWNER_READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'foundationalServiceRepository', method: 'listByOwner', args: [] },
+    { repo: 'foundationalServiceRepository', method: 'get', args: ['file-storage'] },
+    { repo: 'apiContractRepository', method: 'listManifestByOwner', args: [] },
+    { repo: 'apiContractRepository', method: 'listByServiceIds', args: [['file-storage']] },
+    { repo: 'foundationalServiceSourceRepository', method: 'listByOwner', args: [] },
+  ]
+
+  for (const { repo, method, args } of FOUNDATIONAL_OWNER_READS) {
+    it(`forwards ${repo}.${method} for a workspace owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('workspace', 'ws_in', ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'workspace', ownerId: 'ws_in' })
+    })
+
+    it(`forwards ${repo}.${method} for an account owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('account', ACCOUNT, ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'account', ownerId: ACCOUNT })
+    })
+
+    it(`rejects ${repo}.${method} for a workspace owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an account owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', OTHER_ACCOUNT, ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an unknown owner kind (fails closed)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('user', 'usr_x', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // The owner-keyed VOID writes: the catalog's tombstone and the contract set's replace/delete.
+  const FOUNDATIONAL_OWNER_WRITES: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'foundationalServiceRepository', method: 'softDelete', args: ['file-storage', 0] },
+    { repo: 'apiContractRepository', method: 'replaceForService', args: ['file-storage', []] },
+    { repo: 'apiContractRepository', method: 'deleteForService', args: ['file-storage'] },
+  ]
+
+  for (const { repo, method, args } of FOUNDATIONAL_OWNER_WRITES) {
+    it(`forwards ${repo}.${method} for an in-scope owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', ACCOUNT, ...args),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope owner (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  for (const repo of ['foundationalServiceRepository', 'foundationalServiceSourceRepository']) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope owner (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has no owner fields (404, fail-closed)`, async () => {
+      await expect(remoteRegistry()[repo]!.upsert!({})).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // The sourceId-keyed SYNC surface stays off the allow-list: a sync needs a GitHub client a
+  // mothership node does not have, and none of these carries an (ownerKind, ownerId) pair for a
+  // rule to bind. Asserted, not assumed — an allow-list entry added without a scope rule that
+  // binds its arguments is exactly the mistake that would make these callable cross-tenant.
+  const SYNC_SURFACE: Array<[repo: string, method: string, args: unknown[]]> = [
+    ['foundationalServiceRepository', 'listBySource', ['fndsrc_1']],
+    ['foundationalServiceRepository', 'softDeleteBySource', ['fndsrc_1', 0]],
+    ['foundationalServiceSourceRepository', 'get', ['fndsrc_1']],
+    ['foundationalServiceSourceRepository', 'getByLocation', ['account', ACCOUNT, {}]],
+    ['foundationalServiceSourceRepository', 'updateSyncState', ['fndsrc_1', 'sha', 0]],
+    ['foundationalServiceSourceRepository', 'recordSyncFailure', ['fndsrc_1', 0, 'boom']],
+    ['foundationalServiceSourceRepository', 'softDelete', ['fndsrc_1', 0]],
+    ['foundationalServiceSourceRepository', 'listStale', [0, 20]],
+  ]
+
+  for (const [repo, method, args] of SYNC_SURFACE) {
+    it(`refuses ${repo}.${method} (mothership-owned sync surface, not allow-listed)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(...args)).rejects.toThrow(/not callable/)
+    })
+  }
+
   it('still refuses the sourceId-keyed sync reads (off the allow-list)', async () => {
     // `promptFragmentRepository.listBySource` + `fragmentSourceRepository.get` are the repo-sync
     // reads the mothership owns — never remotely callable from a mothership node.

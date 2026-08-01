@@ -531,6 +531,42 @@ function buildLibraryAndCommsRepos() {
       upsert: async () => undefined,
       get: async (id: string) => ({ id }),
     },
+    // The FOUNDATIONAL SERVICES catalog + its contract documents, keyed by the same
+    // (ownerKind, ownerId) PAIR the fragment library uses. Each read echoes the pair so the
+    // round-trip can assert the whole bound owner reached the repo. The sourceId-keyed sync
+    // methods (`listBySource`, `softDeleteBySource`, the source repo's `get`/`getByLocation`/
+    // `updateSyncState`/`recordSyncFailure`/`softDelete`/`listStale`) are wired but absent from
+    // the allow-list — mothership-owned sync — so the surface suite can assert they are refused.
+    foundationalServiceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      get: async (ownerKind: string, ownerId: string, serviceId: string) => ({
+        ownerKind,
+        ownerId,
+        serviceId,
+      }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      listBySource: async () => [],
+      softDeleteBySource: async () => undefined,
+    },
+    apiContractRepository: {
+      listManifestByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      listByServiceIds: async (ownerKind: string, ownerId: string, serviceIds: string[]) => [
+        { ownerKind, ownerId, serviceIds },
+      ],
+      replaceForService: async () => undefined,
+      deleteForService: async () => undefined,
+    },
+    foundationalServiceSourceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      upsert: async () => undefined,
+      get: async (id: string) => ({ id }),
+      getByLocation: async () => null,
+      updateSyncState: async () => undefined,
+      recordSyncFailure: async () => undefined,
+      softDelete: async () => undefined,
+      listStale: async () => [],
+    },
     // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
     // the call reached the bound account. `create` is wired but admin-gated (absent from the allow-list).
     invitationRepository: {
