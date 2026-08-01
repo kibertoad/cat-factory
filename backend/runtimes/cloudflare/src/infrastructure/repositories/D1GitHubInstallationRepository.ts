@@ -89,6 +89,22 @@ export class D1GitHubInstallationRepository implements GitHubInstallationReposit
     return results.map(rowToInstallation)
   }
 
+  async listActiveForAccount(accountId: string): Promise<GitHubInstallation[]> {
+    // One scoped query, not the global list filtered in JS: the account's direct bindings
+    // UNION the bindings of its own boards. Ordered so both runtimes pick the same row.
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM github_installations
+          WHERE deleted_at IS NULL
+            AND ( account_id = ?1
+               OR workspace_id IN (SELECT w.id FROM workspaces w WHERE w.account_id = ?1) )
+          ORDER BY created_at, installation_id`,
+      )
+      .bind(accountId)
+      .all<GitHubInstallationRow>()
+    return results.map(rowToInstallation)
+  }
+
   async upsert(installation: GitHubInstallation): Promise<void> {
     const { sql, binds } = buildUpsert('github_installations', installationValues(installation), [
       'installation_id',

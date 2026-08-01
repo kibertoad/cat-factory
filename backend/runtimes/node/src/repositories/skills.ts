@@ -10,7 +10,7 @@ import type { DrizzleDb } from '../db/client.js'
 import { accountSkills, skillSources } from '../db/schema.js'
 
 // Drizzle/Postgres mirrors of the Claude Skills library D1 repositories
-// (docs/initiatives/repo-skills.md; migration 0052). Behaviourally identical to the
+// (ADR 0024; migration 0052). Behaviourally identical to the
 // D1 repos so the cross-runtime conformance suite asserts the same skill library
 // against both stores.
 

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { SkillSummary } from '~/types/domain'
 
 /**
- * The account's repo-sourced Claude Skills catalog (docs/initiatives/repo-skills.md slice 3),
+ * The account's repo-sourced Claude Skills catalog (ADR 0024 slice 3),
  * hydrated from the workspace snapshot as lightweight `{ id, name, description }` summaries.
  * Drives the pipeline builder's per-step skill picker: a `skill` step binds its
  * `stepOptions.skillId` to one of these. Skills live in ONE tier (the account, shared across its

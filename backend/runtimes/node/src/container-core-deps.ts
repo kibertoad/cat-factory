@@ -561,7 +561,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
       workspaces: repos.workspaceRepository,
       modelProviderResolver,
     }),
-    // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
+    // Repo-sourced Claude Skills library (ADR 0024; opt-in): the
     // account's catalog of repo-authored skills, wired exactly like the Worker's
     // selectSkillLibraryDeps (account repos + installation resolver).
     ...selectNodeSkillLibraryDeps(

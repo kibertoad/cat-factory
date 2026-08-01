@@ -80,9 +80,12 @@ silent wrong run); only the resource-body fetch degrades. Pipeline-save/run-star
 - **Runtime symmetry.** Every table/repo/port/queue-job lands D1 ⇄ Drizzle (+ Node/local)
   together with a cross-runtime conformance assertion; the `listByRepo` lookup, the
   `skill-source-resync` job kind, and the `queueSkillResync` gateway seam are mirrored across both
-  facades. Mothership mode leaves skills OFF until the persistence RPC surfaces them (the db-less
-  remote repos leave the module unassembled — the controller 503s — rather than assembling over a
-  broken db), a clean follow-up exactly like fragment repo-sync.
+  facades. **Mothership mode**: skills are now fully served over the persistence RPC — the catalog
+  reads (which are RUN-path reads, since `skillResolver` is a hard dependency for a `skill` step)
+  AND the repo-sync surface, via a `skillSource` scope rule that resolves a source id to its owning
+  account. Unlike the fragment library, whose sync stays mothership-owned, a mothership node has a
+  GitHub client (token delegation), so its link/sync/unlink routes are live and had to be bound
+  rather than left reachable-and-broken. See `docs/initiatives/mothership-mode.md`.
 - **Observability trade-off (claude-code).** Because the skill travels as a top-level job-body
   field (dropped from the agent-context snapshot) and the claude-code prompt is only a pointer, the
   actual instructions a claude-code run executed are NOT captured in agent-context telemetry — only

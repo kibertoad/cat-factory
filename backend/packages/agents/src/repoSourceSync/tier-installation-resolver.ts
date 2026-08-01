@@ -11,8 +11,8 @@ import type { FragmentOwnerKind } from '@cat-factory/kernel'
 // synthetic rows stamp it with the PAT's GitHub account id — so an account-scope source
 // sync failed with "No GitHub installation is available for this scope" on exactly the
 // deployments where the user could already browse the repo. The account tier therefore
-// falls back to the installations of the account's OWN boards (one batched
-// `listByAccount` read — never a per-installation point lookup), which is also the
+// falls back to the installations of the account's OWN boards (one scoped
+// `listActiveForAccount` read — never a per-installation point lookup), which is also the
 // stricter scoping: an installation reachable through one of the account's boards is,
 // by construction, a credential that account already uses.
 
@@ -41,19 +41,22 @@ export function createTierInstallationResolvers(
     (await deps.installations.getByWorkspace(workspaceId))?.installationId ?? null
 
   const forAccount = async (accountId: string): Promise<number | null> => {
-    const active = await deps.installations.listActive()
-    const direct = active.find((i) => i.accountId === accountId)
+    // ONE account-scoped query answers both branches: `listActiveForAccount` returns the rows
+    // bound to the account directly AND the rows bound to its own boards. The global
+    // `listActive()` + a JS board-id filter it replaced read every tenant's installations to
+    // answer a single-account question — which is also why it could never be exposed over the
+    // account-scoped machine API (mothership mode).
+    const reachable = await deps.installations.listActiveForAccount(accountId)
+    const direct = reachable.find((i) => i.accountId === accountId)
     if (direct) return direct.installationId
-    const boards = await deps.workspaces.listByAccount(accountId)
-    const boardIds = new Set(boards.map((w) => w.id))
-    const viaBoard = active.find((i) => boardIds.has(i.workspaceId))
+    const viaBoard = reachable[0]
     if (viaBoard) return viaBoard.installationId
     // Local PAT mode provisions a board's synthetic installation lazily on its FIRST
     // `getByWorkspace` read, so a board never probed has no active row yet. One point read
     // on one of the account's boards covers that (every board resolves to the same PAT
     // there); on a hosted facade a genuinely connected installation is already active, so
     // this stays a miss for an account that truly never connected anything.
-    const [board] = boards
+    const [board] = await deps.workspaces.listByAccount(accountId)
     return board ? forWorkspace(board.id) : null
   }
 

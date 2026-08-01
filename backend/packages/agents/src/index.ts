@@ -571,7 +571,7 @@ export {
 } from './fragmentLibrary/fragment-catalog.js'
 export * as fragmentSourceLogic from './fragmentLibrary/fragment-source.logic.js'
 
-// ---- repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) ----
+// ---- repo-sourced Claude Skills library (ADR 0024) ----
 export {
   SkillSourceService,
   type SkillSourceServiceDependencies,

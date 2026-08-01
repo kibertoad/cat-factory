@@ -2,7 +2,7 @@ import type { GitHubClient } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Shared repo-source sync mechanics, extracted from the fragment library (ADR
-// 0006 §6) so the Claude Skills library (docs/initiatives/repo-skills.md) reuses
+// 0006 §6) so the Claude Skills library (ADR 0024) reuses
 // them rather than copying the shape. It owns the parts every repo-sourced tier
 // gets identically: pin the source dir's head commit BEFORE reading (so a commit
 // landing mid-sync is recorded as the pinned sha and the next status flags it,

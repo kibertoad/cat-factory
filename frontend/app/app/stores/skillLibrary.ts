@@ -10,7 +10,7 @@ import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useSkillsStore } from '~/stores/skills'
 
 /**
- * The repo-sourced Claude Skills library for one account (docs/initiatives/repo-skills.md),
+ * The repo-sourced Claude Skills library for one account (ADR 0024),
  * used by the account-settings management surface. Holds the account's synced skill catalog
  * (full detail) and its linked repo sources, and drives link / sync / status / unlink. Skills
  * are a single account tier (no workspace tier), so — unlike the fragment library — there is no

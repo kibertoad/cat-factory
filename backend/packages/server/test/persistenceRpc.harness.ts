@@ -465,6 +465,11 @@ function buildReviewAndIntegrationRepos() {
     // it echoes the workspaceId as a single record. The rest of the installation repo stays off.
     githubInstallationRepository: {
       getByWorkspace: async (ws: string) => ({ ws }),
+      // The account-scoped installation list the repo-sourced libraries resolve their GitHub
+      // credential through; echoes the accountId (arg0). `listActive` is its GLOBAL sibling —
+      // wired but absent from the allow-list, so it must be refused.
+      listActiveForAccount: async (accountId: string) => [{ accountId }],
+      listActive: async () => [],
     },
     repoProjectionRepository: {
       list: async (ws: string) => [{ ws }],
@@ -500,6 +505,15 @@ function buildReviewAndIntegrationRepos() {
   }
 }
 
+/**
+ * The account-owned skill sources the `skillSource` scope rule resolves against: one under each
+ * account, plus (by absence) `sklsrc_missing`, which resolves to nothing and must fail closed.
+ */
+const SKILL_SOURCES = new Map<string, { id: string; accountId: string }>([
+  ['sklsrc_in', { id: 'sklsrc_in', accountId: ACCOUNT }],
+  ['sklsrc_out', { id: 'sklsrc_out', accountId: OTHER_ACCOUNT }],
+])
+
 /** The owner-scoped content library (fragments, sources) plus the invitation / Slack / telemetry reads. */
 function buildLibraryAndCommsRepos() {
   return {
@@ -530,6 +544,29 @@ function buildLibraryAndCommsRepos() {
       listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
       upsert: async () => undefined,
       get: async (id: string) => ({ id }),
+    },
+    // The repo-sourced Claude Skills library (ADR 0024). ONE tier — the account — so the reads
+    // echo the accountId (arg0) and the sourceId-keyed sync methods bind through the `skillSource`
+    // rule (source → owning account, resolved server-side from `skillSourceRepository.get`).
+    // `sklsrc_in` lives under ACCOUNT, `sklsrc_out` under OTHER_ACCOUNT (see `SKILL_SOURCES`), so
+    // the same in/out-of-scope split the block/service rules use applies here.
+    accountSkillRepository: {
+      listByAccount: async (accountId: string) => [{ accountId }],
+      get: async (accountId: string, skillId: string) => ({ accountId, skillId }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      listBySource: async (sourceId: string) => [{ sourceId }],
+      softDeleteBySource: async () => undefined,
+    },
+    skillSourceRepository: {
+      listByAccount: async (accountId: string) => [{ accountId }],
+      get: async (id: string) => SKILL_SOURCES.get(id) ?? null,
+      upsert: async () => undefined,
+      updateSyncState: async () => undefined,
+      softDelete: async () => undefined,
+      // Wired but deliberately OFF the allow-list: the GLOBAL push-webhook reverse lookup, which
+      // spans every account by construction and runs on the mothership. Must be refused.
+      listByRepo: async (repoOwner: string, repoName: string) => [{ repoOwner, repoName }],
     },
     // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
     // the call reached the bound account. `create` is wired but admin-gated (absent from the allow-list).
@@ -578,6 +615,7 @@ export function makeRegistry(): {
   resolveBlockAccountId: NonNullable<DispatchOptions['resolveBlockAccountId']>
   resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
   resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
+  resolveSkillSourceAccountId: NonNullable<DispatchOptions['resolveSkillSourceAccountId']>
   resolveAccountMemberIds: NonNullable<DispatchOptions['resolveAccountMemberIds']>
 } {
   const fx = makeFixtures()
@@ -622,6 +660,15 @@ export function makeRegistry(): {
       const map = new Map<string, string | null | undefined>()
       for (const service of services) map.set(service.id, service.accountId)
       return map
+    },
+    // Built exactly as the controller builds it (source row → its `accountId`), so the round-trip
+    // exercises the real server-side resolution for the `skillSource` scope. A source that does not
+    // exist yields undefined, which the rule fails closed on.
+    resolveSkillSourceAccountId: async (sourceId) => {
+      const source = (await registry.skillSourceRepository!.get!(sourceId)) as {
+        accountId?: string
+      } | null
+      return source?.accountId
     },
     // Built exactly as the controller builds it (roster → userIds), so the round-trip exercises the
     // real server-side co-membership resolution for the `user`/`userList` scope.

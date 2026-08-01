@@ -141,6 +141,12 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       directly. A non-object arg, a missing/non-string `workspaceId`/`serviceId`,
  *                       an out-of-scope workspace, or a service whose account differs from the
  *                       workspace's (incl. a missing service) is refused as 404.
+ *   - `skillSource`   — `args[arg]` is a skill-SOURCE id (a `skill_sources` row) with no account
+ *                       arg; resolve the source's owning account server-side. This is the rule the
+ *                       repo-sourced Claude Skills library's sync surface needs: a source id is the
+ *                       only key its reconcile/tombstone/pin methods carry, so nothing positional
+ *                       binds them. A missing source (or no resolver wired) fails closed (404, no
+ *                       existence leak), exactly like `block`/`service`.
  *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
  *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
  *                       `workspace` → resolve the workspace's owning account (like `workspace`);
@@ -173,6 +179,7 @@ export type ScopeRule =
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'skillSource'; arg: number }
   | { kind: 'usageRecord'; arg: number }
   | { kind: 'owner'; kindArg: number; idArg: number }
   | { kind: 'ownerField'; arg: number }
@@ -223,6 +230,12 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve a skill source's owning account id (the mothership's `SkillSourceRepository.get`,
+   * projected to its `accountId`). Required for the `skillSource` scope kind; a call hitting that
+   * kind with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveSkillSourceAccountId?(sourceId: string): Promise<string | null | undefined>
   /**
    * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
    * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
@@ -506,11 +519,59 @@ async function checkEntityListCallScope(
 }
 
 /**
+ * The single-ENTITY-ID half of {@link checkEntityCallScope}: the kinds whose argument is one opaque
+ * id belonging to an account, bound through a server-side resolver because the call carries no
+ * workspace/account of its own. Same contract — a `DispatchResult` (404 `denied`) when out of
+ * scope, `undefined` when it passes. A missing entity, or an absent resolver, fails CLOSED in every
+ * case: an id that cannot be bound must never reach the method, and 404 (not 403) matches the auth
+ * gate's existence-non-leak policy. Split out purely to keep each function under the complexity
+ * ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityIdCallScope(
+  rule: Extract<ScopeRule, { kind: 'block' | 'service' | 'skillSource' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+): Promise<DispatchResult | undefined> {
+  const denied = fail('not_found', 'Not found')
+  const id = args[rule.arg]
+  if (typeof id !== 'string') return denied
+  switch (rule.kind) {
+    case 'block': {
+      // The block's home workspace's account (the block carries no workspace arg).
+      if (!opts.resolveBlockAccountId) return denied
+      if (!inScope(await opts.resolveBlockAccountId(id))) return denied
+      break
+    }
+    case 'service': {
+      // The service's owning account (services are account-owned) — the single-id form of
+      // `serviceList`, reusing the same resolver. A missing service is absent from the map.
+      if (!opts.resolveServiceAccountIds) return denied
+      if (!inScope((await opts.resolveServiceAccountIds([id])).get(id))) return denied
+      break
+    }
+    case 'skillSource': {
+      // The skill source's owning account. The library's sync methods carry a source id and
+      // nothing else, so this resolver is the only thing that can bind them.
+      if (!opts.resolveSkillSourceAccountId) return denied
+      if (!inScope(await opts.resolveSkillSourceAccountId(id))) return denied
+      break
+    }
+    default: {
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
+    }
+  }
+  return undefined
+}
+
+/**
  * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
- * server-side account resolver (co-membership for users, block/service ownership, tenant-library
- * owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope, `undefined`
- * when it passes. Split from the core kinds purely to keep each function under the complexity
- * ceiling; the `never` default keeps the two switches jointly exhaustive over `ScopeRule`.
+ * server-side account resolver (co-membership for users, block/service/skill-source ownership,
+ * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
+ * `undefined` when it passes. Split from the core kinds purely to keep each function under the
+ * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
  */
 async function checkEntityCallScope(
   rule: Extract<
@@ -524,6 +585,7 @@ async function checkEntityCallScope(
         | 'service'
         | 'serviceList'
         | 'serviceMount'
+        | 'skillSource'
         | 'usageRecord'
         | 'owner'
         | 'ownerField'
@@ -554,25 +616,12 @@ async function checkEntityCallScope(
       // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
       // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
       return checkEntityListCallScope(rule, args, opts, helpers)
-    case 'block': {
-      // Bind via the block's home workspace's account, resolved server-side (the block carries
-      // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
-      // 404 — no existence leak, matching the `workspace` rule.
-      const blockId = args[rule.arg]
-      if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
-      if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
-      break
-    }
-    case 'service': {
-      // Bind via the service's owning account (services are account-owned; the single-id form of
-      // `serviceList`, reusing the same resolver). A missing service is absent from the map, so it
-      // is refused as 404 — no existence leak, matching the `serviceList`/`block` rules.
-      const serviceId = args[rule.arg]
-      if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
-      const accounts = await opts.resolveServiceAccountIds([serviceId])
-      if (!inScope(accounts.get(serviceId))) return denied
-      break
-    }
+    case 'block':
+    case 'service':
+    case 'skillSource':
+      // The single-ENTITY-ID kinds (an opaque id bound through a server-side account resolver) are
+      // split out to keep this function under the complexity ceiling; same contract.
+      return checkEntityIdCallScope(rule, args, opts, inScope)
     case 'serviceMount': {
       const denialForMount = await checkServiceMountScope(args[rule.arg], opts, inScope, denied)
       if (denialForMount) return denialForMount

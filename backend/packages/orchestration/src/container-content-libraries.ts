@@ -48,7 +48,7 @@ export interface FragmentLibraryModule {
 
 /**
  * The repo-sourced Claude Skills library's services, present only when configured
- * (docs/initiatives/repo-skills.md). Assembles whenever `accountSkillRepository` is wired.
+ * (ADR 0024). Assembles whenever `accountSkillRepository` is wired.
  */
 export interface SkillLibraryModule {
   /** The account skill-catalog read (cached), consumed by the management surface + the run path. */
@@ -218,7 +218,7 @@ export function createFragmentLibraryModule(
 
 /**
  * Assemble the repo-sourced Claude Skills library when its skill repository is
- * present (docs/initiatives/repo-skills.md). The catalog read always assembles; the
+ * present (ADR 0024). The catalog read always assembles; the
  * repo-source sync additionally needs the GitHub client, the source repository and an
  * installation resolver. Returns undefined so the feature stays cleanly opt-in.
  */

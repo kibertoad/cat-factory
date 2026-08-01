@@ -42,6 +42,7 @@ function fakeInstallations(rows: GitHubInstallation[]): {
       getByWorkspace: async () => null,
       listWorkspacesForInstallation: async () => [],
       listActive: async () => [],
+      listActiveForAccount: async () => [],
       upsert: async () => {},
       updateCachedToken: async () => {},
       softDelete: async () => {},

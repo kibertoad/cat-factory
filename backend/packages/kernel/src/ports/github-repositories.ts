@@ -83,6 +83,15 @@ export interface GitHubInstallationRepository {
   listWorkspacesForInstallation(installationId: number): Promise<string[]>
   /** List every live installation across accounts (used by the cron pass). */
   listActive(): Promise<GitHubInstallation[]>
+  /**
+   * The live installations ONE account can read repos through: rows bound to the account
+   * directly, plus rows bound to any of the account's own boards. The account-scoped form of
+   * {@link listActive}, and what `createTierInstallationResolvers.forAccount` uses — the global
+   * list plus a JS filter both read every tenant's rows to answer a single-account question and
+   * cannot be exposed over the account-scoped machine API. Ordered oldest-first
+   * (`createdAt`, then `installationId`) so two runtimes pick the same row.
+   */
+  listActiveForAccount(accountId: string): Promise<GitHubInstallation[]>
   upsert(installation: GitHubInstallation): Promise<void>
   updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void>
   softDelete(installationId: number, at: number): Promise<void>

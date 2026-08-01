@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Persistence ports for the repo-sourced Claude Skills library
-// (docs/initiatives/repo-skills.md). A team authors skills in a repo — a
+// (ADR 0024). A team authors skills in a repo — a
 // directory (conventionally `.claude/skills/<skill>/`) containing a `SKILL.md`
 // (YAML frontmatter `name`/`description` + a markdown body of procedural
 // instructions) plus optional sibling resource files. A `skill_sources` link
@@ -27,7 +27,7 @@ export interface SkillResource {
 }
 
 /**
- * A persisted skill row at the account tier (see the initiative tracker). Owned by
+ * A persisted skill row at the account tier (see ADR 0024). Owned by
  * an account so every workspace in the account shares one skill catalog; carries a
  * tombstone (`deletedAt`) so a renamed/removed skill retires cleanly.
  */
@@ -83,7 +83,7 @@ export interface AccountSkillRepository {
 
 /**
  * A repo directory an account links as a source of Claude skill directories
- * (the initiative tracker's `skill_sources`). Reads go through the account's
+ * (ADR 0024's `skill_sources`). Reads go through the account's
  * existing GitHub installation — no new credential store, exactly like fragment
  * sources.
  */

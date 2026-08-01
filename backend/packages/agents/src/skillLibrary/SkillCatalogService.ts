@@ -18,7 +18,7 @@ export interface SkillCatalogServiceDependencies {
 }
 
 /**
- * Reads an account's repo-sourced skill catalog (docs/initiatives/repo-skills.md).
+ * Reads an account's repo-sourced skill catalog (ADR 0024).
  * Skills live in ONE tier (the account), so there is no cross-tier merge — the catalog
  * is simply the account's live `account_skills` rows, served through the skill-catalog
  * cache when wired (a hit skips the DB read the execution path would otherwise run on

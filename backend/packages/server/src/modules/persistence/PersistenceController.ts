@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
 import type { AppEnv } from '../../http/env.js'
-import { type PersistenceRpcRequest, dispatchPersistenceCall } from '../../persistence/rpc.js'
+import {
+  type PersistenceRegistry,
+  type PersistenceRpcRequest,
+  dispatchPersistenceCall,
+} from '../../persistence/rpc.js'
 
 /**
  * The mothership-mode machine API: `POST /internal/persistence`.
@@ -67,6 +71,7 @@ export function persistenceController(): Hono<AppEnv> {
     const workspaceRepository = registry.workspaceRepository
     const blockRepository = registry.blockRepository
     const serviceRepository = registry.serviceRepository
+    const skillSourceRepository = registry.skillSourceRepository
     const resolveAccountId = (workspaceId: string) =>
       (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
       Promise.resolve(undefined)
@@ -93,21 +98,26 @@ export function persistenceController(): Hono<AppEnv> {
     const blockFindById = memoizeRead((blockId) => blockRepository?.findById?.(blockId as string))
     const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
     const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
+    const skillSourceGet = memoizeRead((id) => skillSourceRepository?.get?.(id as string))
     // For the self-keyed reads, point the dispatcher's own call at the memo so it hits the
     // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
-    // of the registry is untouched.
+    // of the registry is untouched. Keyed `repo.method` so a new self-keyed read is one row here
+    // rather than another rung on a ternary chain.
     const serviceGetViaMemo = async (id: unknown) =>
       ((await serviceListByIds([id])) as Array<{ id: string }> | undefined)?.[0] ?? null
-    const registryForDispatch =
-      request.repo === 'blockRepository' && request.method === 'findById'
-        ? { ...registry, blockRepository: { findById: blockFindById } }
-        : request.repo === 'blockRepository' && request.method === 'findByIds'
-          ? { ...registry, blockRepository: { findByIds: blockFindByIds } }
-          : request.repo === 'serviceRepository' && request.method === 'listByIds'
-            ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
-            : request.repo === 'serviceRepository' && request.method === 'get'
-              ? { ...registry, serviceRepository: { get: serviceGetViaMemo } }
-              : registry
+    const memoOverrides: Record<string, PersistenceRegistry> = {
+      'blockRepository.findById': { blockRepository: { findById: blockFindById } },
+      'blockRepository.findByIds': { blockRepository: { findByIds: blockFindByIds } },
+      'serviceRepository.listByIds': { serviceRepository: { listByIds: serviceListByIds } },
+      'serviceRepository.get': { serviceRepository: { get: serviceGetViaMemo } },
+      // The `skillSource` scope resolves a source's account by reading the source; when the
+      // dispatched call IS that read (the sync service's `get`), reuse the resolver's result.
+      'skillSourceRepository.get': { skillSourceRepository: { get: skillSourceGet } },
+    }
+    const override = Object.hasOwn(memoOverrides, `${request.repo}.${request.method}`)
+      ? memoOverrides[`${request.repo}.${request.method}`]
+      : undefined
+    const registryForDispatch = override ? { ...registry, ...override } : registry
 
     const result = await dispatchPersistenceCall(request, {
       registry: registryForDispatch,
@@ -145,6 +155,13 @@ export function persistenceController(): Hono<AppEnv> {
         const map = new Map<string, string | null | undefined>()
         for (const service of services ?? []) map.set(service.id, service.accountId)
         return map
+      },
+      // Skill sources are account-owned; the sync surface's methods carry only a source id, so
+      // resolve the row and project its `accountId` for the scope check. A source that does not
+      // exist resolves to undefined, which fails closed (404) exactly like a missing block/service.
+      resolveSkillSourceAccountId: async (sourceId) => {
+        const source = (await skillSourceGet(sourceId)) as { accountId?: string } | null | undefined
+        return source?.accountId
       },
       // The member-display scope (`user`/`userList`): a userId is in scope iff a co-member of an
       // in-scope account, so resolve each in-scope account's roster to userIds. Bounded by the

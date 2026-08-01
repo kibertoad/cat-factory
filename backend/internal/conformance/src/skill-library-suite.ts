@@ -1,21 +1,34 @@
 import type {
   AccountSkillRecord,
   AccountSkillRepository,
+  GitHubInstallation,
+  GitHubInstallationRepository,
   SkillSourceRecord,
   SkillSourceRepository,
+  Workspace,
+  WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
-// Cross-runtime parity for the repo-sourced Claude Skills library (docs/initiatives/
-// repo-skills.md; migration 0052). Each facade persists it in its own store (D1 on
-// Cloudflare, Postgres via Drizzle on Node). This suite drives the SAME upsert → get →
-// list → listBySource → softDelete assertions through whichever real repositories a
-// runtime hands it, so a column mapped differently (the resources JSON, the pinned
-// commit, the tombstone) fails a test instead of shipping.
+// Cross-runtime parity for the repo-sourced Claude Skills library (ADR 0024; migration
+// 0052). Each facade persists it in its own store (D1 on Cloudflare, Postgres via Drizzle on Node). This suite drives the SAME
+// upsert → get → list → listBySource → softDelete assertions through whichever real repositories
+// a runtime hands it, so a column mapped differently (the resources JSON, the pinned commit, the
+// tombstone) fails a test instead of shipping — plus the account-tier installation lookup the
+// library's sync and run path resolve their GitHub credential through.
 
 export interface SkillLibraryRepos {
   skillSources: SkillSourceRepository
   accountSkills: AccountSkillRepository
+  /**
+   * The installation store the account-tier resolution reads. Part of THIS suite because
+   * `listActiveForAccount` exists for the repo-sourced libraries: it is what the source sync and
+   * the run path's resource fetch resolve their GitHub credential through, and the two runtimes
+   * express its "direct binding OR one of the account's boards" narrowing in different SQL.
+   */
+  installations: GitHubInstallationRepository
+  /** Needed to give the account a board, the second half of that narrowing. */
+  workspaces: WorkspaceRepository
 }
 
 /** Assert a runtime's skill repositories behave identically to the others. */
@@ -209,6 +222,67 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
       const retired = withDeleted.filter((s) => s.sourceId === sourceId)
       expect(retired).toHaveLength(2)
       expect(retired.every((s) => s.deletedAt === 5_000)).toBe(true)
+    })
+
+    it('lists the installations an account can read repos through, and only those', async () => {
+      const { installations, workspaces } = makeRepos()
+      const accountId = scope()
+      const foreignAccount = scope()
+      let nextId = Math.floor(Math.random() * 1e6) * 100
+
+      const board = async (id: string, owner: string | null): Promise<Workspace> => {
+        const row: Workspace = {
+          id,
+          name: id,
+          description: null,
+          createdAt: 1_000,
+          accountId: owner,
+        }
+        await workspaces.create(row, null, owner)
+        return row
+      }
+      // `github_installations.workspace_id` is UNIQUE (one connection per board, tombstones
+      // included), so an unbound row gets its own throwaway board id rather than a shared one.
+      const install = async (overrides: Partial<GitHubInstallation>): Promise<number> => {
+        nextId += 1
+        const record: GitHubInstallation = {
+          installationId: nextId,
+          workspaceId: `${accountId}-ws-unbound-${nextId}`,
+          accountId: null,
+          accountLogin: 'octo',
+          targetType: 'User',
+          appId: null,
+          provider: 'github',
+          cachedToken: null,
+          tokenExpiresAt: null,
+          accessToken: null,
+          createdAt: nextId,
+          deletedAt: null,
+          ...overrides,
+        }
+        await installations.upsert(record)
+        return record.installationId
+      }
+
+      const mine = await board(`${accountId}-ws`, accountId)
+      const theirs = await board(`${foreignAccount}-ws`, foreignAccount)
+      // Bound to the account directly.
+      const direct = await install({ accountId })
+      // Bound only to one of the account's boards — the per-workspace PAT connect, whose row
+      // carries a null (or foreign) `accountId`, which is why the board leg exists at all.
+      const viaBoard = await install({ workspaceId: mine.id })
+      // Neither: another tenant's board, and another tenant's account.
+      await install({ workspaceId: theirs.id })
+      await install({ accountId: foreignAccount })
+      // A tombstoned row of the account's own must not come back.
+      const retired = await install({ accountId })
+      await installations.softDelete(retired, 9_000)
+
+      const reachable = await installations.listActiveForAccount(accountId)
+      // Oldest-first by (createdAt, installationId), so both runtimes pick the same row.
+      expect(reachable.map((i) => i.installationId)).toEqual([direct, viaBoard])
+      // An account with nothing bound to it or its boards resolves to nothing at all.
+      expect(await installations.listActiveForAccount(scope())).toEqual([])
     })
   })
 }
