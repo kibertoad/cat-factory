@@ -293,7 +293,10 @@ data-loss bug; they bind any new write path.
 ## Untrusted text crossing a rendered surface
 
 Model- and user-authored text reaches PR bodies, tracker comments and telemetry, and those are parsed
-surfaces, not inert string sinks.
+surfaces, not inert string sinks. The end-to-end trust-boundary model — what stands between an
+injected/hallucinating agent and a malicious commit landing, layer by layer with its residual gaps —
+is [`backend/docs/security-model.md`](./backend/docs/security-model.md); a change to the write path
+(token minting, the push, the merge decision, a rendered surface) updates that doc in the same PR.
 
 - **Kernel's `hostMarkdown` is the boundary.** The host auto-links `#123` / `@name` / `!123`, a **closing
   keyword before an issue reference CLOSES that issue on merge**, a raw newline ends a table row, and an
