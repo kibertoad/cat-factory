@@ -8,6 +8,11 @@ import type { ResolvedAccountSettings } from './account-settings-repositories.js
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { AccountSkillRecord } from './skill-repositories.js'
+// Re-exported so `@cat-factory/caching` can name this handle's value type without taking a
+// direct dependency on the contracts package (the same reason `agent-context.ts` re-exports
+// its wire shapes).
+import type { ResolvedFoundationalService } from '@cat-factory/contracts'
+export type { ResolvedFoundationalService }
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 import type { WorkspaceAccess } from '../domain/workspace-access.js'
@@ -112,6 +117,17 @@ export interface AppCaches {
    * state, so — like `fragmentCatalog`/`repoProjection` — it passes through on the Worker.
    */
   skillCatalog: GroupCacheHandle<AccountSkillRecord[]>
+  /**
+   * The merged (account ⊕ workspace) FOUNDATIONAL SERVICES catalog, grouped AND keyed by
+   * workspace id. Read on every design dispatch (the Architect's prompt folds it) and by the
+   * lazy contract read that follows, so it is the same read-per-dispatch profile the fragment
+   * catalog has. Manifest only — the cached value carries operation names and byte sizes, never
+   * a contract document body, so a workspace with a 200 KB OpenAPI spec does not put 200 KB in
+   * every replica's memory. Every write path (register/update/delete, a source sync/unlink)
+   * invalidates the affected groups; our own mutable D1/Postgres state, so — like
+   * `fragmentCatalog`/`skillCatalog` — it passes through on the Worker.
+   */
+  foundationalServiceCatalog: GroupCacheHandle<ResolvedFoundationalService[]>
   /**
    * The live body of a document-backed prompt fragment (the external
    * Confluence/Notion/GitHub/… page), grouped by the workspace whose connection

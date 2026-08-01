@@ -16,6 +16,7 @@ import { eventsController } from './modules/events/EventsController.js'
 import { eventsRelayController } from './modules/events/EventsRelayController.js'
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
+import { foundationalServiceController } from './modules/foundationalServices/FoundationalServiceController.js'
 import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { gitlabController } from './modules/gitlab/GitLabController.js'
@@ -197,6 +198,7 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', mothershipConnectController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/accounts/:accountId', skillLibraryController())
+  app.route('/accounts/:accountId', foundationalServiceController('account'))
   app.route('/', workspaceController())
   // Workspace-membership roster + access-mode management (workspace-rbac). Absolute
   // `/workspaces/:ws/members` + `/access-mode` paths (like the workspace root), so mounted at `/`;
@@ -294,6 +296,7 @@ function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): voi
   app.route('/workspaces/:workspaceId', serviceMountController())
   app.route('/workspaces/:workspaceId', serviceSpecController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
+  app.route('/workspaces/:workspaceId', foundationalServiceController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', gitlabController())
   app.route('/workspaces/:workspaceId', vcsConnectController())

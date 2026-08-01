@@ -185,6 +185,29 @@ export {
   InitiativePresetRegistry,
 } from './domain/initiative-preset-registry.js'
 
+// The foundational-services catalog: pure recognition/indexing/rendering of the shared
+// capability catalog an Architect designs against and its consumers lazily read.
+// See `domain/foundational-services.ts` and docs/initiatives/foundational-services.md.
+export {
+  type FoundationalCatalogView,
+  type FoundationalContractBundle,
+  FOUNDATIONAL_CATALOG_FILE,
+  FOUNDATIONAL_CONTEXT_DIR,
+  FOUNDATIONAL_DECLARATION_TAG,
+  FOUNDATIONAL_INDEX_FILE,
+  MAX_CATALOG_OPERATIONS,
+  MAX_CONTRACT_BODY_CHARS,
+  contextFileFor,
+  detectContractFormat,
+  indexOpenApiOperations,
+  isOpenApiDocument,
+  parseFoundationalDeclaration,
+  renderContractDocument,
+  renderFoundationalCatalog,
+  renderFoundationalIndex,
+  summarizeContract,
+} from './domain/foundational-services.js'
+
 // Installation-level extension point for custom polling gates + step-completion
 // resolvers (mirrors the agent-kind / pipeline registry seams): a deployment registers
 // its own gate / resolver at startup and the ExecutionService merges them with the

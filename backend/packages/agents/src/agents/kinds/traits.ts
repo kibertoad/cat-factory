@@ -2,6 +2,10 @@ import { SPEC_FEATURES_DIR, SPEC_MODULES_DIR, SPEC_OVERVIEW_PATH } from '@cat-fa
 import {
   type AgentKind,
   DOC_INTERVIEWER_AGENT_KIND,
+  FOUNDATIONAL_CATALOG_FILE,
+  FOUNDATIONAL_CONTEXT_DIR,
+  FOUNDATIONAL_DECLARATION_TAG,
+  FOUNDATIONAL_INDEX_FILE,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from './registry.js'
@@ -85,6 +89,41 @@ export const INTERVIEW_GATE_TRAIT: AgentTrait = 'interview-gate'
  */
 export const BRIEF_STANDARDS_TRAIT: AgentTrait = 'brief-standards'
 
+/**
+ * DESIGN-time kinds that choose which shared FOUNDATIONAL SERVICES a solution consumes. The
+ * engine injects the workspace's catalog (identity + capabilities + operation names, never a
+ * contract document) as `.cat-context/foundational-services/catalog.md`, and the guidance below
+ * requires the kind to declare the ids it designed against in a machine-readable block. That
+ * declaration is what the downstream `foundational-contracts` kinds' lazy read keys off — the
+ * whole point of splitting the two traits is that a design step pays for the cheap catalog and
+ * only the services it actually picked cost anyone a document.
+ */
+export const FOUNDATIONAL_CATALOG_TRAIT: AgentTrait = 'foundational-catalog'
+
+/**
+ * CONSUMER kinds that need the API details of the services the design declared. The engine
+ * resolves those ids to their full contract documents and injects one file per service. The
+ * guidance points at the index rather than restating the catalog: a consumer must not be
+ * choosing services, and handing it the whole catalog is how a coder ends up adopting a shared
+ * service the design deliberately rejected.
+ */
+export const FOUNDATIONAL_CONTRACTS_TRAIT: AgentTrait = 'foundational-contracts'
+
+/** The guidance a design-time kind gets: consult the catalog, then DECLARE what it used. */
+export const FOUNDATIONAL_CATALOG_GUIDANCE = [
+  `This deployment runs shared FOUNDATIONAL SERVICES — capabilities such as file storage, notifications or audit that already exist and that new systems are expected to CONSUME rather than rebuild. The catalog of what is available is provided to you as \`.cat-context/${FOUNDATIONAL_CATALOG_FILE}\`; read it before you settle on a design.`,
+  `Prefer an existing foundational service over designing your own equivalent. When you reject one that looks applicable, say why — "we already have this" is the single most common avoidable finding in a design review.`,
+  `The catalog lists each service's operations but NOT its full API documents. Design against the operations you can see; do not invent endpoints, fields or semantics the catalog does not show. The implementation steps get the full contracts.`,
+  `END your reply with a fenced \`\`\`${FOUNDATIONAL_DECLARATION_TAG} block listing the service ids your design consumes, one per line, and nothing else in the block. Write \`none\` when your design consumes no foundational service. This block is machine-read: the ids you list are what the later implementation steps are handed the API contracts for, so a service you omit is one nobody downstream will have the interface to, and an id you invent will be reported as unavailable.`,
+].join('\n')
+
+/** The guidance a consumer kind gets: the contracts are files, and they are authoritative. */
+export const FOUNDATIONAL_CONTRACTS_GUIDANCE = [
+  `The FOUNDATIONAL SERVICES the design chose for this task — shared capabilities such as file storage, notifications or audit — have their API contracts provided to you under \`.cat-context/${FOUNDATIONAL_CONTEXT_DIR}/\`. Start at \`.cat-context/${FOUNDATIONAL_INDEX_FILE}\`, which names each one and states anything the design asked for that could not be provided.`,
+  `Treat those contracts as the authoritative interface: call the operations they declare, with the shapes they declare. Do not invent an endpoint or a field, and do not reimplement a capability one of these services already provides.`,
+  `If the work needs something the provided contracts do not cover, say so in your report rather than guessing at the missing API.`,
+].join('\n')
+
 /** The guidance appended to a spec-aware kind's system prompt — explains the spec format. */
 export const SPEC_AWARE_GUIDANCE = [
   `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:`,
@@ -112,8 +151,14 @@ export const SPEC_AWARE_GUIDANCE = [
  *    `reviewer` companion is a built-in listed here while the coder declares its own).
  */
 export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
-  architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  coder: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
+  // The architect DESIGNS, so it is the one built-in kind that chooses foundational services
+  // and declares them; `researcher` and `coder` CONSUME that declaration.
+  architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, FOUNDATIONAL_CATALOG_TRAIT],
+  coder: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT, FOUNDATIONAL_CONTRACTS_TRAIT],
+  // The researcher plans the solution against the design, so it needs the same contracts the
+  // coder will build to — investigating prior art for a capability the org already runs, from
+  // the catalog entry alone, is how a plan ends up proposing a library beside a shared service.
+  researcher: [FOUNDATIONAL_CONTRACTS_TRAIT],
   reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
   fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
@@ -166,6 +211,8 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE },
   { id: INTERVIEW_GATE_TRAIT },
   { id: BRIEF_STANDARDS_TRAIT },
+  { id: FOUNDATIONAL_CATALOG_TRAIT, guidance: FOUNDATIONAL_CATALOG_GUIDANCE },
+  { id: FOUNDATIONAL_CONTRACTS_TRAIT, guidance: FOUNDATIONAL_CONTRACTS_GUIDANCE },
 ]
 
 /**

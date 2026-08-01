@@ -200,6 +200,11 @@ import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepos
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
 import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
 import { D1SkillSourceRepository } from './repositories/D1SkillSourceRepository'
+import {
+  D1ApiContractRepository,
+  D1FoundationalServiceRepository,
+  D1FoundationalServiceSourceRepository,
+} from './repositories/D1FoundationalServiceRepository'
 import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
 import { buildResolveUserGitHubToken } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
@@ -1248,6 +1253,34 @@ export function selectSkillLibraryDeps(
     accountSkillRepository: new D1AccountSkillRepository({ db }),
     skillSourceRepository: new D1SkillSourceRepository({ db }),
     resolveSkillInstallationId: resolvers.forAccount,
+  }
+}
+
+/**
+ * Build the foundational-services catalog's concrete ports (migration 0073,
+ * docs/initiatives/foundational-services.md).
+ *
+ * Deliberately UNGATED, unlike the two libraries above: a service can be registered with its
+ * contracts uploaded directly, so the catalog is useful on a deployment that wants neither
+ * repo-sourced prompt fragments nor Claude skills. The feature is opt-in by CONTENT — a
+ * deployment that registers nothing gets an empty catalog, and an empty catalog renders as the
+ * "none are registered" line, which leaves every design prompt exactly as it was.
+ *
+ * It reuses the FRAGMENT installation resolver (`resolveFragmentInstallationId`), which already
+ * answers for both tiers — the same pair this catalog is keyed by. `selectFragmentLibraryDeps`
+ * sets the identical resolver when it is enabled; the two agree by construction because both
+ * come from `createTierInstallationResolvers`.
+ */
+export function selectFoundationalServiceDeps(db: D1Database): Partial<CoreDependencies> {
+  const resolvers = createTierInstallationResolvers({
+    installations: new D1GitHubInstallationRepository({ db }),
+    workspaces: new D1WorkspaceRepository({ db }),
+  })
+  return {
+    foundationalServiceRepository: new D1FoundationalServiceRepository({ db }),
+    apiContractRepository: new D1ApiContractRepository({ db }),
+    foundationalServiceSourceRepository: new D1FoundationalServiceSourceRepository({ db }),
+    resolveFragmentInstallationId: resolvers.forOwner,
   }
 }
 

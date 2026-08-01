@@ -72,6 +72,10 @@ export {
   BINARY_STORAGE_TRAIT,
   INTERVIEW_GATE_TRAIT,
   BRIEF_STANDARDS_TRAIT,
+  FOUNDATIONAL_CATALOG_TRAIT,
+  FOUNDATIONAL_CONTRACTS_TRAIT,
+  FOUNDATIONAL_CATALOG_GUIDANCE,
+  FOUNDATIONAL_CONTRACTS_GUIDANCE,
   SPEC_AWARE_GUIDANCE,
   STANDARD_AGENT_TRAITS,
   traitsFor,
@@ -579,6 +583,21 @@ export {
 } from './skillLibrary/SkillCatalogService.js'
 export { SkillRunResolver, type ResolvedSkillForRun } from './skillLibrary/SkillRunResolver.js'
 export * as skillSourceLogic from './skillLibrary/skill-source.logic.js'
+
+// ---- foundational services (docs/initiatives/foundational-services.md) ----
+export {
+  FoundationalServiceCatalogService,
+  type FoundationalServiceCatalogDependencies,
+} from './foundationalServices/FoundationalServiceCatalogService.js'
+export {
+  FoundationalServiceSourceService,
+  type FoundationalServiceSourceServiceDependencies,
+  type ResolveFoundationalInstallationId,
+} from './foundationalServices/FoundationalServiceSourceService.js'
+export { FoundationalServiceRunResolver } from './foundationalServices/FoundationalServiceRunResolver.js'
+export { validateUploadedContract } from './foundationalServices/contract-validation.js'
+export { mergeFoundationalTiers } from './foundationalServices/foundational-catalog.js'
+export * as foundationalSourceLogic from './foundationalServices/foundational-source.logic.js'
 export {
   syncRepoSource,
   probeRepoSourceStatus,

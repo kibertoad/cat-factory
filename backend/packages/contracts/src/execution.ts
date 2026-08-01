@@ -10,6 +10,7 @@ import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
+import { foundationalServiceSelectionSchema } from './foundational-services.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -1018,6 +1019,24 @@ export const pipelineStepSchema = v.object({
       fingerprint: v.optional(v.string()),
     }),
   ),
+  /**
+   * The FOUNDATIONAL SERVICES this step's agent declared its design consumes, read back from
+   * its reply's machine-readable block (see `parseFoundationalDeclaration`). Written only by a
+   * step whose kind carries the `foundational-catalog` trait — in the built-in catalog, the
+   * architect.
+   *
+   * `declared` are ids that resolved against the workspace's catalog; `unknown` are ids the
+   * agent named that did not. Kept apart because they need different downstream handling: the
+   * first get their API contracts injected for the consumer kinds, the second are STATED to
+   * those kinds as unavailable so nobody guesses at an interface the platform never had.
+   *
+   * ABSENT and `{declared: [], unknown: []}` are different states and both are load-bearing:
+   * absent means no design step declared anything (it was skipped by estimate gating, or the
+   * run predates the feature), while an empty selection means a design step ran and concluded
+   * that no shared service applies. A consumer told the wrong one of those would either invent
+   * a shared service or silently rebuild one.
+   */
+  foundationalServices: v.optional(foundationalServiceSelectionSchema),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
