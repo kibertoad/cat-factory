@@ -267,7 +267,12 @@ by its `when(gates)` predicate (the same reactive gates service the nav uses, fi
 ## Extending the layer (consumer modules)
 
 A deployment can contribute its own components — result windows, nav entries, inspector
-panels, agent-kind palette data — **without forking**, through the auto-imported
+panels, agent-kind palette data — plus two DATA-only seams that need no components at all:
+its own applications in an **External tools** sidebar section (`externalTools`, each
+resolving its URL from the acting user / open workspace / this board's custom fields) and the
+**custom workspace metadata fields** those resolvers read (`workspaceMetadataFields`, edited
+on the Metadata tab of Workspace settings). All of it **without forking**, through the
+auto-imported
 `registerAppModule` seam (the frontend analogue of the backend's `registerAgentKind` /
 `registerGate` registries). The authoring walkthrough, the reusable shared building blocks
 (`ResultWindowShell`, the `StepRunMeta` run-metadata block, `useResultView`, …), and the

@@ -12,6 +12,7 @@ import {
   requireWorkspace,
   ValidationError,
 } from '@cat-factory/kernel'
+import { mergeWorkspaceSettings } from './workspaceSettingsMerge.js'
 
 export interface WorkspaceSettingsServiceDependencies {
   workspaceSettingsRepository: WorkspaceSettingsRepository
@@ -74,43 +75,7 @@ export class WorkspaceSettingsService {
   ): Promise<WorkspaceSettings> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const current = await this.get(workspaceId)
-    const next: WorkspaceSettings = {
-      waitingEscalationMinutes: patch.waitingEscalationMinutes ?? current.waitingEscalationMinutes,
-      taskLimitMode: patch.taskLimitMode ?? current.taskLimitMode,
-      taskLimitShared:
-        patch.taskLimitShared !== undefined ? patch.taskLimitShared : current.taskLimitShared,
-      taskLimitPerType:
-        patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
-      storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
-      publishPrVerificationReport:
-        patch.publishPrVerificationReport ?? current.publishPrVerificationReport,
-      artifactRetentionDays: patch.artifactRetentionDays ?? current.artifactRetentionDays,
-      kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
-      delegateAgentsToRunnerPool:
-        patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,
-      reviewFrictionMode: patch.reviewFrictionMode ?? current.reviewFrictionMode,
-      reviewFrictionWarnCount: patch.reviewFrictionWarnCount ?? current.reviewFrictionWarnCount,
-      reviewFrictionBlockCount:
-        patch.reviewFrictionBlockCount !== undefined
-          ? patch.reviewFrictionBlockCount
-          : current.reviewFrictionBlockCount,
-      reviewFrictionBlockStuckMinutes:
-        patch.reviewFrictionBlockStuckMinutes !== undefined
-          ? patch.reviewFrictionBlockStuckMinutes
-          : current.reviewFrictionBlockStuckMinutes,
-      spendCurrency:
-        patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
-      spendMonthlyLimit:
-        patch.spendMonthlyLimit !== undefined ? patch.spendMonthlyLimit : current.spendMonthlyLimit,
-      defaultProvisionType:
-        patch.defaultProvisionType !== undefined
-          ? patch.defaultProvisionType
-          : current.defaultProvisionType,
-      defaultProvisionManifestId:
-        patch.defaultProvisionManifestId !== undefined
-          ? patch.defaultProvisionManifestId
-          : current.defaultProvisionManifestId,
-    }
+    const next = mergeWorkspaceSettings(current, patch)
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.
     if (next.taskLimitMode === 'off') {

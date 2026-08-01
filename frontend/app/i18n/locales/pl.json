@@ -119,6 +119,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Kontekst obszaru roboczego",
     "contextFragments": "Fragmenty kontekstu",
+    "externalTools": "Narzędzia zewnętrzne",
     "configuration": "Konfiguracja",
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
@@ -2049,6 +2050,7 @@
         "create": "Utwórz",
         "repositories": "Repozytoria",
         "integrations": "Integracje",
+        "externalTools": "Narzędzia zewnętrzne",
         "workspace": "Obszar roboczy",
         "account": "Konto"
       },
@@ -2901,6 +2903,7 @@
         "merge": "Zasady ryzyka",
         "tracker": "System zgłoszeń",
         "fragments": "Dobre praktyki usługi",
+        "metadata": "Metadane",
         "members": "Członkowie"
       },
       "waiting": {
@@ -2965,6 +2968,12 @@
         "heading": "Agent Kaizen",
         "body": "Po zakończeniu każdego uruchomienia agent Kaizen ocenia, jak przebiegł każdy krok agenta, od płynnego i wydajnego po chaotyczny i zagmatwany, oraz rekomenduje usprawnienia promptu/modelu. Kombinacja prompt + agent + model, która pięć razy z rzędu uzyska wysoką ocenę bez rekomendacji, jest oznaczana jako zweryfikowana i nie jest już oceniana. Ocenianie działa w tle i jest pokazywane w szczegółach uruchomienia oraz na ekranie Kaizen. Ustaw model oceniającego w Konfiguracji modeli (agent \"Kaizen\").",
         "toggle": "Oceniaj uruchomienia agentów za pomocą Kaizen"
+      },
+      "metadata": {
+        "heading": "Metadane przestrzeni roboczej",
+        "body": "Wartości pól niestandardowych zdefiniowanych przez to wdrożenie. Narzędzia zewnętrzne odczytują je, aby otworzyć właściwy projekt dla tej przestrzeni roboczej.",
+        "empty": "To wdrożenie nie definiuje niestandardowych pól przestrzeni roboczej.",
+        "unset": "Nie ustawiono"
       },
       "budget": {
         "heading": "Miesięczny budżet wydatków",
@@ -6102,6 +6111,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "Nie można otworzyć: {tool}",
+      "missingMetadata": "Najpierw uzupełnij {fields} na karcie Metadane w ustawieniach przestrzeni roboczej.",
+      "unresolved": "To narzędzie nie zwróciło adresu dla bieżącej przestrzeni roboczej.",
+      "resolverFailed": "To narzędzie napotkało błąd podczas ustalania swojego adresu. Przyczyna znajduje się w konsoli przeglądarki, dla osób utrzymujacych to wdrożenie.",
+      "unsafeUrl": "To narzędzie zwróciło adres, który nie jest odnośnikiem internetowym, więc nie został otwarty."
     }
   }
 }

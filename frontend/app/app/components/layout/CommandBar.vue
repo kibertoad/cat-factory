@@ -139,10 +139,14 @@ const commands = computed<Command[]>(() => {
   const asCommand = (g: (typeof commandGroups.value)[number]): Command[] =>
     g.items.map((ci) => ({
       id: ci.item.id,
-      label: t(ci.labelKey),
+      // A contribution whose copy is deployment DATA (a registered external tool's title)
+      // carries a literal `label`; catalog destinations resolve their key. Running a tool's
+      // own name through `t()` would show the raw name plus a missing-key warning.
+      label: ci.item.label ?? t(ci.labelKey),
       group: t(g.labelKey),
       icon: ci.item.icon,
-      keywords: ci.keywordsKey ? t(ci.keywordsKey) : undefined,
+      // The description doubles as fuzzy-match keywords for a tool, which has no keyword key.
+      keywords: ci.keywordsKey ? t(ci.keywordsKey) : ci.item.description,
       run: () => invoke(ci.item),
     }))
   const groupOrEmpty = (name: (typeof commandGroups.value)[number]['group']) => {
@@ -154,6 +158,8 @@ const commands = computed<Command[]>(() => {
     ...groupOrEmpty('repositories'),
     ...groupOrEmpty('integrations'),
     ...dynamicIntegrationCommands.value,
+    // The deployment's own applications (the `externalTools` slot, projected onto nav items).
+    ...groupOrEmpty('externalTools'),
     ...groupOrEmpty('workspace'),
     ...groupOrEmpty('account'),
   ]
