@@ -141,6 +141,35 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       directly. A non-object arg, a missing/non-string `workspaceId`/`serviceId`,
  *                       an out-of-scope workspace, or a service whose account differs from the
  *                       workspace's (incl. a missing service) is refused as 404.
+ *   - `skillSource`   — `args[arg]` is a skill-SOURCE id (a `skill_sources` row) with no account
+ *                       arg; resolve the source's owning account server-side. This is the rule the
+ *                       repo-sourced Claude Skills library's sync surface needs: a source id is the
+ *                       only key its reconcile/tombstone/pin methods carry, so nothing positional
+ *                       binds them. A missing source (or no resolver wired) fails closed (404, no
+ *                       existence leak), exactly like `block`/`service`.
+ *   - `accountFieldUpsert`
+ *                     — the UPSERT form of `accountField`, for a record-keyed write whose conflict
+ *                       key is the record's `id` rather than its `accountId`. Binds BOTH the
+ *                       declared account (`record.accountId`, exactly like `accountField`) AND — when
+ *                       a row with `record.id` already EXISTS — that stored row's owning account,
+ *                       resolved server-side by `entity`. An absent row is a CREATE and passes on the
+ *                       declared half alone.
+ *
+ *                       The second half is the whole point. `accountField` is safe only under the
+ *                       precondition stated in its own entry: the row is stored under, and later read
+ *                       by, the bound `accountId`. An `ON CONFLICT (id) DO UPDATE` that does not
+ *                       re-`SET account_id` breaks that precondition — the write lands on whichever
+ *                       row already holds that id, under ITS account, not the caller's. A token scoped
+ *                       to account A could then name account B's source id, declare `accountId: A` to
+ *                       satisfy the field check, and repoint B's row at an attacker-controlled repo;
+ *                       B's next sync would fold `SKILL.md` bodies — agent INSTRUCTIONS — from that
+ *                       repo into B's catalog. Binding the stored row closes it.
+ *
+ *                       Prefer `accountField` whenever the write IS keyed by the tenant column (the
+ *                       sibling `accountSkillRepository.upsert` conflicts on `(account_id, skill_id)`,
+ *                       so a foreign id inserts under the caller's own account and can never mutate
+ *                       another tenant's row). Reach for this rule only when the conflict key alone
+ *                       decides which row is written.
  *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
  *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
  *                       `workspace` → resolve the workspace's owning account (like `workspace`);
@@ -173,6 +202,11 @@ export type ScopeRule =
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'skillSource'; arg: number }
+  // `entity` names the resolver that binds the STORED row. A one-member union today; adding a
+  // member is what a sibling library's own id-keyed upsert will need (see `fragmentSourceRepository`
+  // in the allow-list), and the exhaustive switch fails to compile until it is handled.
+  | { kind: 'accountFieldUpsert'; arg: number; entity: 'skillSource' }
   | { kind: 'usageRecord'; arg: number }
   | { kind: 'owner'; kindArg: number; idArg: number }
   | { kind: 'ownerField'; arg: number }
@@ -223,6 +257,12 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve a skill source's owning account id (the mothership's `SkillSourceRepository.get`,
+   * projected to its `accountId`). Required for the `skillSource` scope kind; a call hitting that
+   * kind with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveSkillSourceAccountId?(sourceId: string): Promise<string | null | undefined>
   /**
    * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
    * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
@@ -506,11 +546,105 @@ async function checkEntityListCallScope(
 }
 
 /**
+ * The single-ENTITY-ID half of {@link checkEntityCallScope}: the kinds whose argument is one opaque
+ * id belonging to an account, bound through a server-side resolver because the call carries no
+ * workspace/account of its own. Same contract — a `DispatchResult` (404 `denied`) when out of
+ * scope, `undefined` when it passes. A missing entity, or an absent resolver, fails CLOSED in every
+ * case: an id that cannot be bound must never reach the method, and 404 (not 403) matches the auth
+ * gate's existence-non-leak policy. Split out purely to keep each function under the complexity
+ * ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityIdCallScope(
+  rule: Extract<ScopeRule, { kind: 'block' | 'service' | 'skillSource' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+): Promise<DispatchResult | undefined> {
+  const denied = fail('not_found', 'Not found')
+  const id = args[rule.arg]
+  if (typeof id !== 'string') return denied
+  switch (rule.kind) {
+    case 'block': {
+      // The block's home workspace's account (the block carries no workspace arg).
+      if (!opts.resolveBlockAccountId) return denied
+      if (!inScope(await opts.resolveBlockAccountId(id))) return denied
+      break
+    }
+    case 'service': {
+      // The service's owning account (services are account-owned) — the single-id form of
+      // `serviceList`, reusing the same resolver. A missing service is absent from the map.
+      if (!opts.resolveServiceAccountIds) return denied
+      if (!inScope((await opts.resolveServiceAccountIds([id])).get(id))) return denied
+      break
+    }
+    case 'skillSource': {
+      // The skill source's owning account. The library's sync methods carry a source id and
+      // nothing else, so this resolver is the only thing that can bind them.
+      if (!opts.resolveSkillSourceAccountId) return denied
+      if (!inScope(await opts.resolveSkillSourceAccountId(id))) return denied
+      break
+    }
+    default: {
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
+    }
+  }
+  return undefined
+}
+
+/**
+ * The `accountFieldUpsert` check: bind an id-keyed `upsert(record)` on BOTH the account the record
+ * DECLARES and the account that owns the row it would OVERWRITE. See the `accountFieldUpsert` entry
+ * on {@link ScopeRule} for why the declared half alone is not enough.
+ *
+ * The stored half is decided by row EXISTENCE: the resolver yields the row's `accountId`, and yields
+ * null/undefined exactly when no such row exists — `skill_sources.account_id` is NOT NULL on both
+ * runtimes, so there is no third state where a row exists but cannot be bound. An absent row is a
+ * CREATE, which the declared half has already bound. An absent RESOLVER still fails closed, like
+ * every other entity-resolved kind.
+ */
+async function checkAccountFieldUpsertScope(
+  rule: Extract<ScopeRule, { kind: 'accountFieldUpsert' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+): Promise<DispatchResult | undefined> {
+  const denied = fail('not_found', 'Not found')
+  const record = args[rule.arg]
+  if (!record || typeof record !== 'object') return denied
+  const { accountId, id } = record as { accountId?: unknown; id?: unknown }
+  // The declared half — identical to `accountField`.
+  if (typeof accountId !== 'string' || !inScope(accountId)) return denied
+  // The stored half. A record with no usable conflict key cannot be bound to the row it would
+  // write, so it is refused rather than allowed through on the declared half alone.
+  if (typeof id !== 'string') return denied
+  // A switch, not a ternary: adding an `entity` member must FAIL TO COMPILE here rather than fall
+  // through to a silent `undefined` that reads as "no resolver wired" and denies every write.
+  let resolveStoredAccountId: DispatchOptions['resolveSkillSourceAccountId']
+  switch (rule.entity) {
+    case 'skillSource':
+      resolveStoredAccountId = opts.resolveSkillSourceAccountId
+      break
+    default: {
+      const _exhaustive: never = rule.entity
+      void _exhaustive
+      return denied
+    }
+  }
+  if (!resolveStoredAccountId) return denied
+  const stored = await resolveStoredAccountId(id)
+  // No row ⇒ a create, already bound above. A row ⇒ its owner must be in scope too.
+  if (stored != null && !inScope(stored)) return denied
+  return undefined
+}
+
+/**
  * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
- * server-side account resolver (co-membership for users, block/service ownership, tenant-library
- * owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope, `undefined`
- * when it passes. Split from the core kinds purely to keep each function under the complexity
- * ceiling; the `never` default keeps the two switches jointly exhaustive over `ScopeRule`.
+ * server-side account resolver (co-membership for users, block/service/skill-source ownership,
+ * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
+ * `undefined` when it passes. Split from the core kinds purely to keep each function under the
+ * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
  */
 async function checkEntityCallScope(
   rule: Extract<
@@ -524,6 +658,8 @@ async function checkEntityCallScope(
         | 'service'
         | 'serviceList'
         | 'serviceMount'
+        | 'skillSource'
+        | 'accountFieldUpsert'
         | 'usageRecord'
         | 'owner'
         | 'ownerField'
@@ -554,25 +690,16 @@ async function checkEntityCallScope(
       // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
       // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
       return checkEntityListCallScope(rule, args, opts, helpers)
-    case 'block': {
-      // Bind via the block's home workspace's account, resolved server-side (the block carries
-      // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
-      // 404 — no existence leak, matching the `workspace` rule.
-      const blockId = args[rule.arg]
-      if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
-      if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
-      break
-    }
-    case 'service': {
-      // Bind via the service's owning account (services are account-owned; the single-id form of
-      // `serviceList`, reusing the same resolver). A missing service is absent from the map, so it
-      // is refused as 404 — no existence leak, matching the `serviceList`/`block` rules.
-      const serviceId = args[rule.arg]
-      if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
-      const accounts = await opts.resolveServiceAccountIds([serviceId])
-      if (!inScope(accounts.get(serviceId))) return denied
-      break
-    }
+    case 'block':
+    case 'service':
+    case 'skillSource':
+      // The single-ENTITY-ID kinds (an opaque id bound through a server-side account resolver) are
+      // split out to keep this function under the complexity ceiling; same contract.
+      return checkEntityIdCallScope(rule, args, opts, inScope)
+    case 'accountFieldUpsert':
+      // Binds the record's DECLARED account and the STORED row's account together; see the rule's
+      // entry on `ScopeRule` for why the declared half alone is not enough.
+      return checkAccountFieldUpsertScope(rule, args, opts, inScope)
     case 'serviceMount': {
       const denialForMount = await checkServiceMountScope(args[rule.arg], opts, inScope, denied)
       if (denialForMount) return denialForMount

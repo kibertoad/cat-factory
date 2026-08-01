@@ -71,7 +71,7 @@ export function selectNodeFragmentLibraryDeps(opts: {
 }
 
 /**
- * Wire the repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) for
+ * Wire the repo-sourced Claude Skills library (ADR 0024) for
  * the Node facade when opted in, mirroring the Worker's `selectSkillLibraryDeps`: the
  * two Drizzle repositories and the account-only installation resolver the repo-source
  * sync uses. Gated on the same `fragmentLibrary.enabled` flag (both are the repo-sourced

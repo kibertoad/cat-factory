@@ -43,6 +43,10 @@ import {
   DrizzleFoundationalServiceRepository,
   DrizzleFoundationalServiceSourceRepository,
 } from '../src/repositories/foundationalServices.js'
+import {
+  DrizzleAccountSkillRepository,
+  DrizzleSkillSourceRepository,
+} from '../src/repositories/skills.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleNotificationWebhookRepository } from '../src/repositories/drizzle/settings.js'
 import {
@@ -520,6 +524,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   promptFragmentRepository: {
     listBySource: 'pending',
   },
+  // The repo-sourced Claude Skills library (ADR 0024) is fully remote — catalog reads AND the
+  // repo-sync surface, which the sibling libraries above still defer. A mothership-mode node HAS a
+  // GitHub client (the delegated App token rides the same machine API), so its `SkillSourceService`
+  // assembles and its link/sync/unlink routes are live; the sourceId-keyed methods bind through the
+  // `skillSource` scope rule (source → owning account, resolved server-side).
+  //
+  // `listByRepo` is the one exception: the push-webhook's GLOBAL `(repoOwner, repoName)` → sources
+  // reverse lookup, spanning every account by construction, so no rule can bind it. It runs on the
+  // mothership that receives the webhook, never on a laptop.
+  accountSkillRepository: {},
+  skillSourceRepository: { listByRepo: 'sweeper' },
   // The inbox's read/act/dismiss/escalate surface is fully remote (see REMOTE_PERSISTENCE_METHODS);
   // only the cron sweeps stay mothership-internal: the retention prune of resolved cards, and
   // `listOpenByType` — the platform-health sweep's batched every-workspace dedup read (the
@@ -720,6 +735,8 @@ function reflectAllRepositories(): Record<string, string[]> {
     apiContractRepository: DrizzleApiContractRepository,
     foundationalServiceSourceRepository: DrizzleFoundationalServiceSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,
+    accountSkillRepository: DrizzleAccountSkillRepository,
+    skillSourceRepository: DrizzleSkillSourceRepository,
     notificationRepository: DrizzleNotificationRepository,
     notificationWebhookRepository: DrizzleNotificationWebhookRepository,
     slackConnectionRepository: DrizzleSlackConnectionRepository,

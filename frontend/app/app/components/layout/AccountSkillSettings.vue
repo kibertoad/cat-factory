@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Account-tier repo-sourced Claude Skills library (docs/initiatives/repo-skills.md): a team
+// Account-tier repo-sourced Claude Skills library (ADR 0024): a team
 // authors skills in a repo (`<skill>/SKILL.md` + resources), the account syncs them into a
 // catalog shared across its workspaces, and a pipeline `skill` step runs one. A body-only
 // section rendered in the "Skills" tab of AccountSettingsPanel; available for ALL account types.

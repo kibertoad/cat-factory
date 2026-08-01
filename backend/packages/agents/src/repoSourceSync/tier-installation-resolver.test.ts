@@ -32,6 +32,13 @@ function board(id: string, accountId: string | null): Workspace {
   return { id, name: id, description: null, createdAt: 1, accountId }
 }
 
+/**
+ * `active` is every stored live row; `listActiveForAccount` narrows it exactly as the two SQL
+ * implementations do (bound to the account directly, OR to one of the account's own boards), so
+ * these cases still describe the same worlds they did when the resolver filtered in JS. The
+ * global `listActive` is deliberately NOT wired: reaching for it would throw, which is what pins
+ * the account tier to the scoped read the machine API can serve.
+ */
 function makeDeps(opts: {
   active: GitHubInstallation[]
   boards?: Record<string, Workspace[]>
@@ -41,7 +48,10 @@ function makeDeps(opts: {
   return {
     pointReads,
     installations: {
-      listActive: async () => opts.active,
+      listActiveForAccount: async (accountId: string) => {
+        const boardIds = new Set((opts.boards?.[accountId] ?? []).map((w) => w.id))
+        return opts.active.filter((i) => i.accountId === accountId || boardIds.has(i.workspaceId))
+      },
       getByWorkspace: async (workspaceId: string) => {
         pointReads.push(workspaceId)
         return opts.byWorkspace?.[workspaceId] ?? null
@@ -100,6 +110,20 @@ describe('createTierInstallationResolvers', () => {
   it('resolves null for an account with no installation anywhere', async () => {
     const deps = makeDeps({ active: [installation({ installationId: 7 })] })
     expect(await createTierInstallationResolvers(deps).forAccount('acc-1')).toBeNull()
+  })
+
+  it('never reads the global installation list for the account tier', async () => {
+    // The account tier goes through the SCOPED `listActiveForAccount`. A reach for the global
+    // `listActive` — which no account-scoped machine token can be allowed to serve — must be a
+    // hard failure here rather than something mothership mode discovers at dispatch.
+    const deps = makeDeps({
+      active: [installation({ installationId: 8, accountId: 'acc-1' })],
+    })
+    const installations = deps.installations as unknown as { listActive: () => Promise<unknown> }
+    installations.listActive = async () => {
+      throw new Error('the account tier must not read every tenant’s installations')
+    }
+    expect(await createTierInstallationResolvers(deps).forAccount('acc-1')).toBe(8)
   })
 
   it('keys forOwner off the tier', async () => {

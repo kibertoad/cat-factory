@@ -873,7 +873,7 @@ export interface CoreDependencies {
    */
   documentContentResolver?: DocumentContentResolver
 
-  // ---- Repo-sourced Claude Skills library (opt-in; docs/initiatives/repo-skills.md) ----
+  // ---- Repo-sourced Claude Skills library (opt-in; ADR 0024) ----
   // An account's catalog of repo-authored Claude skills. The catalog read assembles
   // whenever `accountSkillRepository` is present; the source sync additionally needs
   // `skillSourceRepository`, the `githubClient` (above) and an installation resolver.

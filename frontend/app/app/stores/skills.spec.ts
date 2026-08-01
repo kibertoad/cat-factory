@@ -8,7 +8,7 @@ const summary = (id: string, name = id): SkillSummary => ({ id, name, descriptio
 /**
  * The skill picker spans two stores: the snapshot-hydrated `useSkillsStore` (the catalog the
  * builder's `USelect` binds against) and the per-step `skillId` helpers on `usePipelinesStore`.
- * These pin the behaviours the builder relies on (docs/initiatives/repo-skills.md slice 3).
+ * These pin the behaviours the builder relies on (ADR 0024 slice 3).
  */
 describe('skills picker store — snapshot-hydrated catalog', () => {
   it('hydrate is a straight replace (a later hydrate does not merge with the earlier one)', () => {

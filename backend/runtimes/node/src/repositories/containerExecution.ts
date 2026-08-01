@@ -6,7 +6,7 @@ import type {
   Service,
   ServiceRepository,
 } from '@cat-factory/kernel'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
 
@@ -182,6 +182,31 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       .select()
       .from(githubInstallations)
       .where(isNull(githubInstallations.deleted_at))
+    return rows.map(rowToInstallation)
+  }
+
+  async listActiveForAccount(accountId: string): Promise<GitHubInstallation[]> {
+    // One scoped query, not the global list filtered in JS: the account's direct bindings
+    // UNION the bindings of its own boards. Ordered so both runtimes pick the same row.
+    const rows = await this.db
+      .select()
+      .from(githubInstallations)
+      .where(
+        and(
+          isNull(githubInstallations.deleted_at),
+          or(
+            eq(githubInstallations.account_id, accountId),
+            inArray(
+              githubInstallations.workspace_id,
+              this.db
+                .select({ id: workspaces.id })
+                .from(workspaces)
+                .where(eq(workspaces.account_id, accountId)),
+            ),
+          ),
+        ),
+      )
+      .orderBy(githubInstallations.created_at, githubInstallations.installation_id)
     return rows.map(rowToInstallation)
   }
 

@@ -434,10 +434,10 @@ export const agentPromptRevisions = pgTable(
   ],
 )
 
-// Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md, slice 1;
-// mirror of D1 migration 0052). An account links a repo directory of skill folders;
-// the link is synced into the account's skill catalog. ONE tier (the account), a
-// directory-per-skill sync unit, resources JSON-encoded in a `text` column.
+// Repo-sourced Claude Skills library (ADR 0024, slice 1; mirror of D1 migration 0052).
+// An account links a repo directory of skill folders; the link is synced into the
+// account's skill catalog. ONE tier (the account), a directory-per-skill sync unit,
+// resources JSON-encoded in a `text` column.
 export const skillSources = pgTable(
   'skill_sources',
   {

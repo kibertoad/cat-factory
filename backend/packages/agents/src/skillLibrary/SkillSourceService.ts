@@ -45,7 +45,7 @@ export interface SkillSourceServiceDependencies {
 }
 
 /**
- * Repo-sourced Claude skills (docs/initiatives/repo-skills.md): link a repo
+ * Repo-sourced Claude skills (ADR 0024): link a repo
  * directory of skill folders to an account, resync it (read each `<skill>/SKILL.md`
  * directory, upsert changed skills, tombstone removed ones), and answer the cheap
  * "check for changes" without writing. Reads go through the account's existing

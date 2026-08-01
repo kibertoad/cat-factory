@@ -2,7 +2,7 @@ import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
 // Wire contracts for the repo-sourced Claude Skills library
-// (docs/initiatives/repo-skills.md). An account links a repo directory of skill
+// (ADR 0024). An account links a repo directory of skill
 // folders (`<skill>/SKILL.md` + sibling resources); the link is synced into the
 // account's skill catalog, shared across its workspaces. These shapes back the
 // account-settings management UI (link/sync/status) and, later, the palette
@@ -40,7 +40,7 @@ export type AccountSkill = v.InferOutput<typeof accountSkillSchema>
  * builder's skill picker (id + name + description only — NOT the full `instructions` / resource
  * manifest, which would bloat every board load). The account catalog is shared across the
  * account's workspaces, so this is the account's skills served through the catalog cache in one
- * read (see docs/initiatives/repo-skills.md "No N+1"). The account-settings management surface
+ * read (see ADR 0024 "No N+1"). The account-settings management surface
  * fetches the full {@link AccountSkill} via `GET /accounts/:accountId/skills` instead.
  */
 export const skillSummarySchema = v.object({

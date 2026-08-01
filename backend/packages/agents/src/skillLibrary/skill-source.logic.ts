@@ -1,6 +1,6 @@
 import { parseSimpleYaml, splitFrontmatter, str } from '../repoSourceSync/frontmatter.js'
 
-// Pure logic for repo-sourced Claude skills (docs/initiatives/repo-skills.md):
+// Pure logic for repo-sourced Claude skills (ADR 0024):
 // parse a `SKILL.md` manifest (YAML frontmatter `name`/`description` + a markdown
 // body of instructions) and the small helpers the sync flow needs. No I/O lives
 // here so it is unit-testable. Staleness is a commit-sha probe (see

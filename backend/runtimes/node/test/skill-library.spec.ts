@@ -2,6 +2,8 @@ import { defineSkillLibrarySuite } from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
 import { DrizzleAccountSkillRepository } from '../src/repositories/skills.js'
 import { DrizzleSkillSourceRepository } from '../src/repositories/skills.js'
+import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
+import { DrizzleWorkspaceRepository } from '../src/repositories/drizzle/board.js'
 import { setupTestDb } from './harness.js'
 
 // Cross-runtime parity for the repo-sourced Claude Skills library against the Node
@@ -16,6 +18,8 @@ if (databaseUrl) {
   defineSkillLibrarySuite('node', () => ({
     skillSources: new DrizzleSkillSourceRepository(db),
     accountSkills: new DrizzleAccountSkillRepository(db),
+    installations: new DrizzleGitHubInstallationRepository(db),
+    workspaces: new DrizzleWorkspaceRepository(db),
   }))
 } else {
   describe.skip('[node] skill library (set DATABASE_URL to run)', () => {

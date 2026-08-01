@@ -285,11 +285,15 @@ function applyMothershipRemoteRepos(
     dependencies.fragmentSourceRepository =
       remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
   }
-  // The Claude Skills library, same shape as the fragment library above: swap the
-  // (db-less, broken) Drizzle repos for the remote ones when the mothership exposes
-  // them. Until the mothership RPC surfaces skills, `remoteRepos.*` is undefined, which
-  // leaves the skill module UNassembled in mothership mode (the controller 503s) rather
-  // than assembling over a broken db — a clean opt-in follow-up, like fragment repo-sync.
+  // The Claude Skills library, same shape as the fragment library above: swap the (db-less,
+  // broken) Drizzle repos for the remote ones, keeping the "module only when configured" gate.
+  //
+  // UNLIKE the fragment library, the repo-SYNC surface is remote too — a mothership-mode node
+  // reaches GitHub by token delegation, so its `SkillSourceService` assembles and its link /
+  // sync / unlink routes are live. The sourceId-keyed methods bind through the `skillSource`
+  // scope rule (see `REMOTE_PERSISTENCE_METHODS`). Routing the catalog is not cosmetic: a
+  // `skill` step's `skillResolver` is a HARD dependency, so an un-routed read fails the
+  // dispatch rather than blanking a panel.
   if (dependencies.accountSkillRepository) {
     dependencies.accountSkillRepository =
       remoteRepos.accountSkillRepository as CoreDependencies['accountSkillRepository']

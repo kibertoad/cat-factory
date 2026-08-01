@@ -1234,7 +1234,7 @@ export function selectFragmentLibraryDeps(
 
 /**
  * Build the repo-sourced Claude Skills library's concrete ports when opted in
- * (docs/initiatives/repo-skills.md). Skills live in ONE tier (the account), so the
+ * (ADR 0024). Skills live in ONE tier (the account), so the
  * installation resolver is account-only. Gated on the same `fragmentLibrary.enabled`
  * flag as the fragment library (both are the repo-sourced prompt library). Returns
  * `{}` when disabled, so `createCore` leaves the skill module unassembled.

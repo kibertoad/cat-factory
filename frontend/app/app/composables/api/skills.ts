@@ -10,7 +10,7 @@ import type { LinkSkillSourceInput } from '~/types/domain'
 import type { ApiContext } from './context'
 
 /**
- * The repo-sourced Claude Skills library (docs/initiatives/repo-skills.md). Skills live in ONE
+ * The repo-sourced Claude Skills library (ADR 0024). Skills live in ONE
  * tier — the account, shared across its workspaces — so every route is account-scoped
  * (`/accounts/:accountId/...`), unlike the two-tier fragment library.
  */

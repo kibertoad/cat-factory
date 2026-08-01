@@ -35,7 +35,7 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
- * The repo-sourced Claude Skills library API (docs/initiatives/repo-skills.md).
+ * The repo-sourced Claude Skills library API (ADR 0024).
  * Skills live in ONE tier (the account, shared across its workspaces), so — unlike
  * the fragment library — this is mounted only under `/accounts/:accountId`. Routes
  * are guarded by account membership (404 hides existence, mirroring boards). The

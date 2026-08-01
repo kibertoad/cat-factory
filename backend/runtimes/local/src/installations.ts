@@ -94,6 +94,10 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     return this.inner.listActive()
   }
 
+  listActiveForAccount(accountId: string): Promise<GitHubInstallation[]> {
+    return this.inner.listActiveForAccount(accountId)
+  }
+
   upsert(installation: GitHubInstallation): Promise<void> {
     return this.inner.upsert(installation)
   }

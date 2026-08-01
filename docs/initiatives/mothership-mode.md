@@ -21,7 +21,8 @@
 > (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen no-ops a run
 > makes over the remote (telemetry itself is now local-first — see PR 5 below); and the document/task
 > connection integration (blocked on its decrypt-inside connection repos). (Subscription activation,
-> the prompt-fragment library, and the Slack settings surface are no longer among these — PR 3 gave
+> the prompt-fragment library, the Claude Skills library — catalog AND repo sync — and the Slack
+> settings surface are no longer among these — PR 3 gave
 > them, and the subscription-credential trio + local settings their real `local-sqlite` home; see the
 > [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings).)
 > The remaining `pending` org methods are the live per-repo checklist below.
@@ -244,6 +245,66 @@
   `findByIdentity`/`findByEmail` — stay OFF (the account-lifecycle / login surface). Round-trip +
   co-membership-scope + secret-read-refusal tests in `persistenceRpc.spec.ts`; the drift guard moves
   `get`/`listByIds` out of `pending`.
+- **Repo-sourced Claude Skills library (ADR 0024) — catalog AND sync** — the first content library
+  whose repo-SYNC goes remote too, not just its management reads. Two things forced the widening
+  beyond the fragment-library shape:
+  - **A skill catalog read is a RUN-path read.** `skillResolver` is a HARD dependency for a `skill`
+    step (and for ADR 0029's declared `{ catalogSkillId }` capabilities), so an un-routed
+    `accountSkillRepository` did not blank a panel — it failed the dispatch. Worse, it failed
+    PARTIALLY: a skill with no sibling resources resolved from the catalog alone, while one with
+    resources threw out of `SkillRunResolver.resolveResources`, so the feature looked wired.
+  - **"A mothership node has no GitHub client" is no longer true.** That premise is what parked the
+    fragment / foundational-service sync surfaces at `pending`; token delegation
+    (`DelegatedAppTokenSource`) since gave the node one, so its `SkillSourceService` assembles and
+    its link / sync / unlink routes are LIVE — reachable and broken, which is worse than either
+    serving them or hiding them.
+
+  Introduces the **`skillSource`** scope rule: the sync methods carry a source id and nothing else,
+  so nothing positional binds them. It resolves the source's owning account server-side through a
+  new `resolveSkillSourceAccountId` dispatch resolver (memoised beside the block/service resolvers,
+  and the dispatched `skillSourceRepository.get` is routed through the SAME memo so the scope check
+  is not a second read). The sibling libraries can adopt it when their own sync surface lands.
+  Allow-listed: `accountSkillRepository` `listByAccount`/`get` (the `account` rule),
+  `upsert` (`accountField`), `softDelete` (`account`), `listBySource`/`softDeleteBySource`
+  (`skillSource`); `skillSourceRepository` `listByAccount` (`account`),
+  `upsert` (**`accountFieldUpsert`**), `get`/`updateSyncState`/`softDelete` (`skillSource`). Rows
+  carry no secrets — a `SKILL.md` body plus a `{ path, sha, size }` manifest; the resource BODIES
+  are fetched from the repo at dispatch and never stored.
+
+  Also introduces **`accountFieldUpsert`**, the upsert form of `accountField` for a record-keyed
+  write whose CONFLICT KEY is the record's `id` rather than its `accountId`. `accountField` is safe
+  only under the precondition its own doc entry states — the row is stored under, and later read
+  by, the bound `accountId`. An `ON CONFLICT (id) DO UPDATE` that does not re-`SET account_id`
+  breaks it: the write lands on whichever row already holds that id, under ITS account. Binding
+  only the declared field would let a token scoped to account A name account B's source id, declare
+  its own account to pass the check, and repoint B's link at a repo A controls — whose `SKILL.md`
+  bodies are agent INSTRUCTIONS that B's next sync folds into their catalog. The rule therefore
+  binds the STORED row's account as well; an absent row is a CREATE and passes on the declared half
+  alone. Its sibling `accountSkillRepository.upsert` keeps plain `accountField` because that write
+  conflicts on `(account_id, skill_id)`, so the bound account is part of the key.
+
+  > **Open gap this rule does NOT close.** `fragmentSourceRepository.upsert` (`ownerField`) has the
+  > same id-keyed conflict shape and the same exposure. Closing it needs the `ownerField` analogue —
+  > a source → owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId) — plus its own
+  > round-trip tests, so it is tracked here rather than folded into the skills slice. Until then, do
+  > not copy `ownerField`/`accountField` onto a new id-keyed upsert.
+
+  **Also new: `githubInstallationRepository.listActiveForAccount`** (`account` rule), a real port
+  addition rather than an allow-list line. The account-tier installation lookup every repo-sourced
+  library resolves its GitHub credential through went via the cron `listActive()` plus a JS filter —
+  a read of every tenant's installations to answer a single-account question, which no
+  account-scoped token can ever be allowed to serve and which no rule can bind (the method takes no
+  arguments). The scoped form pushes "bound to the account directly OR to one of its own boards"
+  into SQL on both runtimes, ordered `(createdAt, installationId)` so the two pick the same row;
+  `createTierInstallationResolvers.forAccount` now makes one query where it made two.
+
+  **Still off:** `skillSourceRepository.listByRepo` — the GLOBAL `(repoOwner, repoName)` → sources
+  reverse lookup behind the push-webhook fan-out, spanning every account by construction and running
+  on the mothership that receives the webhook. Classified `sweeper`, like
+  `slackConnectionRepository.getByTeam`. **Config expectation:** both ends must have
+  `fragmentLibrary.enabled` — the mothership folds the skill repos into its reflected registry only
+  when its own library is configured, exactly as it does for fragments, so a node with the library on
+  against a mothership with it off gets a clean `... is not wired`.
 
 **Notification delivery delegation (PR 4, first half)**
 
@@ -718,9 +779,11 @@ never remotely invocable (mothership-internal cron).
 | `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                               |
 | `promptFragmentRepository`               | ◑ part  | owner-scoped library mgmt; `listBySource` (repo-sync) pending                                      |
 | `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
+| `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
+| `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
 | `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
 | `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
-| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` run-path read; id-keyed reads / sync writes pending                               |
+| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
 | `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                       |
 | `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                |

@@ -833,10 +833,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // GitHub write and THEN fail on the un-remoted `upsertMany` projection refresh — a worse
   // failure than today's clean pre-write refusal. It comes back with the repo-write slice. The
   // rest of `githubInstallationRepository` (installationId-keyed reads, sync/token writes, the
-  // fan-out, the cron `listActive`) also stays off — only the workspace-scoped `getByWorkspace`
-  // the run path needs is opened here.
+  // fan-out, the cron `listActive`) also stays off — only the two SCOPED reads the run path needs
+  // are opened here.
+  //
+  // `listActiveForAccount` is the second: the account-tier installation lookup
+  // (`createTierInstallationResolvers.forAccount`) every repo-sourced library's sync and the skill
+  // run path's resource fetch go through. It exists precisely BECAUSE the cron `listActive` cannot
+  // be exposed — a global read across every tenant answers a single-account question, and no scope
+  // rule can bind an argument-less method. The scoped form takes the accountId as arg0 (the
+  // `account` rule) and returns only rows bound to that account or to one of its own boards.
   githubInstallationRepository: {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listActiveForAccount: { scope: { kind: 'account', arg: 0 } },
   },
   repoProjectionRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
@@ -937,9 +945,83 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // (`get`/`updateSyncState`/`softDelete`) stay off — they back the repo-SYNC management the
   // mothership owns (the source service needs a GitHub client, which a mothership node does not have),
   // so a later GitHub-sync-in-mothership slice opens them with a source→owner resolver.
+  //
+  // KNOWN GAP, tracked in `docs/initiatives/mothership-mode.md`: `upsert` has the same id-keyed
+  // conflict shape the skills library's source upsert does (`ON CONFLICT (id) DO UPDATE`, no
+  // re-`SET` of the owner columns), so plain `ownerField` binds only the DECLARED owner and an
+  // in-scope caller naming a foreign source id can repoint another tenant's fragment source at a
+  // repo it controls. The fix is the `ownerField` analogue of `accountFieldUpsert` below — it needs
+  // a source→owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId) plus its own
+  // round-trip tests, which is why it is not folded in here. Do NOT copy `ownerField` onto a new
+  // id-keyed upsert in the meantime.
   fragmentSourceRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
+  },
+  // --- Repo-sourced Claude Skills library (ADR 0024) ------------------------------
+  // Skills live in ONE tier — the ACCOUNT — so every method here binds on an accountId rather
+  // than the `(ownerKind, ownerId)` pair the fragment library uses: positionally via the `account`
+  // rule, on a record's `accountId` FIELD via `accountField` / `accountFieldUpsert`, or (the sync
+  // surface) via the `skillSource` rule, which resolves a source id to its owning account
+  // server-side. A machine token scoped to one account can therefore neither read nor write another
+  // tenant's skills.
+  //
+  // Remote rather than `telemetry` or `local-sqlite` for the reason the bucket test names: what
+  // READS this is a RUN. `SkillRunResolver` resolves the picked skill (and ADR 0029's declared
+  // `{ catalogSkillId }` capabilities) out of `accountSkillRepository` at every dispatch, and
+  // `skillResolver` is a HARD dependency for a `skill` step — so leaving the catalog off would
+  // not merely blank a panel, it would fail every skill-running dispatch on a mothership-mode
+  // node with `unknown_method`. The rows carry no secrets (a `SKILL.md` body plus a resource
+  // manifest of `{ path, sha, size }`); the resource BODIES are fetched from the repo at
+  // dispatch and never stored, so nothing credential-bearing crosses the machine API.
+  //
+  // UNLIKE the fragment / foundational-service libraries, the repo-SYNC surface is remote here
+  // too. Those deferred theirs because a sync needs a GitHub client — but a mothership-mode node
+  // HAS one (`DelegatedAppTokenSource` mints the account's App token over the same machine API),
+  // so its `SkillSourceService` assembles and its link/sync/unlink routes are live. Leaving the
+  // sourceId-keyed methods off would leave those routes reachable and broken, which is worse than
+  // either serving them or hiding them. `skillSource` is the rule that binds them; the sibling
+  // libraries can adopt it when their own sync surface lands.
+  accountSkillRepository: {
+    // Catalog reads: the account library panel, the pipeline builder's skill picker, and the RUN
+    // path (`SkillCatalogService.list`/`get`, behind the per-account `skillCatalog` cache slice).
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    get: { scope: { kind: 'account', arg: 0 } },
+    // Sync writes. `upsert(record)` binds on the record's `accountId` FIELD, so a synced skill can
+    // only ever land under an in-scope account. Plain `accountField` is sufficient HERE (and NOT for
+    // `skillSourceRepository.upsert` below) because this write conflicts on `(account_id, skill_id)`
+    // on both runtimes: the bound account is part of the key, so a foreign `skillId` inserts a fresh
+    // row under the caller's own account and can never mutate another tenant's. `softDelete(accountId,
+    // skillId, at)` is positional.
+    upsert: { scope: { kind: 'accountField', arg: 0 } },
+    softDelete: { scope: { kind: 'account', arg: 0 } },
+    // The source-keyed reconcile pair: list a source's live skills to diff against the repo, and
+    // tombstone all of them in one write on unlink. Both bind through `skillSource`.
+    listBySource: { scope: { kind: 'skillSource', arg: 0 } },
+    softDeleteBySource: { scope: { kind: 'skillSource', arg: 0 } },
+  },
+  // The repo-linkage rows the library panel lists and the sync pins its head commit on.
+  // `listByAccount` is positional; the three sourceId-keyed methods bind through `skillSource`.
+  //
+  // `upsert(record)` takes `accountFieldUpsert`, NOT the plain `accountField` its sibling above uses,
+  // because this write conflicts on the `id` ALONE and does not re-`SET account_id` (D1
+  // `ON CONFLICT (id) DO UPDATE`, Drizzle `target: skillSources.id`). The row it lands on is therefore
+  // chosen by the id, not by the bound account — so binding only the DECLARED `accountId` would let a
+  // token scoped to account A name account B's source id, declare its own account to pass the check,
+  // and repoint B's link at an attacker-controlled repo; B's next sync folds that repo's `SKILL.md`
+  // bodies — agent INSTRUCTIONS — into B's catalog. `accountFieldUpsert` additionally binds the STORED
+  // row's account, so an existing foreign row is refused while a create (no such row) still passes.
+  //
+  // `listByRepo` is deliberately absent: it is the GLOBAL `(repoOwner, repoName)` → sources reverse
+  // lookup the push-webhook fan-out uses, spanning every account by construction, so no rule can
+  // bind it. It runs on the mothership (which receives the webhook), never on a laptop — the same
+  // "unscoped, mothership-internal" bucket as `slackConnectionRepository.getByTeam`.
+  skillSourceRepository: {
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    get: { scope: { kind: 'skillSource', arg: 0 } },
+    upsert: { scope: { kind: 'accountFieldUpsert', arg: 0, entity: 'skillSource' } },
+    updateSyncState: { scope: { kind: 'skillSource', arg: 0 } },
+    softDelete: { scope: { kind: 'skillSource', arg: 0 } },
   },
   // --- Foundational services (backend/docs/adr/0031-foundational-services.md) -----------
   // The tiered catalog of shared capabilities an Architect designs against, and the API contract

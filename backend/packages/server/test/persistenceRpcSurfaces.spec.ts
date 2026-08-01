@@ -982,6 +982,21 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
     )
     await expect(repos.githubInstallationRepository!.listActive!()).rejects.toThrow(/not callable/)
   })
+
+  // The second opened installation read: the ACCOUNT-scoped list the repo-sourced libraries
+  // (fragments / skills) resolve their GitHub credential through. It exists because its global
+  // sibling `listActive` can never be exposed — see the refusal asserted just above.
+  it('forwards githubInstallationRepository.listActiveForAccount for an in-scope account', async () => {
+    const result =
+      await remoteRegistry().githubInstallationRepository!.listActiveForAccount!(ACCOUNT)
+    expect((result as Array<{ accountId: string }>)[0]).toMatchObject({ accountId: ACCOUNT })
+  })
+
+  it('rejects githubInstallationRepository.listActiveForAccount for another account (404)', async () => {
+    await expect(
+      remoteRegistry().githubInstallationRepository!.listActiveForAccount!(OTHER_ACCOUNT),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
 })
 
 describe('self-hosted runner-backend connection surface (workspace-scoped)', () => {
@@ -1242,6 +1257,154 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
     await expect(remoteRegistry().fragmentSourceRepository!.get!('src_1')).rejects.toThrow(
       /not callable/,
     )
+  })
+})
+
+describe('Claude Skills library surface (account- and source-scoped)', () => {
+  // Skills live in ONE tier (the account), so the catalog + link reads bind positionally on an
+  // accountId (`account`) rather than the fragment library's (ownerKind, ownerId) pair. Each stub
+  // echoes the accountId, proving the call reached the bound account.
+  const ACCOUNT_METHODS: Array<{ repo: string; method: string; extra?: unknown[] }> = [
+    { repo: 'accountSkillRepository', method: 'listByAccount' },
+    { repo: 'accountSkillRepository', method: 'get', extra: ['src:sklsrc_in:triage'] },
+    { repo: 'accountSkillRepository', method: 'softDelete', extra: ['src:sklsrc_in:triage', 0] },
+    { repo: 'skillSourceRepository', method: 'listByAccount' },
+  ]
+
+  for (const { repo, method, extra = [] } of ACCOUNT_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(ACCOUNT, ...extra)
+      // Reads echo `{ accountId }`; the void `softDelete` forwards without throwing.
+      if (result !== undefined && result !== null) {
+        expect(Array.isArray(result) ? result[0] : result).toMatchObject({ accountId: ACCOUNT })
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(OTHER_ACCOUNT, ...extra)).rejects.toMatchObject(
+        { code: 'not_found' },
+      )
+    })
+  }
+
+  // The sync surface: every method carries a source id and nothing else, so the `skillSource` rule
+  // resolves the source's owning account server-side. `sklsrc_in` is under ACCOUNT, `sklsrc_out`
+  // under OTHER_ACCOUNT, and `sklsrc_missing` does not exist (must fail closed, not 500).
+  const SOURCE_METHODS: Array<{ repo: string; method: string; extra?: unknown[] }> = [
+    { repo: 'accountSkillRepository', method: 'listBySource' },
+    { repo: 'accountSkillRepository', method: 'softDeleteBySource', extra: [0] },
+    { repo: 'skillSourceRepository', method: 'get' },
+    { repo: 'skillSourceRepository', method: 'updateSyncState', extra: ['abc123', 0] },
+    { repo: 'skillSourceRepository', method: 'softDelete', extra: [0] },
+  ]
+
+  for (const { repo, method, extra = [] } of SOURCE_METHODS) {
+    it(`forwards ${repo}.${method} for a source in an in-scope account`, async () => {
+      // The reads resolve a value, the void writes resolve `undefined` — either way, reaching the
+      // repo at all (rather than a 404) is the assertion, so a refusal fails by throwing.
+      await remoteRegistry()[repo]![method]!('sklsrc_in', ...extra)
+    })
+
+    it(`rejects ${repo}.${method} for a source in another account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!('sklsrc_out', ...extra)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+
+    it(`rejects ${repo}.${method} for a source that does not exist (fails closed)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('sklsrc_missing', ...extra),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for a non-string source id (fails closed)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(undefined, ...extra)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // `accountSkillRepository.upsert(record)` binds on the record's `accountId` FIELD (`accountField`).
+  // That is sufficient here because the write conflicts on `(account_id, skill_id)`: the bound
+  // account is part of the key, so a foreign `skillId` inserts under the caller's own account.
+  it('forwards accountSkillRepository.upsert when the record targets an in-scope account', async () => {
+    await expect(
+      remoteRegistry().accountSkillRepository!.upsert!({ accountId: ACCOUNT }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects accountSkillRepository.upsert when the record targets another account (404)', async () => {
+    await expect(
+      remoteRegistry().accountSkillRepository!.upsert!({ accountId: OTHER_ACCOUNT }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects accountSkillRepository.upsert when the record has no accountId (404, fail-closed)', async () => {
+    await expect(remoteRegistry().accountSkillRepository!.upsert!({})).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  // `skillSourceRepository.upsert(record)` takes `accountFieldUpsert` instead, because its write
+  // conflicts on the `id` ALONE and never re-`SET`s `account_id` — the row it lands on is chosen by
+  // the id, not by the bound account. So BOTH the declared account and the STORED row's account are
+  // bound, and a create (no such row yet) passes on the declared half alone.
+  describe('skillSourceRepository.upsert binds the stored row, not just the declared account', () => {
+    it('forwards a CREATE: an id no row holds yet, under an in-scope account', async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({
+          id: 'sklsrc_missing',
+          accountId: ACCOUNT,
+        }),
+      ).resolves.toBeUndefined()
+    })
+
+    it("forwards an UPDATE of the caller's own existing source", async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({ id: 'sklsrc_in', accountId: ACCOUNT }),
+      ).resolves.toBeUndefined()
+    })
+
+    // The regression this rule exists for. Declaring an in-scope `accountId` satisfies the field
+    // check, but the id names ANOTHER account's row — and because the upsert does not re-`SET`
+    // `account_id`, forwarding it would repoint that tenant's source at a repo the caller chose,
+    // whose `SKILL.md` bodies their next sync folds into their catalog as agent instructions.
+    it('rejects an in-scope account claiming ANOTHER account’s source id (404)', async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({ id: 'sklsrc_out', accountId: ACCOUNT }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it('rejects a record declaring another account outright (404)', async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({
+          id: 'sklsrc_out',
+          accountId: OTHER_ACCOUNT,
+        }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it('rejects a record with no accountId (404, fail-closed)', async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({ id: 'sklsrc_in' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    // No usable conflict key ⇒ the record cannot be bound to the row it would write, so it is
+    // refused rather than allowed through on the declared half alone.
+    it('rejects a record with no id (404, fail-closed)', async () => {
+      await expect(
+        remoteRegistry().skillSourceRepository!.upsert!({ accountId: ACCOUNT }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  })
+
+  it('still refuses the global push-webhook reverse lookup (off the allow-list)', async () => {
+    // `listByRepo` spans every account by construction (a push delivery knows a repo, not an
+    // account), so no scope rule can bind it — it stays mothership-internal.
+    await expect(
+      remoteRegistry().skillSourceRepository!.listByRepo!('acme', 'guidelines'),
+    ).rejects.toThrow(/not callable/)
   })
 })
 

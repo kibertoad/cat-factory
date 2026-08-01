@@ -36,6 +36,7 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
 function installationsRepo(active: GitHubInstallation[]): GitHubInstallationRepository {
   return {
     listActive: async () => active,
+    listActiveForAccount: async (accountId) => active.filter((i) => i.accountId === accountId),
     getByInstallationId: async () => null,
     listByInstallationIds: async () => [],
     getByWorkspace: async (workspaceId) =>

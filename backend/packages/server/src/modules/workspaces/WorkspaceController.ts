@@ -171,7 +171,7 @@ function snapshotCustomTaskTypes(registry: TaskTypeRegistry): CustomTaskType[] |
 
 /**
  * The account's repo-sourced Claude Skills as lightweight snapshot summaries (`{ id, name,
- * description }`) for the pipeline builder's per-step skill picker (docs/initiatives/repo-skills.md
+ * description }`) for the pipeline builder's per-step skill picker (ADR 0024
  * slice 3). Read through the account skill-catalog cache — one read for the whole account, shared
  * across its workspaces (see "No N+1"). Best-effort: the skill library is optional and must NEVER
  * break the board load, so an unwired library, an unresolved account, or a read failure degrades

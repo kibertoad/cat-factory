@@ -7,7 +7,7 @@ import { linkedContextSection } from '../prompts/standard.js'
 
 // ---------------------------------------------------------------------------
 // The `skill` agent kind — ONE generic, parametrized container-coding agent that executes a
-// repo-sourced Claude Skill (docs/initiatives/repo-skills.md). A team authors skills in a repo
+// repo-sourced Claude Skill (ADR 0024). A team authors skills in a repo
 // (`<skill>/SKILL.md` + sibling resources); the account syncs them into its skill catalog
 // (slice 1), and a pipeline step of this kind runs one — selected NOT by a bespoke per-skill
 // agent kind, but by the step's `stepOptions.skillId`. That per-step id is resolved to the skill
@@ -73,7 +73,7 @@ function skillUserPrompt(context: AgentRunContext): string {
   return lines.filter(Boolean).join('\n')
 }
 
-/** The generic skill-execution kind (repo-skills initiative slice 2). */
+/** The generic skill-execution kind (ADR 0024, slice 2). */
 export const SKILL_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: SKILL_AGENT_KIND,
