@@ -6,7 +6,9 @@ import type {
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import {
+  BINARY_OUTPUT_TRAIT,
   companionTargets,
+  hasTrait,
   INLINE_ENGINE_SYSTEM_PROMPTS,
   isCompanionKind,
   isGatableKind,
@@ -68,6 +70,9 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
  *    separately — but under the same "threshold set + estimator earlier" rules, since a
  *    QC gate with no estimator would silently never gate.
+ *  - {@link assertValidBinaryOutputSteps}: a step whose kind carries the `binary-output` trait
+ *    must select the foundational service it stores its generated binaries through — a
+ *    generator with nowhere to deliver would dispatch and only be able to refuse.
  *
  * Each check takes the whole shape rather than the two or three arrays it happens to read today:
  * the gating check needed `gates` + the kind registry after the estimate-gating rules were
@@ -101,6 +106,41 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
   assertValidAgentVariants(pipeline)
+  assertValidBinaryOutputSteps(pipeline)
+}
+
+/**
+ * Every ENABLED step whose kind carries the `binary-output` trait (a generator whose
+ * deliverable is binary artifacts stored through a foundational service) must SELECT its
+ * storage service (`stepOptions[i].binaryOutput`). The same rule as a `skill` step's
+ * `skillId`: the step is parametrized by the selection and has nowhere to deliver without it,
+ * so it is rejected at pipeline save (and again at run start, which shares this validation)
+ * rather than dispatching a generator that can only refuse. Whether the selected ids RESOLVE
+ * against the catalog is the run-admission guard's half — the catalog is workspace state this
+ * structural check deliberately does not read.
+ *
+ * Skipped when no registry is supplied (the kernel seed test's built-in catalog): the trait is
+ * carried only by deployment-registered kinds, which such a caller cannot see.
+ */
+export function assertValidBinaryOutputSteps({
+  agentKinds,
+  enabled,
+  stepOptions,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!agentKindRegistry) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    const kind = agentKinds[i]
+    if (kind === undefined || !isEnabled(i)) continue
+    if (!hasTrait(kind, BINARY_OUTPUT_TRAIT, agentKindRegistry)) continue
+    if (!stepOptions?.[i]?.binaryOutput?.storageServiceId?.trim()) {
+      throw new ValidationError(
+        `Step '${kind}' generates binary outputs but selects no storage service — pick the ` +
+          "foundational service it stores them through in the step's options.",
+      )
+    }
+  }
 }
 
 /**

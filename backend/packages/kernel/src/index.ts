@@ -208,6 +208,25 @@ export {
   summarizeContract,
 } from './domain/foundational-services.js'
 
+// Binary-output steps: pure validation/parsing/rendering for a kind that generates binary
+// artifacts and stores them through a selected foundational service, scoped by further
+// selected context services. See `domain/binary-outputs.ts` and
+// docs/initiatives/binary-output-foundational-storage.md.
+export {
+  type BinaryOutputBriefInput,
+  type BinaryOutputConfigIssue,
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_CONTEXT_DIR,
+  BINARY_OUTPUT_DECLARATION_TAG,
+  BINARY_STORAGE_CAPABILITY,
+  GENERATION_CONTEXT_CAPABILITY,
+  MAX_BINARY_OUTPUT_ENTRIES,
+  binaryContextFileFor,
+  binaryOutputConfigIssues,
+  parseBinaryOutputDeclaration,
+  renderBinaryOutputBrief,
+} from './domain/binary-outputs.js'
+
 // Installation-level extension point for custom polling gates + step-completion
 // resolvers (mirrors the agent-kind / pipeline registry seams): a deployment registers
 // its own gate / resolver at startup and the ExecutionService merges them with the

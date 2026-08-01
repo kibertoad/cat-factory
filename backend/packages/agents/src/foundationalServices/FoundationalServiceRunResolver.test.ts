@@ -1,5 +1,11 @@
 import type { ApiContractDocument, ResolvedFoundationalService } from '@cat-factory/contracts'
-import { FOUNDATIONAL_INDEX_FILE, contextFileFor } from '@cat-factory/kernel'
+import {
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_STORAGE_CAPABILITY,
+  FOUNDATIONAL_INDEX_FILE,
+  binaryContextFileFor,
+  contextFileFor,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
 import { FoundationalServiceRunResolver } from './FoundationalServiceRunResolver.js'
@@ -86,5 +92,63 @@ describe('FoundationalServiceRunResolver.contextFilesFor', () => {
     // for an index file saying so.
     const resolver = new FoundationalServiceRunResolver(catalog([]))
     expect(await resolver.contextFilesFor('ws', undefined)).toEqual([])
+  })
+})
+
+describe('FoundationalServiceRunResolver.binaryOutputContextFilesFor', () => {
+  const storageEntry = {
+    ...entry('asset-store'),
+    capabilities: [BINARY_STORAGE_CAPABILITY],
+  }
+
+  it('injects the brief plus one contract file per resolved service, storage first', async () => {
+    const resolver = new FoundationalServiceRunResolver(
+      catalog(
+        [storageEntry, entry('entity-inventory')],
+        new Map([
+          ['asset-store', [document]],
+          ['entity-inventory', [document]],
+        ]),
+      ),
+    )
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'asset-store',
+      contextServiceIds: ['entity-inventory'],
+    })
+    expect(files.map((f) => f.path)).toEqual([
+      BINARY_OUTPUT_BRIEF_FILE,
+      binaryContextFileFor('asset-store'),
+      binaryContextFileFor('entity-inventory'),
+    ])
+    expect(files[0]?.content).toContain('`asset-store`')
+    expect(files[0]?.content).toContain('`entity-inventory`')
+    expect(files[1]?.content).toContain('openapi: 3.0.3')
+  })
+
+  it('still injects the brief when the storage id no longer resolves, stating the gap', async () => {
+    // Admission validated the selection at start, but a run can outlive a catalog edit — the
+    // brief must then re-state the gap rather than let the agent guess at a storage endpoint.
+    const resolver = new FoundationalServiceRunResolver(catalog([entry('entity-inventory')]))
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'asset-store',
+    })
+    expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
+    expect(files[0]?.content).toContain('does not contain it')
+  })
+
+  it('omits the contract file for a service with no registered contract; the brief says so', async () => {
+    const resolver = new FoundationalServiceRunResolver(catalog([storageEntry]))
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'asset-store',
+    })
+    expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
+    expect(files[0]?.content).toContain('No API contract is registered for `asset-store`')
+  })
+
+  it('injects a brief stating a missing selection rather than nothing at all', async () => {
+    const resolver = new FoundationalServiceRunResolver(catalog([storageEntry]))
+    const files = await resolver.binaryOutputContextFilesFor('ws', undefined)
+    expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
+    expect(files[0]?.content).toContain('No storage service is selected')
   })
 })

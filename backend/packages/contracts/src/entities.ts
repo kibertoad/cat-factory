@@ -6,6 +6,7 @@ import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { agentMaxOutputTokensSchema } from './agent-settings.js'
+import { binaryOutputConfigSchema } from './binary-outputs.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceProvisioningSchema } from './environments.js'
@@ -736,6 +737,17 @@ export const stepOptionsSchema = v.object({
    * kind's shipped prompt.
    */
   agentVariantId: v.optional(v.string()),
+  /**
+   * Binary-generating steps only (a kind carrying the `binary-output` trait, e.g. a
+   * deployment's image generator). Selects — from the workspace's foundational-services
+   * catalog — the service the step STORES its generated binaries through, plus the services it
+   * consults for generation SCOPE and context (which entities exist, which lack an asset, how
+   * each is described). Required on such a step: refused at pipeline save and at run admission
+   * when missing, exactly as a `skill` step without a `skillId` is — a generator with nowhere
+   * to store its deliverable would silently produce nothing. Ignored on every other kind.
+   * See `docs/initiatives/binary-output-foundational-storage.md`.
+   */
+  binaryOutput: v.optional(binaryOutputConfigSchema),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 

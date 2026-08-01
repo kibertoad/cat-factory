@@ -543,7 +543,8 @@
         "pipeline_schedule_attached": "定期スケジュールがこのパイプラインを使用しています",
         "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
         "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません",
-        "foundational_service_exists": "その基盤サービスはすでに存在します"
+        "foundational_service_exists": "その基盤サービスはすでに存在します",
+        "binary_output_service_invalid": "バイナリ出力用のサービスを解決できません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -572,7 +573,8 @@
         "pipeline_schedule_attached": "定期スケジュールがまだこのパイプラインを参照しており、開始する実行はすべて ID でパイプラインを解決します。先にそのスケジュールを解除または削除してから、パイプラインを削除してください。",
         "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
         "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。",
-        "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。"
+        "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。",
+        "binary_output_service_invalid": "バイナリ出力を生成するステップが、このワークスペースのカタログでは解決できない基盤サービスを選択しています。ID が不明か、選択した保存先サービスに binary-storage ケイパビリティがありません。ステップの選択を修正するかサービスを登録して、もう一度開始してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

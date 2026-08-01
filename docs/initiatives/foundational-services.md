@@ -58,6 +58,12 @@ Both reads are delivered as injected `.cat-context/` files (`foundational-servic
 fields — one mechanism that already works for container dispatches, inline calls and consensus
 participants, and one stable path the trait guidance can name.
 
+A THIRD read now rides the same resolver: a BINARY-OUTPUT step (`binary-output` trait — e.g. a
+deployment's image generator) gets the brief + contracts for the storage/context services its own
+step options selected from this catalog. Its join is the step's config rather than a design's
+declaration — see
+[`binary-output-foundational-storage.md`](./binary-output-foundational-storage.md).
+
 ## The declaration is the join between them
 
 The Architect's guidance requires it to end its reply with a fenced ` ```foundational-services `

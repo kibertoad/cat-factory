@@ -95,6 +95,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     environmentProvisioning: deps.environmentProvisioning,
     workspaceSettingsService: deps.workspaceSettingsService,
     resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
+    foundationalServiceResolver: deps.foundationalServiceResolver,
     resolveProviderCapabilities: deps.resolveProviderCapabilities,
     inlineHarnessRef: deps.inlineHarnessRef,
     resolveWorkspaceModelDefault: deps.resolveWorkspaceModelDefault,

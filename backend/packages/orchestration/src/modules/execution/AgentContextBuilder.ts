@@ -18,7 +18,6 @@ import type {
   Initiative,
   InitiativePresetRegistry,
   InitiativeRepository,
-  InjectedContextFile,
   Logger,
   PipelineStep,
   RequirementReviewRepository,
@@ -67,11 +66,8 @@ import { isTesterKind } from './ci.logic.js'
 import { interviewFollowsStep } from '../initiative/initiative.logic.js'
 import { resolveRunSkills } from './run-skills.js'
 import { mergeInjectedContextFiles, priorPrReviewContextFor } from './builder-context-files.js'
-import {
-  type FoundationalServiceResolver,
-  createFoundationalDeclarationRecorder,
-  resolveFoundationalContext,
-} from './run-foundational-services.js'
+import { type FoundationalServiceResolver } from './run-foundational-services.js'
+import { CatalogRunContext } from './run-catalog-context.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import {
   type DocumentUrlResolver,
@@ -423,6 +419,11 @@ export class AgentContextBuilder {
       // anything else. Best-effort inside — an unreachable catalog degrades to no files rather
       // than failing a run that would otherwise proceed exactly as it did before the feature.
       foundationalContextFiles,
+      // The BINARY-OUTPUT slice: the storage/context brief + contract files for a kind carrying
+      // the `binary-output` trait, off the step's own `stepOptions.binaryOutput` selection.
+      // Best-effort inside — the trait guidance names an absent brief as "storage could not be
+      // provided", so the agent refuses loudly instead of guessing at an endpoint.
+      binaryOutputContextFiles,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -449,7 +450,8 @@ export class AgentContextBuilder {
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
-      this.foundationalContextFor(workspaceId, agentKind, instance),
+      this.catalogContext().foundationalContextFor(workspaceId, agentKind, instance),
+      this.catalogContext().binaryOutputContextFor(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -560,6 +562,7 @@ export class AgentContextBuilder {
       ...mergeInjectedContextFiles(
         priorPrReviewContextFor(agentKind, step).injectedContextFiles,
         foundationalContextFiles,
+        binaryOutputContextFiles,
       ),
       priorOutputs,
       decisions: instance.steps
@@ -1239,49 +1242,36 @@ export class AgentContextBuilder {
   }
 
   /**
-   * The deps `run-foundational-services` needs. One place, because BOTH entry points below take
-   * the same three and the optional-spread shape is easy to get subtly wrong twice.
+   * The CATALOG-backed slices of a dispatch's context — the foundational-services pair and the
+   * binary-output brief — plus their declaration read-backs, extracted as the cohesive
+   * {@link CatalogRunContext} collaborator. The two `record*` delegates below stay PUBLIC here
+   * because the completion hub reaches them through the builder, which handed the agent its
+   * catalog context in the first place.
    */
-  private foundationalDeps() {
-    return {
+  private catalogContext(): CatalogRunContext {
+    return new CatalogRunContext({
       agentKindRegistry: this.deps.agentKindRegistry,
       ...(this.deps.foundationalServiceResolver
         ? { foundationalServiceResolver: this.deps.foundationalServiceResolver }
         : {}),
       ...(this.deps.logger ? { logger: this.deps.logger } : {}),
-    }
-  }
-
-  /**
-   * The FOUNDATIONAL SERVICES slice of this dispatch's `.cat-context/` — the catalog for a design
-   * kind, the declared services' contracts for a consumer kind, nothing for anything else. Only
-   * the steps BEFORE this one are read, so a re-dispatched design cannot read its own prior round.
-   */
-  private foundationalContextFor(
-    workspaceId: string,
-    agentKind: string,
-    instance: ExecutionInstance,
-  ): Promise<InjectedContextFile[]> {
-    return resolveFoundationalContext({
-      ...this.foundationalDeps(),
-      workspaceId,
-      agentKind,
-      priorSteps: instance.steps.slice(0, instance.currentStep),
     })
   }
 
-  /**
-   * Read back what a settled DESIGN step declared, and record it on the step — the counterpart of
-   * {@link foundationalContextFor}. It lives here because this builder handed the design its
-   * catalog and already holds the resolver, registry and logger the read-back needs, so the
-   * completion hub takes no dependency of its own for it.
-   */
   recordFoundationalDeclaration(
     workspaceId: string,
     step: PipelineStep,
     output: string | undefined,
   ): Promise<void> {
-    return createFoundationalDeclarationRecorder(this.foundationalDeps())(workspaceId, step, output)
+    return this.catalogContext().recordFoundationalDeclaration(workspaceId, step, output)
+  }
+
+  recordBinaryOutputDeclaration(
+    workspaceId: string,
+    step: PipelineStep,
+    output: string | undefined,
+  ): Promise<void> {
+    return this.catalogContext().recordBinaryOutputDeclaration(workspaceId, step, output)
   }
 
   /**
