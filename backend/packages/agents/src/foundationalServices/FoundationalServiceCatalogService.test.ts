@@ -34,6 +34,9 @@ function serviceRepo(seed: FoundationalServiceRecord[] = []): FoundationalServic
       const row = rows.get(key)
       if (row) rows.set(key, { ...row, deletedAt: at })
     },
+    hardDelete: async (ownerKind, ownerId, serviceId) => {
+      rows.delete(`${ownerKind}:${ownerId}:${serviceId}`)
+    },
     listBySource: async (sourceId) => [...rows.values()].filter((r) => r.sourceId === sourceId),
     softDeleteBySource: async (sourceId, at) => {
       for (const [key, row] of rows) {
@@ -304,5 +307,77 @@ describe('FoundationalServiceCatalogService writes', () => {
       record('account', 'acct', 'file-storage', { deletedAt: 5 }),
     ]).create('account', 'acct', input)
     expect(revived.id).toBe('file-storage')
+  })
+})
+
+describe('FoundationalServiceCatalogService suppression', () => {
+  const build = (seed: FoundationalServiceRecord[]) =>
+    new FoundationalServiceCatalogService({
+      foundationalServiceRepository: serviceRepo(seed),
+      apiContractRepository: contractRepo(),
+      workspaceRepository: workspaces('acct'),
+      clock,
+    })
+
+  it('drops an inherited account service out of the board’s catalog', async () => {
+    const service = build([
+      record('account', 'acct', 'file-storage'),
+      record('account', 'acct', 'notifications'),
+    ])
+    await service.suppressForWorkspace('ws', 'file-storage')
+    expect((await service.resolve('ws')).map((s) => s.id)).toEqual(['notifications'])
+  })
+
+  it('is idempotent, so a retried suppression is not a 404', async () => {
+    const service = build([record('account', 'acct', 'file-storage')])
+    await service.suppressForWorkspace('ws', 'file-storage')
+    // The id is no longer in the merged catalog, so the "is it inherited?" check cannot answer
+    // this case — the already-suppressed short-circuit is what keeps the endpoint retry-safe.
+    await expect(service.suppressForWorkspace('ws', 'file-storage')).resolves.toBeUndefined()
+  })
+
+  it('refuses an id nothing in the catalog carries', async () => {
+    // A tombstone here would suppress whatever the account registers under the id LATER, with
+    // nothing on either tier explaining why the service never appeared.
+    await expect(build([]).suppressForWorkspace('ws', 'file-storage')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('refuses to suppress the board’s OWN registration, steering to delete instead', async () => {
+    const service = build([
+      record('account', 'acct', 'file-storage'),
+      record('workspace', 'ws', 'file-storage', { name: 'Board storage' }),
+    ])
+    await expect(service.suppressForWorkspace('ws', 'file-storage')).rejects.toBeInstanceOf(
+      ConflictError,
+    )
+  })
+
+  it('restores inheritance by DROPPING the tombstone, not by reviving it', async () => {
+    const service = build([record('account', 'acct', 'file-storage', { name: 'Org storage' })])
+    await service.suppressForWorkspace('ws', 'file-storage')
+    await service.restoreInherited('ws', 'file-storage')
+
+    // Reviving the tombstone instead would leave an empty workspace row WINNING the merge; the
+    // account entry, name and all, is what must come back.
+    const restored = await service.resolve('ws')
+    expect(restored).toHaveLength(1)
+    expect(restored[0]).toMatchObject({ id: 'file-storage', name: 'Org storage', tier: 'account' })
+  })
+
+  it('refuses to restore where the tier is not suppressing anything', async () => {
+    // A LIVE workspace row is an override, not a suppression — hard-deleting it here would
+    // silently destroy the board's authored description and contracts.
+    const service = build([
+      record('account', 'acct', 'file-storage'),
+      record('workspace', 'ws', 'file-storage'),
+    ])
+    await expect(service.restoreInherited('ws', 'file-storage')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    await expect(service.restoreInherited('ws', 'audit')).rejects.toMatchObject({
+      code: 'not_found',
+    })
   })
 })

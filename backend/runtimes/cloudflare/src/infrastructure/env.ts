@@ -23,12 +23,14 @@ export interface ExecutionStartMessage {
  * apply projection updates asynchronously. A discriminated union: verified
  * webhook deliveries, targeted repo resyncs (from the cron reconciler / the
  * on-demand resync endpoint), and targeted skill-source resyncs (the push-webhook
- * freshness fan-out, slice 4).
+ * freshness fan-out, slice 4) — for the skill library and the foundational-services catalog
+ * alike.
  */
 export type GitHubSyncMessage =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
   | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
+  | { kind: 'foundational-source-resync'; sourceId: string }
 
 /**
  * Work enqueued on TRACKER_SYNC_QUEUE by the tracker webhook receiver so it can ack fast — a

@@ -51,7 +51,8 @@
       "tabs": {
         "team": "Team & Zugriff",
         "fragments": "Kontextfragmente",
-        "skills": "Skills"
+        "skills": "Skills",
+        "foundational": "Basisdienste"
       }
     },
     "infrastructure": {
@@ -2133,7 +2134,8 @@
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
         "toggleUiMode": "Oberflächenmodus wechseln",
-        "tutorial": "Tour starten"
+        "tutorial": "Tour starten",
+        "foundationalServices": "Basisdienste"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2156,7 +2158,8 @@
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
         "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden",
-        "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen"
+        "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
+        "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog"
       }
     },
     "shortcuts": {
@@ -2316,6 +2319,9 @@
       "title": "Standard-Testumgebung wählen",
       "body": "Für dieses Board ist noch nicht festgelegt, wie seine Services eine Testumgebung erhalten. Wählen Sie einen Standard, dann startet jeder künftig hinzugefügte Service damit, statt einzeln eingerichtet zu werden. Pro Service lässt sich das weiterhin ändern.",
       "action": "Standard wählen"
+    },
+    "accountFoundational": {
+      "intro": "Die gemeinsamen Fähigkeiten, die diese Organisation bereits betreibt - Dateiablage, Benachrichtigungen, Audit - samt ihren API-Verträgen. Jedes Board erbt sie, und einem Architekten wird gesagt, sie zu nutzen statt einen Neubau vorzuschlagen."
     }
   },
   "board": {
@@ -4203,6 +4209,134 @@
     },
     "unavailable": "Die Prompt-Fragment-Bibliothek ist für dieses Deployment nicht aktiviert."
   },
+  "foundational": {
+    "unavailable": "Der Katalog der Basisdienste ist für diese Installation nicht aktiviert.",
+    "owner": {
+      "workspace": "Dieses Board",
+      "account": "Dieses Konto"
+    },
+    "tab": {
+      "catalog": "Katalog",
+      "sources": "Repo-Quellen"
+    },
+    "panel": {
+      "title": "Basisdienste",
+      "subtitle": "Die gemeinsamen Fähigkeiten, die eure Organisation bereits betreibt, damit ein Entwurf sie nutzt statt sie neu zu bauen."
+    },
+    "tier": {
+      "account": "Konto",
+      "workspace": "Board"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} weitere nicht aufgeführt",
+      "none": "Kein API-Vertrag hinterlegt. Einem Agenten wird gesagt, dass die Schnittstelle unbekannt ist, statt dass er sie errät."
+    },
+    "catalog": {
+      "intro": "Was ein Architekt auf diesem Board erhält: Identität, Fähigkeits-Tags und Operationsnamen. Vertragsdokumente werden erst gelesen, wenn ein Entwurf den Dienst benennt.",
+      "empty": "Noch keine Basisdienste. Registriere unten einen oder verknüpfe ein Repo, das sie beschreibt.",
+      "suppress": "Diesen Dienst auf diesem Board nicht anbieten",
+      "showDocuments": "Vertragsdokumente anzeigen",
+      "hideDocuments": "Vertragsdokumente ausblenden"
+    },
+    "suppressions": {
+      "title": "Auf diesem Board abgewählt",
+      "intro": "Diese Kontodienste sind für Entwürfe auf diesem Board ausgeblendet. Nichts wurde gelöscht, und das Konto behält sie für alle anderen Boards.",
+      "restore": "Wieder anbieten",
+      "shadowsNothing": "Unter dieser ID wird derzeit nichts geerbt, diese Abwahl blendet also aktuell nichts aus."
+    },
+    "registry": {
+      "empty": "In diesem Bereich ist noch nichts registriert.",
+      "add": "Dienst registrieren",
+      "addTitle": "Basisdienst registrieren",
+      "editTitle": "Basisdienst bearbeiten",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "fromSource": "Aus einem verknüpften Repo synchronisiert ({path}). Bearbeite ihn im Repo; die nächste Synchronisierung überschreibt Änderungen von hier.",
+      "idFixed": "die ID, die ein Architekt in seinem Entwurf schreibt - nach der Registrierung unveränderlich",
+      "idPlaceholder": "ID (Kleinbuchstaben mit Bindestrich, z. B. file-storage)",
+      "namePlaceholder": "Name (z. B. File Storage)",
+      "summaryPlaceholder": "einzeilige Zusammenfassung - wofür er da ist",
+      "descriptionPlaceholder": "was er tut, wann er zu nutzen ist und was er NICHT abdeckt",
+      "capabilitiesPlaceholder": "Fähigkeits-Tags, durch Komma getrennt (z. B. file-storage, cdn)",
+      "contractsTitle": "API-Verträge",
+      "contractsKeep": "Unverändert lassen, um die gespeicherten Dokumente zu behalten.",
+      "contractsReplace": "Beim Speichern wird der gesamte gespeicherte Satz durch das Hier-Aufgeführte ERSETZT.",
+      "addContract": "Vertrag hinzufügen",
+      "removeContract": "Diesen Vertrag entfernen",
+      "contractIdPlaceholder": "Vertrags-ID (Kleinbuchstaben mit Bindestrich, z. B. openapi)",
+      "contractTitlePlaceholder": "Titel (z. B. HTTP API)",
+      "contractBodyPlaceholder": "Dokument einfügen: eine OpenAPI-3.x-Datei oder der Quelltext eines Vertragsmoduls"
+    },
+    "sources": {
+      "empty": "Keine verknüpften Repos. Verknüpfe unten eines, um Dienstdefinitionen und ihre Vertragsdateien zu synchronisieren.",
+      "linkTitle": "Repo-Quelle verknüpfen",
+      "link": "Verknüpfen & synchronisieren",
+      "metaSynced": "synchronisiert {date} · Ref {ref}",
+      "metaNever": "nie synchronisiert · Ref {ref}",
+      "metaFiles": "{service} · {count} Vertragsdateien",
+      "metaDirectory": "ein Dienst je Unterverzeichnis",
+      "changes": "Änderungen",
+      "check": "Auf Änderungen prüfen",
+      "sync": "Erneut synchronisieren",
+      "unlink": "Verknüpfung lösen",
+      "selectedDir": "Verzeichnis:",
+      "selectedFiles": "Ausgewählte Dateien: {count}",
+      "wholeRepo": "Gesamtes Repository (Wurzel).",
+      "ownerPlaceholder": "Owner",
+      "repoPlaceholder": "Repo",
+      "dirPlaceholder": "Verzeichnispfad (z. B. foundational)",
+      "filePathsPlaceholder": "Pfade der Vertragsdateien, einer pro Zeile",
+      "refPlaceholder": "Ref (Standard HEAD)",
+      "githubRequired": "Zum Verknüpfen eines Repos wird die Versionsverwaltungs-Integration benötigt. Verbinde sie zuerst auf einem Board.",
+      "serviceIdPlaceholder": "Dienst-ID (Kleinbuchstaben mit Bindestrich)",
+      "serviceNamePlaceholder": "Dienstname",
+      "serviceSummaryPlaceholder": "einzeilige Zusammenfassung (optional)",
+      "mode": {
+        "directory": "Ein Ordner mit Diensten",
+        "files": "Bestimmte Dateien, ein Dienst",
+        "directoryHint": "Jedes Unterverzeichnis des verknüpften Pfads ist ein Dienst, beschrieben durch eine service.md mit den Vertragsdateien daneben.",
+        "filesHint": "Die aufgeführten Dateien beschreiben alle den einen Dienst, den du hier benennst. Nutze das, wenn es keine Ordnerkonvention gibt."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Verknüpfung zu diesem Repo lösen?",
+      "body": "\"{repo}\" und die daraus synchronisierten Dienste werden aus dem Katalog entfernt. Du kannst es später erneut verknüpfen.",
+      "confirm": "Verknüpfung lösen"
+    },
+    "confirmDelete": {
+      "title": "Diesen Dienst löschen?",
+      "body": "\"{name}\" und die hochgeladenen Vertragsdokumente werden aus diesem Bereich entfernt.",
+      "confirm": "Löschen"
+    },
+    "toast": {
+      "created": "Dienst registriert",
+      "updated": "Dienst aktualisiert",
+      "deleted": "Dienst gelöscht",
+      "saveFailed": "Dienst konnte nicht gespeichert werden",
+      "deleteFailed": "Dienst konnte nicht gelöscht werden",
+      "suppressed": "Für Entwürfe auf diesem Board ausgeblendet",
+      "suppressFailed": "Dienst konnte nicht ausgeblendet werden",
+      "restored": "Auf diesem Board wieder angeboten",
+      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
+      "contractsFailed": "Vertragsdokumente konnten nicht geladen werden",
+      "sourceLinked": "Repo verknüpft & synchronisiert",
+      "linkSourceFailed": "Repo konnte nicht verknüpft werden",
+      "synced": "Synchronisiert: {updated} aktualisiert, {removed} entfernt",
+      "syncFailed": "Repo konnte nicht synchronisiert werden",
+      "changesAvailable": "Stromaufwärts liegen Änderungen vor",
+      "upToDate": "Bereits aktuell",
+      "checkSourceFailed": "Repo konnte nicht geprüft werden",
+      "sourceUnlinked": "Repo-Verknüpfung gelöst",
+      "unlinkSourceFailed": "Repo-Verknüpfung konnte nicht gelöst werden"
+    }
+  },
   "brainstorm": {
     "title": {
       "architecture": "Architektur-Brainstorm",
@@ -4640,7 +4774,8 @@
     "modelConfiguration": "Modellkonfiguration",
     "accountSettings": "Kontoeinstellungen",
     "operatorDashboard": "Plattform-Observability",
-    "reports": "Berichte"
+    "reports": "Berichte",
+    "foundationalServices": "Basisdienste"
   },
   "errors": {
     "generic": {
@@ -4709,7 +4844,8 @@
         "pipeline_schedule_attached": "Wiederkehrender Zeitplan nutzt diese Pipeline",
         "pipeline_schedule_requires_recurring": "Wiederkehrender Zeitplan braucht diese Pipeline",
         "pipeline_schedule_intake_unconfigured": "Zeitplan ohne Ticket-Erfassung",
-        "foundational_service_exists": "Basisdienst existiert bereits"
+        "foundational_service_exists": "Basisdienst existiert bereits",
+        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -4738,7 +4874,8 @@
         "pipeline_schedule_attached": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline, und jeder von ihm gestartete Lauf löst die Pipeline über ihre ID auf. Lösen oder löschen Sie zuerst diesen Zeitplan und entfernen Sie danach die Pipeline.",
         "pipeline_schedule_requires_recurring": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline. Sie nur einmalig zu machen würde jeden künftigen Lauf unterbrechen. Lösen Sie zuerst diesen Zeitplan.",
         "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan.",
-        "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet."
+        "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
+        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

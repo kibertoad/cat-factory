@@ -51,7 +51,8 @@
       "tabs": {
         "team": "Team e accesso",
         "fragments": "Frammenti di contesto",
-        "skills": "Competenze"
+        "skills": "Competenze",
+        "foundational": "Servizi fondamentali"
       }
     },
     "infrastructure": {
@@ -2133,7 +2134,8 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
-        "tutorial": "Fai un tour"
+        "tutorial": "Fai un tour",
+        "foundationalServices": "Servizi fondamentali"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2156,7 +2158,8 @@
         "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
         "bugHunt": "bug caccia triage backlog ticket non assegnati",
         "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi",
-        "tutorial": "tutorial tour guida aiuto imparare introduzione"
+        "tutorial": "tutorial tour guida aiuto imparare introduzione",
+        "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo"
       }
     },
     "shortcuts": {
@@ -2316,6 +2319,9 @@
       "title": "Scegli un ambiente di test predefinito",
       "body": "Questa board non ha ancora stabilito come i suoi servizi ottengono un ambiente di test. Scegli un valore predefinito e ogni servizio che aggiungerai partirà con quello, invece di essere configurato uno alla volta. Potrai comunque cambiarlo per singolo servizio.",
       "action": "Scegli predefinito"
+    },
+    "accountFoundational": {
+      "intro": "Le capacità condivise che questa organizzazione già gestisce - archiviazione file, notifiche, audit - con i loro contratti API. Ogni bacheca le eredita, e a un architetto viene detto di utilizzarle invece di proporre di ricostruirle."
     }
   },
   "board": {
@@ -4203,6 +4209,134 @@
     },
     "unavailable": "La libreria di frammenti di prompt non e abilitata per questo deployment."
   },
+  "foundational": {
+    "unavailable": "Il catalogo dei servizi fondamentali non è abilitato in questa installazione.",
+    "owner": {
+      "workspace": "Questa bacheca",
+      "account": "Questo account"
+    },
+    "tab": {
+      "catalog": "Catalogo",
+      "sources": "Repo collegati"
+    },
+    "panel": {
+      "title": "Servizi fondamentali",
+      "subtitle": "Le capacità condivise che la tua organizzazione già gestisce, così che una progettazione le utilizzi invece di ricostruirle."
+    },
+    "tier": {
+      "account": "Account",
+      "workspace": "Bacheca"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} non elencate",
+      "none": "Nessun contratto API allegato. All'agente verrà detto che l'interfaccia è sconosciuta, invece di lasciargliela indovinare."
+    },
+    "catalog": {
+      "intro": "Ciò che riceve un architetto che progetta su questa bacheca: identità, tag di capacità e nomi delle operazioni. I documenti di contratto vengono letti solo quando una progettazione dichiara il servizio.",
+      "empty": "Ancora nessun servizio fondamentale. Registrane uno qui sotto, o collega un repository che li descriva.",
+      "suppress": "Non proporre questo servizio su questa bacheca",
+      "showDocuments": "Mostra i documenti di contratto",
+      "hideDocuments": "Nascondi i documenti di contratto"
+    },
+    "suppressions": {
+      "title": "Esclusi su questa bacheca",
+      "intro": "Questi servizi dell'account sono nascosti alle progettazioni di questa bacheca. Nulla è stato eliminato e l'account li mantiene per tutte le altre bacheche.",
+      "restore": "Proponi di nuovo",
+      "shadowsNothing": "Al momento non si eredita nulla con questo id, quindi questa esclusione non nasconde nulla."
+    },
+    "registry": {
+      "empty": "Non è ancora registrato nulla a questo livello.",
+      "add": "Registra un servizio",
+      "addTitle": "Registra un servizio fondamentale",
+      "editTitle": "Modifica il servizio fondamentale",
+      "edit": "Modifica",
+      "delete": "Elimina",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "fromSource": "Sincronizzato da un repository collegato ({path}). Modificalo nel repository; la prossima sincronizzazione sovrascrive le modifiche fatte qui.",
+      "idFixed": "l'id che un architetto scrive nella sua progettazione, fisso una volta registrato",
+      "idPlaceholder": "id (minuscolo con trattini, es. file-storage)",
+      "namePlaceholder": "nome (es. File Storage)",
+      "summaryPlaceholder": "riepilogo di una riga: a cosa serve",
+      "descriptionPlaceholder": "cosa fa, quando usarlo e cosa NON copre",
+      "capabilitiesPlaceholder": "tag di capacità separati da virgole (es. file-storage, cdn)",
+      "contractsTitle": "Contratti API",
+      "contractsKeep": "Lascia invariato per conservare i documenti memorizzati.",
+      "contractsReplace": "Il salvataggio SOSTITUISCE l'intero insieme memorizzato con quanto elencato qui.",
+      "addContract": "Aggiungi un contratto",
+      "removeContract": "Rimuovi questo contratto",
+      "contractIdPlaceholder": "id contratto (minuscolo con trattini, es. openapi)",
+      "contractTitlePlaceholder": "titolo (es. HTTP API)",
+      "contractBodyPlaceholder": "incolla il documento: un file OpenAPI 3.x, o il sorgente di un modulo di contratto"
+    },
+    "sources": {
+      "empty": "Nessun repository collegato. Collegane uno qui sotto per sincronizzare le definizioni dei servizi e i loro file di contratto.",
+      "linkTitle": "Collega un repository",
+      "link": "Collega e sincronizza",
+      "metaSynced": "sincronizzato {date} · ref {ref}",
+      "metaNever": "mai sincronizzato · ref {ref}",
+      "metaFiles": "{service} · {count} file di contratto",
+      "metaDirectory": "un servizio per sottocartella",
+      "changes": "Modifiche",
+      "check": "Cerca modifiche",
+      "sync": "Risincronizza",
+      "unlink": "Scollega",
+      "selectedDir": "Cartella:",
+      "selectedFiles": "File scelti: {count}",
+      "wholeRepo": "Intero repository (radice).",
+      "ownerPlaceholder": "proprietario",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "percorso cartella (es. foundational)",
+      "filePathsPlaceholder": "percorsi dei file di contratto, uno per riga",
+      "refPlaceholder": "ref (predefinito HEAD)",
+      "githubRequired": "Collegare un repository richiede l'integrazione di controllo del codice. Collegala prima su una bacheca.",
+      "serviceIdPlaceholder": "id del servizio (minuscolo con trattini)",
+      "serviceNamePlaceholder": "nome del servizio",
+      "serviceSummaryPlaceholder": "riepilogo di una riga (facoltativo)",
+      "mode": {
+        "directory": "Una cartella di servizi",
+        "files": "File specifici, un solo servizio",
+        "directoryHint": "Ogni sottocartella del percorso collegato è un servizio, descritto da un service.md con accanto i suoi file di contratto.",
+        "filesHint": "I file elencati descrivono tutti l'unico servizio che indichi qui. Usalo quando non c'è una convenzione di cartelle da adottare."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Scollegare questo repository?",
+      "body": "\"{repo}\" e i servizi che ha sincronizzato saranno rimossi dal catalogo. Potrai ricollegarlo in seguito.",
+      "confirm": "Scollega"
+    },
+    "confirmDelete": {
+      "title": "Eliminare questo servizio?",
+      "body": "\"{name}\" e i suoi documenti di contratto caricati saranno rimossi da questo ambito.",
+      "confirm": "Elimina"
+    },
+    "toast": {
+      "created": "Servizio registrato",
+      "updated": "Servizio aggiornato",
+      "deleted": "Servizio eliminato",
+      "saveFailed": "Impossibile salvare il servizio",
+      "deleteFailed": "Impossibile eliminare il servizio",
+      "suppressed": "Nascosto alle progettazioni di questa bacheca",
+      "suppressFailed": "Impossibile nascondere il servizio",
+      "restored": "Di nuovo proposto su questa bacheca",
+      "restoreFailed": "Impossibile ripristinare il servizio",
+      "contractsFailed": "Impossibile caricare i documenti di contratto",
+      "sourceLinked": "Repository collegato e sincronizzato",
+      "linkSourceFailed": "Impossibile collegare il repository",
+      "synced": "Sincronizzato: {updated} aggiornati, {removed} rimossi",
+      "syncFailed": "Impossibile sincronizzare il repository",
+      "changesAvailable": "Sono disponibili modifiche a monte",
+      "upToDate": "Già aggiornato",
+      "checkSourceFailed": "Impossibile controllare il repository",
+      "sourceUnlinked": "Repository scollegato",
+      "unlinkSourceFailed": "Impossibile scollegare il repository"
+    }
+  },
   "brainstorm": {
     "title": {
       "architecture": "Brainstorm sull'architettura",
@@ -4640,7 +4774,8 @@
     "modelConfiguration": "Configurazione del modello",
     "accountSettings": "Impostazioni dell'account",
     "operatorDashboard": "Osservabilità della piattaforma",
-    "reports": "Report"
+    "reports": "Report",
+    "foundationalServices": "Servizi fondamentali"
   },
   "errors": {
     "generic": {
@@ -4709,7 +4844,8 @@
         "pipeline_schedule_attached": "Una pianificazione ricorrente usa questa pipeline",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
         "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket",
-        "foundational_service_exists": "Il servizio fondamentale esiste già"
+        "foundational_service_exists": "Il servizio fondamentale esiste già",
+        "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4738,7 +4874,8 @@
         "pipeline_schedule_attached": "Una pianificazione ricorrente punta ancora a questa pipeline e ogni esecuzione che avvia la risolve tramite id. Scollega o elimina prima quella pianificazione, poi rimuovi la pipeline.",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",
         "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione.",
-        "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione."
+        "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione.",
+        "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

@@ -224,6 +224,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.foundational_service_exists',
     descriptionKey: 'errors.conflict.description.foundational_service_exists',
   },
+  foundational_service_not_inherited: {
+    titleKey: 'errors.conflict.title.foundational_service_not_inherited',
+    descriptionKey: 'errors.conflict.description.foundational_service_not_inherited',
+  },
   pipeline_schedule_intake_unconfigured: {
     titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
     descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',

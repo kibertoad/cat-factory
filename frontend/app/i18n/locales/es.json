@@ -125,7 +125,8 @@
     "accountSettings": "Ajustes de la cuenta",
     "operatorDashboard": "Observabilidad de la plataforma",
     "reports": "Informes",
-    "infrastructure": "Infraestructura"
+    "infrastructure": "Infraestructura",
+    "foundationalServices": "Servicios fundamentales"
   },
   "board": {
     "toast": {
@@ -543,7 +544,8 @@
         "pipeline_schedule_attached": "Una programación recurrente usa esta canalización",
         "pipeline_schedule_requires_recurring": "Una programación recurrente necesita esta canalización",
         "pipeline_schedule_intake_unconfigured": "La programación no tiene entrada de incidencias",
-        "foundational_service_exists": "El servicio fundacional ya existe"
+        "foundational_service_exists": "El servicio fundacional ya existe",
+        "foundational_service_not_inherited": "Este tablero registró ese servicio"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -572,7 +574,8 @@
         "pipeline_schedule_attached": "Una programación recurrente todavía apunta a esta canalización, y cada ejecución que inicia la resuelve por su id. Desvincule o elimine esa programación antes de quitar la canalización.",
         "pipeline_schedule_requires_recurring": "Una programación recurrente todavía apunta a esta canalización, así que limitarla a un solo uso rompería cada ejecución futura. Desvincule primero esa programación.",
         "pipeline_schedule_intake_unconfigured": "Un paso de entrada de errores toma su trabajo de la entrada de incidencias de la programación, y la programación vinculada no la tiene. Configure la entrada de incidencias en la programación primero.",
-        "foundational_service_exists": "Ya hay un servicio fundacional con este identificador registrado en este ámbito. Abre la entrada existente y edítala: dos servicios no pueden compartir un identificador, porque es el nombre que un arquitecto usa en su diseño."
+        "foundational_service_exists": "Ya hay un servicio fundacional con este identificador registrado en este ámbito. Abre la entrada existente y edítala: dos servicios no pueden compartir un identificador, porque es el nombre que un arquitecto usa en su diseño.",
+        "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -2075,7 +2078,8 @@
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
         "toggleUiMode": "Cambiar el modo de interfaz",
-        "tutorial": "Hacer un recorrido"
+        "tutorial": "Hacer un recorrido",
+        "foundationalServices": "Servicios fundamentales"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -2098,7 +2102,8 @@
         "shortcuts": "atajos teclado teclas ayuda",
         "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
         "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar",
-        "tutorial": "tutorial recorrido guía ayuda aprender introducción"
+        "tutorial": "tutorial recorrido guía ayuda aprender introducción",
+        "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo"
       }
     },
     "integrationsHub": {
@@ -2258,6 +2263,9 @@
       "title": "Elige un entorno de pruebas predeterminado",
       "body": "Este tablero aún no ha definido cómo obtienen un entorno de pruebas sus servicios. Elige un valor predeterminado y todos los servicios que añadas a partir de ahora empezarán con él, en lugar de configurarse uno a uno. Podrás cambiarlo en cada servicio.",
       "action": "Elegir predeterminado"
+    },
+    "accountFoundational": {
+      "intro": "Las capacidades compartidas que esta organización ya opera - almacenamiento de archivos, notificaciones, auditoría - con sus contratos de API. Todos los tableros las heredan, y a un arquitecto se le indica que las consuma en lugar de proponer reconstruirlas."
     }
   },
   "settings": {
@@ -2312,7 +2320,8 @@
       "tabs": {
         "team": "Equipo y acceso",
         "fragments": "Fragmentos de contexto",
-        "skills": "Habilidades"
+        "skills": "Habilidades",
+        "foundational": "Servicios fundamentales"
       }
     },
     "providerConnection": {
@@ -5155,6 +5164,134 @@
       "confirm": "Desvincular"
     },
     "unavailable": "La biblioteca de fragmentos de prompt no está habilitada en esta implementación."
+  },
+  "foundational": {
+    "unavailable": "El catálogo de servicios fundamentales no está habilitado en esta instalación.",
+    "owner": {
+      "workspace": "Este tablero",
+      "account": "Esta cuenta"
+    },
+    "tab": {
+      "catalog": "Catálogo",
+      "sources": "Repos vinculados"
+    },
+    "panel": {
+      "title": "Servicios fundamentales",
+      "subtitle": "Las capacidades compartidas que tu organización ya opera, para que un diseño las consuma en lugar de reconstruirlas."
+    },
+    "tier": {
+      "account": "Cuenta",
+      "workspace": "Tablero"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} más sin listar",
+      "none": "No hay contrato de API adjunto. Al agente se le dirá que la interfaz es desconocida en lugar de dejar que la adivine."
+    },
+    "catalog": {
+      "intro": "Lo que recibe un arquitecto que diseña en este tablero: identidad, etiquetas de capacidad y nombres de operaciones. Los documentos de contrato solo se leen cuando un diseño declara el servicio.",
+      "empty": "Todavía no hay servicios fundamentales. Registra uno abajo o vincula un repositorio que los describa.",
+      "suppress": "No ofrecer este servicio en este tablero",
+      "showDocuments": "Mostrar documentos de contrato",
+      "hideDocuments": "Ocultar documentos de contrato"
+    },
+    "suppressions": {
+      "title": "Excluidos en este tablero",
+      "intro": "Estos servicios de la cuenta están ocultos para los diseños de este tablero. No se ha borrado nada y la cuenta los conserva para los demás tableros.",
+      "restore": "Volver a ofrecer",
+      "shadowsNothing": "Ahora mismo no se hereda nada con este id, así que esta exclusión no oculta nada."
+    },
+    "registry": {
+      "empty": "Todavía no hay nada registrado en este ámbito.",
+      "add": "Registrar un servicio",
+      "addTitle": "Registrar un servicio fundamental",
+      "editTitle": "Editar servicio fundamental",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "fromSource": "Sincronizado desde un repositorio vinculado ({path}). Edítalo en el repositorio; la próxima sincronización sobrescribirá los cambios hechos aquí.",
+      "idFixed": "el id que un arquitecto escribe en su diseño, fijo una vez registrado",
+      "idPlaceholder": "id (minúsculas con guiones, p. ej. file-storage)",
+      "namePlaceholder": "nombre (p. ej. File Storage)",
+      "summaryPlaceholder": "resumen de una línea: para qué sirve",
+      "descriptionPlaceholder": "qué hace, cuándo usarlo y qué NO cubre",
+      "capabilitiesPlaceholder": "etiquetas de capacidad separadas por comas (p. ej. file-storage, cdn)",
+      "contractsTitle": "Contratos de API",
+      "contractsKeep": "Déjalo sin tocar para conservar los documentos guardados.",
+      "contractsReplace": "Al guardar se SUSTITUYE todo el conjunto guardado por lo que aparece aquí.",
+      "addContract": "Añadir un contrato",
+      "removeContract": "Quitar este contrato",
+      "contractIdPlaceholder": "id de contrato (minúsculas con guiones, p. ej. openapi)",
+      "contractTitlePlaceholder": "título (p. ej. HTTP API)",
+      "contractBodyPlaceholder": "pega el documento: un archivo OpenAPI 3.x o el código de un módulo de contrato"
+    },
+    "sources": {
+      "empty": "No hay repositorios vinculados. Vincula uno abajo para sincronizar definiciones de servicio y sus archivos de contrato.",
+      "linkTitle": "Vincular un repositorio",
+      "link": "Vincular y sincronizar",
+      "metaSynced": "sincronizado {date} · ref {ref}",
+      "metaNever": "nunca sincronizado · ref {ref}",
+      "metaFiles": "{service} · {count} archivos de contrato",
+      "metaDirectory": "un servicio por subdirectorio",
+      "changes": "Cambios",
+      "check": "Buscar cambios",
+      "sync": "Volver a sincronizar",
+      "unlink": "Desvincular",
+      "selectedDir": "Directorio:",
+      "selectedFiles": "Archivos elegidos: {count}",
+      "wholeRepo": "Todo el repositorio (raíz).",
+      "ownerPlaceholder": "propietario",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "ruta del directorio (p. ej. foundational)",
+      "filePathsPlaceholder": "rutas de los archivos de contrato, una por línea",
+      "refPlaceholder": "ref (por defecto HEAD)",
+      "githubRequired": "Vincular un repositorio requiere la integración de control de versiones. Conéctala primero en un tablero.",
+      "serviceIdPlaceholder": "id del servicio (minúsculas con guiones)",
+      "serviceNamePlaceholder": "nombre del servicio",
+      "serviceSummaryPlaceholder": "resumen de una línea (opcional)",
+      "mode": {
+        "directory": "Una carpeta de servicios",
+        "files": "Archivos concretos, un servicio",
+        "directoryHint": "Cada subdirectorio de la ruta vinculada es un servicio, descrito por un service.md con sus archivos de contrato al lado.",
+        "filesHint": "Los archivos listados describen el único servicio que nombras aquí. Úsalo cuando no haya una convención de carpetas que adoptar."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "¿Desvincular este repositorio?",
+      "body": "\"{repo}\" y los servicios que sincronizó se quitarán del catálogo. Podrás volver a vincularlo más adelante.",
+      "confirm": "Desvincular"
+    },
+    "confirmDelete": {
+      "title": "¿Eliminar este servicio?",
+      "body": "\"{name}\" y sus documentos de contrato subidos se quitarán de este ámbito.",
+      "confirm": "Eliminar"
+    },
+    "toast": {
+      "created": "Servicio registrado",
+      "updated": "Servicio actualizado",
+      "deleted": "Servicio eliminado",
+      "saveFailed": "No se pudo guardar el servicio",
+      "deleteFailed": "No se pudo eliminar el servicio",
+      "suppressed": "Oculto para los diseños de este tablero",
+      "suppressFailed": "No se pudo ocultar el servicio",
+      "restored": "Vuelve a ofrecerse en este tablero",
+      "restoreFailed": "No se pudo restaurar el servicio",
+      "contractsFailed": "No se pudieron cargar los documentos de contrato",
+      "sourceLinked": "Repositorio vinculado y sincronizado",
+      "linkSourceFailed": "No se pudo vincular el repositorio",
+      "synced": "Sincronizado: {updated} actualizados, {removed} eliminados",
+      "syncFailed": "No se pudo sincronizar el repositorio",
+      "changesAvailable": "Hay cambios en el origen",
+      "upToDate": "Ya está actualizado",
+      "checkSourceFailed": "No se pudo comprobar el repositorio",
+      "sourceUnlinked": "Repositorio desvinculado",
+      "unlinkSourceFailed": "No se pudo desvincular el repositorio"
+    }
   },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",

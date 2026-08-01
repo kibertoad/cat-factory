@@ -125,7 +125,8 @@
     "modelConfiguration": "Model yapılandırması",
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
-    "reports": "Raporlar"
+    "reports": "Raporlar",
+    "foundationalServices": "Temel hizmetler"
   },
   "board": {
     "toast": {
@@ -543,7 +544,8 @@
         "pipeline_schedule_attached": "Yinelenen bir zamanlama bu hattı kullanıyor",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama bu hatta ihtiyaç duyuyor",
         "pipeline_schedule_intake_unconfigured": "Zamanlamada sorun alımı yok",
-        "foundational_service_exists": "Temel hizmet zaten var"
+        "foundational_service_exists": "Temel hizmet zaten var",
+        "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -572,7 +574,8 @@
         "pipeline_schedule_attached": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor ve başlattığı her çalışma hattı kimliğiyle çözümlüyor. Önce o zamanlamayı ayırın veya silin, sonra hattı kaldırın.",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor, bu yüzden yalnızca tek seferlik yapmak gelecekteki her çalışmayı bozar. Önce o zamanlamayı ayırın.",
         "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın.",
-        "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır."
+        "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
+        "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -2075,7 +2078,8 @@
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
         "toggleUiMode": "Arayüz modunu değiştir",
-        "tutorial": "Tura başla"
+        "tutorial": "Tura başla",
+        "foundationalServices": "Temel hizmetler"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2098,7 +2102,8 @@
         "shortcuts": "kısayollar klavye tuşlar yardım",
         "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
         "toggleUiMode": "arayüz mod temel gelişmiş göster gizle",
-        "tutorial": "eğitim tur rehber yardım öğren tanıtım"
+        "tutorial": "eğitim tur rehber yardım öğren tanıtım",
+        "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog"
       }
     },
     "integrationsHub": {
@@ -2258,6 +2263,9 @@
       "title": "Varsayılan test ortamı seçin",
       "body": "Bu pano, servislerinin test ortamını nasıl edineceğini henüz belirlemedi. Bir varsayılan seçin; bundan sonra eklediğiniz her servis tek tek kurulmak yerine bununla başlasın. Servis bazında yine değiştirebilirsiniz.",
       "action": "Varsayılanı seç"
+    },
+    "accountFoundational": {
+      "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir."
     }
   },
   "settings": {
@@ -2312,7 +2320,8 @@
       "tabs": {
         "team": "Ekip ve erişim",
         "fragments": "Bağlam parçaları",
-        "skills": "Beceriler"
+        "skills": "Beceriler",
+        "foundational": "Temel hizmetler"
       }
     },
     "infrastructure": {
@@ -5167,6 +5176,134 @@
       "confirm": "Bağlantıyı kaldır"
     },
     "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
+  },
+  "foundational": {
+    "unavailable": "Temel hizmetler kataloğu bu kurulumda etkin değil.",
+    "owner": {
+      "workspace": "Bu pano",
+      "account": "Bu hesap"
+    },
+    "tab": {
+      "catalog": "Katalog",
+      "sources": "Bağlı depolar"
+    },
+    "panel": {
+      "title": "Temel hizmetler",
+      "subtitle": "Kuruluşunuzun hâlihazırda işlettiği ortak yetenekler; böylece bir tasarım onları yeniden inşa etmek yerine kullanır."
+    },
+    "tier": {
+      "account": "Hesap",
+      "workspace": "Pano"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} tanesi listelenmedi",
+      "none": "Ekli API sözleşmesi yok. Ajana arayüzün bilinmediği söylenecek; tahmin etmesine izin verilmeyecek."
+    },
+    "catalog": {
+      "intro": "Bu panoda tasarım yapan bir mimara verilenler: kimlik, yetenek etiketleri ve operasyon adları. Sözleşme belgeleri yalnızca bir tasarım hizmeti bildirdiğinde okunur.",
+      "empty": "Henüz temel hizmet yok. Aşağıdan bir tane kaydedin veya bunları tanımlayan bir depo bağlayın.",
+      "suppress": "Bu hizmeti bu panoda sunma",
+      "showDocuments": "Sözleşme belgelerini göster",
+      "hideDocuments": "Sözleşme belgelerini gizle"
+    },
+    "suppressions": {
+      "title": "Bu panoda devre dışı",
+      "intro": "Bu hesap hizmetleri, bu panodaki tasarımlardan gizlenmiştir. Hiçbir şey silinmedi; hesap onları diğer tüm panolar için korur.",
+      "restore": "Yeniden sun",
+      "shadowsNothing": "Şu anda bu kimlik altında devralınan bir şey yok, dolayısıyla bu devre dışı bırakma şu an hiçbir şeyi gizlemiyor."
+    },
+    "registry": {
+      "empty": "Bu kapsamda henüz bir kayıt yok.",
+      "add": "Hizmet kaydet",
+      "addTitle": "Temel hizmet kaydet",
+      "editTitle": "Temel hizmeti düzenle",
+      "edit": "Düzenle",
+      "delete": "Sil",
+      "save": "Kaydet",
+      "cancel": "Vazgeç",
+      "fromSource": "Bağlı bir depodan eşitlendi ({path}). Depoda düzenleyin; sonraki eşitleme burada yapılan değişiklikleri üzerine yazar.",
+      "idFixed": "bir mimarın tasarımında yazdığı kimlik - kaydedildikten sonra değiştirilemez",
+      "idPlaceholder": "kimlik (küçük harf ve tire, örn. file-storage)",
+      "namePlaceholder": "ad (örn. File Storage)",
+      "summaryPlaceholder": "tek satırlık özet - ne işe yaradığı",
+      "descriptionPlaceholder": "ne yaptığı, ne zaman kullanılacağı ve neyi KAPSAMADIĞI",
+      "capabilitiesPlaceholder": "yetenek etiketleri, virgülle ayrılmış (örn. file-storage, cdn)",
+      "contractsTitle": "API sözleşmeleri",
+      "contractsKeep": "Kayıtlı belgeleri korumak için dokunmadan bırakın.",
+      "contractsReplace": "Kaydetmek, saklanan tüm kümeyi burada listelenenlerle DEĞİŞTİRİR.",
+      "addContract": "Sözleşme ekle",
+      "removeContract": "Bu sözleşmeyi kaldır",
+      "contractIdPlaceholder": "sözleşme kimliği (küçük harf ve tire, örn. openapi)",
+      "contractTitlePlaceholder": "başlık (örn. HTTP API)",
+      "contractBodyPlaceholder": "belgeyi yapıştırın: bir OpenAPI 3.x dosyası ya da bir sözleşme modülünün kaynağı"
+    },
+    "sources": {
+      "empty": "Bağlı depo yok. Hizmet tanımlarını ve sözleşme dosyalarını eşitlemek için aşağıdan bir depo bağlayın.",
+      "linkTitle": "Depo bağla",
+      "link": "Bağla ve eşitle",
+      "metaSynced": "eşitlendi {date} · ref {ref}",
+      "metaNever": "hiç eşitlenmedi · ref {ref}",
+      "metaFiles": "{service} · {count} sözleşme dosyası",
+      "metaDirectory": "her alt dizin için bir hizmet",
+      "changes": "Değişiklikler",
+      "check": "Değişiklikleri denetle",
+      "sync": "Yeniden eşitle",
+      "unlink": "Bağlantıyı kaldır",
+      "selectedDir": "Dizin:",
+      "selectedFiles": "Seçilen dosyalar: {count}",
+      "wholeRepo": "Tüm depo (kök).",
+      "ownerPlaceholder": "sahip",
+      "repoPlaceholder": "depo",
+      "dirPlaceholder": "dizin yolu (örn. foundational)",
+      "filePathsPlaceholder": "sözleşme dosyası yolları, her satıra bir tane",
+      "refPlaceholder": "ref (varsayılan HEAD)",
+      "githubRequired": "Depo bağlamak için sürüm denetimi entegrasyonu gerekir. Önce bir panoda bağlayın.",
+      "serviceIdPlaceholder": "hizmet kimliği (küçük harf ve tire)",
+      "serviceNamePlaceholder": "hizmet adı",
+      "serviceSummaryPlaceholder": "tek satırlık özet (isteğe bağlı)",
+      "mode": {
+        "directory": "Hizmetlerin bulunduğu bir klasör",
+        "files": "Belirli dosyalar, tek hizmet",
+        "directoryHint": "Bağlanan yolun her alt dizini bir hizmettir; bir service.md ile tanımlanır ve sözleşme dosyaları onun yanında durur.",
+        "filesHint": "Listelenen dosyaların tamamı burada adlandırdığınız tek hizmeti tanımlar. Benimsenecek bir klasör düzeni yoksa bunu kullanın."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Bu deponun bağlantısı kaldırılsın mı?",
+      "body": "\"{repo}\" ve eşitlediği hizmetler katalogdan kaldırılacak. Daha sonra yeniden bağlayabilirsiniz.",
+      "confirm": "Bağlantıyı kaldır"
+    },
+    "confirmDelete": {
+      "title": "Bu hizmet silinsin mi?",
+      "body": "\"{name}\" ve yüklenen sözleşme belgeleri bu kapsamdan kaldırılacak.",
+      "confirm": "Sil"
+    },
+    "toast": {
+      "created": "Hizmet kaydedildi",
+      "updated": "Hizmet güncellendi",
+      "deleted": "Hizmet silindi",
+      "saveFailed": "Hizmet kaydedilemedi",
+      "deleteFailed": "Hizmet silinemedi",
+      "suppressed": "Bu panodaki tasarımlardan gizlendi",
+      "suppressFailed": "Hizmet gizlenemedi",
+      "restored": "Bu panoda yeniden sunuluyor",
+      "restoreFailed": "Hizmet geri getirilemedi",
+      "contractsFailed": "Sözleşme belgeleri yüklenemedi",
+      "sourceLinked": "Depo bağlandı ve eşitlendi",
+      "linkSourceFailed": "Depo bağlanamadı",
+      "synced": "Eşitlendi: {updated} güncellendi, {removed} kaldırıldı",
+      "syncFailed": "Depo eşitlenemedi",
+      "changesAvailable": "Kaynakta değişiklikler var",
+      "upToDate": "Zaten güncel",
+      "checkSourceFailed": "Depo denetlenemedi",
+      "sourceUnlinked": "Deponun bağlantısı kaldırıldı",
+      "unlinkSourceFailed": "Deponun bağlantısı kaldırılamadı"
+    }
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",

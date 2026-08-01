@@ -21,7 +21,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // The FOUNDATIONAL SERVICES slice of one dispatch's context
-// (docs/initiatives/foundational-services.md).
+// (backend/docs/adr/0031-foundational-services.md).
 //
 // Extracted from `AgentContextBuilder` as a cohesive collaborator, like `run-skills.ts`: it
 // owns which of the two reads a dispatch gets, where a design's declaration is read from, and

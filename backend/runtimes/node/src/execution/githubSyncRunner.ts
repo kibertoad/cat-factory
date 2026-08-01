@@ -34,6 +34,7 @@ export type GitHubSyncJob =
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
   | { kind: 'backfill'; installationId: number }
   | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
+  | { kind: 'foundational-source-resync'; sourceId: string }
 
 // Retry a handful of times with backoff so a transient failure (a momentary DB blip, a
 // rate-limited GitHub read) is redriven rather than dropped — the durable analogue of the
@@ -106,6 +107,15 @@ export class PgBossGitHubWebhookIngest implements GitHubWebhookIngest {
     )
     return true
   }
+
+  async queueFoundationalResync(sourceId: string): Promise<boolean> {
+    await this.boss.send(
+      GITHUB_SYNC_QUEUE,
+      { kind: 'foundational-source-resync', sourceId },
+      sendOptions(),
+    )
+    return true
+  }
 }
 
 /**
@@ -132,6 +142,9 @@ export async function applyGitHubSyncJob(
     case 'skill-source-resync':
       await applySkillSourceResync(container, job.accountId, job.sourceId)
       return
+    case 'foundational-source-resync':
+      await applyFoundationalSourceResync(container, job.sourceId)
+      return
   }
 }
 
@@ -152,6 +165,26 @@ async function applySkillSourceResync(
   if (!sourceService) return
   try {
     await sourceService.sync(accountId, sourceId)
+  } catch (error) {
+    if (error instanceof NotFoundError) return
+    throw error
+  }
+}
+
+/**
+ * Resync one foundational-service source — the same fan-out as {@link applySkillSourceResync},
+ * over its own optional module, and with the same terminal-vs-transient split. Keyed on the
+ * source id alone: `syncById` resolves the owning tier off the stored row, so a copy of the
+ * owner on the queue could only ever contradict it.
+ */
+async function applyFoundationalSourceResync(
+  container: ServerContainer,
+  sourceId: string,
+): Promise<void> {
+  const sourceService = container.foundationalServices?.sourceService
+  if (!sourceService) return
+  try {
+    await sourceService.syncById(sourceId)
   } catch (error) {
     if (error instanceof NotFoundError) return
     throw error

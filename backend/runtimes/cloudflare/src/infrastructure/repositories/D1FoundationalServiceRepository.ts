@@ -163,6 +163,19 @@ export class D1FoundationalServiceRepository implements FoundationalServiceRepos
       .run()
   }
 
+  async hardDelete(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceId: string,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        'DELETE FROM foundational_services WHERE owner_kind = ? AND owner_id = ? AND service_id = ?',
+      )
+      .bind(ownerKind, ownerId, serviceId)
+      .run()
+  }
+
   async listBySource(sourceId: string): Promise<FoundationalServiceRecord[]> {
     const { results } = await this.db
       .prepare(
@@ -397,6 +410,19 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
         'SELECT * FROM foundational_service_sources WHERE owner_kind = ? AND owner_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
       )
       .bind(ownerKind, ownerId)
+      .all<SourceRow>()
+    return results.map(toSourceRecord)
+  }
+
+  async listByRepo(
+    repoOwner: string,
+    repoName: string,
+  ): Promise<FoundationalServiceSourceRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        'SELECT * FROM foundational_service_sources WHERE repo_owner = ? AND repo_name = ? AND deleted_at IS NULL ORDER BY created_at DESC',
+      )
+      .bind(repoOwner, repoName)
       .all<SourceRow>()
     return results.map(toSourceRecord)
   }

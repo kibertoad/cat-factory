@@ -9,10 +9,10 @@ import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from '
 // (`foundational_services`), the API contract DOCUMENTS its consumers lazily read
 // (`api_contracts`), and the repo links a sync keeps them fresh from
 // (`foundational_service_sources`). Split out of `../schema.ts` so that module stays within its
-// file-size budget; see docs/initiatives/foundational-services.md.
+// file-size budget; see backend/docs/adr/0031-foundational-services.md.
 // ---------------------------------------------------------------------------
 
-// Foundational services (docs/initiatives/foundational-services.md; mirror of D1 migration 0073).
+// Foundational services (backend/docs/adr/0031-foundational-services.md; mirror of D1 migration 0073).
 // A tiered catalog of shared capabilities an Architect designs against, owner-scoped by an
 // (owner_kind, owner_id) pair exactly like the prompt-fragment library. Identity and DOCUMENTS
 // are separate tables on purpose: the catalog read runs on every design dispatch and must never
@@ -105,6 +105,11 @@ export const foundationalServiceSources = pgTable(
     ),
     index('idx_foundational_sources_owner')
       .on(t.owner_kind, t.owner_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    // The push-webhook fan-out looks sources up by the only thing a delivery names — the repo —
+    // across every tier, so it is indexed on that pair rather than on an owner.
+    index('idx_foundational_sources_repo')
+      .on(t.repo_owner, t.repo_name)
       .where(sql`${t.deleted_at} IS NULL`),
     // The autorefresh sweep drains the oldest-synced live sources in bounded batches.
     index('idx_foundational_sources_stale')

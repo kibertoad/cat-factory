@@ -5,8 +5,11 @@ import {
   getFoundationalServiceContractsContract,
   linkFoundationalServiceSourceContract,
   listFoundationalServiceSourcesContract,
+  listFoundationalServiceSuppressionsContract,
   listFoundationalServicesContract,
   resolvedFoundationalServicesContract,
+  restoreFoundationalServiceContract,
+  suppressFoundationalServiceContract,
   syncFoundationalServiceSourceContract,
   unlinkFoundationalServiceSourceContract,
   updateFoundationalServiceContract,
@@ -44,7 +47,7 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
- * The foundational-services API (docs/initiatives/foundational-services.md), mounted TWICE —
+ * The foundational-services API (backend/docs/adr/0031-foundational-services.md), mounted TWICE —
  * once under `/accounts/:accountId` and once under `/workspaces/:workspaceId` — so a tier's
  * services and repo sources are managed at the scope that owns them, exactly like the
  * prompt-fragment library.
@@ -117,6 +120,25 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
       const serviceId = c.req.valid('param').serviceId
       const documents = await module.catalogService.contractsFor(ownerId(c), [serviceId])
       return c.json(documents.get(serviceId) ?? [], 200)
+    })
+
+    // Opting a board out of an inherited account service, and back in. Workspace-only for the
+    // same reason the merged read is: an account tier has nothing above it to opt out of.
+    buildHonoRoute(app, listFoundationalServiceSuppressionsContract, async (c) => {
+      const module = requireCatalog(c)
+      return c.json(await module.catalogService.listSuppressions(ownerId(c)), 200)
+    })
+
+    buildHonoRoute(app, suppressFoundationalServiceContract, async (c) => {
+      const module = requireCatalog(c)
+      await module.catalogService.suppressForWorkspace(ownerId(c), c.req.valid('param').serviceId)
+      return c.body(null, 204)
+    })
+
+    buildHonoRoute(app, restoreFoundationalServiceContract, async (c) => {
+      const module = requireCatalog(c)
+      await module.catalogService.restoreInherited(ownerId(c), c.req.valid('param').serviceId)
+      return c.body(null, 204)
     })
   }
 

@@ -70,10 +70,14 @@ function fakeGitHub() {
 function fakeContainer(parts: {
   github?: GitHubModule
   skillSync?: (accountId: string, sourceId: string) => Promise<void>
+  foundationalSync?: (sourceId: string) => Promise<void>
 }): ServerContainer {
   return {
     github: parts.github,
     skillLibrary: parts.skillSync ? { sourceService: { sync: parts.skillSync } } : undefined,
+    foundationalServices: parts.foundationalSync
+      ? { sourceService: { syncById: parts.foundationalSync } }
+      : undefined,
   } as unknown as ServerContainer
 }
 
@@ -85,18 +89,17 @@ describe('createNodeGateways async GitHub ingest', () => {
     await expect(gw.githubWebhook.enqueueWebhook('push', { a: 1 })).resolves.toBe(true)
     await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(true)
     await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(true)
+    await expect(gw.githubWebhook.queueFoundationalResync('fndsrc-1')).resolves.toBe(true)
     await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(true)
 
-    expect(sends.map((s) => s.name)).toEqual([
-      GITHUB_SYNC_QUEUE,
-      GITHUB_SYNC_QUEUE,
-      GITHUB_SYNC_QUEUE,
-      GITHUB_SYNC_QUEUE,
-    ])
+    expect(sends.map((s) => s.name)).toEqual(Array(5).fill(GITHUB_SYNC_QUEUE))
     expect(sends.map((s) => s.data)).toEqual([
       { kind: 'webhook', eventName: 'push', payload: { a: 1 } },
       { kind: 'resync-repo', workspaceId: 'ws-1', repoGithubId: 42 },
       { kind: 'skill-source-resync', accountId: 'acct-1', sourceId: 'src-1' },
+      // The foundational message carries the source id ALONE — the consumer resolves the owning
+      // tier off the stored row rather than trusting a copy that rode the queue.
+      { kind: 'foundational-source-resync', sourceId: 'fndsrc-1' },
       { kind: 'backfill', installationId: 99 },
     ])
   })
@@ -106,6 +109,7 @@ describe('createNodeGateways async GitHub ingest', () => {
     await expect(gw.githubWebhook.enqueueWebhook('push', {})).resolves.toBe(false)
     await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(false)
     await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(false)
+    await expect(gw.githubWebhook.queueFoundationalResync('fndsrc-1')).resolves.toBe(false)
     await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(false)
   })
 })
@@ -172,6 +176,48 @@ describe('applyGitHubSyncJob', () => {
         accountId: 'acct-5',
         sourceId: 'src-5',
       }),
+    ).rejects.toThrow('github 503')
+  })
+
+  // The foundational-source twin. Its module is independently optional (a deployment can run
+  // either repo-sourced library), and it resolves by SOURCE ID alone.
+  it('routes a foundational-source-resync to the catalog source service', async () => {
+    const synced: string[] = []
+    const container = fakeContainer({
+      foundationalSync: async (sourceId) => {
+        synced.push(sourceId)
+      },
+    })
+    await applyGitHubSyncJob(container, {
+      kind: 'foundational-source-resync',
+      sourceId: 'fndsrc-2',
+    })
+    expect(synced).toEqual(['fndsrc-2'])
+  })
+
+  it('drops a foundational-source-resync when the catalog is unwired', async () => {
+    await expect(
+      applyGitHubSyncJob(fakeContainer({}), {
+        kind: 'foundational-source-resync',
+        sourceId: 'fndsrc-3',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('swallows a NotFoundError but rethrows a transient foundational-source failure', async () => {
+    const gone = fakeContainer({
+      foundationalSync: async () =>
+        Promise.reject(new NotFoundError('FoundationalServiceSource', 'fndsrc-4')),
+    })
+    await expect(
+      applyGitHubSyncJob(gone, { kind: 'foundational-source-resync', sourceId: 'fndsrc-4' }),
+    ).resolves.toBeUndefined()
+
+    const flaky = fakeContainer({
+      foundationalSync: async () => Promise.reject(new Error('github 503')),
+    })
+    await expect(
+      applyGitHubSyncJob(flaky, { kind: 'foundational-source-resync', sourceId: 'fndsrc-5' }),
     ).rejects.toThrow('github 503')
   })
 })

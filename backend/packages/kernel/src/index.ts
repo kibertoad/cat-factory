@@ -187,7 +187,7 @@ export {
 
 // The foundational-services catalog: pure recognition/indexing/rendering of the shared
 // capability catalog an Architect designs against and its consumers lazily read.
-// See `domain/foundational-services.ts` and docs/initiatives/foundational-services.md.
+// See `domain/foundational-services.ts` and backend/docs/adr/0031-foundational-services.md.
 export {
   type FoundationalCatalogView,
   type FoundationalContractBundle,
