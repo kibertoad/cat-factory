@@ -16,6 +16,7 @@ import { forkDecisionApi } from './api/forkDecision'
 import { judgeApi } from './api/judge'
 import { prReviewApi } from './api/prReview'
 import { fragmentsApi } from './api/fragments'
+import { foundationalServicesApi } from './api/foundationalServices'
 import { skillsApi } from './api/skills'
 import { githubApi } from './api/github'
 import { vcsApi } from './api/vcs'
@@ -154,6 +155,7 @@ export function useApi() {
     ...environmentsApi(ctx),
     ...recurringApi(ctx),
     ...sandboxApi(ctx),
+    ...foundationalServicesApi(ctx),
     ...githubApi(ctx),
     ...vcsApi(ctx),
     ...slackApi(ctx),

@@ -269,3 +269,106 @@ describe('WebhookService — skill-source resync fan-out (repo-skills slice 4)',
     expect(enqueued).toEqual([])
   })
 })
+
+// The same fan-out, one library over: a branch push to a repo linked as a FOUNDATIONAL-SERVICE
+// source enqueues a targeted resync per source. Two things differ from the skill twin and both
+// are asserted here — the sources span BOTH tenancy tiers (so one repo legitimately fans out to
+// an account source and a workspace one), and the message carries the source id ALONE, because
+// the consumer resolves the owning tier off the stored row.
+describe('WebhookService — foundational-source resync fan-out', () => {
+  const foundationalDeps = (
+    sourcesByRepo: (owner: string, name: string) => { id: string; gitRef?: string }[],
+    enqueued: { sourceId: string }[],
+  ) =>
+    ({
+      githubInstallationRepository: {
+        getByInstallationId: async () => ({ installationId: 1, deletedAt: null }),
+        listWorkspacesForInstallation: async () => ['ws-a'],
+      },
+      repoProjectionRepository: { linkedWorkspaces: async (_id: number, c: string[]) => c },
+      branchProjectionRepository: { upsertMany: async () => {} },
+      commitProjectionRepository: { upsertMany: async () => {} },
+      clock: { now: () => 0 },
+      foundationalServiceSourceRepository: {
+        listByRepo: async (owner: string, name: string) => sourcesByRepo(owner, name),
+      },
+      enqueueFoundationalResync: async (req: { sourceId: string }) => {
+        enqueued.push(req)
+      },
+    }) as unknown as WebhookServiceDependencies
+
+  it('enqueues a resync for every tier that linked the pushed repo', async () => {
+    const enqueued: { sourceId: string }[] = []
+    const deps = foundationalDeps(
+      (owner, name) =>
+        owner === 'acme' && name === 'contracts'
+          ? [{ id: 'fndsrc-account' }, { id: 'fndsrc-workspace' }]
+          : [],
+      enqueued,
+    )
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'contracts', owner: { login: 'acme' } },
+      ref: 'refs/heads/main',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(enqueued).toEqual([{ sourceId: 'fndsrc-account' }, { sourceId: 'fndsrc-workspace' }])
+  })
+
+  it('only resyncs sources tracking the pushed branch', async () => {
+    const enqueued: { sourceId: string }[] = []
+    const deps = foundationalDeps(
+      () => [
+        { id: 'fndsrc-main', gitRef: 'main' },
+        { id: 'fndsrc-head', gitRef: 'HEAD' },
+        { id: 'fndsrc-feat', gitRef: 'refs/heads/feature-x' },
+      ],
+      enqueued,
+    )
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'contracts', owner: { login: 'acme' }, default_branch: 'main' },
+      ref: 'refs/heads/feature-x',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(enqueued).toEqual([{ sourceId: 'fndsrc-feat' }])
+  })
+
+  it('does not fan out on a tag push', async () => {
+    const enqueued: { sourceId: string }[] = []
+    await new WebhookService(foundationalDeps(() => [{ id: 'fndsrc-1' }], enqueued)).handle(
+      'push',
+      {
+        installation: { id: 1 },
+        repository: { id: 7, name: 'contracts', owner: { login: 'acme' } },
+        ref: 'refs/tags/v1.0.0',
+        after: 'abc123',
+        commits: [],
+      },
+    )
+    expect(enqueued).toEqual([])
+  })
+
+  it('fans out to each library independently when only one is wired', async () => {
+    // A deployment can run the skill library, the foundational catalog, or both — so an unwired
+    // pair must not suppress the other's fan-out.
+    const enqueued: { sourceId: string }[] = []
+    const skillEnqueued: unknown[] = []
+    const deps = {
+      ...foundationalDeps(() => [{ id: 'fndsrc-1' }], enqueued),
+      // Repository present, enqueue absent: the skill half stays off, and must not throw.
+      skillSourceRepository: { listByRepo: async () => [{ id: 's-1', accountId: 'a-1' }] },
+    } as unknown as WebhookServiceDependencies
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'contracts', owner: { login: 'acme' } },
+      ref: 'refs/heads/main',
+      after: 'abc123',
+      commits: [],
+    })
+    expect(skillEnqueued).toEqual([])
+    expect(enqueued).toEqual([{ sourceId: 'fndsrc-1' }])
+  })
+})

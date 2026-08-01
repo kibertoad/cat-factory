@@ -228,6 +228,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.binary_output_service_invalid',
     descriptionKey: 'errors.conflict.description.binary_output_service_invalid',
   },
+  foundational_service_not_inherited: {
+    titleKey: 'errors.conflict.title.foundational_service_not_inherited',
+    descriptionKey: 'errors.conflict.description.foundational_service_not_inherited',
+  },
   pipeline_schedule_intake_unconfigured: {
     titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
     descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',

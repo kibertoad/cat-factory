@@ -126,7 +126,8 @@
     "modelConfiguration": "モデル設定",
     "accountSettings": "アカウント設定",
     "operatorDashboard": "プラットフォームの可観測性",
-    "reports": "レポート"
+    "reports": "レポート",
+    "foundationalServices": "基盤サービス"
   },
   "board": {
     "toast": {
@@ -545,7 +546,8 @@
         "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
         "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません",
         "foundational_service_exists": "その基盤サービスはすでに存在します",
-        "binary_output_service_invalid": "バイナリ出力用のサービスを解決できません"
+        "binary_output_service_invalid": "バイナリ出力用のサービスを解決できません",
+        "foundational_service_not_inherited": "このボードが登録したサービスです"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -575,7 +577,8 @@
         "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
         "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。",
         "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。",
-        "binary_output_service_invalid": "バイナリ出力を生成するステップが、このワークスペースのカタログでは解決できない基盤サービスを選択しています。ID が不明か、選択した保存先サービスに asset-storage ケイパビリティがありません。ステップの選択を修正するかサービスを登録して、もう一度開始してください。"
+        "binary_output_service_invalid": "バイナリ出力を生成するステップが、このワークスペースのカタログでは解決できない基盤サービスを選択しています。ID が不明か、選択した保存先サービスに asset-storage ケイパビリティがありません。ステップの選択を修正するかサービスを登録して、もう一度開始してください。",
+        "foundational_service_not_inherited": "除外はアカウントから継承したサービスに対する操作です。この ID はこのボード自身が登録しているため、除外するものがありません。代わりにボード自身のエントリを削除してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -2079,7 +2082,8 @@
         "shortcuts": "キーボードショートカット",
         "bugHunt": "バグハント",
         "toggleUiMode": "インターフェースモードを切り替え",
-        "tutorial": "ツアーを開始"
+        "tutorial": "ツアーを開始",
+        "foundationalServices": "基盤サービス"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2102,7 +2106,8 @@
         "shortcuts": "キーボード ショートカット キー ヘルプ",
         "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
         "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示",
-        "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング"
+        "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
+        "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ"
       }
     },
     "integrationsHub": {
@@ -2262,6 +2267,9 @@
       "title": "既定のテスト環境を選択してください",
       "body": "このボードでは、サービスがテスト環境をどのように用意するかがまだ決まっていません。既定を選ぶと、以降に追加するサービスは個別に設定しなくてもその設定で始まります。サービスごとの変更も引き続き可能です。",
       "action": "既定を選択"
+    },
+    "accountFoundational": {
+      "intro": "この組織がすでに運用している共通機能 - ファイルストレージ、通知、監査 - とその API コントラクト。すべてのボードがこれらを継承し、アーキテクトには作り直しを提案せず利用するよう指示されます。"
     }
   },
   "settings": {
@@ -2316,7 +2324,8 @@
       "tabs": {
         "team": "チームとアクセス",
         "fragments": "コンテキストフラグメント",
-        "skills": "スキル"
+        "skills": "スキル",
+        "foundational": "基盤サービス"
       }
     },
     "infrastructure": {
@@ -5178,6 +5187,135 @@
       "confirm": "リンク解除"
     },
     "unavailable": "このデプロイではプロンプトフラグメントライブラリが有効になっていません。"
+  },
+  "foundational": {
+    "unavailable": "基盤サービスのカタログはこのデプロイでは有効になっていません。",
+    "owner": {
+      "workspace": "このボード",
+      "account": "このアカウント"
+    },
+    "tab": {
+      "catalog": "カタログ",
+      "sources": "リポジトリ連携"
+    },
+    "panel": {
+      "title": "基盤サービス",
+      "subtitle": "組織がすでに運用している共通機能。設計がこれらを作り直さずに利用できるようにします。"
+    },
+    "tier": {
+      "account": "アカウント",
+      "workspace": "ボード"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "他 {count} 件は未掲載",
+      "none": "API コントラクトが添付されていません。エージェントには、インターフェースが不明であることが伝えられます（推測はさせません）。"
+    },
+    "catalog": {
+      "intro": "このボードで設計するアーキテクトに渡される内容です。識別情報、機能タグ、オペレーション名のみで、コントラクト文書は設計がそのサービスを宣言したときにだけ読み込まれます。",
+      "empty": "基盤サービスはまだありません。下で登録するか、それらを記述したリポジトリを連携してください。",
+      "suppress": "このボードではこのサービスを提示しない",
+      "showDocuments": "コントラクト文書を表示",
+      "hideDocuments": "コントラクト文書を隠す"
+    },
+    "suppressions": {
+      "title": "このボードで除外中",
+      "intro": "これらのアカウントのサービスは、このボードの設計から隠されています。削除はされておらず、他のボードではそのまま利用されます。",
+      "restore": "再び提示する",
+      "shadowsNothing": "現在この ID で継承されているものはないため、この除外は何も隠していません。"
+    },
+    "registry": {
+      "empty": "このスコープにはまだ何も登録されていません。",
+      "add": "サービスを登録",
+      "addTitle": "基盤サービスを登録",
+      "editTitle": "基盤サービスを編集",
+      "edit": "編集",
+      "delete": "削除",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "fromSource": "連携リポジトリから同期されています（{path}）。リポジトリ側で編集してください。ここでの変更は次回の同期で上書きされます。",
+      "idFixed": "アーキテクトが設計に書く ID。登録後は変更できません",
+      "idPlaceholder": "ID（小文字とハイフン。例: file-storage）",
+      "namePlaceholder": "名前（例: File Storage）",
+      "summaryPlaceholder": "1 行の要約 - 何のためのものか",
+      "descriptionPlaceholder": "何をするか、いつ使うか、何を対象としないか",
+      "capabilitiesPlaceholder": "機能タグ（カンマ区切り。例: file-storage, cdn）",
+      "contractsTitle": "API コントラクト",
+      "contractsKeep": "保存済みの文書を維持する場合は、ここに触れないでください。",
+      "contractsReplace": "保存すると、保存済みの一式がここに並ぶ内容で置き換えられます。",
+      "addContract": "コントラクトを追加",
+      "removeContract": "このコントラクトを削除",
+      "contractIdPlaceholder": "コントラクト ID（小文字とハイフン。例: openapi）",
+      "contractTitlePlaceholder": "タイトル（例: HTTP API）",
+      "contractBodyPlaceholder": "文書を貼り付け: OpenAPI 3.x ファイル、またはコントラクトモジュールのソース"
+    },
+    "sources": {
+      "empty": "連携リポジトリはありません。下で連携すると、サービス定義とコントラクトファイルが同期されます。",
+      "linkTitle": "リポジトリを連携",
+      "link": "連携して同期",
+      "metaSynced": "同期日時 {date} · ref {ref}",
+      "metaNever": "未同期 · ref {ref}",
+      "metaFiles": "{service} · コントラクトファイル {count} 件",
+      "metaDirectory": "サブディレクトリごとに 1 サービス",
+      "changes": "変更あり",
+      "check": "変更を確認",
+      "sync": "再同期",
+      "unlink": "連携解除",
+      "selectedDir": "ディレクトリ:",
+      "selectedFiles": "選択したファイル: {count}",
+      "wholeRepo": "リポジトリ全体（ルート）。",
+      "ownerPlaceholder": "オーナー",
+      "repoPlaceholder": "リポジトリ",
+      "dirPlaceholder": "ディレクトリのパス（例: foundational）",
+      "filePathsPlaceholder": "コントラクトファイルのパス（1 行に 1 つ）",
+      "refPlaceholder": "ref（既定は HEAD）",
+      "githubRequired": "リポジトリの連携にはソース管理の連携が必要です。まずいずれかのボードで接続してください。",
+      "serviceIdPlaceholder": "サービス ID（小文字とハイフン）",
+      "serviceNamePlaceholder": "サービス名",
+      "serviceSummaryPlaceholder": "1 行の要約（任意）",
+      "mode": {
+        "directory": "サービスをまとめたフォルダ",
+        "files": "特定のファイル、1 サービス",
+        "directoryHint": "連携したパスの各サブディレクトリが 1 つのサービスで、service.md で説明され、その横にコントラクトファイルが置かれます。",
+        "filesHint": "列挙したファイルはすべて、ここで指定する 1 つのサービスを説明します。従うべきフォルダ規約がない場合に使います。"
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "このリポジトリの連携を解除しますか？",
+      "body": "「{repo}」と、そこから同期されたサービスがカタログから削除されます。あとで再度連携できます。",
+      "confirm": "連携解除"
+    },
+    "confirmDelete": {
+      "title": "このサービスを削除しますか？",
+      "body": "「{name}」とアップロード済みのコントラクト文書が、このスコープから削除されます。",
+      "bodyWorkspace": "「{name}」とアップロード済みのコントラクト文書が、このボードから削除されます。同じ id のサービスがアカウントに登録されている場合、このボードはそれの継承も停止します。「このボードで除外中」から元に戻せます。",
+      "confirm": "削除"
+    },
+    "toast": {
+      "created": "サービスを登録しました",
+      "updated": "サービスを更新しました",
+      "deleted": "サービスを削除しました",
+      "saveFailed": "サービスを保存できませんでした",
+      "deleteFailed": "サービスを削除できませんでした",
+      "suppressed": "このボードの設計から隠しました",
+      "suppressFailed": "サービスを隠せませんでした",
+      "restored": "このボードで再び提示されます",
+      "restoreFailed": "サービスを元に戻せませんでした",
+      "contractsFailed": "コントラクト文書を読み込めませんでした",
+      "sourceLinked": "リポジトリを連携して同期しました",
+      "linkSourceFailed": "リポジトリを連携できませんでした",
+      "synced": "同期完了: {updated} 件更新、{removed} 件削除",
+      "syncFailed": "リポジトリを同期できませんでした",
+      "changesAvailable": "上流に変更があります",
+      "upToDate": "すでに最新です",
+      "checkSourceFailed": "リポジトリを確認できませんでした",
+      "sourceUnlinked": "リポジトリの連携を解除しました",
+      "unlinkSourceFailed": "リポジトリの連携を解除できませんでした"
+    }
   },
   "sandbox": {
     "title": "Sandbox: プロンプトとモデルのテスト",

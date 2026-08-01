@@ -147,6 +147,12 @@ export const CONFLICT_REASONS = [
   // (A step MISSING its selection entirely is a structural pipeline fault, refused as a 422 at
   // save and start by `assertValidBinaryOutputSteps` — the skill-step precedent.)
   'binary_output_service_invalid',
+  // A board asked to SUPPRESS a foundational service that it already owns a row for at its own
+  // tier. Suppression writes a workspace tombstone so an INHERITED account service loses the
+  // merge; against the board's own registration it would be an obscure spelling of "delete",
+  // and the two are not interchangeable — a delete drops the board's authored description and
+  // contracts, a suppression drops nothing. The SPA steers to the delete action instead.
+  'foundational_service_not_inherited',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

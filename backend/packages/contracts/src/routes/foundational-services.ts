@@ -6,6 +6,7 @@ import {
   foundationalServiceSchema,
   foundationalServiceSourceSchema,
   foundationalServiceSourceStatusSchema,
+  foundationalServiceSuppressionSchema,
   foundationalServiceSyncResultSchema,
   linkFoundationalServiceSourceSchema,
   resolvedFoundationalServiceSchema,
@@ -82,6 +83,49 @@ export const resolvedFoundationalServicesContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/foundational-services/resolved',
   responsesByStatusCode: { 200: resolvedFoundationalServiceListSchema, ...errorResponses },
+})
+
+/**
+ * The SUPPRESSION sub-resource: opting a board out of an inherited account service, listing what
+ * it is opted out of, and opting back in. Workspace-mount only, since an account tier has nothing
+ * above it to opt out of.
+ *
+ * Its own sub-resource rather than a flag on the service, because a suppression is a fact the
+ * WORKSPACE tier asserts about an id it does not own — there is no service row of its own to
+ * patch. And note it is NOT `DELETE /foundational-services/:id`: that removes the board's OWN
+ * registration and its uploaded contracts, where a suppression destroys nothing and is
+ * reversible, which is exactly why the two cannot share a verb.
+ *
+ * The LIST is what makes the pair usable at all: a suppressed id is by construction absent from
+ * the merged catalog, so a surface offering suppression could otherwise offer no way back. It is
+ * a SIBLING top-level resource (`/foundational-service-suppressions`) rather than a literal
+ * `/foundational-services/suppressions` segment, for the same reason the repo sources below are:
+ * a literal segment sharing a namespace with `:serviceId` is a collision waiting for the first
+ * single-segment by-id route, and a service id is a lower-kebab slug that could legitimately BE
+ * `suppressions`. Keeping them apart costs nothing and needs no reserved-word list.
+ */
+export const listFoundationalServiceSuppressionsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/foundational-service-suppressions',
+  responsesByStatusCode: {
+    200: v.array(foundationalServiceSuppressionSchema),
+    ...errorResponses,
+  },
+})
+
+export const suppressFoundationalServiceContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: serviceIdParams,
+  pathResolver: ({ serviceId }) => `/foundational-services/${serviceId}/suppression`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+export const restoreFoundationalServiceContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: serviceIdParams,
+  pathResolver: ({ serviceId }) => `/foundational-services/${serviceId}/suppression`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
 // ---- repo sources ---------------------------------------------------------

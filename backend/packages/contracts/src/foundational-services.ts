@@ -3,7 +3,7 @@ import { fragmentOwnerKindSchema } from './fragment-library.js'
 
 // ---------------------------------------------------------------------------
 // Wire contracts for the FOUNDATIONAL SERVICES catalog
-// (docs/initiatives/foundational-services.md).
+// (backend/docs/adr/0031-foundational-services.md).
 //
 // A foundational service is a shared capability the organisation already runs —
 // file storage, notifications, audit, feature flags — that a designed system is
@@ -109,6 +109,30 @@ export const resolvedFoundationalServiceSchema = v.object({
   tier: foundationalServiceTierSchema,
 })
 export type ResolvedFoundationalService = v.InferOutput<typeof resolvedFoundationalServiceSchema>
+
+/**
+ * One SUPPRESSION a board is asserting: an id its workspace tier tombstones, so the account
+ * service of that id loses the merge.
+ *
+ * A suppressed id is by construction absent from the merged catalog, which is what makes this a
+ * separate read rather than a flag on it — without it the management surface could offer no way
+ * back, and suppression would be a one-way door.
+ *
+ * `inherited` is the honest half: `false` says the tombstone currently shadows NOTHING (the
+ * account withdrew the service, or the board deleted its own registration), so a reader does not
+ * conclude a capability is being withheld when there is none to withhold. The name is the
+ * inherited service's when there is one and the tombstone's own otherwise, which is empty for a
+ * suppression written against an id this tier never registered.
+ */
+export const foundationalServiceSuppressionSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  summary: v.string(),
+  inherited: v.boolean(),
+})
+export type FoundationalServiceSuppression = v.InferOutput<
+  typeof foundationalServiceSuppressionSchema
+>
 
 const slug = v.pipe(
   v.string(),

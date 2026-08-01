@@ -150,7 +150,8 @@
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
     "operatorDashboard": "Platform observability",
-    "reports": "Reports"
+    "reports": "Reports",
+    "foundationalServices": "Foundational services"
   },
   "board": {
     "toast": {
@@ -602,7 +603,8 @@
         "pipeline_schedule_requires_recurring": "Recurring schedule needs this pipeline",
         "pipeline_schedule_intake_unconfigured": "Schedule has no issue intake",
         "foundational_service_exists": "Foundational service already exists",
-        "binary_output_service_invalid": "Binary output service can't be resolved"
+        "binary_output_service_invalid": "Binary output service can't be resolved",
+        "foundational_service_not_inherited": "This board registered that service"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -635,7 +637,8 @@
         "pipeline_schedule_requires_recurring": "A recurring schedule still points at this pipeline, so making it one-off only would break every future run it starts. Detach that schedule first.",
         "pipeline_schedule_intake_unconfigured": "A bug intake step draws its work from the schedule issue intake settings, and the attached schedule has none. Configure issue intake on the schedule first.",
         "foundational_service_exists": "A foundational service with this id is already registered at this scope. Open the existing entry and edit it — two services cannot share an id, because the id is what an architect names in its design.",
-        "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again."
+        "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again.",
+        "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -2161,7 +2164,8 @@
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
         "toggleUiMode": "Switch interface mode",
-        "tutorial": "Take a tour"
+        "tutorial": "Take a tour",
+        "foundationalServices": "Foundational services"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2184,7 +2188,8 @@
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "bug hunt triage backlog issue tracker unassigned",
         "toggleUiMode": "interface mode basic advanced simple expert show hide",
-        "tutorial": "tutorial onboarding tour guide help learn basics"
+        "tutorial": "tutorial onboarding tour guide help learn basics",
+        "foundationalServices": "shared capability platform service api contract openapi catalog"
       }
     },
     "shortcuts": {
@@ -2344,6 +2349,9 @@
       "title": "Pick a default test environment",
       "body": "This board hasn't chosen how its services get a test environment. Pick a default and every service you add from now on starts with it, instead of being set up one at a time. You can still change it per service.",
       "action": "Choose default"
+    },
+    "accountFoundational": {
+      "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild."
     }
   },
   "settings": {
@@ -2398,7 +2406,8 @@
       "tabs": {
         "team": "Team & access",
         "fragments": "Context fragments",
-        "skills": "Skills"
+        "skills": "Skills",
+        "foundational": "Foundational services"
       }
     },
     "infrastructure": {
@@ -5415,6 +5424,135 @@
       "confirm": "Unlink"
     },
     "unavailable": "The prompt-fragment library isn't enabled for this deployment."
+  },
+  "foundational": {
+    "unavailable": "The foundational-services catalog isn't enabled for this deployment.",
+    "owner": {
+      "workspace": "This board",
+      "account": "This account"
+    },
+    "tab": {
+      "catalog": "Catalog",
+      "sources": "Repo sources"
+    },
+    "panel": {
+      "title": "Foundational services",
+      "subtitle": "The shared capabilities your organisation already runs, so a design consumes them instead of rebuilding them."
+    },
+    "tier": {
+      "account": "Account",
+      "workspace": "Board"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} more not listed",
+      "none": "No API contract attached. An agent will be told the interface is unknown rather than guessing at it."
+    },
+    "catalog": {
+      "intro": "What an architect designing on this board is handed: identity, capability tags and operation names. Contract documents are read only when a design declares the service.",
+      "empty": "No foundational services yet. Register one below, or link a repo that describes them.",
+      "suppress": "Do not offer this service on this board",
+      "showDocuments": "Show contract documents",
+      "hideDocuments": "Hide contract documents"
+    },
+    "suppressions": {
+      "title": "Opted out on this board",
+      "intro": "These account services are hidden from designs on this board. Nothing was deleted, and the account keeps them for every other board.",
+      "restore": "Offer again",
+      "shadowsNothing": "Nothing is inherited under this id right now, so this opt-out currently hides nothing."
+    },
+    "registry": {
+      "empty": "Nothing registered at this scope yet.",
+      "add": "Register a service",
+      "addTitle": "Register a foundational service",
+      "editTitle": "Edit foundational service",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "fromSource": "Synced from a linked repo ({path}). Edit it in the repo; the next sync overwrites changes made here.",
+      "idFixed": "the id an architect writes in its design, fixed once registered",
+      "idPlaceholder": "id (lower-kebab, e.g. file-storage)",
+      "namePlaceholder": "name (e.g. File Storage)",
+      "summaryPlaceholder": "one-line summary - what it is for",
+      "descriptionPlaceholder": "what it does, when to use it, and what it does NOT cover",
+      "capabilitiesPlaceholder": "capability tags, comma separated (e.g. file-storage, cdn)",
+      "contractsTitle": "API contracts",
+      "contractsKeep": "Leave untouched to keep the stored documents.",
+      "contractsReplace": "Saving REPLACES the whole stored set with what is listed here.",
+      "addContract": "Add a contract",
+      "removeContract": "Remove this contract",
+      "contractIdPlaceholder": "contract id (lower-kebab, e.g. openapi)",
+      "contractTitlePlaceholder": "title (e.g. HTTP API)",
+      "contractBodyPlaceholder": "paste the document: an OpenAPI 3.x file, or a contract module's source"
+    },
+    "sources": {
+      "empty": "No linked repos. Link one below to sync service definitions and their contract files.",
+      "linkTitle": "Link a repo source",
+      "link": "Link & sync",
+      "metaSynced": "synced {date} · ref {ref}",
+      "metaNever": "never synced · ref {ref}",
+      "metaFiles": "{service} · {count} contract files",
+      "metaDirectory": "one service per subdirectory",
+      "changes": "Changes",
+      "check": "Check for changes",
+      "sync": "Resync",
+      "unlink": "Unlink",
+      "selectedDir": "Directory:",
+      "selectedFiles": "Files picked: {count}",
+      "wholeRepo": "Whole repository (root).",
+      "ownerPlaceholder": "owner",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "dir path (e.g. foundational)",
+      "filePathsPlaceholder": "contract file paths, one per line",
+      "refPlaceholder": "ref (default HEAD)",
+      "githubRequired": "Linking a repo requires the source-control integration. Connect it on a board first.",
+      "serviceIdPlaceholder": "service id (lower-kebab)",
+      "serviceNamePlaceholder": "service name",
+      "serviceSummaryPlaceholder": "one-line summary (optional)",
+      "mode": {
+        "directory": "A folder of services",
+        "files": "Specific files, one service",
+        "directoryHint": "Every subdirectory of the linked path is one service, described by a service.md with its contract files beside it.",
+        "filesHint": "The listed files all describe the one service you name here. Use this when there is no folder convention to adopt."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Unlink this repo?",
+      "body": "\"{repo}\" and the services it synced will be removed from the catalog. You can link it again later.",
+      "confirm": "Unlink"
+    },
+    "confirmDelete": {
+      "title": "Delete this service?",
+      "body": "\"{name}\" and its uploaded contract documents will be removed from this scope.",
+      "bodyWorkspace": "\"{name}\" and its uploaded contract documents will be removed from this board. If the account registers a service under the same id, this board will also stop inheriting it; you can undo that under \"Opted out on this board\".",
+      "confirm": "Delete"
+    },
+    "toast": {
+      "created": "Service registered",
+      "updated": "Service updated",
+      "deleted": "Service deleted",
+      "saveFailed": "Could not save the service",
+      "deleteFailed": "Could not delete the service",
+      "suppressed": "Hidden from designs on this board",
+      "suppressFailed": "Could not hide the service",
+      "restored": "Offered on this board again",
+      "restoreFailed": "Could not restore the service",
+      "contractsFailed": "Could not load the contract documents",
+      "sourceLinked": "Repo linked & synced",
+      "linkSourceFailed": "Could not link the repo",
+      "synced": "Synced: {updated} updated, {removed} removed",
+      "syncFailed": "Could not sync the repo",
+      "changesAvailable": "Changes available upstream",
+      "upToDate": "Already up to date",
+      "checkSourceFailed": "Could not check the repo",
+      "sourceUnlinked": "Repo unlinked",
+      "unlinkSourceFailed": "Could not unlink the repo"
+    }
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",

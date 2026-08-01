@@ -1,4 +1,4 @@
--- Foundational services (docs/initiatives/foundational-services.md).
+-- Foundational services (backend/docs/adr/0031-foundational-services.md).
 -- A tiered catalog of shared capabilities (file storage, notifications, audit …) that a
 -- designed system is expected to CONSUME rather than rebuild. Rows are scoped by an
 -- (owner_kind, owner_id) pair — an account id or a workspace id — exactly like the

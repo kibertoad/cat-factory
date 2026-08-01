@@ -779,8 +779,13 @@ exactly the ids the design DECLARED in its machine-read fenced block. Both arriv
 downstream states are kept apart because each needs a different reaction — no declaration at all
 ("nothing was checked"), an empty one ("no shared service applies") and an id the catalog does not
 know (named, with "do not guess at its API"). **Routing is by TRAIT, never a kind-id list**, so a
-deployment's own design/implementer kinds opt in by declaring one. Doc:
-[`foundational-services.md`](./docs/initiatives/foundational-services.md).
+deployment's own design/implementer kinds opt in by declaring one. A board opts OUT of an inherited
+account service through a suppression sub-resource, never a delete: a delete drops the board's own
+registration and its documents, where a suppression destroys nothing — which is why RESTORING one
+hard-deletes the tombstone rather than clearing its `deletedAt` (that would revive an EMPTY override
+that wins the merge), and why the suppression LIST is its own read (a suppressed id is by
+construction absent from the merged catalog, so nothing else could offer the way back). Doc:
+[ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
 **Binary-output steps** — a kind carrying the `binary-output` trait (a deployment's image
 generator; no built-in carries it) generates BINARY artifacts and stores them through a

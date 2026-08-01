@@ -105,6 +105,29 @@ export function defineFoundationalServicesSuite(
       expect(withDeleted[0]?.deletedAt).toBe(5_000)
     })
 
+    it('hard-deletes a suppression row outright, where a tombstone would linger', async () => {
+      const { services } = makeRepos()
+      const ownerId = scope()
+      // The shape `suppressForWorkspace` writes: a tombstone with no content, whose only job is
+      // to lose the tier merge. Lifting the suppression must leave the tier saying NOTHING about
+      // the id — clearing `deletedAt` instead would revive this as an empty winning override.
+      await services.upsert(
+        service(ownerId, 'file-storage', {
+          ownerKind: 'workspace',
+          name: '',
+          summary: '',
+          description: '',
+          capabilities: [],
+          deletedAt: 2_000,
+        }),
+      )
+      expect(await services.listByOwner('workspace', ownerId, true)).toHaveLength(1)
+
+      await services.hardDelete('workspace', ownerId, 'file-storage')
+      expect(await services.listByOwner('workspace', ownerId, true)).toEqual([])
+      expect(await services.get('workspace', ownerId, 'file-storage')).toBeNull()
+    })
+
     it('tombstones every service a source produced, in one write', async () => {
       const { services } = makeRepos()
       const ownerId = scope()
@@ -265,6 +288,58 @@ export function defineFoundationalServicesSuite(
       )
       // A tombstoned source is never handed to the sweep, however stale it looks.
       expect((await sources.listStale(70_000, 10)).map((s) => s.id)).not.toContain(old.id)
+    })
+
+    it('finds every tier that linked a repo, skipping tombstones (the push fan-out)', async () => {
+      const { sources } = makeRepos()
+      const ownerId = scope()
+      // A repo name unique to this run: `listByRepo` is deliberately global across tiers, so a
+      // shared name would let a sibling test's rows leak into the assertion.
+      const repoName = `contracts-${ownerId}`
+      const base: Omit<FoundationalServiceSourceRecord, 'id' | 'ownerKind' | 'dirPath'> = {
+        ownerId,
+        repoOwner: 'acme',
+        repoName,
+        gitRef: 'main',
+        mode: 'directory',
+        filePaths: [],
+        serviceId: null,
+        serviceName: null,
+        serviceSummary: null,
+        lastSyncedCommit: null,
+        lastSyncedAt: null,
+        createdAt: 1_000,
+        deletedAt: null,
+      }
+      const accountSource: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-acct`,
+        ownerKind: 'account',
+        dirPath: 'foundational',
+      }
+      // A DIFFERENT tier linking the same repo: a push delivery names only `owner/name`, so both
+      // must come back from the one lookup or the fan-out silently skips a board.
+      const workspaceSource: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-ws`,
+        ownerKind: 'workspace',
+        dirPath: 'boards',
+      }
+      const unlinked: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-gone`,
+        ownerKind: 'account',
+        dirPath: 'retired',
+        deletedAt: 3_000,
+      }
+      await sources.upsert(accountSource)
+      await sources.upsert(workspaceSource)
+      await sources.upsert(unlinked)
+
+      const found = await sources.listByRepo('acme', repoName)
+      expect(found.map((s) => s.id).sort()).toEqual([accountSource.id, workspaceSource.id].sort())
+      // Another repo in the same owner namespace shares nothing.
+      expect(await sources.listByRepo('acme', `${repoName}-other`)).toEqual([])
     })
   })
 }

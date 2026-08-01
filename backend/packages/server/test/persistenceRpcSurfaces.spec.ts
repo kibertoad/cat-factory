@@ -1245,6 +1245,98 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
   })
 })
 
+describe('foundational-services catalog surface (owner-scoped)', () => {
+  // The tiered catalog a mothership-mode architect resolves and its coder reads contracts from
+  // (backend/docs/adr/0031-foundational-services.md). Same (ownerKind, ownerId) pair as the fragment
+  // library above, so the same `owner` / `ownerField` rules bind it — and the same three
+  // properties are what matter: the pair reaches the repo intact, another tenant's catalog is a
+  // 404 rather than a leak, and the sync surface stays uncallable.
+  const OWNER_READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'foundationalServiceRepository', method: 'listByOwner', args: [] },
+    { repo: 'foundationalServiceRepository', method: 'get', args: ['file-storage'] },
+    { repo: 'apiContractRepository', method: 'listManifestByOwner', args: [] },
+    { repo: 'apiContractRepository', method: 'listByServiceIds', args: [['file-storage']] },
+    { repo: 'foundationalServiceSourceRepository', method: 'listByOwner', args: [] },
+  ]
+
+  for (const { repo, method, args } of OWNER_READS) {
+    it(`forwards ${repo}.${method} for a workspace owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('workspace', 'ws_in', ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'workspace', ownerId: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for a workspace owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an account owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', OTHER_ACCOUNT, ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // The owner-keyed WRITES the management surface drives, including `hardDelete` — the one that
+  // lifts a board's suppression of an inherited account service. Without it a mothership-mode
+  // board could opt out of an org-wide service with no way back in.
+  const OWNER_WRITES: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'foundationalServiceRepository', method: 'softDelete', args: ['file-storage', 0] },
+    { repo: 'foundationalServiceRepository', method: 'hardDelete', args: ['file-storage'] },
+    { repo: 'apiContractRepository', method: 'replaceForService', args: ['file-storage', []] },
+    { repo: 'apiContractRepository', method: 'deleteForService', args: ['file-storage'] },
+  ]
+
+  for (const { repo, method, args } of OWNER_WRITES) {
+    it(`forwards ${repo}.${method} for an in-scope owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', ACCOUNT, ...args),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope owner (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('rejects a catalog upsert whose record targets an out-of-scope owner (404)', async () => {
+    await expect(
+      remoteRegistry().foundationalServiceRepository!.upsert!({
+        ownerKind: 'workspace',
+        ownerId: 'ws_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards a catalog upsert whose record targets an in-scope owner', async () => {
+    await expect(
+      remoteRegistry().foundationalServiceRepository!.upsert!({
+        ownerKind: 'account',
+        ownerId: ACCOUNT,
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('still refuses the sync surface (source- and repo-keyed, off the allow-list)', async () => {
+    // These carry no (ownerKind, ownerId) pair for a rule to bind and back work a mothership node
+    // cannot do anyway: the resync fan-outs and the push-webhook repo lookup.
+    const repos = remoteRegistry()
+    await expect(repos.foundationalServiceRepository!.listBySource!('fndsrc_1')).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(
+      repos.foundationalServiceRepository!.softDeleteBySource!('fndsrc_1', 0),
+    ).rejects.toThrow(/not callable/)
+    await expect(
+      repos.foundationalServiceSourceRepository!.listByRepo!('acme', 'contracts'),
+    ).rejects.toThrow(/not callable/)
+  })
+})
+
 describe('account onboarding read surface (account-scoped)', () => {
   // The two member-level account reads the SPA's account/members + email-settings panels drive.
   // arg0 is an accountId → the `account` rule (reject out-of-scope as 404). Each stub echoes the

@@ -168,6 +168,7 @@ export const NAV_ACTIONS = [
   'kaizen',
   'infrastructure',
   'fragmentLibrary',
+  'foundationalServices',
   'mergeThresholds',
   'workspaceSettings',
   'modelConfiguration',
@@ -363,6 +364,31 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       order: 10,
       labelKey: 'layout.commandBar.cmd.fragments',
       keywordsKey: 'layout.commandBar.keywords.fragments',
+    },
+  },
+  {
+    // Registering the shared capabilities the ORGANISATION already runs, so a design consumes
+    // them instead of proposing a rebuild. Advanced: the everyday delivery loop (plan a task,
+    // run it, review and merge it) never touches this — it is org-wide platform configuration,
+    // set up once by whoever knows the estate, and a board can deliver its whole backlog with an
+    // empty catalog. Beside the fragment library in `workspaceContext`, because both answer
+    // "what standing context does an agent get?".
+    id: 'foundational-services',
+    labelKey: 'nav.foundationalServices',
+    icon: 'i-lucide-boxes',
+    surfaces: S('sidebar', 'command'),
+    advanced: true,
+    gate: (g) => g.canManageSettings,
+    action: 'foundationalServices',
+    testId: 'nav-foundational-services',
+    sidebar: { group: 'workspaceContext', order: 20 },
+    command: {
+      // Appended after the pre-existing workspace commands rather than interleaved beside the
+      // fragment library, so the palette order people already know is unchanged.
+      group: 'workspace',
+      order: 110,
+      labelKey: 'layout.commandBar.cmd.foundationalServices',
+      keywordsKey: 'layout.commandBar.keywords.foundationalServices',
     },
   },
   {

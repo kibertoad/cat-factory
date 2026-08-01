@@ -2,7 +2,7 @@ import { parseSimpleYaml, splitFrontmatter } from '../repoSourceSync/frontmatter
 
 // ---------------------------------------------------------------------------
 // Pure parsing rules for repo-sourced foundational services
-// (docs/initiatives/foundational-services.md). A `directory` source treats every
+// (backend/docs/adr/0031-foundational-services.md). A `directory` source treats every
 // immediate subdirectory of its `dirPath` as one service, described by a
 // `service.md` whose YAML frontmatter carries the identity and whose body is the
 // general description; the contract documents sit beside it. A `files` source has

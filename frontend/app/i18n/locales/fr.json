@@ -126,7 +126,8 @@
     "accountSettings": "Paramètres du compte",
     "operatorDashboard": "Observabilité de la plateforme",
     "reports": "Rapports",
-    "infrastructure": "Infrastructure"
+    "infrastructure": "Infrastructure",
+    "foundationalServices": "Services fondamentaux"
   },
   "board": {
     "toast": {
@@ -545,7 +546,8 @@
         "pipeline_schedule_requires_recurring": "Une planification récurrente exige ce pipeline",
         "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets",
         "foundational_service_exists": "Ce service fondamental existe déjà",
-        "binary_output_service_invalid": "Service des sorties binaires introuvable"
+        "binary_output_service_invalid": "Service des sorties binaires introuvable",
+        "foundational_service_not_inherited": "Ce tableau a enregistré ce service"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -575,7 +577,8 @@
         "pipeline_schedule_requires_recurring": "Une planification récurrente pointe encore vers ce pipeline. Le limiter à une exécution unique casserait chaque exécution future. Détachez d'abord cette planification.",
         "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification.",
         "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception.",
-        "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez."
+        "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
+        "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -2079,7 +2082,8 @@
         "shortcuts": "Raccourcis clavier",
         "bugHunt": "Chasse aux bugs",
         "toggleUiMode": "Changer le mode d'interface",
-        "tutorial": "Faire une visite guidée"
+        "tutorial": "Faire une visite guidée",
+        "foundationalServices": "Services fondamentaux"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -2102,7 +2106,8 @@
         "shortcuts": "raccourcis clavier touches aide",
         "bugHunt": "bug chasse tri backlog tickets non assignés",
         "toggleUiMode": "interface mode simple avancé afficher masquer",
-        "tutorial": "tutoriel visite guide aide apprendre découverte"
+        "tutorial": "tutoriel visite guide aide apprendre découverte",
+        "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue"
       }
     },
     "integrationsHub": {
@@ -2262,6 +2267,9 @@
       "title": "Choisissez un environnement de test par défaut",
       "body": "Ce tableau n'a pas encore défini comment ses services obtiennent un environnement de test. Choisissez une valeur par défaut et chaque service ajouté ensuite démarrera avec elle, au lieu d'être configuré un par un. Vous pourrez toujours la modifier service par service.",
       "action": "Choisir la valeur par défaut"
+    },
+    "accountFoundational": {
+      "intro": "Les capacités partagées que cette organisation exploite déjà - stockage de fichiers, notifications, audit - avec leurs contrats d'API. Chaque tableau en hérite, et il est demandé à un architecte de les consommer plutôt que de proposer de les reconstruire."
     }
   },
   "settings": {
@@ -2316,7 +2324,8 @@
       "tabs": {
         "team": "Équipe et accès",
         "fragments": "Fragments de contexte",
-        "skills": "Compétences"
+        "skills": "Compétences",
+        "foundational": "Services fondamentaux"
       }
     },
     "providerConnection": {
@@ -5166,6 +5175,135 @@
       "confirm": "Dissocier"
     },
     "unavailable": "La bibliothèque de fragments de prompt n'est pas activée pour ce déploiement."
+  },
+  "foundational": {
+    "unavailable": "Le catalogue des services fondamentaux n'est pas activé pour ce déploiement.",
+    "owner": {
+      "workspace": "Ce tableau",
+      "account": "Ce compte"
+    },
+    "tab": {
+      "catalog": "Catalogue",
+      "sources": "Dépôts liés"
+    },
+    "panel": {
+      "title": "Services fondamentaux",
+      "subtitle": "Les capacités partagées que votre organisation exploite déjà, pour qu'une conception les consomme au lieu de les reconstruire."
+    },
+    "tier": {
+      "account": "Compte",
+      "workspace": "Tableau"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} autres non listées",
+      "none": "Aucun contrat d'API joint. On indiquera à l'agent que l'interface est inconnue plutôt que de le laisser la deviner."
+    },
+    "catalog": {
+      "intro": "Ce que reçoit un architecte qui conçoit sur ce tableau : identité, étiquettes de capacité et noms d'opérations. Les documents de contrat ne sont lus que lorsqu'une conception déclare le service.",
+      "empty": "Aucun service fondamental pour l'instant. Enregistrez-en un ci-dessous ou liez un dépôt qui les décrit.",
+      "suppress": "Ne pas proposer ce service sur ce tableau",
+      "showDocuments": "Afficher les documents de contrat",
+      "hideDocuments": "Masquer les documents de contrat"
+    },
+    "suppressions": {
+      "title": "Écartés sur ce tableau",
+      "intro": "Ces services du compte sont masqués pour les conceptions de ce tableau. Rien n'a été supprimé, et le compte les conserve pour tous les autres tableaux.",
+      "restore": "Proposer à nouveau",
+      "shadowsNothing": "Rien n'est hérité sous cet identifiant pour le moment : cet écartement ne masque donc rien."
+    },
+    "registry": {
+      "empty": "Rien n'est encore enregistré à ce niveau.",
+      "add": "Enregistrer un service",
+      "addTitle": "Enregistrer un service fondamental",
+      "editTitle": "Modifier le service fondamental",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "fromSource": "Synchronisé depuis un dépôt lié ({path}). Modifiez-le dans le dépôt ; la prochaine synchronisation écrasera les changements faits ici.",
+      "idFixed": "l'identifiant qu'un architecte écrit dans sa conception, figé une fois enregistré",
+      "idPlaceholder": "identifiant (minuscules et tirets, ex. file-storage)",
+      "namePlaceholder": "nom (ex. File Storage)",
+      "summaryPlaceholder": "résumé d'une ligne : à quoi il sert",
+      "descriptionPlaceholder": "ce qu'il fait, quand l'utiliser et ce qu'il NE couvre PAS",
+      "capabilitiesPlaceholder": "étiquettes de capacité, séparées par des virgules (ex. file-storage, cdn)",
+      "contractsTitle": "Contrats d'API",
+      "contractsKeep": "Laissez tel quel pour conserver les documents enregistrés.",
+      "contractsReplace": "L'enregistrement REMPLACE tout l'ensemble stocké par ce qui figure ici.",
+      "addContract": "Ajouter un contrat",
+      "removeContract": "Retirer ce contrat",
+      "contractIdPlaceholder": "identifiant de contrat (minuscules et tirets, ex. openapi)",
+      "contractTitlePlaceholder": "titre (ex. HTTP API)",
+      "contractBodyPlaceholder": "collez le document : un fichier OpenAPI 3.x, ou le source d'un module de contrat"
+    },
+    "sources": {
+      "empty": "Aucun dépôt lié. Liez-en un ci-dessous pour synchroniser les définitions de service et leurs fichiers de contrat.",
+      "linkTitle": "Lier un dépôt",
+      "link": "Lier et synchroniser",
+      "metaSynced": "synchronisé le {date} · réf {ref}",
+      "metaNever": "jamais synchronisé · réf {ref}",
+      "metaFiles": "{service} · {count} fichiers de contrat",
+      "metaDirectory": "un service par sous-répertoire",
+      "changes": "Changements",
+      "check": "Vérifier les changements",
+      "sync": "Resynchroniser",
+      "unlink": "Délier",
+      "selectedDir": "Répertoire :",
+      "selectedFiles": "Fichiers choisis : {count}",
+      "wholeRepo": "Dépôt entier (racine).",
+      "ownerPlaceholder": "propriétaire",
+      "repoPlaceholder": "dépôt",
+      "dirPlaceholder": "chemin du répertoire (ex. foundational)",
+      "filePathsPlaceholder": "chemins des fichiers de contrat, un par ligne",
+      "refPlaceholder": "réf (HEAD par défaut)",
+      "githubRequired": "Lier un dépôt nécessite l'intégration de gestion de sources. Connectez-la d'abord sur un tableau.",
+      "serviceIdPlaceholder": "identifiant du service (minuscules et tirets)",
+      "serviceNamePlaceholder": "nom du service",
+      "serviceSummaryPlaceholder": "résumé d'une ligne (facultatif)",
+      "mode": {
+        "directory": "Un dossier de services",
+        "files": "Des fichiers précis, un seul service",
+        "directoryHint": "Chaque sous-répertoire du chemin lié est un service, décrit par un service.md avec ses fichiers de contrat à côté.",
+        "filesHint": "Les fichiers listés décrivent tous l'unique service que vous nommez ici. À utiliser quand il n'y a pas de convention de dossiers à adopter."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Délier ce dépôt ?",
+      "body": "\"{repo}\" et les services qu'il a synchronisés seront retirés du catalogue. Vous pourrez le relier plus tard.",
+      "confirm": "Délier"
+    },
+    "confirmDelete": {
+      "title": "Supprimer ce service ?",
+      "body": "\"{name}\" et ses documents de contrat téléversés seront retirés de ce périmètre.",
+      "bodyWorkspace": "\"{name}\" et ses documents de contrat téléversés seront retirés de ce tableau. Si le compte enregistre un service portant le même id, ce tableau cessera aussi d'en hériter ; vous pouvez annuler cela dans \"Écartés sur ce tableau\".",
+      "confirm": "Supprimer"
+    },
+    "toast": {
+      "created": "Service enregistré",
+      "updated": "Service mis à jour",
+      "deleted": "Service supprimé",
+      "saveFailed": "Impossible d'enregistrer le service",
+      "deleteFailed": "Impossible de supprimer le service",
+      "suppressed": "Masqué pour les conceptions de ce tableau",
+      "suppressFailed": "Impossible de masquer le service",
+      "restored": "De nouveau proposé sur ce tableau",
+      "restoreFailed": "Impossible de rétablir le service",
+      "contractsFailed": "Impossible de charger les documents de contrat",
+      "sourceLinked": "Dépôt lié et synchronisé",
+      "linkSourceFailed": "Impossible de lier le dépôt",
+      "synced": "Synchronisé : {updated} mis à jour, {removed} retirés",
+      "syncFailed": "Impossible de synchroniser le dépôt",
+      "changesAvailable": "Des changements sont disponibles en amont",
+      "upToDate": "Déjà à jour",
+      "checkSourceFailed": "Impossible de vérifier le dépôt",
+      "sourceUnlinked": "Dépôt délié",
+      "unlinkSourceFailed": "Impossible de délier le dépôt"
+    }
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",

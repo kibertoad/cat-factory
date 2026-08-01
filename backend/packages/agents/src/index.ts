@@ -586,7 +586,7 @@ export {
 export { SkillRunResolver, type ResolvedSkillForRun } from './skillLibrary/SkillRunResolver.js'
 export * as skillSourceLogic from './skillLibrary/skill-source.logic.js'
 
-// ---- foundational services (docs/initiatives/foundational-services.md) ----
+// ---- foundational services (backend/docs/adr/0031-foundational-services.md) ----
 export {
   FoundationalServiceCatalogService,
   type FoundationalServiceCatalogDependencies,

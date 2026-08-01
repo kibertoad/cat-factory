@@ -3,7 +3,7 @@ import type { FoundationalServiceModule } from '@cat-factory/orchestration'
 
 // ---------------------------------------------------------------------------
 // The AUTOREFRESH pass for repo-linked foundational-service sources
-// (docs/initiatives/foundational-services.md).
+// (backend/docs/adr/0031-foundational-services.md).
 //
 // It lives here, in the shared server layer, rather than in either facade, because both run
 // exactly this pass and only the TRIGGER differs (a Cloudflare cron tick ⇄ a Node interval

@@ -9,9 +9,10 @@ what exists, what lacks an image, and how each thing is described).
 (`BinaryArtifactStore`, the `binary-storage` TRAIT) holds run EVIDENCE — the UI Tester's
 screenshots, read back by the visual-confirmation gate. A generated product asset is not evidence:
 it belongs in the org's own storage, addressed the org's own way, found by the org's own systems.
-The foundational-services catalog ([`foundational-services.md`](./foundational-services.md))
-already models exactly that — a registered shared capability with an API contract — so this
-feature is a third read off that catalog, not a second storage subsystem.
+The foundational-services catalog
+([ADR 0031](../../backend/docs/adr/0031-foundational-services.md)) already models exactly that — a
+registered shared capability with an API contract — so this feature is a third read off that
+catalog, not a second storage subsystem.
 
 ## Model
 
@@ -111,9 +112,10 @@ dropping artifacts.
 - [ ] **SPA pipeline-builder picker.** The REST/pipeline API carries `stepOptions.binaryOutput`;
       there is no Vue picker yet. It belongs beside the variant/skill step options, listing the
       workspace's resolved catalog filtered to `asset-storage`-tagged services for the storage
-      half (and `generation-context`-tagged first for the context half). Blocked in practice on
-      the foundational-services management SPA, which is itself still pending
-      ([`foundational-services.md`](./foundational-services.md) → Remaining work).
+      half (and `generation-context`-tagged first for the context half). No longer blocked: the
+      foundational-services management surface landed with
+      [ADR 0031](../../backend/docs/adr/0031-foundational-services.md), so the resolved catalog
+      the picker needs is already reachable from the SPA.
 - [ ] **Step result view.** `PipelineStep.binaryOutputs` is recorded but no result window renders
       it; a small panel listing the stored artifacts (and the unknown-service / invalid-entry
       warnings) belongs in the `resultViews` slot.

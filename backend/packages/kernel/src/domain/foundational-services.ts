@@ -8,7 +8,7 @@ import { extractFencedDeclaration } from './fenced-declaration.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for the FOUNDATIONAL SERVICES catalog
-// (docs/initiatives/foundational-services.md): recognise a contract document,
+// (backend/docs/adr/0031-foundational-services.md): recognise a contract document,
 // index an OpenAPI document's operations, render the two agent-facing surfaces
 // (the cheap catalog the Architect designs against and the lazily-read contract
 // bundle its consumers get), and read back the ids the Architect declared.
