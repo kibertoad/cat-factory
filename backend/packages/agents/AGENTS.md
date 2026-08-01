@@ -112,6 +112,13 @@
   `SkillRunResolver`, which resolves ONE catalog skill (instructions + resource bodies at its
   pinned commit) for a dispatch. A BUNDLED skill needs none of this — it is deployment code,
   registered on `AgentKindRegistry.registerSkill`.
+- `foundationalServices/` — the shared-capability catalog an Architect designs against
+  (`docs/initiatives/foundational-services.md`). `FoundationalServiceCatalogService` owns the tier
+  merge and the manifest/document SPLIT (a catalog read never loads a contract body);
+  `FoundationalServiceSourceService` reuses the same `repoSourceSync/` engine the two libraries
+  above do, supplying only what a UNIT is — a service DIRECTORY, or an explicit FILE list for one
+  named service; `FoundationalServiceRunResolver` is the engine-facing seam that turns both into
+  injected `.cat-context/` files.
 - `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts, plus the
   built-in post-ops (`builtin.ts`: `blueprintPostOp`, `specPostOp`, and `specPromotionPostOp` —
   the tester-driven `aspirational` → `established` promotion of the in-repo spec) and

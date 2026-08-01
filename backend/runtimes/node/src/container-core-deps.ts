@@ -62,6 +62,7 @@ import { DrizzleCustomManifestTypeRepository } from './repositories/customManife
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   selectNodeFragmentLibraryDeps,
+  selectNodeFoundationalServiceDeps,
   selectNodeSkillLibraryDeps,
 } from './container-content-library-deps.js'
 // The container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
@@ -565,6 +566,14 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // selectSkillLibraryDeps (account repos + installation resolver).
     ...selectNodeSkillLibraryDeps(
       config,
+      db,
+      githubClient,
+      githubInstallationRepository,
+      repos.workspaceRepository,
+    ),
+    // The foundational-services catalog: ungated (a service's contracts can be uploaded
+    // directly, so it is useful without either repo-sourced library) — see the selector's note.
+    ...selectNodeFoundationalServiceDeps(
       db,
       githubClient,
       githubInstallationRepository,

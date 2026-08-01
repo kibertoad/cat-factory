@@ -71,6 +71,7 @@ import type {
   FragmentBodyResolver,
   SkillResolver,
 } from './AgentContextBuilder.js'
+import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import type { ForkChatService } from './ForkChatService.js'
 import type { KaizenScheduler } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
@@ -268,6 +269,12 @@ export interface ExecutionServiceDependencies {
    * configured; a skill step dispatched with this unwired fails loudly rather than running blank.
    */
   skillResolver?: SkillResolver
+  /**
+   * Optional: the FOUNDATIONAL SERVICES catalog seam (docs/initiatives/foundational-services.md).
+   * Supplies a design kind its catalog and a consumer kind the API contracts of the services that
+   * design declared, both as injected `.cat-context/` files. Absent ⇒ neither is injected.
+   */
+  foundationalServiceResolver?: FoundationalServiceResolver
   /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal

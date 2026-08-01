@@ -94,7 +94,11 @@ import { EnvironmentTestService } from './modules/environments/EnvironmentTestSe
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
-import type { FragmentLibraryModule, SkillLibraryModule } from './container-content-libraries.js'
+import type {
+  FoundationalServiceModule,
+  FragmentLibraryModule,
+  SkillLibraryModule,
+} from './container-content-libraries.js'
 import type {
   GateRegistry,
   JudgeRegistry,
@@ -265,7 +269,7 @@ export type {
 // The two content-library module shapes (`FragmentLibraryModule` / `SkillLibraryModule`) live
 // beside their factories in `container-content-libraries.js` for file-size hygiene; re-exported
 // here so existing importers are unaffected.
-export type { FragmentLibraryModule, SkillLibraryModule }
+export type { FoundationalServiceModule, FragmentLibraryModule, SkillLibraryModule }
 
 /**
  * The always-present core services every facade wires — the composition root's SPINE. These
@@ -457,6 +461,8 @@ export interface OptionalCoreModules {
   fragmentLibrary?: FragmentLibraryModule
   /** Present only when the repo-sourced Claude Skills library is configured (see CoreDependencies). */
   skillLibrary?: SkillLibraryModule
+  /** Present only when the foundational-services catalog is configured (see CoreDependencies). */
+  foundationalServices?: FoundationalServiceModule
   /** Present only when the initiative repository is wired (see CoreDependencies). */
   initiatives?: InitiativesModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */

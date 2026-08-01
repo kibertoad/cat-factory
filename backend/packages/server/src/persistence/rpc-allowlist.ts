@@ -941,6 +941,42 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
   },
+  // --- Foundational services (docs/initiatives/foundational-services.md) -----------
+  // The tiered catalog of shared capabilities an Architect designs against, and the API contract
+  // documents its consumers lazily read. Both are `(ownerKind, ownerId)`-keyed org/durable state
+  // — the `remote` bucket by default — and every method here binds with the same `owner` /
+  // `ownerField` rules the prompt-fragment library uses, so a token scoped to one account can
+  // neither read nor overwrite another tenant's catalog.
+  //
+  // Remote rather than `telemetry` or `local-sqlite` for the reason the bucket test names: what
+  // READS this is a RUN. A mothership-mode node dispatching an architect step resolves the merged
+  // catalog over this RPC, and its coder resolves the declared services' contract documents the
+  // same way — so a catalog that lived only on the laptop would make every design on a
+  // mothership-mode deployment silently see an empty catalog and rebuild capabilities the org
+  // already runs. `listByServiceIds` is the hot one (once per consumer dispatch) and is already a
+  // single chunked `IN` query, so it stays one round trip over the wire too.
+  //
+  // The sourceId-keyed sync methods (`listBySource`, `softDeleteBySource`, the source repo's
+  // `get`/`updateSyncState`/`softDelete`/`listStale`) stay OFF, exactly as the fragment library's
+  // do: they back the repo-SYNC the mothership owns (a sync needs a GitHub client, which a
+  // mothership-mode node does not have), and none of them carries an `(ownerKind, ownerId)` pair
+  // for a rule to bind — a source→owner resolver is what a later sync-in-mothership slice owes.
+  foundationalServiceRepository: {
+    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+  },
+  apiContractRepository: {
+    listManifestByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    listByServiceIds: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    replaceForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    deleteForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+  },
+  foundationalServiceSourceRepository: {
+    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+  },
   // --- Account onboarding read surface --------------------------------------------
   // The two account-scoped READS a mothership-mode SPA's account/members + email-settings panels
   // drive, both member-level (`AccountController` guards them with `requireMember`, NOT

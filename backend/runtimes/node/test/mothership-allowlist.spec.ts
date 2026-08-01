@@ -38,6 +38,11 @@ import {
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
 } from '../src/repositories/fragments.js'
+import {
+  DrizzleApiContractRepository,
+  DrizzleFoundationalServiceRepository,
+  DrizzleFoundationalServiceSourceRepository,
+} from '../src/repositories/foundationalServices.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleNotificationWebhookRepository } from '../src/repositories/drizzle/settings.js'
 import {
@@ -487,6 +492,23 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSyncState: 'pending',
     softDelete: 'pending',
   },
+  // Foundational services (docs/initiatives/foundational-services.md). The owner-scoped
+  // catalog + contract reads/writes ARE allow-listed (org/durable state a RUN reads: a
+  // mothership-mode architect resolves the catalog and its coder resolves the declared
+  // services' contracts over the RPC). What stays off is the repo-SYNC surface, for exactly the
+  // reason the fragment library's does — a sync needs a GitHub client a mothership node lacks,
+  // and none of these methods carries an `(ownerKind, ownerId)` pair for a scope rule to bind.
+  foundationalServiceRepository: {
+    listBySource: 'pending',
+    softDeleteBySource: 'pending',
+  },
+  foundationalServiceSourceRepository: {
+    get: 'pending',
+    updateSyncState: 'pending',
+    softDelete: 'pending',
+    // The autorefresh sweep's query: global (across every tier) and unscoped by construction.
+    listStale: 'sweeper',
+  },
   // `listByOwner`/`get`/`upsert`/`softDelete` are now allow-listed (the prompt-fragment library
   // management surface, owner scoped, member-level, no secrets). The `sourceId`-keyed `listBySource`
   // is the repo-sync fan-out read (mothership-owned sync) — stays pending.
@@ -689,6 +711,9 @@ function reflectAllRepositories(): Record<string, string[]> {
     customManifestTypeRepository: DrizzleCustomManifestTypeRepository,
     fragmentBriefRepository: DrizzleFragmentBriefRepository,
     fragmentSourceRepository: DrizzleFragmentSourceRepository,
+    foundationalServiceRepository: DrizzleFoundationalServiceRepository,
+    apiContractRepository: DrizzleApiContractRepository,
+    foundationalServiceSourceRepository: DrizzleFoundationalServiceSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,
     notificationRepository: DrizzleNotificationRepository,
     notificationWebhookRepository: DrizzleNotificationWebhookRepository,

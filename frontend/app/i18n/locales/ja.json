@@ -543,7 +543,8 @@
         "prompt_revision_conflict": "別のユーザーがプロンプトを変更しました",
         "pipeline_schedule_attached": "定期スケジュールがこのパイプラインを使用しています",
         "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
-        "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません"
+        "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません",
+        "foundational_service_exists": "その基盤サービスはすでに存在します"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -571,7 +572,8 @@
         "prompt_revision_conflict": "このプロンプトへの別の編集が先に反映されました。読み込み直して、その上に変更をやり直してください。",
         "pipeline_schedule_attached": "定期スケジュールがまだこのパイプラインを参照しており、開始する実行はすべて ID でパイプラインを解決します。先にそのスケジュールを解除または削除してから、パイプラインを削除してください。",
         "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
-        "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。"
+        "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。",
+        "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

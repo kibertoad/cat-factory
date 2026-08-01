@@ -45,6 +45,13 @@ export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
 export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
+// The shared autorefresh pass for repo-linked foundational-service sources — one implementation
+// both facades drive (a Cloudflare cron tick, a Node interval sweeper).
+export {
+  FOUNDATIONAL_SOURCE_STALE_MS,
+  FOUNDATIONAL_SOURCE_SWEEP_BATCH,
+  sweepFoundationalSources,
+} from './modules/foundationalServices/sweepFoundationalSources.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
   GITHUB_RECONCILE_STALE_MS,

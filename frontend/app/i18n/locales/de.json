@@ -4717,7 +4717,8 @@
         "prompt_revision_conflict": "Prompt von jemand anderem geändert",
         "pipeline_schedule_attached": "Wiederkehrender Zeitplan nutzt diese Pipeline",
         "pipeline_schedule_requires_recurring": "Wiederkehrender Zeitplan braucht diese Pipeline",
-        "pipeline_schedule_intake_unconfigured": "Zeitplan ohne Ticket-Erfassung"
+        "pipeline_schedule_intake_unconfigured": "Zeitplan ohne Ticket-Erfassung",
+        "foundational_service_exists": "Basisdienst existiert bereits"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -4745,7 +4746,8 @@
         "prompt_revision_conflict": "Eine andere Änderung an diesem Prompt war zuerst da. Laden Sie ihn neu und wenden Sie Ihre Änderung darauf erneut an.",
         "pipeline_schedule_attached": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline, und jeder von ihm gestartete Lauf löst die Pipeline über ihre ID auf. Lösen oder löschen Sie zuerst diesen Zeitplan und entfernen Sie danach die Pipeline.",
         "pipeline_schedule_requires_recurring": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline. Sie nur einmalig zu machen würde jeden künftigen Lauf unterbrechen. Lösen Sie zuerst diesen Zeitplan.",
-        "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan."
+        "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan.",
+        "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

@@ -332,11 +332,21 @@ export type {
   SkillSourceResyncRequest,
 } from './skill-repositories.js'
 export type {
+  ApiContractManifestEntry,
+  ApiContractRecord,
+  ApiContractRepository,
+  FoundationalServiceRecord,
+  FoundationalServiceRepository,
+  FoundationalServiceSourceRecord,
+  FoundationalServiceSourceRepository,
+} from './foundational-service-repositories.js'
+export type {
   AppCaches,
   AccountModelPolicyCacheValue,
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  ResolvedFoundationalService,
   RiskPolicyCacheValue,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,

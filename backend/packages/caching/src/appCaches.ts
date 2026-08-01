@@ -13,6 +13,7 @@ import type {
   RiskPolicyCacheValue,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
+  ResolvedFoundationalService,
 } from '@cat-factory/kernel'
 // Deep imports on purpose: layered-loader's root index eagerly requires its Redis
 // modules (and thereby `ioredis`), which must never load outside the Node facade's
@@ -77,6 +78,7 @@ export interface GroupCacheProfile {
 export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
   skillCatalog: GroupCacheProfile
+  foundationalServiceCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
   repoProjection: GroupCacheProfile
   repoFiles: GroupCacheProfile
@@ -100,6 +102,15 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // Invalidation-driven (the skill-source sync drops the group after a change); no version
   // probe — a DB read as the probe would cost as much as the DB read as the load.
   skillCatalog: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 2000, maxItemsPerGroup: 1 },
+  // One merged foundational-services catalog per workspace, keyed by workspace id. Same
+  // invalidation-driven profile as the fragment catalog it mirrors; manifest-only values, so
+  // the per-group bound stays small.
+  foundationalServiceCatalog: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 500,
+    maxItemsPerGroup: 1,
+  },
   // The live external body of a document-backed fragment, grouped by workspace and
   // keyed per document. Self-verifying: an entry entering the last minute of its TTL
   // runs the source's cheap version probe (bump on unchanged, background reload on
@@ -211,6 +222,11 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // Pass-through for the same reason as `fragmentCatalog`: the skill catalog is our own
   // mutable D1 state with no cross-isolate invalidation bus on the Worker.
   skillCatalog: { ...DEFAULT_APP_CACHES_PROFILE.skillCatalog, enabled: false },
+  // Pass-through for the same reason: our own mutable D1 state, no cross-isolate bus.
+  foundationalServiceCatalog: {
+    ...DEFAULT_APP_CACHES_PROFILE.foundationalServiceCatalog,
+    enabled: false,
+  },
   fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
   // Pass-through: the repo projection is our own mutable D1 state, and a Worker
   // isolate has no cross-isolate invalidation bus (unlike `fragmentDocumentBody`,
@@ -400,6 +416,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.skillCatalog,
     options,
   )
+  const foundationalServiceCatalog = buildGroupCache<ResolvedFoundationalService[]>(
+    'foundational-service-catalog',
+    profile.foundationalServiceCatalog,
+    options,
+  )
   const fragmentDocumentBody = buildGroupCache<DocumentContent>(
     'fragment-document-body',
     profile.fragmentDocumentBody,
@@ -455,6 +476,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
   return {
     fragmentCatalog,
     skillCatalog,
+    foundationalServiceCatalog,
     fragmentDocumentBody,
     repoProjection,
     repoFiles,
@@ -471,6 +493,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
       await Promise.all([
         fragmentCatalog.close(),
         skillCatalog.close(),
+        foundationalServiceCatalog.close(),
         fragmentDocumentBody.close(),
         repoProjection.close(),
         repoFiles.close(),

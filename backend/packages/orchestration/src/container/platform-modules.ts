@@ -33,9 +33,14 @@ import {
 } from './modules.js'
 import {
   createFragmentLibraryModule,
+  createFoundationalServiceModule,
   createSkillLibraryModule,
 } from '../container-content-libraries.js'
-import type { FragmentLibraryModule, SkillLibraryModule } from '../container-content-libraries.js'
+import type {
+  FoundationalServiceModule,
+  FragmentLibraryModule,
+  SkillLibraryModule,
+} from '../container-content-libraries.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { CoreDependencies } from '../container.js'
@@ -59,6 +64,7 @@ export interface PlatformModules {
   sharedStackSeeder: SharedStackSeeder | undefined
   fragmentLibrary: FragmentLibraryModule | undefined
   skillLibrary: SkillLibraryModule | undefined
+  foundationalServices: FoundationalServiceModule | undefined
 }
 
 export function createPlatformModules(input: PlatformModulesInput): PlatformModules {
@@ -199,6 +205,9 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   const skillLibrary = modules.build('skillLibrary', () =>
     createSkillLibraryModule(dependencies, caches),
   )
+  const foundationalServices = modules.build('foundationalServices', () =>
+    createFoundationalServiceModule(dependencies, caches),
+  )
   return {
     llmObservability,
     environments,
@@ -206,5 +215,6 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     sharedStackSeeder,
     fragmentLibrary,
     skillLibrary,
+    foundationalServices,
   }
 }

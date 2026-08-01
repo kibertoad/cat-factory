@@ -56,8 +56,6 @@ import {
   applySubtaskProgress,
   recordDispatchAttribution,
 } from './step-fold.logic.js'
-import { applyValidationReport } from './validation.logic.js'
-import { recordReproductionOutcome } from './reproductionProof.logic.js'
 import { FORK_PROPOSER_KIND, PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
@@ -96,6 +94,7 @@ import {
   shouldProposeForkAuto,
 } from './forkDecision.logic.js'
 import type { InterviewGateController } from './InterviewGateController.js'
+import { recordJobFacts } from './job-facts.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -1141,45 +1140,13 @@ export class RunDispatcher {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<AdvanceResult> {
-    // The container agent's effort self-assessment (how hard the work was, what reduced its
-    // effectiveness, the obstacles it hit) describes the JOB THAT JUST RAN, so record it before
-    // any of the paths below can return early — exactly like the usage metering under it. It
-    // used to sit with the normal completion further down, which meant every kind whose verdict
-    // drives run flow silently dropped it: a `pr-reviewer` parking on its findings, a container
-    // companion applying its verdict, the fork proposer, a Tester withholding its greenlight, a
-    // step raising a human decision. Those are the runs whose self-assessment is most worth
-    // reading, and none of them ever reaches the normal completion with the result in hand.
-    if (result.effortReport) step.effortReport = result.effortReport
-
-    // The pre-PR validation report of a coding step whose service configured checks — recorded
-    // here for the same reason as the effort report above: it describes the JOB THAT JUST RAN,
-    // so it must land before any early-returning path below. On this (successful) path it is
-    // the captured proof the checkout was green BEFORE the PR opened; the failed path records
-    // it in `PollCompletionController.handleFailedPoll`.
-    applyValidationReport(step, result.validationReport)
-
-    // The BUGFIX REPRODUCTION PROOF of a coding step — the harness's verdict, or (for a run whose
-    // reproduction step conceded, which dispatches no proof at all) the structural infeasibility
-    // declaration the engine mints itself. Recorded here for the same reason as the validation
-    // report above: it describes the JOB THAT JUST RAN, so it must land before any early return.
-    recordReproductionOutcome(step, result.reproductionReport, instance, this.clock.now())
-
-    // Meter the LLM call into the usage ledger. Recorded whether the step completed or
-    // raised a decision — both consumed tokens. A subscription-harness result is tagged
-    // `'subscription'` so it's counted for the usage report but EXCLUDED from the budget
-    // rollups (a flat-rate quota plan costs nothing per token); an inline metered call
-    // defaults to `'metered'` and is summed by the spend gate as before.
-    if (result.usage) {
-      await this.spend.record({
-        workspaceId,
-        executionId: instance.id,
-        agentKind: step.agentKind,
-        model: result.model ?? 'unknown',
-        usage: result.usage,
-        billing: result.usageBilling ?? 'metered',
-        vendor: result.usageVendor ?? null,
-      })
-    }
+    await recordJobFacts(
+      { clock: this.clock, spend: this.spend, contextBuilder: this.contextBuilder },
+      workspaceId,
+      instance,
+      step,
+      result,
+    )
 
     // The agent asked for a human decision and this step hasn't resolved one yet.
     if (result.decision && !step.decision?.chosen) {

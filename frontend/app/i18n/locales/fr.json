@@ -543,7 +543,8 @@
         "prompt_revision_conflict": "Invite modifiée par quelqu'un d'autre",
         "pipeline_schedule_attached": "Une planification récurrente utilise ce pipeline",
         "pipeline_schedule_requires_recurring": "Une planification récurrente exige ce pipeline",
-        "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets"
+        "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets",
+        "foundational_service_exists": "Ce service fondamental existe déjà"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -571,7 +572,8 @@
         "prompt_revision_conflict": "Une autre modification de cette invite est arrivée en premier. Rechargez-la et réappliquez la vôtre par-dessus.",
         "pipeline_schedule_attached": "Une planification récurrente pointe encore vers ce pipeline, et chaque exécution qu'elle lance le résout par son identifiant. Détachez ou supprimez d'abord cette planification, puis retirez le pipeline.",
         "pipeline_schedule_requires_recurring": "Une planification récurrente pointe encore vers ce pipeline. Le limiter à une exécution unique casserait chaque exécution future. Détachez d'abord cette planification.",
-        "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification."
+        "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification.",
+        "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

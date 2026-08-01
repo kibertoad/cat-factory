@@ -17,6 +17,11 @@ import {
   DrizzleAccountSkillRepository,
   DrizzleSkillSourceRepository,
 } from './repositories/skills.js'
+import {
+  DrizzleApiContractRepository,
+  DrizzleFoundationalServiceRepository,
+  DrizzleFoundationalServiceSourceRepository,
+} from './repositories/foundationalServices.js'
 
 // The Node facade's content-library dependency selectors (prompt-fragment library + repo-sourced
 // Claude Skills), extracted from `container.ts` for file-size hygiene and symmetric with the shared
@@ -87,5 +92,33 @@ export function selectNodeSkillLibraryDeps(
     // Repo-sourced skills read through the account's App installation; the source sync
     // is only wired when a real GitHub client is available (parity with the Worker).
     ...(githubClient ? { githubClient, resolveSkillInstallationId: resolvers.forAccount } : {}),
+  }
+}
+
+/**
+ * Wire the foundational-services catalog (docs/initiatives/foundational-services.md) for the
+ * Node facade — the mirror of the Worker's `selectFoundationalServiceDeps`.
+ *
+ * Deliberately UNGATED, unlike the two libraries above: a service's contracts can be uploaded
+ * directly, so the catalog is useful on a deployment that wants neither repo-sourced prompt
+ * fragments nor Claude skills. The feature is opt-in by CONTENT — a deployment that registers
+ * nothing gets an empty catalog, which leaves every design prompt exactly as it was.
+ *
+ * Reuses the FRAGMENT installation resolver, which already answers for both tiers — the same
+ * pair this catalog is keyed by — and is wired only when a real GitHub client is available
+ * (parity with the Worker; a direct upload needs none).
+ */
+export function selectNodeFoundationalServiceDeps(
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+  workspaces: WorkspaceRepository,
+): Partial<CoreDependencies> {
+  const resolvers = createTierInstallationResolvers({ installations, workspaces })
+  return {
+    foundationalServiceRepository: new DrizzleFoundationalServiceRepository(db),
+    apiContractRepository: new DrizzleApiContractRepository(db),
+    foundationalServiceSourceRepository: new DrizzleFoundationalServiceSourceRepository(db),
+    ...(githubClient ? { githubClient, resolveFragmentInstallationId: resolvers.forOwner } : {}),
   }
 }

@@ -366,6 +366,7 @@ export {
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
   type SkillLibraryModule,
+  type FoundationalServiceModule,
   type InitiativesModule,
   type RecurringModule,
   type TrackerModule,

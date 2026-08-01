@@ -43,9 +43,6 @@ import {
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
   hasTrait,
-  PR_PRIOR_REVIEW_CONTEXT_FILE,
-  PR_REVIEWER_KIND,
-  renderPriorReviewContext,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -69,6 +66,12 @@ import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { interviewFollowsStep } from '../initiative/initiative.logic.js'
 import { resolveRunSkills } from './run-skills.js'
+import { mergeInjectedContextFiles, priorPrReviewContextFor } from './builder-context-files.js'
+import {
+  type FoundationalServiceResolver,
+  createFoundationalDeclarationRecorder,
+  resolveFoundationalContext,
+} from './run-foundational-services.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import {
   type DocumentUrlResolver,
@@ -117,45 +120,6 @@ function buildRevisionContext(step: PipelineStep): {
           }
         : {}),
     },
-  }
-}
-
-/**
- * The `.cat-context/pr-prior-review.md` slice of a RESUMED PR review's context — the previous
- * attempt's captured slice reports plus the slices that still need reviewing. Empty object for
- * every other dispatch, so the fold at the {@link AgentContextBuilder.buildContext} call site
- * stays branch-free.
- *
- * Emitted by the BUILDER rather than by a preOp beside the reviewer's other three, for two
- * reasons. The state is on the STEP (`step.prReview`), which a {@link RepoOpContext} deliberately
- * does not carry — it hands ops the block-scoped run context and a `RepoFiles`. And a preOp only
- * runs once a run repo RESOLVES, which is right for the diff/comments/standards ops (all of them
- * read the repo) and wrong here: this file needs no repo access at all, and silently skipping it on
- * a deployment whose repo context is unwired would turn a resume back into a from-zero re-review
- * with nothing to say so.
- *
- * Gated on the dispatched kind being the reviewer itself: a `fix` / `post` / `challenge`
- * re-dispatch reuses this same step under an overriding kind, and none of them aggregates
- * anything, so handing them the prior reports would be noise charged on every turn.
- *
- * `resumePendingSlices` being ABSENT is the signal that this is not a resume (the controller
- * leaves it unset when a resume observed no prior work at all, which makes it a plain restart);
- * an EMPTY array is a real resume whose every planned slice already reported.
- */
-function priorPrReviewContextFor(
-  agentKind: string,
-  step: PipelineStep,
-): { injectedContextFiles?: InjectedContextFile[] } {
-  if (agentKind !== PR_REVIEWER_KIND) return {}
-  const pending = step.prReview?.resumePendingSlices
-  if (!pending) return {}
-  return {
-    injectedContextFiles: [
-      {
-        path: PR_PRIOR_REVIEW_CONTEXT_FILE,
-        content: renderPriorReviewContext(step.prReview?.sliceReviews ?? [], pending),
-      },
-    ],
   }
 }
 
@@ -337,6 +301,13 @@ export interface AgentContextBuilderDeps {
    */
   skillResolver?: SkillResolver
   /**
+   * Optional: the FOUNDATIONAL SERVICES catalog seam — the design-time catalog for a
+   * `foundational-catalog` kind and the lazily-resolved contract documents for a
+   * `foundational-contracts` one, both delivered as injected `.cat-context/` files. Wired only
+   * when the catalog is configured; absent ⇒ neither is injected (the prior behaviour).
+   */
+  foundationalServiceResolver?: FoundationalServiceResolver
+  /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
    * those degradations are silent, which is why every facade wires it.
@@ -447,6 +418,11 @@ export class AgentContextBuilder {
       // authored inline participants, the workspace group its estimate earned when it named a
       // tier set, or nothing at all when no tier cleared (⇒ the standard single-actor agent).
       consensus,
+      // The FOUNDATIONAL SERVICES slice of this dispatch's `.cat-context/`: the catalog for a
+      // design kind, the declared services' API contracts for a consumer kind, nothing for
+      // anything else. Best-effort inside — an unreachable catalog degrades to no files rather
+      // than failing a run that would otherwise proceed exactly as it did before the feature.
+      foundationalContextFiles,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -473,6 +449,7 @@ export class AgentContextBuilder {
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
+      this.foundationalContextFor(workspaceId, agentKind, instance),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -574,9 +551,16 @@ export class AgentContextBuilder {
       // entries steer a later harness fetch. Absent when the task attaches none.
       ...(block.aprioriBranches?.length ? { aprioriBranches: block.aprioriBranches } : {}),
       ...(initiative ? { initiative } : {}),
-      // A RESUMED PR review's prior slice reports, as the `.cat-context/pr-prior-review.md` the
-      // reviewer reads (see {@link priorPrReviewContextFor}). Absent for every other dispatch.
-      ...priorPrReviewContextFor(agentKind, step),
+      // The builder's own injected context files. Two producers CONTRIBUTE here and they must
+      // ACCUMULATE rather than replace one another (a preOp's repo-derived files are merged in
+      // separately, downstream): a RESUMED PR review's prior slice reports
+      // (`.cat-context/pr-prior-review.md`, see {@link priorPrReviewContextFor}) and the
+      // foundational-services catalog/contracts. Spreading both objects would silently drop
+      // whichever came first, so they are concatenated.
+      ...mergeInjectedContextFiles(
+        priorPrReviewContextFor(agentKind, step).injectedContextFiles,
+        foundationalContextFiles,
+      ),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -1252,6 +1236,52 @@ export class AgentContextBuilder {
     const selected = selectConsensusGroup(groups, block.estimate)
     if (!selected) return {}
     return { consensus: applyConsensusGroup(config, selected) }
+  }
+
+  /**
+   * The deps `run-foundational-services` needs. One place, because BOTH entry points below take
+   * the same three and the optional-spread shape is easy to get subtly wrong twice.
+   */
+  private foundationalDeps() {
+    return {
+      agentKindRegistry: this.deps.agentKindRegistry,
+      ...(this.deps.foundationalServiceResolver
+        ? { foundationalServiceResolver: this.deps.foundationalServiceResolver }
+        : {}),
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    }
+  }
+
+  /**
+   * The FOUNDATIONAL SERVICES slice of this dispatch's `.cat-context/` — the catalog for a design
+   * kind, the declared services' contracts for a consumer kind, nothing for anything else. Only
+   * the steps BEFORE this one are read, so a re-dispatched design cannot read its own prior round.
+   */
+  private foundationalContextFor(
+    workspaceId: string,
+    agentKind: string,
+    instance: ExecutionInstance,
+  ): Promise<InjectedContextFile[]> {
+    return resolveFoundationalContext({
+      ...this.foundationalDeps(),
+      workspaceId,
+      agentKind,
+      priorSteps: instance.steps.slice(0, instance.currentStep),
+    })
+  }
+
+  /**
+   * Read back what a settled DESIGN step declared, and record it on the step — the counterpart of
+   * {@link foundationalContextFor}. It lives here because this builder handed the design its
+   * catalog and already holds the resolver, registry and logger the read-back needs, so the
+   * completion hub takes no dependency of its own for it.
+   */
+  recordFoundationalDeclaration(
+    workspaceId: string,
+    step: PipelineStep,
+    output: string | undefined,
+  ): Promise<void> {
+    return createFoundationalDeclarationRecorder(this.foundationalDeps())(workspaceId, step, output)
   }
 
   /**

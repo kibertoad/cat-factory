@@ -1,4 +1,7 @@
 import {
+  FoundationalServiceCatalogService,
+  FoundationalServiceRunResolver,
+  FoundationalServiceSourceService,
   FragmentBriefService,
   FragmentLibraryService,
   FragmentSourceService,
@@ -59,6 +62,78 @@ export interface SkillLibraryModule {
    * service. Absent ⇒ a skill step fails loudly at dispatch.
    */
   runResolver?: SkillRunResolver
+}
+
+/**
+ * The foundational-services catalog's services, present only when configured
+ * (docs/initiatives/foundational-services.md). Assembles whenever the service + contract
+ * repositories are wired.
+ */
+export interface FoundationalServiceModule {
+  /** Per-tier CRUD + the merged account ⊕ workspace catalog read (cached). */
+  catalogService: FoundationalServiceCatalogService
+  /** Repo-sourced definitions; present only when the GitHub client + source repo are wired. */
+  sourceService?: FoundationalServiceSourceService
+  /**
+   * The engine-facing reads: the design-time catalog and the lazily-resolved contract
+   * documents, both materialised as injected `.cat-context/` files. Always present with the
+   * module — unlike the source service it needs no GitHub access, because it reads only what a
+   * sync (or a direct upload) already persisted.
+   */
+  runResolver: FoundationalServiceRunResolver
+}
+
+/**
+ * Assemble the foundational-services catalog when its repositories are present. The catalog +
+ * run resolver always assemble together (a catalog nothing can read is not a feature); the
+ * repo-source sync additionally needs the GitHub client, the source repository and an
+ * installation resolver. Returns undefined so the feature stays cleanly opt-in — with it
+ * absent, the design prompt folds no catalog and the consumer kinds get no context files,
+ * which is byte-for-byte the prior behaviour.
+ */
+export function createFoundationalServiceModule(
+  deps: CoreDependencies,
+  caches: AppCaches,
+): FoundationalServiceModule | undefined {
+  const { foundationalServiceRepository, apiContractRepository } = deps
+  if (!foundationalServiceRepository || !apiContractRepository) return undefined
+
+  const catalogService = new FoundationalServiceCatalogService({
+    foundationalServiceRepository,
+    apiContractRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+    catalogCache: caches.foundationalServiceCatalog,
+  })
+
+  const sourceService =
+    deps.foundationalServiceSourceRepository &&
+    deps.githubClient &&
+    deps.resolveFragmentInstallationId
+      ? new FoundationalServiceSourceService({
+          foundationalServiceSourceRepository: deps.foundationalServiceSourceRepository,
+          foundationalServiceRepository,
+          apiContractRepository,
+          githubClient: deps.githubClient,
+          // Reuses the FRAGMENT installation resolver rather than a third one: it already
+          // answers for both tiers (`(ownerKind, ownerId) => installationId`), which is exactly
+          // this feature's tenancy shape, and a second resolver would be one more place for a
+          // deployment to wire one tier and forget the other.
+          resolveInstallationId: deps.resolveFragmentInstallationId,
+          idGenerator: deps.idGenerator,
+          clock: deps.clock,
+          logger: deps.logger,
+          // A sync/unlink mutates the same catalog the read caches — route its invalidation
+          // through the catalog service so the eviction policy stays in one place.
+          invalidateCatalog: (ownerKind, ownerId) => catalogService.invalidate(ownerKind, ownerId),
+        })
+      : undefined
+
+  return {
+    catalogService,
+    sourceService,
+    runResolver: new FoundationalServiceRunResolver(catalogService),
+  }
 }
 
 /**

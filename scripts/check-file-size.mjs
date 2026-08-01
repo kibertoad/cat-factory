@@ -110,7 +110,10 @@ const LEGACY_ALLOWANCES = new Map([
   // The SETTINGS rows (the local-mode singleton, the per-user budget, the per-workspace runtime
   // policy row and the per-agent-kind generation knob) then moved to `db/tables/settings.ts` the
   // same way — ratcheted 1900 -> 1820.
-  ['backend/runtimes/node/src/db/schema.ts', 1820],
+  // The PROMPT-FRAGMENT LIBRARY rows (the tenant-scoped best-practice catalog, its generated
+  // condensed briefs, its repo sources and the per-workspace inherited selection) then moved to
+  // `db/tables/prompt-fragments.ts` the same way — ratcheted 1820 -> 1716.
+  ['backend/runtimes/node/src/db/schema.ts', 1716],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan

@@ -543,7 +543,8 @@
         "prompt_revision_conflict": "Otra persona cambió el prompt",
         "pipeline_schedule_attached": "Una programación recurrente usa esta canalización",
         "pipeline_schedule_requires_recurring": "Una programación recurrente necesita esta canalización",
-        "pipeline_schedule_intake_unconfigured": "La programación no tiene entrada de incidencias"
+        "pipeline_schedule_intake_unconfigured": "La programación no tiene entrada de incidencias",
+        "foundational_service_exists": "El servicio fundacional ya existe"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -571,7 +572,8 @@
         "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima.",
         "pipeline_schedule_attached": "Una programación recurrente todavía apunta a esta canalización, y cada ejecución que inicia la resuelve por su id. Desvincule o elimine esa programación antes de quitar la canalización.",
         "pipeline_schedule_requires_recurring": "Una programación recurrente todavía apunta a esta canalización, así que limitarla a un solo uso rompería cada ejecución futura. Desvincule primero esa programación.",
-        "pipeline_schedule_intake_unconfigured": "Un paso de entrada de errores toma su trabajo de la entrada de incidencias de la programación, y la programación vinculada no la tiene. Configure la entrada de incidencias en la programación primero."
+        "pipeline_schedule_intake_unconfigured": "Un paso de entrada de errores toma su trabajo de la entrada de incidencias de la programación, y la programación vinculada no la tiene. Configure la entrada de incidencias en la programación primero.",
+        "foundational_service_exists": "Ya hay un servicio fundacional con este identificador registrado en este ámbito. Abre la entrada existente y edítala: dos servicios no pueden compartir un identificador, porque es el nombre que un arquitecto usa en su diseño."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",

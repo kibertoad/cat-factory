@@ -4717,7 +4717,8 @@
         "prompt_revision_conflict": "Prompt modificato da qualcun altro",
         "pipeline_schedule_attached": "Una pianificazione ricorrente usa questa pipeline",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
-        "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket"
+        "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket",
+        "foundational_service_exists": "Il servizio fondamentale esiste già"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4745,7 +4746,8 @@
         "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra.",
         "pipeline_schedule_attached": "Una pianificazione ricorrente punta ancora a questa pipeline e ogni esecuzione che avvia la risolve tramite id. Scollega o elimina prima quella pianificazione, poi rimuovi la pipeline.",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",
-        "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione."
+        "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione.",
+        "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

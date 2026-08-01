@@ -70,6 +70,9 @@ import type {
   FragmentBriefGenerator,
   FragmentBriefRepository,
   FragmentSelector,
+  ApiContractRepository,
+  FoundationalServiceRepository,
+  FoundationalServiceSourceRepository,
   FragmentSourceRepository,
   GateRegistry,
   JudgeAssessor,
@@ -883,6 +886,17 @@ export interface CoreDependencies {
    * at dispatch by the resolver's head-commit probe instead.
    */
   enqueueSkillResync?: (request: SkillSourceResyncRequest) => Promise<void>
+
+  // ---- Foundational services (opt-in; docs/initiatives/foundational-services.md) ----
+  // The tiered catalog of shared capabilities (file storage, notifications, audit …) an
+  // Architect designs against and its consumers lazily read the API contracts of. The catalog
+  // assembles whenever `foundationalServiceRepository` + `apiContractRepository` are present;
+  // repo-sourced definitions additionally need `foundationalServiceSourceRepository`, the
+  // `githubClient` (above) and an installation resolver (the fragment one, which already
+  // resolves BOTH tiers).
+  foundationalServiceRepository?: FoundationalServiceRepository
+  apiContractRepository?: ApiContractRepository
+  foundationalServiceSourceRepository?: FoundationalServiceSourceRepository
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action

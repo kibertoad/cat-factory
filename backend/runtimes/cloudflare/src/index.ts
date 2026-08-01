@@ -27,7 +27,9 @@ import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastr
 import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
+  FOUNDATIONAL_SOURCE_STALE_MS,
   shouldRunReachabilityPass,
+  sweepFoundationalSources,
   sweepInfraReachability,
   sweepPlatformHealth,
 } from '@cat-factory/server'
@@ -651,6 +653,25 @@ function runPeriodicBackstops(
         }),
       ),
   )
+
+  // Refresh repo-linked FOUNDATIONAL-SERVICE sources whose last sync has aged out, so a merged
+  // OpenAPI change reaches the catalog without anyone opening the management surface. Runs on the
+  // same hourly cadence as its staleness window through the stateless window gate — a cron isolate
+  // has no memory of the last pass, and running the probe every 2 minutes would multiply the reads
+  // by 30 for a source that can only go stale once an hour. No-op unless the catalog + GitHub are
+  // both wired (nothing is linked to refresh).
+  if (
+    shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, FOUNDATIONAL_SOURCE_STALE_MS)
+  ) {
+    ctx.waitUntil(
+      sweepFoundationalSources(buildContainer(env).foundationalServices, logger).catch((error) =>
+        logger.error('foundational-source sweep failed', {
+          sweep: 'foundational-sources',
+          ...describeError(error),
+        }),
+      ),
+    )
+  }
 
   // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
   // environment integration is configured).

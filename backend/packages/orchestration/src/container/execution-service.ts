@@ -48,7 +48,8 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     platform,
     collaborators,
   } = input
-  const { llmObservability, environments, fragmentLibrary, skillLibrary } = platform
+  const { llmObservability, environments, foundationalServices, fragmentLibrary, skillLibrary } =
+    platform
   const {
     initiativeService,
     initiativeInterviewService,
@@ -92,6 +93,10 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // commit) through the skill library, present only when it's configured; a skill step
     // dispatched without it fails loudly rather than running blank.
     skillResolver: skillLibrary?.runResolver,
+    // The foundational-services catalog seam: the design-time catalog folded into an
+    // architect's context, and the lazily-resolved contract documents folded into its
+    // consumers'. Absent ⇒ neither is injected, which is byte-for-byte the prior behaviour.
+    foundationalServiceResolver: foundationalServices?.runResolver,
     // Canonicalise a URL pasted into a block description to the document's stable
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the
