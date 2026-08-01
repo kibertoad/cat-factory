@@ -785,7 +785,7 @@ deployment's own design/implementer kinds opt in by declaring one. Doc:
 **Binary-output steps** — a kind carrying the `binary-output` trait (a deployment's image
 generator; no built-in carries it) generates BINARY artifacts and stores them through a
 foundational service its step SELECTS from that same catalog (`stepOptions.binaryOutput`: a
-`binary-storage`-capability-tagged storage service + context services that scope the generation),
+`asset-storage`-capability-tagged storage service + context services that scope the generation),
 never through the platform's artifact store, which holds run evidence rather than deliverables.
 The join is the step's own config, not a design's declaration, so presence is refused structurally
 at save + start and resolution re-validates against the catalog at every admission; the injected

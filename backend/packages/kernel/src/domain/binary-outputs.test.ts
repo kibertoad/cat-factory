@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ASSET_STORAGE_CAPABILITY,
   BINARY_OUTPUT_DECLARATION_TAG,
-  BINARY_STORAGE_CAPABILITY,
   MAX_BINARY_OUTPUT_ENTRIES,
   binaryContextFileFor,
   binaryOutputConfigIssues,
+  describeBinaryOutputConfigIssues,
   parseBinaryOutputDeclaration,
   renderBinaryOutputBrief,
 } from './binary-outputs.js'
@@ -16,7 +17,7 @@ function view(overrides: Partial<FoundationalCatalogView> = {}): FoundationalCat
     name: 'Asset store',
     summary: 'Stores product media.',
     description: 'Org-wide binary asset storage.',
-    capabilities: [BINARY_STORAGE_CAPABILITY],
+    capabilities: [ASSET_STORAGE_CAPABILITY],
     contracts: [
       {
         contractId: 'api',
@@ -193,6 +194,54 @@ describe('parseBinaryOutputDeclaration', () => {
     expect(report.stored[0]?.description).toHaveLength(501)
     expect(report.stored[0]?.description?.endsWith('…')).toBe(true)
   })
+
+  it('reads the LAST block, so an illustrated example does not beat the real declaration', () => {
+    // Models routinely restate the contract before doing the work. Parsing the first block would
+    // record "stored nothing" for a run that stored two artifacts — a confident wrong answer.
+    const reply = [
+      'I will end with a block shaped like:',
+      '```binary-outputs',
+      'none',
+      '```',
+      'Generating now.',
+      '```binary-outputs',
+      JSON.stringify([{ service: 'asset-store', location: 'real.png' }]),
+      '```',
+    ].join('\n')
+    const report = parseBinaryOutputDeclaration(reply, known)
+    expect(report.stored).toEqual([{ service: 'asset-store', location: 'real.png' }])
+    expect(report.undeclared).toBeUndefined()
+  })
+})
+
+describe('describeBinaryOutputConfigIssues', () => {
+  it('names EVERY unresolved id, so one edit clears the refusal', () => {
+    // The point of collecting issues: a step that lost three services must not cost three
+    // refuse-fix-restart rounds.
+    const message = describeBinaryOutputConfigIssues('image-generator', [
+      { role: 'storage', serviceId: 'gone-store', problem: 'unknown_service' },
+      { role: 'context', serviceId: 'gone-inventory', problem: 'unknown_service' },
+      { role: 'context', serviceId: 'also-gone', problem: 'unknown_service' },
+    ])
+    expect(message).toContain('image-generator')
+    expect(message).toContain('gone-store')
+    expect(message).toContain('gone-inventory')
+    expect(message).toContain('also-gone')
+  })
+
+  it('states the capability problem as a distinct cause from an unknown id', () => {
+    // "registered but not storage-capable" and "not registered" need different fixes, so they
+    // must not read the same.
+    const capability = describeBinaryOutputConfigIssues('image-generator', [
+      { role: 'storage', serviceId: 'audit-log', problem: 'not_storage_capable' },
+    ])
+    const unknown = describeBinaryOutputConfigIssues('image-generator', [
+      { role: 'storage', serviceId: 'audit-log', problem: 'unknown_service' },
+    ])
+    expect(capability).toContain(ASSET_STORAGE_CAPABILITY)
+    expect(capability).not.toContain("is not in the workspace's catalog")
+    expect(unknown).toContain("is not in the workspace's catalog")
+  })
 })
 
 describe('renderBinaryOutputBrief', () => {
@@ -254,6 +303,6 @@ describe('renderBinaryOutputBrief', () => {
       contextServices: [],
       unresolvedContextIds: [],
     })
-    expect(brief).toContain(`does not advertise the \`${BINARY_STORAGE_CAPABILITY}\` capability`)
+    expect(brief).toContain(`does not advertise the \`${ASSET_STORAGE_CAPABILITY}\` capability`)
   })
 })

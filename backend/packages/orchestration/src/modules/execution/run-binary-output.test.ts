@@ -114,13 +114,33 @@ describe('createBinaryOutputDeclarationRecorder', () => {
     expect(target.binaryOutputs?.undeclared).toBe(true)
   })
 
-  it('leaves a non-trait step unannotated', async () => {
+  it('leaves a step that was never briefed unannotated', async () => {
+    // Neither its kind nor a selection: no brief was ever built for it, so a block in its reply
+    // is a coincidence, not a declaration.
     const target = step({ agentKind: 'coder' })
     await createBinaryOutputDeclarationRecorder({
       agentKindRegistry: registry,
       foundationalServiceResolver: resolver(),
     })('ws', target, declaration)
     expect(target.binaryOutputs).toBeUndefined()
+  })
+
+  it('records a step that carries a SELECTION even when its own kind lacks the trait', async () => {
+    // The read-back runs on the durable completion path, which rebuilds everything from the step
+    // and cannot see that a gate helper (or a PR-review override kind) is what actually ran.
+    // Keying on `step.agentKind` alone would silently drop the declaration of every trait-carrying
+    // kind dispatched under an overriding kind — the artifacts exist and the record says nothing.
+    // A selection is the only thing a brief is ever built from, so its presence is the honest
+    // step-local signal that some dispatch here was briefed.
+    const target = step({
+      agentKind: 'ci',
+      stepOptions: { binaryOutput: { storageServiceId: 'asset-store' } },
+    })
+    await createBinaryOutputDeclarationRecorder({
+      agentKindRegistry: registry,
+      foundationalServiceResolver: resolver(),
+    })('ws', target, declaration)
+    expect(target.binaryOutputs?.stored).toEqual([{ service: 'asset-store', location: 'a.png' }])
   })
 
   it('still records with NO resolver wired — every claimed id is then honestly unknown', async () => {

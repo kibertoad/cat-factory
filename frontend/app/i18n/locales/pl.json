@@ -575,7 +575,7 @@
         "pipeline_schedule_requires_recurring": "Harmonogram cykliczny nadal wskazuje ten potok, więc ograniczenie go do jednorazowego zepsułoby każde przyszłe uruchomienie. Najpierw odłącz ten harmonogram.",
         "pipeline_schedule_intake_unconfigured": "Krok pobierania błędów czerpie pracę z ustawień pobierania zgłoszeń harmonogramu, a powiązany harmonogram ich nie ma. Najpierw skonfiguruj pobieranie zgłoszeń w harmonogramie.",
         "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie.",
-        "binary_output_service_invalid": "Krok generujący wyniki binarne wybiera usługę fundamentalną, której katalog tego obszaru roboczego nie może rozpoznać: identyfikator jest nieznany albo wybrana usługa przechowywania nie ma zdolności binary-storage. Popraw wybór w kroku lub zarejestruj usługę, a następnie uruchom ponownie."
+        "binary_output_service_invalid": "Krok generujący wyniki binarne wybiera usługę fundamentalną, której katalog tego obszaru roboczego nie może rozpoznać: identyfikator jest nieznany albo wybrana usługa przechowywania nie ma zdolności asset-storage. Popraw wybór w kroku lub zarejestruj usługę, a następnie uruchom ponownie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

@@ -26,7 +26,7 @@ const serviceId = v.pipe(
 export const binaryOutputConfigSchema = v.object({
   /**
    * The catalog service every generated binary is STORED through. Must exist in the resolved
-   * catalog and carry the `binary-storage` capability tag — storing product assets in the
+   * catalog and carry the `asset-storage` capability tag — storing product assets in the
    * org's audit service is a configuration error, not a judgment call left to the agent.
    */
   storageServiceId: serviceId,
@@ -43,7 +43,12 @@ export type BinaryOutputConfig = v.InferOutput<typeof binaryOutputConfigSchema>
 
 /** One stored artifact a binary-generating step declared in its reply's machine-read block. */
 export const binaryOutputArtifactSchema = v.object({
-  /** The foundational-service id the agent says it stored the artifact through. */
+  /**
+   * The foundational-service id the agent says it stored the artifact through, LOWERCASED on
+   * read-back — catalog ids are lower-kebab slugs, so a model that capitalises one means the
+   * same service and must not be reported as unknown. (The sibling `location` is not
+   * normalised: it is the service's own addressing, where case can be significant.)
+   */
   service: v.string(),
   /**
    * Where the artifact lives IN that service's own addressing — an object key, a path, a URL;

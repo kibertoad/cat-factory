@@ -4749,7 +4749,7 @@
         "pipeline_schedule_requires_recurring": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline. Sie nur einmalig zu machen würde jeden künftigen Lauf unterbrechen. Lösen Sie zuerst diesen Zeitplan.",
         "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan.",
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
-        "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit binary-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut."
+        "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

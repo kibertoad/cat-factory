@@ -321,7 +321,7 @@ it buys (full design: `docs/initiatives/binary-output-foundational-storage.md`):
 - **Storage is a FOUNDATIONAL SERVICE the step selects**, never the platform's own artifact
   store (that store holds run evidence — screenshots — not product deliverables). The pipeline
   step sets `stepOptions.binaryOutput.storageServiceId` to a catalog service carrying the
-  `binary-storage` capability tag, plus optional `contextServiceIds` — catalog services the agent
+  `asset-storage` capability tag, plus optional `contextServiceIds` — catalog services the agent
   consults for generation SCOPE (an entity inventory that knows what exists, what lacks an asset,
   and how each thing is described).
 - **The engine injects `.cat-context/binary-output/`**: a brief naming the selected services and

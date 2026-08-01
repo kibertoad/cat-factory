@@ -1,6 +1,6 @@
 import { AgentKindRegistry } from '@cat-factory/agents'
 import type { Block } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ASSET_STORAGE_CAPABILITY, ConflictError, ValidationError } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import { RunAdmission, type RunAdmissionDeps } from './RunAdmission.js'
@@ -65,7 +65,7 @@ async function refusal(run: Promise<void>): Promise<ConflictError> {
 }
 
 describe('RunAdmission — binary-output selection', () => {
-  const storage = { id: 'asset-store', capabilities: ['binary-storage'] }
+  const storage = { id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }
   const inventory = { id: 'entity-inventory', capabilities: ['generation-context'] }
 
   it('refuses a generator step with NO selection as a structural fault (the shape check)', async () => {
@@ -99,7 +99,7 @@ describe('RunAdmission — binary-output selection', () => {
     })
   })
 
-  it('refuses a storage service without the binary-storage capability tag', async () => {
+  it('refuses a storage service without the asset-storage capability tag', async () => {
     const error = await refusal(
       admission(catalogResolver([inventory])).assertRunnable(
         'ws',
@@ -129,6 +129,41 @@ describe('RunAdmission — binary-output selection', () => {
       ),
     )
     expect(error.details).toMatchObject({ serviceId: 'gone', role: 'context' })
+  })
+
+  it('names EVERY unresolved id, so one edit clears the refusal', async () => {
+    // Surfacing only the first would cost a refuse-fix-restart round per lost service, each one a
+    // full admission cycle. `details.issues` is the machine-readable whole; the headline fields
+    // stay for the SPA toast.
+    const error = await refusal(
+      admission(catalogResolver([storage])).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'gone-store',
+                contextServiceIds: ['gone-inventory', 'entity-inventory'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_service_invalid',
+      serviceId: 'gone-store',
+      issues: [
+        { role: 'storage', serviceId: 'gone-store', problem: 'unknown_service' },
+        { role: 'context', serviceId: 'gone-inventory', problem: 'unknown_service' },
+        { role: 'context', serviceId: 'entity-inventory', problem: 'unknown_service' },
+      ],
+    })
+    expect(error.message).toContain('gone-inventory')
+    expect(error.message).toContain('entity-inventory')
   })
 
   it('admits a resolvable selection, and a chain with no generator step at all', async () => {

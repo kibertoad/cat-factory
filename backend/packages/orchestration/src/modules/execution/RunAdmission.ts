@@ -31,7 +31,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { binaryOutputConfigIssues } from '@cat-factory/kernel'
+import { binaryOutputConfigIssues, describeBinaryOutputConfigIssues } from '@cat-factory/kernel'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
@@ -670,10 +670,15 @@ export class RunAdmission {
    * {@link BINARY_OUTPUT_TRAIT} — e.g. a deployment's image generator, whose deliverable is
    * binary artifacts pushed into a foundational storage service): the step's selection
    * (`stepOptions.binaryOutput`) must RESOLVE against the workspace's catalog — the storage id
-   * must exist and carry the `binary-storage` capability tag, each context id must exist —
-   * refused with `binary_output_service_invalid` naming the offending id. The catalog can
-   * change after the pipeline was saved, which is why this re-validates at every
-   * start/retry/restart.
+   * must exist and carry the `asset-storage` capability tag, each context id must exist —
+   * refused with `binary_output_service_invalid`. The catalog can change after the pipeline was
+   * saved, which is why this re-validates at every start/retry/restart.
+   *
+   * The refusal names EVERY unresolved id, not the first: the message comes from
+   * `describeBinaryOutputConfigIssues` and `details.issues` carries the machine-readable list,
+   * so one edit clears a step that lost three services rather than three refuse-fix-restart
+   * rounds. `details.serviceId` / `problem` / `role` stay on the envelope as the headline the
+   * SPA's toast reads.
    *
    * The selection's PRESENCE is deliberately not checked here: that is a structural pipeline
    * fault `assertValidBinaryOutputSteps` (in `validatePipelineShape`, which every entry point
@@ -691,35 +696,27 @@ export class RunAdmission {
   ): Promise<void> {
     const resolver = this.foundationalServiceResolver
     if (!resolver) return
-    const generators = agentKinds
-      .map((kind, i) => ({ kind, config: stepOptions?.[i]?.binaryOutput, i }))
-      .filter(
-        ({ kind, config, i }) =>
-          config !== undefined &&
-          enabled?.[i] !== false &&
-          hasTrait(kind, BINARY_OUTPUT_TRAIT, this.agentKindRegistry),
-      )
+    const generators = agentKinds.flatMap((kind, i) => {
+      const config = stepOptions?.[i]?.binaryOutput
+      if (!config || enabled?.[i] === false) return []
+      if (!hasTrait(kind, BINARY_OUTPUT_TRAIT, this.agentKindRegistry)) return []
+      return [{ kind, config }]
+    })
     if (generators.length === 0) return
     const catalog = await resolver.catalogFor(workspaceId)
     for (const { kind, config } of generators) {
-      const issues = binaryOutputConfigIssues(config!, catalog)
+      const issues = binaryOutputConfigIssues(config, catalog)
       const first = issues[0]
       if (!first) continue
       throw new ConflictError(
-        first.problem === 'not_storage_capable'
-          ? `Step '${kind}' stores its binary outputs through '${first.serviceId}', but that ` +
-              "foundational service does not declare the 'binary-storage' capability. Pick a " +
-              'storage-capable service, or add the capability tag to it.'
-          : `Step '${kind}' selects the foundational service '${first.serviceId}' ` +
-              `(as its ${first.role === 'storage' ? 'storage target' : 'generation context'}), ` +
-              "but the workspace's catalog does not contain it. Fix the step's selection, or " +
-              'register the service.',
+        describeBinaryOutputConfigIssues(kind, issues),
         'binary_output_service_invalid',
         {
           agentKind: kind,
           serviceId: first.serviceId,
           problem: first.problem,
           role: first.role,
+          issues: issues.map(({ role, serviceId, problem }) => ({ role, serviceId, problem })),
         },
       )
     }

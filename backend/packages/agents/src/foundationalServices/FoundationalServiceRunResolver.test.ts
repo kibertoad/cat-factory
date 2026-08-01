@@ -1,7 +1,7 @@
 import type { ApiContractDocument, ResolvedFoundationalService } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_BRIEF_FILE,
-  BINARY_STORAGE_CAPABILITY,
+  ASSET_STORAGE_CAPABILITY,
   FOUNDATIONAL_INDEX_FILE,
   binaryContextFileFor,
   contextFileFor,
@@ -98,7 +98,7 @@ describe('FoundationalServiceRunResolver.contextFilesFor', () => {
 describe('FoundationalServiceRunResolver.binaryOutputContextFilesFor', () => {
   const storageEntry = {
     ...entry('asset-store'),
-    capabilities: [BINARY_STORAGE_CAPABILITY],
+    capabilities: [ASSET_STORAGE_CAPABILITY],
   }
 
   it('injects the brief plus one contract file per resolved service, storage first', async () => {

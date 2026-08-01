@@ -2,11 +2,13 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
 import type { ExecutionInstance, InjectedContextFile, Logger } from '@cat-factory/kernel'
 import {
+  type FoundationalDeclarationRecorder,
   type FoundationalServiceResolver,
   createFoundationalDeclarationRecorder,
   resolveFoundationalContext,
 } from './run-foundational-services.js'
 import {
+  type BinaryOutputDeclarationRecorder,
   createBinaryOutputDeclarationRecorder,
   resolveBinaryOutputContext,
 } from './run-binary-output.js'
@@ -28,7 +30,18 @@ export interface CatalogRunContextDeps {
 }
 
 export class CatalogRunContext {
-  constructor(private readonly deps: CatalogRunContextDeps) {}
+  /**
+   * The two read-back closures, bound ONCE. Each `create*Recorder` resolves the failure policy
+   * and (for the foundational one) short-circuits to a no-op when no resolver is wired, so
+   * rebuilding them per settlement re-did that work and made the no-op binding pointless.
+   */
+  private readonly recordFoundational: FoundationalDeclarationRecorder
+  private readonly recordBinaryOutput: BinaryOutputDeclarationRecorder
+
+  constructor(private readonly deps: CatalogRunContextDeps) {
+    this.recordFoundational = createFoundationalDeclarationRecorder(deps)
+    this.recordBinaryOutput = createBinaryOutputDeclarationRecorder(deps)
+  }
 
   /**
    * The FOUNDATIONAL SERVICES slice of a dispatch's `.cat-context/` — the catalog for a design
@@ -73,7 +86,7 @@ export class CatalogRunContext {
     step: PipelineStep,
     output: string | undefined,
   ): Promise<void> {
-    return createFoundationalDeclarationRecorder(this.deps)(workspaceId, step, output)
+    return this.recordFoundational(workspaceId, step, output)
   }
 
   /**
@@ -85,6 +98,6 @@ export class CatalogRunContext {
     step: PipelineStep,
     output: string | undefined,
   ): Promise<void> {
-    return createBinaryOutputDeclarationRecorder(this.deps)(workspaceId, step, output)
+    return this.recordBinaryOutput(workspaceId, step, output)
   }
 }

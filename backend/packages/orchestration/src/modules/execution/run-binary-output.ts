@@ -57,6 +57,34 @@ export async function resolveBinaryOutputContext(
 }
 
 /**
+ * Whether a SETTLED step may carry a binary-output declaration worth reading back — the
+ * read-back's counterpart to {@link resolveBinaryOutputContext}'s trait check.
+ *
+ * The two cannot ask the same question, and getting that wrong loses records. Injection runs at
+ * DISPATCH and keys off the EFFECTIVE kind, which it is handed; the read-back runs on the
+ * durable completion path, which rebuilds everything from the STEP alone and so cannot know
+ * that a gate helper or a PR-review override kind — not `step.agentKind` — is what actually
+ * ran. Asking only `hasTrait(step.agentKind)` therefore drops the declaration of every
+ * trait-carrying kind dispatched under an overriding kind, silently: the artifacts exist, the
+ * step's record says nothing was stored, and nothing errors.
+ *
+ * So the condition is the UNION, and both halves are derivable from the step:
+ * - its own kind carries the trait (the ordinary generator step), or
+ * - it carries a `binaryOutput` SELECTION, which is the only thing a brief is ever built from —
+ *   if one is present, some dispatch on this step was briefed and may have stored something.
+ *
+ * A step with neither was never handed a brief, so a block in its reply would be a coincidence,
+ * not a declaration.
+ */
+export function stepMayDeclareBinaryOutputs(
+  step: PipelineStep,
+  agentKindRegistry: AgentKindRegistry,
+): boolean {
+  if (step.stepOptions?.binaryOutput !== undefined) return true
+  return hasTrait(step.agentKind, BINARY_OUTPUT_TRAIT, agentKindRegistry)
+}
+
+/**
  * Read a settled binary-generating step's declaration out of the reply it just produced and
  * record it on the step (`step.binaryOutputs`). Called from the completion hub's job-facts
  * pass, BEFORE any early-returning path — a generator that parks on a decision must not lose
@@ -84,7 +112,7 @@ export function createBinaryOutputDeclarationRecorder(deps: {
   logger?: Logger
 }): BinaryOutputDeclarationRecorder {
   return async (workspaceId, step, output) => {
-    if (!hasTrait(step.agentKind, BINARY_OUTPUT_TRAIT, deps.agentKindRegistry)) return
+    if (!stepMayDeclareBinaryOutputs(step, deps.agentKindRegistry)) return
     await runBestEffort(
       deps.logger ?? noopLogger,
       'binaryOutput.recordDeclaration',

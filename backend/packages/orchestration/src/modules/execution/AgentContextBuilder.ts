@@ -1247,15 +1247,23 @@ export class AgentContextBuilder {
    * {@link CatalogRunContext} collaborator. The two `record*` delegates below stay PUBLIC here
    * because the completion hub reaches them through the builder, which handed the agent its
    * catalog context in the first place.
+   *
+   * Built ONCE and memoised: it is stateless and its four entry points are reached on every
+   * dispatch (twice inside one `Promise.all`) and every settlement, so re-deriving the
+   * optional-spread deps each time was allocation with no purpose — and a collaborator rebuilt
+   * per call invites someone to give it per-call state it cannot keep.
    */
+  private catalogRunContext?: CatalogRunContext
+
   private catalogContext(): CatalogRunContext {
-    return new CatalogRunContext({
+    this.catalogRunContext ??= new CatalogRunContext({
       agentKindRegistry: this.deps.agentKindRegistry,
       ...(this.deps.foundationalServiceResolver
         ? { foundationalServiceResolver: this.deps.foundationalServiceResolver }
         : {}),
       ...(this.deps.logger ? { logger: this.deps.logger } : {}),
     })
+    return this.catalogRunContext
   }
 
   recordFoundationalDeclaration(

@@ -218,14 +218,19 @@ export {
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_CONTEXT_DIR,
   BINARY_OUTPUT_DECLARATION_TAG,
-  BINARY_STORAGE_CAPABILITY,
+  ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
   MAX_BINARY_OUTPUT_ENTRIES,
   binaryContextFileFor,
   binaryOutputConfigIssues,
+  describeBinaryOutputConfigIssues,
   parseBinaryOutputDeclaration,
   renderBinaryOutputBrief,
 } from './domain/binary-outputs.js'
+
+// The shared reader for an agent's machine-read ` ```<tag> ` declaration block — the LAST one
+// wins, because every contract using it asks the agent to END its reply with it.
+export { extractFencedDeclaration } from './domain/fenced-declaration.js'
 
 // Installation-level extension point for custom polling gates + step-completion
 // resolvers (mirrors the agent-kind / pipeline registry seams): a deployment registers

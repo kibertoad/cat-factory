@@ -3,6 +3,7 @@ import type {
   BinaryOutputConfig,
   BinaryOutputReport,
 } from '@cat-factory/contracts'
+import { extractFencedDeclaration } from './fenced-declaration.js'
 import type { FoundationalCatalogView } from './foundational-services.js'
 
 // ---------------------------------------------------------------------------
@@ -23,11 +24,16 @@ import type { FoundationalCatalogView } from './foundational-services.js'
 /**
  * The capability tag a foundational service must carry to be selectable as a step's binary
  * STORAGE target. Enforced at run admission: pushing product assets into the org's audit
- * service is a configuration error, not a judgment call left to the agent. (Unrelated to the
- * agents package's `binary-storage` TRAIT, which marks a kind as needing the PLATFORM's own
- * artifact store for run evidence such as screenshots.)
+ * service is a configuration error, not a judgment call left to the agent.
+ *
+ * Deliberately NOT spelled `binary-storage`, which is the agents package's
+ * `BINARY_STORAGE_TRAIT` — a marker on a KIND that needs the PLATFORM's own artifact store for
+ * run EVIDENCE (the UI Tester's screenshots). The two mean opposite things about opposite
+ * subjects, and while they shared one literal, `RunAdmission` imported both, a swap typechecked
+ * (a capability tag is a free-form string), and no test could tell. `binary-outputs.spec.ts` in
+ * `@cat-factory/agents` — the one package that can see both — pins them apart.
  */
-export const BINARY_STORAGE_CAPABILITY = 'binary-storage'
+export const ASSET_STORAGE_CAPABILITY = 'asset-storage'
 
 /**
  * The CONVENTIONAL capability tag for a service that can scope a generation — an inventory
@@ -88,7 +94,7 @@ export interface BinaryOutputConfigIssue {
 /**
  * Validate a step's selection against the RESOLVED catalog. Pure, so run admission and any
  * future save-time surface apply identical rules: the storage id must exist AND carry
- * {@link BINARY_STORAGE_CAPABILITY}; each context id must exist. Returns every issue rather
+ * {@link ASSET_STORAGE_CAPABILITY}; each context id must exist. Returns every issue rather
  * than the first, so a refusal can name the whole fix.
  */
 export function binaryOutputConfigIssues(
@@ -104,7 +110,7 @@ export function binaryOutputConfigIssues(
       serviceId: config.storageServiceId,
       problem: 'unknown_service',
     })
-  } else if (!storage.capabilities.includes(BINARY_STORAGE_CAPABILITY)) {
+  } else if (!storage.capabilities.includes(ASSET_STORAGE_CAPABILITY)) {
     issues.push({
       role: 'storage',
       serviceId: config.storageServiceId,
@@ -115,6 +121,38 @@ export function binaryOutputConfigIssues(
     if (!byId.has(id)) issues.push({ role: 'context', serviceId: id, problem: 'unknown_service' })
   }
   return issues
+}
+
+/**
+ * The operator-facing message for a refused selection, naming EVERY issue
+ * {@link binaryOutputConfigIssues} found rather than only the one that happens to sort first.
+ *
+ * That completeness is the whole point of collecting them: a step selecting three context ids
+ * the catalog lost would otherwise be fixed, restarted, and refused again — once per id — with
+ * each round costing a full admission cycle. The refusal names the whole fix so one edit clears
+ * it.
+ *
+ * Prose, not localized copy: the SPA keys its translated toast off the envelope's
+ * `details.reason` / `details.issues` and reveals this text under "Show details" (the standing
+ * split — the backend does not localize, and its operator remedies must still be reachable).
+ */
+export function describeBinaryOutputConfigIssues(
+  agentKind: string,
+  issues: readonly BinaryOutputConfigIssue[],
+): string {
+  const clauses = issues.map((issue) => {
+    if (issue.problem === 'not_storage_capable') {
+      return `'${issue.serviceId}' is registered but does not declare the '${ASSET_STORAGE_CAPABILITY}' capability, so it cannot be the storage target`
+    }
+    const role = issue.role === 'storage' ? 'storage target' : 'generation context'
+    return `'${issue.serviceId}' (selected as ${role}) is not in the workspace's catalog`
+  })
+  const problems = clauses.length === 1 ? clauses[0] : clauses.map((c) => `\n  - ${c}`).join('')
+  return (
+    `Step '${agentKind}' generates binary outputs, but its selection does not resolve: ${problems}` +
+    "\nFix the step's selection, register the missing service, or add the " +
+    `'${ASSET_STORAGE_CAPABILITY}' capability to the one you meant, then start again.`
+  )
 }
 
 // --- the agent's declaration ------------------------------------------------
@@ -132,6 +170,9 @@ export function binaryOutputConfigIssues(
  * entries past {@link MAX_BINARY_OUTPUT_ENTRIES} in `omitted`, and a `service` id not in
  * `known` is listed in `unknownServices` while its entries are KEPT — the platform records the
  * claim; a reader judges it against the step's configured target.
+ *
+ * The LAST block wins ({@link extractFencedDeclaration}), because the guidance asks the agent to
+ * END its reply with it and models routinely illustrate the shape first.
  */
 export function parseBinaryOutputDeclaration(
   output: string | undefined,
@@ -143,14 +184,8 @@ export function parseBinaryOutputDeclaration(
     invalidEntries: 0,
     omitted: 0,
   }
-  if (!output) return { ...empty, undeclared: true }
-  const fence = new RegExp(
-    `\`\`\`${BINARY_OUTPUT_DECLARATION_TAG}\\s*\\r?\\n([\\s\\S]*?)\`\`\``,
-    'i',
-  )
-  const match = output.match(fence)
-  if (!match) return { ...empty, undeclared: true }
-  const body = (match[1] ?? '').trim()
+  const body = extractFencedDeclaration(output, BINARY_OUTPUT_DECLARATION_TAG)
+  if (body === null) return { ...empty, undeclared: true }
   if (body.toLowerCase() === 'none') return empty
 
   let parsed: unknown
@@ -211,7 +246,12 @@ function identityField(value: unknown): string | null {
   return trimmed
 }
 
-/** A field that DESCRIBES something: kept best-effort, elided past the cap with a marker. */
+/**
+ * A field that DESCRIBES something: kept best-effort, elided past the cap with a marker. The
+ * retained text is a PLAIN PREFIX and the `…` says so, which is what the cap owes a reader —
+ * unlike the entry-level caps beside it, where what was dropped is a countable thing and is
+ * therefore counted (`omitted` / `invalidEntries`).
+ */
 function displayField(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
@@ -259,9 +299,9 @@ export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
       `Store EVERY binary you generate through \`${input.storage.id}\` — ${input.storage.name}: ${input.storage.summary}`,
       '',
     )
-    if (!input.storage.capabilities.includes(BINARY_STORAGE_CAPABILITY)) {
+    if (!input.storage.capabilities.includes(ASSET_STORAGE_CAPABILITY)) {
       lines.push(
-        `Note: \`${input.storage.id}\` does not advertise the \`${BINARY_STORAGE_CAPABILITY}\` capability. It was still selected for this step; if its API offers no way to store binary content, say so in your report rather than improvising.`,
+        `Note: \`${input.storage.id}\` does not advertise the \`${ASSET_STORAGE_CAPABILITY}\` capability. It was still selected for this step; if its API offers no way to store binary content, say so in your report rather than improvising.`,
         '',
       )
     }

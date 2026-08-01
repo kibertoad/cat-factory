@@ -141,7 +141,7 @@ export const CONFLICT_REASONS = [
   // A binary-generating step's (`binary-output` trait) selected foundational service does not
   // resolve against the workspace's catalog — the id is unknown
   // (`details.problem: 'unknown_service'`), or the selected STORAGE service does not carry the
-  // `binary-storage` capability tag (`details.problem: 'not_storage_capable'`).
+  // `asset-storage` capability tag (`details.problem: 'not_storage_capable'`).
   // `details.serviceId` names the offender. The catalog can change after the pipeline was
   // saved, which is why run admission re-validates the selection every start/retry/restart.
   // (A step MISSING its selection entirely is a structural pipeline fault, refused as a 422 at
