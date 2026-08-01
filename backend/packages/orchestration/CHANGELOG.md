@@ -1,5 +1,33 @@
 # @cat-factory/orchestration
 
+## 0.179.0
+
+### Minor Changes
+
+- 0b52df7: Add foundational services: a tiered (account ⊕ workspace) catalog of the shared capabilities an
+  organisation already runs — file storage, notifications, audit — each with a description and its
+  API contracts (OpenAPI 3.x, `@toad-contracts/core` or `@lokalise/api-contract`), supplied either by
+  direct upload or by linking files/folders in a git repo that is cached and auto-refreshed on both
+  runtimes.
+
+  The Architect is folded the catalog (identity, capability tags and indexed operation names — never a
+  document body) and must declare the service ids its design consumes; the Researcher and Coder are
+  then handed the full API contracts of exactly those services, plus an explicit statement of anything
+  the design named that the catalog does not contain.
+
+### Patch Changes
+
+- Updated dependencies [0b52df7]
+  - @cat-factory/contracts@0.204.0
+  - @cat-factory/kernel@0.203.0
+  - @cat-factory/caching@0.12.0
+  - @cat-factory/agents@0.96.0
+  - @cat-factory/integrations@0.113.8
+  - @cat-factory/prompt-fragments@0.15.27
+  - @cat-factory/sandbox@0.11.18
+  - @cat-factory/spend@0.12.134
+  - @cat-factory/workspaces@0.21.11
+
 ## 0.178.1
 
 ### Patch Changes
