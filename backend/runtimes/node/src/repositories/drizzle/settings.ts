@@ -331,6 +331,16 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
       perType = null
     }
   }
+  let metadata: WorkspaceSettings['metadata'] = {}
+  if (row.metadata) {
+    try {
+      metadata = JSON.parse(row.metadata) as WorkspaceSettings['metadata']
+    } catch {
+      // An unparseable blob reads as "nothing filled in", never as a missing key — the
+      // settings object is total, so every reader can index it without a null check.
+      metadata = {}
+    }
+  }
   return {
     waitingEscalationMinutes: row.waiting_escalation_minutes,
     taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
@@ -350,6 +360,7 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
     defaultProvisionType:
       (row.default_provision_type as WorkspaceSettings['defaultProvisionType']) ?? null,
     defaultProvisionManifestId: row.default_provision_manifest_id,
+    metadata,
   }
 }
 
@@ -408,6 +419,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       spend_monthly_limit: settings.spendMonthlyLimit,
       default_provision_type: settings.defaultProvisionType,
       default_provision_manifest_id: settings.defaultProvisionManifestId,
+      metadata: JSON.stringify(settings.metadata),
     }
     await this.db
       .insert(workspaceSettings)
@@ -432,6 +444,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           spend_monthly_limit: values.spend_monthly_limit,
           default_provision_type: values.default_provision_type,
           default_provision_manifest_id: values.default_provision_manifest_id,
+          metadata: values.metadata,
         },
       })
   }

@@ -781,6 +781,7 @@
         "merge": "Risikorichtlinien",
         "tracker": "Issue-Tracker",
         "fragments": "Dienst-Best-Practices",
+        "metadata": "Metadaten",
         "members": "Mitglieder"
       },
       "waiting": {
@@ -845,6 +846,12 @@
         "heading": "Kaizen-Agent",
         "body": "Nach Abschluss jeder Ausführung bewertet der Kaizen-Agent, wie jeder Agentenschritt verlief, von reibungslos und effizient bis verwirrt und chaotisch, und empfiehlt Prompt-/Modellverbesserungen. Eine Kombination aus Prompt, Agent und Modell, die fünfmal in Folge hoch bewertet wird und keine Empfehlungen erhält, wird als verifiziert markiert und nicht mehr bewertet. Die Bewertung läuft im Hintergrund und wird in den Ausführungsdetails und im Kaizen-Bildschirm angezeigt. Lege das Modell des Bewerters in der Modellkonfiguration fest (der \"Kaizen\"-Agent).",
         "toggle": "Agenten-Ausführungen mit Kaizen bewerten"
+      },
+      "metadata": {
+        "heading": "Arbeitsbereich-Metadaten",
+        "body": "Werte für die benutzerdefinierten Felder dieser Installation. Externe Tools lesen sie und öffnen direkt das richtige Projekt für diesen Arbeitsbereich.",
+        "empty": "Diese Installation definiert keine benutzerdefinierten Arbeitsbereichsfelder.",
+        "unset": "Nicht gesetzt"
       },
       "budget": {
         "heading": "Monatliches Ausgabenbudget",
@@ -2107,6 +2114,7 @@
         "create": "Erstellen",
         "repositories": "Repositories",
         "integrations": "Integrationen",
+        "externalTools": "Externe Tools",
         "workspace": "Workspace",
         "account": "Konto"
       },
@@ -4635,6 +4643,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Workspace-Kontext",
     "contextFragments": "Kontextfragmente",
+    "externalTools": "Externe Tools",
     "configuration": "Konfiguration",
     "workspaceSettings": "Workspace-Einstellungen",
     "modelConfiguration": "Modellkonfiguration",
@@ -6114,6 +6123,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "{tool} kann nicht geöffnet werden",
+      "missingMetadata": "Füllen Sie zuerst {fields} im Tab Metadaten der Arbeitsbereichseinstellungen aus.",
+      "unresolved": "Dieses Tool hat für den aktuellen Arbeitsbereich keine Adresse geliefert.",
+      "resolverFailed": "Beim Ermitteln der Adresse ist in diesem Tool ein Fehler aufgetreten. Die Ursache steht in der Browser-Konsole, für die Betreuer dieser Installation.",
+      "unsafeUrl": "Dieses Tool hat eine Adresse geliefert, die kein Weblink ist, und wurde daher nicht geöffnet."
     }
   }
 }

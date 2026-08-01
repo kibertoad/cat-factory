@@ -56,16 +56,18 @@ export default defineNuxtPlugin(() => {
 
 ## The landed seams
 
-| Seam                                | Slot key          | Entry shape                                                                                      | Host                                                                 |
-| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Run-detail windows                  | `resultViews`     | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView`                          |
-| Agent kinds (palette data)          | `agentKinds`      | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`                                 |
-| Custom task types                   | `taskTypes`       | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`) |
-| Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`          | the three shells via `useNavContributions`                           |
-| Inspector body panels               | `inspectorPanels` | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                 |
-| Top-level overlays                  | `appOverlays`     | `{ id: '<ns>:<name>', component }`                                                               | `<AppOverlayHost>` via `useAppOverlays().open(id)`                   |
-| Multi-step wizards                  | (journeys)        | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                  |
-| Locale strings                      | (i18n)            | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                      |
+| Seam                                | Slot key                  | Entry shape                                                                                      | Host                                                                      |
+| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Run-detail windows                  | `resultViews`             | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView`                               |
+| Agent kinds (palette data)          | `agentKinds`              | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`                                      |
+| Custom task types                   | `taskTypes`               | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`)      |
+| Sidebar / command-palette / toolbar | `nav`                     | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`          | the three shells via `useNavContributions`                                |
+| Inspector body panels               | `inspectorPanels`         | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                      |
+| Top-level overlays                  | `appOverlays`             | `{ id: '<ns>:<name>', component }`                                                               | `<AppOverlayHost>` via `useAppOverlays().open(id)`                        |
+| External tools                      | `externalTools`           | `{ id, title, icon, url, description?, requiredMetadata?, gate?, advanced?, order? }`            | the "External tools" sidebar section + palette, via `useNavContributions` |
+| Custom workspace metadata fields    | `workspaceMetadataFields` | `{ key, label, description?, placeholder?, type?, options?, order? }`                            | the Metadata tab of Workspace settings                                    |
+| Multi-step wizards                  | (journeys)                | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                       |
+| Locale strings                      | (i18n)                    | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                           |
 
 A `nav` entry may also declare `advanced: true`, which hides it in **basic** interface mode
 (the shipped default) exactly as it does for the first-party destinations — see
@@ -102,6 +104,70 @@ Contribute `PanelEntry<Block>` entries; each `when(block)` predicate decides whi
 show the panel, and `order` places it among the built-ins. Your panel component reads the
 selected block via `usePanelSubject<Block>()` (`@modular-vue/core`). `when` must tolerate a
 nullish subject (the boot-time validation resolve passes `null`).
+
+### External tools + workspace metadata (`externalTools`, `workspaceMetadataFields`)
+
+Put your OWN web applications — a map editor, an asset pipeline, an admin console — in the
+sidebar's **External tools** section, and open each one _already scoped to what the user is
+looking at_. That second half is the point of the seam; a static link needs no registration.
+
+```ts
+externalTools: [
+  {
+    id: 'acme:map-editor',
+    title: 'Map editor',                       // literal copy: a tool's name is DATA, not a key
+    description: 'Edit the level geometry for this project.',
+    icon: 'i-lucide-map',
+    requiredMetadata: ['gameId'],
+    url: (ctx) => {
+      // Build, don't splice: every value here is operator-typed text (see below).
+      const url = new URL('https://maps.acme.dev/edit')
+      url.searchParams.set('game', ctx.metadata.gameId ?? '')
+      url.searchParams.set('ws', ctx.workspaceId)
+      return url.toString()
+    },
+  },
+],
+workspaceMetadataFields: [{ key: 'gameId', label: 'Game id', placeholder: 'zork' }],
+```
+
+- **`url` is a string or a RESOLVER** `(ctx) => string | null`. The context carries `userId`,
+  `userEmail`, `workspaceId`, `workspaceName` and `metadata` — the custom workspace fields you
+  declared. It is read at CLICK time, so a value a teammate fills in while the sidebar is open
+  takes effect without a reload.
+- **Clicking opens a separate page** (`target=_blank`, `noopener`). The resolved URL must be
+  `http(s)`: anything else is refused rather than handed to the browser, because the string
+  reaches `window.open` and a `javascript:` URL would run in the SPA's own origin.
+- **Declare `requiredMetadata` for the fields your resolver needs.** An unconfigured workspace
+  then gets "fill in `gameId` on the Metadata tab" instead of a generic failure — and the tool
+  stays LISTED, because the person looking at the sidebar is usually the one who can fix it. A
+  resolver that returns `null` reports separately ("this tool gave no address"), since that one
+  is yours to fix, not the operator's.
+- **Treat every `ctx.metadata` value as untrusted input.** A workspace admin types these in, so a
+  value is operator-supplied text that happens to be length-bounded — not a constant you chose.
+  Set it as a query parameter or an `encodeURIComponent`'d path segment, as above. Never build the
+  ORIGIN from one: `` `https://${ctx.metadata.region}.acme.dev` `` with `region` set to
+  `evil.com/x?a=` resolves to a URL on someone else's host, and the `http(s)` allow-list cannot
+  tell that apart from the link you meant.
+- **A resolver that THROWS costs only its own item.** It is caught and reported as a fourth
+  reason (`resolver-failed`) with the cause logged to the console — the sidebar, the palette and
+  the toolbar all render from one catalog, so an uncaught throw would otherwise blank all three.
+  Do not rely on it: `requiredMetadata` is how you say a field must be there.
+- **`gate` and `advanced`** work exactly as on a `nav` entry; both must pass.
+
+**The metadata half** is a deployment-declared FIELD list (here) whose VALUES are per workspace,
+typed in under _Workspace settings → Metadata_ and persisted on the workspace settings row. The
+tab appears only where a deployment declares fields. Keys must be identifier-shaped
+(`^[A-Za-z][A-Za-z0-9_.-]{0,63}$` — the backend refuses anything else); a malformed or duplicate
+key is dropped with a dev-console warning rather than rendered. `type: 'select'` renders a picker
+over your `options`; everything is stored as a string.
+
+Two rules the editor keeps, and any other writer of the bag should too: a CLEARED field drops its
+key (so "unset" never reads as "set to nothing" in a resolver), and a save carries through any
+stored key the current build does not declare — the update replaces the whole bag, so a value
+written under a field you have since retired must not be deleted by an unrelated save.
+
+Values are readable anywhere in the SPA via `useWorkspaceSettingsStore().settings.metadata`.
 
 ### Custom task types (`taskTypes`)
 

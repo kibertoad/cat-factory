@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { hasI18nKey } from '../../test/i18nKeys'
 import {
+  COMMAND_GROUP_ORDER,
   groupCommands,
   groupSidebar,
   NAV_ACTIONS,
   NAV_CONTRIBUTIONS,
   navSlotFilter,
+  SIDEBAR_GROUP_ORDER,
   sortToolbar,
 } from './nav-contributions'
 import type { AppSlots, NavGates } from './nav-contributions'
@@ -60,6 +62,8 @@ const slots = (): AppSlots => ({
   taskTypeFormPanels: [],
   appOverlays: [],
   tutorialTours: [],
+  externalTools: [],
+  workspaceMetadataFields: [],
 })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 
@@ -212,6 +216,30 @@ describe('navSlotFilter', () => {
   })
 })
 
+describe('navSlotFilter external tools', () => {
+  const tools = [
+    { id: 'acme:a', title: 'A', icon: 'i-lucide-link', url: 'https://a.dev' },
+    {
+      id: 'acme:b',
+      title: 'B',
+      icon: 'i-lucide-link',
+      url: 'https://b.dev',
+      gate: (g: NavGates) => g.canManageIntegrations,
+    },
+  ]
+  const toolIds = (s: unknown) => (s as AppSlots).externalTools.map((t) => t.id)
+
+  it('gates registered tools in the SAME filter as the nav catalog', () => {
+    // They become nav items downstream (`useNavContributions` projects them), so gating them
+    // anywhere else would let a tool the caller can't use reach the palette while its sidebar
+    // twin was correctly hidden.
+    const withTools = (): AppSlots => ({ ...slots(), externalTools: [...tools] })
+    expect(toolIds(navSlotFilter(withTools(), { gates: ALL_GATES }))).toEqual(['acme:a', 'acme:b'])
+    expect(toolIds(navSlotFilter(withTools(), { gates: NO_GATES }))).toEqual(['acme:a'])
+    expect(toolIds(navSlotFilter(withTools(), {}))).toEqual(['acme:a', 'acme:b'])
+  })
+})
+
 describe('NAV_CONTRIBUTIONS catalog integrity', () => {
   it('has unique ids and every item targets at least one surface', () => {
     const seen = new Set<string>()
@@ -250,20 +278,10 @@ describe('NAV_CONTRIBUTIONS catalog integrity', () => {
     const check = (key: string | undefined) => {
       if (key && !hasKey(key)) missing.push(key)
     }
-    for (const group of ['create', 'repositories', 'integrations', 'workspace', 'account']) {
-      check(`layout.commandBar.groups.${group}`)
-    }
-    for (const group of [
-      'create',
-      'repositories',
-      'models',
-      'integrations',
-      'infrastructure',
-      'workspaceContext',
-      'configuration',
-    ]) {
-      check(`nav.${group}`)
-    }
+    // Derived from the canonical orders rather than re-listed, so a NEW section (the
+    // deployment-contributed `externalTools` one) can't be added without its header key.
+    for (const group of COMMAND_GROUP_ORDER) check(`layout.commandBar.groups.${group}`)
+    for (const group of SIDEBAR_GROUP_ORDER) check(`nav.${group}`)
     for (const item of NAV_CONTRIBUTIONS) {
       check(item.labelKey)
       if (item.command) {

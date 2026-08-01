@@ -120,6 +120,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Çalışma alanı bağlamı",
     "contextFragments": "Bağlam parçaları",
+    "externalTools": "Harici araçlar",
     "configuration": "Yapılandırma",
     "workspaceSettings": "Çalışma alanı ayarları",
     "modelConfiguration": "Model yapılandırması",
@@ -2049,6 +2050,7 @@
         "create": "Oluştur",
         "repositories": "Depolar",
         "integrations": "Entegrasyonlar",
+        "externalTools": "Harici araçlar",
         "workspace": "Çalışma alanı",
         "account": "Hesap"
       },
@@ -3042,6 +3044,7 @@
         "merge": "Risk ilkeleri",
         "tracker": "Sorun takipçisi",
         "fragments": "Servis en iyi uygulamaları",
+        "metadata": "Meta veriler",
         "members": "Üyeler"
       },
       "waiting": {
@@ -3106,6 +3109,12 @@
         "heading": "Kaizen agent'ı",
         "body": "Her çalıştırma tamamlandıktan sonra Kaizen agent'ı, her agent adımının sorunsuz ve verimli olmaktan kafa karışık ve kaotik olmaya kadar nasıl gittiğini değerlendirir ve istem/model iyileştirmeleri önerir. Üst üste beş kez öneri olmadan yüksek not alan bir istem + agent + model birleşimi doğrulanmış olarak işaretlenir ve artık değerlendirilmez. Değerlendirme arka planda çalışır ve çalıştırma ayrıntıları ile Kaizen ekranında gösterilir. Değerlendiricinin modelini Model Yapılandırması'nda (\"Kaizen\" agent'ı) ayarlayın.",
         "toggle": "Agent çalıştırmalarını Kaizen ile değerlendir"
+      },
+      "metadata": {
+        "heading": "Çalışma alanı meta verileri",
+        "body": "Bu dağıtımın tanımladığı özel alanların değerleri. Harici araçlar bunları okuyarak bu çalışma alanı için doğru projeyi açar.",
+        "empty": "Bu dağıtım özel çalışma alanı alanı tanımlamıyor.",
+        "unset": "Ayarlanmadı"
       },
       "budget": {
         "heading": "Aylık harcama bütçesi",
@@ -6114,6 +6123,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "{tool} açılamıyor",
+      "missingMetadata": "Önce çalışma alanı ayarlarındaki Meta veriler sekmesinde {fields} alanlarını doldurun.",
+      "unresolved": "Bu araç geçerli çalışma alanı için bir adres döndürmedi.",
+      "resolverFailed": "Bu araç adresini belirlerken hata verdi. Nedeni, bu dağıtımı yönetenler için tarayıcı konsolunda yer alıyor.",
+      "unsafeUrl": "Bu araç web bağlantısı olmayan bir adres döndürdü, bu yüzden açılmadı."
     }
   }
 }

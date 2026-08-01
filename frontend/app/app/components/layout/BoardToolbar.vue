@@ -242,7 +242,7 @@ const decisionItems = computed(() =>
     <IconButton
       v-for="item in toolbarItems"
       :key="item.id"
-      :label="t(item.labelKey)"
+      :label="item.label ?? t(item.labelKey)"
       :icon="item.icon"
       color="neutral"
       variant="ghost"

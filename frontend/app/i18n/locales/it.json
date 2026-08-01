@@ -781,6 +781,7 @@
         "merge": "Criteri di rischio",
         "tracker": "Tracker degli issue",
         "fragments": "Best practice dei servizi",
+        "metadata": "Metadati",
         "members": "Membri"
       },
       "waiting": {
@@ -845,6 +846,12 @@
         "heading": "Agente Kaizen",
         "body": "Al termine di ogni run, l'agente Kaizen valuta l'andamento di ogni passo dell'agente, da fluido ed efficiente a confuso e caotico, e raccomanda miglioramenti al prompt/modello. Una combinazione di prompt + agente + modello che ottiene una valutazione elevata senza raccomandazioni per cinque volte di fila viene contrassegnata come verificata e non viene piu valutata. La valutazione viene eseguita in background ed e mostrata all'interno dei dettagli del run e nella schermata Kaizen. Imposta il modello del valutatore in Configurazione del modello (l'agente \"Kaizen\").",
         "toggle": "Valuta i run degli agenti con Kaizen"
+      },
+      "metadata": {
+        "heading": "Metadati dell'area di lavoro",
+        "body": "Valori dei campi personalizzati definiti da questa installazione. Gli strumenti esterni li leggono per aprirsi sul progetto giusto per quest'area di lavoro.",
+        "empty": "Questa installazione non definisce campi personalizzati per l'area di lavoro.",
+        "unset": "Non impostato"
       },
       "budget": {
         "heading": "Budget di spesa mensile",
@@ -2107,6 +2114,7 @@
         "create": "Crea",
         "repositories": "Repository",
         "integrations": "Integrazioni",
+        "externalTools": "Strumenti esterni",
         "workspace": "Workspace",
         "account": "Account"
       },
@@ -4635,6 +4643,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Contesto dello workspace",
     "contextFragments": "Frammenti di contesto",
+    "externalTools": "Strumenti esterni",
     "configuration": "Configurazione",
     "workspaceSettings": "Impostazioni dello workspace",
     "modelConfiguration": "Configurazione del modello",
@@ -6114,6 +6123,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "Impossibile aprire {tool}",
+      "missingMetadata": "Compila prima {fields} nella scheda Metadati delle impostazioni dell'area di lavoro.",
+      "unresolved": "Questo strumento non ha restituito un indirizzo per l'area di lavoro corrente.",
+      "resolverFailed": "Questo strumento non è riuscito a calcolare il proprio indirizzo. La causa è nella console del browser, per chi gestisce questa installazione.",
+      "unsafeUrl": "Questo strumento ha restituito un indirizzo che non è un collegamento web, quindi non è stato aperto."
     }
   }
 }
