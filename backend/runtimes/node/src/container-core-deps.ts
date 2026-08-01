@@ -21,6 +21,7 @@ import {
   type GitHubClient,
   type GitHubInstallationRepository,
   type RunLifecycleSink,
+  type FoundationalSourceResyncRequest,
   type SkillSourceResyncRequest,
   DEFAULT_MODEL_PRESET_ID,
 } from '@cat-factory/kernel'
@@ -584,6 +585,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // dispatch-time probe is the freshness backstop.
     enqueueSkillResync: async ({ accountId, sourceId }: SkillSourceResyncRequest) => {
       await gateways.githubWebhook.queueSkillResync(accountId, sourceId)
+    },
+    // The same fan-out for repo-sourced foundational services.
+    enqueueFoundationalResync: async ({ sourceId }: FoundationalSourceResyncRequest) => {
+      await gateways.githubWebhook.queueFoundationalResync(sourceId)
     },
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled its channel is composed into `notificationChannel` below

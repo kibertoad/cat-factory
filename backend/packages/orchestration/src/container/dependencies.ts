@@ -73,6 +73,7 @@ import type {
   ApiContractRepository,
   FoundationalServiceRepository,
   FoundationalServiceSourceRepository,
+  FoundationalSourceResyncRequest,
   FragmentSourceRepository,
   GateRegistry,
   JudgeAssessor,
@@ -887,7 +888,7 @@ export interface CoreDependencies {
    */
   enqueueSkillResync?: (request: SkillSourceResyncRequest) => Promise<void>
 
-  // ---- Foundational services (opt-in; docs/initiatives/foundational-services.md) ----
+  // ---- Foundational services (opt-in; backend/docs/adr/0031-foundational-services.md) ----
   // The tiered catalog of shared capabilities (file storage, notifications, audit …) an
   // Architect designs against and its consumers lazily read the API contracts of. The catalog
   // assembles whenever `foundationalServiceRepository` + `apiContractRepository` are present;
@@ -897,6 +898,13 @@ export interface CoreDependencies {
   foundationalServiceRepository?: FoundationalServiceRepository
   apiContractRepository?: ApiContractRepository
   foundationalServiceSourceRepository?: FoundationalServiceSourceRepository
+  /**
+   * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
+   * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.
+   * Facade-provided (Worker Queue / Node pg-boss); absent (no queue, or a pure-logic test) ⇒ no
+   * proactive resync, and the autorefresh sweep bounds staleness instead.
+   */
+  enqueueFoundationalResync?: (request: FoundationalSourceResyncRequest) => Promise<void>
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action

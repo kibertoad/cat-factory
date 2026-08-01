@@ -52,6 +52,12 @@ export interface GitHubWebhookIngest {
    * head-commit probe rather than proactively here.
    */
   queueSkillResync(accountId: string, sourceId: string): Promise<boolean>
+  /**
+   * The same fan-out for a repo-sourced FOUNDATIONAL-SERVICE source. Keyed on the source id
+   * alone: the source's owning tier is a stored field, and the consumer resolves it there rather
+   * than trusting a copy that rode the queue.
+   */
+  queueFoundationalResync(sourceId: string): Promise<boolean>
 }
 
 /**

@@ -344,6 +344,9 @@ function createOverlayModals() {
   // Prompt-fragment library panel (manage the board's best-practice catalog +
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
+  // Foundational-services panel (register the shared capabilities the org already runs, and see
+  // the merged catalog an Architect designs against; backend/docs/adr/0031-foundational-services.md).
+  const foundationalServicesOpen = ref(false)
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
   // Keyboard-shortcuts cheatsheet (?) — a modal listing every global shortcut.
@@ -372,6 +375,12 @@ function createOverlayModals() {
   }
   function closeFragmentLibrary() {
     fragmentLibraryOpen.value = false
+  }
+  function openFoundationalServices() {
+    foundationalServicesOpen.value = true
+  }
+  function closeFoundationalServices() {
+    foundationalServicesOpen.value = false
   }
   function openCommandBar() {
     commandBarOpen.value = true
@@ -411,6 +420,7 @@ function createOverlayModals() {
     bootstrapOpen,
     addServiceOpen,
     fragmentLibraryOpen,
+    foundationalServicesOpen,
     commandBarOpen,
     shortcutsHelpOpen,
     mobileNavOpen,
@@ -421,6 +431,8 @@ function createOverlayModals() {
     closeAddService,
     openFragmentLibrary,
     closeFragmentLibrary,
+    openFoundationalServices,
+    closeFoundationalServices,
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,

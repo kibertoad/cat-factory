@@ -138,6 +138,12 @@ export const CONFLICT_REASONS = [
   // id IS what an Architect names in its design, so two rows competing for one id is exactly
   // the ambiguity the catalog exists to prevent.
   'foundational_service_exists',
+  // A board asked to SUPPRESS a foundational service that it already owns a row for at its own
+  // tier. Suppression writes a workspace tombstone so an INHERITED account service loses the
+  // merge; against the board's own registration it would be an obscure spelling of "delete",
+  // and the two are not interchangeable — a delete drops the board's authored description and
+  // contracts, a suppression drops nothing. The SPA steers to the delete action instead.
+  'foundational_service_not_inherited',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

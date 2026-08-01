@@ -126,7 +126,8 @@
     "accountSettings": "Ustawienia konta",
     "operatorDashboard": "Obserwowalność platformy",
     "reports": "Raporty",
-    "infrastructure": "Infrastruktura"
+    "infrastructure": "Infrastruktura",
+    "foundationalServices": "Usługi fundamentalne"
   },
   "board": {
     "toast": {
@@ -544,7 +545,8 @@
         "pipeline_schedule_attached": "Harmonogram cykliczny używa tego potoku",
         "pipeline_schedule_requires_recurring": "Harmonogram cykliczny wymaga tego potoku",
         "pipeline_schedule_intake_unconfigured": "Harmonogram nie ma pobierania zgłoszeń",
-        "foundational_service_exists": "Usługa fundamentalna już istnieje"
+        "foundational_service_exists": "Usługa fundamentalna już istnieje",
+        "foundational_service_not_inherited": "Ta tablica zarejestrowała tę usługę"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -573,7 +575,8 @@
         "pipeline_schedule_attached": "Harmonogram cykliczny nadal wskazuje ten potok, a każde uruchomienie odnajduje go po identyfikatorze. Najpierw odłącz lub usuń ten harmonogram, a dopiero potem usuń potok.",
         "pipeline_schedule_requires_recurring": "Harmonogram cykliczny nadal wskazuje ten potok, więc ograniczenie go do jednorazowego zepsułoby każde przyszłe uruchomienie. Najpierw odłącz ten harmonogram.",
         "pipeline_schedule_intake_unconfigured": "Krok pobierania błędów czerpie pracę z ustawień pobierania zgłoszeń harmonogramu, a powiązany harmonogram ich nie ma. Najpierw skonfiguruj pobieranie zgłoszeń w harmonogramie.",
-        "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie."
+        "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie.",
+        "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -2077,7 +2080,8 @@
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
         "toggleUiMode": "Zmień tryb interfejsu",
-        "tutorial": "Rozpocznij przewodnik"
+        "tutorial": "Rozpocznij przewodnik",
+        "foundationalServices": "Usługi fundamentalne"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2100,7 +2104,8 @@
         "shortcuts": "skróty klawiatura klawisze pomoc",
         "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
         "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj",
-        "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie"
+        "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
+        "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog"
       }
     },
     "integrationsHub": {
@@ -2260,6 +2265,9 @@
       "title": "Wybierz domyślne środowisko testowe",
       "body": "Ta tablica nie ma jeszcze ustalonego sposobu, w jaki jej usługi otrzymują środowisko testowe. Wybierz wartość domyślną, a każda kolejno dodawana usługa będzie od niej startować, zamiast być konfigurowana pojedynczo. Nadal możesz to zmienić dla poszczególnej usługi.",
       "action": "Wybierz domyślne"
+    },
+    "accountFoundational": {
+      "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa."
     }
   },
   "settings": {
@@ -2314,7 +2322,8 @@
       "tabs": {
         "team": "Zespół i dostęp",
         "fragments": "Fragmenty kontekstu",
-        "skills": "Umiejętności"
+        "skills": "Umiejętności",
+        "foundational": "Usługi fundamentalne"
       }
     },
     "providerConnection": {
@@ -5164,6 +5173,135 @@
       "confirm": "Odłącz"
     },
     "unavailable": "Biblioteka fragmentów promptów nie jest włączona w tym wdrożeniu."
+  },
+  "foundational": {
+    "unavailable": "Katalog usług fundamentalnych nie jest włączony w tym wdrożeniu.",
+    "owner": {
+      "workspace": "Ta tablica",
+      "account": "To konto"
+    },
+    "tab": {
+      "catalog": "Katalog",
+      "sources": "Powiązane repozytoria"
+    },
+    "panel": {
+      "title": "Usługi fundamentalne",
+      "subtitle": "Wspólne możliwości, które Twoja organizacja już utrzymuje, aby projekt z nich korzystał zamiast budować je od nowa."
+    },
+    "tier": {
+      "account": "Konto",
+      "workspace": "Tablica"
+    },
+    "format": {
+      "openapi": "OpenAPI",
+      "toadContract": "toad-contracts",
+      "lokaliseApiContract": "lokalise/api-contract"
+    },
+    "contracts": {
+      "omitted": "+{count} więcej, niewymienionych",
+      "none": "Nie dołączono kontraktu API. Agent zostanie poinformowany, że interfejs jest nieznany, zamiast go zgadywać."
+    },
+    "catalog": {
+      "intro": "To, co dostaje architekt projektujący na tej tablicy: tożsamość, znaczniki możliwości i nazwy operacji. Dokumenty kontraktów są czytane dopiero wtedy, gdy projekt zadeklaruje daną usługę.",
+      "empty": "Brak usług fundamentalnych. Zarejestruj jedną poniżej albo powiąż repozytorium, które je opisuje.",
+      "suppress": "Nie proponuj tej usługi na tej tablicy",
+      "showDocuments": "Pokaż dokumenty kontraktów",
+      "hideDocuments": "Ukryj dokumenty kontraktów"
+    },
+    "suppressions": {
+      "title": "Wyłączone na tej tablicy",
+      "intro": "Te usługi konta są ukryte przed projektami na tej tablicy. Nic nie zostało usunięte, a konto zachowuje je dla wszystkich pozostałych tablic.",
+      "restore": "Proponuj ponownie",
+      "shadowsNothing": "Pod tym identyfikatorem nic obecnie nie jest dziedziczone, więc to wyłączenie niczego teraz nie ukrywa."
+    },
+    "registry": {
+      "empty": "W tym zakresie nic jeszcze nie zarejestrowano.",
+      "add": "Zarejestruj usługę",
+      "addTitle": "Zarejestruj usługę fundamentalną",
+      "editTitle": "Edytuj usługę fundamentalną",
+      "edit": "Edytuj",
+      "delete": "Usuń",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "fromSource": "Zsynchronizowane z powiązanego repozytorium ({path}). Edytuj je w repozytorium; następna synchronizacja nadpisze zmiany wprowadzone tutaj.",
+      "idFixed": "identyfikator, który architekt zapisuje w projekcie - po rejestracji już niezmienny",
+      "idPlaceholder": "identyfikator (małe litery i myślniki, np. file-storage)",
+      "namePlaceholder": "nazwa (np. File Storage)",
+      "summaryPlaceholder": "jednozdaniowe streszczenie - do czego służy",
+      "descriptionPlaceholder": "co robi, kiedy jej używać i czego NIE obejmuje",
+      "capabilitiesPlaceholder": "znaczniki możliwości, oddzielone przecinkami (np. file-storage, cdn)",
+      "contractsTitle": "Kontrakty API",
+      "contractsKeep": "Zostaw bez zmian, aby zachować zapisane dokumenty.",
+      "contractsReplace": "Zapis ZASTĄPI cały zapisany zestaw tym, co jest wymienione tutaj.",
+      "addContract": "Dodaj kontrakt",
+      "removeContract": "Usuń ten kontrakt",
+      "contractIdPlaceholder": "identyfikator kontraktu (małe litery i myślniki, np. openapi)",
+      "contractTitlePlaceholder": "tytuł (np. HTTP API)",
+      "contractBodyPlaceholder": "wklej dokument: plik OpenAPI 3.x albo źródło modułu kontraktu"
+    },
+    "sources": {
+      "empty": "Brak powiązanych repozytoriów. Powiąż jedno poniżej, aby synchronizować definicje usług i ich pliki kontraktów.",
+      "linkTitle": "Powiąż repozytorium",
+      "link": "Powiąż i zsynchronizuj",
+      "metaSynced": "zsynchronizowano {date} · ref {ref}",
+      "metaNever": "nigdy nie synchronizowano · ref {ref}",
+      "metaFiles": "{service} · {count} plików kontraktów",
+      "metaDirectory": "jedna usługa na podkatalog",
+      "changes": "Zmiany",
+      "check": "Sprawdź zmiany",
+      "sync": "Zsynchronizuj ponownie",
+      "unlink": "Odłącz",
+      "selectedDir": "Katalog:",
+      "selectedFiles": "Wybrane pliki: {count}",
+      "wholeRepo": "Całe repozytorium (katalog główny).",
+      "ownerPlaceholder": "właściciel",
+      "repoPlaceholder": "repozytorium",
+      "dirPlaceholder": "ścieżka katalogu (np. foundational)",
+      "filePathsPlaceholder": "ścieżki plików kontraktów, po jednej w wierszu",
+      "refPlaceholder": "ref (domyślnie HEAD)",
+      "githubRequired": "Powiązanie repozytorium wymaga integracji z systemem kontroli wersji. Podłącz ją najpierw na tablicy.",
+      "serviceIdPlaceholder": "identyfikator usługi (małe litery i myślniki)",
+      "serviceNamePlaceholder": "nazwa usługi",
+      "serviceSummaryPlaceholder": "jednozdaniowe streszczenie (opcjonalne)",
+      "mode": {
+        "directory": "Katalog z usługami",
+        "files": "Wybrane pliki, jedna usługa",
+        "directoryHint": "Każdy podkatalog powiązanej ścieżki to jedna usługa, opisana plikiem service.md, obok którego leżą jej pliki kontraktów.",
+        "filesHint": "Wymienione pliki opisują tę jedną usługę, którą tu nazywasz. Użyj tego, gdy nie ma konwencji katalogów do przyjęcia."
+      }
+    },
+    "confirmUnlinkSource": {
+      "title": "Odłączyć to repozytorium?",
+      "body": "\"{repo}\" i usługi z niego zsynchronizowane zostaną usunięte z katalogu. Możesz powiązać je ponownie później.",
+      "confirm": "Odłącz"
+    },
+    "confirmDelete": {
+      "title": "Usunąć tę usługę?",
+      "body": "\"{name}\" i przesłane dla niej dokumenty kontraktów zostaną usunięte z tego zakresu.",
+      "bodyWorkspace": "\"{name}\" i przesłane dla niej dokumenty kontraktów zostaną usunięte z tej tablicy. Jeśli konto rejestruje usługę o tym samym id, ta tablica przestanie ją także dziedziczyć; możesz to cofnąć w sekcji \"Wyłączone na tej tablicy\".",
+      "confirm": "Usuń"
+    },
+    "toast": {
+      "created": "Usługa zarejestrowana",
+      "updated": "Usługa zaktualizowana",
+      "deleted": "Usługa usunięta",
+      "saveFailed": "Nie udało się zapisać usługi",
+      "deleteFailed": "Nie udało się usunąć usługi",
+      "suppressed": "Ukryto przed projektami na tej tablicy",
+      "suppressFailed": "Nie udało się ukryć usługi",
+      "restored": "Ponownie proponowana na tej tablicy",
+      "restoreFailed": "Nie udało się przywrócić usługi",
+      "contractsFailed": "Nie udało się wczytać dokumentów kontraktów",
+      "sourceLinked": "Repozytorium powiązane i zsynchronizowane",
+      "linkSourceFailed": "Nie udało się powiązać repozytorium",
+      "synced": "Zsynchronizowano: {updated} zaktualizowanych, {removed} usuniętych",
+      "syncFailed": "Nie udało się zsynchronizować repozytorium",
+      "changesAvailable": "W źródle są zmiany",
+      "upToDate": "Już aktualne",
+      "checkSourceFailed": "Nie udało się sprawdzić repozytorium",
+      "sourceUnlinked": "Repozytorium odłączone",
+      "unlinkSourceFailed": "Nie udało się odłączyć repozytorium"
+    }
   },
   "sandbox": {
     "title": "Piaskownica: testowanie promptów i modeli",

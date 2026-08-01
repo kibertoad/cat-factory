@@ -4,6 +4,8 @@ import type {
   CachedRepoRead,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
+  FoundationalServiceSourceRepository,
+  FoundationalSourceResyncRequest,
   GitHubInstallationRepository,
   GitHubRepo,
   GroupCacheHandle,
@@ -87,6 +89,18 @@ export interface WebhookServiceDependencies {
    */
   skillSourceRepository?: SkillSourceRepository
   enqueueSkillResync?: (request: SkillSourceResyncRequest) => Promise<void>
+  /**
+   * Repo-sourced FOUNDATIONAL-SERVICE freshness — the same fan-out, one library over
+   * (backend/docs/adr/0031-foundational-services.md). It matters more here than for skills: a stale
+   * skill costs an agent a slightly old instruction, while a stale API contract is handed to a
+   * coder as the interface to write against, so the sweep's staleness window is the window in
+   * which code is written against a withdrawn endpoint.
+   *
+   * Wired independently of the skill pair (a deployment can run either library, or both), and
+   * absent ⇒ no proactive resync, with the autorefresh sweep still bounding staleness.
+   */
+  foundationalServiceSourceRepository?: FoundationalServiceSourceRepository
+  enqueueFoundationalResync?: (request: FoundationalSourceResyncRequest) => Promise<void>
 }
 
 type Json = Record<string, unknown>
@@ -96,15 +110,15 @@ function asObject(value: unknown): Json | null {
 }
 
 /**
- * Whether a branch push to `pushedBranch` could have moved a skill source's tracked ref, so the
- * source is worth resyncing (slice 4 fan-out). A source tracks a branch via `gitRef`; `HEAD` (or
- * empty) means the repo's default branch, which the push payload carries as `default_branch`.
- * Returns `true` whenever a mismatch can't be proven — an unknown default, or a non-`refs/heads`
- * gitRef — so the filter never suppresses a resync it isn't certain about. This is a pure
- * optimisation: the dispatch-time head-commit probe is the correctness backstop, so a wrong
- * skip could only ever cost a warm-up, never a stale run.
+ * Whether a branch push to `pushedBranch` could have moved a repo source's tracked ref, so the
+ * source is worth resyncing (the slice-4 fan-out, shared by every repo-sourced library). A source
+ * tracks a branch via `gitRef`; `HEAD` (or empty) means the repo's default branch, which the push
+ * payload carries as `default_branch`. Returns `true` whenever a mismatch can't be proven — an
+ * unknown default, or a non-`refs/heads` gitRef — so the filter never suppresses a resync it
+ * isn't certain about. This is a pure optimisation: the dispatch-time head-commit probe is the
+ * correctness backstop, so a wrong skip could only ever cost a warm-up, never a stale run.
  */
-function pushAffectsSkillSource(
+function pushAffectsTrackedRef(
   gitRef: string | undefined,
   pushedBranch: string,
   defaultBranch: string | undefined,
@@ -116,6 +130,32 @@ function pushAffectsSkillSource(
     return defaultBranch ? pushedBranch === defaultBranch : true
   }
   return tracked === pushedBranch
+}
+
+/**
+ * Enqueue a targeted resync for every source of ONE repo-sourced library that tracks the pushed
+ * branch. Shared by the skill library and the foundational-services catalog so the branch-match
+ * rule and the dispatch shape cannot drift apart between them; each caller supplies only its own
+ * indexed lookup and the message its consumer expects.
+ *
+ * Sources tracking a different branch are dropped here: a source's directory cannot have moved on
+ * a branch it does not follow, so enqueuing them would only queue guaranteed no-op resyncs.
+ * Skipping is always safe — the dispatch-time head-commit probe is the correctness backstop, so a
+ * wrong skip costs at most a warm-up, never a stale run.
+ *
+ * The sends run CONCURRENTLY rather than in sequence. They are independent, and this is the
+ * hottest inbound path in the deployment: a shared contracts repo is legitimately linked by an
+ * account tier AND many boards, so serialising would put a queue round-trip per board between the
+ * delivery and its ack. A rejection still propagates so the batch retries — an enqueue that
+ * silently dropped would cost exactly the freshness this fan-out exists to provide.
+ */
+async function fanOutRepoSourceResync<S extends { id: string; gitRef: string }>(
+  list: () => Promise<S[]>,
+  affects: (gitRef: string | undefined) => boolean,
+  enqueue: (source: S) => Promise<void>,
+): Promise<void> {
+  const sources = (await list()).filter((source) => affects(source.gitRef))
+  await Promise.all(sources.map(enqueue))
 }
 
 export class WebhookService {
@@ -235,22 +275,37 @@ export class WebhookService {
         repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
       )
     }
-    // Skill-source freshness fan-out (slice 4): a branch push may have changed a linked skill
-    // directory, so resync every skill source that TRACKS the pushed branch. One indexed
-    // lookup, then a targeted async resync per matching source (typically zero or one). Sources
-    // that track a different branch are skipped here — a source's dir can't have moved on a
-    // branch it doesn't follow, so enqueuing them would only queue guaranteed no-op resyncs.
-    // Skipping is always safe: the dispatch-time head-commit probe is the correctness backstop,
-    // so a missed enqueue costs at most a warm-up, never a stale run.
-    if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
-      const pushedBranch = ref.slice('refs/heads/'.length)
-      const defaultBranch =
-        typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
-      const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
-      for (const source of sources) {
-        if (!pushAffectsSkillSource(source.gitRef, pushedBranch, defaultBranch)) continue
-        await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
-      }
+    // Repo-source freshness fan-out (slice 4): a branch push may have changed a linked skill
+    // directory or foundational-service contract, so resync every source that TRACKS the pushed
+    // branch. One indexed lookup PER LIBRARY, then a targeted async resync per matching source.
+    // Each library is wired independently (a deployment can run either, or both), so an unwired
+    // pair must never suppress the other's fan-out.
+    const pushedBranch = ref.slice('refs/heads/'.length)
+    const defaultBranch = typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
+    const affects = (gitRef: string | undefined) =>
+      pushAffectsTrackedRef(gitRef, pushedBranch, defaultBranch)
+
+    const skillSources = this.deps.skillSourceRepository
+    const enqueueSkill = this.deps.enqueueSkillResync
+    if (skillSources && enqueueSkill) {
+      await fanOutRepoSourceResync(
+        () => skillSources.listByRepo(owner, name),
+        affects,
+        (source) => enqueueSkill({ accountId: source.accountId, sourceId: source.id }),
+      )
+    }
+
+    // The foundational-services twin. Its sources span BOTH tiers, so one repo can legitimately
+    // fan out to an account source and several workspace ones; the message carries only the
+    // source id, since the consumer resolves the owning tier off the row.
+    const foundationalSources = this.deps.foundationalServiceSourceRepository
+    const enqueueFoundational = this.deps.enqueueFoundationalResync
+    if (foundationalSources && enqueueFoundational) {
+      await fanOutRepoSourceResync(
+        () => foundationalSources.listByRepo(owner, name),
+        affects,
+        (source) => enqueueFoundational({ sourceId: source.id }),
+      )
     }
   }
 

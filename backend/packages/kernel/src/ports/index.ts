@@ -339,6 +339,7 @@ export type {
   FoundationalServiceRepository,
   FoundationalServiceSourceRecord,
   FoundationalServiceSourceRepository,
+  FoundationalSourceResyncRequest,
 } from './foundational-service-repositories.js'
 export type {
   AppCaches,

@@ -16,8 +16,8 @@ import { logger } from '../observability/logger'
 
 /**
  * Apply one queued message. Each kind resolves its own optional module and skips gracefully
- * when unwired: `webhook`/`resync-repo` need the GitHub module, `skill-source-resync` the
- * skill-library module (the push-webhook freshness fan-out, slice 4) — either can be absent
+ * when unwired: `webhook`/`resync-repo` need the GitHub module, the two `*-source-resync` kinds their own
+ * repo-sourced library (the push-webhook freshness fan-out, slice 4) — each can be absent
  * independently. A source unlinked between enqueue and processing is a terminal `NotFoundError`
  * (swallowed, not retried); any other error propagates so the batch retries.
  */
@@ -37,6 +37,19 @@ async function applyGitHubSyncMessage(
       if (!sourceService) return
       try {
         await sourceService.sync(message.accountId, message.sourceId)
+      } catch (error) {
+        if (error instanceof NotFoundError) return
+        throw error
+      }
+      return
+    }
+    case 'foundational-source-resync': {
+      // Resolved by SOURCE ID alone: `syncById` reads the owning tier off the stored row, so an
+      // owner that rode the queue could only ever disagree with it.
+      const sourceService = container.foundationalServices?.sourceService
+      if (!sourceService) return
+      try {
+        await sourceService.syncById(message.sourceId)
       } catch (error) {
         if (error instanceof NotFoundError) return
         throw error

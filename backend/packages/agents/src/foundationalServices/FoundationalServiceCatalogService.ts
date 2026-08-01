@@ -3,6 +3,7 @@ import type {
   CreateFoundationalServiceInput,
   FoundationalService,
   FoundationalServiceOwnerKind,
+  FoundationalServiceSuppression,
   ResolvedFoundationalService,
   UpdateFoundationalServiceInput,
 } from '@cat-factory/contracts'
@@ -35,7 +36,7 @@ export interface FoundationalServiceCatalogDependencies {
 }
 
 /**
- * The foundational-services catalog (docs/initiatives/foundational-services.md): per-tier CRUD
+ * The foundational-services catalog (backend/docs/adr/0031-foundational-services.md): per-tier CRUD
  * plus the merged account ⊕ workspace resolve every design dispatch reads.
  *
  * Two properties are load-bearing and are why this is a service rather than a repository call:
@@ -173,8 +174,39 @@ export class FoundationalServiceCatalogService {
    * row carries no content of its own — it exists only to lose the merge — so it is written
    * here rather than through {@link create}, which would demand a name and summary for
    * something that is never rendered.
+   *
+   * Both refusals are deliberate. An id the merged catalog does not carry would tombstone
+   * NOTHING today and silently swallow whatever the account registers under it tomorrow — a
+   * suppression nobody could later explain. An id the workspace owns at its own tier is not
+   * inherited at all: tombstoning it there would read as a delete while destroying the board's
+   * authored description and contracts, which is {@link remove}'s job and not this one's.
    */
   async suppressForWorkspace(workspaceId: string, serviceId: string): Promise<void> {
+    const existing = await this.deps.foundationalServiceRepository.get(
+      'workspace',
+      workspaceId,
+      serviceId,
+    )
+    // Already suppressed: the tombstone IS the whole state, so a retried request has nothing
+    // left to do. Returning rather than 404-ing keeps the endpoint safe to retry, and the merge
+    // below could not answer this case anyway — a suppressed id is exactly one the merged
+    // catalog no longer carries.
+    if (existing?.deletedAt) return
+    // Deliberately `loadCatalog` rather than the cached {@link resolve}: both refusals below are
+    // decisions ABOUT persisted state, and a TTL'd merge can be behind it. Reading the cache
+    // would 404 an opt-out for a service the account registered moments ago, and — worse —
+    // write a tombstone against an id the account has since withdrawn, which is exactly the
+    // shadows-nothing row the 404 exists to prevent. This is a rare, human-driven write, so the
+    // four batched reads it costs are not worth trading for a refusal that can be wrong.
+    const inherited = (await this.loadCatalog(workspaceId)).find((entry) => entry.id === serviceId)
+    if (!inherited) throw new NotFoundError('FoundationalService', serviceId)
+    if (inherited.tier === 'workspace') {
+      throw new ConflictError(
+        `Foundational service '${serviceId}' is registered by this workspace, not inherited`,
+        'foundational_service_not_inherited',
+        { serviceId },
+      )
+    }
     const now = this.deps.clock.now()
     await this.deps.foundationalServiceRepository.upsert({
       serviceId,
@@ -191,6 +223,63 @@ export class FoundationalServiceCatalogService {
       updatedAt: now,
       deletedAt: now,
     })
+    await this.invalidate('workspace', workspaceId)
+  }
+
+  /**
+   * What a board is currently suppressing. The merged catalog cannot answer this — a suppressed
+   * id is precisely one it no longer carries — so the tombstones are read directly and joined
+   * against the account tier for identity.
+   *
+   * `inherited: false` is the case worth keeping distinct: the tombstone shadows nothing today,
+   * because the account withdrew the service or because the row is the remains of the board
+   * DELETING its own registration. Collapsing the two would tell an operator a capability is
+   * being withheld when there is none to withhold.
+   */
+  async listSuppressions(workspaceId: string): Promise<FoundationalServiceSuppression[]> {
+    const rows = await this.deps.foundationalServiceRepository.listByOwner(
+      'workspace',
+      workspaceId,
+      true,
+    )
+    const tombstones = rows.filter((row) => row.deletedAt !== null)
+    if (tombstones.length === 0) return []
+    const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
+    const accountRows = accountId
+      ? await this.deps.foundationalServiceRepository.listByOwner('account', accountId)
+      : []
+    const inherited = new Map(accountRows.map((row) => [row.serviceId, row]))
+    return tombstones.map((row) => {
+      const shadowed = inherited.get(row.serviceId)
+      return {
+        id: row.serviceId,
+        // The inherited row's identity when there is one; otherwise whatever the tombstone
+        // carries, which is empty for a suppression written against an id this tier never
+        // registered — the id is then the only honest name, and it is the one an Architect uses.
+        name: shadowed?.name ?? row.name,
+        summary: shadowed?.summary ?? row.summary,
+        inherited: shadowed !== undefined,
+      }
+    })
+  }
+
+  /**
+   * Undo a suppression: DROP the workspace tombstone so the account service is inherited again.
+   *
+   * The row is deleted rather than un-tombstoned because a tombstone carries no name, summary or
+   * contracts — clearing its `deletedAt` would revive it as an EMPTY workspace override that
+   * wins the merge, which is a worse outcome than the suppression it was meant to undo. It is
+   * also why a LIVE workspace row is refused with a 404 on the suppression rather than deleted:
+   * the caller asked to lift a suppression, and this tier is not suppressing anything.
+   */
+  async restoreInherited(workspaceId: string, serviceId: string): Promise<void> {
+    const row = await this.deps.foundationalServiceRepository.get(
+      'workspace',
+      workspaceId,
+      serviceId,
+    )
+    if (!row || !row.deletedAt) throw new NotFoundError('FoundationalServiceSuppression', serviceId)
+    await this.deps.foundationalServiceRepository.hardDelete('workspace', workspaceId, serviceId)
     await this.invalidate('workspace', workspaceId)
   }
 

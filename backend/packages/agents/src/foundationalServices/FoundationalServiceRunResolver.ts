@@ -10,7 +10,7 @@ import type { FoundationalServiceCatalogService } from './FoundationalServiceCat
 
 /**
  * The engine-facing seam over the foundational-services catalog
- * (docs/initiatives/foundational-services.md). Two reads, deliberately separate, because they
+ * (backend/docs/adr/0031-foundational-services.md). Two reads, deliberately separate, because they
  * serve the two halves of the feature:
  *
  * - {@link catalogFor} is the DESIGN-time read: identity, capabilities and operation names for
