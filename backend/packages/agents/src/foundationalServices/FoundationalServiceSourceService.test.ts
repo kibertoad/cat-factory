@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FoundationalServiceSourceService } from './FoundationalServiceSourceService.js'
+import { MAX_FOLDER_CONTRACT_FILES } from './folder-scan.js'
 
 // Coverage for the `folder` source mode (backend/docs/adr/0031-foundational-services.md): the
 // whole of one folder — optionally its subfolders — is ONE service's contract set, rediscovered
@@ -295,6 +296,11 @@ describe('FoundationalServiceSourceService — folder mode', () => {
     const result = await service.sync('account', 'acct1', source.id)
 
     expect(result.upserted).toBe(0)
+    expect(result.skippedFiles).toBe(1)
+    // A candidate that failed to READ is not a folder that holds nothing: the service survives
+    // where an emptied folder's would be retired, which is the distinction the "nothing to take"
+    // cases below turn on.
+    expect(result.tombstoned).toBe(0)
     expect(services.rows.get('account|acct1|billing')?.deletedAt).toBeNull()
     // The pin is left behind so the next pass re-reads rather than serving stale content forever.
     expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(pinned)
@@ -329,5 +335,82 @@ describe('FoundationalServiceSourceService — folder mode', () => {
     expect(github.listings).toEqual([])
     expect(github.reads).toEqual([])
     expect(result).toMatchObject({ upserted: 0, unchanged: 1, skippedFiles: 0, truncated: false })
+  })
+})
+
+// A folder holding no contracts is a STABLE state, not a failed read, and the difference is the
+// whole reason `folder` mode cannot simply inherit `files` mode's zero-contract disposition: a
+// `files` link is validated to carry at least one path, so zero contracts there really does mean
+// something failed, while a spec folder is routinely empty before anyone fills it in.
+describe('FoundationalServiceSourceService — folder mode, nothing to take', () => {
+  it('pins an empty folder instead of re-walking it forever', async () => {
+    // Prose beside no specs: nothing here even LOOKS like a contract.
+    const github = fakeGitHub({ 'specs/README.md': { sha: 'a', content: '# specs' } })
+    const { service, sources } = makeService(github)
+    const source = await service.link('account', 'acct1', { ...link, recursive: true })
+
+    const first = await service.sync('account', 'acct1', source.id)
+
+    // The pass is complete, so the commit is pinned and the source stops claiming to be behind.
+    expect(first.lastSyncedCommit).not.toBeNull()
+    expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(first.lastSyncedCommit)
+    expect((await service.status('account', 'acct1', source.id)).changed).toBe(false)
+
+    // ...and the next sweep costs one commit read rather than another walk of the whole subtree.
+    github.listings.length = 0
+    await service.sync('account', 'acct1', source.id)
+    expect(github.listings).toEqual([])
+  })
+
+  it('retires the service when the folder is emptied upstream', async () => {
+    const github = fakeGitHub({
+      'specs/openapi.yaml': { sha: 'a', content: OPENAPI('Billing', '/invoices') },
+    })
+    const { service, services, contracts, sources } = makeService(github)
+    const source = await service.link('account', 'acct1', link)
+    await service.sync('account', 'acct1', source.id)
+    expect(services.rows.get('account|acct1|billing')?.deletedAt).toBeNull()
+
+    // The specs are deleted upstream; only prose is left behind.
+    delete github.files['specs/openapi.yaml']
+    github.files['specs/README.md'] = { sha: 'b', content: '# moved elsewhere' }
+    const result = await service.sync('account', 'acct1', source.id)
+
+    // A folder that no longer holds contracts retires its service, exactly as `directory` mode
+    // retires a directory that lost its `service.md` — and the pin advances, so it stays retired.
+    expect(result.tombstoned).toBe(1)
+    expect(services.rows.get('account|acct1|billing')?.deletedAt).not.toBeNull()
+    expect(contracts.rows).toEqual([])
+    expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(result.lastSyncedCommit)
+    expect(result.lastSyncedCommit).not.toBeNull()
+  })
+
+  // The transient counterpart — candidates found, none of them usable — is pinned by "keeps a
+  // prior service alive when the whole folder reads back unusable" above, which asserts the
+  // opposite disposition on the same two observables (no tombstone, pin left behind).
+})
+
+describe('FoundationalServiceSourceService — folder mode, truncation', () => {
+  it('reports a capped walk on the result and still pins the commit', async () => {
+    // More contract files than one scan may take, all in the folder root.
+    const files: Record<string, FileEntry> = {}
+    for (let i = 0; i < MAX_FOLDER_CONTRACT_FILES + 5; i++) {
+      files[`specs/s${String(i).padStart(3, '0')}.yaml`] = {
+        sha: `sha${i}`,
+        content: OPENAPI(`Spec ${i}`, `/r${i}`),
+      }
+    }
+    const github = fakeGitHub(files)
+    const { service, contracts, sources } = makeService(github)
+    const source = await service.link('account', 'acct1', link)
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.truncated).toBe(true)
+    expect(contracts.rows).toHaveLength(MAX_FOLDER_CONTRACT_FILES)
+    // Truncation is a STABLE outcome, so the pin advances: a re-read would truncate identically
+    // and the source would otherwise look permanently behind while serving what it already serves.
+    expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(result.lastSyncedCommit)
+    expect(result.lastSyncedCommit).not.toBeNull()
   })
 })

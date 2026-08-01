@@ -117,6 +117,30 @@ describe('scanContractFolder', () => {
     expect(result.truncated).toBe(true)
   })
 
+  it('keeps the walk order when a level’s listings answer out of order', async () => {
+    // The listings within a level run concurrently, so the network decides who answers first.
+    // Ordering must come from the walk, not from that race — otherwise a truncated scan would
+    // keep a different set of contracts on every sync.
+    const tree = treeLister({
+      specs: ['z/', 'a/', 'm/'],
+      'specs/a': ['a1.yaml'],
+      'specs/m': ['m1.yaml'],
+      'specs/z': ['z1.yaml'],
+    })
+    // Answer the alphabetically-first directory LAST, by the widest margin.
+    const delays: Record<string, number> = { 'specs/a': 30, 'specs/m': 15, 'specs/z': 0 }
+    const listDir = async (path: string) => {
+      const entries = await tree(path)
+      await new Promise((resolve) => setTimeout(resolve, delays[path] ?? 0))
+      return entries
+    }
+
+    const result = await scanContractFolder({ listDir, root: 'specs', recursive: true })
+
+    expect(result.paths).toEqual(['specs/a/a1.yaml', 'specs/m/m1.yaml', 'specs/z/z1.yaml'])
+    expect(result.truncated).toBe(false)
+  })
+
   it('is deterministic across runs, so a truncated scan keeps the same contracts', async () => {
     const listDir = treeLister({
       specs: ['b.yaml', 'a.yaml', 'z/', 'm/'],

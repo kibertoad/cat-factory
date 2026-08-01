@@ -21,7 +21,12 @@ name-sorted listings, so the result is deterministic across syncs and the cap fa
 deepest, least-specific files rather than on a root-level `openapi.yaml`. A truncation is
 reported on the sync result rather than treated as a transient failure, because holding the
 pinned commit back would make the next pass truncate identically while the source looked
-permanently behind. Contract ids in a `folder` source come from the path RELATIVE to the folder
+permanently behind. An EMPTY folder is stable for the same reason and pins the same way: a folder
+under which nothing even looked like a contract retires its service, exactly as a directory that
+lost its `service.md` does, while a folder whose candidates all read back unusable is the
+transient case that keeps the prior row and leaves the pin behind. The listings and contract
+bodies a walk needs are fetched with bounded concurrency rather than one round trip at a time,
+which is what keeps a deep subtree's sync to seconds. Contract ids in a `folder` source come from the path RELATIVE to the folder
 root (`v1/users.yaml` → `v1-users`): the basename rule the other modes use would collapse
 `v1/users.yaml` and `v2/users.yaml` onto one id and silently drop one of them. An optional
 `service.md` at the folder root supplies the description and capability tags, never the id or

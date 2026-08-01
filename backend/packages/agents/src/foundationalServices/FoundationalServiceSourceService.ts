@@ -28,6 +28,7 @@ import {
   runBestEffort,
   summarizeContract,
 } from '@cat-factory/kernel'
+import pMap from 'p-map'
 import {
   normalizeDirPath,
   probeRepoSourceStatus,
@@ -61,6 +62,13 @@ interface ScanReport {
 
 /** How one reconcile maps a contract file path to its id within the service. */
 type ContractIdForPath = (path: string) => string
+
+/**
+ * How many contract bodies one reconcile fetches at once. A `folder` source can take up to
+ * {@link MAX_FOLDER_CONTRACT_FILES} documents, and paying that one round trip at a time is the
+ * dominant cost of a sync that has any real work to do.
+ */
+const CONTRACT_READ_CONCURRENCY = 8
 
 /**
  * Resolve the GitHub App installation id that can read a tier's repos — a workspace source
@@ -327,7 +335,7 @@ export class FoundationalServiceSourceService {
     existing: FoundationalServiceRecord[],
     report: ScanReport,
   ): Promise<{ liveIds: Set<string>; upserted: number; unchanged: number; incomplete?: boolean }> {
-    const serviceId = this.requireNamedService(source)
+    const { serviceId, serviceName } = this.requireNamedService(source)
     const prior = existing.find((s) => s.serviceId === serviceId)
     const scan = await scanContractFolder({
       listDir: (path) => this.listDir(source, installationId, path, readRef),
@@ -349,10 +357,22 @@ export class FoundationalServiceSourceService {
       contractIdFor: (path) => contractIdFromRelativePath(path, source.dirPath),
     })
     if (contracts.length === 0) {
-      // Nothing in the folder read back as a usable contract. Keep a prior row alive and leave
-      // the pin behind so the next pass re-reads — the same disposition `files` mode takes, for
-      // the same reason: retiring a service over a momentary read failure strips a capability
-      // from every subsequent design.
+      // Two DIFFERENT zero-contract outcomes reach this line, and only one of them is a failure.
+      //
+      // Nothing under the folder even LOOKED like a contract: a spec folder nobody has filled in
+      // yet, one holding only prose, or one whose contents were removed upstream (a listing of a
+      // missing path reads back empty, not as an error). That is a stable state, so the pass is
+      // COMPLETE — pin it, and let the tombstone sweep retire a service whose folder was emptied,
+      // exactly as `directory` mode retires a directory that lost its `service.md`. Calling it
+      // incomplete instead would hold the pin back forever: every later sweep would re-walk the
+      // whole subtree to reach the same answer while the source never stopped reporting changes
+      // upstream — the very re-read loop the truncation disposition above exists to avoid.
+      if (scan.paths.length === 0) return { liveIds: new Set(), upserted: 0, unchanged: 0 }
+      // Candidates WERE found and every one of them read back unusable — a transient read
+      // failure, or a tree caught mid-edit. Keep a prior row alive and leave the pin behind so
+      // the next pass re-reads, the same disposition `files` mode takes, for the same reason:
+      // retiring a service over a momentary read failure strips a capability from every
+      // subsequent design.
       if (prior)
         return { liveIds: new Set([serviceId]), upserted: 0, unchanged: 1, incomplete: true }
       return { liveIds: new Set(), upserted: 0, unchanged: 0, incomplete: true }
@@ -369,8 +389,8 @@ export class FoundationalServiceSourceService {
       source,
       {
         serviceId,
-        name: source.serviceName as string,
-        summary: source.serviceSummary || overview?.summary || (source.serviceName as string),
+        name: serviceName,
+        summary: source.serviceSummary || overview?.summary || serviceName,
         description: overview?.description ?? '',
         capabilities: overview?.capabilities ?? [],
         sourcePath: source.dirPath,
@@ -487,7 +507,7 @@ export class FoundationalServiceSourceService {
     existing: FoundationalServiceRecord[],
     report: ScanReport,
   ): Promise<{ liveIds: Set<string>; upserted: number; unchanged: number; incomplete?: boolean }> {
-    const serviceId = this.requireNamedService(source)
+    const { serviceId, serviceName } = this.requireNamedService(source)
     const prior = existing.find((s) => s.serviceId === serviceId)
     const contracts = await this.readContracts({
       source,
@@ -511,8 +531,8 @@ export class FoundationalServiceSourceService {
       source,
       {
         serviceId,
-        name: source.serviceName as string,
-        summary: source.serviceSummary ?? (source.serviceName as string),
+        name: serviceName,
+        summary: source.serviceSummary ?? serviceName,
         description: '',
         capabilities: [],
         sourcePath: source.dirPath,
@@ -526,19 +546,24 @@ export class FoundationalServiceSourceService {
   }
 
   /**
-   * The service id a single-service source names, or a refusal.
+   * The identity a single-service source names, or a refusal.
    *
    * Guaranteed by the link-time `v.check`, but a stored row outlives the schema that wrote it —
-   * so this is a real guard, not a type-narrowing convenience.
+   * so this is a real guard, not a type-narrowing convenience. It returns BOTH proven fields
+   * rather than just the id, so a caller narrows by using the result instead of re-asserting
+   * `serviceName as string` at each use — a cast that would survive the guard being weakened.
    */
-  private requireNamedService(source: FoundationalServiceSourceRecord): string {
+  private requireNamedService(source: FoundationalServiceSourceRecord): {
+    serviceId: string
+    serviceName: string
+  } {
     if (!source.serviceId || !source.serviceName) {
       throw new ValidationError('This source does not name the service its contracts describe', {
         reason: 'foundational_source_unnamed_service',
         sourceId: source.id,
       })
     }
-    return source.serviceId
+    return { serviceId: source.serviceId, serviceName: source.serviceName }
   }
 
   /**
@@ -565,9 +590,16 @@ export class FoundationalServiceSourceService {
     const { source, installationId, readRef, serviceId, paths, now, report, contractIdFor } = params
     const out: ApiContractRecord[] = []
     const seen = new Set<string>()
-    for (const path of paths) {
-      if (!isContractCandidatePath(path)) continue
-      const file = await this.readFile(source, installationId, path, readRef)
+    // Read the bodies concurrently, then DECIDE over them in path order. The split matters: the
+    // reads are independent, but the id dedupe keeps the FIRST claimant of a colliding id, so
+    // the decision pass has to run in a deterministic order or which contract survives would
+    // depend on which response arrived first. `pMap` resolves in input order, so it does.
+    const fetched = await pMap(
+      paths.filter(isContractCandidatePath),
+      async (path) => ({ path, file: await this.readFile(source, installationId, path, readRef) }),
+      { concurrency: CONTRACT_READ_CONCURRENCY },
+    )
+    for (const { path, file } of fetched) {
       if (!file) {
         report.skipped++
         continue

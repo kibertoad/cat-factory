@@ -182,7 +182,9 @@ async function sync(id: string) {
       // other explanation available to them, so the losses ride the same toast as the counts.
       const notes: string[] = []
       if (result.skippedFiles > 0)
-        notes.push(t('foundational.toast.syncSkipped', { count: result.skippedFiles }))
+        notes.push(
+          t('foundational.toast.syncSkipped', { count: result.skippedFiles }, result.skippedFiles),
+        )
       if (result.truncated) notes.push(t('foundational.toast.syncTruncated'))
       toast.add({
         title: t('foundational.toast.synced', {

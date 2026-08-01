@@ -222,9 +222,19 @@ Gotchas the implementation surfaced, each now pinned by a test:
   directory**, so a dozen linked files still cost ONE cheap read per freshness check. A `folder`
   source anchors on the folder itself, so a whole recursive subtree costs the same single read —
   and the walk only runs at all once that read says the commit moved.
-- **A `folder` source that reads back with NO usable contract keeps its prior row alive and leaves
-  the pinned commit behind**, the same disposition `files` mode takes and for the same reason. A
-  TRUNCATION is the deliberate exception: it is stable rather than transient, so it pins normally.
+- **A `folder` source distinguishes an EMPTY folder from a folder it failed to read**, and the two
+  dispositions are opposite. Candidates were found and none of them was usable ⇒ transient: keep the
+  prior row alive and leave the pinned commit behind so the next pass re-reads, the same disposition
+  `files` mode takes and for the same reason. NOTHING under the folder even looked like a contract
+  ⇒ stable: pin normally and let the sweep retire the service, exactly as a directory that lost its
+  `service.md` is retired. Conflating them is not a cosmetic error — an ordinary empty spec folder
+  would never pin, so every sweep would re-walk the whole subtree to reach the same answer while
+  the source reported changes upstream forever. That is why the test for "is this a failure?" is
+  whether the SCAN found candidates, not whether the reconcile produced contracts. `files` mode can
+  reuse the simpler rule only because its link is validated to carry at least one path.
+- **A TRUNCATION pins normally too**: like an empty folder it is stable rather than transient, so
+  holding the commit back would make the next pass truncate identically while the source looked
+  permanently behind.
 - **A directory that loses its `service.md` retires the service it described**, but a manifest that
   reads back unparseable this round keeps the prior row alive AND leaves the pinned commit behind,
   so the next pass re-reads it. Retiring a service over a transient read would silently strip a
