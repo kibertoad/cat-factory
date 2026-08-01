@@ -114,8 +114,17 @@ export function persistenceController(): Hono<AppEnv> {
       // dispatched call IS that read (the sync service's `get`), reuse the resolver's result.
       'skillSourceRepository.get': { skillSourceRepository: { get: skillSourceGet } },
     }
-    const override = Object.hasOwn(memoOverrides, `${request.repo}.${request.method}`)
-      ? memoOverrides[`${request.repo}.${request.method}`]
+    // Substitute ONLY for a method the real registry actually wires. `memoizeRead` returns a
+    // function unconditionally — it closes over an optional-chained call — so overriding an ABSENT
+    // repository would satisfy the dispatcher's `typeof fn !== 'function'` wiring check and answer a
+    // misconfigured deployment with a scope 404 (or a bare null) instead of the `... is not wired`
+    // that names what to fix. The key is only ever consulted after `Object.hasOwn`, so an
+    // attacker-controlled `request.repo` cannot reach an inherited member through the lookup below.
+    const memoKey = `${request.repo}.${request.method}`
+    const override = Object.hasOwn(memoOverrides, memoKey)
+      ? typeof registry[request.repo]?.[request.method] === 'function'
+        ? memoOverrides[memoKey]
+        : undefined
       : undefined
     const registryForDispatch = override ? { ...registry, ...override } : registry
 

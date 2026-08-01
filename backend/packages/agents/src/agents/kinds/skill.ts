@@ -73,7 +73,7 @@ function skillUserPrompt(context: AgentRunContext): string {
   return lines.filter(Boolean).join('\n')
 }
 
-/** The generic skill-execution kind (repo-skills initiative slice 2). */
+/** The generic skill-execution kind (ADR 0024, slice 2). */
 export const SKILL_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: SKILL_AGENT_KIND,

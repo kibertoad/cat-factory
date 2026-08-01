@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Repo-sourced Claude Skills library manager (docs/initiatives/repo-skills.md), for the account
+// Repo-sourced Claude Skills library manager (ADR 0024), for the account
 // tier (skills are a single tier — shared across the account's workspaces). Link repo directories
 // of `<skill>/SKILL.md` folders, resync them (with a "changes available" badge), and review the
 // synced skill catalog a pipeline `skill` step picks from. Mirrors the fragment library's

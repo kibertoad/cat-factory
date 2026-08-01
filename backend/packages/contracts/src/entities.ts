@@ -705,7 +705,7 @@ export const stepOptionsSchema = v.object({
   autoRecommend: v.optional(v.boolean()),
   /**
    * `skill` steps only. The id of the account-tier repo-sourced Claude Skill this step
-   * executes (`src:<sourceId>:<dirName>`; see `ADR 0024`). The one
+   * executes (`src:<sourceId>:<dirName>`; see ADR 0024). The one
    * generic `skill` agent kind is parametrized by THIS field — the picked skill's
    * instructions + resources are resolved at dispatch and folded into the step (natively for
    * the claude-code harness, as prompt + `.cat-context/skill/*` for Pi/codex). A `skill` step

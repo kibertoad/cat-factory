@@ -266,10 +266,28 @@
   is not a second read). The sibling libraries can adopt it when their own sync surface lands.
   Allow-listed: `accountSkillRepository` `listByAccount`/`get` (the `account` rule),
   `upsert` (`accountField`), `softDelete` (`account`), `listBySource`/`softDeleteBySource`
-  (`skillSource`); `skillSourceRepository` `listByAccount` (`account`), `upsert` (`accountField`),
-  `get`/`updateSyncState`/`softDelete` (`skillSource`). Rows carry no secrets — a `SKILL.md` body
-  plus a `{ path, sha, size }` manifest; the resource BODIES are fetched from the repo at dispatch
-  and never stored.
+  (`skillSource`); `skillSourceRepository` `listByAccount` (`account`),
+  `upsert` (**`accountFieldUpsert`**), `get`/`updateSyncState`/`softDelete` (`skillSource`). Rows
+  carry no secrets — a `SKILL.md` body plus a `{ path, sha, size }` manifest; the resource BODIES
+  are fetched from the repo at dispatch and never stored.
+
+  Also introduces **`accountFieldUpsert`**, the upsert form of `accountField` for a record-keyed
+  write whose CONFLICT KEY is the record's `id` rather than its `accountId`. `accountField` is safe
+  only under the precondition its own doc entry states — the row is stored under, and later read
+  by, the bound `accountId`. An `ON CONFLICT (id) DO UPDATE` that does not re-`SET account_id`
+  breaks it: the write lands on whichever row already holds that id, under ITS account. Binding
+  only the declared field would let a token scoped to account A name account B's source id, declare
+  its own account to pass the check, and repoint B's link at a repo A controls — whose `SKILL.md`
+  bodies are agent INSTRUCTIONS that B's next sync folds into their catalog. The rule therefore
+  binds the STORED row's account as well; an absent row is a CREATE and passes on the declared half
+  alone. Its sibling `accountSkillRepository.upsert` keeps plain `accountField` because that write
+  conflicts on `(account_id, skill_id)`, so the bound account is part of the key.
+
+  > **Open gap this rule does NOT close.** `fragmentSourceRepository.upsert` (`ownerField`) has the
+  > same id-keyed conflict shape and the same exposure. Closing it needs the `ownerField` analogue —
+  > a source → owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId) — plus its own
+  > round-trip tests, so it is tracked here rather than folded into the skills slice. Until then, do
+  > not copy `ownerField`/`accountField` onto a new id-keyed upsert.
 
   **Also new: `githubInstallationRepository.listActiveForAccount`** (`account` rule), a real port
   addition rather than an allow-list line. The account-tier installation lookup every repo-sourced

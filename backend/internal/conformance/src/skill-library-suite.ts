@@ -10,12 +10,12 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
-// Cross-runtime parity for the repo-sourced Claude Skills library (ADR 0024; migration
-// 0052). Each facade persists it in its own store (D1 on Cloudflare, Postgres via Drizzle on Node). This suite drives the SAME
-// upsert → get → list → listBySource → softDelete assertions through whichever real repositories
-// a runtime hands it, so a column mapped differently (the resources JSON, the pinned commit, the
-// tombstone) fails a test instead of shipping — plus the account-tier installation lookup the
-// library's sync and run path resolve their GitHub credential through.
+// Cross-runtime parity for the repo-sourced Claude Skills library (ADR 0024; migration 0052).
+// Each facade persists it in its own store (D1 on Cloudflare, Postgres via Drizzle on Node).
+// This suite drives the SAME upsert → get → list → listBySource → softDelete assertions through
+// whichever real repositories a runtime hands it, so a column mapped differently (the resources
+// JSON, the pinned commit, the tombstone) fails a test instead of shipping — plus the account-tier
+// installation lookup the library's sync and run path resolve their GitHub credential through.
 
 export interface SkillLibraryRepos {
   skillSources: SkillSourceRepository
@@ -241,8 +241,11 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
         await workspaces.create(row, null, owner)
         return row
       }
-      // `github_installations.workspace_id` is UNIQUE (one connection per board, tombstones
-      // included), so an unbound row gets its own throwaway board id rather than a shared one.
+      // `github_installations.workspace_id` carries a UNIQUE index (one live connection per
+      // board), so an unbound row gets its own throwaway board id rather than a shared one. The
+      // two runtimes scope that index differently — Node's is partial (`WHERE deleted_at IS
+      // NULL`), D1's is not — which is exactly why the rows here never share a workspace id:
+      // doing so would make the tombstoned case pass on one runtime and collide on the other.
       const install = async (overrides: Partial<GitHubInstallation>): Promise<number> => {
         nextId += 1
         const record: GitHubInstallation = {

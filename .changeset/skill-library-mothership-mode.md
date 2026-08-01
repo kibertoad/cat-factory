@@ -29,6 +29,19 @@ positional binds them; it resolves the source's owning account server-side (memo
 read with the dispatched call). The global `skillSourceRepository.listByRepo` — the push-webhook
 reverse lookup across every account — stays mothership-internal.
 
+Adds `accountFieldUpsert` alongside it, for a record-keyed write whose conflict key is the record's
+`id` rather than its `accountId`. `accountField` binds only the account a record DECLARES, which is
+sufficient only while the row is stored under that account — an `ON CONFLICT (id) DO UPDATE` that
+does not re-`SET account_id` instead writes whichever row already holds that id, under its own
+account. The new rule binds the stored row too, so a token scoped to one account can no longer name
+another's source id and repoint their link at a repo it controls (whose `SKILL.md` bodies the other
+tenant's next sync would fold into their catalog as agent instructions); an absent row is a create
+and still passes.
+
+A misconfiguration now also reports itself correctly: the persistence controller's per-request memo
+overrides are applied only for repositories the deployment actually wires, so a mothership without
+the library answers `... is not wired` instead of a scope 404 that reads as a missing row.
+
 `GitHubInstallationRepository` gains `listActiveForAccount`, the account-scoped form of the cron
 `listActive`. The account-tier installation lookup every repo-sourced library resolves its GitHub
 credential through read EVERY tenant's installations and filtered in JS — unexposable over an

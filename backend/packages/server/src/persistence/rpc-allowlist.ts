@@ -945,6 +945,15 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // (`get`/`updateSyncState`/`softDelete`) stay off — they back the repo-SYNC management the
   // mothership owns (the source service needs a GitHub client, which a mothership node does not have),
   // so a later GitHub-sync-in-mothership slice opens them with a source→owner resolver.
+  //
+  // KNOWN GAP, tracked in `docs/initiatives/mothership-mode.md`: `upsert` has the same id-keyed
+  // conflict shape the skills library's source upsert does (`ON CONFLICT (id) DO UPDATE`, no
+  // re-`SET` of the owner columns), so plain `ownerField` binds only the DECLARED owner and an
+  // in-scope caller naming a foreign source id can repoint another tenant's fragment source at a
+  // repo it controls. The fix is the `ownerField` analogue of `accountFieldUpsert` below — it needs
+  // a source→owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId) plus its own
+  // round-trip tests, which is why it is not folded in here. Do NOT copy `ownerField` onto a new
+  // id-keyed upsert in the meantime.
   fragmentSourceRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
@@ -952,9 +961,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // --- Repo-sourced Claude Skills library (ADR 0024) ------------------------------
   // Skills live in ONE tier — the ACCOUNT — so every method here binds on an accountId rather
   // than the `(ownerKind, ownerId)` pair the fragment library uses: positionally via the `account`
-  // rule, on a record's `accountId` FIELD via `accountField`, or (the sync surface) via the
-  // `skillSource` rule, which resolves a source id to its owning account server-side. A machine
-  // token scoped to one account can therefore neither read nor write another tenant's skills.
+  // rule, on a record's `accountId` FIELD via `accountField` / `accountFieldUpsert`, or (the sync
+  // surface) via the `skillSource` rule, which resolves a source id to its owning account
+  // server-side. A machine token scoped to one account can therefore neither read nor write another
+  // tenant's skills.
   //
   // Remote rather than `telemetry` or `local-sqlite` for the reason the bucket test names: what
   // READS this is a RUN. `SkillRunResolver` resolves the picked skill (and ADR 0029's declared
@@ -978,7 +988,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
     // Sync writes. `upsert(record)` binds on the record's `accountId` FIELD, so a synced skill can
-    // only ever land under an in-scope account; `softDelete(accountId, skillId, at)` is positional.
+    // only ever land under an in-scope account. Plain `accountField` is sufficient HERE (and NOT for
+    // `skillSourceRepository.upsert` below) because this write conflicts on `(account_id, skill_id)`
+    // on both runtimes: the bound account is part of the key, so a foreign `skillId` inserts a fresh
+    // row under the caller's own account and can never mutate another tenant's. `softDelete(accountId,
+    // skillId, at)` is positional.
     upsert: { scope: { kind: 'accountField', arg: 0 } },
     softDelete: { scope: { kind: 'account', arg: 0 } },
     // The source-keyed reconcile pair: list a source's live skills to diff against the repo, and
@@ -987,9 +1001,16 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     softDeleteBySource: { scope: { kind: 'skillSource', arg: 0 } },
   },
   // The repo-linkage rows the library panel lists and the sync pins its head commit on.
-  // `listByAccount` is positional; `upsert(record)` binds on the record's `accountId` FIELD (so a
-  // link can only ever be created under an in-scope account); the three sourceId-keyed methods bind
-  // through `skillSource`.
+  // `listByAccount` is positional; the three sourceId-keyed methods bind through `skillSource`.
+  //
+  // `upsert(record)` takes `accountFieldUpsert`, NOT the plain `accountField` its sibling above uses,
+  // because this write conflicts on the `id` ALONE and does not re-`SET account_id` (D1
+  // `ON CONFLICT (id) DO UPDATE`, Drizzle `target: skillSources.id`). The row it lands on is therefore
+  // chosen by the id, not by the bound account — so binding only the DECLARED `accountId` would let a
+  // token scoped to account A name account B's source id, declare its own account to pass the check,
+  // and repoint B's link at an attacker-controlled repo; B's next sync folds that repo's `SKILL.md`
+  // bodies — agent INSTRUCTIONS — into B's catalog. `accountFieldUpsert` additionally binds the STORED
+  // row's account, so an existing foreign row is refused while a create (no such row) still passes.
   //
   // `listByRepo` is deliberately absent: it is the GLOBAL `(repoOwner, repoName)` → sources reverse
   // lookup the push-webhook fan-out uses, spanning every account by construction, so no rule can
@@ -998,7 +1019,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   skillSourceRepository: {
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'skillSource', arg: 0 } },
-    upsert: { scope: { kind: 'accountField', arg: 0 } },
+    upsert: { scope: { kind: 'accountFieldUpsert', arg: 0, entity: 'skillSource' } },
     updateSyncState: { scope: { kind: 'skillSource', arg: 0 } },
     softDelete: { scope: { kind: 'skillSource', arg: 0 } },
   },
