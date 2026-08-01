@@ -30,10 +30,39 @@ tombstone SUPPRESSES an inherited account service, which is how a board opts out
 admin.
 
 Contracts arrive two ways, and both are served: **direct upload** (the document body on the
-request, validated at the write boundary against the format it declares), and **a linked git repo**
-— either a FOLDER whose immediate subdirectories are services (each with a `service.md` and its
-contract files beside it) or an explicit FILE list attached to one named service. Both are cached
-in our own store and auto-refreshed.
+request, validated at the write boundary against the format it declares), and **a linked git
+repo**, in one of three shapes. All are cached in our own store and auto-refreshed.
+
+| Source mode | What it maps to                                                                                        | Where identity comes from        |
+| ----------- | ------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| `directory` | every immediate SUBDIRECTORY of the path is a service, with a `service.md` and its contracts beside it | the subdirectory name + manifest |
+| `folder`    | the WHOLE path — optionally its subfolders — is ONE service's contract set                             | the link                         |
+| `files`     | an explicit FILE list attached to ONE service                                                          | the link                         |
+
+`folder` and `files` differ in WHEN the file set is decided, and that is the whole reason both
+exist: a `files` link pins the paths, so a contract added upstream stays invisible until somebody
+edits the link, while a `folder` link re-discovers the set on every sync. Pointing at a folder is
+therefore the right shape for a spec directory that grows, and naming files is the right shape for
+picking two documents out of a repo that is mostly something else.
+
+A `folder` source's walk is BOUNDED (depth, directories listed, contract files taken) and
+breadth-first over name-sorted listings, which buys two properties at once: the result is
+deterministic across syncs, so a truncated scan keeps the same contracts rather than flapping, and
+the cap falls on the deepest, least-specific files rather than on a root-level `openapi.yaml`. A
+truncation is REPORTED on the sync result (`truncated`) and is deliberately not treated as a
+transient failure — holding the pinned commit back would make the next pass truncate identically
+while the source looked permanently behind. Beside it, `skippedFiles` counts documents that LOOKED
+like contracts (an OpenAPI or contract-module extension) and were not usable; a file with no
+contract extension is never read and never counted, so the number explains a thin catalog entry
+instead of restating the folder's contents. Contract ids inside a `folder` source are derived from
+the path RELATIVE to the folder root (`v1/users.yaml` → `v1-users`), because a recursive scan is
+exactly where the basename rule collapses `v1/users.yaml` and `v2/users.yaml` onto one id and
+silently drops one of them.
+
+A `folder` source may also carry an OPTIONAL `service.md` at its root. It supplies the description
+and capability tags only — never the id or name, which the link already gave — so identity keeps
+exactly one source while a folder that happens to follow the `directory` convention is not left
+with a blank catalog entry.
 
 ### The two agent-facing reads, and why they are separate
 
@@ -123,13 +152,13 @@ shadows-nothing row the 404 exists to prevent.
 
 ### Runtime symmetry
 
-| Concern      | Cloudflare                                                        | Node                                                        |
-| ------------ | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| Store        | D1 migrations `0073_foundational_services`, `0074_..._repo_index` | Drizzle schema + the two matching migrations                |
-| Repositories | `D1FoundationalServiceRepository` (+ contract, source)            | `DrizzleFoundationalServiceRepository` (+ contract, source) |
-| Autorefresh  | a `scheduled` cron pass, gated to the staleness window            | a `startSweeper` interval                                   |
-| Push refresh | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`     | the same kind on the pg-boss `github.sync` queue            |
-| Parity       | `defineFoundationalServicesSuite` runs against both real stores   | ditto                                                       |
+| Concern      | Cloudflare                                                                                | Node                                                        |
+| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Store        | D1 migrations `0073_foundational_services`, `0074_..._repo_index`, `0075_..._folder_mode` | Drizzle schema + the three matching migrations              |
+| Repositories | `D1FoundationalServiceRepository` (+ contract, source)                                    | `DrizzleFoundationalServiceRepository` (+ contract, source) |
+| Autorefresh  | a `scheduled` cron pass, gated to the staleness window                                    | a `startSweeper` interval                                   |
+| Push refresh | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`                             | the same kind on the pg-boss `github.sync` queue            |
+| Parity       | `defineFoundationalServicesSuite` runs against both real stores                           | ditto                                                       |
 
 The refresh PASS itself is one implementation (`sweepFoundationalSources` in
 `@cat-factory/server`) that both facades drive — only the trigger differs. Two copies would be two
@@ -190,7 +219,12 @@ Gotchas the implementation surfaced, each now pinned by a test:
   a naive round-trip and disagree about every non-ASCII document; the conformance suite pins it with
   a multi-byte body.
 - **A `files`-mode source anchors its head-commit probe on the linked files' deepest common
-  directory**, so a dozen linked files still cost ONE cheap read per freshness check.
+  directory**, so a dozen linked files still cost ONE cheap read per freshness check. A `folder`
+  source anchors on the folder itself, so a whole recursive subtree costs the same single read —
+  and the walk only runs at all once that read says the commit moved.
+- **A `folder` source that reads back with NO usable contract keeps its prior row alive and leaves
+  the pinned commit behind**, the same disposition `files` mode takes and for the same reason. A
+  TRUNCATION is the deliberate exception: it is stable rather than transient, so it pins normally.
 - **A directory that loses its `service.md` retires the service it described**, but a manifest that
   reads back unparseable this round keeps the prior row alive AND leaves the pinned commit behind,
   so the next pass re-reads it. Retiring a service over a transient read would silently strip a

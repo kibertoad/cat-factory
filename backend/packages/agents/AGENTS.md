@@ -116,8 +116,9 @@
   (`backend/docs/adr/0031-foundational-services.md`). `FoundationalServiceCatalogService` owns the tier
   merge and the manifest/document SPLIT (a catalog read never loads a contract body);
   `FoundationalServiceSourceService` reuses the same `repoSourceSync/` engine the two libraries
-  above do, supplying only what a UNIT is — a service DIRECTORY, or an explicit FILE list for one
-  named service; `FoundationalServiceRunResolver` is the engine-facing seam that turns both into
+  above do, supplying only what a UNIT is — a service DIRECTORY, a whole contract FOLDER
+  (`folder-scan.ts`, optionally recursive) for one named service, or an explicit FILE list for one
+  named service; `FoundationalServiceRunResolver` is the engine-facing seam that turns them into
   injected `.cat-context/` files. Its third read serves BINARY-OUTPUT steps
   (`docs/initiatives/binary-output-foundational-storage.md`): a kind carrying the
   `binary-output` trait gets `binary-output/brief.md` + contract files for the storage/context

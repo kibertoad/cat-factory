@@ -363,6 +363,7 @@ interface SourceRow {
   git_ref: string
   mode: string
   dir_path: string
+  recursive: number
   file_paths: string
   service_id: string | null
   service_name: string | null
@@ -383,6 +384,7 @@ function toSourceRecord(row: SourceRow): FoundationalServiceSourceRecord {
     gitRef: row.git_ref,
     mode: row.mode as FoundationalServiceSourceMode,
     dirPath: row.dir_path,
+    recursive: row.recursive === 1,
     filePaths: parseStringArray(row.file_paths),
     serviceId: row.service_id,
     serviceName: row.service_name,
@@ -439,16 +441,17 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
     await this.db
       .prepare(
         `INSERT INTO foundational_service_sources
-          (id, owner_kind, owner_id, repo_owner, repo_name, git_ref, mode, dir_path, file_paths,
-           service_id, service_name, service_summary, last_synced_commit, last_synced_at,
-           created_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, owner_kind, owner_id, repo_owner, repo_name, git_ref, mode, dir_path, recursive,
+           file_paths, service_id, service_name, service_summary, last_synced_commit,
+           last_synced_at, created_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            repo_owner = excluded.repo_owner,
            repo_name = excluded.repo_name,
            git_ref = excluded.git_ref,
            mode = excluded.mode,
            dir_path = excluded.dir_path,
+           recursive = excluded.recursive,
            file_paths = excluded.file_paths,
            service_id = excluded.service_id,
            service_name = excluded.service_name,
@@ -466,6 +469,7 @@ export class D1FoundationalServiceSourceRepository implements FoundationalServic
         record.gitRef,
         record.mode,
         record.dirPath,
+        record.recursive ? 1 : 0,
         JSON.stringify(record.filePaths),
         record.serviceId,
         record.serviceName,

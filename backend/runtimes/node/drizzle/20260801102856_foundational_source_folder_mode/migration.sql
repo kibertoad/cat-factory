@@ -1,0 +1,1 @@
+ALTER TABLE "foundational_service_sources" ADD COLUMN "recursive" boolean DEFAULT false NOT NULL;
