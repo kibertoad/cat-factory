@@ -54,6 +54,43 @@ export function isValidMetadataKey(key: string): boolean {
 }
 
 /**
+ * Read one value out of a stored bag, as an OWN property.
+ *
+ * A plain `bag[key]` is not that. {@link METADATA_KEY_PATTERN} requires a leading letter, which
+ * keeps `__proto__` out, but `constructor`, `toString` and `valueOf` are all legal field keys —
+ * and on a plain object (which is what `JSON.parse` hands back) each of those reads as an
+ * INHERITED function rather than `undefined` when nobody has filled the field in. That is not a
+ * cosmetic difference: a truthy read makes `resolveExternalToolUrl`'s required-metadata check
+ * conclude the field IS set, and a function reaching the editor's draft is a `TypeError` on the
+ * next save. Both failures would name a field the operator never mistyped.
+ */
+export function metadataValue(
+  bag: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  if (!Object.hasOwn(bag, key)) return undefined
+  const value = bag[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * A stored bag re-hung on a NULL PROTOTYPE, so `bag.anything` is either a stored string or
+ * `undefined` for every reader.
+ *
+ * {@link metadataValue} is the disciplined way to read one key, but the bag's whole purpose is
+ * to be handed to a DEPLOYMENT'S OWN resolver, which writes `ctx.metadata.gameId` and cannot be
+ * made to call our helper. Sanitising the object once at that boundary is what makes the plain
+ * property access those resolvers will write correct by construction.
+ */
+export function toMetadataBag(stored: WorkspaceMetadata): Readonly<Record<string, string>> {
+  const bag: Record<string, string> = Object.create(null)
+  for (const [key, value] of Object.entries(stored)) {
+    if (typeof value === 'string') bag[key] = value
+  }
+  return bag
+}
+
+/**
  * The fields to render: valid keys only, first declaration wins on a duplicate, ordered.
  *
  * A code-shipped definition is trusted the way a code-shipped task type is — no boot-time
@@ -88,7 +125,7 @@ export function metadataDraftFrom(
   stored: WorkspaceMetadata,
 ): Record<string, string> {
   const draft: Record<string, string> = {}
-  for (const field of fields) draft[field.key] = stored[field.key] ?? ''
+  for (const field of fields) draft[field.key] = metadataValue(stored, field.key) ?? ''
   return draft
 }
 
@@ -104,19 +141,32 @@ export function metadataDraftFrom(
  *
  * Trimming and empty-dropping mirror the backend's normalisation, so the editor shows the same
  * bag the server will store rather than one that changes shape on the round trip.
+ *
+ * The carried-over keys count against the contract's per-workspace entry cap like any other, so
+ * a bag already near it can refuse a save over fields the editor doesn't show. That is the right
+ * end of the trade: dropping what we don't render to stay under the cap would be exactly the
+ * silent deletion this function exists to prevent, and the cap is generous next to the number of
+ * fields a deployment declares.
+ *
+ * `draft` is typed `unknown`-valued and coerced rather than trusted as a string map: it is bound
+ * straight to the editor's inputs, and a `number` field's `v-model` hands back a NUMBER, on which
+ * `.trim()` throws. `BudgetSettings.vue` wraps the same control's value in `String(...)` for the
+ * same reason. The declared type would say otherwise, which is precisely why it must not.
  */
 export function metadataPatchFrom(
   fields: readonly WorkspaceMetadataFieldDefinition[],
-  draft: Readonly<Record<string, string>>,
+  draft: Readonly<Record<string, unknown>>,
   stored: WorkspaceMetadata,
 ): WorkspaceMetadata {
   const rendered = new Set(fields.map((f) => f.key))
-  const patch: WorkspaceMetadata = {}
+  // Null-prototype for the same reason as `toMetadataBag`: this is a data bag being assembled
+  // from stored keys, and an assignment to an inherited slot is never what was meant.
+  const patch: WorkspaceMetadata = Object.create(null)
   for (const [key, value] of Object.entries(stored)) {
     if (!rendered.has(key)) patch[key] = value
   }
   for (const field of fields) {
-    const value = (draft[field.key] ?? '').trim()
+    const value = String(draft[field.key] ?? '').trim()
     if (value) patch[field.key] = value
   }
   return patch

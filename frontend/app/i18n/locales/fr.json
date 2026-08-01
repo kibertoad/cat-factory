@@ -6116,6 +6116,7 @@
       "title": "Impossible d'ouvrir {tool}",
       "missingMetadata": "Renseignez d'abord {fields} dans l'onglet Métadonnées des paramètres de l'espace de travail.",
       "unresolved": "Cet outil n'a pas fourni d'adresse pour l'espace de travail actuel.",
+      "resolverFailed": "Cet outil a échoué lors du calcul de son adresse. La cause se trouve dans la console du navigateur, pour les responsables de ce déploiement.",
       "unsafeUrl": "Cet outil a fourni une adresse qui n'est pas un lien web, elle n'a donc pas été ouverte."
     }
   }

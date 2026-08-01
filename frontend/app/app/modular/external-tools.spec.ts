@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { missingI18nKeys } from '../../test/i18nKeys'
 import {
+  EXTERNAL_TOOL_UNAVAILABLE_KEYS,
   filterExternalTools,
   projectExternalTools,
   resolveExternalToolUrl,
@@ -89,6 +91,40 @@ describe('resolveExternalToolUrl', () => {
     })
   })
 
+  it('reports a resolver that THREW separately, carrying the cause', () => {
+    const boom = new TypeError("Cannot read properties of undefined (reading 'split')")
+    const tool: ExternalToolContribution = {
+      ...MAP_EDITOR,
+      requiredMetadata: undefined,
+      url: () => {
+        throw boom
+      },
+    }
+
+    // Distinct from `unresolved`: declining is a resolver working as written, throwing is a
+    // bug in it. The cause rides along so the caller can put a stack in the console — the
+    // deployment author who must fix it is not the person reading the toast.
+    expect(resolveExternalToolUrl(tool, CONTEXT)).toEqual({
+      ok: false,
+      reason: 'resolver-failed',
+      missing: [],
+      cause: boom,
+    })
+  })
+
+  it('treats a required field named after an Object member as missing', () => {
+    // `constructor` / `toString` / `valueOf` all pass the key pattern (only a leading `_` is
+    // barred, which is what keeps `__proto__` out). On a plain object an unfilled one reads as
+    // an INHERITED function, i.e. truthy — so a naive `metadata[key]` check would conclude the
+    // field is set and hand the resolver `Object` itself.
+    const tool: ExternalToolContribution = { ...MAP_EDITOR, requiredMetadata: ['constructor'] }
+    expect(resolveExternalToolUrl(tool, { ...CONTEXT, metadata: {} })).toEqual({
+      ok: false,
+      reason: 'missing-metadata',
+      missing: ['constructor'],
+    })
+  })
+
   it.each([
     // The security-relevant one: the resolved string is handed to `window.open`, so a
     // `javascript:` URL would execute in the SPA's own origin.
@@ -168,6 +204,35 @@ describe('projectExternalTools', () => {
     )
   })
 
+  it('survives a throwing resolver instead of taking the nav catalog down with it', () => {
+    const h = handlers()
+    const exploding: ExternalToolContribution = {
+      id: 'acme:broken',
+      title: 'Broken',
+      icon: 'i-lucide-bug',
+      url: () => {
+        throw new Error('boom')
+      },
+    }
+
+    // This projection runs inside the `externalToolItems` computed, which feeds the sidebar,
+    // the command palette AND the board toolbar. A registration mistake in a deployment's own
+    // code must cost that one item — not every nav shell in the app.
+    const items = projectExternalTools([exploding, MAP_EDITOR], CONTEXT, h)
+
+    expect(items.map((i) => i.tool.id)).toEqual(['acme:broken', 'acme:map-editor'])
+    expect(items[0]?.resolution).toMatchObject({ ok: false, reason: 'resolver-failed' })
+    expect(items[1]?.resolution.ok).toBe(true)
+
+    // Clicking the broken one reports, and still doesn't throw at the shell.
+    expect(() => items[0]?.contribution.run?.()).not.toThrow()
+    expect(h.open).not.toHaveBeenCalled()
+    expect(h.onUnavailable).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'resolver-failed' }),
+      exploding,
+    )
+  })
+
   it('re-resolves at click time, so a value filled in meanwhile is picked up', () => {
     const h = handlers()
     const metadata: Record<string, string> = {}
@@ -203,5 +268,14 @@ describe('filterExternalTools', () => {
 
   it('passes everything through with no gates service wired (dev-open parity)', () => {
     expect(filterExternalTools(tools, undefined).map((t) => t.id)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('EXTERNAL_TOOL_UNAVAILABLE_KEYS', () => {
+  it('names copy that exists for every reason', () => {
+    // The exhaustive `Record` proves each reason HAS an entry; only this proves the entry still
+    // names a live key. Neither typed message keys nor `i18n:check` can see a lookup table, so a
+    // deleted key would otherwise read as a clean removal and render its own path in a toast.
+    expect(missingI18nKeys(Object.values(EXTERNAL_TOOL_UNAVAILABLE_KEYS))).toEqual([])
   })
 })

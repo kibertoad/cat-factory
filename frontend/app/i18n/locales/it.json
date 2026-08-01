@@ -6128,6 +6128,7 @@
       "title": "Impossibile aprire {tool}",
       "missingMetadata": "Compila prima {fields} nella scheda Metadati delle impostazioni dell'area di lavoro.",
       "unresolved": "Questo strumento non ha restituito un indirizzo per l'area di lavoro corrente.",
+      "resolverFailed": "Questo strumento non è riuscito a calcolare il proprio indirizzo. La causa è nella console del browser, per chi gestisce questa installazione.",
       "unsafeUrl": "Questo strumento ha restituito un indirizzo che non è un collegamento web, quindi non è stato aperto."
     }
   }

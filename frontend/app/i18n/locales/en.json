@@ -6338,6 +6338,7 @@
       "title": "Can't open {tool}",
       "missingMetadata": "Fill in {fields} on the Metadata tab of Workspace settings first.",
       "unresolved": "This tool did not return an address for the current workspace.",
+      "resolverFailed": "This tool failed while working out its address. The cause is in the browser console, for whoever maintains this deployment.",
       "unsafeUrl": "This tool returned an address that is not a web link, so it was not opened."
     }
   }

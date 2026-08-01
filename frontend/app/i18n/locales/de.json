@@ -6128,6 +6128,7 @@
       "title": "{tool} kann nicht geöffnet werden",
       "missingMetadata": "Füllen Sie zuerst {fields} im Tab Metadaten der Arbeitsbereichseinstellungen aus.",
       "unresolved": "Dieses Tool hat für den aktuellen Arbeitsbereich keine Adresse geliefert.",
+      "resolverFailed": "Beim Ermitteln der Adresse ist in diesem Tool ein Fehler aufgetreten. Die Ursache steht in der Browser-Konsole, für die Betreuer dieser Installation.",
       "unsafeUrl": "Dieses Tool hat eine Adresse geliefert, die kein Weblink ist, und wurde daher nicht geöffnet."
     }
   }

@@ -419,7 +419,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       spend_monthly_limit: settings.spendMonthlyLimit,
       default_provision_type: settings.defaultProvisionType,
       default_provision_manifest_id: settings.defaultProvisionManifestId,
-      metadata: JSON.stringify(settings.metadata ?? {}),
+      metadata: JSON.stringify(settings.metadata),
     }
     await this.db
       .insert(workspaceSettings)

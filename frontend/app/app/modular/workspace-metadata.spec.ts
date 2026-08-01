@@ -5,7 +5,9 @@ import {
   isValidMetadataKey,
   metadataDraftFrom,
   metadataPatchFrom,
+  metadataValue,
   resolveMetadataFields,
+  toMetadataBag,
   type WorkspaceMetadataFieldDefinition,
 } from './workspace-metadata'
 
@@ -36,6 +38,43 @@ describe('isValidMetadataKey', () => {
       expect(isValidMetadataKey(key)).toBe(v.safeParse(workspaceMetadataKeySchema, key).success)
     },
   )
+})
+
+// A field key only has to be identifier-shaped, and `constructor` / `toString` / `valueOf` all
+// are. On a plain object each of those reads as an inherited FUNCTION for a field nobody has
+// filled in — truthy where the code expects `undefined`, and not a string where the code expects
+// one. These two helpers are what stop that reaching a required-metadata check, a resolver, or
+// the editor's draft.
+describe('metadataValue', () => {
+  it('reads a stored value', () => {
+    expect(metadataValue({ gameId: 'zork' }, 'gameId')).toBe('zork')
+  })
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'])(
+    'reads an unfilled %s as undefined rather than an inherited member',
+    (key) => {
+      expect(metadataValue({}, key)).toBeUndefined()
+    },
+  )
+
+  it('reads a non-string value as undefined', () => {
+    // The bag arrives via `JSON.parse`, so its shape is only as good as what was stored.
+    expect(
+      metadataValue({ gameId: 7 } as unknown as Record<string, string>, 'gameId'),
+    ).toBeUndefined()
+  })
+})
+
+describe('toMetadataBag', () => {
+  it('hangs the bag on a null prototype so a plain property read is total', () => {
+    // A resolver is a deployment's own code writing `ctx.metadata.gameId`; it cannot be made to
+    // call `metadataValue`, so the object it receives has to be safe by construction.
+    const bag = toMetadataBag({ gameId: 'zork' })
+
+    expect(bag.gameId).toBe('zork')
+    expect(Object.getPrototypeOf(bag)).toBeNull()
+    expect((bag as Record<string, unknown>).constructor).toBeUndefined()
+  })
 })
 
 describe('resolveMetadataFields', () => {
@@ -100,5 +139,22 @@ describe('metadataPatchFrom', () => {
     expect(metadataPatchFrom(fields, { gameId: 'myst', region: '' }, { gameId: 'zork' })).toEqual({
       gameId: 'myst',
     })
+  })
+
+  it("coerces a number field's draft value instead of throwing on it", () => {
+    // A `number` field renders `<UInput type="number">`, whose v-model hands back a NUMBER
+    // however the draft is typed — `.trim()` on it is a TypeError, surfaced to the operator as
+    // an opaque "save failed". `BudgetSettings.vue` wraps the same control in `String(...)`.
+    const numeric = [field('port', { type: 'number' })]
+    expect(metadataPatchFrom(numeric, { port: 8080 }, {})).toEqual({ port: '8080' })
+  })
+
+  it('keeps a stored key named after an Object member out of the prototype', () => {
+    const patch = metadataPatchFrom(fields, { gameId: 'zork', region: '' }, { toString: 'kept' })
+
+    expect(patch).toEqual({ gameId: 'zork', toString: 'kept' })
+    expect(Object.getPrototypeOf(patch)).toBeNull()
+    // The bag is JSON on the wire, and a null prototype changes nothing about that.
+    expect(JSON.parse(JSON.stringify(patch))).toEqual({ gameId: 'zork', toString: 'kept' })
   })
 })

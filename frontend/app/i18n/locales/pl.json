@@ -6116,6 +6116,7 @@
       "title": "Nie można otworzyć: {tool}",
       "missingMetadata": "Najpierw uzupełnij {fields} na karcie Metadane w ustawieniach przestrzeni roboczej.",
       "unresolved": "To narzędzie nie zwróciło adresu dla bieżącej przestrzeni roboczej.",
+      "resolverFailed": "To narzędzie napotkało błąd podczas ustalania swojego adresu. Przyczyna znajduje się w konsoli przeglądarki, dla osób utrzymujacych to wdrożenie.",
       "unsafeUrl": "To narzędzie zwróciło adres, który nie jest odnośnikiem internetowym, więc nie został otwarty."
     }
   }

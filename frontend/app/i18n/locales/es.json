@@ -6116,6 +6116,7 @@
       "title": "No se puede abrir {tool}",
       "missingMetadata": "Primero completa {fields} en la pestaña Metadatos de la configuración del espacio de trabajo.",
       "unresolved": "Esta herramienta no devolvió una dirección para el espacio de trabajo actual.",
+      "resolverFailed": "Esta herramienta falló al calcular su dirección. La causa está en la consola del navegador, para quien mantiene esta instalación.",
       "unsafeUrl": "Esta herramienta devolvió una dirección que no es un enlace web, así que no se abrió."
     }
   }

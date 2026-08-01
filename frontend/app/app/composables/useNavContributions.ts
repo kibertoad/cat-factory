@@ -1,12 +1,9 @@
 import { computed } from 'vue'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import { groupCommands, groupSidebar, sortToolbar } from '~/modular/nav-contributions'
-import { projectExternalTools } from '~/modular/external-tools'
-import type {
-  ExternalToolContext,
-  ExternalToolContribution,
-  ExternalToolUnavailableReason,
-} from '~/modular/external-tools'
+import { EXTERNAL_TOOL_UNAVAILABLE_KEYS, projectExternalTools } from '~/modular/external-tools'
+import { toMetadataBag } from '~/modular/workspace-metadata'
+import type { ExternalToolContext, ExternalToolContribution } from '~/modular/external-tools'
 import type {
   AppSlots,
   CommandGroup,
@@ -14,19 +11,6 @@ import type {
   NavContribution,
   SidebarGroup,
 } from '~/modular/nav-contributions'
-
-/**
- * Why an external tool could not be opened → the copy that says what to do about it. An
- * exhaustive `Record` over the reason union with LITERAL keys: the typed-message-key check
- * can't see a key assembled at runtime, so the map's exhaustiveness is what makes a new
- * reason a build error instead of a toast with a raw key in it (the `usePipelineErrorToast`
- * pattern).
- */
-const UNAVAILABLE_DESCRIPTION_KEYS: Record<ExternalToolUnavailableReason, string> = {
-  'missing-metadata': 'externalTools.unavailable.missingMetadata',
-  unresolved: 'externalTools.unavailable.unresolved',
-  'unsafe-url': 'externalTools.unavailable.unsafeUrl',
-}
 
 /**
  * The single source the three nav shells render from (slice 1 of the modular-vue
@@ -93,6 +77,15 @@ export function useNavContributions() {
   }
 
   /**
+   * The stored metadata bag, re-hung on a null prototype. A resolver is a DEPLOYMENT'S own code
+   * writing `ctx.metadata.gameId`, so the object it reads has to answer `undefined` for an
+   * unfilled field whatever that field is called — `constructor` and `toString` both pass the
+   * key pattern, and on a plain object both read as an inherited function. A `computed` rather
+   * than a copy per read, so the reference stays stable between settings changes.
+   */
+  const externalToolMetadata = computed(() => toMetadataBag(workspaceSettings.settings.metadata))
+
+  /**
    * The invocation context an external tool's resolver reads. GETTERS, not a captured snapshot,
    * so a resolver called at click time sees the workspace/metadata as they are NOW — a teammate
    * can fill in the field the tool needs while this sidebar is open, and the click must then
@@ -113,7 +106,7 @@ export function useNavContributions() {
       return workspace.activeWorkspace?.name ?? ''
     },
     get metadata() {
-      return workspaceSettings.settings.metadata
+      return externalToolMetadata.value
     },
   }
 
@@ -135,9 +128,20 @@ export function useNavContributions() {
         // into this one through `window.opener`.
         open: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
         onUnavailable: (resolution, tool) => {
+          // A resolver that threw is the one refusal the toast can't fully explain: the person
+          // reading it can't act on a stack trace, and the deployment author who can isn't
+          // here. So the message says which tool is broken and the cause goes to the console —
+          // unconditionally, not behind `import.meta.dev`, because this is an exception being
+          // absorbed and the deployment debugging it is a built one.
+          if (resolution.reason === 'resolver-failed') {
+            console.error(
+              `[cat-factory] external tool "${tool.id}" URL resolver threw`,
+              resolution.cause,
+            )
+          }
           toast.add({
             title: t('externalTools.unavailable.title', { tool: tool.title }),
-            description: t(UNAVAILABLE_DESCRIPTION_KEYS[resolution.reason], {
+            description: t(EXTERNAL_TOOL_UNAVAILABLE_KEYS[resolution.reason], {
               fields: resolution.missing.join(', '),
             }),
             icon: 'i-lucide-triangle-alert',

@@ -152,7 +152,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.spendMonthlyLimit,
         settings.defaultProvisionType,
         settings.defaultProvisionManifestId,
-        JSON.stringify(settings.metadata ?? {}),
+        JSON.stringify(settings.metadata),
       )
       .run()
   }

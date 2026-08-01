@@ -54,7 +54,7 @@ function navLabel(item: NavContribution): string {
  * what it is without a second line in the sidebar.
  */
 function navTitle(item: NavContribution, railed: boolean): string | undefined {
-  if (railed) return item.description ? `${navLabel(item)} — ${item.description}` : navLabel(item)
+  if (railed) return item.description ? `${navLabel(item)}: ${item.description}` : navLabel(item)
   return item.description
 }
 

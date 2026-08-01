@@ -107,10 +107,16 @@ export const MAX_WORKSPACE_METADATA_VALUE_LENGTH = 1024
 
 /**
  * A metadata field key: an identifier a deployment writes in code and a resolver reads
- * off `ctx.metadata`. Deliberately identifier-shaped (no spaces, no `/`, no `%`) —
- * these end up interpolated into external URLs, so anything needing escaping to be a
- * safe object key or query parameter is refused at the boundary rather than encoded on
- * the way out.
+ * off `ctx.metadata`. Deliberately identifier-shaped (no spaces, no `/`, no `%`) so that
+ * the one thing every consumer does with a key — read it as a property, `ctx.metadata.gameId`
+ * — is total and needs no escaping. The leading-letter rule additionally keeps `__proto__`
+ * out of a bag that is `JSON.parse`d on both sides.
+ *
+ * This is NOT what makes an external tool's URL safe. It is the VALUES that get interpolated
+ * into one, and a value is operator-typed text bounded only in length — so the rule that
+ * matters lives with the reader: build a URL by setting a query parameter or an encoded path
+ * segment, never by splicing a value into the origin. Stated where a resolver author will
+ * read it, on `ExternalToolContext.metadata`.
  */
 export const workspaceMetadataKeySchema = v.pipe(
   v.string(),

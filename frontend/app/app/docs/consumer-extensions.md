@@ -119,7 +119,13 @@ externalTools: [
     description: 'Edit the level geometry for this project.',
     icon: 'i-lucide-map',
     requiredMetadata: ['gameId'],
-    url: (ctx) => `https://maps.acme.dev/edit?game=${ctx.metadata.gameId}&ws=${ctx.workspaceId}`,
+    url: (ctx) => {
+      // Build, don't splice: every value here is operator-typed text (see below).
+      const url = new URL('https://maps.acme.dev/edit')
+      url.searchParams.set('game', ctx.metadata.gameId ?? '')
+      url.searchParams.set('ws', ctx.workspaceId)
+      return url.toString()
+    },
   },
 ],
 workspaceMetadataFields: [{ key: 'gameId', label: 'Game id', placeholder: 'zork' }],
@@ -137,6 +143,16 @@ workspaceMetadataFields: [{ key: 'gameId', label: 'Game id', placeholder: 'zork'
   stays LISTED, because the person looking at the sidebar is usually the one who can fix it. A
   resolver that returns `null` reports separately ("this tool gave no address"), since that one
   is yours to fix, not the operator's.
+- **Treat every `ctx.metadata` value as untrusted input.** A workspace admin types these in, so a
+  value is operator-supplied text that happens to be length-bounded — not a constant you chose.
+  Set it as a query parameter or an `encodeURIComponent`'d path segment, as above. Never build the
+  ORIGIN from one: `` `https://${ctx.metadata.region}.acme.dev` `` with `region` set to
+  `evil.com/x?a=` resolves to a URL on someone else's host, and the `http(s)` allow-list cannot
+  tell that apart from the link you meant.
+- **A resolver that THROWS costs only its own item.** It is caught and reported as a fourth
+  reason (`resolver-failed`) with the cause logged to the console — the sidebar, the palette and
+  the toolbar all render from one catalog, so an uncaught throw would otherwise blank all three.
+  Do not rely on it: `requiredMetadata` is how you say a field must be there.
 - **`gate` and `advanced`** work exactly as on a `nav` entry; both must pass.
 
 **The metadata half** is a deployment-declared FIELD list (here) whose VALUES are per workspace,

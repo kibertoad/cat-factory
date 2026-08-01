@@ -6128,6 +6128,7 @@
       "title": "{tool} açılamıyor",
       "missingMetadata": "Önce çalışma alanı ayarlarındaki Meta veriler sekmesinde {fields} alanlarını doldurun.",
       "unresolved": "Bu araç geçerli çalışma alanı için bir adres döndürmedi.",
+      "resolverFailed": "Bu araç adresini belirlerken hata verdi. Nedeni, bu dağıtımı yönetenler için tarayıcı konsolunda yer alıyor.",
       "unsafeUrl": "Bu araç web bağlantısı olmayan bir adres döndürdü, bu yüzden açılmadı."
     }
   }
