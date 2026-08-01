@@ -17,6 +17,7 @@ import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UiModeSwitcher from '~/components/layout/UiModeSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
+import type { NavContribution } from '~/modular/nav-contributions'
 
 const { t } = useI18n()
 
@@ -36,6 +37,26 @@ const ui = useUiStore()
 // from `useReactiveSlots`. Sections + items appear/disappear reactively as a permission
 // or connection flips, so this shell no longer hand-rolls per-item `show*` computeds.
 const { sidebarGroups, invoke } = useNavContributions()
+
+/**
+ * A destination's visible label: catalog copy for a first-party item, the LITERAL `label` for
+ * one whose copy is deployment data (a registered external tool's title). A tool's name is not
+ * a catalog key — the deployment ships whatever locales it needs in its own catalog — so
+ * running it through `t()` would render the raw name back with a missing-key warning.
+ */
+function navLabel(item: NavContribution): string {
+  return item.label ?? t(item.labelKey)
+}
+
+/**
+ * The hover tooltip. In the rail it names the destination (the label is hidden); expanded it
+ * carries the item's `description` when it has one, which is how an external tool explains
+ * what it is without a second line in the sidebar.
+ */
+function navTitle(item: NavContribution, railed: boolean): string | undefined {
+  if (railed) return item.description ? `${navLabel(item)}: ${item.description}` : navLabel(item)
+  return item.description
+}
 
 // `isCompact` (< lg) is the breakpoint at which the navbar is an off-canvas drawer;
 // above it the aside is static and the drawer flag is inert.
@@ -235,12 +256,12 @@ watch(
               :square="railed"
               class="w-full"
               :class="railed ? 'justify-center' : 'justify-start'"
-              :aria-label="railed ? t(item.labelKey) : undefined"
-              :title="railed ? t(item.labelKey) : undefined"
+              :aria-label="railed ? navLabel(item) : undefined"
+              :title="navTitle(item, railed)"
               :data-testid="item.testId"
               @click="invoke(item)"
             >
-              <span v-if="!railed">{{ t(item.labelKey) }}</span>
+              <span v-if="!railed">{{ navLabel(item) }}</span>
             </UButton>
           </div>
         </section>

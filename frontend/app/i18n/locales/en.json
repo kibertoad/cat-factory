@@ -144,6 +144,7 @@
     },
     "workspaceContext": "Workspace context",
     "contextFragments": "Context fragments",
+    "externalTools": "External tools",
     "configuration": "Configuration",
     "workspaceSettings": "Workspace settings",
     "modelConfiguration": "Model configuration",
@@ -2133,6 +2134,7 @@
         "create": "Create",
         "repositories": "Repositories",
         "integrations": "Integrations",
+        "externalTools": "External tools",
         "workspace": "Workspace",
         "account": "Account"
       },
@@ -3135,6 +3137,7 @@
         "merge": "Risk policies",
         "tracker": "Issue tracker",
         "fragments": "Service best practices",
+        "metadata": "Metadata",
         "members": "Members"
       },
       "waiting": {
@@ -3202,6 +3205,12 @@
           "description": "\"Kaizen\" is a product feature name; keep it verbatim in every locale."
         },
         "toggle": "Grade agent runs with Kaizen"
+      },
+      "metadata": {
+        "heading": "Workspace metadata",
+        "body": "Values for the custom fields this deployment defines. External tools read them, so a tool opens on the right project for this workspace.",
+        "empty": "This deployment defines no custom workspace fields.",
+        "unset": "Not set"
       },
       "budget": {
         "heading": "Monthly spend budget",
@@ -6326,6 +6335,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "Can't open {tool}",
+      "missingMetadata": "Fill in {fields} on the Metadata tab of Workspace settings first.",
+      "unresolved": "This tool did not return an address for the current workspace.",
+      "resolverFailed": "This tool failed while working out its address. The cause is in the browser console, for whoever maintains this deployment.",
+      "unsafeUrl": "This tool returned an address that is not a web link, so it was not opened."
     }
   }
 }

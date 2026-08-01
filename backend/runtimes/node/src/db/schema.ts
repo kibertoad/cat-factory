@@ -56,18 +56,17 @@ export * from './tables/identity.js'
 // The foundational-services catalog (docs/initiatives/foundational-services.md).
 export * from './tables/foundational-services.js'
 
-// Local-mode operational settings — a per-DEPLOYMENT SINGLETON (one developer's machine),
-// addressed by a fixed `id` ('local'). `config` is non-secret tuning JSON (warm-pool
-// sizing + per-repo checkout reuse) that replaced the `LOCAL_POOL_*` / `HARNESS_*` env
-// vars. LOCAL-MODE-ONLY: the warm pool is the local Docker-family runner's differentiator,
-// so this table has NO D1 mirror (the symmetry rule's runtime-specific carve-out). A
-// missing row means all defaults (pooling off).
-export const localSettings = pgTable('local_settings', {
-  id: text('id').primaryKey(),
-  config: text('config').notNull(),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
+// The SETTINGS tables (the local-mode singleton, the per-user budget, the per-workspace
+// runtime policy row + its custom metadata bag, and the per-agent-kind generation knob) live
+// in `tables/settings.ts` — the same cohesive-group extraction, for the same size-budget
+// reason — and are re-exported here.
+export * from './tables/settings.js'
+
+// The PROMPT-FRAGMENT LIBRARY tables (the tenant-scoped best-practice catalog, its generated
+// condensed briefs, the repo directories it syncs from, and the per-workspace inherited
+// selection) live in `tables/prompt-fragments.ts` — the same cohesive-group extraction, for
+// the same size-budget reason — and are re-exported here.
+export * from './tables/prompt-fragments.js'
 
 // ADR 0026 D6.1 — the non-secret fingerprint of the deployment's master ENCRYPTION_KEY,
 // a per-DEPLOYMENT SINGLETON addressed by a fixed `id` ('key'). Seeded once on first boot
@@ -381,13 +380,6 @@ export const tokenUsage = pgTable(
   ],
 )
 
-export const userSettings = pgTable('user_settings', {
-  user_id: text('user_id').primaryKey(),
-  // The user-tier monthly spend budget (base pricing currency). Null = none.
-  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
 // Per-workspace model presets (mirror of D1 migration 0006's `model_presets`). A
 // preset is one `base_model_id` applied to every agent kind plus per-kind `overrides`
 // (JSON object, agentKind -> model id). A task selects one via `blocks.model_preset_id`;
@@ -439,137 +431,6 @@ export const agentPromptRevisions = pgTable(
     // direction would buy nothing and cost a regenerated snapshot. Neither store's head read
     // depends on the declared direction.
     index('idx_agent_prompt_revisions_workspace').on(t.workspace_id, t.agent_kind, t.revision),
-  ],
-)
-
-// Per-workspace, per-agent-kind generation settings (mirror of D1 migration 0071), edited from
-// the pipeline builder beside the prompt overrides. The workspace tier of the deployment's
-// per-kind output-token ceiling: no row (or a NULL `max_output_tokens`) means inherit the
-// routing default. PLAIN, not append-only like `agent_prompt_revisions` — the value is one
-// scalar a human typed, so an upsert on the primary key is the right concurrency story and a
-// revision log would be ceremony. The composite primary key serves both reads (the dispatch
-// path's point read, and the workspace-prefix scan the settings UI does), so there is no
-// secondary index to keep in step.
-export const workspaceAgentSettings = pgTable(
-  'workspace_agent_settings',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    max_output_tokens: integer('max_output_tokens'),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
-)
-
-// Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
-// row per workspace; the best-practice fragment ids new services inherit, JSON array.
-export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {
-  workspace_id: text('workspace_id').primaryKey(),
-  fragment_ids: text('fragment_ids').notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Prompt-fragment library (ADR 0006; mirror of D1 migration 0020). The managed,
-// tenant-scoped catalog of best-practice fragments, scoped by an (owner_kind,
-// owner_id) pair so one table backs both the account and workspace tiers. JSON-shaped
-// columns (`applies_to`, `tags`) are `text`; a tombstone (`deleted_at`) suppresses an
-// inherited or removed-upstream fragment.
-export const promptFragments = pgTable(
-  'prompt_fragments',
-  {
-    fragment_id: text('fragment_id').notNull(),
-    owner_kind: text('owner_kind').notNull(),
-    owner_id: text('owner_id').notNull(),
-    version: text('version').notNull(),
-    title: text('title').notNull(),
-    category: text('category'),
-    summary: text('summary').notNull(),
-    body: text('body').notNull(),
-    // The short version this tier LINKED (hand-authored, or a sourced file's `brief:`
-    // frontmatter), folded for implementer kinds in place of `body`. Null ⇒ a long body is
-    // condensed automatically into `fragment_briefs`.
-    brief: text('brief'),
-    applies_to: text('applies_to'),
-    tags: text('tags'),
-    source_id: text('source_id'),
-    source_path: text('source_path'),
-    source_sha: text('source_sha'),
-    doc_source: text('doc_source'),
-    doc_external_id: text('doc_external_id'),
-    doc_via_workspace_id: text('doc_via_workspace_id'),
-    resolved_at: bigint('resolved_at', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] }),
-    index('idx_prompt_fragments_owner')
-      .on(t.owner_kind, t.owner_id)
-      .where(sql`${t.deleted_at} IS NULL`),
-    index('idx_prompt_fragments_source')
-      .on(t.source_id)
-      .where(sql`${t.deleted_at} IS NULL`),
-  ],
-)
-
-// Model-GENERATED condensed briefs for long best-practice standards that link none of their
-// own (mirror of D1 migration 0069). Derived data with its own lifecycle — regenerated when
-// `body_fingerprint` stops matching the body resolved at run time, dropped with its fragment —
-// which is why it is a table of its own rather than more columns on `prompt_fragments`: it must
-// also cover a BUILT-IN fragment, which has no managed row, and stay clear of the tier merge's
-// shadow/tombstone semantics. Scoped by the owner of the tier that won the merge (a builtin-tier
-// entry is scoped to the resolving workspace's account), so a row is bound to a tenant exactly
-// like the fragment it condenses. The PK leads with the owner pair, which is the only read shape.
-// An EMPTY `brief` is a real state — "this body was condensed and the result was unusable" — kept
-// so a standard that cannot be usefully shortened is not re-condensed on every dispatch forever;
-// it self-clears when `body_fingerprint` stops matching. See the D1 0069 header for the full rule.
-export const fragmentBriefs = pgTable(
-  'fragment_briefs',
-  {
-    owner_kind: text('owner_kind').notNull(),
-    owner_id: text('owner_id').notNull(),
-    fragment_id: text('fragment_id').notNull(),
-    body_fingerprint: text('body_fingerprint').notNull(),
-    brief: text('brief').notNull(),
-    model: text('model').notNull(),
-    generated_at: bigint('generated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] })],
-)
-
-// A repo directory linked as a source of Markdown guideline files (ADR 0006 §3;
-// mirror of D1 migration 0020). At most one live source per (owner, repo, ref, dir) —
-// the unique index is the upsert key; a partial owner index powers the list.
-export const fragmentSources = pgTable(
-  'fragment_sources',
-  {
-    id: text('id').primaryKey(),
-    owner_kind: text('owner_kind').notNull(),
-    owner_id: text('owner_id').notNull(),
-    repo_owner: text('repo_owner').notNull(),
-    repo_name: text('repo_name').notNull(),
-    git_ref: text('git_ref').notNull().default('HEAD'),
-    dir_path: text('dir_path').notNull().default(''),
-    // Head commit sha of the source dir at the last sync (name kept for column stability;
-    // it no longer stores the former tree-listing digest). Powers the staleness probe.
-    last_synced_sha: text('last_synced_sha'),
-    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    uniqueIndex('idx_fragment_sources_unique').on(
-      t.owner_kind,
-      t.owner_id,
-      t.repo_owner,
-      t.repo_name,
-      t.git_ref,
-      t.dir_path,
-    ),
-    index('idx_fragment_sources_owner')
-      .on(t.owner_kind, t.owner_id)
-      .where(sql`${t.deleted_at} IS NULL`),
   ],
 )
 
@@ -1184,51 +1045,6 @@ export const notifications = pgTable(
       .where(sql`${t.status} = 'open'`),
   ],
 )
-
-// Per-workspace runtime settings (mirror of D1 migration 0004's `workspace_settings`):
-// the human-wait escalation threshold + the per-service running-task limit policy. One
-// row per workspace; the service lazily seeds DEFAULT_WORKSPACE_SETTINGS on first read.
-export const workspaceSettings = pgTable('workspace_settings', {
-  workspace_id: text('workspace_id').notNull().primaryKey(),
-  waiting_escalation_minutes: integer('waiting_escalation_minutes').notNull().default(120),
-  // 'off' | 'shared' | 'per_type'
-  task_limit_mode: text('task_limit_mode').notNull().default('off'),
-  // The shared cap when task_limit_mode = 'shared'; null otherwise.
-  task_limit_shared: integer('task_limit_shared'),
-  // JSON object of per-type caps when task_limit_mode = 'per_type'; null otherwise.
-  task_limit_per_type: text('task_limit_per_type'),
-  // Whether to store the full provided-context snapshot for each container agent
-  // (the observability feature). On by default; integer 0/1 to match the SQLite store.
-  store_agent_context: integer('store_agent_context').notNull().default(1),
-  publish_pr_verification_report: integer('publish_pr_verification_report').notNull().default(1),
-  // Retention window (days) for binary artifacts (UI screenshots + reference designs)
-  // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
-  artifact_retention_days: integer('artifact_retention_days').notNull().default(14),
-  // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
-  // 0/1 to match the SQLite store.
-  kaizen_enabled: integer('kaizen_enabled').notNull().default(1),
-  // LOCAL MODE ONLY toggle (inert on Cloudflare/Node): delegate container agents to the
-  // workspace's runner pool instead of the host container runtime. Off by default; integer
-  // 0/1 to match the SQLite store.
-  delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
-  // Opt-in review-debt friction on task creation. Mode ('off'|'warn'|'enforce'), off by default;
-  // the soft warn threshold (count of tasks in human review, default 3); and the two nullable
-  // hard-block triggers (a count and a stuck-age in minutes). Mirrors the D1 columns.
-  review_friction_mode: text('review_friction_mode').notNull().default('off'),
-  review_friction_warn_count: integer('review_friction_warn_count').notNull().default(3),
-  review_friction_block_count: integer('review_friction_block_count'),
-  review_friction_block_stuck_minutes: integer('review_friction_block_stuck_minutes'),
-  // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
-  // DEFAULT_SPEND_PRICING base table.
-  spend_currency: text('spend_currency'),
-  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
-  // The default test-environment provisioning mechanism suggested for newly added service
-  // frames, plus the custom manifest id a `custom` default pins. Both nullable with NO
-  // default: null means the operator has never chosen (which the SPA nags about), and is
-  // deliberately distinct from an explicit `infraless`. Mirrors the D1 columns.
-  default_provision_type: text('default_provision_type'),
-  default_provision_manifest_id: text('default_provision_manifest_id'),
-})
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
 // `merge_threshold_presets`). A task selects one via `blocks.merge_preset_id`; none →

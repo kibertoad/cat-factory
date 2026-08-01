@@ -85,6 +85,67 @@ const spendCurrencySchema = v.pipe(
 // service still owns and the user can still change.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Custom workspace metadata: a free-form `key -> string` bag on the settings row,
+// whose FIELDS are declared programmatically by the deployment (the SPA's
+// `workspaceMetadataFields` slot) and whose VALUES are typed in by an operator in
+// the workspace-settings panel. The canonical consumer is an external-tool URL
+// resolver — "open the map editor already switched to this workspace's `gameId`".
+//
+// The backend deliberately knows NOTHING about which fields exist: definitions are
+// code-shipped by a deployment that can add, rename and retire them without a
+// migration, so validating a key against a server-side list would make the store
+// disagree with the app the moment either side is deployed alone. What it DOES own
+// is the shape — an identifier-ish key and a bounded scalar value — so a stray
+// write can neither bloat the row nor smuggle a structure the readers don't expect.
+// ---------------------------------------------------------------------------
+
+/** Max stored metadata entries per workspace. */
+export const MAX_WORKSPACE_METADATA_ENTRIES = 64
+/** Max stored length of a single metadata value. */
+export const MAX_WORKSPACE_METADATA_VALUE_LENGTH = 1024
+
+/**
+ * A metadata field key: an identifier a deployment writes in code and a resolver reads
+ * off `ctx.metadata`. Deliberately identifier-shaped (no spaces, no `/`, no `%`) so that
+ * the one thing every consumer does with a key — read it as a property, `ctx.metadata.gameId`
+ * — is total and needs no escaping. The leading-letter rule additionally keeps `__proto__`
+ * out of a bag that is `JSON.parse`d on both sides.
+ *
+ * This is NOT what makes an external tool's URL safe. It is the VALUES that get interpolated
+ * into one, and a value is operator-typed text bounded only in length — so the rule that
+ * matters lives with the reader: build a URL by setting a query parameter or an encoded path
+ * segment, never by splicing a value into the origin. Stated where a resolver author will
+ * read it, on `ExternalToolContext.metadata`.
+ */
+export const workspaceMetadataKeySchema = v.pipe(
+  v.string(),
+  v.regex(
+    /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/,
+    'metadata keys start with a letter and may contain letters, digits, "_", "." and "-" (max 64 chars)',
+  ),
+)
+
+/**
+ * The stored metadata bag. Values are STRINGS whatever the declared field type — the
+ * only consumer is text interpolation (a URL, a prompt), and a numeric-looking field
+ * that round-trips as a number would lose a leading zero the external system cares about.
+ * An UNSET field is an ABSENT key, never an empty string: the editor drops a cleared
+ * value, so "nobody filled this in" and "somebody deliberately entered nothing" don't
+ * both render as a tool URL with an empty parameter.
+ */
+export const workspaceMetadataSchema = v.pipe(
+  v.record(
+    workspaceMetadataKeySchema,
+    v.pipe(v.string(), v.maxLength(MAX_WORKSPACE_METADATA_VALUE_LENGTH)),
+  ),
+  v.check(
+    (record) => Object.keys(record).length <= MAX_WORKSPACE_METADATA_ENTRIES,
+    `a workspace may hold at most ${MAX_WORKSPACE_METADATA_ENTRIES} metadata fields`,
+  ),
+)
+export type WorkspaceMetadata = v.InferOutput<typeof workspaceMetadataSchema>
+
 /** A workspace's runtime settings. */
 export const workspaceSettingsSchema = v.object({
   /**
@@ -187,6 +248,11 @@ export const workspaceSettingsSchema = v.object({
    * null for every other type. Cross-field validated by `WorkspaceSettingsService.update`.
    */
   defaultProvisionManifestId: v.nullable(manifestIdSchema),
+  /**
+   * The workspace's custom metadata values, keyed by the field keys a deployment declares
+   * in code. `{}` when nothing has been filled in. See {@link workspaceMetadataSchema}.
+   */
+  metadata: workspaceMetadataSchema,
 })
 export type WorkspaceSettings = v.InferOutput<typeof workspaceSettingsSchema>
 
@@ -217,5 +283,13 @@ export const updateWorkspaceSettingsSchema = v.object({
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
   defaultProvisionType: v.optional(v.nullable(provisionTypeSchema)),
   defaultProvisionManifestId: v.optional(v.nullable(manifestIdSchema)),
+  /**
+   * Replace the whole metadata bag. Whole-bag rather than per-key because the editor
+   * renders every declared field at once, so a save states the complete intent — and a
+   * field the operator CLEARED has to disappear, which a merge-only patch could never
+   * express. The editor carries any key it did not render back into the submitted bag, so
+   * a value written by another deployment version survives an unrelated save.
+   */
+  metadata: v.optional(workspaceMetadataSchema),
 })
 export type UpdateWorkspaceSettingsInput = v.InferOutput<typeof updateWorkspaceSettingsSchema>
