@@ -119,6 +119,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Contexto del espacio de trabajo",
     "contextFragments": "Fragmentos de contexto",
+    "externalTools": "Herramientas externas",
     "configuration": "Configuración",
     "workspaceSettings": "Ajustes del espacio de trabajo",
     "modelConfiguration": "Configuración del modelo",
@@ -2052,6 +2053,7 @@
         "create": "Crear",
         "repositories": "Repositorios",
         "integrations": "Integraciones",
+        "externalTools": "Herramientas externas",
         "workspace": "Espacio de trabajo",
         "account": "Cuenta"
       },
@@ -2910,6 +2912,7 @@
         "merge": "Políticas de riesgo",
         "tracker": "Gestor de incidencias",
         "fragments": "Buenas prácticas del servicio",
+        "metadata": "Metadatos",
         "members": "Miembros"
       },
       "waiting": {
@@ -2974,6 +2977,12 @@
         "heading": "Agente Kaizen",
         "body": "Al completarse cada ejecución, el agente Kaizen evalúa cómo fue cada paso del agente, desde fluido y eficiente hasta confuso y caótico, y recomienda mejoras de prompt/modelo. Una combinación de prompt + agente + modelo que obtiene una buena nota sin recomendaciones cinco veces seguidas se marca como verificada y deja de evaluarse. La evaluación se ejecuta en segundo plano y se muestra en los detalles de la ejecución y en la pantalla de Kaizen. Configura el modelo del evaluador en Configuración de modelos (el agente \"Kaizen\").",
         "toggle": "Evaluar ejecuciones de agentes con Kaizen"
+      },
+      "metadata": {
+        "heading": "Metadatos del espacio de trabajo",
+        "body": "Valores de los campos personalizados que define esta instalación. Las herramientas externas los leen para abrirse en el proyecto correcto de este espacio de trabajo.",
+        "empty": "Esta instalación no define campos personalizados del espacio de trabajo.",
+        "unset": "Sin definir"
       },
       "budget": {
         "heading": "Presupuesto de gasto mensual",
@@ -6239,6 +6248,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "No se puede abrir {tool}",
+      "missingMetadata": "Primero completa {fields} en la pestaña Metadatos de la configuración del espacio de trabajo.",
+      "unresolved": "Esta herramienta no devolvió una dirección para el espacio de trabajo actual.",
+      "resolverFailed": "Esta herramienta falló al calcular su dirección. La causa está en la consola del navegador, para quien mantiene esta instalación.",
+      "unsafeUrl": "Esta herramienta devolvió una dirección que no es un enlace web, así que no se abrió."
     }
   }
 }

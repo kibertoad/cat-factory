@@ -1,5 +1,6 @@
 import { defineModule } from '@modular-vue/core'
 import { resolveTours } from '~/utils/tutorial'
+import { filterExternalTools } from './external-tools'
 import type { AppSlots } from './slots'
 
 // Re-exported for the slice-1 importers that reach `AppSlots` through this
@@ -40,6 +41,12 @@ export type NavSurface = 'sidebar' | 'command' | 'toolbar'
  * in a list of ones most never touch; parking the two model-quality surfaces there was the
  * same mistake from the other end — neither Sandbox nor Kaizen connects to anything, they
  * evaluate what the `models` section configures.
+ *
+ * `externalTools` is the one section with NO first-party items: it holds the deployment's own
+ * applications (the `externalTools` slot, projected here by `useNavContributions`), and is
+ * dropped entirely where none are registered. It is separate from `integrations` for the same
+ * reason `models` is — an integration is a system cat-factory READS FROM or WRITES TO on your
+ * behalf, while these are places a person GOES.
  */
 export type NavSidebarGroup =
   | 'create'
@@ -48,10 +55,17 @@ export type NavSidebarGroup =
   | 'integrations'
   | 'infrastructure'
   | 'workspaceContext'
+  | 'externalTools'
   | 'configuration'
 
 /** Command-palette group (its i18n label is `layout.commandBar.groups.<group>`). */
-export type NavCommandGroup = 'create' | 'repositories' | 'integrations' | 'workspace' | 'account'
+export type NavCommandGroup =
+  | 'create'
+  | 'repositories'
+  | 'integrations'
+  | 'externalTools'
+  | 'workspace'
+  | 'account'
 
 /**
  * The reactive gate inputs a contribution's `gate` predicate reads. Backed by a
@@ -175,6 +189,14 @@ export interface NavContribution {
   id: string
   /** Default (sidebar) label i18n key. */
   labelKey: string
+  /**
+   * Literal label, winning over {@link labelKey} when present. For a contribution whose copy is
+   * DATA rather than catalog text — an external tool's registered title, the same class as a
+   * custom agent kind's `presentation.label`. A first-party destination always uses `labelKey`.
+   */
+  label?: string
+  /** Literal one-line description, rendered as the item's tooltip. Data, like {@link label}. */
+  description?: string
   icon: string
   surfaces: readonly NavSurface[]
   /** Reactive predicate over {@link NavGates}; absent = always visible. */
@@ -594,6 +616,7 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
   const gates = deps.gates
   const nav = slots.nav ?? []
   const tutorialTours = slots.tutorialTours ?? []
+  const externalTools = slots.externalTools ?? []
   return {
     ...slots,
     // No gates service wired (tests / bare install) ⇒ show everything, matching
@@ -608,6 +631,10 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
     // about a branch this board isn't on is dropped rather than skipped (see `resolveTours`).
     // Same gates-absent pass-through as `nav`.
     tutorialTours: gates ? resolveTours(tutorialTours, gates) : tutorialTours,
+    // External tools gate on the same two axes as `nav` — they become nav items downstream
+    // (`useNavContributions` projects them), so gating them anywhere else would let a tool the
+    // caller can't use reach the palette while its sidebar twin was correctly hidden.
+    externalTools: filterExternalTools(externalTools, gates),
   }
 }
 
@@ -619,6 +646,9 @@ export const SIDEBAR_GROUP_ORDER: readonly NavSidebarGroup[] = [
   'integrations',
   'infrastructure',
   'workspaceContext',
+  // The deployment's own applications, below what cat-factory itself offers and above the
+  // configuration tail: they are destinations someone reaches mid-work, not settings.
+  'externalTools',
   'configuration',
 ]
 
@@ -627,6 +657,7 @@ export const COMMAND_GROUP_ORDER: readonly NavCommandGroup[] = [
   'create',
   'repositories',
   'integrations',
+  'externalTools',
   'workspace',
   'account',
 ]

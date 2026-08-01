@@ -119,6 +119,7 @@
     "kaizen": "Kaizen",
     "workspaceContext": "Contexte de l’espace de travail",
     "contextFragments": "Fragments de contexte",
+    "externalTools": "Outils externes",
     "configuration": "Configuration",
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
@@ -2052,6 +2053,7 @@
         "create": "Créer",
         "repositories": "Dépôts",
         "integrations": "Intégrations",
+        "externalTools": "Outils externes",
         "workspace": "Espace de travail",
         "account": "Compte"
       },
@@ -2910,6 +2912,7 @@
         "merge": "Politiques de risque",
         "tracker": "Suivi des tickets",
         "fragments": "Bonnes pratiques du service",
+        "metadata": "Métadonnées",
         "members": "Membres"
       },
       "waiting": {
@@ -2974,6 +2977,12 @@
         "heading": "Agent Kaizen",
         "body": "À la fin de chaque exécution, l'agent Kaizen évalue le déroulement de chaque étape de l'agent, de fluide et efficace à confus et chaotique, et recommande des améliorations de prompt/modèle. Une combinaison prompt + agent + modèle bien notée sans recommandation cinq fois de suite est marquée comme vérifiée et n'est plus évaluée. L'évaluation s'exécute en arrière-plan et s'affiche dans les détails de l'exécution et l'écran Kaizen. Définissez le modèle de l'évaluateur dans Configuration des modèles (l'agent \"Kaizen\").",
         "toggle": "Évaluer les exécutions d'agents avec Kaizen"
+      },
+      "metadata": {
+        "heading": "Métadonnées de l'espace de travail",
+        "body": "Valeurs des champs personnalisés définis par ce déploiement. Les outils externes les lisent pour s'ouvrir sur le bon projet pour cet espace de travail.",
+        "empty": "Ce déploiement ne définit aucun champ personnalisé d'espace de travail.",
+        "unset": "Non défini"
       },
       "budget": {
         "heading": "Budget de dépenses mensuel",
@@ -6239,6 +6248,15 @@
           }
         }
       }
+    }
+  },
+  "externalTools": {
+    "unavailable": {
+      "title": "Impossible d'ouvrir {tool}",
+      "missingMetadata": "Renseignez d'abord {fields} dans l'onglet Métadonnées des paramètres de l'espace de travail.",
+      "unresolved": "Cet outil n'a pas fourni d'adresse pour l'espace de travail actuel.",
+      "resolverFailed": "Cet outil a échoué lors du calcul de son adresse. La cause se trouve dans la console du navigateur, pour les responsables de ce déploiement.",
+      "unsafeUrl": "Cet outil a fourni une adresse qui n'est pas un lien web, elle n'a donc pas été ouverte."
     }
   }
 }

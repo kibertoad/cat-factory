@@ -5,9 +5,12 @@
 //   - Merge thresholds: the auto-merge preset library.
 //   - Issue tracker: filing-tracker selection + linking sources + writeback.
 //   - Service best practices: the default fragments new services inherit.
+//   - Metadata: values for the custom workspace fields the DEPLOYMENT declares in code (read
+//     by external-tool URL resolvers); present only where any are declared.
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
+import { useReactiveSlots } from '@modular-vue/runtime'
 import type { ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
@@ -15,7 +18,9 @@ import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentD
 import BudgetSettings from '~/components/settings/BudgetSettings.vue'
 import UsageSettings from '~/components/settings/UsageSettings.vue'
 import WorkspaceMembersSettings from '~/components/layout/WorkspaceMembersSettings.vue'
+import WorkspaceMetadataSettings from '~/components/settings/WorkspaceMetadataSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import type { AppSlots } from '~/modular/slots'
 
 const { t, te } = useI18n()
 const ui = useUiStore()
@@ -23,6 +28,13 @@ const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const toast = useToast()
+const slots = useReactiveSlots<AppSlots>()
+
+// The Metadata tab exists only where the deployment DECLARES custom fields — an unwired
+// capability is invisible, not an empty tab in every deployment. Declared-but-malformed fields
+// still open the tab: it carries the empty state (and the console warning names the keys), so a
+// broken declaration surfaces instead of looking like one nobody wrote.
+const hasMetadataFields = computed(() => (slots.value.workspaceMetadataFields ?? []).length > 0)
 
 const open = computed({
   get: () => ui.workspaceSettingsOpen,
@@ -74,6 +86,16 @@ const tabs = computed(() => [
     icon: 'i-lucide-book-open-check',
     slot: 'fragments',
   },
+  ...(hasMetadataFields.value
+    ? [
+        {
+          value: 'metadata',
+          label: t('settings.workspaceSettings.tabs.metadata'),
+          icon: 'i-lucide-tags',
+          slot: 'metadata',
+        },
+      ]
+    : []),
   // Roster + access-mode management is `members.manage` (workspace admins only). Hidden
   // for everyone else — the backend 403s the writes and the tab has nothing to read.
   ...(access.canManageMembers.value
@@ -515,6 +537,11 @@ async function save() {
         <!-- Service best practices -->
         <template #fragments>
           <ServiceFragmentDefaultsPanel />
+        </template>
+
+        <!-- Custom workspace metadata (only where the deployment declares fields) -->
+        <template v-if="hasMetadataFields" #metadata>
+          <WorkspaceMetadataSettings />
         </template>
 
         <!-- Members (workspace RBAC roster + access mode; admins only) -->

@@ -1,5 +1,119 @@
 # @cat-factory/node-server
 
+## 0.147.0
+
+### Minor Changes
+
+- 1441041: Let a deployment register its own EXTERNAL TOOLS into the sidebar, opened already scoped to the
+  workspace through deployment-declared custom metadata fields.
+
+  Two new data-only `registerAppModule` slots, which only mean anything together:
+
+  - **`externalTools`** — a deployment's own web applications (a map editor, an asset pipeline, an
+    admin console) in a new "External tools" sidebar section and the command palette. A tool declares
+    a RESOLVER, `(context) => url`, not a link: the context carries the acting user, the open
+    workspace and that workspace's custom metadata, so clicking lands on the right state rather than
+    the tool's front door. That is the whole point — a static bookmark needs no registration.
+  - **`workspaceMetadataFields`** — the custom fields the resolver reads. Declared in CODE (so a
+    deployment adds, renames and retires them with no migration); the VALUES are per workspace, typed
+    in on a new Metadata tab of Workspace settings and persisted in a `metadata` JSON column on the
+    workspace settings row, mirrored across D1 and Postgres.
+
+  The worked example is `deploy/frontend`'s `acme:security` module: a `gameId` field, and a map editor
+  that opens on that game.
+
+  Four decisions worth knowing when reading this:
+
+  - **A tool that cannot resolve stays LISTED and explains itself on click**, with `missing-metadata`
+    (naming the unfilled fields), `unresolved`, `resolver-failed` and `unsafe-url` as four separate
+    causes. Hiding it would make an unconfigured workspace look identical to a deployment that never
+    registered the tool — and the person reading the sidebar is usually the one who can fix it.
+  - **The resolved URL must be `http(s)`.** It reaches `window.open`, so a `javascript:` URL from a
+    mis-built resolver would execute in the SPA's own origin; the scheme allow-list is a boundary,
+    not hygiene. Values are operator-typed, so a resolver sets them as query parameters or encoded
+    path segments and never builds the ORIGIN from one — a value like `evil.com/x?a=` spliced into a
+    host resolves to somebody else's site and still passes the allow-list.
+  - **Resolution is TOTAL: a resolver that throws costs its own item and nothing else.** Registered
+    tools are projected inside the computed the sidebar, the command palette and the board toolbar
+    all render from, so an uncaught throw in a deployment's own resolver would blank all three at
+    once. It is caught, reported as `resolver-failed` and the cause logged.
+  - **The metadata bag is REPLACED wholesale on save, and a cleared field drops its key** rather than
+    storing `''` — otherwise "nobody filled this in" and "somebody entered nothing" both resolve to a
+    tool URL with an empty parameter. The editor carries any key it does not render back into the
+    patch, so a value written under a retired field survives an unrelated save.
+
+  The backend deliberately validates only the SHAPE of the bag (identifier-shaped keys, bounded values
+  and entry count), never the field list: the definitions are code-shipped, so a server-side list would
+  disagree with the app the moment either side is deployed alone. The key pattern bars a leading `_`,
+  which keeps `__proto__` out — but `constructor` and `toString` are legal field keys, so every read of
+  the bag goes through `metadataValue` / `toMetadataBag` and an unfilled field named after an
+  `Object.prototype` member reads `undefined` rather than an inherited function.
+
+### Patch Changes
+
+- 1441041: Move the SETTINGS tables (the local-mode singleton, the per-user budget, the per-workspace runtime
+  policy row and the per-agent-kind generation knob) out of `db/schema.ts` into
+  `db/tables/settings.ts`, re-exported — the same cohesive-group extraction `tables/identity.ts` and
+  `tables/vcs.ts` already got, so the module stays inside its size budget (ratcheted 1900 -> 1820)
+  while the workspace metadata column lands on it. drizzle-kit follows the re-export, so the generated
+  lineage is unchanged.
+- Updated dependencies [1441041]
+  - @cat-factory/contracts@0.205.0
+  - @cat-factory/kernel@0.204.0
+  - @cat-factory/orchestration@0.180.0
+  - @cat-factory/agents@0.96.1
+  - @cat-factory/consensus@0.13.14
+  - @cat-factory/eks@0.1.188
+  - @cat-factory/gates@0.8.34
+  - @cat-factory/gitlab@0.14.17
+  - @cat-factory/integrations@0.113.9
+  - @cat-factory/observability-otel@0.4.31
+  - @cat-factory/prompt-fragments@0.15.28
+  - @cat-factory/server@0.188.1
+  - @cat-factory/spend@0.12.135
+  - @cat-factory/caching@0.12.1
+  - @cat-factory/observability-langfuse@0.9.31
+  - @cat-factory/provider-bedrock@0.7.339
+  - @cat-factory/provider-cloudflare@0.7.340
+  - @cat-factory/provider-s3@0.2.259
+
+## 0.146.0
+
+### Minor Changes
+
+- 0b52df7: Add foundational services: a tiered (account ⊕ workspace) catalog of the shared capabilities an
+  organisation already runs — file storage, notifications, audit — each with a description and its
+  API contracts (OpenAPI 3.x, `@toad-contracts/core` or `@lokalise/api-contract`), supplied either by
+  direct upload or by linking files/folders in a git repo that is cached and auto-refreshed on both
+  runtimes.
+
+  The Architect is folded the catalog (identity, capability tags and indexed operation names — never a
+  document body) and must declare the service ids its design consumes; the Researcher and Coder are
+  then handed the full API contracts of exactly those services, plus an explicit statement of anything
+  the design named that the catalog does not contain.
+
+### Patch Changes
+
+- Updated dependencies [0b52df7]
+  - @cat-factory/contracts@0.204.0
+  - @cat-factory/kernel@0.203.0
+  - @cat-factory/caching@0.12.0
+  - @cat-factory/agents@0.96.0
+  - @cat-factory/orchestration@0.179.0
+  - @cat-factory/server@0.188.0
+  - @cat-factory/consensus@0.13.13
+  - @cat-factory/eks@0.1.187
+  - @cat-factory/gates@0.8.33
+  - @cat-factory/gitlab@0.14.16
+  - @cat-factory/integrations@0.113.8
+  - @cat-factory/observability-otel@0.4.30
+  - @cat-factory/prompt-fragments@0.15.27
+  - @cat-factory/spend@0.12.134
+  - @cat-factory/observability-langfuse@0.9.30
+  - @cat-factory/provider-bedrock@0.7.338
+  - @cat-factory/provider-cloudflare@0.7.339
+  - @cat-factory/provider-s3@0.2.258
+
 ## 0.145.0
 
 ### Minor Changes

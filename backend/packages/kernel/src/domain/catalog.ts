@@ -51,6 +51,9 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   // "no environments" choice (which is `infraless`, and silences the banner).
   defaultProvisionType: null,
   defaultProvisionManifestId: null,
+  // Empty, not seeded: which metadata FIELDS exist is declared by the deployment's app,
+  // and a value only ever arrives by someone typing it in.
+  metadata: {},
 }
 
 /**
