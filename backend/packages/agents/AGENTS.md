@@ -118,7 +118,10 @@
   `FoundationalServiceSourceService` reuses the same `repoSourceSync/` engine the two libraries
   above do, supplying only what a UNIT is — a service DIRECTORY, or an explicit FILE list for one
   named service; `FoundationalServiceRunResolver` is the engine-facing seam that turns both into
-  injected `.cat-context/` files.
+  injected `.cat-context/` files. Its third read serves BINARY-OUTPUT steps
+  (`docs/initiatives/binary-output-foundational-storage.md`): a kind carrying the
+  `binary-output` trait gets `binary-output/brief.md` + contract files for the storage/context
+  services its step selected (`stepOptions.binaryOutput`).
 - `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts, plus the
   built-in post-ops (`builtin.ts`: `blueprintPostOp`, `specPostOp`, and `specPromotionPostOp` —
   the tester-driven `aspirational` → `established` promotion of the in-repo spec) and

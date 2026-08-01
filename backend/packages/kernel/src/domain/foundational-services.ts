@@ -4,6 +4,7 @@ import type {
   ApiContractSummary,
   FoundationalServiceSelection,
 } from '@cat-factory/contracts'
+import { extractFencedDeclaration } from './fenced-declaration.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for the FOUNDATIONAL SERVICES catalog
@@ -180,6 +181,10 @@ export function summarizeContract(input: {
  * as a rejected alternative, and the downstream consequence of a false positive is a coder
  * handed the wrong API.
  *
+ * The LAST such block wins ({@link extractFencedDeclaration}) — the guidance asks the agent to
+ * END its reply with it, and a model that illustrates the shape earlier would otherwise have its
+ * example parsed instead of its answer.
+ *
  * Ids are matched against `known` so an invented one lands in `unknown` rather than
  * disappearing — see {@link FoundationalServiceSelection}.
  */
@@ -188,18 +193,13 @@ export function parseFoundationalDeclaration(
   known: Iterable<string>,
 ): FoundationalServiceSelection {
   const empty: FoundationalServiceSelection = { declared: [], unknown: [] }
-  if (!output) return empty
-  const fence = new RegExp(
-    `\`\`\`${FOUNDATIONAL_DECLARATION_TAG}\\s*\\r?\\n([\\s\\S]*?)\`\`\``,
-    'i',
-  )
-  const match = output.match(fence)
-  if (!match) return empty
+  const body = extractFencedDeclaration(output, FOUNDATIONAL_DECLARATION_TAG)
+  if (body === null) return empty
   const knownIds = new Set(known)
   const declared: string[] = []
   const unknown: string[] = []
   const seen = new Set<string>()
-  for (const raw of (match[1] ?? '').split(/\r?\n/)) {
+  for (const raw of body.split(/\r?\n/)) {
     const id = raw
       .trim()
       .replace(/^[-*]\s*/, '')

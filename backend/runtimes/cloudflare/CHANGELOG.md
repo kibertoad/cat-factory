@@ -1,5 +1,93 @@
 # @cat-factory/worker
 
+## 0.133.1
+
+### Patch Changes
+
+- Updated dependencies [9e5f785]
+  - @cat-factory/contracts@0.207.0
+  - @cat-factory/kernel@0.207.0
+  - @cat-factory/agents@0.99.0
+  - @cat-factory/orchestration@0.182.0
+  - @cat-factory/consensus@0.13.17
+  - @cat-factory/eks@0.1.191
+  - @cat-factory/gates@0.8.37
+  - @cat-factory/gitlab@0.14.20
+  - @cat-factory/integrations@0.114.2
+  - @cat-factory/observability-otel@0.4.34
+  - @cat-factory/prompt-fragments@0.15.31
+  - @cat-factory/server@0.190.1
+  - @cat-factory/spend@0.12.138
+  - @cat-factory/caching@0.12.4
+  - @cat-factory/observability-langfuse@0.9.34
+  - @cat-factory/provider-cloudflare@0.7.343
+
+## 0.133.0
+
+### Minor Changes
+
+- 8fbc0b5: Serve the repo-sourced Claude Skills library (ADR 0024) over the mothership-mode persistence RPC —
+  catalog reads and the repo-sync surface alike — so a local node with no main database can list,
+  sync and RUN a skill.
+
+  This was not a blank panel. `skillResolver` is a hard dependency for a `skill` step (and for the
+  declared `{ catalogSkillId }` capabilities of ADR 0029), so an un-routed skill catalog failed the
+  dispatch, and it failed partially: a skill with no sibling resources resolved from the catalog
+  alone while one with resources threw out of the resource fetch, so the feature read as wired. The
+  sync half went remote too — unlike the prompt-fragment library, whose sync stays mothership-owned
+  because "a mothership node has no GitHub client", a mothership node now reaches GitHub by token
+  delegation, so its skill link/sync/unlink routes were live and broken rather than absent.
+
+  Adds a `skillSource` scope rule: the sync methods carry a source id and nothing else, so nothing
+  positional binds them; it resolves the source's owning account server-side (memoised, sharing its
+  read with the dispatched call). The global `skillSourceRepository.listByRepo` — the push-webhook
+  reverse lookup across every account — stays mothership-internal.
+
+  Adds `accountFieldUpsert` alongside it, for a record-keyed write whose conflict key is the record's
+  `id` rather than its `accountId`. `accountField` binds only the account a record DECLARES, which is
+  sufficient only while the row is stored under that account — an `ON CONFLICT (id) DO UPDATE` that
+  does not re-`SET account_id` instead writes whichever row already holds that id, under its own
+  account. The new rule binds the stored row too, so a token scoped to one account can no longer name
+  another's source id and repoint their link at a repo it controls (whose `SKILL.md` bodies the other
+  tenant's next sync would fold into their catalog as agent instructions); an absent row is a create
+  and still passes.
+
+  A misconfiguration now also reports itself correctly: the persistence controller's per-request memo
+  overrides are applied only for repositories the deployment actually wires, so a mothership without
+  the library answers `... is not wired` instead of a scope 404 that reads as a missing row.
+
+  `GitHubInstallationRepository` gains `listActiveForAccount`, the account-scoped form of the cron
+  `listActive`. The account-tier installation lookup every repo-sourced library resolves its GitHub
+  credential through read EVERY tenant's installations and filtered in JS — unexposable over an
+  account-scoped machine API, and unbindable by any scope rule since the method takes no arguments.
+  The narrowing ("bound to the account directly, or to one of its own boards") now runs in SQL on
+  both runtimes, ordered so they pick the same row, and the resolver makes one query where it made
+  two.
+
+  Both ends of a mothership deployment must have the skill/fragment library enabled: the mothership
+  reflects the skill repositories into its machine-API registry only when its own library is
+  configured, exactly as it does for fragments.
+
+### Patch Changes
+
+- Updated dependencies [8fbc0b5]
+  - @cat-factory/kernel@0.206.0
+  - @cat-factory/agents@0.98.0
+  - @cat-factory/server@0.190.0
+  - @cat-factory/integrations@0.114.1
+  - @cat-factory/orchestration@0.181.1
+  - @cat-factory/contracts@0.206.1
+  - @cat-factory/caching@0.12.3
+  - @cat-factory/consensus@0.13.16
+  - @cat-factory/eks@0.1.190
+  - @cat-factory/gates@0.8.36
+  - @cat-factory/gitlab@0.14.19
+  - @cat-factory/observability-langfuse@0.9.33
+  - @cat-factory/observability-otel@0.4.33
+  - @cat-factory/provider-cloudflare@0.7.342
+  - @cat-factory/spend@0.12.137
+  - @cat-factory/prompt-fragments@0.15.30
+
 ## 0.132.0
 
 ### Minor Changes

@@ -1,6 +1,8 @@
 import { SPEC_FEATURES_DIR, SPEC_MODULES_DIR, SPEC_OVERVIEW_PATH } from '@cat-factory/contracts'
 import {
   type AgentKind,
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_DECLARATION_TAG,
   DOC_INTERVIEWER_AGENT_KIND,
   FOUNDATIONAL_CATALOG_FILE,
   FOUNDATIONAL_CONTEXT_DIR,
@@ -117,6 +119,28 @@ export const FOUNDATIONAL_CATALOG_GUIDANCE = [
   `END your reply with a fenced \`\`\`${FOUNDATIONAL_DECLARATION_TAG} block listing the service ids your design consumes, one per line, and nothing else in the block. Write \`none\` when your design consumes no foundational service. This block is machine-read: the ids you list are what the later implementation steps are handed the API contracts for, so a service you omit is one nobody downstream will have the interface to, and an id you invent will be reported as unavailable.`,
 ].join('\n')
 
+/**
+ * GENERATOR kinds whose deliverable is BINARY artifacts (image generation is the canonical
+ * example) stored through a FOUNDATIONAL SERVICE the step selected from the workspace catalog
+ * (`stepOptions.binaryOutput`) — never through the platform's own artifact store, which holds
+ * run evidence, not product deliverables. The engine injects a brief naming the selected
+ * storage service and the selected CONTEXT services (an inventory that can say which entities
+ * exist, which lack an asset, and how each is described), each with its API contract, and reads
+ * the agent's machine-readable declaration of what it stored back onto the step
+ * (`PipelineStep.binaryOutputs`). Run admission refuses a step carrying this trait whose
+ * selection is missing or does not resolve against the catalog. No built-in kind carries it —
+ * a deployment's generator opts in via `registerAgentKind({ traits })`.
+ * See docs/initiatives/binary-output-foundational-storage.md.
+ */
+export const BINARY_OUTPUT_TRAIT: AgentTrait = 'binary-output'
+
+/** The guidance a binary-generating kind gets: the brief, the workflow, and the declaration. */
+export const BINARY_OUTPUT_GUIDANCE = [
+  `Your deliverable is BINARY artifacts (images, audio, or similar), stored through a shared storage service this deployment runs. Start from \`.cat-context/${BINARY_OUTPUT_BRIEF_FILE}\`: it names the storage service to use and any context services selected for this step, and points at their API contracts. If that file is absent, the platform could not provide storage — do not attempt any upload; state it in your report and stop generating.`,
+  `Before generating, establish SCOPE from the selected context services (what entities exist, which already have an asset, what each thing's description says) rather than inventing subjects. Store every artifact through the named storage service's contract — call the operations it declares, with the shapes it declares; never invent an endpoint, and never deliver binaries by committing them to the repository or embedding them in your reply.`,
+  `END your reply with a fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block containing either the literal \`none\` (you stored nothing) or a JSON array of entries \`{"service": "<service id>", "location": "<where the service stored it>", "entity": "<what it is for>", "contentType": "<media type>", "description": "<one line>"}\` — \`service\` and \`location\` are required, the rest optional. This block is machine-read and recorded on the run; an artifact you omit is one nobody can find later. Anything you could NOT store (a failed upload, a missing credential, a contract gap) belongs in your report as a named omission, never silently dropped.`,
+].join('\n')
+
 /** The guidance a consumer kind gets: the contracts are files, and they are authoritative. */
 export const FOUNDATIONAL_CONTRACTS_GUIDANCE = [
   `The FOUNDATIONAL SERVICES the design chose for this task — shared capabilities such as file storage, notifications or audit — have their API contracts provided to you under \`.cat-context/${FOUNDATIONAL_CONTEXT_DIR}/\`. Start at \`.cat-context/${FOUNDATIONAL_INDEX_FILE}\`, which names each one and states anything the design asked for that could not be provided.`,
@@ -202,8 +226,9 @@ export interface AgentTraitDefinition {
 /**
  * The standard trait DEFINITIONS, pre-loaded onto every {@link AgentKindRegistry} instance
  * (its constructor installs them) — the analogue of `STANDARD_AGENT_TRAITS`, but for the
- * per-trait guidance. Only `spec-aware` carries guidance; the rest are pure markers whose
- * whole effect lives in the engine (the fragment fold / the interview-gate handling).
+ * per-trait guidance. The spec-aware / foundational / binary-output traits carry guidance;
+ * the rest are pure markers whose whole effect lives in the engine (the fragment fold / the
+ * interview-gate handling).
  */
 export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: CODE_AWARE_TRAIT },
@@ -213,6 +238,7 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: BRIEF_STANDARDS_TRAIT },
   { id: FOUNDATIONAL_CATALOG_TRAIT, guidance: FOUNDATIONAL_CATALOG_GUIDANCE },
   { id: FOUNDATIONAL_CONTRACTS_TRAIT, guidance: FOUNDATIONAL_CONTRACTS_GUIDANCE },
+  { id: BINARY_OUTPUT_TRAIT, guidance: BINARY_OUTPUT_GUIDANCE },
 ]
 
 /**

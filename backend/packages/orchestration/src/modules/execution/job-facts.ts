@@ -7,11 +7,11 @@ import { recordReproductionOutcome } from './reproductionProof.logic.js'
 
 // ---------------------------------------------------------------------------
 // Everything the JOB THAT JUST RAN reported about itself — the effort self-assessment, the
-// design's foundational-service declaration, the pre-PR validation and reproduction proofs, and
-// the usage metering.
+// design's foundational-service declaration, the generator's binary-output declaration, the
+// pre-PR validation and reproduction proofs, and the usage metering.
 //
 // Extracted from `RunDispatcher.recordStepResult` as a cohesive collaborator (the file-size /
-// statement ratchets' split trigger) because these five share ONE rule that is easy to violate a
+// statement ratchets' split trigger) because these six share ONE rule that is easy to violate a
 // member at a time: each must land BEFORE any of `recordStepResult`'s early-returning paths, or
 // the runs whose verdict drives flow — a parked PR review, a companion applying rework, a Tester
 // withholding its greenlight, a step raising a human decision — silently drop it. Keeping them in
@@ -49,6 +49,12 @@ export async function recordJobFacts(
   // Read back by the context BUILDER, which handed the design its catalog and already holds the
   // resolver + registry, so the completion hub takes no dependency of its own for it.
   await deps.contextBuilder.recordFoundationalDeclaration(workspaceId, step, result.output)
+
+  // The BINARY OUTPUTS a generating step declared it stored, read out of the same reply — the
+  // sibling of the foundational declaration above, recorded here for the same reason: a
+  // generator that parks on a decision must not lose the record of what it already stored,
+  // and every path below can return early.
+  await deps.contextBuilder.recordBinaryOutputDeclaration(workspaceId, step, result.output)
 
   // The pre-PR validation report of a coding step whose service configured checks — recorded
   // here for the same reason as the effort report above: it describes the JOB THAT JUST RAN,

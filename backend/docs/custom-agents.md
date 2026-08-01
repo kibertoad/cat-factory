@@ -312,6 +312,32 @@ Rules worth knowing before declaring one:
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
 
+### Binary-output generators (the `binary-output` trait)
+
+A kind whose deliverable is BINARY artifacts — an image generator is the canonical case — opts in
+with `registerAgentKind({ traits: ['binary-output'] })`. No built-in kind carries the trait. What
+it buys (full design: `docs/initiatives/binary-output-foundational-storage.md`):
+
+- **Storage is a FOUNDATIONAL SERVICE the step selects**, never the platform's own artifact
+  store (that store holds run evidence — screenshots — not product deliverables). The pipeline
+  step sets `stepOptions.binaryOutput.storageServiceId` to a catalog service carrying the
+  `asset-storage` capability tag, plus optional `contextServiceIds` — catalog services the agent
+  consults for generation SCOPE (an entity inventory that knows what exists, what lacks an asset,
+  and how each thing is described).
+- **The engine injects `.cat-context/binary-output/`**: a brief naming the selected services and
+  one file per resolved API contract. A step with a missing/unresolvable selection is refused at
+  save + admission; a gap that appears mid-run (a catalog edit) is STATED in the brief, and an
+  absent brief itself means "storage could not be provided" — the trait guidance tells the agent
+  to refuse and report rather than guess at an endpoint.
+- **The agent declares what it stored** in a fenced ` ```binary-outputs ` block (`none`, or a
+  JSON array of `{ service, location, entity?, contentType?, description? }`), recorded onto
+  `PipelineStep.binaryOutputs` with degrade-loudly bookkeeping (undeclared / parse-failed /
+  invalid / omitted / unknown-service ids).
+- **Credentials are not this feature's job**: the contract says HOW to call the service; a
+  credential rides the existing capability seams (a tool server's named secret, test secrets),
+  and a missing one follows the standing rule — stated to the agent, reported as a named
+  omission.
+
 ### How the engine runs the hooks
 
 `ExecutionService` runs a registered kind's `preOps` before the agent step dispatches, and

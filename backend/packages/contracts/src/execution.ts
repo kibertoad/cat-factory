@@ -11,6 +11,7 @@ import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
+import { binaryOutputReportSchema } from './binary-outputs.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -1037,6 +1038,19 @@ export const pipelineStepSchema = v.object({
    * a shared service or silently rebuild one.
    */
   foundationalServices: v.optional(foundationalServiceSelectionSchema),
+  /**
+   * What this step's agent DECLARED it stored, when its kind carries the `binary-output` trait
+   * (a generator whose deliverable is binary artifacts pushed into a foundational storage
+   * service, not a commit). Read back from the reply's fenced ```binary-outputs block by
+   * `parseBinaryOutputDeclaration` and recorded beside the other job facts, before any
+   * early-returning completion path.
+   *
+   * ABSENT means no binary-generating step settled here (the kind does not carry the trait, or
+   * the run predates the feature) — distinct from a present report whose `undeclared` flag says
+   * the agent never answered, and from an empty `stored`, which is the agent explicitly
+   * reporting it stored nothing. See {@link binaryOutputReportSchema} for the bookkeeping.
+   */
+  binaryOutputs: v.optional(binaryOutputReportSchema),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so

@@ -1,5 +1,80 @@
 # @cat-factory/contracts
 
+## 0.207.0
+
+### Minor Changes
+
+- 9e5f785: Add binary-output agent steps: a kind carrying the new `binary-output` trait (image generation is
+  the canonical example) generates binary artifacts and stores them through a FOUNDATIONAL SERVICE
+  its step selects from the workspace catalog (`stepOptions.binaryOutput.storageServiceId`, which
+  must carry the `asset-storage` capability tag), consulting further selected catalog services for
+  the SCOPE of the generation — what entities exist, which lack an asset, how each is described
+  (`contextServiceIds`).
+
+  The engine injects a `.cat-context/binary-output/` brief naming the selected services plus their
+  API contracts, refuses at pipeline save and run admission a generator step whose selection is
+  missing or does not resolve (`binary_output_service_invalid`), and records the agent's
+  machine-readable declaration of what it stored — with every loss bookkept (undeclared /
+  parse-failed / invalid / omitted / unknown service ids) — onto `PipelineStep.binaryOutputs`.
+  No built-in kind carries the trait; a deployment's generator opts in via
+  `registerAgentKind({ traits: ['binary-output'] })`.
+
+  Two behaviour changes reach existing code. A declaration block is now found by the shared
+  `extractFencedDeclaration`, which takes the LAST matching block rather than the first — the
+  guidance asks agents to END their reply with it, and a model that illustrates the shape earlier
+  had its example parsed instead of its answer. This applies to the FOUNDATIONAL-SERVICES
+  declaration too, which reads through the same helper: an architect whose reply showed an example
+  block before its real one now has the real one recorded. And the whole-catalog storage capability
+  tag is `asset-storage`, deliberately distinct from the agents package's `binary-storage` TRAIT
+  (which marks a kind needing the platform's own artifact store for run evidence) — the two meant
+  opposite things about opposite subjects while sharing one literal.
+
+## 0.206.1
+
+### Patch Changes
+
+- 8fbc0b5: Serve the repo-sourced Claude Skills library (ADR 0024) over the mothership-mode persistence RPC —
+  catalog reads and the repo-sync surface alike — so a local node with no main database can list,
+  sync and RUN a skill.
+
+  This was not a blank panel. `skillResolver` is a hard dependency for a `skill` step (and for the
+  declared `{ catalogSkillId }` capabilities of ADR 0029), so an un-routed skill catalog failed the
+  dispatch, and it failed partially: a skill with no sibling resources resolved from the catalog
+  alone while one with resources threw out of the resource fetch, so the feature read as wired. The
+  sync half went remote too — unlike the prompt-fragment library, whose sync stays mothership-owned
+  because "a mothership node has no GitHub client", a mothership node now reaches GitHub by token
+  delegation, so its skill link/sync/unlink routes were live and broken rather than absent.
+
+  Adds a `skillSource` scope rule: the sync methods carry a source id and nothing else, so nothing
+  positional binds them; it resolves the source's owning account server-side (memoised, sharing its
+  read with the dispatched call). The global `skillSourceRepository.listByRepo` — the push-webhook
+  reverse lookup across every account — stays mothership-internal.
+
+  Adds `accountFieldUpsert` alongside it, for a record-keyed write whose conflict key is the record's
+  `id` rather than its `accountId`. `accountField` binds only the account a record DECLARES, which is
+  sufficient only while the row is stored under that account — an `ON CONFLICT (id) DO UPDATE` that
+  does not re-`SET account_id` instead writes whichever row already holds that id, under its own
+  account. The new rule binds the stored row too, so a token scoped to one account can no longer name
+  another's source id and repoint their link at a repo it controls (whose `SKILL.md` bodies the other
+  tenant's next sync would fold into their catalog as agent instructions); an absent row is a create
+  and still passes.
+
+  A misconfiguration now also reports itself correctly: the persistence controller's per-request memo
+  overrides are applied only for repositories the deployment actually wires, so a mothership without
+  the library answers `... is not wired` instead of a scope 404 that reads as a missing row.
+
+  `GitHubInstallationRepository` gains `listActiveForAccount`, the account-scoped form of the cron
+  `listActive`. The account-tier installation lookup every repo-sourced library resolves its GitHub
+  credential through read EVERY tenant's installations and filtered in JS — unexposable over an
+  account-scoped machine API, and unbindable by any scope rule since the method takes no arguments.
+  The narrowing ("bound to the account directly, or to one of its own boards") now runs in SQL on
+  both runtimes, ordered so they pick the same row, and the resolver makes one query where it made
+  two.
+
+  Both ends of a mothership deployment must have the skill/fragment library enabled: the mothership
+  reflects the skill repositories into its machine-API registry only when its own library is
+  configured, exactly as it does for fragments.
+
 ## 0.206.0
 
 ### Minor Changes

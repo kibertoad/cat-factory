@@ -790,6 +790,18 @@ that wins the merge), and why the suppression LIST is its own read (a suppressed
 construction absent from the merged catalog, so nothing else could offer the way back). Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
+**Binary-output steps** — a kind carrying the `binary-output` trait (a deployment's image
+generator; no built-in carries it) generates BINARY artifacts and stores them through a
+foundational service its step SELECTS from that same catalog (`stepOptions.binaryOutput`: a
+`asset-storage`-capability-tagged storage service + context services that scope the generation),
+never through the platform's artifact store, which holds run evidence rather than deliverables.
+The join is the step's own config, not a design's declaration, so presence is refused structurally
+at save + start and resolution re-validates against the catalog at every admission; the injected
+`binary-output/` brief states every gap (an ABSENT brief itself means "do not upload — report"),
+and what the agent declares it stored lands on `PipelineStep.binaryOutputs` with every loss
+bookkept. Doc:
+[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
 `ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read
 checkout-free through the workspace's VCS connection. That is what lets a deployment declare infra

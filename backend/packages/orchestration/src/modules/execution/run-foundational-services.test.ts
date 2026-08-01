@@ -28,6 +28,7 @@ function resolver(overrides: Partial<FoundationalServiceResolver> = {}) {
     ]),
     catalogIdsFor: vi.fn(async () => ['file-storage']),
     contextFilesFor: vi.fn(async () => [{ path: FOUNDATIONAL_INDEX_FILE, content: 'index' }]),
+    binaryOutputContextFilesFor: vi.fn(async () => []),
     ...overrides,
   } satisfies FoundationalServiceResolver & Record<string, unknown>
 }

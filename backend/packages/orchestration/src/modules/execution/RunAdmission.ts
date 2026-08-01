@@ -6,6 +6,7 @@ import type {
   PipelineStep,
   ProviderCapabilities,
   ResolveBinaryArtifactStore,
+  StepOptions,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
@@ -23,8 +24,15 @@ import {
   isLocalRunner,
   pipelineHasVisualStep,
 } from '@cat-factory/contracts'
-import { BINARY_STORAGE_TRAIT, hasTrait, isInlineModelStep } from '@cat-factory/agents'
+import {
+  BINARY_OUTPUT_TRAIT,
+  BINARY_STORAGE_TRAIT,
+  hasTrait,
+  isInlineModelStep,
+} from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { binaryOutputConfigIssues, describeBinaryOutputConfigIssues } from '@cat-factory/kernel'
+import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
@@ -59,6 +67,13 @@ export interface RunAdmissionDeps {
   environmentProvisioning?: EnvironmentProvisioningService
   workspaceSettingsService?: WorkspaceSettingsService
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The foundational-services catalog seam, for validating a binary-generating step's
+   * storage/context selection against the RESOLVED catalog. Absent ⇒ the selection cannot be
+   * checked here (the presence check still runs), and the dispatch-time brief states whatever
+   * gap remains to the agent — matching the other optional start guards.
+   */
+  foundationalServiceResolver?: FoundationalServiceResolver
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -91,6 +106,7 @@ export class RunAdmission {
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly foundationalServiceResolver?: FoundationalServiceResolver
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -113,6 +129,7 @@ export class RunAdmission {
     this.environmentProvisioning = deps.environmentProvisioning
     this.workspaceSettingsService = deps.workspaceSettingsService
     this.resolveBinaryArtifactStore = deps.resolveBinaryArtifactStore
+    this.foundationalServiceResolver = deps.foundationalServiceResolver
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.inlineHarnessRef = deps.inlineHarnessRef
     this.resolveWorkspaceModelDefault = deps.resolveWorkspaceModelDefault
@@ -187,6 +204,18 @@ export class RunAdmission {
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
     // screenshots) needs the account to have storage configured.
     await this.assertBinaryStorageConfigured(workspaceId, shape.agentKinds)
+
+    // A chain carrying a BINARY-GENERATING step (the `binary-output` trait — a deployment's
+    // image generator) needs each such step's foundational-service selection to resolve
+    // against the workspace catalog, or the generator dispatches with nowhere to deliver its
+    // output. (The selection's PRESENCE is a structural fault validatePipelineShape refused
+    // above.)
+    await this.assertBinaryOutputSelected(
+      workspaceId,
+      shape.agentKinds,
+      shape.stepOptions,
+      shape.enabled,
+    )
 
     // A workspace that delegates container agents to a runner pool needs that pool registered
     // (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and when delegation is off.
@@ -634,6 +663,63 @@ export class RunAdmission {
       'This pipeline includes an agent that needs binary storage (e.g. the UI Tester, which uploads its screenshots), but this account has no content storage configured. Configure content storage to run it.',
       'binary_storage_unconfigured',
     )
+  }
+
+  /**
+   * Guard a pipeline's start when it carries a BINARY-GENERATING step (a kind with the
+   * {@link BINARY_OUTPUT_TRAIT} — e.g. a deployment's image generator, whose deliverable is
+   * binary artifacts pushed into a foundational storage service): the step's selection
+   * (`stepOptions.binaryOutput`) must RESOLVE against the workspace's catalog — the storage id
+   * must exist and carry the `asset-storage` capability tag, each context id must exist —
+   * refused with `binary_output_service_invalid`. The catalog can change after the pipeline was
+   * saved, which is why this re-validates at every start/retry/restart.
+   *
+   * The refusal names EVERY unresolved id, not the first: the message comes from
+   * `describeBinaryOutputConfigIssues` and `details.issues` carries the machine-readable list,
+   * so one edit clears a step that lost three services rather than three refuse-fix-restart
+   * rounds. `details.serviceId` / `problem` / `role` stay on the envelope as the headline the
+   * SPA's toast reads.
+   *
+   * The selection's PRESENCE is deliberately not checked here: that is a structural pipeline
+   * fault `assertValidBinaryOutputSteps` (in `validatePipelineShape`, which every entry point
+   * runs first) already refuses at save AND start — a second check here would be dead code.
+   * Skipped when no catalog seam is wired (tests / unconfigured facades): the dispatch-time
+   * brief then states whatever gap remains to the agent, which refuses loudly rather than
+   * guessing at a storage endpoint. Evaluated over the ENABLED subset, like every other shape
+   * check — a disabled generator never runs, so it imposes no requirement.
+   */
+  private async assertBinaryOutputSelected(
+    workspaceId: string,
+    agentKinds: readonly string[],
+    stepOptions: readonly (StepOptions | null)[] | undefined,
+    enabled: readonly boolean[] | undefined,
+  ): Promise<void> {
+    const resolver = this.foundationalServiceResolver
+    if (!resolver) return
+    const generators = agentKinds.flatMap((kind, i) => {
+      const config = stepOptions?.[i]?.binaryOutput
+      if (!config || enabled?.[i] === false) return []
+      if (!hasTrait(kind, BINARY_OUTPUT_TRAIT, this.agentKindRegistry)) return []
+      return [{ kind, config }]
+    })
+    if (generators.length === 0) return
+    const catalog = await resolver.catalogFor(workspaceId)
+    for (const { kind, config } of generators) {
+      const issues = binaryOutputConfigIssues(config, catalog)
+      const first = issues[0]
+      if (!first) continue
+      throw new ConflictError(
+        describeBinaryOutputConfigIssues(kind, issues),
+        'binary_output_service_invalid',
+        {
+          agentKind: kind,
+          serviceId: first.serviceId,
+          problem: first.problem,
+          role: first.role,
+          issues: issues.map(({ role, serviceId, problem }) => ({ role, serviceId, problem })),
+        },
+      )
+    }
   }
 
   /**

@@ -3,6 +3,7 @@ import { seedPipelines } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
+  assertValidBinaryOutputSteps,
   assertValidCompanionPlacement,
   assertValidGating,
   assertValidAgentVariants,
@@ -543,5 +544,61 @@ describe('assertValidAgentVariants', () => {
         stepOptions: [{ agentVariantId: 'org:tdd' }],
       }),
     ).not.toThrow()
+  })
+})
+
+describe('assertValidBinaryOutputSteps', () => {
+  /** A registry carrying a binary-generating kind, as a deployment package would register it. */
+  function registryWithGenerator() {
+    const registry = new AgentKindRegistry()
+    registry.register({
+      kind: 'image-generator',
+      systemPrompt: 'You generate images.',
+      traits: ['binary-output'],
+    })
+    return registry
+  }
+
+  it('rejects an enabled generator step that selects no storage service', () => {
+    for (const stepOptions of [undefined, [null], [{}]]) {
+      expect(() =>
+        assertValidBinaryOutputSteps({
+          agentKinds: ['image-generator'],
+          ...(stepOptions ? { stepOptions } : {}),
+          agentKindRegistry: registryWithGenerator(),
+        }),
+      ).toThrow(/selects no storage service/)
+    }
+  })
+
+  it('accepts a generator step that selects one', () => {
+    expect(() =>
+      assertValidBinaryOutputSteps({
+        agentKinds: ['coder', 'image-generator'],
+        stepOptions: [null, { binaryOutput: { storageServiceId: 'asset-store' } }],
+        agentKindRegistry: registryWithGenerator(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('imposes no requirement on a DISABLED generator step or a non-generator kind', () => {
+    expect(() =>
+      assertValidBinaryOutputSteps({
+        agentKinds: ['image-generator'],
+        enabled: [false],
+        agentKindRegistry: registryWithGenerator(),
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertValidBinaryOutputSteps({
+        agentKinds: ['coder'],
+        stepOptions: [{}],
+        agentKindRegistry: registryWithGenerator(),
+      }),
+    ).not.toThrow()
+  })
+
+  it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
+    expect(() => assertValidBinaryOutputSteps({ agentKinds: ['image-generator'] })).not.toThrow()
   })
 })

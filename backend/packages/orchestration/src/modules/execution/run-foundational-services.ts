@@ -4,7 +4,11 @@ import {
   FOUNDATIONAL_CONTRACTS_TRAIT,
   hasTrait,
 } from '@cat-factory/agents'
-import type { FoundationalServiceSelection, PipelineStep } from '@cat-factory/contracts'
+import type {
+  BinaryOutputConfig,
+  FoundationalServiceSelection,
+  PipelineStep,
+} from '@cat-factory/contracts'
 import type {
   AgentKind,
   FoundationalCatalogView,
@@ -49,6 +53,16 @@ export interface FoundationalServiceResolver {
   contextFilesFor(
     workspaceId: string,
     selection: FoundationalServiceSelection | undefined,
+  ): Promise<InjectedContextFile[]>
+  /**
+   * The BINARY-OUTPUT read (`run-binary-output.ts`): the brief + contract files for a
+   * generating step's own selection (`stepOptions.binaryOutput`). On this interface rather
+   * than its own seam because it is the same catalog behind the same tier merge and cache —
+   * two resolvers would be two places for a workspace override to win differently.
+   */
+  binaryOutputContextFilesFor(
+    workspaceId: string,
+    config: BinaryOutputConfig | undefined,
   ): Promise<InjectedContextFile[]>
 }
 
