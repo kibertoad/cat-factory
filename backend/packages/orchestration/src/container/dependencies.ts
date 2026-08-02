@@ -71,6 +71,7 @@ import type {
   FragmentBriefRepository,
   FragmentSelector,
   ApiContractRepository,
+  FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   FoundationalServiceRepository,
   FoundationalServiceSourceRepository,
@@ -908,6 +909,25 @@ export interface CoreDependencies {
    * reads it back so a malformed definition fails the deployment rather than a design dispatch.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * Where the `builtin` tier is READ from, when that is not this process's own registry.
+   * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)` — i.e. exactly the
+   * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
+   * mothership's registry over `GET /internal/foundational-services`.
+   *
+   * It exists because a mothership deployment is TWO processes and the estate is org state: with
+   * the registry as the only route, a deployment had to register the same estate on both entry
+   * points, and a node one build behind — the normal state of a local node — silently resolved a
+   * catalog missing whatever the mothership had since added. A run then simply does not consider
+   * that service, which is indistinguishable from an Architect judging it irrelevant. See
+   * `kernel/src/ports/foundational-builtins.ts`.
+   *
+   * When it is set, this process's own `foundationalServiceRegistry` is NOT consulted for the
+   * tier (the facade warns at boot if it is non-empty) — the two are alternatives, never a merge:
+   * a merge would reinstate the drift, since a stale local copy would win by id over the
+   * authoritative one.
+   */
+  foundationalBuiltinSource?: FoundationalBuiltinSource
   /**
    * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
    * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.

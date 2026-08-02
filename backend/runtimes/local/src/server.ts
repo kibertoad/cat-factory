@@ -348,13 +348,32 @@ async function startLocalMothership(
     seedSharedStacks,
   })
 
-  // Validate registered gates / agent kinds once before serving (parity with `start()`).
+  // Validate registered gates / agent kinds once before serving (parity with `start()`). The
+  // foundational-service definitions are still validated here even though this node resolves the
+  // tier remotely (below): they are the SAME code the mothership boots, so a malformed one is a
+  // real defect and a laptop is the cheapest place to learn about it.
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
     foundationalServiceRegistry: container.foundationalServiceRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
+
+  // In mothership mode the catalog's `builtin` tier comes from the MOTHERSHIP, so anything this
+  // node registered locally is not part of any catalog it resolves. Say so, naming the ids: this
+  // is the shape a deployment written before the tier crossed the machine API has (it had to
+  // register on both entry points), and silently ignoring it would swap one invisible failure for
+  // another. The registrations are harmless — the same build registers them on the mothership,
+  // which is where they take effect.
+  const localEstate = container.foundationalServiceRegistry.entries()
+  if (localEstate.length > 0) {
+    logger.warn(
+      'local mode: foundational services registered on this node are NOT used in mothership ' +
+        'mode — the catalog’s builtin tier is read from the mothership, which is authoritative ' +
+        'for the deployment’s estate. Register them on the mothership’s own entry point.',
+      { serviceIds: localEstate.map((entry) => entry.id) },
+    )
+  }
 
   // Backfill the deployment's declared environment-handler seeds onto every existing workspace —
   // the mothership path builds `buildLocalContainer` directly and never runs `bootServer`, so it

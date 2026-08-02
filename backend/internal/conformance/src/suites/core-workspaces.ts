@@ -98,6 +98,20 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.status).toBe(403)
     })
 
+    it('serves /internal/foundational-services with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The catalog's `builtin` TIER read (a mothership-mode node resolving the deployment's
+      // estate from the mothership rather than from its own, necessarily drifting, copy). Both
+      // routes are mounted by the shared controller on both facades and machine-gated FIRST, so
+      // an unauthenticated call is a 403 everywhere — including on a deployment that registers no
+      // foundational services at all, which is exactly the case where a mistakenly ungated
+      // endpoint would look like it was working (an empty list is a legitimate answer).
+      expect((await call('GET', '/internal/foundational-services')).status).toBe(403)
+      expect(
+        (await call('GET', '/internal/foundational-services/file-storage/contracts')).status,
+      ).toBe(403)
+    })
+
     it('serves /internal/events/subscribe/:ws with the machine-token gate active', async () => {
       const { call } = harness.makeApp()
       // The INBOUND real-time leg (a mothership-mode node subscribing to a workspace's stream so

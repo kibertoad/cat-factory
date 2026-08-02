@@ -9,6 +9,7 @@ import {
   defaultStepResolverRegistry,
   defaultFoundationalServiceRegistry,
   defaultTaskTypeRegistry,
+  registryBuiltinSource,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
 import type { CoreDependencies } from '../container.js'
@@ -23,6 +24,13 @@ import type { CoreDependencies } from '../container.js'
  * `container.ts` as a cohesive collaborator (the file-size ratchet: split, never grow).
  */
 export function resolveCoreRuntime(dependencies: CoreDependencies) {
+  // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
+  // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
+  // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different empty
+  // instance from the one a deployment registered on — silently, since both read as empty until
+  // someone registers.
+  const foundationalServiceRegistry =
+    dependencies.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry()
   return {
     agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
     gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
@@ -31,8 +39,13 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
-    foundationalServiceRegistry:
-      dependencies.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry(),
+    foundationalServiceRegistry,
+    // Where the catalog's `builtin` tier is READ from. Defaults to this process's own registry
+    // (the same instance, so the engine and the boot validation can never disagree); a
+    // mothership-mode node injects the REMOTE source instead, because the estate is org state
+    // its own build can only hold a second, drifting copy of.
+    foundationalBuiltins:
+      dependencies.foundationalBuiltinSource ?? registryBuiltinSource(foundationalServiceRegistry),
     initiativePresetRegistry:
       dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
     workRunner: dependencies.workRunner ?? new NoopWorkRunner(),

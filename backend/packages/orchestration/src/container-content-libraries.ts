@@ -13,7 +13,7 @@ import {
 import type {
   AppCaches,
   DocumentContentResolver,
-  FoundationalServiceRegistry,
+  FoundationalBuiltinSource,
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from './container.js'
 import { FragmentTitleService } from './modules/fragmentLibrary/FragmentTitleService.js'
@@ -98,7 +98,7 @@ export interface FoundationalServiceModule {
 export function createFoundationalServiceModule(
   deps: CoreDependencies,
   caches: AppCaches,
-  registry: FoundationalServiceRegistry,
+  builtins: FoundationalBuiltinSource,
 ): FoundationalServiceModule | undefined {
   const { foundationalServiceRepository, apiContractRepository } = deps
   if (!foundationalServiceRepository || !apiContractRepository) return undefined
@@ -109,9 +109,10 @@ export function createFoundationalServiceModule(
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     catalogCache: caches.foundationalServiceCatalog,
-    // The deployment's code-registered `builtin` tier, resolved once by `resolveCoreRuntime` so
-    // the engine and the boot validation read the SAME instance.
-    registry,
+    // The `builtin` tier, resolved once by `resolveCoreRuntime`: this process's own registry (so
+    // the engine and the boot validation read the SAME instance), or the MOTHERSHIP's over the
+    // machine API when this is a mothership-mode node.
+    builtins,
   })
 
   const sourceService =

@@ -320,6 +320,34 @@
   when its own library is configured, exactly as it does for fragments, so a node with the library on
   against a mothership with it off gets a clean `... is not wired`.
 
+**Code-registered ORG state: the foundational-services `builtin` tier**
+
+- **`GET /internal/foundational-services`** (+ `/:serviceId/contracts`) — the catalog tier a
+  deployment registers in CODE (ADR 0031). It is the one class of state this initiative's four
+  buckets did not cover, because it is not a repository method at all, and the gap it left was the
+  quiet kind. A mothership deployment is TWO processes, so the estate had to be registered on both
+  entry points and the copies matched only while both ran the same build — with a node one build
+  behind being the normal state of running one. Nothing detected the skew, and a run whose catalog
+  is missing a service simply does not consider it, which reads exactly like an Architect judging
+  it irrelevant.
+
+  So the estate is treated as the org state it is: the node reads the tier from the mothership
+  through the kernel `FoundationalBuiltinSource` port and does NOT consult its own registry (a boot
+  warning names any ids it is therefore ignoring). Same machine-token audience pin as the
+  persistence RPC, same base URL and same per-request token — but its OWN `/internal/*` endpoint
+  rather than a hole in the persistence proxy, per ADR 0009: there are no rows, and every method in
+  `REMOTE_PERSISTENCE_METHODS` binds to an account through a scope rule this read has no argument
+  to offer one from. There is nothing account-shaped to scope: the tier is one deployment-wide set
+  every workspace of every account already resolves in full.
+
+  **A failed read throws rather than answering with an empty tier** — including the 404 from a
+  mothership OLDER than the node — because an empty catalog reaching an Architect is precisely the
+  failure the feature exists to prevent.
+
+  **The general rule this sets:** state a deployment registers in CODE and a RUN resolves is org
+  state in mothership mode too. It rides its own `/internal/*` read, never a second registration on
+  the node, whose build is by construction the one that can be stale.
+
 **Notification delivery delegation (PR 4, first half)**
 
 - **`POST /internal/notifications/deliver`** — the mothership now DELIVERS a notification a
@@ -885,8 +913,9 @@ modes look like success:
   > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The six live
   > `/internal/*` routes today are `POST /internal/persistence`,
   > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
-  > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`, and
-  > `POST /internal/telemetry/ingest`.
+  > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,
+  > `POST /internal/telemetry/ingest`, and `GET /internal/foundational-services`
+  > (+ `/:serviceId/contracts`).
 
 - **Real-time — BOTH directions ✅ landed.** The OUTBOUND leg is
   built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a

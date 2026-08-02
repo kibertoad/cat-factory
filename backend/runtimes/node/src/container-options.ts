@@ -45,6 +45,7 @@ import {
   type PipelineRegistry,
   type PreviewTransport,
   type ProviderRegistry,
+  type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type TaskTypeRegistry,
   type VcsProviderRegistry,
@@ -395,6 +396,14 @@ export interface NodeContainerOptions {
    * definition. See backend/docs/adr/0031-foundational-services.md.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * Where the catalog's `builtin` tier is READ from, when it is not this process's own registry
+   * above. Set by exactly one caller — the local facade booting in MOTHERSHIP mode, which reads
+   * the mothership's registry over `GET /internal/foundational-services` because the estate is
+   * org state and a node's own build can only hold a second, drifting copy of it. See
+   * `kernel/src/ports/foundational-builtins.ts`.
+   */
+  foundationalBuiltinSource?: FoundationalBuiltinSource
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode

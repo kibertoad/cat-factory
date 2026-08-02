@@ -10,8 +10,19 @@ local facades too (root `CLAUDE.md` → "Keep the runtimes symmetric"). This fac
 Cloudflare differentiators: D1 persistence, Durable Objects (real-time + per-run Containers),
 Cloudflare Workflows (durable execution), queues/cron, and the `workers-ai` binding.
 
-**Entry:** `src/index.ts` (default fetch/scheduled/queue handler + the DO/Workflow classes);
-`src/app.ts` (`createApp()` — a thin wrapper over `@cat-factory/server`).
+**Entry:** `src/index.ts` — `createWorker(options?)` (the fetch/scheduled/queue handler) plus the
+DO/Workflow classes; `export default createWorker()` is the shape a deployment re-exports when it
+extends nothing. `src/app.ts` (`createApp()` — a thin wrapper over `@cat-factory/server`).
+
+**`createWorker` is this facade's INSTALLATION SEAM** — the counterpart of the Node facade's
+`start({ … })` and the local facade's `startLocal({ … })`. A deployment registering its own agent
+kinds, gates, pipelines, task types or foundational-service estate passes the instance in
+(`createWorker({ overrides: { foundationalServiceRegistry } })`) and gets the whole boot sequence:
+the `LOG_LEVEL` read, the once-guarded registration validation over ITS registries, and the
+`scheduled`/`queue` handlers. **Never move a step of that back to the module scope of `index.ts`**
+— a deployment cannot reach a registry newed there, and reassembling the sequence by hand costs it
+a version-pinned direct dependency on `@cat-factory/server` (`setLogLevel` mutates module state, so
+it only reaches the logger the Worker writes through while both imports resolve to ONE copy).
 
 **Where things live** (under `src/infrastructure/`):
 

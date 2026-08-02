@@ -224,6 +224,14 @@ export {
   defaultFoundationalServiceRegistry,
 } from './domain/foundational-service-registry.js'
 
+// Where that `builtin` tier is READ from: the in-process registry by default, the MOTHERSHIP's
+// over `/internal/foundational-services` on a mothership-mode node (which has no estate of its
+// own to be authoritative about). See `ports/foundational-builtins.ts`.
+export {
+  type FoundationalBuiltinSource,
+  registryBuiltinSource,
+} from './ports/foundational-builtins.js'
+
 // Binary-output steps: pure validation/parsing/rendering for a kind that generates binary
 // artifacts and stores them through a selected foundational service, scoped by further
 // selected context services. See `domain/binary-outputs.ts` and

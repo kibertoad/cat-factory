@@ -122,5 +122,32 @@ dropping artifacts.
 - [ ] **A worked example generator** in `backend/internal/example-custom-agent`, once a real
       image-generation harness path exists to demonstrate against.
 
+### Both SPA items are wanted as contributions, and the result view is the one to take first
+
+Asked by a downstream deployment adopting ADR 0031, whose registered estate now has nothing
+between it and a generator step but these two. The answer is yes to both, as upstream PRs rather
+than a forked layer — they are additive slots by construction (a step-options component beside the
+variant/skill pickers; one `resultViews` entry), which is exactly the shape the modular seams
+exist to take from outside.
+
+Take the **result view first**. The declaration parsing already keeps `unknownServices` /
+`invalidEntries` / `omitted` apart precisely so a partial failure is legible, and today all of it
+degrades loudly into a database column — so the view is not new behaviour, it is the missing half
+of behaviour that already exists. Two rules bind it and are easy to miss:
+
+- **Read the run's details through `useResultViewRunMeta(viewId, …)`**, never off `useResultView`'s
+  `stepIndex`. A window opened OFF-PATH carries a block id and no step index, and that is the entry
+  point people actually use — hand-deriving blanks the model, run id and token telemetry there.
+- **"Absent" and "zero" must not render the same.** A step that stored nothing and a step whose
+  declaration named a service the catalog does not know are different states with different fixes,
+  and the second must name the id rather than showing an empty list.
+
+For the **picker**, the constraint that is not obvious from the API shape: presence is refused
+structurally at save AND at start, and resolution re-validates against the catalog at every
+admission — so the picker filters the workspace's RESOLVED catalog (`asset-storage`-tagged for the
+storage half) and must not offer an id from a stale client-side copy, or a step saves clean and
+fails at admission. It is also a plain step OPTION, not an override of a default, so it stays in
+both interface tiers rather than being hidden in `basic`.
+
 When the committed scope completes, convert this tracker into a numbered ADR under
 `backend/docs/adr/` and `git rm` it in the same PR.

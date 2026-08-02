@@ -158,6 +158,16 @@ new hole in the persistence proxy; and **a new secret must state which key seals
 its credential SEALED can go remote, one that decrypts INSIDE the repo cannot, because the mothership's
 `ENCRYPTION_KEY` never reaches a laptop.
 
+**State a deployment registers in CODE and a RUN resolves is org state too** — the fifth thing that must
+pick a route, and the one with no repository method to give it away. A mothership deployment is TWO
+processes, so "the deployment registers it on both entry points" is not a design: the copies match only
+while both run the same build, and a node one build behind is the NORMAL state of running one. It rides
+its OWN `/internal/*` read from the mothership (the foundational-services `builtin` tier is the model),
+the node does not consult its own copy, and the read THROWS rather than answering empty — an empty
+catalog and an unreachable mothership are the same value and opposite facts, and only one of them may
+reach an agent. Never MERGE the two: a stale local copy winning by id is the same drift with a mechanism
+that looks deliberate.
+
 ## No N+1 repository access
 
 **Calling a single-row repository method inside a loop (`for`, `.map`, `Promise.all`) over a list is

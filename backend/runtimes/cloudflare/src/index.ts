@@ -1,5 +1,10 @@
-import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
-import { createApp } from './app'
+import type {
+  ExecutionContext,
+  ExportedHandler,
+  MessageBatch,
+  ScheduledController,
+} from '@cloudflare/workers-types'
+import { type CreateAppOptions, createApp } from './app'
 import { loadConfig } from './infrastructure/config'
 import type {
   Env,
@@ -54,6 +59,7 @@ import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import {
+  type CoreDependencies,
   defaultJudgeRegistry,
   defaultStepResolverRegistry,
   sweepBinaryArtifactRetention,
@@ -142,58 +148,52 @@ export {
   type FoundationalServiceDefinition,
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
+// The options {@link createWorker} takes — re-exported from the root so a deployment can name the
+// type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
+export type { CreateAppOptions } from './app'
 // The built-in model-preset ids + the catalog fallback default. A custom Worker entry that builds
 // its own app can seed a different out-of-the-box default with
 // `createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude } })` (a
 // `Partial<CoreDependencies>` field), parity with the Node/local `start()` seams.
 export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 
-// One app-owned agent-kind registry, shared by every per-request container (via the
-// `createApp` override) AND the boot-time validation below — so the check validates the SAME
-// instance the engine uses, matching the Node/local facades. A deployment injecting custom
-// kinds registers them on this instance (or overrides it) before the first request.
-const agentKindRegistry = defaultAgentKindRegistry()
-// One app-owned initiative-preset registry, shared by every per-request container (via the
-// `createApp` override). A deployment injecting custom presets registers them on this instance
-// (or overrides it) before the first request — the same seam as `agentKindRegistry`.
-const initiativePresetRegistry = defaultInitiativePresetRegistry()
-// One app-owned gate registry with the built-in `@cat-factory/gates` suite installed, shared by
-// every per-request container (via the `createApp` override) AND the boot-time validation below —
-// so the check validates the SAME instance the engine uses. A deployment adds custom gates by
-// registering them on this instance (or overrides it) before the first request.
-const gateRegistry = gateRegistryWithBuiltins()
-// One app-owned step-resolver registry (empty by default), shared the same way; a deployment
-// registers its custom resolvers on this instance before the first request.
-const stepResolverRegistry = defaultStepResolverRegistry()
-// One app-owned JUDGE registry (empty by default — the platform ships no built-in judges), shared
-// by every per-request container; a deployment registers its rubric judges on this instance before
-// the first request. See `docs/initiatives/judge-registry.md`.
-const judgeRegistry = defaultJudgeRegistry()
-// One app-owned pipeline registry (empty by default), shared by every per-request container AND
-// the boot-time validation below; a deployment registers its extra pipelines on this instance
-// before the first request so they seed into every new workspace and validate at boot.
-const pipelineRegistry = defaultPipelineRegistry()
-// One app-owned task-type registry (empty by default), shared by every per-request container AND
-// the boot-time validation below; a deployment registers its custom task types on this instance
-// before the first request so they surface in the snapshot and validate at boot.
-const taskTypeRegistry = defaultTaskTypeRegistry()
-// One app-owned foundational-service registry (empty by default — the platform ships no built-in
-// shared capabilities), shared by every per-request container AND the boot-time validation below;
-// a deployment registers its estate on this instance before the first request, so every workspace
-// catalog carries it and a malformed contract document fails boot rather than a design dispatch.
-const foundationalServiceRegistry = defaultFoundationalServiceRegistry()
-const app = createApp({
-  overrides: {
-    agentKindRegistry,
-    gateRegistry,
-    judgeRegistry,
-    stepResolverRegistry,
-    pipelineRegistry,
-    taskTypeRegistry,
-    foundationalServiceRegistry,
-    initiativePresetRegistry,
-  },
-})
+/**
+ * The app-owned registries the ENTRY POINT news (as opposed to the per-request set
+ * `resolveWorkerRegistries` resolves inside `buildContainer`): each is threaded into `createApp`
+ * as an override AND into the boot-time `validateRegistrations`, so the check validates the SAME
+ * instance the engine uses, matching the Node/local facades.
+ *
+ * An injected instance always wins, which is what makes {@link createWorker} a real extension
+ * seam: a deployment registers its kinds/gates/pipelines/estate on its own instance and passes it
+ * in, exactly as it would through `start({ … })` / `startLocal({ … })` on the other two facades.
+ */
+function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
+  return {
+    // Custom agent kinds (the built-ins plus anything a deployment registered by reference).
+    agentKindRegistry: overrides.agentKindRegistry ?? defaultAgentKindRegistry(),
+    // Custom initiative presets — the same DI seam as `agentKindRegistry`.
+    initiativePresetRegistry:
+      overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
+    // The gate registry with the built-in `@cat-factory/gates` suite installed.
+    gateRegistry: overrides.gateRegistry ?? gateRegistryWithBuiltins(),
+    // Step resolvers (empty by default — the built-in `merger` resolver is a privileged engine
+    // built-in, not a registry entry).
+    stepResolverRegistry: overrides.stepResolverRegistry ?? defaultStepResolverRegistry(),
+    // Judges (empty by default — the platform ships no built-in judges). See
+    // `docs/initiatives/judge-registry.md`.
+    judgeRegistry: overrides.judgeRegistry ?? defaultJudgeRegistry(),
+    // Predefined pipelines (empty by default); registered ones seed into every new workspace and
+    // validate at boot.
+    pipelineRegistry: overrides.pipelineRegistry ?? defaultPipelineRegistry(),
+    // Custom task types (empty by default); registered ones surface in the snapshot.
+    taskTypeRegistry: overrides.taskTypeRegistry ?? defaultTaskTypeRegistry(),
+    // Foundational services (empty by default — the platform ships no built-in shared
+    // capabilities); registered ones are the `builtin` tier of every workspace catalog, and a
+    // malformed contract document fails boot rather than a design dispatch.
+    foundationalServiceRegistry:
+      overrides.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry(),
+  }
+}
 
 /** The boot/cron key-fingerprint check's logger, tagged so its lines are greppable by cron. */
 const keyFingerprintLogger = logger.child({ cron: 'key-fingerprint' })
@@ -770,89 +770,130 @@ function runPeriodicBackstops(
   }
 }
 
-export default {
-  // Validate the registered extensions (gates / agent kinds) ONCE, on the first request —
-  // by which point every `register*` import side effect has run. A typo'd gate helperKind or
-  // an unknown resultView then fails loudly at boot instead of mid-run. The once-guard keeps
-  // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
-  fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    // The Worker has no process env, so the configured verbosity is read off the request's
-    // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
-    // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
-    setLogLevel(parseLogLevel(env.LOG_LEVEL))
-    validateRegistrationsOnce({
-      agentKindRegistry,
-      gateRegistry,
-      pipelineRegistry,
-      taskTypeRegistry,
-      foundationalServiceRegistry,
-      onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
-    })
-    return app.fetch(request, env, ctx)
-  },
+/** The cron sweeper. Module-level (not closed over the app) so {@link createWorker} stays thin. */
+async function handleScheduled(
+  controller: ScheduledController,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<void> {
+  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  const clock = new SystemClock()
 
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    setLogLevel(parseLogLevel(env.LOG_LEVEL))
-    const clock = new SystemClock()
+  // Daily pass: prune the unbounded ledgers/projections to their retention windows.
+  if (controller.cron === RETENTION_CRON) {
+    runDailyRetentionSweeps(env, ctx, clock)
+    return
+  }
 
-    // Daily pass: prune the unbounded ledgers/projections to their retention windows.
-    if (controller.cron === RETENTION_CRON) {
-      runDailyRetentionSweeps(env, ctx, clock)
-      return
-    }
-
-    // Frequent pass (every 2 min): time-sensitive backstops.
-    redriveStuckAgentRuns(env, ctx, clock)
-    redriveStuckEnvTests(env, ctx, clock)
-    reclaimExpiredActivations(env, ctx, clock)
-    reapStaleContainers(env, ctx, clock)
-    runPeriodicBackstops(env, ctx, clock, controller.scheduledTime)
-  },
-
-  async queue(
-    batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
-    env: Env,
-  ): Promise<void> {
-    setLogLevel(parseLogLevel(env.LOG_LEVEL))
-    // Route by source queue — the single handler serves all three queues.
-    if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
-      await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
-      return
-    }
-
-    // Inbound tracker deliveries (push-driven intake + ticket replies to a parked review).
-    if (batch.queue === TRACKER_SYNC_QUEUE_NAME) {
-      await handleTrackerSyncBatch(batch as MessageBatch<TrackerSyncMessage>, env)
-      return
-    }
-
-    // Execution admission queue: create the Workflows instance per message.
-    if (!env.EXECUTION_WORKFLOW) {
-      logger.warn('execution admission: no EXECUTION_WORKFLOW binding; acking without starting', {
-        queue: batch.queue,
-        messages: batch.messages.length,
-      })
-      for (const message of batch.messages) message.ack()
-      return
-    }
-    const runner = new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW })
-    for (const message of batch.messages as MessageBatch<ExecutionStartMessage>['messages']) {
-      try {
-        await runner.create(message.body.workspaceId, message.body.executionId)
-        message.ack()
-      } catch (error) {
-        // Retrying blind used to be the WHOLE handling: a run that can never start burned its
-        // retries and then vanished, with no evidence it was ever admitted. The tracker-sync
-        // sibling has always logged; this matches it.
-        logger.warn('execution admission failed; retrying message', {
-          queue: batch.queue,
-          workspaceId: message.body.workspaceId,
-          executionId: message.body.executionId,
-          attempts: message.attempts,
-          ...describeError(error),
-        })
-        message.retry()
-      }
-    }
-  },
+  // Frequent pass (every 2 min): time-sensitive backstops.
+  redriveStuckAgentRuns(env, ctx, clock)
+  redriveStuckEnvTests(env, ctx, clock)
+  reclaimExpiredActivations(env, ctx, clock)
+  reapStaleContainers(env, ctx, clock)
+  runPeriodicBackstops(env, ctx, clock, controller.scheduledTime)
 }
+
+/** The queue consumer multiplexing the three queues. Module-level, like {@link handleScheduled}. */
+async function handleQueue(
+  batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
+  env: Env,
+): Promise<void> {
+  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  // Route by source queue — the single handler serves all three queues.
+  if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
+    await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
+    return
+  }
+
+  // Inbound tracker deliveries (push-driven intake + ticket replies to a parked review).
+  if (batch.queue === TRACKER_SYNC_QUEUE_NAME) {
+    await handleTrackerSyncBatch(batch as MessageBatch<TrackerSyncMessage>, env)
+    return
+  }
+
+  // Execution admission queue: create the Workflows instance per message.
+  if (!env.EXECUTION_WORKFLOW) {
+    logger.warn('execution admission: no EXECUTION_WORKFLOW binding; acking without starting', {
+      queue: batch.queue,
+      messages: batch.messages.length,
+    })
+    for (const message of batch.messages) message.ack()
+    return
+  }
+  const runner = new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW })
+  for (const message of batch.messages as MessageBatch<ExecutionStartMessage>['messages']) {
+    try {
+      await runner.create(message.body.workspaceId, message.body.executionId)
+      message.ack()
+    } catch (error) {
+      // Retrying blind used to be the WHOLE handling: a run that can never start burned its
+      // retries and then vanished, with no evidence it was ever admitted. The tracker-sync
+      // sibling has always logged; this matches it.
+      logger.warn('execution admission failed; retrying message', {
+        queue: batch.queue,
+        workspaceId: message.body.workspaceId,
+        executionId: message.body.executionId,
+        attempts: message.attempts,
+        ...describeError(error),
+      })
+      message.retry()
+    }
+  }
+}
+
+/** The Worker's exported handler shape (fetch + the cron and queue consumers). */
+export type WorkerHandler = ExportedHandler<
+  Env,
+  ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage
+>
+
+/**
+ * Build the Worker's exported handler — the Cloudflare facade's INSTALLATION SEAM, and the
+ * counterpart of the Node facade's `start({ … })` / the local facade's `startLocal({ … })`.
+ *
+ * A deployment that only re-exports {@link default} cannot register anything: the registries
+ * would be newed here, in a module it does not own, and never handed back. So a deployment that
+ * ships custom agent kinds, gates, pipelines, task types or a foundational-service estate writes
+ * ONE line instead of reassembling this boot sequence itself:
+ *
+ * ```ts
+ * export default createWorker({ overrides: { foundationalServiceRegistry } })
+ * ```
+ *
+ * Everything the bare default export owns is owned here — the `LOG_LEVEL` read (which mutates
+ * module state inside `@cat-factory/server`, so it must run in the copy the Worker actually logs
+ * through), the once-guarded registration validation over whatever registries the options carry,
+ * and the `scheduled` / `queue` handlers. Re-exporting `default` and spreading it to keep the
+ * non-`fetch` handlers is therefore never necessary, and a handler added here later reaches such
+ * a deployment without it having to notice.
+ */
+export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
+  const registries = resolveEntryRegistries(options.overrides ?? {})
+  const app = createApp({ ...options, overrides: { ...options.overrides, ...registries } })
+  return {
+    // Validate the registered extensions (gates / agent kinds) ONCE, on the first request —
+    // by which point every `register*` import side effect has run. A typo'd gate helperKind or
+    // an unknown resultView then fails loudly at boot instead of mid-run. The once-guard keeps
+    // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
+    fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      // The Worker has no process env, so the configured verbosity is read off the request's
+      // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
+      // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
+      setLogLevel(parseLogLevel(env.LOG_LEVEL))
+      validateRegistrationsOnce({
+        agentKindRegistry: registries.agentKindRegistry,
+        gateRegistry: registries.gateRegistry,
+        pipelineRegistry: registries.pipelineRegistry,
+        taskTypeRegistry: registries.taskTypeRegistry,
+        foundationalServiceRegistry: registries.foundationalServiceRegistry,
+        onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+      })
+      return app.fetch(request, env, ctx)
+    },
+    scheduled: handleScheduled,
+    queue: handleQueue,
+  }
+}
+
+/** The default deployment shape: every registry defaulted. Unchanged for a bare re-export. */
+export default createWorker()

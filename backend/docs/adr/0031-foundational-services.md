@@ -219,14 +219,15 @@ tier under its own rows: it has one tier below it and no workspace above it to c
 
 ### Runtime symmetry
 
-| Concern        | Cloudflare                                                                                | Node                                                                                         |
-| -------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Store          | D1 migrations `0073_foundational_services`, `0074_..._repo_index`, `0075_..._folder_mode` | Drizzle schema + the three matching migrations                                               |
-| Repositories   | `D1FoundationalServiceRepository` (+ contract, source)                                    | `DrizzleFoundationalServiceRepository` (+ contract, source)                                  |
-| Autorefresh    | a `scheduled` cron pass, gated to the staleness window                                    | a `startSweeper` interval                                                                    |
-| Push refresh   | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`                             | the same kind on the pg-boss `github.sync` queue                                             |
-| Parity         | `defineFoundationalServicesSuite` runs against both real stores                           | ditto                                                                                        |
-| `builtin` tier | `defaultFoundationalServiceRegistry()` newed in `index.ts`, injected via `createApp`      | the same instance via `start({ foundationalServiceRegistry })` (local rides the Node option) |
+| Concern                         | Cloudflare                                                                                                                                 | Node                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Store                           | D1 migrations `0073_foundational_services`, `0074_..._repo_index`, `0075_..._folder_mode`                                                  | Drizzle schema + the three matching migrations                                               |
+| Repositories                    | `D1FoundationalServiceRepository` (+ contract, source)                                                                                     | `DrizzleFoundationalServiceRepository` (+ contract, source)                                  |
+| Autorefresh                     | a `scheduled` cron pass, gated to the staleness window                                                                                     | a `startSweeper` interval                                                                    |
+| Push refresh                    | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`                                                                              | the same kind on the pg-boss `github.sync` queue                                             |
+| Parity                          | `defineFoundationalServicesSuite` runs against both real stores                                                                            | ditto                                                                                        |
+| `builtin` tier                  | the instance passed to `createWorker({ overrides: { foundationalServiceRegistry } })`, defaulted to `defaultFoundationalServiceRegistry()` | the same instance via `start({ foundationalServiceRegistry })` (local rides the Node option) |
+| `builtin` tier, mothership mode | serves it at `GET /internal/foundational-services`                                                                                         | ditto; a mothership-mode NODE reads that endpoint instead of its own registry                |
 
 The refresh PASS itself is one implementation (`sweepFoundationalSources` in
 `@cat-factory/server`) that both facades drive — only the trigger differs. Two copies would be two
@@ -247,6 +248,46 @@ resolves the catalog over the RPC and its coder resolves the declared contracts 
 repo-SYNC surface stays off, exactly as the fragment library's does — a sync needs a GitHub client
 a mothership node does not have, and none of those methods carries an `(ownerKind, ownerId)` pair
 for a scope rule to bind.
+
+**The `builtin` tier crosses the machine API too**, and the first cut of this ADR got that wrong:
+it reasoned that the tier is code rather than a repo read, so a mothership node resolves it "like
+any other". A mothership deployment is TWO processes — the hosted mothership answers the SPA's
+catalog reads, the node resolves the catalog for the runs it dispatches — so what that actually
+meant was that the estate had to be registered on BOTH entry points, and the two copies were equal
+only for as long as both imported the same package at the same commit. Nothing detected a skew,
+and a local node one build behind is the NORMAL state of a mothership deployment. The failure was
+silent in the worst direction: a run whose catalog is missing a service simply does not consider
+it, which is indistinguishable from an Architect deciding the service was not relevant.
+
+A deployment's estate is org state, so the mothership owns it like every other org fact a node
+reads remotely. The tier is read through the kernel `FoundationalBuiltinSource` port — the
+in-process registry by default, `GET /internal/foundational-services` (+ `/:id/contracts`) on a
+mothership-mode node — and the node's own registry is then not consulted at all, with a boot
+warning naming the ids it is ignoring, because that is precisely the double registration the old
+shape forced. Three things about it are deliberate:
+
+- **It is a DEDICATED `/internal/*` endpoint, not an entry in the persistence allow-list.** The
+  registry is not a repository and holds no rows, and every method in that table binds to an
+  account through a scope rule this read has no argument to offer one from. The tier is one
+  deployment-wide set with no owner, which every workspace of every account already resolves in
+  full — so the machine-token audience pin is the whole of its authorization, and there is nothing
+  account-shaped to check beyond it.
+- **The remote read THROWS; it never degrades to an empty tier.** "The mothership is unreachable"
+  and "this deployment registers no shared services" are the same value and opposite facts, and an
+  empty catalog reaching an Architect produces a design that reinvents a service the org already
+  runs — the failure this whole feature exists to prevent. The case that makes this load-bearing
+  rather than pedantic is a mothership one release BEHIND the node, which answers 404 for a route
+  it does not serve.
+- **The two are alternatives, never a merge.** Layering a node's own registrations over the
+  mothership's would reinstate the drift, since a stale local copy of a service would win by id
+  over the authoritative one — i.e. exactly the skew, now with a mechanism that looks deliberate.
+  A deployment that genuinely wants to try a new service before it ships registers it on a
+  STANDALONE local deployment, which keeps the in-process registry, or at the account/workspace
+  tier, which is what those tiers are for.
+
+A skew is therefore structurally impossible rather than merely observable, which is why no
+fingerprint of the resolved tier is exposed on either facade's health read: it would report on a
+disagreement that can no longer occur.
 
 ### The management surface
 
@@ -360,8 +401,9 @@ Deliberately not done, and why:
 
 - **The repo-sync surface remains off in mothership mode.** Closing it needs a source→owner resolver
   and a GitHub client on the node; both belong to a later mothership slice, and until then a
-  mothership-mode board manages sources through the hosted surface. The `builtin` tier is unaffected
-  — it is code, not a repo read, so a mothership node resolves it like any other.
+  mothership-mode board manages sources through the hosted surface. (The `builtin` tier was
+  originally listed here as unaffected. It was not — see the Mothership section above, which
+  supersedes that claim.)
 - **The catalog CRUD is not mounted on the public (API-key) surface.** The ask behind it was
   provisioning a deployment's catalog from CI, which code registration answers without a
   credential: the definitions live in the deployment's own repo, ship with its build, and are

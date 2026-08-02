@@ -186,6 +186,37 @@ describe('composeMothership', () => {
     }
   })
 
+  it('reads the catalog’s builtin tier from the mothership, not from this node’s own registry', async () => {
+    // The estate a deployment registers in CODE is org state, and a mothership deployment is TWO
+    // processes. Registering it on both was the only route before this, and a node one build
+    // behind — the normal state of a local node — then resolved a catalog quietly missing
+    // whatever the mothership had since added, which reads exactly like an Architect judging a
+    // service irrelevant. So the tier rides the machine API like every other org read.
+    const seen: { url: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
+      return new Response(
+        JSON.stringify({ entries: [{ id: 'file-storage', name: 'File Storage', contracts: [] }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+
+    const { foundationalBuiltins, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test/', LOCAL_MOTHERSHIP_TOKEN: 'machine-tok' }),
+    )
+    try {
+      const entries = await foundationalBuiltins.entries()
+      expect(entries.map((entry) => entry.id)).toEqual(['file-storage'])
+      // Same base URL and same per-request machine token as the persistence RPC, so the tier
+      // follows one connect/expiry lifecycle rather than a second one.
+      expect(seen).toEqual([
+        { url: 'https://m.test/internal/foundational-services', auth: 'Bearer machine-tok' },
+      ])
+    } finally {
+      close()
+    }
+  })
+
   it('serves the local-first telemetry bucket from the laptop, never over the RPC', async () => {
     // Telemetry is written on the hot path of every LLM call / dispatch / provisioning attempt and
     // read back by the observability panel + the board's per-step rollups. If it resolved to the

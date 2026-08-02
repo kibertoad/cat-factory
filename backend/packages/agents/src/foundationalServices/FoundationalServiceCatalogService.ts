@@ -12,8 +12,8 @@ import type {
   ApiContractRecord,
   ApiContractRepository,
   Clock,
+  FoundationalBuiltinSource,
   FoundationalServiceRecord,
-  FoundationalServiceRegistry,
   FoundationalServiceRepository,
   GroupCacheHandle,
   WorkspaceRepository,
@@ -22,6 +22,7 @@ import {
   ConflictError,
   NotFoundError,
   defaultFoundationalServiceRegistry,
+  registryBuiltinSource,
   summarizeContract,
 } from '@cat-factory/kernel'
 import { mergeFoundationalTiers, toWire } from './foundational-catalog.js'
@@ -37,9 +38,14 @@ export interface FoundationalServiceCatalogDependencies {
   /**
    * The deployment's own registered services — the `builtin` tier. Optional and defaulted to an
    * empty registry, so a construction site that omits it resolves the stored tiers exactly as
-   * before; a facade injects the SAME instance it registers on.
+   * before.
+   *
+   * A standalone facade passes its own registry wrapped in `registryBuiltinSource`; a
+   * MOTHERSHIP-MODE node passes the remote source, because the estate is org state the
+   * mothership owns and a node's own copy could only ever be a second, drifting one. See
+   * `kernel/src/ports/foundational-builtins.ts`.
    */
-  registry?: FoundationalServiceRegistry
+  builtins?: FoundationalBuiltinSource
 }
 
 /**
@@ -56,16 +62,17 @@ export interface FoundationalServiceCatalogDependencies {
  *   inherits.** That is what lets a board opt out of an org-wide service without an account
  *   admin — and an account out of a deployment `builtin` — and it is why the merge reads both
  *   stored tiers `includeDeleted`.
- * - **The `builtin` tier has no rows.** It is read from the app-owned
- *   {@link FoundationalServiceRegistry} on every resolve, so a deployment's catalog is present
- *   from a workspace's first request and cannot drift from the code that declares it.
+ * - **The `builtin` tier has no rows.** It is read from the {@link FoundationalBuiltinSource} on
+ *   every resolve — the app-owned registry in a standalone deployment, the MOTHERSHIP's own
+ *   registry over the machine API on a mothership-mode node — so a deployment's catalog is
+ *   present from a workspace's first request and cannot drift from the code that declares it.
  */
 export class FoundationalServiceCatalogService {
   /** The deployment's registered services; an empty registry when a facade wired none. */
-  private readonly registry: FoundationalServiceRegistry
+  private readonly builtins: FoundationalBuiltinSource
 
   constructor(private readonly deps: FoundationalServiceCatalogDependencies) {
-    this.registry = deps.registry ?? defaultFoundationalServiceRegistry()
+    this.builtins = deps.builtins ?? registryBuiltinSource(defaultFoundationalServiceRegistry())
   }
 
   /** One tier's registered services, contract manifests joined on. Raw — not merged. */
@@ -308,11 +315,11 @@ export class FoundationalServiceCatalogService {
     ownerId: string,
   ): Promise<{ id: string; name: string; summary: string }[]> {
     // An account's tier below is the deployment's registry and nothing else.
-    if (ownerKind === 'account') return this.registry.entries()
+    if (ownerKind === 'account') return this.builtins.entries()
     const accountId = await this.deps.workspaceRepository.accountOf(ownerId)
     // A board with no account inherits the deployment tier directly, with nothing able to
     // suppress it in between.
-    if (!accountId) return this.registry.entries()
+    if (!accountId) return this.builtins.entries()
     return this.loadTierView('account', accountId)
   }
 
@@ -377,7 +384,7 @@ export class FoundationalServiceCatalogService {
       const tier = tierById.get(id)
       if (!tier) continue
       if (tier === 'builtin') {
-        out.set(id, this.registry.documentsFor(id))
+        out.set(id, await this.builtins.documentsFor(id))
         continue
       }
       const docs = (tier === 'workspace' ? workspaceDocs : accountDocs).filter(
@@ -412,7 +419,7 @@ export class FoundationalServiceCatalogService {
         : Promise.resolve<ApiContractManifestEntry[]>([]),
     ])
     return mergeFoundationalTiers({
-      builtins: this.registry.entries(),
+      builtins: await this.builtins.entries(),
       accountRows,
       workspaceRows,
       accountManifest: indexManifest(accountManifest),
@@ -435,7 +442,7 @@ export class FoundationalServiceCatalogService {
       this.deps.apiContractRepository.listManifestByOwner('account', ownerId),
     ])
     return mergeFoundationalTiers({
-      builtins: this.registry.entries(),
+      builtins: await this.builtins.entries(),
       accountRows,
       workspaceRows: [],
       accountManifest: indexManifest(accountManifest),

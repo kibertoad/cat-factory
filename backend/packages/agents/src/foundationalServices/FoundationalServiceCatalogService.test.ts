@@ -12,6 +12,7 @@ import {
   ConflictError,
   ValidationError,
   defaultFoundationalServiceRegistry,
+  registryBuiltinSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
@@ -442,7 +443,7 @@ describe('FoundationalServiceCatalogService builtin tier', () => {
       apiContractRepository: contractRepo(contracts),
       workspaceRepository: workspaces('acct'),
       clock,
-      registry,
+      builtins: registryBuiltinSource(registry),
     })
   }
 

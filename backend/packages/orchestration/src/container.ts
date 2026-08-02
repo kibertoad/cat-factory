@@ -526,6 +526,7 @@ export function createCore(injected: CoreDependencies): Core {
     pipelineRegistry,
     taskTypeRegistry,
     foundationalServiceRegistry,
+    foundationalBuiltins,
     initiativePresetRegistry,
     executionEventPublisher,
     caches,
@@ -618,7 +619,7 @@ export function createCore(injected: CoreDependencies): Core {
     caches,
     executionEventPublisher,
     boardService,
-    foundationalServiceRegistry,
+    foundationalBuiltins,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
   environmentHandlerSeederRef = environmentHandlerSeeder
