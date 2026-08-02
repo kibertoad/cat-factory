@@ -311,8 +311,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       layered-loader:
-        specifier: ^14.5.3
-        version: 14.5.3
+        specifier: ^16.0.0
+        version: 16.0.0(ioredis@6.0.0)
     devDependencies:
       '@types/node':
         specifier: ^26.1.2
@@ -1015,8 +1015,8 @@ importers:
         specifier: ^4.12.33
         version: 4.12.33
       layered-loader:
-        specifier: ^14.5.3
-        version: 14.5.3
+        specifier: ^16.0.0
+        version: 16.0.0(ioredis@6.0.0)
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -6758,9 +6758,14 @@ packages:
   launch-editor@2.14.1:
     resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
-  layered-loader@14.5.3:
-    resolution: {integrity: sha512-f8pUUs8OUEbF29AsPyIBfF92cdMgrK5Cz//1AyvA2t6SCr53bQWibZTNeteBkq6e14+RB9kBXg54MvLXk5cg2A==}
+  layered-loader@16.0.0:
+    resolution: {integrity: sha512-kF962i8fhNAffcbnkGyw5aewfh9vOFXaWURyFTOyLqpjlBU/rHdJcJ5GdSz3RF3UMXFTO1bG3XOzylJr1xZ6gQ==}
     engines: {node: '>=22'}
+    peerDependencies:
+      ioredis: ^6.0.0
+    peerDependenciesMeta:
+      ioredis:
+        optional: true
 
   lazystream@1.0.1:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
@@ -14975,12 +14980,11 @@ snapshots:
       picocolors: 1.1.1
       shell-quote: 1.10.0
 
-  layered-loader@14.5.3:
+  layered-loader@16.0.0(ioredis@6.0.0):
     dependencies:
-      ioredis: 5.11.1
       toad-cache: 3.7.4
-    transitivePeerDependencies:
-      - supports-color
+    optionalDependencies:
+      ioredis: 6.0.0
 
   lazystream@1.0.1:
     dependencies:

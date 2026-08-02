@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CachedRepoRead, ResolvedCatalogEntry } from '@cat-factory/kernel'
-import { AbstractNotificationConsumer } from 'layered-loader/dist/lib/notifications/AbstractNotificationConsumer.js'
-import type { InMemoryGroupCache } from 'layered-loader/dist/lib/memory/InMemoryGroupCache.js'
+import { AbstractNotificationConsumer, type InMemoryGroupCache } from 'layered-loader/core'
 import {
   DEFAULT_APP_CACHES_PROFILE,
   ISOLATE_SAFE_APP_CACHES_PROFILE,

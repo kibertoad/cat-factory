@@ -50,12 +50,16 @@ The fix: **one caching seam built on [`layered-loader`](https://github.com/kiber
 
 The pilot validated the pattern below with four corrections a later slice must carry:
 
-- **layered-loader's root index eagerly loads its Redis modules, and `ioredis` is a HARD
-  dependency of layered-loader 14.x.** So "ioredis stays out" is enforced at the _module
-  graph_, not the install: `@cat-factory/caching` deep-imports ONLY the in-memory modules
-  (`layered-loader/dist/lib/GroupLoader.js` etc. — safe in workerd, proven by the Worker
-  conformance run), and only the Node facade's `REDIS_URL`-gated dynamic import
-  (`cacheNotifications.ts`) ever touches `createGroupNotificationPair`/ioredis.
+- **layered-loader's ROOT index re-exports its Redis surface, so "ioredis stays out" is
+  enforced at the _module graph_, not the install.** Since layered-loader 16 the package
+  states that boundary itself: `@cat-factory/caching` imports `layered-loader/core`, the
+  Redis-free entrypoint (safe in workerd, proven by the Worker conformance run), and only
+  the Node facade's `REDIS_URL`-gated dynamic import (`cacheNotifications.ts`) reaches
+  `layered-loader/redis` for `createGroupNotificationPair`. Never import the package ROOT
+  from `@cat-factory/caching` — it carries both halves. (Through 15.x this had to be spelled
+  as deep imports into `dist/`, which 15's `exports` map then forbade; 16 also demotes
+  `ioredis` to an optional peer resolved lazily, and only when a caller passes connection
+  options rather than a client — we always pass clients.)
 - **The consumer-facing interfaces live in kernel** (`ports/caching.ts`: `AppCaches`,
   `GroupCacheHandle`), per the repo's ports-in-kernel rule — so services (agents) depend
   on no caching machinery; `@cat-factory/caching` is the implementation the composition
