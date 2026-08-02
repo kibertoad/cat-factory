@@ -1,4 +1,9 @@
-import type { AccountSettingsRecord, AccountSettingsRepository } from '@cat-factory/kernel'
+import type {
+  AccountSettingsConfig,
+  AccountSettingsRecord,
+  AccountSettingsRepository,
+} from '@cat-factory/kernel'
+import { parseStoredAccountSettingsConfig } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface AccountSettingsRow {
@@ -40,6 +45,16 @@ export class D1AccountSettingsRepository implements AccountSettingsRepository {
       .bind(accountId)
       .first<AccountSettingsRow>()
     return row ? rowToRecord(row) : null
+  }
+
+  // Selects the `config` COLUMN alone — never `secrets_cipher`. That is the whole reason this
+  // method can be proxied to a mothership node while `getByAccount` cannot; see the port doc.
+  async getConfigByAccount(accountId: string): Promise<AccountSettingsConfig> {
+    const row = await this.db
+      .prepare('SELECT config FROM account_settings WHERE account_id = ?')
+      .bind(accountId)
+      .first<{ config: string }>()
+    return parseStoredAccountSettingsConfig(row?.config)
   }
 
   async upsert(record: AccountSettingsRecord): Promise<void> {

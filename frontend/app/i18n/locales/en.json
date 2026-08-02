@@ -3223,7 +3223,8 @@
         "heading": "Run credential",
         "body": "By default a run authenticates with the personal access token of whoever started it, when they have stored one, so pushes and pull requests are attributed to that person. Their token's reach is whatever they granted it, which is often wider than the repositories this workspace's GitHub App installation covers. Turn this off to make every run authenticate as the App installation instead.",
         "toggle": "Let runs act as the person who started them",
-        "offHint": "Runs will push and open pull requests as the GitHub App, not as their initiator."
+        "offHint": "Runs will push and open pull requests as the GitHub App, not as their initiator.",
+        "accountFloorNote": "An account-wide policy can forbid this for every board; if one is set, runs here use the GitHub App regardless of this switch."
       },
       "metadata": {
         "heading": "Workspace metadata",
@@ -3398,6 +3399,15 @@
         "saveFailed": "Could not save the consensus group",
         "deleteFailed": "Could not delete the consensus group"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Run credential policy",
+      "body": "A board can let a run authenticate with the personal access token of whoever started it. That is useful, and for a single person working inside an org that has not adopted cat-factory it is often the only option. But a personal token reaches whatever its owner granted it, which is usually wider than this account's GitHub App installation, and a board admin can turn the board's own switch back on. Forbid it here and no board in this account can.",
+      "toggle": "Forbid runs from using their initiator’s personal access token",
+      "onHint": "Every run in this account will authenticate as the GitHub App installation. Pushes and pull requests will come from the app rather than from the person who started the run.",
+      "offHint": "Not set: each board decides for itself. Existing boards keep whatever they have chosen.",
+      "saved": "Run credential policy saved",
+      "saveFailed": "Could not save the run credential policy"
     }
   },
   "providers": {

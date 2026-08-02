@@ -20,25 +20,100 @@ class HttpError extends Error {
 }
 const statusOf = (e: unknown): number | undefined => (e instanceof HttpError ? e.status : undefined)
 
-/** A request stub answering per path suffix; anything unmatched throws the given status. */
+/**
+ * A request stub answering per path suffix; anything unmatched throws the given status.
+ *
+ * Matches the LONGEST suffix rather than the first, because the paths genuinely nest:
+ * `/rules/branches/main` also ends with `/branches/main`, and `/branches/main/protection`
+ * contains `/branches/main`. Order-dependent matching would silently answer the wrong read.
+ */
 function requestOver(answers: Record<string, unknown>, fallbackStatus = 500) {
+  const bySpecificity = Object.entries(answers).sort(([a], [b]) => b.length - a.length)
   return vi.fn(async (path: string) => {
-    for (const [suffix, json] of Object.entries(answers)) {
+    for (const [suffix, json] of bySpecificity) {
       if (path.endsWith(suffix)) return { json }
     }
     throw new HttpError(fallbackStatus)
   })
 }
 
+/** No rulesets apply — the common case for a repo using classic protection (or nothing). */
+const NO_RULES = { '/rules/branches/main': [] }
+
 describe('probeBranchProtection', () => {
-  it('reports an unprotected branch without reading the rule at all', async () => {
-    const request = requestOver({ '/branches/main': { protected: false } })
+  it('reports unprotected only when BOTH mechanisms say so, without reading the rule', async () => {
+    const request = requestOver({ '/branches/main': { protected: false }, ...NO_RULES })
     const result = await probeBranchProtection(request, statusOf, REF, 'main')
 
     expect(result).toEqual({ state: 'unprotected' })
-    // Exactly one read: there is no rule to fetch, and a second call would burn rate limit on
-    // every unprotected repo in the report.
-    expect(request).toHaveBeenCalledTimes(1)
+    // The branch object and the rules, and nothing else: there is no classic rule to fetch, and
+    // a third call would burn rate limit on every unprotected repo in the report.
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a branch protected ONLY by a ruleset as protected, not as a false alarm', async () => {
+    // The regression this exists for. Org-level rulesets are how protection is enforced
+    // org-wide, and they leave no classic rule behind — so a legacy-only probe reported the
+    // best-configured repos as exposed, on a panel whose whole job is naming exposed repos.
+    const request = requestOver({
+      '/branches/main': { protected: false },
+      '/rules/branches/main': [
+        { type: 'pull_request', parameters: { required_approving_review_count: 2 } },
+        {
+          type: 'required_status_checks',
+          parameters: { required_status_checks: [{ context: 'ci' }] },
+        },
+        { type: 'non_fast_forward' },
+      ],
+    })
+
+    expect(await probeBranchProtection(request, statusOf, REF, 'main')).toEqual({
+      state: 'protected',
+      detail: {
+        requiresPullRequest: true,
+        requiredApprovingReviewCount: 2,
+        requiredStatusChecks: ['ci'],
+        // `non_fast_forward` is the rule that FORBIDS a force push, so its presence is what
+        // makes this false — there is no `allow_force_pushes` equivalent to read.
+        allowsForcePush: false,
+      },
+    })
+  })
+
+  it('treats an unreadable rules response as unknown, never as unprotected', async () => {
+    // With no classic rule, rulesets are the only remaining source. If we could not read them we
+    // genuinely do not know — and `unprotected` is the one answer that must never be a guess,
+    // because it is the one an operator acts on.
+    const request = vi.fn(async (path: string) => {
+      if (path.includes('/rules/')) throw new HttpError(403)
+      return { json: { protected: false } }
+    })
+
+    expect(await probeBranchProtection(request, statusOf, REF, 'main')).toEqual({
+      state: 'unknown',
+      reason: 'forbidden',
+    })
+  })
+
+  it('falls back to ruleset detail when the classic rule needs admin we lack', async () => {
+    // `/protection` needs admin; `/rules` needs only repo read. Being able to say WHAT is
+    // enforced beats saying only THAT something is, so a minimally-scoped installation now gets
+    // real detail where it previously got `detailUnavailable`.
+    const request = vi.fn(async (path: string) => {
+      if (path.endsWith('/protection')) throw new HttpError(403)
+      if (path.includes('/rules/')) return { json: [{ type: 'pull_request' }] }
+      return { json: { protected: true } }
+    })
+
+    expect(await probeBranchProtection(request, statusOf, REF, 'main')).toEqual({
+      state: 'protected',
+      detail: {
+        requiresPullRequest: true,
+        requiredApprovingReviewCount: 0,
+        requiredStatusChecks: [],
+        allowsForcePush: true,
+      },
+    })
   })
 
   it('reports a protected branch with the rule it could read', async () => {
@@ -49,6 +124,7 @@ describe('probeBranchProtection', () => {
         allow_force_pushes: { enabled: false },
       },
       '/branches/main': { protected: true },
+      ...NO_RULES,
     })
 
     expect(await probeBranchProtection(request, statusOf, REF, 'main')).toEqual({
@@ -67,6 +143,7 @@ describe('probeBranchProtection', () => {
     // "protected" would overstate what was verified — the rule may still permit direct pushes.
     const request = vi.fn(async (path: string) => {
       if (path.endsWith('/protection')) throw new HttpError(403)
+      if (path.includes('/rules/')) return { json: [] }
       return { json: { protected: true } }
     })
 
@@ -106,11 +183,17 @@ describe('probeBranchProtection', () => {
     })
   })
 
-  it('URL-encodes a branch name with a slash', async () => {
-    const request = requestOver({ '/branches/release%2F1.2': { protected: false } })
+  it('URL-encodes a branch name with a slash on BOTH reads', async () => {
+    const request = requestOver({
+      '/rules/branches/release%2F1.2': [],
+      '/branches/release%2F1.2': { protected: false },
+    })
     expect(await probeBranchProtection(request, statusOf, REF, 'release/1.2')).toEqual({
       state: 'unprotected',
     })
+    // An unencoded slash on either read would 404 and surface as `unknown`, so the verdict
+    // above only holds if both paths were encoded.
+    expect(request.mock.calls.every(([path]) => path.includes('release%2F1.2'))).toBe(true)
   })
 })
 

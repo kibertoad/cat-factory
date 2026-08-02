@@ -139,6 +139,18 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
         initiatorPatGate: createInitiatorPatGate({
           repository: repos.workspaceSettingsRepository,
           ...(options.caches?.workspaceSettings ? { cache: options.caches.workspaceSettings } : {}),
+          // The account-wide floor. Read off the REPOSITORY rather than
+          // `AccountSettingsService`, deliberately: the service needs an `ENCRYPTION_KEY` to
+          // open the account's secrets, which a mothership node does not have — so building
+          // the floor from the service would have made it silently inert on exactly the
+          // deployment shape where an operator scoped things centrally. The repo's
+          // config-only read needs no key and is proxied.
+          account: {
+            resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+            readAllowInitiatorPat: async (accountId) =>
+              (await repos.accountSettingsRepository.getConfigByAccount(accountId))
+                .allowInitiatorPat,
+          },
         }),
         logger,
       })

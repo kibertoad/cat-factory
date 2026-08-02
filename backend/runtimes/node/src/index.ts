@@ -124,6 +124,7 @@ export { driveExecution, type DriveConfig, type DriveOutcome } from './execution
 export {
   createDrizzleRepositories,
   type CoreRepositories,
+  DrizzleAccountSettingsRepository,
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
   DrizzleWorkspaceRepository,

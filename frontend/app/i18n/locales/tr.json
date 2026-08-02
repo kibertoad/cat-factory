@@ -3129,7 +3129,8 @@
         "heading": "Çalıştırma kimlik bilgisi",
         "body": "Varsayılan olarak bir çalıştırma, onu başlatan kişinin kayıtlı kişisel erişim belirtecini kullanarak kimlik doğrular; böylece gönderimler ve çekme istekleri o kişiye atfedilir. Belirtecin erişimi, kişinin ona verdiği kadardır ve çoğu zaman bu çalışma alanının GitHub Uygulaması kurulumunun kapsadığı depolardan daha geniştir. Her çalıştırmanın bunun yerine Uygulama kurulumu olarak kimlik doğrulaması için bu seçeneği kapatın.",
         "toggle": "Çalıştırmalar onları başlatan kişi adına işlem yapsın",
-        "offHint": "Çalıştırmalar, onları başlatan kişi olarak değil GitHub Uygulaması olarak gönderim yapar ve çekme isteği açar."
+        "offHint": "Çalıştırmalar, onları başlatan kişi olarak değil GitHub Uygulaması olarak gönderim yapar ve çekme isteği açar.",
+        "accountFloorNote": "Hesap genelindeki bir ilke bunu her pano için yasaklayabilir; ayarlanmışsa buradaki çalıştırmalar bu anahtardan bağımsız olarak GitHub App’i kullanır."
       },
       "metadata": {
         "heading": "Çalışma alanı meta verileri",
@@ -3304,6 +3305,15 @@
         "saveFailed": "Uzlaşı grubu kaydedilemedi",
         "deleteFailed": "Uzlaşı grubu silinemedi"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Çalıştırma kimlik bilgisi ilkesi",
+      "body": "Bir pano, bir çalıştırmanın onu başlatan kişinin kişisel erişim belirteciyle kimlik doğrulamasına izin verebilir. Bu kullanışlıdır ve cat-factory’yi benimsememiş bir kurumdaki tek bir kişi için çoğu zaman tek seçenektir. Ancak kişisel bir belirteç, sahibinin verdiği her yere ulaşır — genellikle bu hesabın GitHub App kurulumundan daha geniş — ve bir pano yöneticisi panonun kendi anahtarını yeniden açabilir. Burada yasaklarsanız bu hesaptaki hiçbir pano bunu yapamaz.",
+      "toggle": "Çalıştırmaların, kendilerini başlatan kişinin kişisel erişim belirtecini kullanmasını yasakla",
+      "onHint": "Bu hesaptaki her çalıştırma GitHub App kurulumu olarak kimlik doğrulayacak. Gönderimler ve çekme istekleri, çalıştırmayı başlatan kişiden değil uygulamadan gelecek.",
+      "offHint": "Ayarlanmadı: her pano kendisi karar verir. Mevcut panolar seçimlerini korur.",
+      "saved": "Çalıştırma kimlik bilgisi ilkesi kaydedildi",
+      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi"
     }
   },
   "providers": {

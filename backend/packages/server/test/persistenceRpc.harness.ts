@@ -388,6 +388,15 @@ function buildBoardConfigRepos() {
 /** The review / session / integration-connection surfaces (each admin-gated on its own permission). */
 function buildReviewAndIntegrationRepos() {
   return {
+    // Only the non-secret config read is routable; `getByAccount` (which would carry the sealed
+    // secret blob) deliberately is not, so the fake offers both and the surface table proves
+    // which one the allow-list actually forwards.
+    accountSettingsRepository: {
+      getConfigByAccount: async (accountId: string) => ({ accountId, allowInitiatorPat: false }),
+      getByAccount: async (accountId: string) => ({ accountId, secretsCipher: 'sealed' }),
+      upsert: async () => undefined,
+      listAll: async () => [],
+    },
     requirementReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
       get: async (ws: string, id: string) => ({ ws, id }),

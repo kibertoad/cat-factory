@@ -25,6 +25,8 @@ import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepos
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
+import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { buildResolveUserGitHubToken } from './wireCredentialServices'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -129,6 +131,14 @@ export function buildResolveRunInitiatorToken(
     // would be a pass-through anyway.
     initiatorPatGate: createInitiatorPatGate({
       repository: new D1WorkspaceSettingsRepository({ db }),
+      // The account-wide floor, mirroring the Node facade. Config-only read, so it never
+      // touches the account's sealed secrets.
+      account: {
+        resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+        readAllowInitiatorPat: async (accountId) =>
+          (await new D1AccountSettingsRepository({ db }).getConfigByAccount(accountId))
+            .allowInitiatorPat,
+      },
     }),
     logger,
   })

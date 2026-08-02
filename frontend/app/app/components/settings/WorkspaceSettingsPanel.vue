@@ -508,6 +508,13 @@ async function save() {
               <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-amber-300">
                 {{ t('settings.workspaceSettings.runCredential.offHint') }}
               </p>
+              <!-- Stated rather than read: the account floor lives behind an ACCOUNT-admin
+                   endpoint, which a workspace admin may not hold, so probing it here would 403
+                   for exactly the people this note is for. A static line sets the expectation
+                   without pretending to report a value we cannot see. -->
+              <p v-if="draft.allowInitiatorPat" class="text-[11px] text-slate-500">
+                {{ t('settings.workspaceSettings.runCredential.accountFloorNote') }}
+              </p>
             </section>
 
             <!-- Kaizen agent -->

@@ -29,6 +29,19 @@ export type InitiatorPatGate = (workspaceId: string) => Promise<boolean>
  * ({@link createResolveRunInitiatorToken} in `@cat-factory/server`) fails CLOSED on it, since
  * an unreadable settings row is not permission to widen a run's credential.
  */
+/**
+ * The ACCOUNT tier beneath the workspace switch, supplied by a facade that has account settings
+ * wired. Two narrow callbacks rather than the repositories themselves, so this stays composable
+ * from either facade's own seams (`workspaceRepository.accountOf` and the cached
+ * `AccountSettingsService.resolve`) without kernel naming either.
+ */
+export interface InitiatorPatAccountTier {
+  /** The account a workspace belongs to; absent ⇒ unscoped board, so no account opinion. */
+  resolveAccountId: (workspaceId: string) => Promise<string | null | undefined>
+  /** The account's `allowInitiatorPat`; `undefined` ⇒ the account expresses no opinion. */
+  readAllowInitiatorPat: (accountId: string) => Promise<boolean | undefined>
+}
+
 export function createInitiatorPatGate(deps: {
   repository?: WorkspaceSettingsRepository
   /**
@@ -38,10 +51,24 @@ export function createInitiatorPatGate(deps: {
    * repository read (the Worker's situation, where the slice is a pass-through anyway).
    */
   cache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * The account-wide floor. Absent ⇒ no account tier is wired (plain local mode, a minimal
+   * container), and the workspace decides alone — which is the pre-existing behaviour and the
+   * right one for single-user adoption.
+   */
+  account?: InitiatorPatAccountTier
 }): InitiatorPatGate {
-  const { repository, cache } = deps
+  const { repository, cache, account } = deps
   if (!repository) return () => Promise.resolve(true)
   return async (workspaceId: string): Promise<boolean> => {
+    // The ACCOUNT is asked first and short-circuits, because it is the tier a workspace admin
+    // cannot reach: once the account has said no there is no workspace answer that could
+    // re-permit it, so reading the workspace row would only cost a query to reach the same
+    // verdict. A throw from either read propagates deliberately — the caller fails closed.
+    if (account) {
+      const accountId = await account.resolveAccountId(workspaceId)
+      if (accountId && (await account.readAllowInitiatorPat(accountId)) === false) return false
+    }
     const settings =
       (await readCachedWorkspaceSettings(cache, repository, workspaceId)) ??
       DEFAULT_WORKSPACE_SETTINGS

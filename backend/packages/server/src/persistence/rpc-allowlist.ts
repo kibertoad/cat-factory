@@ -250,6 +250,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // as the block/pipeline mutations above. Completes the read+write settings surface.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // ONLY the non-secret config read. The run path needs the account-wide `allowInitiatorPat`
+  // floor (`createInitiatorPatGate`), and without this a mothership node would silently not
+  // enforce it — a parity gap in a security control, which is the worse of the two failures.
+  //
+  // `getByAccount` stays mothership-internal and its reasoning is untouched: the machine token
+  // scopes ACCOUNTS not ROLES and the RPC bypasses the service layer's `requireAdmin`, so
+  // proxying the full row would let any account member pull the sealed secret blob.
+  // `getConfigByAccount` selects the `config` column alone, so there is no secret to expose —
+  // which is exactly the "or routes them through the service" escape the sibling comment
+  // anticipated. `upsert` (an admin write) and `listAll` (the unscoped sweeper) stay off.
+  accountSettingsRepository: {
+    getConfigByAccount: { scope: { kind: 'account', arg: 0 } },
+  },
   // Per-user settings (the user-tier spend budget). Self-scoped: a user reads/writes only their
   // OWN row (the `selfUser` rule requires args[0] to equal the token's userId), so both the
   // read (snapshot + spend gate) and the write (the user's own budget edit) are safe over RPC —

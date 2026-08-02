@@ -4,7 +4,9 @@
 // matches across stores; this layer only owns the Drizzle queries. Assembled into the
 // CoreRepositories set by ./drizzle.ts (the barrel).
 
+import { parseStoredAccountSettingsConfig } from '@cat-factory/contracts'
 import type {
+  AccountSettingsConfig,
   AccountSettingsRecord,
   AccountSettingsRepository,
   AgentPromptRepository,
@@ -479,6 +481,17 @@ export class DrizzleAccountSettingsRepository implements AccountSettingsReposito
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
+  }
+
+  // Selects the `config` COLUMN alone — never `secrets_cipher`. That is the whole reason this
+  // method can be proxied to a mothership node while `getByAccount` cannot; see the port doc.
+  async getConfigByAccount(accountId: string): Promise<AccountSettingsConfig> {
+    const rows = await this.db
+      .select({ config: accountSettings.config })
+      .from(accountSettings)
+      .where(eq(accountSettings.account_id, accountId))
+      .limit(1)
+    return parseStoredAccountSettingsConfig(rows[0]?.config)
   }
 
   async upsert(record: AccountSettingsRecord): Promise<void> {

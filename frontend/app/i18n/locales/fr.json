@@ -2988,7 +2988,8 @@
         "heading": "Identifiant d'exécution",
         "body": "Par défaut, une exécution s'authentifie avec le jeton d'accès personnel de la personne qui l'a lancée, si elle en a enregistré un, de sorte que les poussées et les demandes de tirage lui sont attribuées. La portée de son jeton est celle qu'elle lui a accordée, souvent plus large que les dépôts couverts par l'installation de l'App GitHub de cet espace de travail. Désactivez cette option pour que chaque exécution s'authentifie plutôt comme l'installation de l'App.",
         "toggle": "Laisser les exécutions agir au nom de la personne qui les lance",
-        "offHint": "Les exécutions pousseront et ouvriront des demandes de tirage en tant qu'App GitHub, et non au nom de la personne qui les a lancées."
+        "offHint": "Les exécutions pousseront et ouvriront des demandes de tirage en tant qu'App GitHub, et non au nom de la personne qui les a lancées.",
+        "accountFloorNote": "Une politique à l’échelle du compte peut l’interdire pour tous les tableaux ; si elle est définie, les exécutions ici utilisent l’App GitHub quel que soit cet interrupteur."
       },
       "metadata": {
         "heading": "Métadonnées de l'espace de travail",
@@ -3292,6 +3293,15 @@
         "saveFailed": "Impossible d'enregistrer le groupe de consensus",
         "deleteFailed": "Impossible de supprimer le groupe de consensus"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Politique d’identifiants d’exécution",
+      "body": "Un tableau peut laisser une exécution s’authentifier avec le jeton d’accès personnel de la personne qui l’a lancée. C’est utile et, pour une personne seule au sein d’une organisation qui n’a pas adopté cat-factory, c’est souvent la seule option. Mais un jeton personnel atteint tout ce que son propriétaire lui a accordé, généralement plus que l’installation de l’App GitHub de ce compte, et l’administration d’un tableau peut réactiver son propre interrupteur. Interdisez-le ici et aucun tableau de ce compte ne le pourra.",
+      "toggle": "Interdire aux exécutions d’utiliser le jeton d’accès personnel de leur initiateur",
+      "onHint": "Toutes les exécutions de ce compte s’authentifieront en tant qu’installation de l’App GitHub. Les poussées et les demandes de tirage proviendront de l’application et non de la personne ayant lancé l’exécution.",
+      "offHint": "Non défini : chaque tableau décide pour lui-même. Les tableaux existants conservent leur choix.",
+      "saved": "Politique d’identifiants d’exécution enregistrée",
+      "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution"
     }
   },
   "providers": {

@@ -271,15 +271,36 @@ is possible at all:
    repositories" of an org that also holds crown jewels.
 4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
-   would otherwise silently widen every run they start to their own whole account. Two things now
-   help, and they are different kinds of help:
-   - **Enforced**: turn `allowInitiatorPat` off in workspace settings ("Run credential"). Every
-     run then authenticates as the App installation, at the cost of bot attribution. This is the
-     only control here that a member cannot undo.
+   would otherwise silently widen every run they start to their own whole account.
+
+   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first —
+   but only if this deployment serves the whole org.** A GitHub org owner can, under
+   _Settings → Personal access tokens_, deny classic PATs access to the org outright and require
+   owner approval for fine-grained tokens (naming the repositories each may touch); SAML/SSO
+   authorization gates PATs independently. Those bind every tool the member uses, cannot be
+   undone by the member, and apply whether or not cat-factory is involved. Nothing below is a
+   substitute for them.
+
+   **They are the wrong tool for individual adoption**, which is the case our own controls exist
+   for. Someone running cat-factory alone inside an org that has not adopted it has no App
+   installation to inherit and no authority to change org policy — and restricting classic PATs
+   org-wide to constrain one person's agent runs would break every other workflow in the org. A
+   personal token is the right credential there, which is why it stays fully supported and why
+   the account floor below ships UNSET.
+
+   Ours, in the order they bind:
+   - **Enforced, account-wide**: `allowInitiatorPat: false` in account settings ("Run credential
+     policy"). No board in the account may then use an initiator's token. This is the tier a
+     workspace admin cannot lift, which matters because the workspace switch below is edited with
+     `settings.manage` — a permission a member elevated on one board holds. Unset by default.
+   - **Enforced, per board**: turn `allowInitiatorPat` off in workspace settings ("Run
+     credential"). The board then authenticates as the App installation, at the cost of bot
+     attribution. Effective = the account permits AND the board permits.
    - **Visible**: the personal-token form states what a token actually grants the moment it is
      tested or saved — a classic token carrying `repo` is called out as reaching every repository
      its owner can push to, scopes the platform never uses are flagged, and a token whose scopes
-     GitHub did not report is reported as unknown rather than passing as narrow.
+     GitHub did not report is reported as unknown rather than passing as narrow. Advice, not a
+     gate: the save still succeeds.
 
    Beyond that, ask members to store fine-grained PATs limited to the working repos, or to leave
    the personal-PAT slot empty. The same fine-grained advice covers local mode's shared
@@ -304,12 +325,27 @@ is possible at all:
   mitigation.
 - **An initiator's personal PAT is still unbounded once it IS used.** The platform stores it sealed
   and never logs it, but it cannot narrow it: `repository_ids` scoping is an App-token mechanism
-  with no PAT equivalent. What changed is that a workspace can now decline to use it at all
-  (`allowInitiatorPat`, an enforced mechanism) and that its breadth is stated when a member tests
-  or saves it. What has NOT changed: with the switch on, a member's classic token is exactly as
-  wide as they made it, and the breadth report is advice at save time — it does not refuse the
-  save, and it re-reads nothing later, so a token whose scopes are widened on GitHub afterwards is
-  not re-flagged.
+  with no PAT equivalent. What changed is that an account or a workspace can now decline to use it
+  at all (`allowInitiatorPat`, an enforced mechanism at both tiers) and that its breadth is stated
+  when a member tests or saves it. What has NOT changed: with the switch on, a member's classic
+  token is exactly as wide as they made it, and the breadth report is advice at save time — it does
+  not refuse the save, and it re-reads nothing later, so a token whose scopes are widened on GitHub
+  afterwards is not re-flagged.
+
+  **The structural fix is a GitHub App USER-TO-SERVER token, and it is not built.** "Cannot narrow
+  it" is a property of the stored-PAT design, not a law: a user-to-server token obtained through
+  the App's OAuth flow is bounded by the INTERSECTION of the installation's scope and the user's
+  own access, and is short-lived. That is attribution — pushes and PRs from the human who started
+  the run — with the operator's installation scoping still the real bound, which is exactly the
+  property this whole section works around. `auth/GitHubOAuth.ts` already implements that flow,
+  wired for LOGIN only (`scope: 'read:user'`, token read for identity and discarded), so what is
+  missing is the run-path plumbing (consent per user, refresh, and a fallback for a repo the App
+  is not installed on) rather than the client.
+
+  It would not replace stored PATs. An individual adopter inside a non-adopting org has no App
+  installation to obtain such a token against, so the PAT path stays — the two are for different
+  deployments, and `allowInitiatorPat` remains how an operator chooses between them.
+
 - **The branch-protection preflight is on demand and reports on the DEFAULT branch only.** It
   tells an operator where item 1 is missing, which is what nothing in-product used to do — but it
   is a check someone has to run, not a gate: no run is refused, and no notification is raised, for

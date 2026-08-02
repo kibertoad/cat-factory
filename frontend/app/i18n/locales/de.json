@@ -856,7 +856,8 @@
         "heading": "Anmeldedaten für Ausführungen",
         "body": "Standardmäßig authentifiziert sich eine Ausführung mit dem persönlichen Zugriffstoken der Person, die sie gestartet hat, sofern sie eines hinterlegt hat. Pushes und Pull Requests werden dann dieser Person zugeordnet. Die Reichweite ihres Tokens ist genau das, was sie ihm gewährt hat, und damit oft größer als die Repositories, die die GitHub-App-Installation dieses Arbeitsbereichs abdeckt. Schalte dies aus, damit sich jede Ausführung stattdessen als App-Installation authentifiziert.",
         "toggle": "Ausführungen im Namen der startenden Person laufen lassen",
-        "offHint": "Ausführungen pushen und öffnen Pull Requests als GitHub-App, nicht als die Person, die sie gestartet hat."
+        "offHint": "Ausführungen pushen und öffnen Pull Requests als GitHub-App, nicht als die Person, die sie gestartet hat.",
+        "accountFloorNote": "Eine kontoweite Richtlinie kann dies für jedes Board verbieten; ist eine gesetzt, verwenden Ausführungen hier unabhängig von diesem Schalter die GitHub-App."
       },
       "metadata": {
         "heading": "Arbeitsbereich-Metadaten",
@@ -1031,6 +1032,15 @@
         "saveFailed": "Konsensgruppe konnte nicht gespeichert werden",
         "deleteFailed": "Konsensgruppe konnte nicht gelöscht werden"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Richtlinie für Ausführungs-Anmeldedaten",
+      "body": "Ein Board kann zulassen, dass sich eine Ausführung mit dem persönlichen Zugriffstoken derjenigen Person authentifiziert, die sie gestartet hat. Das ist nützlich, und für eine einzelne Person in einer Organisation, die cat-factory nicht eingeführt hat, ist es oft die einzige Möglichkeit. Ein persönliches Token reicht jedoch so weit, wie seine Besitzerin oder sein Besitzer es erlaubt hat — meist weiter als die GitHub-App-Installation dieses Kontos —, und eine Board-Administration kann den Schalter des Boards wieder einschalten. Verbiete es hier, dann kann es kein Board in diesem Konto mehr.",
+      "toggle": "Ausführungen verbieten, das persönliche Zugriffstoken ihrer Starterin oder ihres Starters zu verwenden",
+      "onHint": "Jede Ausführung in diesem Konto authentifiziert sich als GitHub-App-Installation. Pushes und Pull Requests stammen dann von der App und nicht von der Person, die die Ausführung gestartet hat.",
+      "offHint": "Nicht gesetzt: Jedes Board entscheidet selbst. Bestehende Boards behalten ihre Auswahl.",
+      "saved": "Richtlinie für Ausführungs-Anmeldedaten gespeichert",
+      "saveFailed": "Richtlinie für Ausführungs-Anmeldedaten konnte nicht gespeichert werden"
     }
   },
   "inspector": {

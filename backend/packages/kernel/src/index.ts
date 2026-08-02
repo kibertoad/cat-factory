@@ -514,7 +514,11 @@ export {
   createStoreAgentContextGate,
   type StoreAgentContextGate,
 } from './shared/agent-context-gate.js'
-export { createInitiatorPatGate, type InitiatorPatGate } from './shared/initiator-pat-gate.js'
+export {
+  createInitiatorPatGate,
+  type InitiatorPatGate,
+  type InitiatorPatAccountTier,
+} from './shared/initiator-pat-gate.js'
 export {
   type RepoScanEntry,
   type CheckoutFreeRepoReader,

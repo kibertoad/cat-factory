@@ -2988,7 +2988,8 @@
         "heading": "Poświadczenie uruchomienia",
         "body": "Domyślnie uruchomienie uwierzytelnia się osobistym tokenem dostępu osoby, która je rozpoczęła, o ile go zapisała, dzięki czemu wypchnięcia i pull requesty są przypisywane tej osobie. Zasięg jej tokenu jest taki, jaki sama mu nadała, i często obejmuje więcej repozytoriów niż instalacja aplikacji GitHub tego obszaru roboczego. Wyłącz tę opcję, aby każde uruchomienie uwierzytelniało się jako instalacja aplikacji.",
         "toggle": "Pozwól uruchomieniom działać w imieniu osoby, która je rozpoczęła",
-        "offHint": "Uruchomienia będą wypychać zmiany i otwierać pull requesty jako aplikacja GitHub, a nie jako osoba, która je rozpoczęła."
+        "offHint": "Uruchomienia będą wypychać zmiany i otwierać pull requesty jako aplikacja GitHub, a nie jako osoba, która je rozpoczęła.",
+        "accountFloorNote": "Zasada obowiązująca w całym koncie może tego zabronić wszystkim tablicom; jeśli jest ustawiona, uruchomienia tutaj używają aplikacji GitHub niezależnie od tego przełącznika."
       },
       "metadata": {
         "heading": "Metadane przestrzeni roboczej",
@@ -3292,6 +3293,15 @@
         "saveFailed": "Nie udało się zapisać grupy konsensusu",
         "deleteFailed": "Nie udało się usunąć grupy konsensusu"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Zasady poświadczeń uruchomień",
+      "body": "Tablica może pozwolić, aby uruchomienie uwierzytelniało się osobistym tokenem dostępu osoby, która je rozpoczęła. Bywa to przydatne, a dla pojedynczej osoby w organizacji, która nie wdrożyła cat-factory, często jest to jedyna możliwość. Osobisty token sięga jednak wszędzie tam, gdzie pozwolił mu właściciel — zwykle dalej niż instalacja aplikacji GitHub tego konta — a administracja tablicy może z powrotem włączyć jej przełącznik. Zakaż tego tutaj, a żadna tablica w tym koncie tego nie zrobi.",
+      "toggle": "Zakaż uruchomieniom używania osobistego tokenu dostępu osoby, która je rozpoczęła",
+      "onHint": "Każde uruchomienie w tym koncie będzie uwierzytelniać się jako instalacja aplikacji GitHub. Wypchnięcia i żądania ściągnięcia będą pochodzić od aplikacji, a nie od osoby, która rozpoczęła uruchomienie.",
+      "offHint": "Nie ustawiono: każda tablica decyduje sama. Istniejące tablice zachowują swój wybór.",
+      "saved": "Zapisano zasady poświadczeń uruchomień",
+      "saveFailed": "Nie udało się zapisać zasad poświadczeń uruchomień"
     }
   },
   "providers": {

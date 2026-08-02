@@ -856,7 +856,8 @@
         "heading": "Credenziale di esecuzione",
         "body": "Per impostazione predefinita un'esecuzione si autentica con il token di accesso personale di chi l'ha avviata, se ne ha memorizzato uno, così push e richieste di pull vengono attribuiti a quella persona. La portata del suo token è quella che le ha concesso lei stessa, spesso più ampia dei repository coperti dall'installazione dell'App GitHub di questo spazio di lavoro. Disattiva questa opzione per far autenticare ogni esecuzione come installazione dell'App.",
         "toggle": "Consenti alle esecuzioni di agire per conto di chi le avvia",
-        "offHint": "Le esecuzioni faranno push e apriranno richieste di pull come App GitHub, non come chi le ha avviate."
+        "offHint": "Le esecuzioni faranno push e apriranno richieste di pull come App GitHub, non come chi le ha avviate.",
+        "accountFloorNote": "Un criterio a livello di account può vietarlo per ogni board; se ne è impostato uno, le esecuzioni qui useranno l'App GitHub indipendentemente da questo interruttore."
       },
       "metadata": {
         "heading": "Metadati dell'area di lavoro",
@@ -1031,6 +1032,15 @@
         "saveFailed": "Impossibile salvare il gruppo di consenso",
         "deleteFailed": "Impossibile eliminare il gruppo di consenso"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Criterio per le credenziali di esecuzione",
+      "body": "Una board può consentire a un'esecuzione di autenticarsi con il token di accesso personale di chi l'ha avviata. È utile e, per una singola persona in un'organizzazione che non ha adottato cat-factory, spesso è l'unica possibilità. Ma un token personale raggiunge tutto ciò che il proprietario gli ha concesso, di solito più dell'installazione dell'App GitHub di questo account, e chi amministra una board può riattivarne l'interruttore. Vietalo qui e nessuna board di questo account potrà farlo.",
+      "toggle": "Vietare alle esecuzioni di usare il token di accesso personale di chi le avvia",
+      "onHint": "Ogni esecuzione di questo account si autenticherà come installazione dell'App GitHub. I push e le pull request proverranno dall'app e non dalla persona che ha avviato l'esecuzione.",
+      "offHint": "Non impostato: ogni board decide da sé. Le board esistenti mantengono la loro scelta.",
+      "saved": "Criterio per le credenziali di esecuzione salvato",
+      "saveFailed": "Impossibile salvare il criterio per le credenziali di esecuzione"
     }
   },
   "inspector": {

@@ -167,6 +167,32 @@ describe('cross-service + entity-id read surface (board composition)', () => {
     })
   })
 
+  // The account-wide credential floor (`allowInitiatorPat`) is read on the RUN path, so an
+  // unrouted read would not merely blank a panel — a mothership node would stop enforcing an
+  // account admin's decision that runs may not use members' personal tokens, silently.
+  it('forwards accountSettingsRepository.getConfigByAccount for an in-scope account', async () => {
+    await expect(
+      remoteRegistry().accountSettingsRepository!.getConfigByAccount!(ACCOUNT),
+    ).resolves.toMatchObject({ accountId: ACCOUNT })
+  })
+
+  it('rejects accountSettingsRepository.getConfigByAccount for another account (404)', async () => {
+    await expect(
+      remoteRegistry().accountSettingsRepository!.getConfigByAccount!(OTHER_ACCOUNT),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('still refuses accountSettingsRepository.getByAccount — the sealed secrets stay off the wire', async () => {
+    // The config read being routable must not drag its sibling along: `getByAccount` returns
+    // `secretsCipher`, and the machine token scopes accounts rather than roles, so proxying it
+    // would let any account member pull the account's secret blob. Refused client-side by the
+    // allow-list (`not callable`) rather than scope-refused server-side, so the request for the
+    // secret blob never leaves the node at all.
+    await expect(
+      remoteRegistry().accountSettingsRepository!.getByAccount!(ACCOUNT),
+    ).rejects.toThrow(/not callable/)
+  })
+
   it('forwards workspaceRepository.listByAccount for an in-scope account', async () => {
     await expect(
       remoteRegistry().workspaceRepository!.listByAccount!(ACCOUNT),
