@@ -13,6 +13,7 @@
 // probed automatically would spend an operator's rate limit every time they glanced at settings.
 import { computed, ref } from 'vue'
 import type { BranchProtectionReportView, BranchProtectionStateValue } from '@cat-factory/contracts'
+import { describeGenericFailure } from '~/composables/usePipelineErrorToast'
 
 const { t } = useI18n()
 const api = useApi()
@@ -20,7 +21,13 @@ const workspace = useWorkspaceStore()
 
 const report = ref<BranchProtectionReportView | null>(null)
 const checking = ref(false)
-const failure = ref<string | null>(null)
+// A failed probe is described from its STATUS CLASS in translated copy, with the backend's
+// untranslated prose (plus the request id an operator greps for) behind a disclosure — the same
+// split every other failure surface makes, through the same pure classifier the run-control
+// toasts use. Rendering `e.message` as the headline would hand a non-English operator English
+// on the one panel whose entire job is telling them their deployment is exposed.
+const failure = ref<{ descriptionKey: string; detail: string } | null>(null)
+const showFailureDetail = ref(false)
 
 type Row = BranchProtectionReportView['repos'][number]
 type UnknownReason = NonNullable<Row['protection']['reason']>
@@ -84,10 +91,22 @@ async function check() {
   if (!workspaceId) return
   checking.value = true
   failure.value = null
+  showFailureDetail.value = false
   try {
     report.value = await api.checkGitHubBranchProtection(workspaceId)
   } catch (e) {
-    failure.value = e instanceof Error ? e.message : String(e)
+    const described = describeGenericFailure(e)
+    // Joined exactly as the toast disclosure joins it, so the same failure reads the same way
+    // wherever it surfaces. Empty parts drop out: a disclosure that reveals nothing is worse
+    // than no disclosure, so the button is hidden when there is no detail to show.
+    const detail = [
+      described.message,
+      described.issues.join(', '),
+      described.requestId ? t('errors.generic.requestId', { id: described.requestId }) : '',
+    ]
+      .filter((part) => part && part.trim().length > 0)
+      .join(' · ')
+    failure.value = { descriptionKey: described.descriptionKey, detail }
   } finally {
     checking.value = false
   }
@@ -111,7 +130,26 @@ async function check() {
       {{ t('vcs.branchProtection.check') }}
     </UButton>
 
-    <p v-if="failure" class="text-xs text-rose-400">{{ failure }}</p>
+    <div v-if="failure" class="space-y-1" data-testid="branch-protection-failure">
+      <p class="text-xs text-rose-400">{{ t(failure.descriptionKey) }}</p>
+      <!-- The raw prose stays reachable, never dropped: the backend's messages here name the
+           operator remedy, and the request id is the join to the one server log line that
+           explains it. One click away, so it is never what a user is shown FIRST. -->
+      <UButton
+        v-if="failure.detail && !showFailureDetail"
+        color="neutral"
+        variant="link"
+        size="xs"
+        class="p-0"
+        data-testid="branch-protection-failure-detail"
+        @click="showFailureDetail = true"
+      >
+        {{ t('errors.generic.showDetail') }}
+      </UButton>
+      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-slate-500">
+        {{ failure.detail }}
+      </p>
+    </div>
 
     <!-- The provider cannot answer this at all. Said explicitly, because an empty list here
          would otherwise read exactly like a clean bill of health. -->

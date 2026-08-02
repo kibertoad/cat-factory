@@ -271,11 +271,7 @@ export {
   PatPreferringAppRegistry,
   type ResolveRunInitiatorToken,
 } from './github/PatPreferringAppRegistry.js'
-export {
-  runWithInitiator,
-  currentInitiator,
-  currentCredentialScope,
-} from './github/runInitiatorContext.js'
+export { runWithInitiator, currentCredentialScope } from './github/runInitiatorContext.js'
 export {
   createResolveRunInitiatorToken,
   type RunInitiatorTokenDependencies,

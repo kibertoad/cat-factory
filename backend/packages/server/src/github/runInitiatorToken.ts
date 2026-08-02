@@ -5,7 +5,7 @@ import type {
   RunCredentialScope,
 } from '@cat-factory/kernel'
 import { describeError } from '@cat-factory/kernel'
-import { resolveInitiatorTokenCached } from './runInitiatorContext.js'
+import { resolveRunCredentialCached } from './runInitiatorContext.js'
 
 // The ONE answer to "does THIS run act with its initiator's own GitHub token, or with the
 // deployment credential?".
@@ -43,12 +43,16 @@ export interface RunInitiatorTokenDependencies {
  * proceeds on the App installation token (narrower), attributed to the bot rather than to the
  * human, with the cause logged. The opposite choice would silently restore exactly the
  * behaviour an operator turned off.
+ *
+ * The WHOLE decision — policy read included, not just the decrypt — rides the ambient scope's
+ * memo, because a scope is one probe/merge boundary that re-mints per request: the CI gate
+ * asks five times per poll. See `resolveRunCredentialCached`.
  */
 export function createResolveRunInitiatorToken(
   deps: RunInitiatorTokenDependencies,
 ): (scope: RunCredentialScope) => Promise<string | null> {
   const { resolveUserGitHubToken, initiatorPatGate, logger } = deps
-  return async (scope) => {
+  const decide = async (scope: RunCredentialScope): Promise<string | null> => {
     const initiatedBy = scope.initiatedBy
     if (!initiatedBy) return null
     if (initiatorPatGate) {
@@ -65,8 +69,9 @@ export function createResolveRunInitiatorToken(
       }
       if (!allowed) return null
     }
-    // Through the ambient scope's memo when there is one (the engine's probe/merge boundary
-    // fans out into several requests); a plain resolve otherwise (the dispatch mint).
-    return resolveInitiatorTokenCached(resolveUserGitHubToken, initiatedBy)
+    return resolveUserGitHubToken(initiatedBy)
   }
+  // Memoized within an ambient scope (the engine's probe/merge boundary, which fans out into
+  // several requests); decided directly otherwise (the dispatch mint, which asks once).
+  return (scope) => resolveRunCredentialCached(decide, scope)
 }

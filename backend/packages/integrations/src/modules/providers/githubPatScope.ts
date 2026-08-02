@@ -32,6 +32,14 @@ const ACCOUNT_WIDE_SCOPES = new Set(['repo'])
  * Classic scopes the platform never needs, but which a token minted from GitHub's "select all"
  * habit routinely carries. Named individually rather than "anything we don't use" so a scope
  * GitHub adds later doesn't start generating a warning nobody wrote copy for.
+ *
+ * `workflow` is deliberately ABSENT, and it is the one exclusion worth stating: it is genuinely
+ * needed — an agent that edits `.github/workflows/*` cannot push without it — so flagging it
+ * would nag on the RECOMMENDED configuration, which is how a form teaches people to ignore it.
+ * It does mean a compromised run can rewrite CI itself, which is the assumption Layer 4 of
+ * `backend/docs/security-model.md` rests on; the control for that is host-side branch protection
+ * on the workflow's own branch (operator checklist item 1, which the preflight now reports on),
+ * not a scope this form could ask anyone to drop.
  */
 const BEYOND_NEED_SCOPES = new Set([
   'admin:org',

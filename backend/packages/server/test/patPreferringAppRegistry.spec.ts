@@ -178,4 +178,70 @@ describe('PatPreferringAppRegistry workspace credential policy', () => {
 
     expect(await runWithInitiator(SCOPE, () => registry.installationToken(42))).toBe('pat-123')
   })
+
+  it('reads the policy ONCE per scope, not once per minted request', async () => {
+    // The whole decision rides the scope memo, not just the decrypt behind it. This is the
+    // read that has no cache to hide behind on Cloudflare: `AppCaches.workspaceSettings` is
+    // `enabled: false` in the isolate-safe profile, so an un-memoized ask is a live D1 read
+    // on every mint — five per CI poll, for the whole life of a PR's CI.
+    const resolve = vi.fn<ResolveUserGitHubToken>(async () => 'pat-123')
+    const gate = vi.fn<InitiatorPatGate>(async () => true)
+    const registry = registryOver(resolve, { initiatorPatGate: gate })
+
+    await runWithInitiator(SCOPE, async () => {
+      await Promise.all([
+        registry.installationToken(42),
+        registry.installationToken(42),
+        registry.installationToken(42),
+        registry.installationToken(42),
+      ])
+      await registry.installationPermissions(42)
+    })
+
+    expect(gate).toHaveBeenCalledTimes(1)
+    expect(resolve).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports an unreadable policy once per probe, not once per request', async () => {
+    // The fail-closed `null` is a decided ANSWER, so it is memoized like any other. Without
+    // that, one settings outage during a CI poll costs five reads and five identical warns —
+    // the log noise that makes an operator stop reading the line that matters.
+    const logger = createRecordingLogger()
+    const gate = vi.fn<InitiatorPatGate>(async () => {
+      throw new Error('settings row unreadable')
+    })
+    const registry = registryOver(
+      vi.fn<ResolveUserGitHubToken>(async () => 'pat-123'),
+      { initiatorPatGate: gate, logger },
+    )
+
+    const tokens = await runWithInitiator(SCOPE, () =>
+      Promise.all([registry.installationToken(42), registry.installationToken(42)]),
+    )
+
+    expect(tokens).toEqual(['app-token', 'app-token'])
+    expect(gate).toHaveBeenCalledTimes(1)
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
+  })
+
+  it('evicts a REJECTED decision so a transient decrypt failure cannot poison the scope', async () => {
+    // Unchanged from when the memo covered the decrypt alone: a rejection is not an answer,
+    // so the next request in the same scope must get a real attempt rather than the failure.
+    const resolve = vi
+      .fn<ResolveUserGitHubToken>()
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue('pat-123')
+    const gate = vi.fn<InitiatorPatGate>(async () => true)
+    const registry = registryOver(resolve, { initiatorPatGate: gate })
+
+    await runWithInitiator(SCOPE, async () => {
+      await expect(registry.installationToken(42)).rejects.toThrow('transient')
+      expect(await registry.installationToken(42)).toBe('pat-123')
+    })
+
+    expect(resolve).toHaveBeenCalledTimes(2)
+    // The policy read is re-asked with it: the eviction drops the whole decision, which is
+    // correct — a half-cached decision would be a policy answer paired with no token.
+    expect(gate).toHaveBeenCalledTimes(2)
+  })
 })

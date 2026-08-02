@@ -26,9 +26,12 @@ a token whose scopes GitHub does not report is reported as unknown rather than p
 **A branch-protection preflight says where the operator checklist's first item is missing.** On
 demand, the GitHub settings panel probes each linked repository's default branch and reports three
 states — a repo it could not reach is `unknown`, not "fine" — plus whether a protected branch's rule
-was actually readable, and how many repositories a probe cap left unchecked.
+was actually readable, and how many repositories a probe cap left unchecked. It answers to
+`integrations.manage` and probes with bounded concurrency: unlike its sibling reads it spends the
+installation's GitHub rate limit, which the CI gate and the merger draw on for every run.
 
 BREAKING for anything constructing these directly: `RunInitiatorScope` now takes a
 `{ workspaceId, initiatedBy }` scope rather than a bare user id, `MintInstallationToken`'s run
 context carries `workspaceId`, and `PatPreferringAppRegistry` takes the composed token decision
-instead of a raw `ResolveUserGitHubToken`.
+instead of a raw `ResolveUserGitHubToken`. `currentInitiator()` is removed in favour of
+`currentCredentialScope()`.

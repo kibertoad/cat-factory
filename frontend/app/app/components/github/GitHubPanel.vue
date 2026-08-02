@@ -17,6 +17,7 @@ import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const access = useWorkspaceAccess()
 const github = useGitHubStore()
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -463,9 +464,12 @@ async function merge(pr: GitHubPullRequest) {
 
             <!-- Whether the host actually protects what an agent run pushes to. Placed above the
                  repo list because it is a posture check across ALL of them, not a per-repo
-                 attribute. -->
+                 attribute. Admin-only to match the route: the probe spends the installation's
+                 GitHub rate limit, which the CI gate and the merger share, so it is gated rather
+                 than merely read-only. Hidden rather than disabled — a member has nothing to do
+                 with a control whose result is the operator's to act on. -->
             <BranchProtectionPreflight
-              v-if="github.repos.length"
+              v-if="github.repos.length && access.canManageIntegrations.value"
               class="rounded-md border border-slate-800 bg-slate-900/40 p-3"
             />
 

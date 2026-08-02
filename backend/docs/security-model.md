@@ -258,7 +258,10 @@ is possible at all:
    itself was unreadable (a minimally-scoped App installation cannot read it, and such a rule may
    still permit direct pushes), and states how many repos a probe cap left unchecked. A provider
    that cannot answer at all reports `capability: 'unavailable'` rather than an empty list, which
-   is what today's GitLab connections get.
+   is what today's GitLab connections get. It needs `integrations.manage` — the one READ on that
+   controller that does, because it spends the installation's GitHub rate limit, which the CI gate
+   and the merger draw on for every run; on the ordinary read tier a viewer could degrade the write
+   path by holding down a button. Its fan-out is bounded for the same reason.
 2. **Choose merge presets deliberately.** For anything sensitive: pin `Manual review only`, or keep
    auto-merge and add class floors for `source` and `schema`. Remember the shipped default
    auto-merges under Balanced ceilings with no floors.
