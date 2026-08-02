@@ -43,7 +43,7 @@
     "@vue-flow/core": "^1.48.2",
     "@vue-flow/node-resizer": "^1.5.1",
     "@vueuse/core": "^14.4.0",
-    "markdown-it": "^14.3.0",
+    "markdown-it": "^15.0.0",
     "pinia": "^4.0.2",
     "pinia-plugin-persistedstate": "^4.7.1",
     "valibot": "^1.4.2",
@@ -52,7 +52,6 @@
   },
   "devDependencies": {
     "@toad-contracts/testing": "0.3.2",
-    "@types/markdown-it": "^14.1.2",
     "happy-dom": "^20.11.1",
     "msw": "^2.15.0",
     "nuxt": "^4.5.1",

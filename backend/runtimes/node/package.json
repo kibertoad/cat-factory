@@ -59,7 +59,7 @@
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.0.12",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.12.32",
+    "hono": "^4.12.33",
     "layered-loader": "^14.5.3",
     "pg": "^8.22.0",
     "pg-boss": "^12.26.4",
@@ -76,6 +76,6 @@
     "vitest": "^4.1.10"
   },
   "optionalDependencies": {
-    "ioredis": "^5.11.1"
+    "ioredis": "^6.0.0"
   }
 }
