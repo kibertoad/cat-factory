@@ -112,7 +112,7 @@ export interface MothershipComposition {
   githubTokenSource: DelegatedAppTokenSource
   /**
    * The catalog's `builtin` tier, read from the MOTHERSHIP over
-   * `GET /internal/foundational-services` rather than from this node's own
+   * `GET /internal/foundational-services` (+ the batched `POST .../contracts`) rather than from this node's own
    * `FoundationalServiceRegistry`. A deployment's estate is org state: with only the registry as
    * a route it had to be registered on both entry points, and a node one build behind — the
    * normal state of a local node — silently resolved a catalog missing whatever the mothership

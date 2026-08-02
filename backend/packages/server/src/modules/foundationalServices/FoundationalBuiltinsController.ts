@@ -5,7 +5,7 @@ import type { AppEnv } from '../../http/env.js'
 /**
  * The mothership-mode foundational-services `builtin`-tier API:
  * `GET /internal/foundational-services` and
- * `GET /internal/foundational-services/:serviceId/contracts`.
+ * `POST /internal/foundational-services/contracts`.
  *
  * A mothership deployment is TWO processes — the hosted mothership answers the SPA, a local node
  * with no main database resolves the catalog for the runs it dispatches — and the catalog's
@@ -60,15 +60,23 @@ export function foundationalBuiltinsController(): Hono<AppEnv> {
     return c.json({ entries: c.get('container').foundationalServiceRegistry.entries() }, 200)
   })
 
-  // The lazy half: the FULL documents of one service, fetched only for the ids a design
-  // declared. An id the registry does not know answers with an empty list rather than a 404,
-  // exactly as the in-process source does — the caller has already decided this id's winning
-  // tier is `builtin`, and inventing a distinction here would be a second contract to keep.
-  app.get('/internal/foundational-services/:serviceId/contracts', async (c) => {
+  // The lazy half: the FULL documents for exactly the ids a design declared, in ONE read. A
+  // POST because the input is a LIST — the same reason `/internal/persistence` is one — which
+  // also keeps the route off the `:serviceId` namespace a per-id path would have created (a
+  // service id is a lower-kebab slug that could legitimately be `contracts`).
+  //
+  // An id the registry does not know is simply ABSENT from the reply rather than a 404: the
+  // caller has already decided each id's winning tier is `builtin`, so inventing a distinction
+  // here would be a second contract to keep, and a batch read cannot 404 for one member anyway.
+  app.post('/internal/foundational-services/contracts', async (c) => {
     if (!(await requireMachine(c))) return c.json(forbidden, 403)
-    const documents = c
-      .get('container')
-      .foundationalServiceRegistry.documentsFor(c.req.param('serviceId'))
+    const body = (await c.req.json().catch(() => null)) as { ids?: unknown } | null
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === 'string') : []
+    const registry = c.get('container').foundationalServiceRegistry
+    const documents: Record<string, unknown[]> = {}
+    // A per-id loop is correct HERE and only here: on the mothership the tier is an in-memory
+    // projection, so this is a `Map` lookup per id and not the I/O the batching exists to avoid.
+    for (const id of ids) documents[id] = registry.documentsFor(id)
     return c.json({ documents }, 200)
   })
 

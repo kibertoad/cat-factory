@@ -13,7 +13,8 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
 
 /**
  * A {@link FoundationalBuiltinSource} backed by the mothership's
- * `GET /internal/foundational-services`, presenting the node's machine token.
+ * `GET /internal/foundational-services` (+ `POST .../contracts`), presenting the node's machine
+ * token.
  *
  * **A failed read THROWS; it never degrades to an empty tier.** "The mothership is unreachable"
  * and "this deployment registers no shared services" are the same value and opposite facts, and
@@ -23,8 +24,9 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * other org read on this node already has, since the persistence RPC fails a run the same way.
  *
  * There is no cache here on purpose. `entries()` is called once per miss of the per-workspace
- * catalog cache that already sits in front of it, and `documentsFor` once per declared service
- * per design — so the call volume is bounded by that cache, and a second TTL'd copy of a value
+ * catalog cache that already sits in front of it, and `documentsFor` once per DESIGN (it is
+ * batched over the declared set) — so the call volume is bounded by that cache, and a second
+ * TTL'd copy of a value
  * with no invalidation path (the tier changes only when the mothership is redeployed) would be
  * the homebrew cache the caching seam exists to keep out.
  */
@@ -49,20 +51,34 @@ export class HttpFoundationalBuiltinSource implements FoundationalBuiltinSource 
     return body.entries ?? []
   }
 
-  async documentsFor(id: string): Promise<ApiContractDocument[]> {
-    const body = await this.read<{ documents?: ApiContractDocument[] }>(
-      `/internal/foundational-services/${encodeURIComponent(id)}/contracts`,
+  async documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>> {
+    if (ids.length === 0) return new Map()
+    const body = await this.read<{ documents?: Record<string, ApiContractDocument[]> }>(
+      '/internal/foundational-services/contracts',
+      { ids },
     )
-    return body.documents ?? []
+    return new Map(Object.entries(body.documents ?? {}))
   }
 
-  private async read<T>(path: string): Promise<T> {
+  private async read<T>(path: string, payload?: unknown): Promise<T> {
     const fetchImpl = this.opts.fetchImpl ?? fetch
     const token = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}${path}`
+    // The batched contract read carries a LIST, so it is a POST — the same reason the
+    // persistence RPC is one. Both are reads; neither is cacheable over the machine API.
+    const init: RequestInit = payload
+      ? {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token ?? ''}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      : { headers: { authorization: `Bearer ${token ?? ''}` } }
     let res: Response
     try {
-      res = await fetchImpl(url, { headers: { authorization: `Bearer ${token ?? ''}` } })
+      res = await fetchImpl(url, init)
     } catch (error) {
       // A transport failure is reported as the outage it is. The message names the tier rather
       // than the URL, which carries no secret here but would be noise in an operator's log.

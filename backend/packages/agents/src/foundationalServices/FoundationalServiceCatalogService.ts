@@ -379,12 +379,20 @@ export class FoundationalServiceCatalogService {
     // partially applied. So resolve the winning tier first, then take that tier's documents.
     const catalog = await this.resolve(workspaceId)
     const tierById = new Map(catalog.map((entry) => [entry.id, entry.tier]))
+    // The `builtin` winners in ONE read, before the loop — the tier's source can be remote (a
+    // mothership-mode node), where a per-id read inside the loop is an N+1 over the wire. The
+    // stored tiers are already batched above for the same reason.
+    const builtinIds = wanted.filter((id) => tierById.get(id) === 'builtin')
+    const builtinDocs =
+      builtinIds.length > 0
+        ? await this.builtins.documentsFor(builtinIds)
+        : new Map<string, ApiContractDocument[]>()
     const out = new Map<string, ApiContractDocument[]>()
     for (const id of wanted) {
       const tier = tierById.get(id)
       if (!tier) continue
       if (tier === 'builtin') {
-        out.set(id, await this.builtins.documentsFor(id))
+        out.set(id, builtinDocs.get(id) ?? [])
         continue
       }
       const docs = (tier === 'workspace' ? workspaceDocs : accountDocs).filter(

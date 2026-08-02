@@ -90,16 +90,35 @@ describe('mothership-mode foundational `builtin` tier', () => {
     expect(entries[0]!.contracts[0]!.size).toBe(OPENAPI.length)
   })
 
-  it('serves the FULL documents on the lazy per-service read', async () => {
+  it('serves the FULL documents on the lazy read, batched over the declared set', async () => {
     const source = await node(mothership())
-    const documents = await source.documentsFor('file-storage')
-    expect(documents).toHaveLength(1)
-    expect(documents[0]!.body).toBe(OPENAPI)
+    // ONE read for the whole declared set: the tier can be remote, so a per-id read in the
+    // caller's loop would be an N+1 over the wire.
+    const documents = await source.documentsFor(['file-storage'])
+    expect(documents.get('file-storage')).toHaveLength(1)
+    expect(documents.get('file-storage')![0]!.body).toBe(OPENAPI)
   })
 
   it('answers an unknown service id with an empty list, exactly as the in-process source does', async () => {
     const source = await node(mothership())
-    await expect(source.documentsFor('never-registered')).resolves.toEqual([])
+    const documents = await source.documentsFor(['file-storage', 'never-registered'])
+    expect(documents.get('never-registered')).toEqual([])
+    // …and the known id in the same batch is unaffected.
+    expect(documents.get('file-storage')).toHaveLength(1)
+  })
+
+  it('reads nothing at all for an empty declared set', async () => {
+    let calls = 0
+    const source = new HttpFoundationalBuiltinSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() => {
+        calls += 1
+        return Promise.reject(new Error('should not be called'))
+      }) as unknown as typeof fetch,
+    })
+    await expect(source.documentsFor([])).resolves.toEqual(new Map())
+    expect(calls).toBe(0)
   })
 
   it('reports an EMPTY estate as empty — a deployment that registers none is not an error', async () => {
@@ -111,7 +130,7 @@ describe('mothership-mode foundational `builtin` tier', () => {
     const app = mothership()
     expect((await app.request('/internal/foundational-services')).status).toBe(403)
     expect(
-      (await app.request('/internal/foundational-services/file-storage/contracts')).status,
+      (await app.request('/internal/foundational-services/contracts', { method: 'POST' })).status,
     ).toBe(403)
   })
 
@@ -155,7 +174,7 @@ describe('mothership-mode foundational `builtin` tier', () => {
       token: 'tok',
       fetchImpl: (() => Promise.reject(new Error('ECONNREFUSED'))) as unknown as typeof fetch,
     })
-    await expect(source.documentsFor('file-storage')).rejects.toMatchObject({
+    await expect(source.documentsFor(['file-storage'])).rejects.toMatchObject({
       code: 'unavailable',
       details: { reason: 'foundational_builtins_unreachable', err: 'ECONNREFUSED' },
     })

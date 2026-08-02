@@ -322,7 +322,7 @@
 
 **Code-registered ORG state: the foundational-services `builtin` tier**
 
-- **`GET /internal/foundational-services`** (+ `/:serviceId/contracts`) — the catalog tier a
+- **`GET /internal/foundational-services`** (+ the batched `POST .../contracts`) — the catalog tier a
   deployment registers in CODE (ADR 0031). It is the one class of state this initiative's four
   buckets did not cover, because it is not a repository method at all, and the gap it left was the
   quiet kind. A mothership deployment is TWO processes, so the estate had to be registered on both
@@ -914,8 +914,8 @@ modes look like success:
   > `/internal/*` routes today are `POST /internal/persistence`,
   > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
   > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,
-  > `POST /internal/telemetry/ingest`, and `GET /internal/foundational-services`
-  > (+ `/:serviceId/contracts`).
+  > `POST /internal/telemetry/ingest`, `GET /internal/foundational-services`, and
+  > `POST /internal/foundational-services/contracts`.
 
 - **Real-time — BOTH directions ✅ landed.** The OUTBOUND leg is
   built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a

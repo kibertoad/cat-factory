@@ -108,7 +108,8 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       // endpoint would look like it was working (an empty list is a legitimate answer).
       expect((await call('GET', '/internal/foundational-services')).status).toBe(403)
       expect(
-        (await call('GET', '/internal/foundational-services/file-storage/contracts')).status,
+        (await call('POST', '/internal/foundational-services/contracts', { ids: ['file-storage'] }))
+          .status,
       ).toBe(403)
     })
 

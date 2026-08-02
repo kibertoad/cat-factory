@@ -143,7 +143,8 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
   // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
   app.route('/', githubDelegationController())
-  // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`):
+  // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`
+  // + the batched `POST .../contracts`):
   // the catalog tier a deployment registers in CODE is org state, and a mothership-mode node has
   // no main database to hold it — so it reads the MOTHERSHIP's registry here rather than its own,
   // which would be a second copy silently drifting one build behind. Machine-token gated like the

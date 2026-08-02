@@ -261,8 +261,8 @@ it, which is indistinguishable from an Architect deciding the service was not re
 
 A deployment's estate is org state, so the mothership owns it like every other org fact a node
 reads remotely. The tier is read through the kernel `FoundationalBuiltinSource` port — the
-in-process registry by default, `GET /internal/foundational-services` (+ `/:id/contracts`) on a
-mothership-mode node — and the node's own registry is then not consulted at all, with a boot
+in-process registry by default, `GET /internal/foundational-services` (+ the batched
+`POST .../contracts`) on a mothership-mode node — and the node's own registry is then not consulted at all, with a boot
 warning naming the ids it is ignoring, because that is precisely the double registration the old
 shape forced. Three things about it are deliberate:
 

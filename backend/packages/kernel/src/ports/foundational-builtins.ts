@@ -38,8 +38,15 @@ import type {
 export interface FoundationalBuiltinSource {
   /** Every registered service, projected for the catalog merge (identity, manifests, no bodies). */
   entries(): Promise<FoundationalServiceRegistryEntry[]>
-  /** The FULL contract documents of one registered service — the lazy read's `builtin` half. */
-  documentsFor(id: string): Promise<ApiContractDocument[]>
+  /**
+   * The FULL contract documents of the named registered services — the lazy read's `builtin`
+   * half, indexed by service id. An id the tier does not carry is simply absent from the map.
+   *
+   * Batched rather than per-id because one implementation crosses a network: the caller always
+   * has the whole declared set in hand (`contractsFor`), and a per-id read in a loop over it is
+   * the N+1 the stored tiers already avoid with `listByServiceIds`.
+   */
+  documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>>
 }
 
 /**
@@ -51,6 +58,6 @@ export function registryBuiltinSource(
 ): FoundationalBuiltinSource {
   return {
     entries: async () => registry.entries(),
-    documentsFor: async (id) => registry.documentsFor(id),
+    documentsFor: async (ids) => new Map(ids.map((id) => [id, registry.documentsFor(id)] as const)),
   }
 }
