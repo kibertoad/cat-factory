@@ -55,6 +55,8 @@ export interface PlatformModulesInput {
   caches: CoreRuntime['caches']
   executionEventPublisher: CoreRuntime['executionEventPublisher']
   boardService: BoardService
+  /** The resolved app-owned foundational-service registry — the catalog's `builtin` tier. */
+  foundationalServiceRegistry: CoreRuntime['foundationalServiceRegistry']
 }
 
 export interface PlatformModules {
@@ -68,7 +70,14 @@ export interface PlatformModules {
 }
 
 export function createPlatformModules(input: PlatformModulesInput): PlatformModules {
-  const { dependencies, modules, caches, executionEventPublisher, boardService } = input
+  const {
+    dependencies,
+    modules,
+    caches,
+    executionEventPublisher,
+    boardService,
+    foundationalServiceRegistry,
+  } = input
   const llmObservability = modules.build('llmObservability', () =>
     dependencies.llmCallMetricRepository
       ? new LlmObservabilityService({
@@ -206,7 +215,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     createSkillLibraryModule(dependencies, caches),
   )
   const foundationalServices = modules.build('foundationalServices', () =>
-    createFoundationalServiceModule(dependencies, caches),
+    createFoundationalServiceModule(dependencies, caches, foundationalServiceRegistry),
   )
   return {
     llmObservability,

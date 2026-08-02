@@ -2269,7 +2269,7 @@
       "action": "Choisir la valeur par défaut"
     },
     "accountFoundational": {
-      "intro": "Les capacités partagées que cette organisation exploite déjà - stockage de fichiers, notifications, audit - avec leurs contrats d'API. Chaque tableau en hérite, et il est demandé à un architecte de les consommer plutôt que de proposer de les reconstruire."
+      "intro": "Les capacités partagées que cette organisation exploite déjà - stockage de fichiers, notifications, audit - avec leurs contrats d'API. Chaque tableau en hérite, et il est demandé à un architecte de les consommer plutôt que de proposer de les reconstruire. Les services que ce déploiement enregistre dans le code sont également hérités ici : ils peuvent être remplacés par identifiant ou écartés ci-dessous."
     }
   },
   "settings": {
@@ -5211,6 +5211,7 @@
       "subtitle": "Les capacités partagées que votre organisation exploite déjà, pour qu'une conception les consomme au lieu de les reconstruire."
     },
     "tier": {
+      "builtin": "Déploiement",
       "account": "Compte",
       "workspace": "Tableau"
     },
@@ -5221,6 +5222,8 @@
     },
     "contracts": {
       "omitted": "+{count} autres non listées",
+      "notIndexed": "les opérations ne sont pas indexées pour ce format ; ouvrez le document",
+      "noOperations": "ne déclare aucune opération",
       "none": "Aucun contrat d'API joint. On indiquera à l'agent que l'interface est inconnue plutôt que de le laisser la deviner."
     },
     "catalog": {
@@ -5231,8 +5234,14 @@
       "hideDocuments": "Masquer les documents de contrat"
     },
     "suppressions": {
-      "title": "Écartés sur ce tableau",
-      "intro": "Ces services du compte sont masqués pour les conceptions de ce tableau. Rien n'a été supprimé, et le compte les conserve pour tous les autres tableaux.",
+      "title": {
+        "workspace": "Écartés sur ce tableau",
+        "account": "Écartés pour ce compte"
+      },
+      "intro": {
+        "workspace": "Ces services hérités sont masqués pour les conceptions de ce tableau. Rien n'a été supprimé, et tous les autres tableaux les conservent.",
+        "account": "Ces services enregistrés par ce déploiement sont masqués pour les conceptions de tous les tableaux de ce compte. Rien n'a été supprimé, et les autres comptes les conservent."
+      },
       "restore": "Proposer à nouveau",
       "shadowsNothing": "Rien n'est hérité sous cet identifiant pour le moment : cet écartement ne masque donc rien."
     },

@@ -71,6 +71,7 @@ import type {
   FragmentBriefRepository,
   FragmentSelector,
   ApiContractRepository,
+  FoundationalServiceRegistry,
   FoundationalServiceRepository,
   FoundationalServiceSourceRepository,
   FoundationalSourceResyncRequest,
@@ -898,6 +899,15 @@ export interface CoreDependencies {
   foundationalServiceRepository?: FoundationalServiceRepository
   apiContractRepository?: ApiContractRepository
   foundationalServiceSourceRepository?: FoundationalServiceSourceRepository
+  /**
+   * The app-owned registry of foundational services a DEPLOYMENT ships in CODE — the `builtin`
+   * tier of the catalog merge, mirroring `pipelineRegistry` / `taskTypeRegistry`. Optional +
+   * defaulted to `defaultFoundationalServiceRegistry()` (EMPTY — the platform ships no built-in
+   * foundational services), so existing construction sites resolve the stored tiers exactly as
+   * before; a facade injects the SAME instance it registers its estate on, and boot validation
+   * reads it back so a malformed definition fails the deployment rather than a design dispatch.
+   */
+  foundationalServiceRegistry?: FoundationalServiceRegistry
   /**
    * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
    * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.

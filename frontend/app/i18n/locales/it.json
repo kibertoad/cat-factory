@@ -2349,7 +2349,7 @@
       "action": "Scegli predefinito"
     },
     "accountFoundational": {
-      "intro": "Le capacità condivise che questa organizzazione già gestisce - archiviazione file, notifiche, audit - con i loro contratti API. Ogni bacheca le eredita, e a un architetto viene detto di utilizzarle invece di proporre di ricostruirle."
+      "intro": "Le capacità condivise che questa organizzazione già gestisce - archiviazione file, notifiche, audit - con i loro contratti API. Ogni bacheca le eredita, e a un architetto viene detto di utilizzarle invece di proporre di ricostruirle. Anche i servizi che questa distribuzione registra nel codice vengono ereditati qui, e possono essere sovrascritti per id o esclusi qui sotto."
     }
   },
   "board": {
@@ -4252,6 +4252,7 @@
       "subtitle": "Le capacità condivise che la tua organizzazione già gestisce, così che una progettazione le utilizzi invece di ricostruirle."
     },
     "tier": {
+      "builtin": "Distribuzione",
       "account": "Account",
       "workspace": "Bacheca"
     },
@@ -4262,6 +4263,8 @@
     },
     "contracts": {
       "omitted": "+{count} non elencate",
+      "notIndexed": "le operazioni non vengono indicizzate per questo formato; apri il documento",
+      "noOperations": "non dichiara operazioni",
       "none": "Nessun contratto API allegato. All'agente verrà detto che l'interfaccia è sconosciuta, invece di lasciargliela indovinare."
     },
     "catalog": {
@@ -4272,8 +4275,14 @@
       "hideDocuments": "Nascondi i documenti di contratto"
     },
     "suppressions": {
-      "title": "Esclusi su questa bacheca",
-      "intro": "Questi servizi dell'account sono nascosti alle progettazioni di questa bacheca. Nulla è stato eliminato e l'account li mantiene per tutte le altre bacheche.",
+      "title": {
+        "workspace": "Esclusi su questa bacheca",
+        "account": "Esclusi per questo account"
+      },
+      "intro": {
+        "workspace": "Questi servizi ereditati sono nascosti alle progettazioni di questa bacheca. Nulla è stato eliminato e tutte le altre bacheche li mantengono.",
+        "account": "Questi servizi registrati da questa distribuzione sono nascosti alle progettazioni di tutte le bacheche di questo account. Nulla è stato eliminato e gli altri account li mantengono."
+      },
       "restore": "Proponi di nuovo",
       "shadowsNothing": "Al momento non si eredita nulla con questo id, quindi questa esclusione non nasconde nulla."
     },

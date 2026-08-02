@@ -2269,7 +2269,7 @@
       "action": "Wybierz domyślne"
     },
     "accountFoundational": {
-      "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa."
+      "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa. Usługi rejestrowane przez to wdrożenie w kodzie są dziedziczone również tutaj; można je nadpisać po identyfikatorze albo wyłączyć poniżej."
     }
   },
   "settings": {
@@ -5211,6 +5211,7 @@
       "subtitle": "Wspólne możliwości, które Twoja organizacja już utrzymuje, aby projekt z nich korzystał zamiast budować je od nowa."
     },
     "tier": {
+      "builtin": "Wdrożenie",
       "account": "Konto",
       "workspace": "Tablica"
     },
@@ -5221,6 +5222,8 @@
     },
     "contracts": {
       "omitted": "+{count} więcej, niewymienionych",
+      "notIndexed": "operacje nie są indeksowane dla tego formatu; otwórz dokument",
+      "noOperations": "nie deklaruje operacji",
       "none": "Nie dołączono kontraktu API. Agent zostanie poinformowany, że interfejs jest nieznany, zamiast go zgadywać."
     },
     "catalog": {
@@ -5231,8 +5234,14 @@
       "hideDocuments": "Ukryj dokumenty kontraktów"
     },
     "suppressions": {
-      "title": "Wyłączone na tej tablicy",
-      "intro": "Te usługi konta są ukryte przed projektami na tej tablicy. Nic nie zostało usunięte, a konto zachowuje je dla wszystkich pozostałych tablic.",
+      "title": {
+        "workspace": "Wyłączone na tej tablicy",
+        "account": "Wyłączone dla tego konta"
+      },
+      "intro": {
+        "workspace": "Te odziedziczone usługi są ukryte przed projektami na tej tablicy. Nic nie zostało usunięte, a wszystkie pozostałe tablice je zachowują.",
+        "account": "Te usługi zarejestrowane przez to wdrożenie są ukryte przed projektami na wszystkich tablicach tego konta. Nic nie zostało usunięte, a pozostałe konta je zachowują."
+      },
       "restore": "Proponuj ponownie",
       "shadowsNothing": "Pod tym identyfikatorem nic obecnie nie jest dziedziczone, więc to wyłączenie niczego teraz nie ukrywa."
     },

@@ -2269,7 +2269,7 @@
       "action": "Elegir predeterminado"
     },
     "accountFoundational": {
-      "intro": "Las capacidades compartidas que esta organización ya opera - almacenamiento de archivos, notificaciones, auditoría - con sus contratos de API. Todos los tableros las heredan, y a un arquitecto se le indica que las consuma en lugar de proponer reconstruirlas."
+      "intro": "Las capacidades compartidas que esta organización ya opera - almacenamiento de archivos, notificaciones, auditoría - con sus contratos de API. Todos los tableros las heredan, y a un arquitecto se le indica que las consuma en lugar de proponer reconstruirlas. Los servicios que este despliegue registra en código también se heredan aquí, y se pueden sobrescribir por id o excluir abajo."
     }
   },
   "settings": {
@@ -5211,6 +5211,7 @@
       "subtitle": "Las capacidades compartidas que tu organización ya opera, para que un diseño las consuma en lugar de reconstruirlas."
     },
     "tier": {
+      "builtin": "Despliegue",
       "account": "Cuenta",
       "workspace": "Tablero"
     },
@@ -5221,6 +5222,8 @@
     },
     "contracts": {
       "omitted": "+{count} más sin listar",
+      "notIndexed": "las operaciones no se indexan para este formato; abre el documento",
+      "noOperations": "no declara operaciones",
       "none": "No hay contrato de API adjunto. Al agente se le dirá que la interfaz es desconocida en lugar de dejar que la adivine."
     },
     "catalog": {
@@ -5231,8 +5234,14 @@
       "hideDocuments": "Ocultar documentos de contrato"
     },
     "suppressions": {
-      "title": "Excluidos en este tablero",
-      "intro": "Estos servicios de la cuenta están ocultos para los diseños de este tablero. No se ha borrado nada y la cuenta los conserva para los demás tableros.",
+      "title": {
+        "workspace": "Excluidos en este tablero",
+        "account": "Excluidos en esta cuenta"
+      },
+      "intro": {
+        "workspace": "Estos servicios heredados están ocultos para los diseños de este tablero. No se ha borrado nada y los demás tableros los conservan.",
+        "account": "Estos servicios registrados por este despliegue están ocultos para los diseños de todos los tableros de esta cuenta. No se ha borrado nada y las demás cuentas los conservan."
+      },
       "restore": "Volver a ofrecer",
       "shadowsNothing": "Ahora mismo no se hereda nada con este id, así que esta exclusión no oculta nada."
     },

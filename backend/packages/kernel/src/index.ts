@@ -191,6 +191,7 @@ export {
 export {
   type FoundationalCatalogView,
   type FoundationalContractBundle,
+  type FoundationalDefinitionProblem,
   FOUNDATIONAL_CATALOG_FILE,
   FOUNDATIONAL_CONTEXT_DIR,
   FOUNDATIONAL_DECLARATION_TAG,
@@ -198,16 +199,30 @@ export {
   MAX_CATALOG_OPERATIONS,
   MAX_CONTRACT_BODY_CHARS,
   contextFileFor,
+  describeFoundationalProblem,
   detectContractFormat,
+  indexContractOperations,
   indexOpenApiOperations,
+  indexToadContractOperations,
   isContractCandidatePath,
+  isContractModulePath,
   isOpenApiDocument,
   parseFoundationalDeclaration,
   renderContractDocument,
   renderFoundationalCatalog,
   renderFoundationalIndex,
   summarizeContract,
+  validateFoundationalDefinition,
 } from './domain/foundational-services.js'
+
+// The app-owned registry a DEPLOYMENT registers its own foundational services on — the
+// `builtin` tier of the catalog merge, mirroring the pipeline / task-type registries.
+export {
+  type FoundationalServiceDefinition,
+  type FoundationalServiceRegistryEntry,
+  FoundationalServiceRegistry,
+  defaultFoundationalServiceRegistry,
+} from './domain/foundational-service-registry.js'
 
 // Binary-output steps: pure validation/parsing/rendering for a kind that generates binary
 // artifacts and stores them through a selected foundational service, scoped by further

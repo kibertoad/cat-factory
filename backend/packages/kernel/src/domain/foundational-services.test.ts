@@ -4,12 +4,15 @@ import {
   MAX_CONTRACT_BODY_CHARS,
   detectContractFormat,
   indexOpenApiOperations,
+  indexToadContractOperations,
   isContractCandidatePath,
+  isContractModulePath,
   parseFoundationalDeclaration,
   renderContractDocument,
   renderFoundationalCatalog,
   renderFoundationalIndex,
   summarizeContract,
+  validateFoundationalDefinition,
 } from './foundational-services.js'
 
 const OPENAPI_YAML = [
@@ -105,6 +108,23 @@ describe('isContractCandidatePath', () => {
     expect(isContractCandidatePath('specs/package-api.json')).toBe(true)
     expect(isContractCandidatePath('specs/tsconfig-service.yaml')).toBe(true)
     expect(isContractCandidatePath('specs/deno.yaml')).toBe(true)
+  })
+})
+
+describe('isContractModulePath', () => {
+  // The repo source admits a linked module the SET's format vouches for, and it asks this rather
+  // than carrying its own extension list — a second list drifts, and the drift reads as a linked
+  // schema module skipped as `unrecognised` for an extension the detector beside it recognises.
+  it('accepts exactly the extensions a contract MODULE can be detected from', () => {
+    for (const path of ['contracts/api.ts', 'contracts/api.mts', 'dist/api.js']) {
+      expect(isContractModulePath(path)).toBe(true)
+    }
+  })
+
+  it('rejects an OpenAPI document, which is a contract but never a module', () => {
+    for (const path of ['spec.json', 'spec.yaml', 'spec.yml', 'spec.openapi', 'README.md']) {
+      expect(isContractModulePath(path)).toBe(false)
+    }
   })
 })
 
@@ -292,5 +312,187 @@ describe('renderFoundationalIndex', () => {
     expect(rendered).toContain('foundational-services/file-storage.md')
     expect(rendered).toContain('imaginary-bus')
     expect(rendered).toContain('Do not guess')
+  })
+})
+
+const TOAD_MODULE = [
+  "import { defineApiContract } from '@toad-contracts/valibot'",
+  "import { fileSchema } from './schemas.js'",
+  '',
+  'export const listFilesContract = defineApiContract({',
+  "  method: 'get',",
+  "  pathResolver: () => '/files',",
+  '  responsesByStatusCode: { 200: fileSchema },',
+  '})',
+  '',
+  'export const readFileContract = defineApiContract({',
+  "  method: 'get',",
+  '  requestPathParamsSchema: fileIdParams,',
+  '  pathResolver: ({ fileId }) => `/files/${fileId}`,',
+  '  responsesByStatusCode: { 200: fileSchema },',
+  '})',
+].join('\n')
+
+describe('indexToadContractOperations', () => {
+  it('reads a literal and an interpolated path off the source, without evaluating it', () => {
+    expect(indexToadContractOperations(TOAD_MODULE)).toEqual({
+      operations: ['GET /files', 'GET /files/{fileId}'],
+      omitted: 0,
+    })
+  })
+
+  it('COUNTS a declaration whose path it cannot read rather than dropping it silently', () => {
+    // A computed path is exactly what a partial parser must not guess at: an invented operation
+    // name is worse than a missing one, because a coder writes against it. The anchor count is
+    // what keeps the omission visible.
+    const computed = [
+      'export const oddContract = defineApiContract({',
+      "  method: 'post',",
+      '  pathResolver: ({ id }) => `/files/${id ? id : "none"}`,',
+      '})',
+    ].join('\n')
+    expect(indexToadContractOperations(computed)).toEqual({ operations: [], omitted: 1 })
+  })
+
+  it('COUNTS a resolver whose PARAMETER list it cannot read, rather than skipping the anchor', () => {
+    // The parameter matcher stops at the first `)`, so a destructured param carrying a call in a
+    // default defeats it. That must land as a counted omission like any other unread shape — the
+    // bound the extractor rests on is "nothing uncertain is emitted AND the shortfall is
+    // reported", and a declaration silently missing from both halves would break the second.
+    const awkward = [
+      'export const oddContract = defineApiContract({',
+      "  method: 'get',",
+      '  pathResolver: ({ id = fallbackId() }) => `/files/${id}`,',
+      '})',
+    ].join('\n')
+    expect(indexToadContractOperations(awkward)).toEqual({ operations: [], omitted: 1 })
+  })
+
+  it('indexes nothing at all from a module that declares no contracts', () => {
+    expect(indexToadContractOperations('export const x = 1\n')).toEqual({
+      operations: [],
+      omitted: 0,
+    })
+  })
+})
+
+describe('renderFoundationalCatalog operation states', () => {
+  const withContract = (
+    format: 'openapi' | 'toad-contract' | 'lokalise-api-contract',
+    body: string,
+  ) =>
+    renderFoundationalCatalog([
+      {
+        id: 's',
+        name: 'S',
+        summary: 'x',
+        description: '',
+        capabilities: [],
+        contracts: [summarizeContract({ contractId: 'c', format, title: 'T', path: null, body })],
+      },
+    ])
+
+  it('says a format is not indexed rather than letting the empty list read as "no endpoints"', () => {
+    // The failure this prevents: an Architect told a fully-specified service offers nothing.
+    expect(withContract('lokalise-api-contract', "import '@lokalise/api-contract'")).toContain(
+      'not indexed for this format',
+    )
+  })
+
+  it('keeps "declares no operations" distinct from that', () => {
+    const rendered = withContract('openapi', 'openapi: 3.0.3\npaths: {}\n')
+    expect(rendered).toContain('declares no operations')
+    expect(rendered).not.toContain('not indexed')
+  })
+
+  it('states a contract MODULE whose declarations it could not read', () => {
+    const unreadable = [
+      "import { defineApiContract } from '@toad-contracts/valibot'",
+      'export const c = defineApiContract({ ...shared })',
+    ].join('\n')
+    expect(withContract('toad-contract', unreadable)).toContain('could not read')
+  })
+})
+
+describe('validateFoundationalDefinition', () => {
+  it('accepts a contract SET whose anchor module is not the one importing valibot schemas', () => {
+    // The real shape this exists for: a `defineApiContract` module plus the schema module it
+    // imports. Validating per document refuses the half that is not the entry point, which
+    // leaves a registrant concatenating source files to get past the boundary.
+    expect(
+      validateFoundationalDefinition({
+        contracts: [
+          { contractId: 'contract', format: 'toad-contract', title: 'C', body: TOAD_MODULE },
+          {
+            contractId: 'schemas',
+            format: 'toad-contract',
+            title: 'S',
+            body: "import * as v from 'valibot'\nexport const fileSchema = v.object({})",
+          },
+        ],
+      }),
+    ).toEqual([])
+  })
+
+  it('still refuses a set where NO document references the declared library', () => {
+    const problems = validateFoundationalDefinition({
+      contracts: [
+        { contractId: 'a', format: 'toad-contract', title: 'A', body: 'export const a = 1' },
+        { contractId: 'b', format: 'toad-contract', title: 'B', body: 'export const b = 2' },
+      ],
+    })
+    expect(problems).toEqual([
+      {
+        reason: 'contract_library_not_referenced',
+        format: 'toad-contract',
+        expected: '@toad-contracts/core',
+        contractIds: ['a', 'b'],
+      },
+    ])
+  })
+
+  it('anchors PER FORMAT, so one library cannot vouch for another', () => {
+    const problems = validateFoundationalDefinition({
+      contracts: [
+        { contractId: 'a', format: 'toad-contract', title: 'A', body: TOAD_MODULE },
+        {
+          contractId: 'b',
+          format: 'lokalise-api-contract',
+          title: 'B',
+          body: 'export const b = 2',
+        },
+      ],
+    })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatchObject({ format: 'lokalise-api-contract' })
+  })
+
+  it('refuses a capability tag that misses a reserved one by case or separators', () => {
+    // `asset_storage` registers cleanly today and surfaces hours later as a refused run, because
+    // run admission matches `asset-storage` exactly.
+    expect(validateFoundationalDefinition({ capabilities: ['asset_storage'] })).toEqual([
+      {
+        reason: 'capability_tag_near_miss',
+        capability: 'asset_storage',
+        expected: 'asset-storage',
+      },
+    ])
+    expect(validateFoundationalDefinition({ capabilities: ['asset-storage'] })).toEqual([])
+    expect(validateFoundationalDefinition({ capabilities: ['object-storage'] })).toEqual([])
+  })
+
+  it('reports every problem, so a batch is fixed in one round', () => {
+    const problems = validateFoundationalDefinition({
+      capabilities: ['Asset-Storage'],
+      contracts: [
+        { contractId: 'a', format: 'openapi', title: 'A', body: 'not: openapi' },
+        { contractId: 'a', format: 'openapi', title: 'A', body: 'openapi: 3.0.3\npaths: {}' },
+      ],
+    })
+    expect(problems.map((p) => p.reason)).toEqual([
+      'capability_tag_near_miss',
+      'invalid_openapi_document',
+      'duplicate_contract_id',
+    ])
   })
 })

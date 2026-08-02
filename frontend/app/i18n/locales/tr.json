@@ -2269,7 +2269,7 @@
       "action": "Varsayılanı seç"
     },
     "accountFoundational": {
-      "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir."
+      "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir. Bu dağıtımın kodda kaydettiği hizmetler de buraya devralınır; kimliğe göre geçersiz kılınabilir veya aşağıdan devre dışı bırakılabilir."
     }
   },
   "settings": {
@@ -5223,6 +5223,7 @@
       "subtitle": "Kuruluşunuzun hâlihazırda işlettiği ortak yetenekler; böylece bir tasarım onları yeniden inşa etmek yerine kullanır."
     },
     "tier": {
+      "builtin": "Dağıtım",
       "account": "Hesap",
       "workspace": "Pano"
     },
@@ -5233,6 +5234,8 @@
     },
     "contracts": {
       "omitted": "+{count} tanesi listelenmedi",
+      "notIndexed": "bu biçim için işlemler dizinlenmez; belgeyi açın",
+      "noOperations": "hiçbir işlem tanımlamıyor",
       "none": "Ekli API sözleşmesi yok. Ajana arayüzün bilinmediği söylenecek; tahmin etmesine izin verilmeyecek."
     },
     "catalog": {
@@ -5243,8 +5246,14 @@
       "hideDocuments": "Sözleşme belgelerini gizle"
     },
     "suppressions": {
-      "title": "Bu panoda devre dışı",
-      "intro": "Bu hesap hizmetleri, bu panodaki tasarımlardan gizlenmiştir. Hiçbir şey silinmedi; hesap onları diğer tüm panolar için korur.",
+      "title": {
+        "workspace": "Bu panoda devre dışı",
+        "account": "Bu hesapta devre dışı"
+      },
+      "intro": {
+        "workspace": "Devralınan bu hizmetler, bu panodaki tasarımlardan gizlenmiştir. Hiçbir şey silinmedi; diğer tüm panolar onları korur.",
+        "account": "Bu dağıtımın kaydettiği bu hizmetler, bu hesaptaki tüm panoların tasarımlarından gizlenmiştir. Hiçbir şey silinmedi; diğer hesaplar onları korur."
+      },
       "restore": "Yeniden sun",
       "shadowsNothing": "Şu anda bu kimlik altında devralınan bir şey yok, dolayısıyla bu devre dışı bırakma şu an hiçbir şeyi gizlemiyor."
     },

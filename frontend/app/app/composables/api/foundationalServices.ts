@@ -27,10 +27,11 @@ import type { ApiContext } from './context'
  * capabilities an organisation already runs, which an Architect designs against instead of
  * proposing a rebuild.
  *
- * Tiered exactly like the prompt-fragment library (`account` ⊕ `workspace`), so every route
- * reuses the same `scope(kind, id)` prefix. Three of them are workspace-only, because they are
- * about a tier having something ABOVE it: the merged catalog, and the suppress/restore pair
- * that opts a board out of an inherited account service.
+ * Tiered exactly like the prompt-fragment library (a deployment's code-registered `builtin`
+ * services ⊕ `account` ⊕ `workspace`), so every route reuses the same `scope(kind, id)` prefix.
+ * Only the merged catalog + the lazy document read are workspace-only, because a board is what
+ * runs agents; the suppress/restore pair serves both scopes, since an account inherits the
+ * deployment's registered tier exactly as a board inherits its account's.
  */
 export function foundationalServicesApi({ send, ws, scope }: ApiContext) {
   return {
@@ -82,21 +83,29 @@ export function foundationalServicesApi({ send, ws, scope }: ApiContext) {
         pathParams: { serviceId },
       }),
 
-    // ---- opting a board out of an inherited account service ---------------
+    // ---- opting a tier out of what it INHERITS ----------------------------
     // The LIST is what makes the pair usable: a suppressed id is by construction absent from the
     // merged catalog, so nothing else can tell the surface what to offer a restore for.
-    listFoundationalServiceSuppressions: (workspaceId: string) =>
-      send(listFoundationalServiceSuppressionsContract, { pathPrefix: ws(workspaceId) }),
+    listFoundationalServiceSuppressions: (kind: FoundationalServiceOwnerKind, id: string) =>
+      send(listFoundationalServiceSuppressionsContract, { pathPrefix: scope(kind, id) }),
 
-    suppressFoundationalService: (workspaceId: string, serviceId: string) =>
+    suppressFoundationalService: (
+      kind: FoundationalServiceOwnerKind,
+      id: string,
+      serviceId: string,
+    ) =>
       send(suppressFoundationalServiceContract, {
-        pathPrefix: ws(workspaceId),
+        pathPrefix: scope(kind, id),
         pathParams: { serviceId },
       }),
 
-    restoreFoundationalService: (workspaceId: string, serviceId: string) =>
+    restoreFoundationalService: (
+      kind: FoundationalServiceOwnerKind,
+      id: string,
+      serviceId: string,
+    ) =>
       send(restoreFoundationalServiceContract, {
-        pathPrefix: ws(workspaceId),
+        pathPrefix: scope(kind, id),
         pathParams: { serviceId },
       }),
 

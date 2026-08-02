@@ -16,17 +16,11 @@ import { FoundationalServiceRunResolver } from './FoundationalServiceRunResolver
 
 const entry = (id: string): ResolvedFoundationalService => ({
   id,
-  ownerKind: 'account',
   name: 'File Storage',
   summary: 'Stores uploads.',
   description: '',
   capabilities: [],
   contracts: [],
-  sourceId: null,
-  sourcePath: null,
-  pinnedCommit: null,
-  createdAt: 1,
-  updatedAt: 1,
   tier: 'account',
 })
 

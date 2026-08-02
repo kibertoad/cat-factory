@@ -40,7 +40,11 @@ function foundationalServicesSetup(
 ) {
   const api = useApi()
 
-  /** The merged/resolved catalog only exists at the workspace tier. */
+  /**
+   * The merged/resolved catalog only exists at the workspace tier — a board is what runs agents.
+   * The SUPPRESSION pair is not gated on it: an account inherits the deployment's code-registered
+   * `builtin` services exactly as a board inherits its account's, so both tiers can opt out.
+   */
   const hasResolved = kind === 'workspace'
 
   /** null = not probed yet; true/false = the catalog is on/off for this deployment. */
@@ -70,7 +74,7 @@ function foundationalServicesSetup(
 
   /** How many entries of the merged catalog this board inherits rather than owns. */
   const inheritedCount = computed(
-    () => resolved.value.filter((entry) => entry.tier === 'account').length,
+    () => resolved.value.filter((entry) => entry.tier !== 'workspace').length,
   )
 
   function requireOwnerId(): string {
@@ -94,9 +98,7 @@ function foundationalServicesSetup(
         hasResolved
           ? api.getResolvedFoundationalServices(id)
           : Promise.resolve([] as ResolvedFoundationalService[]),
-        hasResolved
-          ? api.listFoundationalServiceSuppressions(id)
-          : Promise.resolve([] as FoundationalServiceSuppression[]),
+        api.listFoundationalServiceSuppressions(kind, id),
       ])
       services.value = tier
       resolved.value = merged
@@ -133,14 +135,15 @@ function foundationalServicesSetup(
   }
 
   async function refreshResolved() {
-    if (!hasResolved) return
     const id = requireOwnerId()
     // Both in one pass: a write that changes the merge routinely changes the opt-out list too
     // (suppressing removes an entry from one and adds it to the other), and refreshing only the
     // catalog would leave the way BACK stale — the exact state the pair exists to avoid.
     const [merged, opted] = await Promise.all([
-      api.getResolvedFoundationalServices(id),
-      api.listFoundationalServiceSuppressions(id),
+      hasResolved
+        ? api.getResolvedFoundationalServices(id)
+        : Promise.resolve([] as ResolvedFoundationalService[]),
+      api.listFoundationalServiceSuppressions(kind, id),
     ])
     resolved.value = merged
     suppressions.value = opted
@@ -171,15 +174,15 @@ function foundationalServicesSetup(
     await reload()
   }
 
-  /** Opt this board out of an inherited ACCOUNT service. Destroys nothing; reversible. */
+  /** Opt this tier out of a service it INHERITS. Destroys nothing; reversible. */
   async function suppress(serviceId: string) {
-    await api.suppressFoundationalService(requireWorkspaceId(), serviceId)
+    await api.suppressFoundationalService(kind, requireOwnerId(), serviceId)
     await reload()
   }
 
-  /** Lift a suppression, so the board inherits the account service again. */
+  /** Lift a suppression, so this tier inherits the service again. */
   async function restore(serviceId: string) {
-    await api.restoreFoundationalService(requireWorkspaceId(), serviceId)
+    await api.restoreFoundationalService(kind, requireOwnerId(), serviceId)
     await reload()
   }
 

@@ -1,18 +1,42 @@
 <script setup lang="ts">
-// What this board is opted OUT of (backend/docs/adr/0031-foundational-services.md). A suppressed id is
+// What this tier is opted OUT of (backend/docs/adr/0031-foundational-services.md). A suppressed id is
 // by construction absent from the merged catalog, so without this list the suppress action would
 // be a one-way door — which is why it is a section of its own rather than a badge on the catalog.
 //
+// Rendered at BOTH scopes, because both inherit: a board from its account, and either from the
+// services the deployment registered in code (the `builtin` tier).
+//
 // `inherited: false` is rendered distinctly rather than hidden: the tombstone shadows nothing
-// today (the account withdrew the service, or this row is what remains of the board deleting its
-// own registration), and an operator reading it as "a capability is being withheld" would go
+// today (the tier below withdrew the service, or this row is what remains of this tier deleting
+// its own registration), and an operator reading it as "a capability is being withheld" would go
 // looking for something that is not there.
-import { reactive } from 'vue'
-import { useFoundationalServicesStore } from '~/stores/foundationalServices'
+import { computed, reactive } from 'vue'
+import type { FoundationalServiceOwnerKind } from '~/types/domain'
+import {
+  useFoundationalServices,
+  useFoundationalServicesStore,
+} from '~/stores/foundationalServices'
 
-const catalog = useFoundationalServicesStore()
+const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
+
+const catalog =
+  props.kind === 'workspace'
+    ? useFoundationalServicesStore()
+    : useFoundationalServices(props.kind, props.ownerId)
 const toast = useToast()
 const { t } = useI18n()
+
+// Exhaustive scope→key maps of literal `t(...)` keys: what a board opts out of (its account's
+// services) and what an account opts out of (the deployment's) are different enough sentences
+// that one string with a placeholder would read as neither.
+const title = computed<Record<FoundationalServiceOwnerKind, string>>(() => ({
+  workspace: t('foundational.suppressions.title.workspace'),
+  account: t('foundational.suppressions.title.account'),
+}))
+const intro = computed<Record<FoundationalServiceOwnerKind, string>>(() => ({
+  workspace: t('foundational.suppressions.intro.workspace'),
+  account: t('foundational.suppressions.intro.account'),
+}))
 
 const busyRows = reactive(new Set<string>())
 const rowBusy = (id: string) => busyRows.has(id)
@@ -42,8 +66,8 @@ async function restore(serviceId: string) {
     class="flex flex-col gap-2"
     data-testid="foundational-suppressions"
   >
-    <p class="text-sm font-medium">{{ t('foundational.suppressions.title') }}</p>
-    <p class="text-xs text-slate-500">{{ t('foundational.suppressions.intro') }}</p>
+    <p class="text-sm font-medium">{{ title[props.kind] }}</p>
+    <p class="text-xs text-slate-500">{{ intro[props.kind] }}</p>
     <div
       v-for="s in catalog.suppressions"
       :key="s.id"

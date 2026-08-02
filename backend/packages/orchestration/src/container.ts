@@ -100,6 +100,7 @@ import type {
   SkillLibraryModule,
 } from './container-content-libraries.js'
 import type {
+  FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
   InitiativePresetRegistry,
@@ -318,6 +319,13 @@ export interface CoreSpine {
    */
   taskTypeRegistry: TaskTypeRegistry
   /**
+   * The app-owned foundational-service registry the engine resolved (the facade's injected
+   * instance, else the empty default) — the catalog's `builtin` tier. Re-exposed so the facade
+   * passes the SAME instance to `validateRegistrations` at boot, where a malformed definition or
+   * an unparseable contract document fails the deployment instead of reaching an Architect.
+   */
+  foundationalServiceRegistry: FoundationalServiceRegistry
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -517,6 +525,7 @@ export function createCore(injected: CoreDependencies): Core {
     judgeRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    foundationalServiceRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     caches,
@@ -609,6 +618,7 @@ export function createCore(injected: CoreDependencies): Core {
     caches,
     executionEventPublisher,
     boardService,
+    foundationalServiceRegistry,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
   environmentHandlerSeederRef = environmentHandlerSeeder
@@ -699,6 +709,7 @@ export function createCore(injected: CoreDependencies): Core {
     judgeRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    foundationalServiceRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

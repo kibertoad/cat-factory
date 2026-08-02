@@ -504,3 +504,97 @@ describe('FoundationalServiceSourceService — folder mode, a folder that is not
     expect(result.upserted).toBe(1)
   })
 })
+
+describe('FoundationalServiceSourceService — files mode, a contract MODULE graph', () => {
+  const linkFiles = (paths: string[]) => ({
+    repoOwner: 'acme',
+    repoName: 'platform',
+    mode: 'files' as const,
+    filePaths: paths,
+    serviceId: 'billing',
+    serviceName: 'Billing',
+  })
+
+  it('keeps a linked module the contract imports, instead of dropping it as unrecognised', async () => {
+    // A `@toad-contracts/core` contract is a module GRAPH and only its entry point names the
+    // library. Dropping the schema half leaves a coder holding imports that point at nothing.
+    const github = fakeGitHub({
+      'src/contracts.ts': {
+        sha: 'a',
+        content: "import { defineApiContract } from '@toad-contracts/core'\nexport const c = 1\n",
+      },
+      'src/schemas.ts': { sha: 'b', content: "import * as v from 'valibot'\nexport const s = 1\n" },
+    })
+    const { service, contracts } = makeService(github)
+    const source = await service.link(
+      'account',
+      'acct1',
+      linkFiles(['src/contracts.ts', 'src/schemas.ts']),
+    )
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.skippedFiles).toBe(0)
+    expect(contracts.rows.map((c) => c.contractId).sort()).toEqual(['contracts', 'schemas'])
+    expect(contracts.rows.every((c) => c.format === 'toad-contract')).toBe(true)
+  })
+
+  it('admits a supporting module linked BEFORE the contract that vouches for it', async () => {
+    // The set's format is decided over every readable file, not left to right: a link that
+    // happens to list the schemas first must not lose them.
+    const github = fakeGitHub({
+      'src/a-schemas.ts': { sha: 'a', content: "import * as v from 'valibot'\n" },
+      'src/b-contracts.ts': {
+        sha: 'b',
+        content: "import { defineApiContract } from '@toad-contracts/core'\n",
+      },
+    })
+    const { service, contracts } = makeService(github)
+    const source = await service.link(
+      'account',
+      'acct1',
+      linkFiles(['src/a-schemas.ts', 'src/b-contracts.ts']),
+    )
+
+    await service.sync('account', 'acct1', source.id)
+
+    expect(contracts.rows).toHaveLength(2)
+  })
+
+  it('refuses to guess when the linked set mixes two contract libraries', async () => {
+    // With both libraries present there is no telling which one an unrecognised module supports,
+    // and attaching it to the wrong contract is worse than reporting it skipped.
+    const github = fakeGitHub({
+      'src/toad.ts': { sha: 'a', content: "import '@toad-contracts/core'\n" },
+      'src/lokalise.ts': { sha: 'b', content: "import '@lokalise/api-contract'\n" },
+      'src/schemas.ts': { sha: 'c', content: "import * as v from 'valibot'\n" },
+    })
+    const { service, contracts } = makeService(github)
+    const source = await service.link(
+      'account',
+      'acct1',
+      linkFiles(['src/toad.ts', 'src/lokalise.ts', 'src/schemas.ts']),
+    )
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.skippedFiles).toBe(1)
+    expect(contracts.rows.map((c) => c.contractId).sort()).toEqual(['lokalise', 'toad'])
+  })
+
+  it('does NOT admit supporting modules in a folder scan, which walks paths nobody named', async () => {
+    // One recursive link would otherwise sweep a repo's TypeScript into an agent's context as
+    // "contracts". The explicit file list is what makes the relaxation safe, and only there.
+    const github = fakeGitHub({
+      'specs/contracts.ts': { sha: 'a', content: "import '@toad-contracts/core'\n" },
+      'specs/helper.ts': { sha: 'b', content: 'export const helper = 1\n' },
+    })
+    const { service, contracts } = makeService(github)
+    const source = await service.link('account', 'acct1', link)
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.skippedFiles).toBe(1)
+    expect(contracts.rows.map((c) => c.contractId)).toEqual(['contracts'])
+  })
+})

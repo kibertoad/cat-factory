@@ -13,6 +13,7 @@ import type {
   ApiContractRepository,
   Clock,
   FoundationalServiceRecord,
+  FoundationalServiceRegistry,
   FoundationalServiceRepository,
   GroupCacheHandle,
   WorkspaceRepository,
@@ -20,11 +21,11 @@ import type {
 import {
   ConflictError,
   NotFoundError,
-  ValidationError,
+  defaultFoundationalServiceRegistry,
   summarizeContract,
 } from '@cat-factory/kernel'
 import { mergeFoundationalTiers, toWire } from './foundational-catalog.js'
-import { validateUploadedContract } from './contract-validation.js'
+import { assertValidDefinition } from './contract-validation.js'
 
 export interface FoundationalServiceCatalogDependencies {
   foundationalServiceRepository: FoundationalServiceRepository
@@ -33,24 +34,39 @@ export interface FoundationalServiceCatalogDependencies {
   clock: Clock
   /** The merged per-workspace catalog cache. Absent (tests) ⇒ every resolve reads through. */
   catalogCache?: GroupCacheHandle<ResolvedFoundationalService[]>
+  /**
+   * The deployment's own registered services — the `builtin` tier. Optional and defaulted to an
+   * empty registry, so a construction site that omits it resolves the stored tiers exactly as
+   * before; a facade injects the SAME instance it registers on.
+   */
+  registry?: FoundationalServiceRegistry
 }
 
 /**
  * The foundational-services catalog (backend/docs/adr/0031-foundational-services.md): per-tier CRUD
- * plus the merged account ⊕ workspace resolve every design dispatch reads.
+ * plus the merged builtin ⊕ account ⊕ workspace resolve every design dispatch reads.
  *
- * Two properties are load-bearing and are why this is a service rather than a repository call:
+ * Three properties are load-bearing and are why this is a service rather than a repository call:
  *
  * - **The catalog never carries a contract BODY.** `listTier` and `resolve` join the contract
  *   MANIFEST (id, format, title, byte size, operation names) onto each service in ONE extra
  *   query for the whole tier. The documents are read only by {@link contractsFor}, and only for
  *   the ids a caller asks for.
- * - **A workspace row wins over an account row of the same id, and a workspace TOMBSTONE
- *   suppresses one.** That is what lets a board opt out of an org-wide service without an
- *   account admin, and it is why the merge reads the workspace tier `includeDeleted`.
+ * - **A later tier wins by id, and a TOMBSTONE at either stored tier suppresses what it
+ *   inherits.** That is what lets a board opt out of an org-wide service without an account
+ *   admin — and an account out of a deployment `builtin` — and it is why the merge reads both
+ *   stored tiers `includeDeleted`.
+ * - **The `builtin` tier has no rows.** It is read from the app-owned
+ *   {@link FoundationalServiceRegistry} on every resolve, so a deployment's catalog is present
+ *   from a workspace's first request and cannot drift from the code that declares it.
  */
 export class FoundationalServiceCatalogService {
-  constructor(private readonly deps: FoundationalServiceCatalogDependencies) {}
+  /** The deployment's registered services; an empty registry when a facade wired none. */
+  private readonly registry: FoundationalServiceRegistry
+
+  constructor(private readonly deps: FoundationalServiceCatalogDependencies) {
+    this.registry = deps.registry ?? defaultFoundationalServiceRegistry()
+  }
 
   /** One tier's registered services, contract manifests joined on. Raw — not merged. */
   async listTier(
@@ -71,6 +87,7 @@ export class FoundationalServiceCatalogService {
     ownerId: string,
     input: CreateFoundationalServiceInput,
   ): Promise<FoundationalService> {
+    assertValidDefinition(input)
     const existing = await this.deps.foundationalServiceRepository.get(ownerKind, ownerId, input.id)
     // A LIVE row is a conflict; a tombstoned one is revived by this write. Refusing the
     // revival would leave an id permanently unusable after one delete.
@@ -117,6 +134,7 @@ export class FoundationalServiceCatalogService {
     serviceId: string,
     input: UpdateFoundationalServiceInput,
   ): Promise<FoundationalService> {
+    assertValidDefinition(input)
     const existing = await this.require(ownerKind, ownerId, serviceId)
     const now = this.deps.clock.now()
     const record: FoundationalServiceRecord = {
@@ -170,21 +188,29 @@ export class FoundationalServiceCatalogService {
   }
 
   /**
-   * Suppress an ACCOUNT service for one workspace by writing a workspace-tier tombstone. The
-   * row carries no content of its own — it exists only to lose the merge — so it is written
-   * here rather than through {@link create}, which would demand a name and summary for
-   * something that is never rendered.
+   * Suppress an INHERITED service at one tier by writing a tombstone there: an account service
+   * for a board, a deployment `builtin` for either. The row carries no content of its own — it
+   * exists only to lose the merge — so it is written here rather than through {@link create},
+   * which would demand a name and summary for something that is never rendered.
+   *
+   * Both scopes are served because both now inherit. Leaving it workspace-only once the
+   * deployment tier existed would make a registered service un-opt-out-able for a whole account
+   * that has one board too many to do it per board.
    *
    * Both refusals are deliberate. An id the merged catalog does not carry would tombstone
-   * NOTHING today and silently swallow whatever the account registers under it tomorrow — a
-   * suppression nobody could later explain. An id the workspace owns at its own tier is not
-   * inherited at all: tombstoning it there would read as a delete while destroying the board's
-   * authored description and contracts, which is {@link remove}'s job and not this one's.
+   * NOTHING today and silently swallow whatever a lower tier registers under it tomorrow — a
+   * suppression nobody could later explain. An id this tier owns a row for is not inherited at
+   * all: tombstoning it there would read as a delete while destroying the authored description
+   * and contracts, which is {@link remove}'s job and not this one's.
    */
-  async suppressForWorkspace(workspaceId: string, serviceId: string): Promise<void> {
+  async suppress(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceId: string,
+  ): Promise<void> {
     const existing = await this.deps.foundationalServiceRepository.get(
-      'workspace',
-      workspaceId,
+      ownerKind,
+      ownerId,
       serviceId,
     )
     // Already suppressed: the tombstone IS the whole state, so a retried request has nothing
@@ -192,17 +218,18 @@ export class FoundationalServiceCatalogService {
     // below could not answer this case anyway — a suppressed id is exactly one the merged
     // catalog no longer carries.
     if (existing?.deletedAt) return
-    // Deliberately `loadCatalog` rather than the cached {@link resolve}: both refusals below are
-    // decisions ABOUT persisted state, and a TTL'd merge can be behind it. Reading the cache
-    // would 404 an opt-out for a service the account registered moments ago, and — worse —
-    // write a tombstone against an id the account has since withdrawn, which is exactly the
-    // shadows-nothing row the 404 exists to prevent. This is a rare, human-driven write, so the
-    // four batched reads it costs are not worth trading for a refusal that can be wrong.
-    const inherited = (await this.loadCatalog(workspaceId)).find((entry) => entry.id === serviceId)
+    // Deliberately the uncached merge: both refusals below are decisions ABOUT persisted state,
+    // and a TTL'd merge can be behind it. Reading the cache would 404 an opt-out for a service
+    // the account registered moments ago, and — worse — write a tombstone against an id the
+    // account has since withdrawn, which is exactly the shadows-nothing row the 404 exists to
+    // prevent. This is a rare, human-driven write, so the batched reads it costs are not worth
+    // trading for a refusal that can be wrong.
+    const merged = await this.loadTierView(ownerKind, ownerId)
+    const inherited = merged.find((entry) => entry.id === serviceId)
     if (!inherited) throw new NotFoundError('FoundationalService', serviceId)
-    if (inherited.tier === 'workspace') {
+    if (inherited.tier === ownerKind) {
       throw new ConflictError(
-        `Foundational service '${serviceId}' is registered by this workspace, not inherited`,
+        `Foundational service '${serviceId}' is registered at this scope, not inherited`,
         'foundational_service_not_inherited',
         { serviceId },
       )
@@ -210,8 +237,8 @@ export class FoundationalServiceCatalogService {
     const now = this.deps.clock.now()
     await this.deps.foundationalServiceRepository.upsert({
       serviceId,
-      ownerKind: 'workspace',
-      ownerId: workspaceId,
+      ownerKind,
+      ownerId,
       name: '',
       summary: '',
       description: '',
@@ -223,37 +250,34 @@ export class FoundationalServiceCatalogService {
       updatedAt: now,
       deletedAt: now,
     })
-    await this.invalidate('workspace', workspaceId)
+    await this.invalidate(ownerKind, ownerId)
   }
 
   /**
-   * What a board is currently suppressing. The merged catalog cannot answer this — a suppressed
+   * What a tier is currently suppressing. The merged catalog cannot answer this — a suppressed
    * id is precisely one it no longer carries — so the tombstones are read directly and joined
-   * against the account tier for identity.
+   * against what this tier inherits for identity.
    *
    * `inherited: false` is the case worth keeping distinct: the tombstone shadows nothing today,
-   * because the account withdrew the service or because the row is the remains of the board
+   * because the tier below withdrew the service or because the row is the remains of this tier
    * DELETING its own registration. Collapsing the two would tell an operator a capability is
    * being withheld when there is none to withhold.
    */
-  async listSuppressions(workspaceId: string): Promise<FoundationalServiceSuppression[]> {
-    const rows = await this.deps.foundationalServiceRepository.listByOwner(
-      'workspace',
-      workspaceId,
-      true,
-    )
+  async listSuppressions(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+  ): Promise<FoundationalServiceSuppression[]> {
+    const rows = await this.deps.foundationalServiceRepository.listByOwner(ownerKind, ownerId, true)
     const tombstones = rows.filter((row) => row.deletedAt !== null)
     if (tombstones.length === 0) return []
-    const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
-    const accountRows = accountId
-      ? await this.deps.foundationalServiceRepository.listByOwner('account', accountId)
-      : []
-    const inherited = new Map(accountRows.map((row) => [row.serviceId, row]))
+    const inherited = new Map(
+      (await this.inheritedIdentities(ownerKind, ownerId)).map((entry) => [entry.id, entry]),
+    )
     return tombstones.map((row) => {
       const shadowed = inherited.get(row.serviceId)
       return {
         id: row.serviceId,
-        // The inherited row's identity when there is one; otherwise whatever the tombstone
+        // The inherited entry's identity when there is one; otherwise whatever the tombstone
         // carries, which is empty for a suppression written against an id this tier never
         // registered — the id is then the only honest name, and it is the one an Architect uses.
         name: shadowed?.name ?? row.name,
@@ -264,23 +288,52 @@ export class FoundationalServiceCatalogService {
   }
 
   /**
-   * Undo a suppression: DROP the workspace tombstone so the account service is inherited again.
+   * The identity of everything a tier INHERITS: the merge as the tier BELOW it resolves it.
+   *
+   * Deliberately the same {@link loadTierView} the merge and {@link suppress} run on, rather than
+   * a second walk over builtins + account rows. Inheritance is a precedence question, and the
+   * tombstone half of that precedence is easy to leave out of a hand-rolled second copy — which
+   * is exactly what happened: reading the account's LIVE rows beside the registry made a builtin
+   * the account had already suppressed still look inherited by every board under it, so a board's
+   * own opt-out claimed to be shadowing a service no board could see. `inherited` is the one
+   * thing this list has to be right about, since it is the difference between "a capability is
+   * being withheld" and "there is none to withhold".
+   *
+   * The cost is one manifest read whose contracts nothing here uses. That is the correct trade
+   * for a rare, human-driven settings read: a second precedence implementation is a standing
+   * invitation for the two to disagree again, and only one of them is the one agents resolve.
+   */
+  private async inheritedIdentities(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+  ): Promise<{ id: string; name: string; summary: string }[]> {
+    // An account's tier below is the deployment's registry and nothing else.
+    if (ownerKind === 'account') return this.registry.entries()
+    const accountId = await this.deps.workspaceRepository.accountOf(ownerId)
+    // A board with no account inherits the deployment tier directly, with nothing able to
+    // suppress it in between.
+    if (!accountId) return this.registry.entries()
+    return this.loadTierView('account', accountId)
+  }
+
+  /**
+   * Undo a suppression: DROP this tier's tombstone so the inherited service is offered again.
    *
    * The row is deleted rather than un-tombstoned because a tombstone carries no name, summary or
-   * contracts — clearing its `deletedAt` would revive it as an EMPTY workspace override that
-   * wins the merge, which is a worse outcome than the suppression it was meant to undo. It is
-   * also why a LIVE workspace row is refused with a 404 on the suppression rather than deleted:
-   * the caller asked to lift a suppression, and this tier is not suppressing anything.
+   * contracts — clearing its `deletedAt` would revive it as an EMPTY override that wins the
+   * merge, which is a worse outcome than the suppression it was meant to undo. It is also why a
+   * LIVE row is refused with a 404 rather than deleted: the caller asked to lift a suppression,
+   * and this tier is not suppressing anything.
    */
-  async restoreInherited(workspaceId: string, serviceId: string): Promise<void> {
-    const row = await this.deps.foundationalServiceRepository.get(
-      'workspace',
-      workspaceId,
-      serviceId,
-    )
+  async restoreInherited(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceId: string,
+  ): Promise<void> {
+    const row = await this.deps.foundationalServiceRepository.get(ownerKind, ownerId, serviceId)
     if (!row || !row.deletedAt) throw new NotFoundError('FoundationalServiceSuppression', serviceId)
-    await this.deps.foundationalServiceRepository.hardDelete('workspace', workspaceId, serviceId)
-    await this.invalidate('workspace', workspaceId)
+    await this.deps.foundationalServiceRepository.hardDelete(ownerKind, ownerId, serviceId)
+    await this.invalidate(ownerKind, ownerId)
   }
 
   /** The merged catalog a workspace's agents see, cached per workspace. */
@@ -291,12 +344,14 @@ export class FoundationalServiceCatalogService {
 
   /**
    * The LAZY contract read: full documents for the named services, resolved against the same
-   * account ⊕ workspace precedence the catalog uses. One batched query per tier — never a
-   * per-service read — and an empty `serviceIds` returns `[]` without touching the store.
+   * builtin ⊕ account ⊕ workspace precedence the catalog uses. One batched query per stored
+   * tier — never a per-service read — and an empty `serviceIds` returns `[]` without touching
+   * the store.
    *
    * Precedence matters here as much as in the catalog: a workspace that overrode a service
    * must hand out ITS documents, or the design would be reviewed against the org's spec while
-   * the code is written against the board's.
+   * the code is written against the board's. A `builtin` winner's documents come from the
+   * registry, which is the only place they exist.
    */
   async contractsFor(
     workspaceId: string,
@@ -321,6 +376,10 @@ export class FoundationalServiceCatalogService {
     for (const id of wanted) {
       const tier = tierById.get(id)
       if (!tier) continue
+      if (tier === 'builtin') {
+        out.set(id, this.registry.documentsFor(id))
+        continue
+      }
       const docs = (tier === 'workspace' ? workspaceDocs : accountDocs).filter(
         (doc) => doc.serviceId === id,
       )
@@ -345,7 +404,7 @@ export class FoundationalServiceCatalogService {
     const [workspaceRows, accountRows, workspaceManifest, accountManifest] = await Promise.all([
       this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId, true),
       accountId
-        ? this.deps.foundationalServiceRepository.listByOwner('account', accountId)
+        ? this.deps.foundationalServiceRepository.listByOwner('account', accountId, true)
         : Promise.resolve<FoundationalServiceRecord[]>([]),
       this.deps.apiContractRepository.listManifestByOwner('workspace', workspaceId),
       accountId
@@ -353,10 +412,34 @@ export class FoundationalServiceCatalogService {
         : Promise.resolve<ApiContractManifestEntry[]>([]),
     ])
     return mergeFoundationalTiers({
+      builtins: this.registry.entries(),
       accountRows,
       workspaceRows,
       accountManifest: indexManifest(accountManifest),
       workspaceManifest: indexManifest(workspaceManifest),
+    })
+  }
+
+  /**
+   * The merge as ONE tier sees it — what {@link suppress} decides against. For a workspace that
+   * is the full catalog; for an account it is the deployment's registered services under its own
+   * rows, since an account has exactly one tier below it and no workspace above it to consult.
+   */
+  private async loadTierView(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+  ): Promise<ResolvedFoundationalService[]> {
+    if (ownerKind === 'workspace') return this.loadCatalog(ownerId)
+    const [accountRows, accountManifest] = await Promise.all([
+      this.deps.foundationalServiceRepository.listByOwner('account', ownerId, true),
+      this.deps.apiContractRepository.listManifestByOwner('account', ownerId),
+    ])
+    return mergeFoundationalTiers({
+      builtins: this.registry.entries(),
+      accountRows,
+      workspaceRows: [],
+      accountManifest: indexManifest(accountManifest),
+      workspaceManifest: new Map(),
     })
   }
 
@@ -370,6 +453,11 @@ export class FoundationalServiceCatalogService {
     return record
   }
 
+  /**
+   * Uploaded documents → stored rows. The definition was already refused at the top of the
+   * write (`assertValidDefinition`) — validating the SET has to happen before any of it is
+   * built, since a set's anchor may be its last document.
+   */
   private buildUploadedContracts(
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
@@ -377,16 +465,7 @@ export class FoundationalServiceCatalogService {
     uploads: CreateFoundationalServiceInput['contracts'],
     now: number,
   ): ApiContractRecord[] {
-    const seen = new Set<string>()
     return (uploads ?? []).map((upload) => {
-      if (seen.has(upload.contractId)) {
-        throw new ValidationError(`Duplicate contract id '${upload.contractId}'`, {
-          reason: 'duplicate_contract_id',
-          contractId: upload.contractId,
-        })
-      }
-      seen.add(upload.contractId)
-      validateUploadedContract(upload)
       const summary = summarizeContract({
         contractId: upload.contractId,
         format: upload.format,

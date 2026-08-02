@@ -72,6 +72,16 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // passes it to `startLocal()` via the `taskTypeRegistry` option — the SPA renders each as a
 // first-class create-task choice + card badge (snapshot `customTaskTypes`).
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+// Installation-level extension point for FOUNDATIONAL SERVICES (the same DI seam again): a
+// deployment news a `defaultFoundationalServiceRegistry()`, registers the shared capabilities its
+// org already runs on it, and passes it via the `foundationalServiceRegistry` option. They resolve
+// as the `builtin` tier of every workspace's catalog, so a board designs against the estate from
+// its first request. See backend/docs/adr/0031-foundational-services.md.
+export {
+  FoundationalServiceRegistry,
+  type FoundationalServiceDefinition,
+  defaultFoundationalServiceRegistry,
+} from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).

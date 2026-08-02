@@ -99,7 +99,8 @@ export function defineFoundationalServicesSuite(
 
       await services.softDelete('account', ownerId, 'file-storage', 5_000)
       expect(await services.listByOwner('account', ownerId)).toEqual([])
-      // The tier merge reads WITH tombstones — that is what suppresses an inherited service.
+      // The tier merge reads BOTH stored tiers WITH tombstones — that is what suppresses an
+      // inherited service, an account opting out of a deployment `builtin` included.
       const withDeleted = await services.listByOwner('account', ownerId, true)
       expect(withDeleted).toHaveLength(1)
       expect(withDeleted[0]?.deletedAt).toBe(5_000)
@@ -108,9 +109,10 @@ export function defineFoundationalServicesSuite(
     it('hard-deletes a suppression row outright, where a tombstone would linger', async () => {
       const { services } = makeRepos()
       const ownerId = scope()
-      // The shape `suppressForWorkspace` writes: a tombstone with no content, whose only job is
-      // to lose the tier merge. Lifting the suppression must leave the tier saying NOTHING about
-      // the id — clearing `deletedAt` instead would revive this as an empty winning override.
+      // The shape `FoundationalServiceCatalogService.suppress` writes at either tier: a tombstone
+      // with no content, whose only job is to lose the tier merge. Lifting the suppression must
+      // leave the tier saying NOTHING about the id — clearing `deletedAt` instead would revive
+      // this as an empty winning override.
       await services.upsert(
         service(ownerId, 'file-storage', {
           ownerKind: 'workspace',

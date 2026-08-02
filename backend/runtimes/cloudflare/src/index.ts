@@ -63,6 +63,7 @@ import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
+  defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
   describeError,
@@ -130,6 +131,17 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // reference, and injects it via the `taskTypeRegistry` override — the SPA renders each as a
 // first-class create-task choice + card badge (snapshot `customTaskTypes`).
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+// Installation-level extension point for FOUNDATIONAL SERVICES (the same DI seam again): a
+// deployment news a `defaultFoundationalServiceRegistry()`, registers the shared capabilities its
+// org already runs on it by reference, and injects it via the `foundationalServiceRegistry`
+// override. They resolve as the `builtin` tier of every workspace's catalog, so a board designs
+// against the estate from its first request and an account/board can still override or suppress
+// any of them. See backend/docs/adr/0031-foundational-services.md.
+export {
+  FoundationalServiceRegistry,
+  type FoundationalServiceDefinition,
+  defaultFoundationalServiceRegistry,
+} from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default. A custom Worker entry that builds
 // its own app can seed a different out-of-the-box default with
 // `createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude } })` (a
@@ -165,6 +177,11 @@ const pipelineRegistry = defaultPipelineRegistry()
 // the boot-time validation below; a deployment registers its custom task types on this instance
 // before the first request so they surface in the snapshot and validate at boot.
 const taskTypeRegistry = defaultTaskTypeRegistry()
+// One app-owned foundational-service registry (empty by default — the platform ships no built-in
+// shared capabilities), shared by every per-request container AND the boot-time validation below;
+// a deployment registers its estate on this instance before the first request, so every workspace
+// catalog carries it and a malformed contract document fails boot rather than a design dispatch.
+const foundationalServiceRegistry = defaultFoundationalServiceRegistry()
 const app = createApp({
   overrides: {
     agentKindRegistry,
@@ -173,6 +190,7 @@ const app = createApp({
     stepResolverRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    foundationalServiceRegistry,
     initiativePresetRegistry,
   },
 })
@@ -767,6 +785,7 @@ export default {
       gateRegistry,
       pipelineRegistry,
       taskTypeRegistry,
+      foundationalServiceRegistry,
       onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
     })
     return app.fetch(request, env, ctx)
