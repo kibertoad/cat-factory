@@ -200,6 +200,7 @@ export {
   contextFileFor,
   detectContractFormat,
   indexOpenApiOperations,
+  isContractCandidatePath,
   isOpenApiDocument,
   parseFoundationalDeclaration,
   renderContractDocument,

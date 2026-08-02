@@ -69,20 +69,44 @@ export const FOUNDATIONAL_DECLARATION_TAG = 'foundational-services'
  */
 export function detectContractFormat(path: string, content: string): ApiContractFormat | null {
   const lower = path.toLowerCase()
-  if (lower.endsWith('.ts') || lower.endsWith('.mts') || lower.endsWith('.js')) {
+  if (endsWithAny(lower, CONTRACT_MODULE_EXTENSIONS)) {
     if (content.includes('@lokalise/api-contract')) return 'lokalise-api-contract'
     if (content.includes('@toad-contracts/')) return 'toad-contract'
     return null
   }
-  if (
-    lower.endsWith('.json') ||
-    lower.endsWith('.yaml') ||
-    lower.endsWith('.yml') ||
-    lower.endsWith('.openapi')
-  ) {
+  if (endsWithAny(lower, OPENAPI_DOCUMENT_EXTENSIONS)) {
     return isOpenApiDocument(content) ? 'openapi' : null
   }
   return null
+}
+
+/** Extensions a TypeScript/JavaScript contract MODULE can carry. */
+const CONTRACT_MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
+
+/** Extensions an OpenAPI document can carry (JSON or YAML). */
+const OPENAPI_DOCUMENT_EXTENSIONS = ['.json', '.yaml', '.yml', '.openapi']
+
+/**
+ * Whether a path's EXTENSION could yield a contract format at all — the half of
+ * {@link detectContractFormat} that is decidable without the body.
+ *
+ * A folder-mode repo source walks directories nobody enumerated by hand, so without this it
+ * would fetch every README, lockfile and image in the subtree only to learn each is not a
+ * contract. This keeps a scan's file reads proportional to the CANDIDATES rather than to the
+ * folder's size. It is derived from the same two extension lists `detectContractFormat`
+ * branches on, so the two cannot drift: a candidate may still be rejected on its content, but a
+ * non-candidate can never be a contract.
+ */
+export function isContractCandidatePath(path: string): boolean {
+  const lower = path.toLowerCase()
+  return (
+    endsWithAny(lower, CONTRACT_MODULE_EXTENSIONS) ||
+    endsWithAny(lower, OPENAPI_DOCUMENT_EXTENSIONS)
+  )
+}
+
+function endsWithAny(lower: string, extensions: string[]): boolean {
+  return extensions.some((extension) => lower.endsWith(extension))
 }
 
 /** Whether `content` parses as an OpenAPI **3.x** document (JSON or YAML). */

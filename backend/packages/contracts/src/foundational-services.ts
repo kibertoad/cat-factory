@@ -182,11 +182,20 @@ export type UpdateFoundationalServiceInput = v.InferOutput<typeof updateFoundati
  *
  * - `directory`: every immediate SUBDIRECTORY of `dirPath` is one service, described by a
  *   `service.md` (YAML frontmatter + markdown body) with its contract documents beside it.
+ * - `folder`: the WHOLE of `dirPath` — optionally including its subfolders — is the contract
+ *   set of the ONE service the source names. Every file under it whose extension could be a
+ *   contract document is read and kept if it is one.
  * - `files`: an explicit list of contract file PATHS, all attached to the ONE service the
  *   source names. This is the "just point at my openapi.yaml" case, where there is no
  *   directory convention to adopt.
+ *
+ * `folder` and `files` differ in WHEN the file set is decided, and that is the whole reason
+ * both exist: a `files` link pins the paths, so a contract added upstream is invisible until
+ * somebody edits the link, while a `folder` link re-discovers the set on every sync. Pointing
+ * at a folder is therefore the right shape for a spec directory that grows, and naming files is
+ * the right shape for picking two documents out of a repo that is mostly something else.
  */
-export const foundationalServiceSourceModeSchema = v.picklist(['directory', 'files'])
+export const foundationalServiceSourceModeSchema = v.picklist(['directory', 'folder', 'files'])
 export type FoundationalServiceSourceMode = v.InferOutput<
   typeof foundationalServiceSourceModeSchema
 >
@@ -200,11 +209,16 @@ export const foundationalServiceSourceSchema = v.object({
   repoName: v.string(),
   gitRef: v.string(),
   mode: foundationalServiceSourceModeSchema,
-  /** Subtree scanned in `directory` mode; the anchor for the head-commit probe in both. */
+  /** Subtree scanned in `directory`/`folder` mode; the anchor for the head-commit probe in all. */
   dirPath: v.string(),
-  /** `files` mode only: the contract files, repo-root-relative. Empty in `directory` mode. */
+  /**
+   * `folder` mode only: whether the scan descends into `dirPath`'s subfolders. False elsewhere —
+   * `directory` mode's subdirectories are its services and `files` mode enumerates paths.
+   */
+  recursive: v.boolean(),
+  /** `files` mode only: the contract files, repo-root-relative. Empty in the folder modes. */
   filePaths: v.array(v.string()),
-  /** `files` mode only: the service the linked files describe. Null in `directory` mode. */
+  /** `folder`/`files` mode: the service the linked contracts describe. Null in `directory` mode. */
   serviceId: v.nullable(v.string()),
   serviceName: v.nullable(v.string()),
   serviceSummary: v.nullable(v.string()),
@@ -214,7 +228,7 @@ export const foundationalServiceSourceSchema = v.object({
 })
 export type FoundationalServiceSource = v.InferOutput<typeof foundationalServiceSourceSchema>
 
-/** Link a repo directory (or an explicit file list) as a foundational-service source. */
+/** Link a repo directory, a whole folder, or an explicit file list as a foundational source. */
 export const linkFoundationalServiceSourceSchema = v.pipe(
   v.object({
     repoOwner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(100)),
@@ -223,6 +237,8 @@ export const linkFoundationalServiceSourceSchema = v.pipe(
     gitRef: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
     mode: foundationalServiceSourceModeSchema,
     dirPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+    /** `folder` mode: descend into `dirPath`'s subfolders too. Defaults to false. */
+    recursive: v.optional(v.boolean()),
     filePaths: v.optional(
       v.pipe(
         v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300))),
@@ -233,14 +249,26 @@ export const linkFoundationalServiceSourceSchema = v.pipe(
     serviceName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
     serviceSummary: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))),
   }),
-  // `files` mode carries no directory convention to read identity from, so the link MUST name
-  // the service its files describe. Refused at the write boundary rather than discovered at
-  // sync time, where the only honest outcome would be a source that permanently syncs nothing.
+  // Neither single-service mode carries a directory convention to read identity from, so the
+  // link MUST name the service its contracts describe. Refused at the write boundary rather
+  // than discovered at sync time, where the only honest outcome would be a source that
+  // permanently syncs nothing.
   v.check(
     (input) =>
-      input.mode !== 'files' ||
-      (!!input.serviceId && !!input.serviceName && (input.filePaths?.length ?? 0) > 0),
-    'a `files` source must name serviceId, serviceName and at least one file path',
+      (input.mode !== 'files' && input.mode !== 'folder') ||
+      (!!input.serviceId && !!input.serviceName),
+    'a `folder` or `files` source must name serviceId and serviceName',
+  ),
+  v.check(
+    (input) => input.mode !== 'files' || (input.filePaths?.length ?? 0) > 0,
+    'a `files` source must list at least one file path',
+  ),
+  // `recursive` is meaningful only where a subtree is scanned for ONE service's contracts. In
+  // `directory` mode the subdirectories ARE the services and in `files` mode the paths are
+  // enumerated, so accepting it there would store a flag that silently does nothing.
+  v.check(
+    (input) => input.mode === 'folder' || !input.recursive,
+    '`recursive` applies only to a `folder` source',
   ),
 )
 export type LinkFoundationalServiceSourceInput = v.InferOutput<
@@ -253,6 +281,21 @@ export const foundationalServiceSyncResultSchema = v.object({
   tombstoned: v.number(),
   unchanged: v.number(),
   lastSyncedCommit: v.nullable(v.string()),
+  /**
+   * Files that LOOKED like contract documents (an OpenAPI or contract-module extension) but did
+   * not become one this pass — unreadable, unrecognised content, or a duplicate contract id.
+   * Zero and "nothing was scanned" are told apart by the counts above, and a non-zero value is
+   * the only thing that explains a folder link that produced fewer contracts than its author
+   * expected. Files with no contract extension are never read and never counted.
+   */
+  skippedFiles: v.number(),
+  /**
+   * True when a scan CAP stopped a `folder` source's walk short (depth, directories visited, or
+   * contract files taken), so the contract set is a prefix of what the folder holds rather than
+   * all of it. Never a transient: a truncated pass still pins its commit, because re-reading
+   * would truncate identically and the source would never look caught up.
+   */
+  truncated: v.boolean(),
 })
 export type FoundationalServiceSyncResult = v.InferOutput<
   typeof foundationalServiceSyncResultSchema
