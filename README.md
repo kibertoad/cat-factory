@@ -297,6 +297,7 @@ Each capability has a deeper write-up; start here and follow the link.
 
 **Operations**
 
+- [Security model — what stands between an agent and your repository](./backend/docs/security-model.md)
 - [Storage & retention](./backend/docs/storage-and-retention.md)
 - [Container reaping & deletion](./backend/docs/container-reaping.md)
 
