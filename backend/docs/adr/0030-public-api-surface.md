@@ -203,3 +203,9 @@ routes on and an empty title is honest about what could be read.
   at task creation (wants the documents model exposed externally), and serving
   `GET /api/v1/openapi.json` (trivial once wanted — the spec already ships as a repo file, so an
   endpoint is only packaging).
+- **The parked-decision surface is INCOMPLETE, and what is missing is tracked in
+  [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md)** — the public
+  decision surface answers three park types (requirements review, fork, judge) while the engine has
+  more, and both `POST /initiatives` (via the `decide` scope) and `POST /tasks/:taskId/start` (which
+  applies no pipeline admission at all) can create a run parked on one of the others. That tracker
+  ranks the additions, and records what was considered and rejected.
