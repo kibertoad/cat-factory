@@ -7,7 +7,7 @@ import type {
   ReferenceArchitectureRepository,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { parseAgentFailure } from '@cat-factory/server'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { agentRuns, blocks, referenceArchitectures } from '../db/schema.js'
@@ -181,7 +181,7 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseAgentFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

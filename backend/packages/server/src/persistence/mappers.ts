@@ -15,13 +15,14 @@ import type {
   Workspace,
 } from '@cat-factory/contracts'
 import {
-  agentFailureSchema,
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
   intakeOriginSchema,
+  isUsableAgentFailure,
   issueIntakeConfigSchema,
   notificationTypeSchema,
+  parseStoredAgentFailure,
   pipelinePurposeSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
@@ -834,44 +835,13 @@ interface ExecutionDetail {
 }
 
 /**
- * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
- * wire schema, not just `kind`/`message`: the SPA re-validates the whole snapshot against
- * `agentFailureSchema` (both the `failure` field and the `failureHistory` array), so a
- * structurally-incomplete record — a kind outside the picklist, OR a known kind missing
- * `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire workspace snapshot
- * decode if surfaced. Dropping it here keeps the run readable (its `status`/`error` still
- * describe what happened) and, for the history, means a retry can't make a bad record
- * permanent.
- */
-function isUsableFailure(o: unknown): o is AgentFailure {
-  return is(agentFailureSchema, o)
-}
-
-/**
- * Parse the JSON-encoded structured failure column of an `agent_runs` row, tolerating
- * null/garbage. Shared by EVERY run kind's repositories on both runtimes (execution here,
- * plus the bootstrap and env-config-repair repos), so one contract change can't leave one
- * store surfacing a record another store drops.
- */
-export function parseAgentFailure(raw: string | null): AgentFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as AgentFailure
-    if (isUsableFailure(o)) return o
-  } catch {
-    // fall through
-  }
-  return null
-}
-
-/**
  * The prior-attempts failure trail packed into `detail`. Tolerant like
- * {@link parseAgentFailure}: a non-array, or an entry that doesn't fully match the wire
- * schema (removed legacy kind, or a structurally-incomplete record), is dropped rather
- * than bricking the whole snapshot decode.
+ * {@link parseStoredAgentFailure}: a non-array, or an entry that doesn't fully match the
+ * wire schema (a kind outside the picklist, or a structurally-incomplete record), is
+ * dropped rather than bricking the whole snapshot decode.
  */
 function parseFailureHistory(list: unknown): AgentFailure[] {
-  return Array.isArray(list) ? list.filter(isUsableFailure) : []
+  return Array.isArray(list) ? list.filter(isUsableAgentFailure) : []
 }
 
 /**
@@ -943,7 +913,7 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       column: 'status',
       id: row.id,
     }),
-    failure: parseAgentFailure(row.failure),
+    failure: parseStoredAgentFailure(row.failure),
     // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
     // no dedicated column); a run that never failed-then-retried simply has none.
     failureHistory: parseFailureHistory(detail.failureHistory),

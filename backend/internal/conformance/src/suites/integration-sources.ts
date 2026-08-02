@@ -1,5 +1,6 @@
 import { resolveDocTemplate } from '@cat-factory/agents'
 import type {
+  AgentFailure,
   Block,
   DocumentRecord,
   SourceTask,
@@ -83,6 +84,43 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       const frame = snap.body.blocks.find((b) => b.id === frameId)
       expect(frame?.level).toBe('frame')
       expect(frame?.status).not.toBe('blocked')
+    })
+
+    it('reads a stopped run’s structured failure back off the store', async () => {
+      // The bootstrap repositories decode `agent_runs.failure` through the shared,
+      // FULL-schema `parseStoredAgentFailure`, which drops any record the wire contract
+      // wouldn't accept. So a drift between what `BootstrapService.buildFailure` WRITES and
+      // what `agentFailureSchema` requires (a new required field, a renamed one) costs every
+      // bootstrap failure its diagnostics SILENTLY — the board showing a stopped run with no
+      // reason to retry from — rather than failing loudly. Driving a real stop and re-reading
+      // pins that write↔read pair on D1 and Postgres alike.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const started = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'stopped-service',
+        instructions: 'Scaffold a small HTTP service.',
+      })
+      expect(started.status).toBe(201)
+      const jobId = started.body.id
+
+      const stopped = await app.call('POST', `/workspaces/${wsId}/agent-runs/${jobId}/stop`)
+      expect(stopped.status).toBe(200)
+
+      // Re-READ off the store: the stop response is the service's own in-memory patch, so
+      // only a fresh GET exercises the repository's decode.
+      const reread = await app.call<{ status: string; failure: AgentFailure | null }>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${jobId}`,
+      )
+      expect(reread.body.status).toBe('failed')
+      expect(reread.body.failure).toBeTruthy()
+      expect(reread.body.failure?.kind).toBe('cancelled')
+      // The fields the full-schema decode requires — a record missing any one of them would
+      // have been dropped above, so naming them documents what "survived" has to mean.
+      expect(typeof reread.body.failure?.hint).toBe('string')
+      expect(typeof reread.body.failure?.occurredAt).toBe('number')
     })
   })
 

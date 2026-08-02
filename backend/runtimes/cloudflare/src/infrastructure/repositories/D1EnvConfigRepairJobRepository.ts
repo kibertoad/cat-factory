@@ -6,7 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { parseAgentFailure } from '@cat-factory/server'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 
 /**
  * A row of the unified `agent_runs` table. This repository owns only the
@@ -84,7 +84,7 @@ function rowToRecord(row: AgentRunRow): EnvConfigRepairJobRecord {
     inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseAgentFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

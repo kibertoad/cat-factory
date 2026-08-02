@@ -5,7 +5,7 @@ import type {
   RepoValidationIssue,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { parseAgentFailure } from '@cat-factory/server'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { agentRuns } from '../db/schema.js'
@@ -67,7 +67,7 @@ function rowToRecord(row: typeof agentRuns.$inferSelect): EnvConfigRepairJobReco
     inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseAgentFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
