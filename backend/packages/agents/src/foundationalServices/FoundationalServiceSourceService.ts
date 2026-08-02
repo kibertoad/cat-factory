@@ -23,24 +23,52 @@ import {
   ValidationError,
   assertFound,
   detectContractFormat,
+  isContractCandidatePath,
   noopLogger,
   runBestEffort,
   summarizeContract,
 } from '@cat-factory/kernel'
+import pMap from 'p-map'
 import {
   normalizeDirPath,
   probeRepoSourceStatus,
   syncRepoSource,
 } from '../repoSourceSync/repo-source-sync.js'
+import { scanContractFolder } from './folder-scan.js'
 import {
   SERVICE_MANIFEST_FILE,
   commonDirectory,
   contractIdFromPath,
+  contractIdFromRelativePath,
   contractTitleFromPath,
   normalizeFilePath,
   parseServiceManifest,
+  parseServiceOverview,
   slugFromDirName,
 } from './foundational-source.logic.js'
+
+/**
+ * What ONE sync pass dropped, accumulated across its reconcile and reported on the result.
+ *
+ * Created per pass rather than held on the service: two tiers can sync concurrently, and a
+ * counter shared between them would attribute one link's losses to the other's result.
+ */
+interface ScanReport {
+  /** Candidate files that did not become a contract (unreadable, unrecognised, duplicate id). */
+  skipped: number
+  /** A `folder` scan hit a cap, so its contract set is a prefix of the folder. */
+  truncated: boolean
+}
+
+/** How one reconcile maps a contract file path to its id within the service. */
+type ContractIdForPath = (path: string) => string
+
+/**
+ * How many contract bodies one reconcile fetches at once. A `folder` source can take up to
+ * {@link MAX_FOLDER_CONTRACT_FILES} documents, and paying that one round trip at a time is the
+ * dominant cost of a sync that has any real work to do.
+ */
+const CONTRACT_READ_CONCURRENCY = 8
 
 /**
  * Resolve the GitHub App installation id that can read a tier's repos — a workspace source
@@ -75,15 +103,22 @@ export interface FoundationalServiceSourceServiceDependencies {
  * The shared repo-source engine (`repoSourceSync`) owns the mechanics that every repo-sourced
  * library gets identically — pin the head commit BEFORE reading, run the reconcile, sweep
  * tombstones by produced id, stamp the sync state, invalidate only on a real change. The
- * differentiator supplied here is what a UNIT is, and there are two of them:
+ * differentiator supplied here is what a UNIT is, and there are three of them:
  *
  * - **`directory`**: one service per immediate subdirectory, identified by its `service.md`.
+ * - **`folder`**: one service, named on the LINK, whose contracts are every contract document
+ *   found under `dirPath` — optionally including its subfolders.
  * - **`files`**: one service, named on the LINK, whose contracts are the linked file paths.
- *   There is no directory convention to read identity from, which is exactly why the link
- *   carries it (refused at the write boundary otherwise).
  *
- * Both modes anchor their staleness probe on ONE directory (`dirPath`), so a `files` source
- * with a dozen linked files still costs a single commit read per freshness check.
+ * Neither single-service mode has a directory convention to read identity from, which is
+ * exactly why the link carries it (refused at the write boundary otherwise). What separates
+ * them is WHEN the file set is decided: `files` pins the paths at link time, so a contract
+ * added upstream stays invisible until somebody edits the link, while `folder` re-discovers
+ * the set on every sync — which is why a spec directory that grows wants the folder shape.
+ *
+ * All three anchor their staleness probe on ONE directory (`dirPath`), so a `files` source with
+ * a dozen linked files, and a `folder` source with a whole subtree, each still cost a single
+ * commit read per freshness check.
  */
 export class FoundationalServiceSourceService {
   private readonly log: Logger
@@ -110,10 +145,14 @@ export class FoundationalServiceSourceService {
     const now = this.deps.clock.now()
     const filePaths = (input.filePaths ?? []).map(normalizeFilePath).filter(Boolean)
     // A `files` source anchors its probe on the linked files' deepest common directory, so
-    // one commit read covers the whole set (see the class note). A `directory` source anchors
-    // on the scanned subtree itself.
+    // one commit read covers the whole set (see the class note). The `directory` and `folder`
+    // sources anchor on the scanned subtree itself.
     const dirPath =
       input.mode === 'files' ? commonDirectory(filePaths) : normalizeDirPath(input.dirPath)
+    // Both single-service modes name their service on the link; only `files` enumerates paths
+    // and only `folder` walks a subtree. Storing each field solely where it is READ keeps a
+    // stored row from claiming a shape its mode never uses.
+    const namesService = input.mode === 'files' || input.mode === 'folder'
     const record: FoundationalServiceSourceRecord = {
       id: this.deps.idGenerator.next('fndsrc'),
       ownerKind,
@@ -123,10 +162,11 @@ export class FoundationalServiceSourceService {
       gitRef: input.gitRef?.trim() || 'HEAD',
       mode: input.mode,
       dirPath,
-      filePaths,
-      serviceId: input.mode === 'files' ? (input.serviceId ?? null) : null,
-      serviceName: input.mode === 'files' ? (input.serviceName ?? null) : null,
-      serviceSummary: input.mode === 'files' ? (input.serviceSummary ?? null) : null,
+      recursive: input.mode === 'folder' && input.recursive === true,
+      filePaths: input.mode === 'files' ? filePaths : [],
+      serviceId: namesService ? (input.serviceId ?? null) : null,
+      serviceName: namesService ? (input.serviceName ?? null) : null,
+      serviceSummary: namesService ? (input.serviceSummary ?? null) : null,
       lastSyncedCommit: null,
       lastSyncedAt: null,
       createdAt: now,
@@ -226,7 +266,11 @@ export class FoundationalServiceSourceService {
   ): Promise<FoundationalServiceSyncResult> {
     // Invariant across the whole sync — resolved ONCE, never per file.
     const installationId = await this.requireInstallation(source)
-    return syncRepoSource<FoundationalServiceRecord>({
+    // Accumulated by the reconcile and lifted onto the result below. The shared engine has no
+    // notion of a dropped file, and giving it one would put a foundational-services concern in
+    // the module the fragment and skill libraries share.
+    const report: ScanReport = { skipped: 0, truncated: false }
+    const outcome = await syncRepoSource<FoundationalServiceRecord>({
       source,
       installationId,
       githubClient: this.deps.githubClient,
@@ -244,9 +288,10 @@ export class FoundationalServiceSourceService {
             unchanged: existing.length,
           }
         }
-        return source.mode === 'files'
-          ? this.reconcileFiles(source, installationId, readRef, now, existing)
-          : this.reconcileDirectories(source, installationId, readRef, now, existing)
+        const args = [source, installationId, readRef, now, existing, report] as const
+        if (source.mode === 'files') return this.reconcileFiles(...args)
+        if (source.mode === 'folder') return this.reconcileFolder(...args)
+        return this.reconcileDirectories(...args)
       },
       tombstone: async (service, now) => {
         await this.deps.foundationalServiceRepository.softDelete(
@@ -266,6 +311,108 @@ export class FoundationalServiceSourceService {
       invalidate: () =>
         this.deps.invalidateCatalog?.(source.ownerKind, source.ownerId) ?? Promise.resolve(),
     })
+    if (report.truncated) {
+      this.log.warn('Foundational folder source truncated by a scan cap', {
+        sourceId: source.id,
+        ownerKind: source.ownerKind,
+        ownerId: source.ownerId,
+        dirPath: source.dirPath,
+        recursive: source.recursive,
+      })
+    }
+    return { ...outcome, skippedFiles: report.skipped, truncated: report.truncated }
+  }
+
+  /**
+   * `folder` mode: ONE service, named on the link, whose contracts are every contract document
+   * under the linked folder (and its subfolders when the link says so).
+   */
+  private async reconcileFolder(
+    source: FoundationalServiceSourceRecord,
+    installationId: number,
+    readRef: string,
+    now: number,
+    existing: FoundationalServiceRecord[],
+    report: ScanReport,
+  ): Promise<{ liveIds: Set<string>; upserted: number; unchanged: number; incomplete?: boolean }> {
+    const { serviceId, serviceName } = this.requireNamedService(source)
+    const prior = existing.find((s) => s.serviceId === serviceId)
+    const scan = await scanContractFolder({
+      listDir: (path) => this.listDir(source, installationId, path, readRef),
+      root: source.dirPath,
+      recursive: source.recursive,
+    })
+    // A truncation is a STABLE outcome, so it is reported but never folded into `incomplete`:
+    // holding the pin back would make the next sync re-read, truncate identically, and the
+    // source would look permanently behind while serving exactly what it already serves.
+    report.truncated = scan.truncated
+    const contracts = await this.readContracts({
+      source,
+      installationId,
+      readRef,
+      serviceId,
+      paths: scan.paths,
+      now,
+      report,
+      contractIdFor: (path) => contractIdFromRelativePath(path, source.dirPath),
+    })
+    if (contracts.length === 0) {
+      // Two DIFFERENT zero-contract outcomes reach this line, and only one of them is a failure.
+      //
+      // Nothing under the folder even LOOKED like a contract: a spec folder nobody has filled in
+      // yet, one holding only prose, or one whose contents were removed upstream (a listing of a
+      // missing path reads back empty, not as an error). That is a stable state, so the pass is
+      // COMPLETE — pin it, and let the tombstone sweep retire a service whose folder was emptied,
+      // exactly as `directory` mode retires a directory that lost its `service.md`. Calling it
+      // incomplete instead would hold the pin back forever: every later sweep would re-walk the
+      // whole subtree to reach the same answer while the source never stopped reporting changes
+      // upstream — the very re-read loop the truncation disposition above exists to avoid.
+      if (scan.paths.length === 0) return { liveIds: new Set(), upserted: 0, unchanged: 0 }
+      // Candidates WERE found and every one of them read back unusable — a transient read
+      // failure, or a tree caught mid-edit. Keep a prior row alive and leave the pin behind so
+      // the next pass re-reads, the same disposition `files` mode takes, for the same reason:
+      // retiring a service over a momentary read failure strips a capability from every
+      // subsequent design.
+      if (prior)
+        return { liveIds: new Set([serviceId]), upserted: 0, unchanged: 1, incomplete: true }
+      return { liveIds: new Set(), upserted: 0, unchanged: 0, incomplete: true }
+    }
+    // An OPTIONAL `service.md` at the folder root enriches the catalog entry; it can never
+    // identify the service, because the link already did that (see `parseServiceOverview`).
+    const overview = await this.readFolderOverview(
+      source,
+      installationId,
+      readRef,
+      scan.manifestPath,
+    )
+    await this.writeService(
+      source,
+      {
+        serviceId,
+        name: serviceName,
+        summary: source.serviceSummary || overview?.summary || serviceName,
+        description: overview?.description ?? '',
+        capabilities: overview?.capabilities ?? [],
+        sourcePath: source.dirPath,
+      },
+      contracts,
+      prior,
+      readRef,
+      now,
+    )
+    return { liveIds: new Set([serviceId]), upserted: 1, unchanged: 0 }
+  }
+
+  /** Read the folder root's optional `service.md`, or null when there is none / it is unreadable. */
+  private async readFolderOverview(
+    source: FoundationalServiceSourceRecord,
+    installationId: number,
+    readRef: string,
+    manifestPath: string | null,
+  ) {
+    if (!manifestPath) return null
+    const file = await this.readFile(source, installationId, manifestPath, readRef)
+    return file ? parseServiceOverview(file.content) : null
   }
 
   /** `directory` mode: one service per immediate subdirectory carrying a `service.md`. */
@@ -275,6 +422,7 @@ export class FoundationalServiceSourceService {
     readRef: string,
     now: number,
     existing: FoundationalServiceRecord[],
+    report: ScanReport,
   ): Promise<{ liveIds: Set<string>; upserted: number; unchanged: number; incomplete?: boolean }> {
     const existingById = new Map(existing.map((s) => [s.serviceId, s]))
     // Sorted by name (code-unit order, locale-independent) so slug-collision resolution is
@@ -314,16 +462,18 @@ export class FoundationalServiceSourceService {
         }
         continue
       }
-      const contracts = await this.readContracts(
+      const contracts = await this.readContracts({
         source,
         installationId,
         readRef,
         serviceId,
-        entries
+        paths: entries
           .filter((e) => e.type === 'file' && e.path !== manifestEntry.path)
           .map((e) => e.path),
         now,
-      )
+        report,
+        contractIdFor: contractIdFromPath,
+      })
       await this.writeService(
         source,
         {
@@ -355,25 +505,20 @@ export class FoundationalServiceSourceService {
     readRef: string,
     now: number,
     existing: FoundationalServiceRecord[],
+    report: ScanReport,
   ): Promise<{ liveIds: Set<string>; upserted: number; unchanged: number; incomplete?: boolean }> {
-    const serviceId = source.serviceId
-    // Guaranteed by the link-time `v.check`, but a stored row outlives the schema that wrote
-    // it — so this is a real guard, not a type narrowing convenience.
-    if (!serviceId || !source.serviceName) {
-      throw new ValidationError('This source does not name the service its files describe', {
-        reason: 'foundational_source_unnamed_service',
-        sourceId: source.id,
-      })
-    }
+    const { serviceId, serviceName } = this.requireNamedService(source)
     const prior = existing.find((s) => s.serviceId === serviceId)
-    const contracts = await this.readContracts(
+    const contracts = await this.readContracts({
       source,
       installationId,
       readRef,
       serviceId,
-      source.filePaths,
+      paths: source.filePaths,
       now,
-    )
+      report,
+      contractIdFor: contractIdFromPath,
+    })
     if (contracts.length === 0) {
       // Every linked file read back unusable. Keep a prior row alive and leave the pin behind
       // so the next pass re-reads — the alternative is retiring a service that a momentary
@@ -386,8 +531,8 @@ export class FoundationalServiceSourceService {
       source,
       {
         serviceId,
-        name: source.serviceName,
-        summary: source.serviceSummary ?? source.serviceName,
+        name: serviceName,
+        summary: source.serviceSummary ?? serviceName,
         description: '',
         capabilities: [],
         sourcePath: source.dirPath,
@@ -401,28 +546,74 @@ export class FoundationalServiceSourceService {
   }
 
   /**
+   * The identity a single-service source names, or a refusal.
+   *
+   * Guaranteed by the link-time `v.check`, but a stored row outlives the schema that wrote it —
+   * so this is a real guard, not a type-narrowing convenience. It returns BOTH proven fields
+   * rather than just the id, so a caller narrows by using the result instead of re-asserting
+   * `serviceName as string` at each use — a cast that would survive the guard being weakened.
+   */
+  private requireNamedService(source: FoundationalServiceSourceRecord): {
+    serviceId: string
+    serviceName: string
+  } {
+    if (!source.serviceId || !source.serviceName) {
+      throw new ValidationError('This source does not name the service its contracts describe', {
+        reason: 'foundational_source_unnamed_service',
+        sourceId: source.id,
+      })
+    }
+    return { serviceId: source.serviceId, serviceName: source.serviceName }
+  }
+
+  /**
    * Read the given repo paths and keep the ones that ARE contract documents. A file whose
    * format is unrecognised is skipped rather than stored as an opaque blob: the format is what
    * tells a downstream agent how to read it, and a "contract" nobody can interpret is worse in
    * an agent's context than an absent one.
+   *
+   * A path whose EXTENSION could never yield a format is dropped without a read and without a
+   * count — it is a README beside the specs, not a contract that failed. Everything else that
+   * fails is COUNTED on the report, because a link that produced fewer contracts than its
+   * author expected has no other explanation available to them.
    */
-  private async readContracts(
-    source: FoundationalServiceSourceRecord,
-    installationId: number,
-    readRef: string,
-    serviceId: string,
-    paths: string[],
-    now: number,
-  ): Promise<ApiContractRecord[]> {
+  private async readContracts(params: {
+    source: FoundationalServiceSourceRecord
+    installationId: number
+    readRef: string
+    serviceId: string
+    paths: string[]
+    now: number
+    report: ScanReport
+    contractIdFor: ContractIdForPath
+  }): Promise<ApiContractRecord[]> {
+    const { source, installationId, readRef, serviceId, paths, now, report, contractIdFor } = params
     const out: ApiContractRecord[] = []
     const seen = new Set<string>()
-    for (const path of paths) {
-      const file = await this.readFile(source, installationId, path, readRef)
-      if (!file) continue
+    // Read the bodies concurrently, then DECIDE over them in path order. The split matters: the
+    // reads are independent, but the id dedupe keeps the FIRST claimant of a colliding id, so
+    // the decision pass has to run in a deterministic order or which contract survives would
+    // depend on which response arrived first. `pMap` resolves in input order, so it does.
+    const fetched = await pMap(
+      paths.filter(isContractCandidatePath),
+      async (path) => ({ path, file: await this.readFile(source, installationId, path, readRef) }),
+      { concurrency: CONTRACT_READ_CONCURRENCY },
+    )
+    for (const { path, file } of fetched) {
+      if (!file) {
+        report.skipped++
+        continue
+      }
       const format = detectContractFormat(path, file.content)
-      if (!format) continue
-      const contractId = contractIdFromPath(path)
-      if (seen.has(contractId)) continue
+      if (!format) {
+        report.skipped++
+        continue
+      }
+      const contractId = contractIdFor(path)
+      if (seen.has(contractId)) {
+        report.skipped++
+        continue
+      }
       seen.add(contractId)
       const summary = summarizeContract({
         contractId,
@@ -556,6 +747,7 @@ function toWire(record: FoundationalServiceSourceRecord): FoundationalServiceSou
     gitRef: record.gitRef,
     mode: record.mode,
     dirPath: record.dirPath,
+    recursive: record.recursive,
     filePaths: record.filePaths,
     serviceId: record.serviceId,
     serviceName: record.serviceName,

@@ -228,6 +228,7 @@ export function defineFoundationalServicesSuite(
         repoName: 'platform',
         gitRef: 'HEAD',
         mode: 'directory',
+        recursive: false,
         filePaths: [],
         serviceId: null,
         serviceName: null,
@@ -262,13 +263,30 @@ export function defineFoundationalServicesSuite(
         lastSyncedCommit: 'c2',
         lastSyncedAt: 10_000,
       }
+      const folder: FoundationalServiceSourceRecord = {
+        ...base,
+        id: `${ownerId}-folder`,
+        dirPath: 'specs/billing',
+        // A recursive `folder` source: `recursive` is the one field the mode adds, and it is a
+        // boolean on Postgres against an INTEGER on D1 — so a round trip is what pins the two
+        // stores to the same value rather than to `1` on one and `true` on the other.
+        mode: 'folder',
+        recursive: true,
+        serviceId: 'billing',
+        serviceName: 'Billing',
+        serviceSummary: 'Invoices and subscriptions.',
+        lastSyncedCommit: 'c4',
+        lastSyncedAt: 20_000,
+      }
       await sources.upsert(never)
       await sources.upsert(old)
       await sources.upsert(fresh)
+      await sources.upsert(folder)
 
       expect(await sources.get(fresh.id)).toEqual(fresh)
+      expect(await sources.get(folder.id)).toEqual(folder)
       expect((await sources.listByOwner('account', ownerId)).map((s) => s.id).sort()).toEqual(
-        [never.id, old.id, fresh.id].sort(),
+        [never.id, old.id, fresh.id, folder.id].sort(),
       )
 
       // The sweep's query: never-synced first, then oldest-synced. The freshly-synced one is
@@ -284,7 +302,7 @@ export function defineFoundationalServicesSuite(
 
       await sources.softDelete(old.id, 60_000)
       expect((await sources.listByOwner('account', ownerId)).map((s) => s.id).sort()).toEqual(
-        [never.id, fresh.id].sort(),
+        [never.id, fresh.id, folder.id].sort(),
       )
       // A tombstoned source is never handed to the sweep, however stale it looks.
       expect((await sources.listStale(70_000, 10)).map((s) => s.id)).not.toContain(old.id)
@@ -302,6 +320,7 @@ export function defineFoundationalServicesSuite(
         repoName,
         gitRef: 'main',
         mode: 'directory',
+        recursive: false,
         filePaths: [],
         serviceId: null,
         serviceName: null,

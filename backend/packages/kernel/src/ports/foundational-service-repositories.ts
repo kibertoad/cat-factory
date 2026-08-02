@@ -171,18 +171,26 @@ export interface FoundationalServiceSourceRecord {
   repoOwner: string
   repoName: string
   gitRef: string
-  /** `directory` scans `<dirPath>/<service>/`; `files` reads an explicit path list. */
+  /**
+   * `directory` scans `<dirPath>/<service>/`; `folder` scans the whole of `<dirPath>` for ONE
+   * service's contracts; `files` reads an explicit path list.
+   */
   mode: FoundationalServiceSourceMode
   /**
-   * The subtree scanned in `directory` mode. In `files` mode it is the DEEPEST COMMON
-   * directory of the linked files, which is what the head-commit probe anchors on — so a
+   * The subtree scanned in `directory` and `folder` mode. In `files` mode it is the DEEPEST
+   * COMMON directory of the linked files, which is what the head-commit probe anchors on — so a
    * `files` source detects an upstream change with the same single cheap read a `directory`
    * one does, rather than a probe per file.
    */
   dirPath: string
+  /**
+   * `folder` mode only: whether the scan descends into `dirPath`'s subfolders. False in the
+   * other modes, where a subtree is either the service list itself or not walked at all.
+   */
+  recursive: boolean
   /** `files` mode only: repo-root-relative contract file paths. */
   filePaths: string[]
-  /** `files` mode only: the service the linked files describe. */
+  /** `folder`/`files` mode: the service the linked contracts describe. */
   serviceId: string | null
   serviceName: string | null
   serviceSummary: string | null

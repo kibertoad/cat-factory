@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 // ---------------------------------------------------------------------------
 // The FOUNDATIONAL SERVICES tables, mirroring the Cloudflare D1 tables column-for-column
@@ -81,9 +90,12 @@ export const foundationalServiceSources = pgTable(
     repo_owner: text('repo_owner').notNull(),
     repo_name: text('repo_name').notNull(),
     git_ref: text('git_ref').notNull().default('HEAD'),
-    // 'directory' scans <dir_path>/<service>/; 'files' reads an explicit path list for ONE service.
+    // 'directory' scans <dir_path>/<service>/; 'folder' scans the whole of <dir_path> for ONE
+    // service's contracts; 'files' reads an explicit path list for ONE service.
     mode: text('mode').notNull().default('directory'),
     dir_path: text('dir_path').notNull().default(''),
+    // 'folder' mode only: whether the scan descends into <dir_path>'s subfolders.
+    recursive: boolean('recursive').notNull().default(false),
     // JSON string[]; 'files' mode only.
     file_paths: text('file_paths').notNull().default('[]'),
     service_id: text('service_id'),

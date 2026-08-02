@@ -15,12 +15,35 @@ import { parseSimpleYaml, splitFrontmatter } from '../repoSourceSync/frontmatter
 /** The manifest file naming a service inside a `directory`-mode source. */
 export const SERVICE_MANIFEST_FILE = 'service.md'
 
-/** The parsed identity half of a `service.md`. */
-export interface ParsedServiceManifest {
-  name: string
+/** The DESCRIPTIVE half of a `service.md` — everything that is not the service's identity. */
+export interface ParsedServiceOverview {
   summary: string
   capabilities: string[]
   description: string
+}
+
+/** The parsed identity half of a `service.md`, with its overview. */
+export interface ParsedServiceManifest extends ParsedServiceOverview {
+  name: string
+}
+
+/**
+ * Parse the descriptive half of a `service.md` — no `name` required.
+ *
+ * This is what a `folder` source reads from an OPTIONAL `service.md` at the folder root: the
+ * link already names the service (there is no directory convention to take a name from), so a
+ * manifest there can only enrich, never identify. Requiring a name to read the description
+ * would silently drop the prose of a manifest whose frontmatter omits one, leaving the
+ * Architect's catalog with a service that has contracts and nothing saying what it is for.
+ */
+export function parseServiceOverview(content: string): ParsedServiceOverview {
+  const { frontmatter, body } = splitFrontmatter(content)
+  const meta = parseSimpleYaml(frontmatter)
+  return {
+    summary: str(meta.summary) || str(meta.description),
+    capabilities: strList(meta.capabilities),
+    description: body.trim(),
+  }
 }
 
 /**
@@ -33,16 +56,11 @@ export interface ParsedServiceManifest {
  * rather than two rows silently claiming the same id from different folders.
  */
 export function parseServiceManifest(content: string): ParsedServiceManifest | null {
-  const { frontmatter, body } = splitFrontmatter(content)
-  const meta = parseSimpleYaml(frontmatter)
-  const name = str(meta.name)
+  const { frontmatter } = splitFrontmatter(content)
+  const name = str(parseSimpleYaml(frontmatter).name)
   if (!name) return null
-  return {
-    name,
-    summary: str(meta.summary) || str(meta.description) || name,
-    capabilities: strList(meta.capabilities),
-    description: body.trim(),
-  }
+  const overview = parseServiceOverview(content)
+  return { ...overview, name, summary: overview.summary || name }
 }
 
 function str(value: unknown): string {
@@ -83,6 +101,28 @@ export function slugFromDirName(name: string): string {
 export function contractIdFromPath(path: string): string {
   const base = path.split('/').pop() ?? path
   return slugFromDirName(base.replace(/\.[^.]+$/, ''))
+}
+
+/**
+ * The contract id a file yields inside a `folder` source: its path RELATIVE to the scanned
+ * folder, minus the extension, lower-kebabed — so `v1/users.yaml` under `specs/` becomes
+ * `v1-users`.
+ *
+ * A recursive scan is exactly where {@link contractIdFromPath}'s basename rule breaks down:
+ * `v1/users.yaml` and `v2/users.yaml` are the two most ordinary files a versioned spec folder
+ * holds, and collapsing both to `users` would silently keep one and drop the other — handing a
+ * coder v1's endpoints as though they were the whole interface. Relative paths collide only
+ * when the files genuinely are the same file.
+ *
+ * For a file sitting directly in the folder root this degrades to exactly the basename rule, so
+ * a non-recursive `folder` source and a `files` source produce identical ids.
+ */
+export function contractIdFromRelativePath(path: string, root: string): string {
+  const prefix = root ? `${root}/` : ''
+  const relative = path.startsWith(prefix)
+    ? path.slice(prefix.length)
+    : (path.split('/').pop() ?? path)
+  return slugFromDirName(relative.replace(/\.[^.]+$/, ''))
 }
 
 /**
