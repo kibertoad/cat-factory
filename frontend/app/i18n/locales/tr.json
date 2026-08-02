@@ -2576,7 +2576,10 @@
         "warningsTitle": "Bu yapılandırmadaki eksikler",
         "warnings": {
           "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",
-          "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir."
+          "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir.",
+          "github_pat_classic_account_wide": "Bu, 'repo' kapsamına sahip klasik bir belirteç: gönderim yapabildiğiniz her depoya, bu çalışma alanının GitHub Uygulamasının hiç kurulmadığı depolar dahil, erişir. Başlattığınız çalıştırmalar bunu Uygulamaya tercih eder. Bu kurulumun depolarıyla sınırlı ince ayarlı bir belirteç daha dardır.",
+          "github_pat_scopes_beyond_need": "Bu belirteç, cat-factory'nin hiç kullanmadığı izinler veriyor. Bunları kaldırmak hiçbir şeye mal olmaz ve ele geçirilmiş bir çalıştırmanın erişebileceği alanı daraltır.",
+          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin."
         }
       },
       "toast": {
@@ -2680,6 +2683,7 @@
       "optionalField": "{label} (isteğe bağlı)",
       "testConnection": "Bağlantıyı test et",
       "tokenValid": "Belirteç geçerli",
+      "tokenReachTitle": "Bu belirtecin eriştiği alan",
       "tokenRejected": "Belirteç reddedildi",
       "secretFallback": "Gizli bilgi",
       "toast": {
@@ -3120,6 +3124,12 @@
         "heading": "Kaizen agent'ı",
         "body": "Her çalıştırma tamamlandıktan sonra Kaizen agent'ı, her agent adımının sorunsuz ve verimli olmaktan kafa karışık ve kaotik olmaya kadar nasıl gittiğini değerlendirir ve istem/model iyileştirmeleri önerir. Üst üste beş kez öneri olmadan yüksek not alan bir istem + agent + model birleşimi doğrulanmış olarak işaretlenir ve artık değerlendirilmez. Değerlendirme arka planda çalışır ve çalıştırma ayrıntıları ile Kaizen ekranında gösterilir. Değerlendiricinin modelini Model Yapılandırması'nda (\"Kaizen\" agent'ı) ayarlayın.",
         "toggle": "Agent çalıştırmalarını Kaizen ile değerlendir"
+      },
+      "runCredential": {
+        "heading": "Çalıştırma kimlik bilgisi",
+        "body": "Varsayılan olarak bir çalıştırma, onu başlatan kişinin kayıtlı kişisel erişim belirtecini kullanarak kimlik doğrular; böylece gönderimler ve çekme istekleri o kişiye atfedilir. Belirtecin erişimi, kişinin ona verdiği kadardır ve çoğu zaman bu çalışma alanının GitHub Uygulaması kurulumunun kapsadığı depolardan daha geniştir. Her çalıştırmanın bunun yerine Uygulama kurulumu olarak kimlik doğrulaması için bu seçeneği kapatın.",
+        "toggle": "Çalıştırmalar onları başlatan kişi adına işlem yapsın",
+        "offHint": "Çalıştırmalar, onları başlatan kişi olarak değil GitHub Uygulaması olarak gönderim yapar ve çekme isteği açar."
       },
       "metadata": {
         "heading": "Çalışma alanı meta verileri",
@@ -6058,6 +6068,29 @@
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
       "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+    },
+    "branchProtection": {
+      "heading": "Varsayılan dal koruması",
+      "body": "Aracı çalıştırmaları, kapsadığı her depoya yazabilen bir kimlik bilgisiyle gönderim yapar. Buradaki hiçbir şey, ele geçirilmiş bir çalıştırmanın doğrudan varsayılan dala göndermesini ya da kendi çekme isteğini barındırıcının API'si üzerinden birleştirmesini engelleyemez; her ikisini de yalnızca barındırıcıdaki dal koruması kapsar ve onu siz yapılandırırsınız. Bu denetim, korumanın var olup olmadığını gösterir.",
+      "check": "Korumayı denetle",
+      "allProtected": "Bağlı her deponun varsayılan dalı korumalı.",
+      "exposed": "{count} deponun varsayılan dalı korumasız. | {count} deponun varsayılan dalı korumasız.",
+      "unavailable": "Bağlı sağlayıcı dal korumasını bildiremiyor, bu yüzden bu denetimin söyleyecek bir şeyi yok — bu temiz bir sonuç değildir.",
+      "omitted": "Bağlı {count} depo daha denetlenmedi. | Bağlı {count} depo daha denetlenmedi.",
+      "state": {
+        "protected": "Korumalı",
+        "unprotected": "Korumasız",
+        "unknown": "Bilinmiyor"
+      },
+      "unprotectedHint": "bir çalıştırmanın kimlik bilgisi buraya doğrudan gönderim yapıp kendi çekme isteğini birleştirebilir",
+      "detailUnavailable": "korumalı, ancak kural okunamadı — doğrudan gönderimlere hâlâ izin veriyor olabilir",
+      "requiresPr": "çekme isteği zorunlu, {reviews} onaylayan inceleme, {checks} zorunlu denetim",
+      "noPrRequired": "korumalı, ancak çekme isteği zorunlu değil",
+      "unknownReason": {
+        "branch_not_found": "varsayılan dal bulunamadı — depo izdüşümü eskimiş olabilir",
+        "forbidden": "kimlik bilgisinin bu deponun dallarını okuma izni yok",
+        "error": "barındırıcıya ulaşılamadı"
+      }
     }
   },
   "tutorial": {

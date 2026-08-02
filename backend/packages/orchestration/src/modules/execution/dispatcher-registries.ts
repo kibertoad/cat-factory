@@ -565,8 +565,9 @@ export function buildStepResolverRegistry(
       resolve: async ({ workspaceId, instance, step, result }) => {
         // The real merge runs the engine GitHub client under the run initiator's
         // ambient context, so a per-user PAT (when set) authors the merge.
-        const decision = await d.runInitiatorScope(instance.initiatedBy, () =>
-          d.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
+        const decision = await d.runInitiatorScope(
+          { workspaceId, initiatedBy: instance.initiatedBy },
+          () => d.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
         )
         // Record the structured verdict on the step so the SPA's dedicated merger result
         // view renders the assessment + explains the auto-merge / awaiting-review decision,

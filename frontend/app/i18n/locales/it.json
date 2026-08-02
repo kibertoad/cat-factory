@@ -303,7 +303,10 @@
         "warningsTitle": "Lacune in questa configurazione",
         "warnings": {
           "runner_manifest_no_release": "Nessun template di release: annullare un'esecuzione non può dire al pool di fermare il suo job, quindi un job orfano tiene occupato il suo runner finché il pool non lo recupera da solo.",
-          "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione."
+          "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione.",
+          "github_pat_classic_account_wide": "È un token classico con l'ambito 'repo': raggiunge ogni repository su cui puoi fare push, compresi quelli in cui l'App GitHub di questo spazio di lavoro non è mai stata installata. Le esecuzioni che avvii lo usano di preferenza rispetto all'App. Un token granulare limitato ai repository di questa installazione è più ristretto.",
+          "github_pat_scopes_beyond_need": "Questo token concede permessi che cat-factory non usa mai. Rimuoverli non costa nulla e restringe ciò che un'esecuzione compromessa potrebbe raggiungere.",
+          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub."
         }
       },
       "toast": {
@@ -407,6 +410,7 @@
       "optionalField": "{label} (facoltativo)",
       "testConnection": "Testa la connessione",
       "tokenValid": "Token valido",
+      "tokenReachTitle": "Cosa raggiunge questo token",
       "tokenRejected": "Token rifiutato",
       "secretFallback": "Segreto",
       "toast": {
@@ -847,6 +851,12 @@
         "heading": "Agente Kaizen",
         "body": "Al termine di ogni run, l'agente Kaizen valuta l'andamento di ogni passo dell'agente, da fluido ed efficiente a confuso e caotico, e raccomanda miglioramenti al prompt/modello. Una combinazione di prompt + agente + modello che ottiene una valutazione elevata senza raccomandazioni per cinque volte di fila viene contrassegnata come verificata e non viene piu valutata. La valutazione viene eseguita in background ed e mostrata all'interno dei dettagli del run e nella schermata Kaizen. Imposta il modello del valutatore in Configurazione del modello (l'agente \"Kaizen\").",
         "toggle": "Valuta i run degli agenti con Kaizen"
+      },
+      "runCredential": {
+        "heading": "Credenziale di esecuzione",
+        "body": "Per impostazione predefinita un'esecuzione si autentica con il token di accesso personale di chi l'ha avviata, se ne ha memorizzato uno, così push e richieste di pull vengono attribuiti a quella persona. La portata del suo token è quella che le ha concesso lei stessa, spesso più ampia dei repository coperti dall'installazione dell'App GitHub di questo spazio di lavoro. Disattiva questa opzione per far autenticare ogni esecuzione come installazione dell'App.",
+        "toggle": "Consenti alle esecuzioni di agire per conto di chi le avvia",
+        "offHint": "Le esecuzioni faranno push e apriranno richieste di pull come App GitHub, non come chi le ha avviate."
       },
       "metadata": {
         "heading": "Metadati dell'area di lavoro",
@@ -6058,6 +6068,29 @@
       "title": "Collega cat-factory a {provider}",
       "titleAny": "Collega cat-factory ai tuoi repository",
       "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare."
+    },
+    "branchProtection": {
+      "heading": "Protezione del ramo predefinito",
+      "body": "Le esecuzioni degli agenti fanno push con una credenziale che può scrivere in ogni repository che copre. Nulla qui impedisce a un'esecuzione compromessa di fare push direttamente su un ramo predefinito o di unire la propria richiesta di pull tramite l'API dell'host: solo la protezione dei rami sull'host copre entrambi i casi, e sei tu a configurarla. Questo controllo indica se è attiva.",
+      "check": "Controlla la protezione",
+      "allProtected": "Il ramo predefinito di ogni repository collegato è protetto.",
+      "exposed": "{count} repository ha il ramo predefinito non protetto. | {count} repository hanno il ramo predefinito non protetto.",
+      "unavailable": "Il provider collegato non può riportare la protezione dei rami, quindi questo controllo non dice nulla: non è un esito positivo.",
+      "omitted": "{count} altro repository collegato non è stato controllato. | Altri {count} repository collegati non sono stati controllati.",
+      "state": {
+        "protected": "Protetto",
+        "unprotected": "Non protetto",
+        "unknown": "Sconosciuto"
+      },
+      "unprotectedHint": "la credenziale di un'esecuzione può fare push qui direttamente e unire la propria richiesta di pull",
+      "detailUnavailable": "protetto, ma la regola non è stata leggibile: potrebbe consentire ancora push diretti",
+      "requiresPr": "richiesta di pull obbligatoria, {reviews} revisione/i di approvazione, {checks} controllo/i obbligatorio/i",
+      "noPrRequired": "protetto, ma non richiede una richiesta di pull",
+      "unknownReason": {
+        "branch_not_found": "ramo predefinito non trovato: la proiezione del repository potrebbe essere obsoleta",
+        "forbidden": "la credenziale non può leggere i rami di questo repository",
+        "error": "non è stato possibile raggiungere l'host"
+      }
     }
   },
   "tutorial": {

@@ -96,6 +96,11 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // deliberately distinct from an explicit `infraless`. Mirrors the D1 columns.
   default_provision_type: text('default_provision_type'),
   default_provision_manifest_id: text('default_provision_manifest_id'),
+  // Whether a run may authenticate as its INITIATOR's stored personal access token instead of
+  // the deployment credential. On by default (the attribution behaviour); off bounds every run
+  // to the App installation's scope. Integer 0/1 to match the SQLite store. Mirrors the D1
+  // column; see `backend/docs/security-model.md`.
+  allow_initiator_pat: integer('allow_initiator_pat').notNull().default(1),
   // The values for the custom metadata FIELDS a deployment declares in its app (read by
   // external-tool URL resolvers). One bounded JSON object per workspace, like
   // `task_limit_per_type`; null ⇒ nothing filled in. Mirrors the D1 column.

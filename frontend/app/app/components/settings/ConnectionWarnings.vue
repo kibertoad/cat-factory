@@ -14,7 +14,15 @@
 import type { ConnectionWarning } from '@cat-factory/contracts'
 import { CONNECTION_WARNING_KEYS } from '~/utils/connectionWarnings'
 
-defineProps<{ warnings?: ConnectionWarning[] }>()
+const props = defineProps<{
+  warnings?: ConnectionWarning[]
+  /**
+   * Heading for the block. Defaults to the connection-test wording ("gaps in this
+   * configuration"), which is wrong for a surface where the finding is about a CREDENTIAL's
+   * reach rather than a config gap — those callers pass their own already-translated title.
+   */
+  title?: string
+}>()
 
 const { t, te } = useI18n()
 
@@ -30,7 +38,9 @@ const copy = (warning: ConnectionWarning): string => {
     class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
     data-testid="connection-warnings"
   >
-    <p class="font-semibold">{{ t('settings.providerConnection.test.warningsTitle') }}</p>
+    <p class="font-semibold">
+      {{ props.title ?? t('settings.providerConnection.test.warningsTitle') }}
+    </p>
     <ul class="mt-1 list-disc space-y-1 pl-4">
       <li v-for="warning in warnings" :key="warning.code">{{ copy(warning) }}</li>
     </ul>

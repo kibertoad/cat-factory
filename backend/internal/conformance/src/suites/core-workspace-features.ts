@@ -48,6 +48,42 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       expect(after.body.currency).toBe('USD')
     })
 
+    it('round-trips the allowInitiatorPat credential policy (D1 ⇄ Postgres)', async () => {
+      // The workspace's "may a run act as its initiator's own PAT?" switch. A boolean column
+      // is exactly the shape that silently diverges between the two stores (D1 stores 0/1,
+      // Postgres an integer we map back), and this one decides which CREDENTIAL a run pushes
+      // with — so a facade that failed to persist it would leave an operator believing they
+      // had turned the preference off. See backend/docs/security-model.md.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const settings = `/workspaces/${workspace.id}/settings`
+
+      const seeded = await call<{ allowInitiatorPat: boolean }>('GET', settings)
+      expect(seeded.status).toBe(200)
+      // Attribution is the shipped default, so a fresh workspace starts permissive.
+      expect(seeded.body.allowInitiatorPat).toBe(true)
+
+      const off = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: false,
+      })
+      expect(off.status).toBe(200)
+      expect(off.body.allowInitiatorPat).toBe(false)
+      expect(
+        (await call<{ allowInitiatorPat: boolean }>('GET', settings)).body.allowInitiatorPat,
+      ).toBe(false)
+
+      // And back on — `false` must not be a one-way door, and a patch that omits the field
+      // must not silently reinstate the default over a deliberate choice.
+      const untouched = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        waitingEscalationMinutes: 33,
+      })
+      expect(untouched.body.allowInitiatorPat).toBe(false)
+      const on = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: true,
+      })
+      expect(on.body.allowInitiatorPat).toBe(true)
+    })
+
     it('counts subscription usage in /usage but excludes it from the spend budget (D1 ⇄ Postgres)', async () => {
       type UsageRow = {
         billing: string

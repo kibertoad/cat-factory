@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { BranchProtectionSummary, Clock } from '@cat-factory/kernel'
 import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
@@ -34,6 +34,31 @@ export interface GitHubServiceDependencies {
   clock: Clock
 }
 
+/**
+ * How many repositories one preflight probes. Each repo costs one or two live GitHub reads, so
+ * an unbounded fan-out on a large installation would both stall the request and burn rate
+ * limit. Anything past the cap is COUNTED and reported, never silently dropped.
+ */
+const DEFAULT_PROTECTION_PROBE_LIMIT = 100
+
+/** One repository's default-branch protection posture. */
+export interface RepoBranchProtection {
+  repoGithubId: number
+  owner: string
+  name: string
+  defaultBranch: string
+  protection: BranchProtectionSummary
+}
+
+/** The preflight's answer: what was probed, and what could not be. */
+export interface BranchProtectionReport {
+  /** `unavailable` ⇒ the wired VCS client cannot answer at all; `repos` is then meaningless. */
+  capability: 'ok' | 'unavailable'
+  repos: RepoBranchProtection[]
+  /** Linked repositories left unprobed by the fan-out cap. */
+  omittedRepos: number
+}
+
 interface ResolvedRepo {
   repo: GitHubRepo
   installationId: number
@@ -59,6 +84,52 @@ export class GitHubService {
 
   listIssues(workspaceId: string): Promise<GitHubIssue[]> {
     return this.deps.issueProjectionRepository.listByWorkspace(workspaceId)
+  }
+
+  // ---- security preflight -------------------------------------------------
+
+  /**
+   * Probe each linked repository's DEFAULT branch for host-side protection.
+   *
+   * This is the one control the platform can neither provide nor enforce: branch protection
+   * lives on the host and is the only thing standing between a stolen `Contents: write` token
+   * and `main` — covering a direct push AND a merge-API call alike
+   * (`backend/docs/security-model.md`, checklist item 1). Nothing in-product used to tell an
+   * operator it was missing, which is the gap this closes.
+   *
+   * Deliberately a live read on an explicitly-invoked endpoint rather than a projection column:
+   * the projection's `protected` flag is only as fresh as the last sync, and a security report
+   * that is quietly stale is worse than none. `capability: 'unavailable'` is returned rather
+   * than an empty list when the wired VCS client cannot answer at all, so "nothing to report"
+   * never impersonates "everything is protected".
+   */
+  async checkDefaultBranchProtection(
+    workspaceId: string,
+    options: { maxRepos?: number } = {},
+  ): Promise<BranchProtectionReport> {
+    const probe = this.deps.githubClient.getBranchProtection
+    if (!probe) return { capability: 'unavailable', repos: [], omittedRepos: 0 }
+
+    const all = await this.deps.repoProjectionRepository.list(workspaceId)
+    const max = options.maxRepos ?? DEFAULT_PROTECTION_PROBE_LIMIT
+    const probed = all.slice(0, max)
+    const repos = await Promise.all(
+      probed.map(async (repo) => ({
+        repoGithubId: repo.githubId,
+        owner: repo.owner,
+        name: repo.name,
+        defaultBranch: repo.defaultBranch ?? 'main',
+        protection: await probe.call(
+          this.deps.githubClient,
+          repo.installationId,
+          { owner: repo.owner, repo: repo.name },
+          repo.defaultBranch ?? 'main',
+        ),
+      })),
+    )
+    // A cap that silently truncated would read as "these are all your repositories", which on a
+    // security report is the same failure as reporting an unprobed repo as protected.
+    return { capability: 'ok', repos, omittedRepos: all.length - probed.length }
   }
 
   // ---- writes -------------------------------------------------------------

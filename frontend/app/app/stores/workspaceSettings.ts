@@ -25,6 +25,9 @@ const DEFAULTS: WorkspaceSettings = {
   // banner on every board before the snapshot even lands.
   defaultProvisionType: null,
   defaultProvisionManifestId: null,
+  // On: a run authenticates as its initiator when they stored a GitHub PAT, so pushes and PRs
+  // are attributed to them. Off bounds every run to the App installation's scope.
+  allowInitiatorPat: true,
   // The custom metadata bag: empty until someone fills a declared field in. Never null — an
   // external-tool resolver indexes it (`ctx.metadata.gameId`) with no guard.
   metadata: {},

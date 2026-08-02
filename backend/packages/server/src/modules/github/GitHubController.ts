@@ -1,4 +1,5 @@
 import {
+  checkGitHubBranchProtectionContract,
   commentGitHubIssueContract,
   commitGitHubFilesContract,
   connectGitHubContract,
@@ -211,6 +212,14 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubReposContract, async (c) => {
     const github = requireGitHub(c)
     return c.json(await github.service.listRepos(param(c, 'workspaceId')), 200)
+  })
+
+  // The branch-protection preflight: for each linked repo, is its DEFAULT branch protected on
+  // the host? Live (not projected) and explicitly invoked — see the contract for why. Reads
+  // only, so the controller's `integrations.manage` mount lets members through unchanged.
+  buildHonoRoute(app, checkGitHubBranchProtectionContract, async (c) => {
+    const github = requireGitHub(c)
+    return c.json(await github.service.checkDefaultBranchProtection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, listGitHubBranchesContract, async (c) => {

@@ -194,7 +194,13 @@ configured. See [`docs/github-integration.md`](./docs/github-integration.md),
 What actually stops a prompt-injected or hallucinating agent from landing malicious
 code — token scoping, the push path, merge gating, and the operator hardening
 checklist (branch protection, merge presets) — is documented layer by layer in
-[`docs/security-model.md`](./docs/security-model.md).
+[`docs/security-model.md`](./docs/security-model.md). Two of that checklist's items
+are now backed in-product: a workspace's `allowInitiatorPat` setting decides whether a
+run may authenticate as its initiator's own personal token rather than the App
+installation (enforced at every mint site through one shared decision), and
+`GET /workspaces/:ws/github/branch-protection` probes each linked repository's default
+branch for host-side protection, reporting `unknown` as its own state rather than
+collapsing an unreachable repo into either verdict.
 
 Auth uses Web Crypto (`crypto.subtle`) — a thin `fetch` `GitHubClient`, no Octokit:
 an RS256 app JWT mints short-lived installation tokens (cached in memory per

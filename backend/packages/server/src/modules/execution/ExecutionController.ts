@@ -78,14 +78,16 @@ export function executionController(): Hono<AppEnv> {
     // `reviewEffort` records how much review the PR needed onto the block's merge track record in
     // the same request; omitting it merges exactly as before and leaves the tag null.
     const { reviewEffort } = c.req.valid('json')
-    const block = await runWithInitiator(c.get('user')?.id, () =>
-      c
-        .get('container')
-        .executionService.mergePr(
-          param(c, 'workspaceId'),
-          c.req.valid('param').blockId,
-          reviewEffort,
-        ),
+    const block = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: c.get('user')?.id },
+      () =>
+        c
+          .get('container')
+          .executionService.mergePr(
+            param(c, 'workspaceId'),
+            c.req.valid('param').blockId,
+            reviewEffort,
+          ),
     )
     return c.json(block, 200)
   })

@@ -144,6 +144,18 @@ export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
 export const connectionWarningCodeSchema = v.picklist([
   'runner_manifest_no_release',
   'runner_manifest_no_status_path',
+  // A stored personal access token OUTRANKS the deployment credential on the run path, so its
+  // scope is the blast radius of every run its owner starts (backend/docs/security-model.md).
+  // A classic token carrying `repo` reaches every repository its owner can push to — routinely
+  // far wider than the workspace's App installation, and invisible unless we say so here.
+  'github_pat_classic_account_wide',
+  // A classic token that is merely broader than it needs to be: admin/delete/workflow-class
+  // scopes the platform never uses.
+  'github_pat_scopes_beyond_need',
+  // The token authenticated, but GitHub returned no scope header at all — so we cannot state
+  // its reach. Reported rather than assumed: "unknown breadth" and "narrow" are not the same
+  // fact, and treating them alike is exactly how an over-broad token stays silent.
+  'github_pat_scope_unreadable',
 ])
 export type ConnectionWarningCode = v.InferOutput<typeof connectionWarningCodeSchema>
 

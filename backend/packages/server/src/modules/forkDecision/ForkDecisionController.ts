@@ -37,8 +37,10 @@ export function forkDecisionController(): Hono<AppEnv> {
     const { executionId } = c.req.valid('param')
     const input = c.req.valid('json')
     const userId = c.get('user')?.id
-    const state = await runWithInitiator(userId, () =>
-      c.get('container').executionService.forkChat(param(c, 'workspaceId'), executionId, input),
+    const state = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
+      () =>
+        c.get('container').executionService.forkChat(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })
@@ -50,8 +52,10 @@ export function forkDecisionController(): Hono<AppEnv> {
     const { executionId } = c.req.valid('param')
     const input = c.req.valid('json')
     const userId = c.get('user')?.id
-    const state = await runWithInitiator(userId, () =>
-      c.get('container').executionService.chooseFork(param(c, 'workspaceId'), executionId, input),
+    const state = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
+      () =>
+        c.get('container').executionService.chooseFork(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })

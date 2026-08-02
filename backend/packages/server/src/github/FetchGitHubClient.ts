@@ -20,6 +20,7 @@ import {
   type GitHubReviewThread,
   type GitHubRepo,
   type GitHubRepoRef,
+  type BranchProtectionSummary,
   type IdGenerator,
   type InstallationMeta,
   type InstallationSummary,
@@ -41,6 +42,8 @@ import { logger } from '../observability/logger.js'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { postPrReview } from './reviewPosting.js'
+import { probeBranchProtection, readRequiredApprovingReviewCount } from './branchProtection.js'
+import { getRepoForToken, listReposForToken } from './viewerTokenReads.js'
 import {
   listPrReviewThreads,
   replyToPrReviewThread,
@@ -49,13 +52,23 @@ import {
 } from './reviewThreads.js'
 import { searchCode, searchIssues } from './searchApi.js'
 import {
+  ACCEPT,
+  API_VERSION,
+  GitHubApiError,
+  MAX_PAGES,
+  PER_PAGE,
+  USER_AGENT,
   decodeBase64Utf8,
+  githubApiStatus,
   numHeader,
   parseGitHubTime,
   parseIssueHtmlUrl,
-  parseLastPage,
   parseNextLink,
 } from './githubHttpHelpers.js'
+
+// Re-exported so every existing importer keeps resolving it from the client it is thrown by;
+// the class itself moved to `githubHttpHelpers.ts` (see its doc).
+export { GitHubApiError } from './githubHttpHelpers.js'
 
 // Thin `fetch`-based GitHubClient: the only place that talks to the GitHub REST
 // API. It authenticates via the App (installation tokens for repo calls, the app
@@ -65,11 +78,6 @@ import {
 // deliberately avoided — Web Crypto + fetch cover everything we need without the
 // bundle weight (see backend/docs/adr/0001-github-app-integration.md).
 
-const USER_AGENT = 'cat-factory'
-const API_VERSION = '2022-11-28'
-const ACCEPT = 'application/vnd.github+json'
-const PER_PAGE = 100
-const MAX_PAGES = 10
 /** Neutral default colour for a label we create on the fly (GitHub requires a colour). */
 const DEFAULT_LABEL_COLOR = 'ededed'
 
@@ -291,104 +299,18 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
-  async listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
-    // The PAT analogue of `/installation/repositories` (App-only): enumerate the repos the
-    // token can reach. Flagged `linkedVia:'user_pat'` — personal, not App-reachable. The
-    // installation id is a placeholder here (the picker dedups by github id); the link flow
-    // attributes the row to the workspace's real installation.
-    const syncedAt = this.deps.clock.now()
-    const base = `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
-    const map = (json: unknown): GitHubRepo[] =>
-      ((json as gp.GhRepoPayload[] | null) ?? []).map((r) => ({
-        ...gp.toRepoProjection(r, 0, syncedAt),
-        linkedVia: 'user_pat' as const,
-      }))
-
-    // Page 1 first: its `Link: rel="last"` header reveals how many pages the token spans, so the
-    // rest fetch CONCURRENTLY rather than walking `next` one blocking request at a time. A broad
-    // PAT (hundreds–thousands of repos) thus costs ~2 round-trips instead of ~MAX_PAGES serial
-    // ones — the difference between a snappy picker and a ~17s stall.
-    const first = await this.requestWithToken(base, token)
-    const items: GitHubRepo[] = map(first.json)
-
-    if (first.last && first.last > 1) {
-      const lastPage = Math.min(first.last, MAX_PAGES)
-      const rest = await Promise.all(
-        Array.from({ length: lastPage - 1 }, (_, i) =>
-          this.requestWithToken(`${base}&page=${i + 2}`, token),
-        ),
-      )
-      for (const r of rest) items.push(...map(r.json))
-      // A `last` beyond our page cap means the token reaches more repos than we enumerated.
-      return { items, truncated: first.last > MAX_PAGES }
-    }
-
-    // No `last` advertised (rare for offset pagination): fall back to the serial `next` walk so
-    // completeness is never traded for the speed-up. A `next` still present at the page cap means
-    // the token reaches more than we enumerated — flag it so the access-cache refresh records
-    // additively rather than replacing (a truncated REPLACE would drop reachable repos and
-    // fail-closed-redact the user's own frames).
-    let url = first.next
-    for (let page = 1; url && page < MAX_PAGES; page++) {
-      const { json, next } = await this.requestWithToken(url, token)
-      items.push(...map(json))
-      url = next
-    }
-    return { items, truncated: Boolean(url) }
-  }
-
-  async getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
-    try {
-      const { json } = await this.requestWithToken(`/repositories/${repoGithubId}`, token)
-      return {
-        ...gp.toRepoProjection(json as gp.GhRepoPayload, 0, this.deps.clock.now()),
-        linkedVia: 'user_pat',
-      }
-    } catch (err) {
-      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
-      throw err
-    }
-  }
-
   /**
-   * A minimal authenticated GET using an explicit personal access token instead of the
-   * installation/App registry — the only place the client talks to GitHub with a
-   * caller-supplied bearer. Used by the PAT-scoped repo reads above; never mints or caches.
+   * Repo reads authenticated with the CALLER's personal access token rather than this client's
+   * installation credential (the personal-PAT repo picker). Thin delegates: the reads live in
+   * `viewerTokenReads.ts`, because nothing about them mints, caches or rate-limit-accounts the
+   * way the rest of this client does.
    */
-  private async requestWithToken(
-    pathOrUrl: string,
-    token: string,
-  ): Promise<{ json: unknown; next?: string; last?: number }> {
-    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
-    const res = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: ACCEPT,
-        'user-agent': USER_AGENT,
-        'x-github-api-version': API_VERSION,
-      },
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      const resetSec = numHeader(res, 'x-ratelimit-reset')
-      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
-      throw new GitHubApiError(
-        res.status,
-        describeVcsApiError({
-          provider: 'github',
-          status: res.status,
-          method: 'GET',
-          url,
-          body: text.slice(0, 300),
-          rateLimited,
-          resetAt: resetSec === null ? null : resetSec * 1000,
-        }),
-        rateLimited,
-      )
-    }
-    const json = res.status === 204 ? null : await res.json().catch(() => null)
-    const link = res.headers.get('link')
-    return { json, next: parseNextLink(link), last: parseLastPage(link) }
+  listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
+    return listReposForToken(this.deps, token)
+  }
+
+  getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
+    return getRepoForToken(this.deps, token, repoGithubId)
   }
 
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
@@ -883,20 +805,36 @@ export class FetchGitHubClient implements GitHubClient {
     // PR-scoped rule (GitLab) needs is accepted by the port but unused here.
     _number?: number,
   ): Promise<number> {
-    try {
-      const { json } = await this.request(
-        `/repos/${ref.owner}/${ref.repo}/branches/${encodeURIComponent(branch)}/protection/required_pull_request_reviews`,
-        { installationId },
-      )
-      const count = (json as { required_approving_review_count?: number })
-        .required_approving_review_count
-      return typeof count === 'number' ? count : 1
-    } catch (error) {
-      // No protection rule, or the App lacks admin access to read it — both common. Default to 1.
-      if (error instanceof GitHubApiError && (error.status === 404 || error.status === 403))
-        return 1
-      throw error
-    }
+    return readRequiredApprovingReviewCount(
+      this.protectionRequest(installationId),
+      githubApiStatus,
+      ref,
+      branch,
+    )
+  }
+
+  /**
+   * A branch's protection posture — the backing read for the security preflight. A thin
+   * delegate: the probe itself lives in `branchProtection.ts` (extracted along the same seam as
+   * `reviewPosting.ts`, since this file is at its size budget), bound to this installation's
+   * authenticated GET. Never throws; see the probe's own doc for why.
+   */
+  async getBranchProtection(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<BranchProtectionSummary> {
+    return probeBranchProtection(
+      this.protectionRequest(installationId),
+      githubApiStatus,
+      ref,
+      branch,
+    )
+  }
+
+  /** This installation's authenticated GET, as the narrow callback the probe helpers take. */
+  private protectionRequest(installationId: number) {
+    return (path: string) => this.request(path, { installationId })
   }
 
   /**
@@ -1430,24 +1368,5 @@ export class FetchGitHubClient implements GitHubClient {
       () => this.deps.rateLimitRepository.record(snapshot),
       { installationId, resource: snapshot.resource },
     )
-  }
-}
-
-/** Carries the HTTP status so callers/queue can decide whether to retry. */
-export class GitHubApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    /**
-     * Whether the response was rate-limited (`x-ratelimit-remaining: 0`). GitHub reports a
-     * PRIMARY rate-limit exhaustion as a 403 (only secondary limits are 429), so status alone
-     * cannot tell a rate-limit apart from a permission denial — a consumer reads this flag to
-     * classify the two differently. Retained here so the signal is available structurally
-     * instead of only baked into the human message.
-     */
-    readonly rateLimited = false,
-  ) {
-    super(message)
-    this.name = 'GitHubApiError'
   }
 }

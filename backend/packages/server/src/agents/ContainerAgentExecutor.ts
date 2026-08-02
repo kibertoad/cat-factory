@@ -977,7 +977,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       await Promise.all([
         this.deps.mintInstallationToken(repo.installationId, {
           executionId,
-          initiatedBy: context.initiatedByUserId,
+          workspaceId,
+          ...(context.initiatedByUserId ? { initiatedBy: context.initiatedByUserId } : {}),
         }),
         this.resolveWorkBranchReady(repo, workBranch, aprioriWork, context),
         this.resolveAuth(context, {

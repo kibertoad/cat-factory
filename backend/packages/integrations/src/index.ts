@@ -462,6 +462,11 @@ export {
   type UserSecretTestInput,
 } from './modules/providers/userSecretKinds.js'
 export {
+  describeGitHubPatScope,
+  summarizeGitHubPatScope,
+  type GitHubPatScopeReport,
+} from './modules/providers/githubPatScope.js'
+export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
   OPENROUTER_BASE_URL,

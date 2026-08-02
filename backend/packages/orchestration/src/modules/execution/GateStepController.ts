@@ -132,8 +132,9 @@ export class GateStepController {
     // initiator's ambient context, so a per-user PAT (when set) is preferred over the
     // deployment's App/env token — see PatPreferringAppRegistry.
     const gateState = step.gate
-    const probe = await this.deps.runInitiatorScope(instance.initiatedBy, () =>
-      gate.probe(workspaceId, block.id, gateState),
+    const probe = await this.deps.runInitiatorScope(
+      { workspaceId, initiatedBy: instance.initiatedBy },
+      () => gate.probe(workspaceId, block.id, gateState),
     )
     step.gate.headSha = probe.headSha
     // Multi-repo (service-connections phase 4): the CI / conflicts gates aggregate across every

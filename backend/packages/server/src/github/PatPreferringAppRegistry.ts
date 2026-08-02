@@ -1,21 +1,28 @@
-import type { InstallationPermissions, ResolveUserGitHubToken } from '@cat-factory/kernel'
+import type { InstallationPermissions, RunCredentialScope } from '@cat-factory/kernel'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
-import { currentInitiator, resolveInitiatorTokenCached } from './runInitiatorContext.js'
+import { currentCredentialScope } from './runInitiatorContext.js'
 
 // Decorates an {@link AppTokenSource} so the engine GitHub client (CI gate / merger /
-// mergeability) mints the RUN INITIATOR's personal access token when they have one,
-// falling back to the wrapped source (the GitHub App installation token, or local
-// mode's static env PAT) otherwise. The initiator is read from the ambient
+// mergeability) mints the RUN INITIATOR's personal access token when they have one AND their
+// workspace permits it, falling back to the wrapped source (the GitHub App installation token,
+// or local mode's static env PAT) otherwise. The scope is read from the ambient
 // `runInitiatorContext` set around the gate-probe / merge call boundaries.
 //
 // Generalizes local mode's `StaticTokenAppRegistry` swap (a constant token via the
 // `installationToken()` seam) to "look up the initiator's PAT first". The app-JWT
 // discovery/listing paths are unaffected — a PAT never participates in those.
+//
+// The "should we?" decision is NOT made here: it is `createResolveRunInitiatorToken`, shared
+// with both facades' dispatch mints, so an opted-out workspace can't be honoured on one path
+// and missed on another.
+
+/** Resolves the token a run should act with, or null to use the wrapped source. */
+export type ResolveRunInitiatorToken = (scope: RunCredentialScope) => Promise<string | null>
 
 export class PatPreferringAppRegistry implements AppTokenSource {
   constructor(
     private readonly inner: AppTokenSource,
-    private readonly resolveUserGitHubToken: ResolveUserGitHubToken,
+    private readonly resolveRunInitiatorToken: ResolveRunInitiatorToken,
   ) {}
 
   get defaultAppId(): string {
@@ -34,15 +41,10 @@ export class PatPreferringAppRegistry implements AppTokenSource {
     installationId: number,
     opts?: { forceRefresh?: boolean },
   ): Promise<string> {
-    const initiatedBy = currentInitiator()
-    if (initiatedBy) {
-      // The PAT is resolved through the ambient scope's memo, so a probe/merge that fans
-      // out into several `request()`s does ONE DB read + decrypt. `forceRefresh` is moot
-      // for a PAT (it never expires the way an App token does); it only matters for the
-      // wrapped App-token cache below.
-      const pat = await resolveInitiatorTokenCached(this.resolveUserGitHubToken, initiatedBy)
-      if (pat) return pat
-    }
+    // `forceRefresh` is moot for a PAT (it never expires the way an App token does); it only
+    // matters for the wrapped App-token cache below.
+    const pat = await this.initiatorToken()
+    if (pat) return pat
     return this.inner.installationToken(installationId, opts)
   }
 
@@ -51,12 +53,17 @@ export class PatPreferringAppRegistry implements AppTokenSource {
     // App-granted permissions map — return empty so canPush falls back to the repo's
     // user-role `permissions.push` (which IS authoritative for a PAT). Otherwise defer
     // to the wrapped App source.
-    const initiatedBy = currentInitiator()
-    if (
-      initiatedBy &&
-      (await resolveInitiatorTokenCached(this.resolveUserGitHubToken, initiatedBy))
-    )
-      return {}
+    if (await this.initiatorToken()) return {}
     return this.inner.installationPermissions(installationId)
+  }
+
+  /**
+   * The initiator's token for the ambient run, or null outside a run scope / when the
+   * decision says no. The resolve rides the scope's own memo, so the several requests one
+   * probe fans out into pay a single DB read + decrypt.
+   */
+  private async initiatorToken(): Promise<string | null> {
+    const scope = currentCredentialScope()
+    return scope ? this.resolveRunInitiatorToken(scope) : null
   }
 }

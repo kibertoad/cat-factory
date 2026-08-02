@@ -174,6 +174,7 @@ const draft = reactive({
   publishPrVerificationReport: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
+  allowInitiatorPat: true,
   reviewFrictionMode: 'off' as ReviewFrictionMode,
   reviewFrictionWarnCount: 3,
   reviewFrictionBlockCountEnabled: false,
@@ -193,6 +194,7 @@ function hydrate() {
   draft.publishPrVerificationReport = s.publishPrVerificationReport
   draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
+  draft.allowInitiatorPat = s.allowInitiatorPat
   draft.reviewFrictionMode = s.reviewFrictionMode
   draft.reviewFrictionWarnCount = s.reviewFrictionWarnCount
   // The hard-block knobs are nullable (null ⇒ that trigger is off); a per-trigger checkbox is
@@ -249,6 +251,7 @@ async function save() {
       publishPrVerificationReport: draft.publishPrVerificationReport,
       artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
+      allowInitiatorPat: draft.allowInitiatorPat,
       reviewFrictionMode: draft.reviewFrictionMode,
       reviewFrictionWarnCount: draft.reviewFrictionWarnCount,
       reviewFrictionBlockCount: blockCount,
@@ -482,6 +485,29 @@ async function save() {
                   size="sm"
                 />
               </label>
+            </section>
+
+            <!-- Run credential: the App installation vs. the initiator's own token -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.runCredential.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.runCredential.body') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch
+                  v-model="draft.allowInitiatorPat"
+                  size="sm"
+                  data-testid="allow-initiator-pat"
+                />
+                <span class="text-sm text-slate-200">{{
+                  t('settings.workspaceSettings.runCredential.toggle')
+                }}</span>
+              </label>
+              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-amber-300">
+                {{ t('settings.workspaceSettings.runCredential.offHint') }}
+              </p>
             </section>
 
             <!-- Kaizen agent -->

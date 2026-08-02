@@ -2380,7 +2380,10 @@
         "warningsTitle": "Braki w tej konfiguracji",
         "warnings": {
           "runner_manifest_no_release": "Brak szablonu release: anulowanie przebiegu nie może przekazać puli, że ma zatrzymać zadanie, więc osierocone zadanie zajmuje swojego runnera, dopóki pula sama go nie odzyska.",
-          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu."
+          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu.",
+          "github_pat_classic_account_wide": "To klasyczny token z zakresem 'repo': sięga każdego repozytorium, do którego możesz wypychać zmiany, także tych, w których aplikacja GitHub tego obszaru roboczego nigdy nie została zainstalowana. Uruchomienia, które rozpoczynasz, używają go zamiast aplikacji. Token szczegółowy ograniczony do repozytoriów tej instalacji jest węższy.",
+          "github_pat_scopes_beyond_need": "Ten token przyznaje uprawnienia, z których cat-factory nigdy nie korzysta. Ich usunięcie nic nie kosztuje i zawęża to, co mogłoby osiągnąć skompromitowane uruchomienie.",
+          "github_pat_scope_unreadable": "GitHub przyjął ten token, ale nie zgłosił jego zakresów, więc jego zasięgu nie da się tu pokazać. Sprawdź w ustawieniach tokenów GitHub, co przyznaje."
         }
       },
       "toast": {
@@ -2539,6 +2542,7 @@
       "optionalField": "{label} (opcjonalnie)",
       "testConnection": "Testuj połączenie",
       "tokenValid": "Token prawidłowy",
+      "tokenReachTitle": "Do czego sięga ten token",
       "tokenRejected": "Token odrzucony",
       "secretFallback": "Sekret",
       "toast": {
@@ -2979,6 +2983,12 @@
         "heading": "Agent Kaizen",
         "body": "Po zakończeniu każdego uruchomienia agent Kaizen ocenia, jak przebiegł każdy krok agenta, od płynnego i wydajnego po chaotyczny i zagmatwany, oraz rekomenduje usprawnienia promptu/modelu. Kombinacja prompt + agent + model, która pięć razy z rzędu uzyska wysoką ocenę bez rekomendacji, jest oznaczana jako zweryfikowana i nie jest już oceniana. Ocenianie działa w tle i jest pokazywane w szczegółach uruchomienia oraz na ekranie Kaizen. Ustaw model oceniającego w Konfiguracji modeli (agent \"Kaizen\").",
         "toggle": "Oceniaj uruchomienia agentów za pomocą Kaizen"
+      },
+      "runCredential": {
+        "heading": "Poświadczenie uruchomienia",
+        "body": "Domyślnie uruchomienie uwierzytelnia się osobistym tokenem dostępu osoby, która je rozpoczęła, o ile go zapisała, dzięki czemu wypchnięcia i pull requesty są przypisywane tej osobie. Zasięg jej tokenu jest taki, jaki sama mu nadała, i często obejmuje więcej repozytoriów niż instalacja aplikacji GitHub tego obszaru roboczego. Wyłącz tę opcję, aby każde uruchomienie uwierzytelniało się jako instalacja aplikacji.",
+        "toggle": "Pozwól uruchomieniom działać w imieniu osoby, która je rozpoczęła",
+        "offHint": "Uruchomienia będą wypychać zmiany i otwierać pull requesty jako aplikacja GitHub, a nie jako osoba, która je rozpoczęła."
       },
       "metadata": {
         "heading": "Metadane przestrzeni roboczej",
@@ -6046,6 +6056,29 @@
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
       "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+    },
+    "branchProtection": {
+      "heading": "Ochrona gałęzi domyślnej",
+      "body": "Uruchomienia agentów wypychają zmiany poświadczeniem, które może zapisywać w każdym objętym repozytorium. Nic tutaj nie powstrzyma skompromitowanego uruchomienia przed wypchnięciem zmian wprost na gałąź domyślną ani przed scaleniem własnego pull requesta przez API hosta — oba przypadki pokrywa wyłącznie ochrona gałęzi po stronie hosta, którą konfigurujesz sam. To sprawdzenie pokazuje, czy jest włączona.",
+      "check": "Sprawdź ochronę",
+      "allProtected": "Gałąź domyślna każdego powiązanego repozytorium jest chroniona.",
+      "exposed": "{count} repozytorium ma niechronioną gałąź domyślną. | {count} repozytoria mają niechronioną gałąź domyślną.",
+      "unavailable": "Podłączony dostawca nie potrafi zgłosić ochrony gałęzi, więc to sprawdzenie nic nie mówi — to nie jest wynik pozytywny.",
+      "omitted": "Nie sprawdzono jeszcze {count} powiązanego repozytorium. | Nie sprawdzono jeszcze {count} powiązanych repozytoriów.",
+      "state": {
+        "protected": "Chroniona",
+        "unprotected": "Niechroniona",
+        "unknown": "Nieznana"
+      },
+      "unprotectedHint": "poświadczenie uruchomienia może wypchnąć zmiany bezpośrednio i scalić własnego pull requesta",
+      "detailUnavailable": "chroniona, ale nie udało się odczytać reguły — bezpośrednie wypchnięcia mogą nadal być dozwolone",
+      "requiresPr": "wymagany pull request, {reviews} zatwierdzających recenzji, {checks} wymaganych sprawdzeń",
+      "noPrRequired": "chroniona, ale nie wymaga pull requesta",
+      "unknownReason": {
+        "branch_not_found": "nie znaleziono gałęzi domyślnej — projekcja repozytorium może być nieaktualna",
+        "forbidden": "poświadczenie nie ma prawa odczytać gałęzi tego repozytorium",
+        "error": "nie udało się połączyć z hostem"
+      }
     }
   },
   "tutorial": {

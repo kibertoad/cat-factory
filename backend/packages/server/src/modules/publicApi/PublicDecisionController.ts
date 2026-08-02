@@ -453,7 +453,7 @@ function registerJudgeRoutes(app: Hono<AppEnv>): void {
       return c.json(failureBody(gated.fail), gated.fail.status)
     }
     const { workspaceId, scoped } = gated
-    await runWithInitiator(scoped.execution.initiatedBy, () =>
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
         .executionService.resolveJudgeDecision(
@@ -490,7 +490,7 @@ function registerForkDecisionRoutes(app: Hono<AppEnv>): void {
       return c.json(failureBody(gated.fail), gated.fail.status)
     }
     const { workspaceId, scoped } = gated
-    await runWithInitiator(scoped.execution.initiatedBy, () =>
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
         .executionService.chooseFork(workspaceId, scoped.execution.id, c.req.valid('json')),

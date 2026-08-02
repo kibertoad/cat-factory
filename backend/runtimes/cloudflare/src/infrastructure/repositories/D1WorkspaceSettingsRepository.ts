@@ -29,6 +29,7 @@ interface WorkspaceSettingsRow {
   spend_monthly_limit: number | null
   default_provision_type: string | null
   default_provision_manifest_id: string | null
+  allow_initiator_pat: number
   metadata: string | null
 }
 
@@ -60,6 +61,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     spendMonthlyLimit: row.spend_monthly_limit,
     defaultProvisionType: (row.default_provision_type as ProvisionType | null) ?? null,
     defaultProvisionManifestId: row.default_provision_manifest_id,
+    allowInitiatorPat: row.allow_initiator_pat === 1,
     // An absent (or unparseable) blob reads as "nothing filled in", never as a missing key
     // the settings object would have to be nullable for.
     metadata: parseJson<WorkspaceMetadata>(row.metadata) ?? {},
@@ -111,8 +113,8 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
             delegate_agents_to_runner_pool, review_friction_mode, review_friction_warn_count,
             review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
             spend_monthly_limit, default_provision_type, default_provision_manifest_id,
-            metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            allow_initiator_pat, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -131,6 +133,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            spend_monthly_limit = excluded.spend_monthly_limit,
            default_provision_type = excluded.default_provision_type,
            default_provision_manifest_id = excluded.default_provision_manifest_id,
+           allow_initiator_pat = excluded.allow_initiator_pat,
            metadata = excluded.metadata`,
       )
       .bind(
@@ -152,6 +155,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.spendMonthlyLimit,
         settings.defaultProvisionType,
         settings.defaultProvisionManifestId,
+        settings.allowInitiatorPat ? 1 : 0,
         JSON.stringify(settings.metadata),
       )
       .run()

@@ -12,6 +12,7 @@ import {
   listGitHubInstallationsContract,
   listGitHubIssuesContract,
   listGitHubPullsContract,
+  checkGitHubBranchProtectionContract,
   listGitHubReposContract,
   listGitHubRepoFilesContract,
   listGitHubRepoTreeContract,
@@ -65,6 +66,11 @@ export function githubApi({ send, ws }: ApiContext) {
 
     listGitHubRepos: (workspaceId: string) =>
       send(listGitHubReposContract, { pathPrefix: ws(workspaceId) }),
+
+    // The branch-protection preflight: a LIVE probe of each linked repo's default branch, so
+    // it is invoked on demand rather than folded into the projection reads above.
+    checkGitHubBranchProtection: (workspaceId: string) =>
+      send(checkGitHubBranchProtectionContract, { pathPrefix: ws(workspaceId) }),
 
     // Programmatic repo creation (privileged App tier). Only called when the
     // connection reports `canCreateRepos`; otherwise the UI opens GitHub directly.

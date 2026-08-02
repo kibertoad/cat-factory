@@ -8,7 +8,11 @@
 // order of every statement here is unchanged from when it lived inline, which matters: the
 // `selectNodeGitHubDeps` call registers gate providers onto `providerRegistry` as a side effect and
 // must stay BEFORE `applyGateProviders` in the finalize step.
-import { type Clock, type GitHubInstallationRepository } from '@cat-factory/kernel'
+import {
+  type Clock,
+  type GitHubInstallationRepository,
+  createInitiatorPatGate,
+} from '@cat-factory/kernel'
 import {
   type AppConfig,
   CompositeAgentExecutor,
@@ -16,6 +20,8 @@ import {
   GitHubAppRegistry,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  createResolveRunInitiatorToken,
+  logger,
 } from '@cat-factory/server'
 
 import type { NodeContainerOptions } from './container-options.js'
@@ -122,6 +128,22 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
 
   const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
 
+  // "Does THIS run act with its initiator's own GitHub token?" — built ONCE here and shared by
+  // the container push-token mint and the engine's GitHub client (CI gate / mergeability /
+  // merge), so the workspace's `allowInitiatorPat` switch cannot bind one path and miss the
+  // other. Undefined when no per-user secret store is wired (no `ENCRYPTION_KEY`), which is
+  // the same condition that already made the preference inert.
+  const resolveRunInitiatorToken = resolveUserGitHubToken
+    ? createResolveRunInitiatorToken({
+        resolveUserGitHubToken,
+        initiatorPatGate: createInitiatorPatGate({
+          repository: repos.workspaceSettingsRepository,
+          ...(options.caches?.workspaceSettings ? { cache: options.caches.workspaceSettings } : {}),
+        }),
+        logger,
+      })
+    : undefined
+
   // The repo a running block targets (installation + owner/name), resolved from the
   // github_repos projection. Built once and shared by the container executor, the
   // GitHub-issue tracker filer, and the CI / merge providers.
@@ -200,7 +222,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     subscriptions,
     personalSubscriptions,
     resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
-    resolveUserGitHubToken,
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
     agentContextObservability: runServices.agentContextObservability,
     resolveWebSearchAvailability: runServices.resolveWebSearchAvailability,
     resolveRepoOrigin: options.resolveRepoOrigin,
@@ -238,7 +260,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     clock,
     appRegistry,
     githubClientOverride: options.githubClient,
-    resolveUserGitHubToken,
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
     gitlabEngineClient,
     providerRegistry,
     resolveRepoTarget,
