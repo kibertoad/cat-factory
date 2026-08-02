@@ -4243,7 +4243,7 @@
     },
     "contracts": {
       "omitted": "+{count} weitere nicht aufgeführt",
-      "notIndexed": "Operationen werden fuer dieses Format nicht indexiert; oeffne das Dokument",
+      "notIndexed": "Operationen werden für dieses Format nicht indexiert; öffne das Dokument",
       "noOperations": "deklariert keine Operationen",
       "none": "Kein API-Vertrag hinterlegt. Einem Agenten wird gesagt, dass die Schnittstelle unbekannt ist, statt dass er sie errät."
     },

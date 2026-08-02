@@ -205,6 +205,7 @@ export {
   indexOpenApiOperations,
   indexToadContractOperations,
   isContractCandidatePath,
+  isContractModulePath,
   isOpenApiDocument,
   parseFoundationalDeclaration,
   renderContractDocument,

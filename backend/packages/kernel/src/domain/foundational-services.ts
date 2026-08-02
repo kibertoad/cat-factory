@@ -143,6 +143,19 @@ export function isContractCandidatePath(path: string): boolean {
   )
 }
 
+/**
+ * Whether `path` names a TypeScript/JavaScript contract MODULE rather than an OpenAPI document,
+ * derived from the same extension list {@link detectContractFormat} branches on.
+ *
+ * Exported so a caller asking "could this file be part of a contract module GRAPH?" — the repo
+ * source's supporting-module admission — asks the one list instead of re-declaring it. A second
+ * copy drifts silently, and the drift surfaces as a linked file skipped as `unrecognised` for an
+ * extension the detector beside it already recognises.
+ */
+export function isContractModulePath(path: string): boolean {
+  return endsWithAny(path.toLowerCase(), CONTRACT_MODULE_EXTENSIONS)
+}
+
 function endsWithAny(lower: string, extensions: string[]): boolean {
   return extensions.some((extension) => lower.endsWith(extension))
 }

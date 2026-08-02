@@ -6,6 +6,7 @@ import {
   indexOpenApiOperations,
   indexToadContractOperations,
   isContractCandidatePath,
+  isContractModulePath,
   parseFoundationalDeclaration,
   renderContractDocument,
   renderFoundationalCatalog,
@@ -107,6 +108,23 @@ describe('isContractCandidatePath', () => {
     expect(isContractCandidatePath('specs/package-api.json')).toBe(true)
     expect(isContractCandidatePath('specs/tsconfig-service.yaml')).toBe(true)
     expect(isContractCandidatePath('specs/deno.yaml')).toBe(true)
+  })
+})
+
+describe('isContractModulePath', () => {
+  // The repo source admits a linked module the SET's format vouches for, and it asks this rather
+  // than carrying its own extension list — a second list drifts, and the drift reads as a linked
+  // schema module skipped as `unrecognised` for an extension the detector beside it recognises.
+  it('accepts exactly the extensions a contract MODULE can be detected from', () => {
+    for (const path of ['contracts/api.ts', 'contracts/api.mts', 'dist/api.js']) {
+      expect(isContractModulePath(path)).toBe(true)
+    }
+  })
+
+  it('rejects an OpenAPI document, which is a contract but never a module', () => {
+    for (const path of ['spec.json', 'spec.yaml', 'spec.yml', 'spec.openapi', 'README.md']) {
+      expect(isContractModulePath(path)).toBe(false)
+    }
   })
 })
 
@@ -334,6 +352,20 @@ describe('indexToadContractOperations', () => {
       '})',
     ].join('\n')
     expect(indexToadContractOperations(computed)).toEqual({ operations: [], omitted: 1 })
+  })
+
+  it('COUNTS a resolver whose PARAMETER list it cannot read, rather than skipping the anchor', () => {
+    // The parameter matcher stops at the first `)`, so a destructured param carrying a call in a
+    // default defeats it. That must land as a counted omission like any other unread shape — the
+    // bound the extractor rests on is "nothing uncertain is emitted AND the shortfall is
+    // reported", and a declaration silently missing from both halves would break the second.
+    const awkward = [
+      'export const oddContract = defineApiContract({',
+      "  method: 'get',",
+      '  pathResolver: ({ id = fallbackId() }) => `/files/${id}`,',
+      '})',
+    ].join('\n')
+    expect(indexToadContractOperations(awkward)).toEqual({ operations: [], omitted: 1 })
   })
 
   it('indexes nothing at all from a module that declares no contracts', () => {

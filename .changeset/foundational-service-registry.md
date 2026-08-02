@@ -32,6 +32,10 @@ Contract MODULE operations are indexed. A `@toad-contracts/core` module is read 
 through `omittedOperations` rather than passing as a complete list. Where a format is not read at
 all, that is now stated instead of rendering as "declares no operations".
 
+Kernel gains `isContractModulePath`, so a caller asking whether a file could be part of a contract
+module GRAPH reads the same extension list `detectContractFormat` branches on instead of declaring
+its own.
+
 The enforced capability tags (`asset-storage`, `generation-context`) moved to
 `@cat-factory/contracts` so registrants and the SPA import the same vocabulary, and the write
 boundary refuses a tag that misses one by case or separators.

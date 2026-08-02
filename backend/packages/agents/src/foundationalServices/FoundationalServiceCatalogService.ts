@@ -288,28 +288,32 @@ export class FoundationalServiceCatalogService {
   }
 
   /**
-   * The identity of everything a tier INHERITS — the deployment's registered services, plus (for
-   * a workspace) its account's live rows. Only what a suppression list needs to name a shadowed
-   * id, so it deliberately does not join contract manifests.
+   * The identity of everything a tier INHERITS: the merge as the tier BELOW it resolves it.
+   *
+   * Deliberately the same {@link loadTierView} the merge and {@link suppress} run on, rather than
+   * a second walk over builtins + account rows. Inheritance is a precedence question, and the
+   * tombstone half of that precedence is easy to leave out of a hand-rolled second copy — which
+   * is exactly what happened: reading the account's LIVE rows beside the registry made a builtin
+   * the account had already suppressed still look inherited by every board under it, so a board's
+   * own opt-out claimed to be shadowing a service no board could see. `inherited` is the one
+   * thing this list has to be right about, since it is the difference between "a capability is
+   * being withheld" and "there is none to withhold".
+   *
+   * The cost is one manifest read whose contracts nothing here uses. That is the correct trade
+   * for a rare, human-driven settings read: a second precedence implementation is a standing
+   * invitation for the two to disagree again, and only one of them is the one agents resolve.
    */
   private async inheritedIdentities(
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
   ): Promise<{ id: string; name: string; summary: string }[]> {
-    const builtins = this.registry.entries()
-    if (ownerKind === 'account') return builtins
+    // An account's tier below is the deployment's registry and nothing else.
+    if (ownerKind === 'account') return this.registry.entries()
     const accountId = await this.deps.workspaceRepository.accountOf(ownerId)
-    const accountRows = accountId
-      ? await this.deps.foundationalServiceRepository.listByOwner('account', accountId)
-      : []
-    return [
-      ...builtins,
-      ...accountRows.map((row) => ({
-        id: row.serviceId,
-        name: row.name,
-        summary: row.summary,
-      })),
-    ]
+    // A board with no account inherits the deployment tier directly, with nothing able to
+    // suppress it in between.
+    if (!accountId) return this.registry.entries()
+    return this.loadTierView('account', accountId)
   }
 
   /**

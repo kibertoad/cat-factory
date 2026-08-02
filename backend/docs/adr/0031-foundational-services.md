@@ -201,6 +201,16 @@ id is a lower-kebab slug that could legitimately be `suppressions`, and a litera
 namespace with `:serviceId` is a collision waiting for the first single-segment by-id route. The
 two mutating verbs stay on the sub-resource, where `:serviceId` is a real path parameter.
 
+That sibling path has a cost paid at the ACCOUNT scope, and it is worth writing down because it
+cost us once. Account-tier authorization is `accountGuard` mounted per top-level resource — not a
+`use('*')`, which Hono would register as `/accounts/:accountId/*` and run against every SIBLING
+controller mounted at the same prefix. So a route whose path does not hang off an already-guarded
+resource inherits nothing, silently: the suppression list, being a sibling rather than a
+`/foundational-services/…` child, was reachable by any signed-in caller for any account id until
+`ACCOUNT_GUARDED_RESOURCES` named it. The enforcement is `foundationalServiceAccountGuard.spec.ts`,
+which drives every route the controller registers and requires each to refuse a non-member — a new
+account resource therefore cannot repeat it without failing a test.
+
 Both refusals are decided against a FRESH tier merge, not the cached one the agents read. They are
 decisions about persisted state, so a TTL'd view can 404 an opt-out for a service the account
 registered moments ago, or write a tombstone against an id it has since withdrawn — precisely the

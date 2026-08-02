@@ -47,6 +47,28 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
+ * Every TOP-LEVEL path this controller serves at the account scope. `accountGuard` is mounted on
+ * each of them and on each one's subtree, so a route is authorized by virtue of the resource it
+ * hangs off rather than by someone remembering to add a `use` line beside it.
+ *
+ * It is a list rather than a `use('*', …)` because this controller shares the
+ * `/accounts/:accountId` mount with its siblings: Hono registers a sub-app's `use('*')` as
+ * `/accounts/:accountId/*` on the parent, so it would also run against `/accounts/:id/reports`
+ * and every other account route, which is a different controller's authorization to own.
+ *
+ * The pairing of `resource` with `resource/*` is what the enumeration existed to get right and
+ * did not — `/foundational-service-suppressions` had no entry at all, leaving the account-tier
+ * opt-out LIST reachable by any signed-in user for any account id. `foundationalServiceAccountGuard.spec.ts`
+ * drives every route this controller registers and fails on an unguarded one, so a new resource
+ * cannot repeat it.
+ */
+const ACCOUNT_GUARDED_RESOURCES = [
+  '/foundational-services',
+  '/foundational-service-suppressions',
+  '/foundational-service-sources',
+] as const
+
+/**
  * The foundational-services API (backend/docs/adr/0031-foundational-services.md), mounted TWICE —
  * once under `/accounts/:accountId` and once under `/workspaces/:workspaceId` — so a tier's
  * services and repo sources are managed at the scope that owns them, exactly like the
@@ -66,10 +88,10 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const ownerKind: FoundationalServiceOwnerKind = scope
 
   if (scope === 'account') {
-    app.use('/foundational-services', accountGuard)
-    app.use('/foundational-services/*', accountGuard)
-    app.use('/foundational-service-sources', accountGuard)
-    app.use('/foundational-service-sources/*', accountGuard)
+    for (const resource of ACCOUNT_GUARDED_RESOURCES) {
+      app.use(resource, accountGuard)
+      app.use(`${resource}/*`, accountGuard)
+    }
   }
 
   if (scope === 'workspace') {

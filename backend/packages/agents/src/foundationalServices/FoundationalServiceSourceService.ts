@@ -26,6 +26,7 @@ import {
   assertFound,
   detectContractFormat,
   isContractCandidatePath,
+  isContractModulePath,
   noopLogger,
   runBestEffort,
   summarizeContract,
@@ -657,19 +658,26 @@ export class FoundationalServiceSourceService {
       async (path) => ({ path, file: await this.readFile(source, installationId, path, readRef) }),
       { concurrency: CONTRACT_READ_CONCURRENCY },
     )
+    // Detect each readable file's format ONCE. The set-wide decision below and the per-file one
+    // in the loop are the same question asked twice, and content detection scans a document that
+    // can run to `MAX_CONTRACT_BODY_CHARS`.
+    const detected = fetched.map(({ path, file }) => ({
+      path,
+      file,
+      format: file ? detectContractFormat(path, file.content) : null,
+    }))
     // The format the SET resolved to, decided over every readable file before any is stored: a
     // supporting module can be linked before the contract that names the library, so a
     // left-to-right pass would drop it on the strength of files it had not read yet.
     const setModuleFormat = params.admitSupportingModules
-      ? moduleFormatOfSet(fetched.flatMap(({ path, file }) => (file ? [{ path, ...file }] : [])))
+      ? moduleFormatOfSet(detected.map((entry) => entry.format))
       : null
-    for (const { path, file } of fetched) {
+    for (const { path, file, format: detectedFormat } of detected) {
       if (!file) {
         this.skip(report, source, path, 'unreadable')
         continue
       }
-      const format =
-        detectContractFormat(path, file.content) ?? supportingModuleFormat(path, setModuleFormat)
+      const format = detectedFormat ?? supportingModuleFormat(path, setModuleFormat)
       if (!format) {
         this.skip(report, source, path, 'unrecognised')
         continue
@@ -829,9 +837,6 @@ export class FoundationalServiceSourceService {
   }
 }
 
-/** TypeScript/JavaScript module extensions — the files a contract MODULE graph is made of. */
-const MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
-
 /**
  * The single TypeScript contract format a linked SET resolved to, or null when it resolved to
  * none or to more than one.
@@ -841,23 +846,28 @@ const MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
  * unrecognised module supports, and attaching it to the wrong one would present a coder with a
  * module the contract beside it does not import.
  */
-function moduleFormatOfSet(files: { path: string; content: string }[]): ApiContractFormat | null {
+function moduleFormatOfSet(detected: (ApiContractFormat | null)[]): ApiContractFormat | null {
   const formats = new Set(
-    files
-      .map((file) => detectContractFormat(file.path, file.content))
-      .filter((format): format is ApiContractFormat => format !== null && format !== 'openapi'),
+    detected.filter(
+      (format): format is ApiContractFormat => format !== null && format !== 'openapi',
+    ),
   )
   return formats.size === 1 ? [...formats][0]! : null
 }
 
-/** A linked module the set's format vouches for; null for anything that is not a module. */
+/**
+ * A linked module the set's format vouches for; null for anything that is not a module.
+ *
+ * "Is this a module?" is kernel's `isContractModulePath`, not a local extension list, so this
+ * admits exactly what `detectContractFormat` would have looked at — a second list here would
+ * silently drop a linked `.mts` schema module the detector beside it recognises.
+ */
 function supportingModuleFormat(
   path: string,
   setFormat: ApiContractFormat | null,
 ): ApiContractFormat | null {
   if (!setFormat) return null
-  const lower = path.toLowerCase()
-  return MODULE_EXTENSIONS.some((extension) => lower.endsWith(extension)) ? setFormat : null
+  return isContractModulePath(path) ? setFormat : null
 }
 
 function toWire(record: FoundationalServiceSourceRecord): FoundationalServiceSource {

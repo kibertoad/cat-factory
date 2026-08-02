@@ -513,4 +513,44 @@ describe('FoundationalServiceCatalogService builtin tier', () => {
     await service.restoreInherited('workspace', 'ws', 'file-storage')
     expect((await service.resolve('ws')).map((s) => s.tier)).toEqual(['builtin'])
   })
+
+  it("says a board's opt-out shadows NOTHING once the account has opted out too", async () => {
+    // The board suppresses first (it can — the builtin is in its catalog), then the account
+    // suppresses the same id for everyone. The board's tombstone now hides a service no board
+    // could see, so `inherited` must say so: reading the account's LIVE rows beside the registry
+    // reports `true` here, which tells an operator a capability is being withheld when there is
+    // none to withhold — the exact distinction this field exists to carry.
+    const service = build()
+    await service.suppress('workspace', 'ws', 'file-storage')
+    await service.suppress('account', 'acct', 'file-storage')
+
+    expect(await service.listSuppressions('workspace', 'ws')).toEqual([
+      { id: 'file-storage', name: '', summary: '', inherited: false },
+    ])
+    // The account's own tombstone still shadows the deployment tier, which is real.
+    expect(await service.listSuppressions('account', 'acct')).toEqual([
+      {
+        id: 'file-storage',
+        name: 'File Storage',
+        summary: 'The org file storage.',
+        inherited: true,
+      },
+    ])
+  })
+
+  it("names a board's suppression from the ACCOUNT's override, not the builtin it replaced", async () => {
+    // One precedence, not two: the suppression list must name what the board actually inherits,
+    // and an account row of the same id wins over the registry entry there exactly as it does in
+    // the merge.
+    const service = build([record('account', 'acct', 'file-storage', { name: 'Org storage' })])
+    await service.suppress('workspace', 'ws', 'file-storage')
+    expect(await service.listSuppressions('workspace', 'ws')).toEqual([
+      {
+        id: 'file-storage',
+        name: 'Org storage',
+        summary: 'file-storage summary',
+        inherited: true,
+      },
+    ])
+  })
 })
