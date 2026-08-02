@@ -191,9 +191,14 @@ the core `github` module and worker adapters are wired only when a GitHub App is
 configured. See [`docs/github-integration.md`](./docs/github-integration.md),
 [`docs/github-operations.md`](./docs/github-operations.md), and
 [`docs/adr/0001-github-app-integration.md`](./docs/adr/0001-github-app-integration.md).
+What actually stops a prompt-injected or hallucinating agent from landing malicious
+code — token scoping, the push path, merge gating, and the operator hardening
+checklist (branch protection, merge presets) — is documented layer by layer in
+[`docs/security-model.md`](./docs/security-model.md).
 
 Auth uses Web Crypto (`crypto.subtle`) — a thin `fetch` `GitHubClient`, no Octokit:
-an RS256 app JWT mints short-lived installation tokens (cached in D1), and webhook
+an RS256 app JWT mints short-lived installation tokens (cached in memory per
+isolate/process, deliberately never persisted — see `GitHubAppAuth`), and webhook
 deliveries are HMAC-verified over the raw body before a fast `202` ack. New schema is
 in migration `0004_github_projections.sql`. Configure via `GITHUB_APP_ID/SLUG` vars
 and `GITHUB_APP_PRIVATE_KEY` (PKCS#8) + `GITHUB_WEBHOOK_SECRET` secrets.
