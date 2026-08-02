@@ -402,6 +402,7 @@ function selectVcsConnectDeps(input: {
     cipher,
     apiBase: gitlab.apiBase,
     clock,
+    logger,
   })
   const service = new VcsPatConnectionService({
     provider: 'gitlab',

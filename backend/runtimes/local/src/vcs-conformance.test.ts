@@ -100,6 +100,16 @@ interface ProviderConfig {
   headRoute: Route
   /** The changed-file list backing the review slicer + the merge track record's classifier. */
   changedFilesRoute: Route
+  /**
+   * The changed-file list as the host answers it for a file whose DIFF it will not give — and
+   * what the neutral entity must then report for its line counts. The two providers legitimately
+   * differ, so the suite pins the difference rather than hiding it: GitHub cannot line-count a
+   * binary but still reports a real `0`, while GitLab reports no counts at all and withholds the
+   * hunk it would have derived them from, so it has nothing to report. What both must refuse is
+   * to render "unknown" as a zero — the reviewer reads these badges and skips a `+0/-0` file.
+   */
+  patchlessFileRoute: Route
+  patchlessCounts: { additions: number | null; deletions: number | null }
   /** The write that lands ONE inline review comment. */
   inlineCommentRoute: Route
   /** The write that lands the review's summary/body as a conversation comment. */
@@ -160,6 +170,14 @@ const github: ProviderConfig = {
       },
     ],
   },
+  // A binary file: GitHub omits `patch` but still sends real counts, and 0/0 is the true answer
+  // for bytes it cannot line-count.
+  patchlessFileRoute: {
+    method: 'GET',
+    match: '/pulls/7/files',
+    body: [{ filename: 'logo.png', status: 'modified', additions: 0, deletions: 0 }],
+  },
+  patchlessCounts: { additions: 0, deletions: 0 },
   inlineCommentRoute: { method: 'POST', match: '/pulls/7/comments', body: { id: 1 } },
   bodyCommentRoute: { method: 'POST', match: '/issues/7/comments', body: { id: 2 } },
 }
@@ -231,6 +249,14 @@ const gitlab: ProviderConfig = {
       },
     ],
   },
+  // A diff GitLab WITHHELD as oversized: no hunk to count off, and no counts of its own to fall
+  // back on, so the honest answer is "not reported" rather than a zero.
+  patchlessFileRoute: {
+    method: 'GET',
+    match: '/merge_requests/7/diffs',
+    body: [{ old_path: 'big.sql', new_path: 'big.sql', too_large: true }],
+  },
+  patchlessCounts: { additions: null, deletions: null },
   inlineCommentRoute: { method: 'POST', match: '/merge_requests/7/discussions', body: { id: 'd' } },
   bodyCommentRoute: { method: 'POST', match: '/merge_requests/7/notes', body: { id: 2 } },
 }
@@ -328,6 +354,15 @@ function defineVcsClientConformance(cfg: ProviderConfig): void {
           }),
         ])
         expect(files[0]?.patch).toContain('+one')
+      })
+    })
+
+    it('never reports a count it does not have as zero for a file with no patch', async () => {
+      await withFetch(cfg.authOk, [cfg.patchlessFileRoute], async () => {
+        const client = cfg.makeClient()!
+        const files = await client.listChangedFiles!(1, ref, 7)
+        expect(files[0]?.patch).toBeNull()
+        expect(files[0]).toMatchObject(cfg.patchlessCounts)
       })
     })
 

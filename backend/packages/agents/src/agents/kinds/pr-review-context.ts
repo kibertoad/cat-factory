@@ -144,8 +144,26 @@ function groupKey(path: string): string {
   return segments.slice(0, SLICE_GROUP_DEPTH).join('/')
 }
 
+/**
+ * A file's weight for slice SIZING. Unreported counts (null — the provider withheld the hunk)
+ * weigh nothing, and that is exact rather than a fudge: what a slice budget is rationing is the
+ * reviewer's context, a file with no hunk is rendered as a one-line "no patch" note by
+ * {@link patchSection}, so it genuinely costs the slice nothing to carry. The same null is NOT
+ * flattened where the counts are SHOWN to the reviewer — see {@link formatLineCounts}.
+ */
 function changedLinesOf(file: GitHubChangedFile): number {
-  return file.additions + file.deletions
+  return (file.additions ?? 0) + (file.deletions ?? 0)
+}
+
+/**
+ * The `+12/-3` badge as the reviewer reads it. A provider that did not report the counts says so
+ * instead of rendering `+0/-0`, which describes a file nobody touched — the one reading a reviewer
+ * would act on by skipping it. Every surface that shows a file's size goes through here, so the
+ * distinction cannot be lost at one call site while being honoured at the others.
+ */
+function formatLineCounts(file: GitHubChangedFile): string {
+  if (file.additions == null && file.deletions == null) return 'size not reported by the host'
+  return `+${file.additions ?? 0}/-${file.deletions ?? 0}`
 }
 
 /**
@@ -276,14 +294,14 @@ function omittedPatchesNote(omitted: readonly GitHubChangedFile[], total: number
     'and you cannot fetch them. Do NOT infer what they contain from their paths, and do not raise ' +
     'findings against them. Review what you were shown, and say plainly in your verdict that this ' +
     'part of the change was not visible to you.\n\n' +
-    omitted.map((f) => `- ${f.path} (+${f.additions}/-${f.deletions})`).join('\n') +
+    omitted.map((f) => `- ${f.path} (${formatLineCounts(f)})`).join('\n') +
     '\n'
   )
 }
 
 /** One file's patch section, or the reason it has none. */
 function patchSection(f: GitHubChangedFile, byteLength: (s: string) => number): string {
-  const heading = `\n### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})\n`
+  const heading = `\n### ${f.path} (${f.status}, ${formatLineCounts(f)})\n`
   if (f.patch == null) {
     return `${heading}(no patch — binary or too large; read the file from the checkout)\n`
   }
@@ -375,7 +393,7 @@ export function renderPrDiffContext(
     `\n## Changed files (${files.length})\n`,
     ...files.map((f) => {
       const rename = f.previousPath ? ` (renamed from ${f.previousPath})` : ''
-      return `- ${f.status} ${f.path} (+${f.additions}/-${f.deletions})${rename}`
+      return `- ${f.status} ${f.path} (${formatLineCounts(f)})${rename}`
     }),
   ]
 

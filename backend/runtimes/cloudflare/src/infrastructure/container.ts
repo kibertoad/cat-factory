@@ -268,6 +268,7 @@ function selectEngineVcsClient(
       token: env.GITLAB_TOKEN,
       apiBase: config.gitlab.apiBase,
       clock,
+      logger,
     })
   }
   return undefined
@@ -1415,6 +1416,7 @@ export function buildContainer(
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
       webhookSecret: config.gitlab.webhookSecret || undefined,
+      logger,
     })
   }
 

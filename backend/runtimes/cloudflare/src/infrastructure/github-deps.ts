@@ -10,6 +10,7 @@ import {
   makeResolveRepoFilesForCoords,
   makeResolveRunRepoContext,
   ProviderRoutingGitHubClient,
+  logger,
 } from '@cat-factory/server'
 import { buildGitLabEngineClient } from '@cat-factory/gitlab'
 import type { AppConfig } from './config'
@@ -83,6 +84,7 @@ export function selectGitHubDeps(
         token: env.GITLAB_TOKEN,
         apiBase: config.gitlab.apiBase,
         clock,
+        logger,
       })
       return {
         resolveRunRepoContext: makeResolveRunRepoContext(

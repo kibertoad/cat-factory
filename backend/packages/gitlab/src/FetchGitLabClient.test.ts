@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VcsConnectionRef, VcsRepoRef } from '@cat-factory/kernel'
-import { defaultVcsRegistry } from '@cat-factory/kernel'
+import { createRecordingLogger, defaultVcsRegistry, noopLogger } from '@cat-factory/kernel'
 import { FetchGitLabClient } from './FetchGitLabClient.js'
 import { StaticGitLabTokenSource } from './tokenSource.js'
 import { registerGitLab } from './index.js'
@@ -57,14 +57,16 @@ const clock = { now: () => 1_000 }
 
 function client(routes: Parameters<typeof fakeFetch>[0]) {
   const { fetchImpl, calls } = fakeFetch(routes)
+  const log = createRecordingLogger()
   const c = new FetchGitLabClient({
     tokenSource: new StaticGitLabTokenSource('tok'),
     clock,
     fetchImpl,
+    logger: log,
     // No real delay between rebase polls in tests.
     sleep: async () => {},
   })
-  return { c, calls }
+  return { c, calls, log }
 }
 
 describe('FetchGitLabClient — neutral projections', () => {
@@ -302,7 +304,13 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
     expect(await c.getPullRequestBaseRef(connection, ref, 3)).toBe('release')
     expect(await c.listRequestedReviewers(connection, ref, 3)).toEqual(['bob', 'cara'])
   })
+})
 
+// The PR deep-review capability set: the four VcsClient members whose ABSENCE every consumer
+// degrades silently on. Split from the block above once it outgrew the per-function line budget —
+// these share a subject (what a review reads, and how its findings get published) rather than
+// merely sharing a client.
+describe('FetchGitLabClient — PR deep review (changed files, head refs, publishing findings)', () => {
   it('reads the MR head ref and head sha, preferring diff_refs over the stale top-level sha', async () => {
     const { c } = client({
       'GET /projects/7/merge_requests/3': {
@@ -336,9 +344,12 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
           { old_path: 'src/new.ts', new_path: 'src/new.ts', new_file: true, diff: '+one\n' },
           { old_path: 'old.ts', new_path: 'moved.ts', renamed_file: true, diff: '' },
           { old_path: 'gone.ts', new_path: 'gone.ts', deleted_file: true, diff: '-x\n' },
-          // A file GitLab truncated: no hunk to count, so zeros and a null patch — the same
-          // shape GitHub reports for a binary/oversized file.
+          // A file whose hunk GitLab WITHHELD: nothing to count, so the counts are null (see
+          // below) rather than a zero that would read as "this file changed nothing".
           { old_path: 'big.bin', new_path: 'big.bin', too_large: true },
+          // A binary file: GitLab sends no hunk and does NOT flag it too_large. Neither host can
+          // line-count bytes, so a real 0 is the honest answer and matches what GitHub reports.
+          { old_path: 'logo.png', new_path: 'logo.png' },
         ],
       },
     })
@@ -380,11 +391,95 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
         path: 'big.bin',
         previousPath: null,
         status: 'modified',
+        // NOT 0: these render straight into the reviewer's prompt, and a withheld 5000-line diff
+        // shown as `+0/-0` beside "diff not available" describes a file nobody touched.
+        additions: null,
+        deletions: null,
+        patch: null,
+      },
+      {
+        path: 'logo.png',
+        previousPath: null,
+        status: 'modified',
         additions: 0,
         deletions: 0,
         patch: null,
       },
     ])
+  })
+
+  it('counts diff content positionally, so a removed line starting with -- is not dropped', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/diffs?per_page=100': {
+        body: [
+          {
+            old_path: 'k8s.yaml',
+            new_path: 'k8s.yaml',
+            // The preamble is skipped by POSITION (everything before the first `@@`), so the
+            // removed `--- ` document separator and the added `++counter` are content, not
+            // headers. A prefix test would drop both and undercount the file by half.
+            diff: '--- a/k8s.yaml\n+++ b/k8s.yaml\n@@ -1,3 +1,3 @@\n ctx\n---\n-- trailing\n+++added\n++counter\n',
+          },
+        ],
+      },
+    })
+    const [file] = await c.listChangedFiles(connection, ref, 3)
+    expect(file).toMatchObject({ additions: 2, deletions: 2 })
+  })
+
+  it('falls back to the deprecated /changes when an older GitLab has no /diffs endpoint', async () => {
+    const { c, log } = client({
+      'GET /projects/7/merge_requests/3/diffs?per_page=100': { status: 404 },
+      'GET /projects/7/merge_requests/3/changes': {
+        body: { changes: [{ old_path: 'a.ts', new_path: 'a.ts', diff: '@@ -1 +1 @@\n+one\n' }] },
+      },
+    })
+    // The method is OPTIONAL on the port so an absent capability degrades to the reviewer's git
+    // fallback — but a PRESENT method that throws fails the whole step, so the adapter absorbs
+    // the version difference rather than letting it surface as a failed review.
+    expect(await c.listChangedFiles(connection, ref, 3)).toEqual([
+      {
+        path: 'a.ts',
+        previousPath: null,
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        patch: '@@ -1 +1 @@\n+one\n',
+      },
+    ])
+    expect(log.lines.some((l) => l.level === 'warn' && l.msg.includes('/changes'))).toBe(true)
+  })
+
+  it('rethrows when the merge request itself is missing, rather than reporting no changed files', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/diffs?per_page=100': { status: 404 },
+      'GET /projects/7/merge_requests/3/changes': { status: 404 },
+    })
+    // Both 404 ⇒ the MR does not exist. Answering [] would be indistinguishable from a real
+    // empty MR and would classify the merge track record off a file list that was never read.
+    await expect(c.listChangedFiles(connection, ref, 3)).rejects.toThrow()
+  })
+
+  it('warns when a listing is truncated at the page cap', async () => {
+    const page = Array.from({ length: 3 }, (_, i) => ({
+      old_path: `f${i}.ts`,
+      new_path: `f${i}.ts`,
+      diff: '@@ -1 +1 @@\n+x\n',
+    }))
+    const next = '<https://gitlab.com/api/v4/projects/7/merge_requests/3/diffs?page=2>; rel="next"'
+    const { c, log } = client({
+      'GET /projects/7/merge_requests/3/diffs?per_page=100': {
+        body: page,
+        headers: { link: next },
+      },
+      'GET /projects/7/merge_requests/3/diffs?page=2': { body: page, headers: { link: next } },
+    })
+    await c.listChangedFiles(connection, ref, 3)
+    const warning = log.lines.find((l) => l.msg.includes('truncated'))
+    // A cap that does not announce itself reads exactly like a complete changed-file list, which
+    // is what the review would then be sliced from.
+    expect(warning?.level).toBe('warn')
+    expect(warning?.fields).toMatchObject({ maxPages: 10 })
   })
 
   it('posts a review as per-comment diff discussions plus a summary note', async () => {
@@ -420,11 +515,11 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
         head_sha: 'h1',
         new_path: 'src/a.ts',
         old_path: 'src/a.ts',
-        new_line: '12',
+        new_line: 12,
       },
     })
     const leftSide = discussions[1]?.body as { position: Record<string, unknown> } | undefined
-    expect(leftSide).toMatchObject({ position: { old_line: '4' } })
+    expect(leftSide).toMatchObject({ position: { old_line: 4 } })
     expect(leftSide?.position.new_line).toBeUndefined()
   })
 
@@ -467,7 +562,9 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
     expect(result.bodyPosted).toBe(false)
     expect(result.bodyError).toContain('diff refs')
   })
+})
 
+describe('FetchGitLabClient — approvals, threads, rebase and tree reads', () => {
   it('maps GitLab approvals to APPROVED reviews + the required count', async () => {
     const { c } = client({
       'GET /projects/7/merge_requests/3/approvals': {
@@ -717,6 +814,7 @@ describe('registerGitLab', () => {
       tokenSource: new StaticGitLabTokenSource('tok'),
       clock,
       webhookSecret: 's',
+      logger: noopLogger,
     })
     const bundle = registry.resolve(connection)
     expect(bundle.provider).toBe('gitlab')

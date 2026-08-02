@@ -18,6 +18,7 @@ import type {
   GitHubRepo,
   GitHubReviewThread,
   ListOptions,
+  Logger,
   Paged,
   RepoContentEntry,
   RepoEntry,
@@ -26,7 +27,7 @@ import type {
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
-import { describeVcsApiError } from '@cat-factory/kernel'
+import { describeVcsApiError, noopLogger } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
@@ -78,11 +79,14 @@ export interface FetchGitLabClientDependencies {
   /** Injected for tests; defaults to a `setTimeout`-based delay (used between rebase polls). */
   sleep?: (ms: number) => Promise<void>
   /**
-   * Optional sink, warned when a listing hits the {@link MAX_PAGES} page cap with more
-   * results still available — so a truncated sync is surfaced rather than silently dropped
-   * (CLAUDE.md "no silent caps"). Defaults to no-op.
+   * Warned when a listing hits the {@link MAX_PAGES} page cap with more results still available,
+   * and when a read falls back to a deprecated endpoint — so a truncated sync is surfaced rather
+   * than silently dropped (CLAUDE.md "no silent caps"). Optional so the client stays constructible
+   * standalone in a unit test; normalised ONCE to `noopLogger`, never null-checked per call. The
+   * FACADE-facing builders in `index.ts` take it as REQUIRED, which is what stops a composition
+   * root from quietly running the whole GitLab path on a no-op.
    */
-  logger?: { warn: (message: string) => void }
+  logger?: Logger
 }
 
 interface RequestOptions {
@@ -99,7 +103,12 @@ interface GitLabResponse {
 }
 
 export class FetchGitLabClient implements VcsClient {
-  constructor(private readonly deps: FetchGitLabClientDependencies) {}
+  /** Normalised once (CLAUDE.md's logging convention), so no call site null-checks the sink. */
+  private readonly log: Logger
+
+  constructor(private readonly deps: FetchGitLabClientDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   // ---- reads --------------------------------------------------------------
 
@@ -496,19 +505,43 @@ export class FetchGitLabClient implements VcsClient {
     return mr?.diff_refs?.head_sha ?? mr?.sha ?? null
   }
 
+  /**
+   * The MR's changed files, read through `/diffs` — the PAGINATED form, so a large MR is bounded by
+   * the same page cap every other listing here obeys instead of arriving as one unbounded payload.
+   *
+   * `/diffs` only exists from GitLab 15.7, and a self-managed instance older than that answers 404.
+   * That 404 falls back to the long-standing `/changes`, because the alternative is worse than a
+   * deprecated read: this method is OPTIONAL on the port precisely so a provider that cannot
+   * enumerate a PR's files degrades to the reviewer's git fallback, but it is only ABSENCE that
+   * degrades — a present method that throws propagates out of `prReviewerDiffPreOp` and FAILS the
+   * step. Version-tolerance is the adapter's job, the same way {@link mergeabilityFromStatus}
+   * prefers 15.6+ `detailed_merge_status` and falls back to the deprecated field.
+   */
   async listChangedFiles(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
   ): Promise<GitHubChangedFile[]> {
-    // `/diffs` is the paginated form of the MR's changed files (GitLab 15.7+); the older
-    // `/changes` returns every file in one unbounded payload, which would defeat the page cap.
-    return this.paginate<GitHubChangedFile>(
-      `/projects/${projectPath(ref)}/merge_requests/${number}/diffs?per_page=${PER_PAGE}`,
-      { connection },
-      (json) =>
-        (Array.isArray(json) ? (json as GlMrDiffPayload[]) : []).map(toChangedFileProjection),
-    )
+    const base = `/projects/${projectPath(ref)}/merge_requests/${number}`
+    const mapDiffs = (json: unknown): GitHubChangedFile[] =>
+      (Array.isArray(json) ? (json as GlMrDiffPayload[]) : []).map(toChangedFileProjection)
+    try {
+      return await this.paginate<GitHubChangedFile>(
+        `${base}/diffs?per_page=${PER_PAGE}`,
+        { connection },
+        mapDiffs,
+      )
+    } catch (error) {
+      if (!(error instanceof GitLabApiError && error.status === 404)) throw error
+      // A 404 here is EITHER "this instance predates /diffs" OR "no such MR". `/changes` tells
+      // the two apart for us: it exists on every version, so a missing MR 404s again and rethrows.
+      this.log.warn('GitLab /diffs unavailable; falling back to the deprecated /changes read', {
+        mergeRequest: number,
+        project: projectPath(ref),
+      })
+      const { json } = await this.request(`${base}/changes`, { connection })
+      return mapDiffs((json as { changes?: unknown } | null)?.changes)
+    }
   }
 
   createReview(
@@ -1061,9 +1094,12 @@ export class FetchGitLabClient implements VcsClient {
     }
     // A `next` link still set at the cap means GitLab had more pages we did not fetch.
     if (url) {
-      this.deps.logger?.warn(
-        `GitLab listing truncated at MAX_PAGES=${MAX_PAGES} (~${PER_PAGE * MAX_PAGES} items) for "${path}"; remaining results were dropped.`,
-      )
+      this.log.warn('GitLab listing truncated at the page cap; remaining results were dropped', {
+        path,
+        maxPages: MAX_PAGES,
+        approxItemCap: PER_PAGE * MAX_PAGES,
+        fetched: all.length,
+      })
     }
     return all
   }

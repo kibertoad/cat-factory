@@ -267,10 +267,17 @@ export interface GitHubChangedFile {
   previousPath: string | null
   /** GitHub's change status: added / modified / removed / renamed / copied / changed / unchanged. */
   status: string
-  /** Lines added. */
-  additions: number
-  /** Lines removed. */
-  deletions: number
+  /**
+   * Lines added, or NULL when the provider did not report them for this file — which is a
+   * different fact from a real `0` and must never be rendered as one. GitHub always reports a
+   * count (`0` for a binary file it cannot line-count, which is honest); GitLab reports none at
+   * all and its adapter derives them from the hunk, so a file whose hunk GitLab withheld as
+   * `too_large` genuinely has no count to give. A reader that folds `null` to `0` tells the
+   * reviewer a 5000-line file changed nothing.
+   */
+  additions: number | null
+  /** Lines removed, or null on the same terms as {@link GitHubChangedFile.additions}. */
+  deletions: number | null
   /**
    * The unified-diff hunk for this file, or null when GitHub omits it (binary files, or a
    * diff too large to inline). The reviewer treats a null patch as "read the file bodies instead".

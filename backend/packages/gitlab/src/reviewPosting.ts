@@ -73,11 +73,16 @@ export async function postMrReview(
     try {
       // `side` selects which side of the diff the line belongs to: RIGHT (the default, the head) is
       // a `new_line` anchor, LEFT (a base/removed line) an `old_line` one. Both paths are always
-      // sent — GitLab needs `old_path` to locate the file on the base even for a new-line anchor —
-      // and the finding's path is the file's path on the head, which is the same on both sides for
-      // everything except a rename (where an inline comment on the old path would not anchor
-      // anyway).
-      const anchor = c.side === 'LEFT' ? { old_line: String(c.line) } : { new_line: String(c.line) }
+      // sent — GitLab needs `old_path` to locate the file on the base even for a new-line anchor.
+      //
+      // The finding names the file's path on the HEAD, which is also its path on the base for
+      // everything except a RENAME: `CreateReviewComment` carries no `previousPath`, so a comment
+      // on a renamed file anchors against a base path GitLab has no record of and is rejected.
+      // That is a bounded, reported outcome rather than a silent loss — this comment comes back
+      // `posted: false` and the caller folds the finding into the summary body, which is the same
+      // disposition as any other un-anchorable line. Carrying the base path would mean widening the
+      // port for one provider's addressing, so it stays out until a finding needs it.
+      const anchor = c.side === 'LEFT' ? { old_line: c.line } : { new_line: c.line }
       await request(`/merge_requests/${number}/discussions`, {
         method: 'POST',
         body: {

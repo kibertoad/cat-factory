@@ -286,6 +286,35 @@ describe('renderPrDiffContext', () => {
     expect(out).not.toContain(huge)
     expect(out).toContain('+kept')
   })
+
+  // A provider that cannot report a file's line counts (GitLab withholds the hunk for an
+  // oversized diff, so there is nothing to count off) must not have that rendered as `+0/-0`.
+  // The reviewer acts on these badges: `+0/-0` beside "no patch" describes a file nobody
+  // touched, which is precisely the file it would then skip.
+  it('says the size is unreported rather than rendering an unknown count as zero', () => {
+    const out = renderPrDiffContext(
+      4,
+      [
+        changedFile({ path: 'src/huge.ts', additions: null, deletions: null, patch: null }),
+        changedFile({ path: 'assets/logo.png', additions: 0, deletions: 0, patch: null }),
+      ],
+      { deliversCheckout: true },
+    )
+    expect(out).toContain('size not reported by the host')
+    // A real zero (a binary file, which neither host can line-count) still renders as one, or
+    // the distinction would be lost in the other direction.
+    expect(out).toContain('+0/-0')
+  })
+
+  it('sizes a slice off the counts it has, without letting an unreported file dominate', () => {
+    // An unreported file carries no patch, so it costs the slice nothing to include — the
+    // budget is rationing the reviewer's context, not the change's true size.
+    const slices = planSlices([
+      changedFile({ path: 'src/a.ts', additions: null, deletions: null, patch: null }),
+      changedFile({ path: 'src/b.ts', additions: 3, deletions: 1 }),
+    ])
+    expect(slices[0]?.changedLines).toBe(4)
+  })
 })
 
 describe('prReviewerDiffPreOp', () => {
