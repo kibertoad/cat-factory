@@ -45,6 +45,7 @@ import {
   type PipelineRegistry,
   type PreviewTransport,
   type ProviderRegistry,
+  type FoundationalServiceRegistry,
   type TaskTypeRegistry,
   type VcsProviderRegistry,
 } from '@cat-factory/kernel'
@@ -386,6 +387,14 @@ export interface NodeContainerOptions {
    * pre-loaded one to assert the seam is symmetric.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned foundational-service registry (the shared capabilities a deployment declares in
+   * CODE). Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to
+   * `defaultFoundationalServiceRegistry()`. A deployment registers its estate on it so every
+   * workspace catalog carries it as the `builtin` tier, and boot validation refuses a malformed
+   * definition. See backend/docs/adr/0031-foundational-services.md.
+   */
+  foundationalServiceRegistry?: FoundationalServiceRegistry
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode

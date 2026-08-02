@@ -8,7 +8,11 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  ValidationError,
+  defaultFoundationalServiceRegistry,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
 
@@ -326,22 +330,22 @@ describe('FoundationalServiceCatalogService suppression', () => {
       record('account', 'acct', 'file-storage'),
       record('account', 'acct', 'notifications'),
     ])
-    await service.suppressForWorkspace('ws', 'file-storage')
+    await service.suppress('workspace', 'ws', 'file-storage')
     expect((await service.resolve('ws')).map((s) => s.id)).toEqual(['notifications'])
   })
 
   it('is idempotent, so a retried suppression is not a 404', async () => {
     const service = build([record('account', 'acct', 'file-storage')])
-    await service.suppressForWorkspace('ws', 'file-storage')
+    await service.suppress('workspace', 'ws', 'file-storage')
     // The id is no longer in the merged catalog, so the "is it inherited?" check cannot answer
     // this case — the already-suppressed short-circuit is what keeps the endpoint retry-safe.
-    await expect(service.suppressForWorkspace('ws', 'file-storage')).resolves.toBeUndefined()
+    await expect(service.suppress('workspace', 'ws', 'file-storage')).resolves.toBeUndefined()
   })
 
   it('refuses an id nothing in the catalog carries', async () => {
     // A tombstone here would suppress whatever the account registers under the id LATER, with
     // nothing on either tier explaining why the service never appeared.
-    await expect(build([]).suppressForWorkspace('ws', 'file-storage')).rejects.toMatchObject({
+    await expect(build([]).suppress('workspace', 'ws', 'file-storage')).rejects.toMatchObject({
       code: 'not_found',
     })
   })
@@ -351,15 +355,15 @@ describe('FoundationalServiceCatalogService suppression', () => {
       record('account', 'acct', 'file-storage'),
       record('workspace', 'ws', 'file-storage', { name: 'Board storage' }),
     ])
-    await expect(service.suppressForWorkspace('ws', 'file-storage')).rejects.toBeInstanceOf(
+    await expect(service.suppress('workspace', 'ws', 'file-storage')).rejects.toBeInstanceOf(
       ConflictError,
     )
   })
 
   it('restores inheritance by DROPPING the tombstone, not by reviving it', async () => {
     const service = build([record('account', 'acct', 'file-storage', { name: 'Org storage' })])
-    await service.suppressForWorkspace('ws', 'file-storage')
-    await service.restoreInherited('ws', 'file-storage')
+    await service.suppress('workspace', 'ws', 'file-storage')
+    await service.restoreInherited('workspace', 'ws', 'file-storage')
 
     // Reviving the tombstone instead would leave an empty workspace row WINNING the merge; the
     // account entry, name and all, is what must come back.
@@ -392,7 +396,7 @@ describe('FoundationalServiceCatalogService suppression', () => {
       catalogCache: stale,
     })
 
-    await expect(service.suppressForWorkspace('ws', 'file-storage')).resolves.toBeUndefined()
+    await expect(service.suppress('workspace', 'ws', 'file-storage')).resolves.toBeUndefined()
     expect(await repository.get('workspace', 'ws', 'file-storage')).toMatchObject({
       deletedAt: clock.now(),
     })
@@ -407,11 +411,146 @@ describe('FoundationalServiceCatalogService suppression', () => {
       record('account', 'acct', 'file-storage'),
       record('workspace', 'ws', 'file-storage'),
     ])
-    await expect(service.restoreInherited('ws', 'file-storage')).rejects.toMatchObject({
+    await expect(service.restoreInherited('workspace', 'ws', 'file-storage')).rejects.toMatchObject(
+      {
+        code: 'not_found',
+      },
+    )
+    await expect(service.restoreInherited('workspace', 'ws', 'audit')).rejects.toMatchObject({
       code: 'not_found',
     })
-    await expect(service.restoreInherited('ws', 'audit')).rejects.toMatchObject({
-      code: 'not_found',
+  })
+})
+
+describe('FoundationalServiceCatalogService builtin tier', () => {
+  const definition = {
+    id: 'file-storage',
+    name: 'File Storage',
+    summary: 'The org file storage.',
+    description: 'Use for any binary blob.',
+    capabilities: ['asset-storage'],
+    contracts: [
+      { contractId: 'http', format: 'openapi' as const, title: 'HTTP API', body: OPENAPI },
+    ],
+  }
+
+  const build = (seed: FoundationalServiceRecord[] = [], contracts: ApiContractRecord[] = []) => {
+    const registry = defaultFoundationalServiceRegistry()
+    registry.register(definition)
+    return new FoundationalServiceCatalogService({
+      foundationalServiceRepository: serviceRepo(seed),
+      apiContractRepository: contractRepo(contracts),
+      workspaceRepository: workspaces('acct'),
+      clock,
+      registry,
     })
+  }
+
+  it('resolves a deployment-registered service with no rows anywhere', () => {
+    // The whole point of the tier: a fresh workspace designs against the org estate on its first
+    // request, with nothing seeded and nothing to drift from the definitions.
+    return build()
+      .resolve('ws')
+      .then((catalog) => {
+        expect(catalog).toHaveLength(1)
+        expect(catalog[0]).toMatchObject({ id: 'file-storage', tier: 'builtin' })
+        expect(catalog[0]?.contracts[0]?.operations).toEqual(['GET /files', 'POST /files'])
+      })
+  })
+
+  it('serves a builtin winner’s documents from the registry, not the store', async () => {
+    const documents = await build().contractsFor('ws', ['file-storage'])
+    expect(documents.get('file-storage')?.[0]?.body).toBe(OPENAPI)
+  })
+
+  it('lets an account row override a builtin by id, documents included', async () => {
+    const service = build(
+      [record('account', 'acct', 'file-storage', { name: 'Org storage' })],
+      [contract('account', 'acct', 'file-storage', { body: 'openapi: 3.0.3\npaths: {}\n' })],
+    )
+    const [entry] = await service.resolve('ws')
+    expect(entry).toMatchObject({ id: 'file-storage', name: 'Org storage', tier: 'account' })
+    const documents = await service.contractsFor('ws', ['file-storage'])
+    expect(documents.get('file-storage')?.[0]?.body).toBe('openapi: 3.0.3\npaths: {}\n')
+  })
+
+  it('lets an ACCOUNT opt out of a builtin, for every board under it', async () => {
+    // Without this an account has no way to decline a service the deployment registered, and the
+    // only remedy is suppressing it board by board, forever, including on boards created later.
+    const service = build()
+    await service.suppress('account', 'acct', 'file-storage')
+    expect(await service.resolve('ws')).toEqual([])
+    expect(await service.listSuppressions('account', 'acct')).toEqual([
+      {
+        id: 'file-storage',
+        name: 'File Storage',
+        summary: 'The org file storage.',
+        inherited: true,
+      },
+    ])
+  })
+
+  it('lets a BOARD opt out of a builtin without touching the account', async () => {
+    const service = build()
+    await service.suppress('workspace', 'ws', 'file-storage')
+    expect(await service.resolve('ws')).toEqual([])
+    const suppressions = await service.listSuppressions('workspace', 'ws')
+    expect(suppressions[0]).toMatchObject({ id: 'file-storage', inherited: true })
+  })
+
+  it('refuses to suppress a builtin at a tier that has overridden it', async () => {
+    // That is a delete of the tier's own row wearing a suppression's clothes, and it would
+    // destroy the authored description and contracts the tier registered.
+    const service = build([record('account', 'acct', 'file-storage')])
+    await expect(service.suppress('account', 'acct', 'file-storage')).rejects.toBeInstanceOf(
+      ConflictError,
+    )
+  })
+
+  it('restores a suppressed builtin by dropping the tombstone', async () => {
+    const service = build()
+    await service.suppress('workspace', 'ws', 'file-storage')
+    await service.restoreInherited('workspace', 'ws', 'file-storage')
+    expect((await service.resolve('ws')).map((s) => s.tier)).toEqual(['builtin'])
+  })
+
+  it("says a board's opt-out shadows NOTHING once the account has opted out too", async () => {
+    // The board suppresses first (it can — the builtin is in its catalog), then the account
+    // suppresses the same id for everyone. The board's tombstone now hides a service no board
+    // could see, so `inherited` must say so: reading the account's LIVE rows beside the registry
+    // reports `true` here, which tells an operator a capability is being withheld when there is
+    // none to withhold — the exact distinction this field exists to carry.
+    const service = build()
+    await service.suppress('workspace', 'ws', 'file-storage')
+    await service.suppress('account', 'acct', 'file-storage')
+
+    expect(await service.listSuppressions('workspace', 'ws')).toEqual([
+      { id: 'file-storage', name: '', summary: '', inherited: false },
+    ])
+    // The account's own tombstone still shadows the deployment tier, which is real.
+    expect(await service.listSuppressions('account', 'acct')).toEqual([
+      {
+        id: 'file-storage',
+        name: 'File Storage',
+        summary: 'The org file storage.',
+        inherited: true,
+      },
+    ])
+  })
+
+  it("names a board's suppression from the ACCOUNT's override, not the builtin it replaced", async () => {
+    // One precedence, not two: the suppression list must name what the board actually inherits,
+    // and an account row of the same id wins over the registry entry there exactly as it does in
+    // the merge.
+    const service = build([record('account', 'acct', 'file-storage', { name: 'Org storage' })])
+    await service.suppress('workspace', 'ws', 'file-storage')
+    expect(await service.listSuppressions('workspace', 'ws')).toEqual([
+      {
+        id: 'file-storage',
+        name: 'Org storage',
+        summary: 'file-storage summary',
+        inherited: true,
+      },
+    ])
   })
 })

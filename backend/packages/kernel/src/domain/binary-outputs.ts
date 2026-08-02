@@ -3,6 +3,7 @@ import type {
   BinaryOutputConfig,
   BinaryOutputReport,
 } from '@cat-factory/contracts'
+import { ASSET_STORAGE_CAPABILITY, GENERATION_CONTEXT_CAPABILITY } from '@cat-factory/contracts'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 import type { FoundationalCatalogView } from './foundational-services.js'
 
@@ -22,26 +23,21 @@ import type { FoundationalCatalogView } from './foundational-services.js'
 // ---------------------------------------------------------------------------
 
 /**
- * The capability tag a foundational service must carry to be selectable as a step's binary
- * STORAGE target. Enforced at run admission: pushing product assets into the org's audit
- * service is a configuration error, not a judgment call left to the agent.
+ * The well-known capability tags, re-exported from the WIRE vocabulary that defines them
+ * (`@cat-factory/contracts`). They moved there because the people who must spell them exactly
+ * are outside the backend — a deployment registering its estate, the SPA rendering a picker —
+ * and a client that cannot import a tag re-declares it, where a re-declaration's failure is
+ * silent (`asset_storage` registers cleanly and surfaces much later as a refused run). The
+ * catalog write boundary now refuses a near-miss of either one.
  *
- * Deliberately NOT spelled `binary-storage`, which is the agents package's
- * `BINARY_STORAGE_TRAIT` — a marker on a KIND that needs the PLATFORM's own artifact store for
- * run EVIDENCE (the UI Tester's screenshots). The two mean opposite things about opposite
- * subjects, and while they shared one literal, `RunAdmission` imported both, a swap typechecked
- * (a capability tag is a free-form string), and no test could tell. `binary-outputs.spec.ts` in
- * `@cat-factory/agents` — the one package that can see both — pins them apart.
+ * `ASSET_STORAGE_CAPABILITY` is deliberately NOT spelled `binary-storage`, which is the agents
+ * package's `BINARY_STORAGE_TRAIT` — a marker on a KIND that needs the PLATFORM's own artifact
+ * store for run EVIDENCE (the UI Tester's screenshots). The two mean opposite things about
+ * opposite subjects, and while they shared one literal, `RunAdmission` imported both, a swap
+ * typechecked, and no test could tell. `binary-outputs.spec.ts` in `@cat-factory/agents` — the
+ * one package that can see both — pins them apart.
  */
-export const ASSET_STORAGE_CAPABILITY = 'asset-storage'
-
-/**
- * The CONVENTIONAL capability tag for a service that can scope a generation — an inventory
- * that answers "what entities exist, which lack an asset, and how is each described". A picker
- * lists services carrying it first, but it is deliberately NOT enforced: any service with a
- * readable contract can inform scope, and refusing one would push the information into prose.
- */
-export const GENERATION_CONTEXT_CAPABILITY = 'generation-context'
+export { ASSET_STORAGE_CAPABILITY, GENERATION_CONTEXT_CAPABILITY }
 
 /** The `.cat-context/` directory the binary-output brief and contract documents live under. */
 export const BINARY_OUTPUT_CONTEXT_DIR = 'binary-output'

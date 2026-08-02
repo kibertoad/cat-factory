@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// The MERGED catalog an Architect is actually handed for this board — account ⊕ workspace, the
-// workspace winning by id (backend/docs/adr/0031-foundational-services.md). Workspace scope only: an
-// account has no tier above it to merge with.
+// The MERGED catalog an Architect is actually handed for this board — the deployment's
+// code-registered `builtin` services ⊕ account ⊕ workspace, the later tier winning by id
+// (backend/docs/adr/0031-foundational-services.md). Workspace scope only: a board is what runs
+// agents, so this is the only place the whole merge is realised.
 //
 // This view is where the two board-level decisions live, and they are deliberately different
 // actions rather than one "remove":
@@ -24,6 +25,7 @@ const { t } = useI18n()
 
 // Exhaustive maps of literal `t(...)` keys, so a new tier/format fails the typed-key guard.
 const tierLabel = computed<Record<FoundationalServiceTier, string>>(() => ({
+  builtin: t('foundational.tier.builtin'),
   account: t('foundational.tier.account'),
   workspace: t('foundational.tier.workspace'),
 }))
@@ -34,6 +36,7 @@ const formatLabel = computed<Record<ApiContractFormat, string>>(() => ({
 }))
 // `as const` keeps the literal colour names assignable to UBadge's `color` union.
 const tierColor = {
+  builtin: 'neutral',
   account: 'info',
   workspace: 'primary',
 } as const satisfies Record<FoundationalServiceTier, string>
@@ -147,10 +150,11 @@ async function suppress(serviceId: string) {
           <UBadge size="xs" :color="tierColor[s.tier]" variant="subtle">
             {{ tierLabel[s.tier] }}
           </UBadge>
-          <!-- Only an INHERITED entry can be suppressed; the board's own row is managed in the
-               registry tab, where deleting it is the honest action. -->
+          <!-- Only an INHERITED entry can be suppressed — an account service or one the
+               deployment registered in code; the board's own row is managed in the registry tab,
+               where deleting it is the honest action. -->
           <UButton
-            v-if="s.tier === 'account'"
+            v-if="s.tier !== 'workspace'"
             icon="i-lucide-eye-off"
             size="xs"
             variant="ghost"

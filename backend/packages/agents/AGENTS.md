@@ -113,8 +113,10 @@
   pinned commit) for a dispatch. A BUNDLED skill needs none of this — it is deployment code,
   registered on `AgentKindRegistry.registerSkill`.
 - `foundationalServices/` — the shared-capability catalog an Architect designs against
-  (`backend/docs/adr/0031-foundational-services.md`). `FoundationalServiceCatalogService` owns the tier
-  merge and the manifest/document SPLIT (a catalog read never loads a contract body);
+  (`backend/docs/adr/0031-foundational-services.md`). `FoundationalServiceCatalogService` owns the
+  three-tier merge — the deployment's code-registered `FoundationalServiceRegistry` (kernel) under
+  the account and workspace rows — and the manifest/document SPLIT (a catalog read never loads a
+  contract body);
   `FoundationalServiceSourceService` reuses the same `repoSourceSync/` engine the two libraries
   above do, supplying only what a UNIT is — a service DIRECTORY, a whole contract FOLDER
   (`folder-scan.ts`, optionally recursive) for one named service, or an explicit FILE list for one

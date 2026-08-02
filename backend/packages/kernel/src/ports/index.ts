@@ -188,6 +188,10 @@ export type {
   GitHubPullRequestComment,
   GitHubSubIssue,
   GitHubRepoRef,
+  BranchProtectionState,
+  BranchProtectionUnknownReason,
+  BranchProtectionDetail,
+  BranchProtectionSummary,
   InstallationMeta,
   InstallationSummary,
   ListOptions,
@@ -508,6 +512,7 @@ export type {
   UserSecretRecord,
   UserSecretRepository,
   ResolveUserGitHubToken,
+  RunCredentialScope,
   RunInitiatorScope,
 } from './user-secret-repositories.js'
 export type {

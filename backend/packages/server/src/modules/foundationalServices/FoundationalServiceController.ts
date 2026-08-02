@@ -47,6 +47,28 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
+ * Every TOP-LEVEL path this controller serves at the account scope. `accountGuard` is mounted on
+ * each of them and on each one's subtree, so a route is authorized by virtue of the resource it
+ * hangs off rather than by someone remembering to add a `use` line beside it.
+ *
+ * It is a list rather than a `use('*', …)` because this controller shares the
+ * `/accounts/:accountId` mount with its siblings: Hono registers a sub-app's `use('*')` as
+ * `/accounts/:accountId/*` on the parent, so it would also run against `/accounts/:id/reports`
+ * and every other account route, which is a different controller's authorization to own.
+ *
+ * The pairing of `resource` with `resource/*` is what the enumeration existed to get right and
+ * did not — `/foundational-service-suppressions` had no entry at all, leaving the account-tier
+ * opt-out LIST reachable by any signed-in user for any account id. `foundationalServiceAccountGuard.spec.ts`
+ * drives every route this controller registers and fails on an unguarded one, so a new resource
+ * cannot repeat it.
+ */
+const ACCOUNT_GUARDED_RESOURCES = [
+  '/foundational-services',
+  '/foundational-service-suppressions',
+  '/foundational-service-sources',
+] as const
+
+/**
  * The foundational-services API (backend/docs/adr/0031-foundational-services.md), mounted TWICE —
  * once under `/accounts/:accountId` and once under `/workspaces/:workspaceId` — so a tier's
  * services and repo sources are managed at the scope that owns them, exactly like the
@@ -55,7 +77,8 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
  * Workspace routes are authorized by the global per-workspace gate in `app.ts` plus the
  * admin-tier `settings.manage` permission (the catalog is workspace configuration); account
  * routes guard on account membership here. The MERGED read — what an agent actually sees — is
- * workspace-only, because an account has no second tier to merge with.
+ * workspace-only, because a board is what runs agents; an account inspects what it inherits
+ * from the deployment's registered tier through the suppression list, which both scopes serve.
  */
 export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -65,10 +88,10 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const ownerKind: FoundationalServiceOwnerKind = scope
 
   if (scope === 'account') {
-    app.use('/foundational-services', accountGuard)
-    app.use('/foundational-services/*', accountGuard)
-    app.use('/foundational-service-sources', accountGuard)
-    app.use('/foundational-service-sources/*', accountGuard)
+    for (const resource of ACCOUNT_GUARDED_RESOURCES) {
+      app.use(resource, accountGuard)
+      app.use(`${resource}/*`, accountGuard)
+    }
   }
 
   if (scope === 'workspace') {
@@ -105,6 +128,31 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
+  // ---- opting a tier out of what it INHERITS ------------------------------
+  // Mounted at both scopes: a board inherits from its account, and either tier inherits the
+  // deployment's code-registered `builtin` services.
+
+  buildHonoRoute(app, listFoundationalServiceSuppressionsContract, async (c) => {
+    const module = requireCatalog(c)
+    return c.json(await module.catalogService.listSuppressions(ownerKind, ownerId(c)), 200)
+  })
+
+  buildHonoRoute(app, suppressFoundationalServiceContract, async (c) => {
+    const module = requireCatalog(c)
+    await module.catalogService.suppress(ownerKind, ownerId(c), c.req.valid('param').serviceId)
+    return c.body(null, 204)
+  })
+
+  buildHonoRoute(app, restoreFoundationalServiceContract, async (c) => {
+    const module = requireCatalog(c)
+    await module.catalogService.restoreInherited(
+      ownerKind,
+      ownerId(c),
+      c.req.valid('param').serviceId,
+    )
+    return c.body(null, 204)
+  })
+
   // ---- the merged catalog + the lazy contract read ------------------------
 
   if (scope === 'workspace') {
@@ -120,25 +168,6 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
       const serviceId = c.req.valid('param').serviceId
       const documents = await module.catalogService.contractsFor(ownerId(c), [serviceId])
       return c.json(documents.get(serviceId) ?? [], 200)
-    })
-
-    // Opting a board out of an inherited account service, and back in. Workspace-only for the
-    // same reason the merged read is: an account tier has nothing above it to opt out of.
-    buildHonoRoute(app, listFoundationalServiceSuppressionsContract, async (c) => {
-      const module = requireCatalog(c)
-      return c.json(await module.catalogService.listSuppressions(ownerId(c)), 200)
-    })
-
-    buildHonoRoute(app, suppressFoundationalServiceContract, async (c) => {
-      const module = requireCatalog(c)
-      await module.catalogService.suppressForWorkspace(ownerId(c), c.req.valid('param').serviceId)
-      return c.body(null, 204)
-    })
-
-    buildHonoRoute(app, restoreFoundationalServiceContract, async (c) => {
-      const module = requireCatalog(c)
-      await module.catalogService.restoreInherited(ownerId(c), c.req.valid('param').serviceId)
-      return c.body(null, 204)
     })
   }
 

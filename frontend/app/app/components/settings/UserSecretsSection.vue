@@ -5,9 +5,11 @@
 // renders them without hard-coding any kind. Stored PER USER (runs you initiate use YOUR
 // access); the secret is write-only server-side and never shown again.
 import { computed, ref, watch } from 'vue'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -30,7 +32,7 @@ const status = computed(() => store.statusFor(kind.value))
 // all other fields map into `metadata`.
 const values = ref<Record<string, string>>({})
 const labelDraft = ref('')
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<ConnectionTestResult | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -103,7 +105,13 @@ async function save() {
   try {
     await store.store(kind.value, { ...payload, label: labelDraft.value.trim() || undefined })
     values.value[secretField.value!.key] = ''
-    testResult.value = null
+    // Probe AFTER the save so what this credential can reach is stated at the moment it is
+    // stored, not only when someone happens to press Test first. A run you start authenticates
+    // with this token in preference to the deployment's own, and the platform cannot narrow it —
+    // so this is the one point at which an over-broad token is visible at all
+    // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
+    // failure must not read as one.
+    testResult.value = await store.test(kind.value, payload).catch(() => null)
     toast.add({
       title: t('settings.userSecrets.toast.saved', {
         label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
@@ -235,6 +243,13 @@ async function remove() {
               {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>
+
+          <!-- How far this token reaches. Independent of the pass/fail verdict: an over-broad
+               token is perfectly VALID, and that is exactly why it is otherwise invisible. -->
+          <ConnectionWarnings
+            :warnings="testResult?.warnings"
+            :title="t('settings.userSecrets.tokenReachTitle')"
+          />
 
           <div class="flex justify-end">
             <UButton

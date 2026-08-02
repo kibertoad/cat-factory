@@ -253,7 +253,7 @@ export class PollRunningController {
           update.state === 'done'
             ? { state: 'done', result: update.result }
             : { state: 'failed', error: update.error ?? null }
-        await this.deps.runInitiatorScope(instance.initiatedBy, () =>
+        await this.deps.runInitiatorScope({ workspaceId, initiatedBy: instance.initiatedBy }, () =>
           gate.onHelperComplete!({
             workspaceId,
             instance,

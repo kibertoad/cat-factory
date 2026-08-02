@@ -255,6 +255,7 @@ export {
   DrizzleWorkspaceRepository,
 } from './drizzle/board.js'
 export {
+  DrizzleAccountSettingsRepository,
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
 } from './drizzle/settings.js'

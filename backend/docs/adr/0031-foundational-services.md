@@ -24,14 +24,45 @@ the name an Architect writes in its design), a name, a one-line summary, a gener
 capability tags, and zero or more **API contracts**: an OpenAPI 3.x document, a
 `@toad-contracts/core` module or a `@lokalise/api-contract` module.
 
-Registration is **tiered**, exactly like the prompt-fragment library: an `account` row is shared by
-every workspace in the account and a `workspace` row of the same id wins over it. A workspace
-tombstone SUPPRESSES an inherited account service, which is how a board opts out without an account
-admin.
+Registration is **tiered**, exactly like the prompt-fragment library: a `builtin` definition the
+DEPLOYMENT registers in code is shared by every account, an `account` row wins over it for every
+workspace in that account, and a `workspace` row of the same id wins over both. A tombstone at
+either stored tier SUPPRESSES what that tier inherits, which is how a board opts out without an
+account admin and how an account opts out without a code change.
+
+The `builtin` tier is the app-owned `FoundationalServiceRegistry`
+(`kernel/src/domain/foundational-service-registry.ts`), newed at the composition root and injected
+through `CoreDependencies.foundationalServiceRegistry` exactly like `PipelineRegistry` /
+`TaskTypeRegistry`. It holds no rows: `resolve` reads it on every merge, so a deployment's estate
+is present from a workspace's FIRST request and cannot drift from the definitions that declare it.
+
+Registering in code rather than provisioning over REST is what buys the boot check: a stored row
+was refused at the moment someone wrote it, while a code definition has no such moment, so
+`validateRegistrations` holds each one to the SAME `createFoundationalServiceSchema` and the same
+document checks the write boundary applies (`foundationalServiceDefinitionIssues` +
+`validateFoundationalDefinition`). A deployment cannot register what it could not have uploaded.
 
 Contracts arrive two ways, and both are served: **direct upload** (the document body on the
 request, validated at the write boundary against the format it declares), and **a linked git
-repo**, in one of three shapes. All are cached in our own store and auto-refreshed.
+repo**, in one of three shapes. All are cached in our own store and auto-refreshed. A `builtin`
+service's documents live in the definition, which is a third supply route in the trivial sense and
+no new plumbing: the registry projects them through the same `summarizeContract` and hands them to
+the same lazy read.
+
+**A contract set is validated as a SET, not document by document.** A `@toad-contracts/core`
+contract is a module GRAPH — the `defineApiContract` module plus the schema modules it imports —
+and only the first names the library. The rule is therefore that a set declared as a format must
+contain at least one document referencing that library, per format; the modules it imports register
+as what they are. Validating per document refused exactly the halves of one contract that are not
+its entry point, which left a registrant concatenating source files to get past the boundary.
+
+The repo path gets the same treatment in `files` mode ONLY, where the link is an explicit list a
+human wrote and therefore plays the role the `format` field plays on an upload: a linked module
+that references no library rides under the format the rest of the set resolved to. It is decided
+over every readable file rather than left to right, since a link may list the schemas first, and it
+declines to guess when the set mixes two libraries. `folder` and `directory` scans keep the
+content-led rule unchanged — they walk paths nobody named, and one recursive link would otherwise
+sweep a repo's TypeScript into an agent's context as "contracts".
 
 | Source mode | What it maps to                                                                                        | Where identity comes from        |
 | ----------- | ------------------------------------------------------------------------------------------------------ | -------------------------------- |
@@ -89,6 +120,22 @@ the org's specs rather than with the number of its services. Hence:
 - **operations are indexed ONCE at write time** and stored on the contract row, so the catalog can
   show an agent what an interface offers without loading a body.
 
+**What "indexed" means is per FORMAT, and the catalog says which.** OpenAPI is parsed. A
+`@toad-contracts/core` module is read STATICALLY (`indexToadContractOperations`): the library
+declares each operation with a `defineApiContract({ method, pathResolver })` call, so a `method`
+literal plus a resolver returning a string or template literal yields `GET /files/{fileId}` without
+evaluating anything — and what makes a partial parse honest is that the `defineApiContract(` ANCHOR
+count is the declaration count, so whatever could not be read is reported through the same
+`omittedOperations` channel the cap uses. Nothing uncertain is emitted: an invented operation name
+is worse than a missing one, because a coder writes against it.
+
+`@lokalise/api-contract` is not read at all, and `operationsAreIndexable` (contracts) is the single
+place that fact lives, because the alternative is the failure this rule exists to prevent: an empty
+`operations` list means "declares nothing" for one format and "nobody looked" for another, the two
+need opposite reactions, and rendering them identically tells an Architect that a fully-specified
+service offers no endpoints. Every surface branches on it — the agent-facing catalog and the SPA's
+manifest row alike.
+
 Both reads are delivered as injected `.cat-context/` files (`foundational-services/catalog.md`,
 `foundational-services/index.md`, `foundational-services/<id>.md`) rather than as new prompt
 fields — one mechanism that already works for container dispatches, inline calls and consensus
@@ -118,31 +165,35 @@ kept apart on purpose, because each needs a different reaction from a consumer:
 - **`unknown` non-empty** — the design leaned on a service the platform cannot hand anyone the
   contract for. The index names it and tells the consumer not to guess at its API.
 
-### Opting a board out is a suppression, never a delete
+### Opting out is a suppression, never a delete
 
-Two verbs on one sub-resource (`POST` / `DELETE /foundational-services/:id/suppression`), workspace
-scope only. A suppression is a fact the WORKSPACE tier asserts about an id it does not own, so
-there is no service row of its own to patch; deleting the board's own registration is the separate,
+Two verbs on one sub-resource (`POST` / `DELETE /foundational-services/:id/suppression`), mounted
+at BOTH scopes because both tiers inherit: a board from its account, and either from the
+deployment's `builtin` tier. A suppression is a fact a tier asserts about an id it does not own, so
+there is no service row of its own to patch; deleting the tier's own registration is the separate,
 destructive `DELETE /foundational-services/:id`.
+
+It was workspace-only while an account had nothing below it. Leaving it that way once the
+deployment tier existed would have made a code-registered service un-declinable for a whole
+account — remediable only board by board, forever, including on boards created later.
 
 Three rules make the pair usable rather than a trap:
 
 - **Suppressing an id the merged catalog does not carry is refused** (404). A tombstone there would
-  shadow NOTHING today and silently swallow whatever the account registers under that id tomorrow —
-  a suppression nobody could later explain.
-- **Suppressing the board's OWN registration is refused** (409, `foundational_service_not_inherited`).
-  It would read as a delete while destroying the board's authored description and contracts.
+  shadow NOTHING today and silently swallow whatever a lower tier registers under that id tomorrow
+  — a suppression nobody could later explain.
+- **Suppressing the tier's OWN registration is refused** (409, `foundational_service_not_inherited`).
+  It would read as a delete while destroying that tier's authored description and contracts.
 - **Restoring HARD-deletes the tombstone rather than clearing `deletedAt`.** A suppression row
-  carries no name, summary or contracts, so reviving it would leave an EMPTY workspace override
-  winning the merge — a worse outcome than the suppression it was meant to undo.
+  carries no name, summary or contracts, so reviving it would leave an EMPTY override winning the
+  merge — a worse outcome than the suppression it was meant to undo.
 
 The suppression LIST is its own read for the same reason: a suppressed id is by construction absent
 from the merged catalog, so without it the surface offering suppression could offer no way back.
 Its `inherited: false` case is kept distinct, because a tombstone that shadows nothing today must
-not read as a capability being withheld — and that case is not hypothetical: `remove` at the
-workspace tier leaves a tombstone too, so a board that deletes its own registration lands in this
-list. The board's delete confirmation says so, since the opt-out is otherwise a silent side effect
-of a delete.
+not read as a capability being withheld — and that case is not hypothetical: `remove` leaves a
+tombstone too, so a tier that deletes its own registration lands in this list. The delete
+confirmation says so, since the opt-out is otherwise a silent side effect of a delete.
 
 The list is mounted as a SIBLING resource (`GET /foundational-service-suppressions`), the way the
 repo sources are, rather than as a literal `/foundational-services/suppressions` segment: a service
@@ -150,20 +201,32 @@ id is a lower-kebab slug that could legitimately be `suppressions`, and a litera
 namespace with `:serviceId` is a collision waiting for the first single-segment by-id route. The
 two mutating verbs stay on the sub-resource, where `:serviceId` is a real path parameter.
 
+That sibling path has a cost paid at the ACCOUNT scope, and it is worth writing down because it
+cost us once. Account-tier authorization is `accountGuard` mounted per top-level resource — not a
+`use('*')`, which Hono would register as `/accounts/:accountId/*` and run against every SIBLING
+controller mounted at the same prefix. So a route whose path does not hang off an already-guarded
+resource inherits nothing, silently: the suppression list, being a sibling rather than a
+`/foundational-services/…` child, was reachable by any signed-in caller for any account id until
+`ACCOUNT_GUARDED_RESOURCES` named it. The enforcement is `foundationalServiceAccountGuard.spec.ts`,
+which drives every route the controller registers and requires each to refuse a non-member — a new
+account resource therefore cannot repeat it without failing a test.
+
 Both refusals are decided against a FRESH tier merge, not the cached one the agents read. They are
 decisions about persisted state, so a TTL'd view can 404 an opt-out for a service the account
 registered moments ago, or write a tombstone against an id it has since withdrawn — precisely the
-shadows-nothing row the 404 exists to prevent.
+shadows-nothing row the 404 exists to prevent. An ACCOUNT's merge for this purpose is the builtin
+tier under its own rows: it has one tier below it and no workspace above it to consult.
 
 ### Runtime symmetry
 
-| Concern      | Cloudflare                                                                                | Node                                                        |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Store        | D1 migrations `0073_foundational_services`, `0074_..._repo_index`, `0075_..._folder_mode` | Drizzle schema + the three matching migrations              |
-| Repositories | `D1FoundationalServiceRepository` (+ contract, source)                                    | `DrizzleFoundationalServiceRepository` (+ contract, source) |
-| Autorefresh  | a `scheduled` cron pass, gated to the staleness window                                    | a `startSweeper` interval                                   |
-| Push refresh | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`                             | the same kind on the pg-boss `github.sync` queue            |
-| Parity       | `defineFoundationalServicesSuite` runs against both real stores                           | ditto                                                       |
+| Concern        | Cloudflare                                                                                | Node                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Store          | D1 migrations `0073_foundational_services`, `0074_..._repo_index`, `0075_..._folder_mode` | Drizzle schema + the three matching migrations                                               |
+| Repositories   | `D1FoundationalServiceRepository` (+ contract, source)                                    | `DrizzleFoundationalServiceRepository` (+ contract, source)                                  |
+| Autorefresh    | a `scheduled` cron pass, gated to the staleness window                                    | a `startSweeper` interval                                                                    |
+| Push refresh   | a `foundational-source-resync` message on `GITHUB_SYNC_QUEUE`                             | the same kind on the pg-boss `github.sync` queue                                             |
+| Parity         | `defineFoundationalServicesSuite` runs against both real stores                           | ditto                                                                                        |
+| `builtin` tier | `defaultFoundationalServiceRegistry()` newed in `index.ts`, injected via `createApp`      | the same instance via `start({ foundationalServiceRegistry })` (local rides the Node option) |
 
 The refresh PASS itself is one implementation (`sweepFoundationalSources` in
 `@cat-factory/server`) that both facades drive — only the trigger differs. Two copies would be two
@@ -211,6 +274,25 @@ Alternatives considered and rejected:
 - **A `suppressed` flag on the catalog read** rather than a separate suppression list. Rejected: the
   catalog read is what an agent's context is built from, and a flag there would put opt-out
   bookkeeping in a prompt.
+- **SEEDING a deployment's services into every workspace at creation** (the pipeline-registry
+  shape) rather than reading them as a tier. Rejected: a foundational service is a standing fact
+  about the org's estate, not a starting point someone edits, so copied rows would drift from the
+  code the moment a contract changed and would need a reseed/version protocol to un-drift — for
+  documents that routinely run to hundreds of kilobytes each. As a tier they cannot drift at all,
+  and override/suppression still give a tenant everything a seeded row would have.
+- **Widening the resolved catalog entry to carry `ownerKind` and row timestamps** for a `builtin`.
+  Rejected: it has no owning scope and no row, so the fields would be placeholders that read as
+  facts. The merged read was NARROWED to what every tier can honestly fill instead; provenance
+  stays on the per-tier management read, where a stored row's provenance belongs.
+- **Accepting an `operations: string[]` on upload** so a registrant can supply what the parser
+  cannot derive from a contract module. Rejected: that is the hand-maintained duplicate of the
+  contract that this catalog exists to eliminate, and nothing would keep it true. A static
+  extraction that reports its own coverage answers the same need without a second source of truth.
+- **A `package` source mode** resolving a contract module from a published npm package. Rejected
+  for now: it needs a registry client, private-registry auth and tarball extraction inside a Worker
+  isolate — a substantial new trust boundary — to serve a case a repo source already serves, since
+  the package's source lives in a repo this platform can read. Revisit when a consumer's contracts
+  genuinely have no readable repo.
 
 ## Consequences
 
@@ -276,8 +358,24 @@ Gotchas the implementation surfaced, each now pinned by a test:
 
 Deliberately not done, and why:
 
-- **Suppression is workspace-only.** An account has no tier above it, so there is nothing to opt out
-  of; an account that wants a service gone deletes it.
 - **The repo-sync surface remains off in mothership mode.** Closing it needs a source→owner resolver
   and a GitHub client on the node; both belong to a later mothership slice, and until then a
-  mothership-mode board manages sources through the hosted surface.
+  mothership-mode board manages sources through the hosted surface. The `builtin` tier is unaffected
+  — it is code, not a repo read, so a mothership node resolves it like any other.
+- **The catalog CRUD is not mounted on the public (API-key) surface.** The ask behind it was
+  provisioning a deployment's catalog from CI, which code registration answers without a
+  credential: the definitions live in the deployment's own repo, ship with its build, and are
+  validated at boot rather than by a job someone must remember to run. What remains is provisioning
+  a per-TENANT catalog from outside, which needs an account-scoped machine credential the public
+  API does not have — a question about the key model, not about this feature.
+- **No idempotent `PUT` on a service.** A provisioning client still lists, then creates or patches.
+  Left out for the same reason: with a deployment's own estate registered in code, what remains is
+  a human-driven tenant surface where the read-modify-write is not the bottleneck — and a
+  full-replace `PUT` on this entity is a trap, since `contracts` means "replace the whole set", so
+  omitting it under `PUT` semantics would silently delete every document while the same omission
+  under `PATCH` leaves them alone.
+- **No content DIGEST on the contract manifest**, so an external reconciler comparing against
+  `size` cannot see an edit that preserved a document's length. The two identities that matter
+  internally already exist — a repo source pins the commit it synced, and a code definition is
+  checked at boot — and the manifest's job is to keep BODIES off the catalog read, not to make
+  re-uploading cheap. A registrant with no other identity re-uploads; the documents are kilobytes.

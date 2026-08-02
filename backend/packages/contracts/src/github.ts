@@ -329,3 +329,67 @@ export const commentSchema = v.object({
   body: v.pipe(v.string(), v.minLength(1)),
 })
 export type CommentInput = v.InferOutput<typeof commentSchema>
+
+// ---------------------------------------------------------------------------
+// Branch-protection preflight. Branch protection on the HOST is the only control over a
+// stolen `Contents: write` token — it covers a direct push to the default branch and a
+// merge-API call alike — and it is the operator's to configure, not something the platform
+// can enforce (backend/docs/security-model.md, checklist item 1). This read is what tells
+// them, per linked repository, whether it is actually in place.
+// ---------------------------------------------------------------------------
+
+/**
+ * Three states, never two. `unknown` is a real answer: a probe that could not reach the host
+ * must not render as either "protected" or "unprotected", or the report manufactures an
+ * all-clear (or a false alarm) out of an outage.
+ */
+export const branchProtectionStateSchema = v.picklist(['protected', 'unprotected', 'unknown'])
+export type BranchProtectionStateValue = v.InferOutput<typeof branchProtectionStateSchema>
+
+/** Why a state is `unknown`. Kept apart because each needs a different fix. */
+export const branchProtectionUnknownReasonSchema = v.picklist([
+  'branch_not_found',
+  'forbidden',
+  'error',
+])
+
+/**
+ * The protection rule's contents. Present only when the run credential could READ the rule,
+ * which needs admin access a minimally-scoped App installation deliberately lacks — so the
+ * state above is always answerable and this is not.
+ */
+export const branchProtectionDetailSchema = v.object({
+  requiresPullRequest: v.boolean(),
+  requiredApprovingReviewCount: v.number(),
+  requiredStatusChecks: v.array(v.string()),
+  allowsForcePush: v.boolean(),
+})
+
+export const branchProtectionSummarySchema = v.object({
+  state: branchProtectionStateSchema,
+  reason: v.optional(branchProtectionUnknownReasonSchema),
+  detail: v.optional(branchProtectionDetailSchema),
+  /** Set on a PROTECTED branch whose rule could not be read — a distinct operator situation. */
+  detailUnavailable: v.optional(v.picklist(['forbidden', 'error'])),
+})
+export type BranchProtectionSummaryView = v.InferOutput<typeof branchProtectionSummarySchema>
+
+export const repoBranchProtectionSchema = v.object({
+  repoGithubId: v.number(),
+  owner: v.string(),
+  name: v.string(),
+  defaultBranch: v.string(),
+  protection: branchProtectionSummarySchema,
+})
+
+export const branchProtectionReportSchema = v.object({
+  /**
+   * `unavailable` ⇒ the wired VCS provider cannot answer this at all. Reported as its own
+   * state so an empty report never impersonates a clean one.
+   */
+  capability: v.picklist(['ok', 'unavailable']),
+  repos: v.array(repoBranchProtectionSchema),
+  /** Linked repositories left unprobed by the fan-out cap — stated, never silently dropped. */
+  omittedRepos: v.number(),
+})
+export type BranchProtectionReportView = v.InferOutput<typeof branchProtectionReportSchema>

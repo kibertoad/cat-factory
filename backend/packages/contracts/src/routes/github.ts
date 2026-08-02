@@ -1,6 +1,7 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  branchProtectionReportSchema,
   commentSchema,
   commitFilesSchema,
   createBranchSchema,
@@ -145,6 +146,15 @@ export const listGitHubReposContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/github/repos',
   responsesByStatusCode: { 200: repoProjectionListSchema, ...errorResponses },
+})
+
+// The branch-protection preflight (see `branchProtectionReportSchema`). A GET because it is a
+// read, but a LIVE one — deliberately not folded into the repo projection list, which is a hot
+// cached read and would then make every board load probe GitHub.
+export const checkGitHubBranchProtectionContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/github/branch-protection',
+  responsesByStatusCode: { 200: branchProtectionReportSchema, ...errorResponses },
 })
 
 export const listGitHubBranchesContract = defineApiContract({

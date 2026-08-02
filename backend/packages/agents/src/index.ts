@@ -597,7 +597,7 @@ export {
   type ResolveFoundationalInstallationId,
 } from './foundationalServices/FoundationalServiceSourceService.js'
 export { FoundationalServiceRunResolver } from './foundationalServices/FoundationalServiceRunResolver.js'
-export { validateUploadedContract } from './foundationalServices/contract-validation.js'
+export { assertValidDefinition } from './foundationalServices/contract-validation.js'
 export { mergeFoundationalTiers } from './foundationalServices/foundational-catalog.js'
 export * as foundationalSourceLogic from './foundationalServices/foundational-source.logic.js'
 export {

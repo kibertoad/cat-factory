@@ -2351,7 +2351,7 @@
       "action": "Choose default"
     },
     "accountFoundational": {
-      "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild."
+      "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild. Services this deployment registers in code are inherited here too, and can be overridden by id or opted out of below."
     }
   },
   "settings": {
@@ -2661,7 +2661,10 @@
         "warningsTitle": "Gaps in this configuration",
         "warnings": {
           "runner_manifest_no_release": "No release template: cancelling a run cannot tell the pool to stop its job, so an orphaned job keeps its runner until the pool reclaims it on its own.",
-          "runner_manifest_no_status_path": "No status path: every poll reads as still running, so a job can only end by exhausting the run's poll budget."
+          "runner_manifest_no_status_path": "No status path: every poll reads as still running, so a job can only end by exhausting the run's poll budget.",
+          "github_pat_classic_account_wide": "This is a classic token with the 'repo' scope: it reaches every repository you can push to, including ones this workspace's GitHub App was never installed on. Runs you start use it in preference to the App. A fine-grained token limited to this deployment's repositories is narrower.",
+          "github_pat_scopes_beyond_need": "This token grants permissions cat-factory never uses. Removing them costs nothing and narrows what a compromised run could reach.",
+          "github_pat_scope_unreadable": "GitHub accepted this token but reported no scopes for it, so its reach cannot be shown here. Check what it grants in your GitHub token settings."
         }
       },
       "toast": {
@@ -2765,6 +2768,7 @@
       "optionalField": "{label} (optional)",
       "testConnection": "Test connection",
       "tokenValid": "Token valid",
+      "tokenReachTitle": "What this token reaches",
       "tokenRejected": "Token rejected",
       "secretFallback": "Secret",
       "toast": {
@@ -3215,6 +3219,13 @@
         },
         "toggle": "Grade agent runs with Kaizen"
       },
+      "runCredential": {
+        "heading": "Run credential",
+        "body": "By default a run authenticates with the personal access token of whoever started it, when they have stored one, so pushes and pull requests are attributed to that person. Their token's reach is whatever they granted it, which is often wider than the repositories this workspace's GitHub App installation covers. Turn this off to make every run authenticate as the App installation instead.",
+        "toggle": "Let runs act as the person who started them",
+        "offHint": "Runs will push and open pull requests as the GitHub App, not as their initiator.",
+        "accountFloorNote": "An account-wide policy can forbid this for every board; if one is set, runs here use the GitHub App regardless of this switch."
+      },
       "metadata": {
         "heading": "Workspace metadata",
         "body": "Values for the custom fields this deployment defines. External tools read them, so a tool opens on the right project for this workspace.",
@@ -3388,6 +3399,15 @@
         "saveFailed": "Could not save the consensus group",
         "deleteFailed": "Could not delete the consensus group"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Run credential policy",
+      "body": "A board can let a run authenticate with the personal access token of whoever started it. That is useful, and for a single person working inside an org that has not adopted cat-factory it is often the only option. But a personal token reaches whatever its owner granted it, which is usually wider than this account's GitHub App installation, and a board admin can turn the board's own switch back on. Forbid it here and no board in this account can.",
+      "toggle": "Forbid runs from using their initiator’s personal access token",
+      "onHint": "Every run in this account will authenticate as the GitHub App installation. Pushes and pull requests will come from the app rather than from the person who started the run.",
+      "offHint": "Not set: each board decides for itself. Existing boards keep whatever they have chosen.",
+      "saved": "Run credential policy saved",
+      "saveFailed": "Could not save the run credential policy"
     }
   },
   "providers": {
@@ -5440,6 +5460,7 @@
       "subtitle": "The shared capabilities your organisation already runs, so a design consumes them instead of rebuilding them."
     },
     "tier": {
+      "builtin": "Deployment",
       "account": "Account",
       "workspace": "Board"
     },
@@ -5450,6 +5471,8 @@
     },
     "contracts": {
       "omitted": "+{count} more not listed",
+      "notIndexed": "operations are not indexed for this format; open the document",
+      "noOperations": "declares no operations",
       "none": "No API contract attached. An agent will be told the interface is unknown rather than guessing at it."
     },
     "catalog": {
@@ -5460,8 +5483,14 @@
       "hideDocuments": "Hide contract documents"
     },
     "suppressions": {
-      "title": "Opted out on this board",
-      "intro": "These account services are hidden from designs on this board. Nothing was deleted, and the account keeps them for every other board.",
+      "title": {
+        "workspace": "Opted out on this board",
+        "account": "Opted out for this account"
+      },
+      "intro": {
+        "workspace": "These inherited services are hidden from designs on this board. Nothing was deleted, and every other board keeps them.",
+        "account": "These services registered by this deployment are hidden from designs in every board of this account. Nothing was deleted, and other accounts keep them."
+      },
       "restore": "Offer again",
       "shadowsNothing": "Nothing is inherited under this id right now, so this opt-out currently hides nothing."
     },
@@ -6271,6 +6300,29 @@
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
       "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+    },
+    "branchProtection": {
+      "heading": "Default-branch protection",
+      "body": "Agent runs push with a credential that can write to every repository it covers. Nothing here can stop a compromised run pushing straight to a default branch, or merging its own pull request through the host's API — branch protection on the host is what covers both, and it is yours to configure. This checks whether it is in place.",
+      "check": "Check protection",
+      "allProtected": "Every linked repository's default branch is protected.",
+      "exposed": "{count} repository has an unprotected default branch. | {count} repositories have an unprotected default branch.",
+      "unavailable": "The connected provider cannot report branch protection, so this check has nothing to say — it is not a clean result.",
+      "omitted": "{count} further linked repository was not checked. | {count} further linked repositories were not checked.",
+      "state": {
+        "protected": "Protected",
+        "unprotected": "Unprotected",
+        "unknown": "Unknown"
+      },
+      "unprotectedHint": "a run's credential can push here directly and merge its own pull request",
+      "detailUnavailable": "protected, but the rule could not be read — it may still allow direct pushes",
+      "requiresPr": "pull request required, {reviews} approving review(s), {checks} required check(s)",
+      "noPrRequired": "protected, but no pull request is required",
+      "unknownReason": {
+        "branch_not_found": "the default branch was not found — the repository projection may be stale",
+        "forbidden": "the credential is not allowed to read this repository's branches",
+        "error": "the host could not be reached"
+      }
     }
   },
   "tutorial": {

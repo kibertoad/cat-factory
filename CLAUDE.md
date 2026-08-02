@@ -20,7 +20,8 @@ Default to the well-factored design, not the fastest thing that passes.
   magic constant standing in for a real fix.
 - **Respect the existing seams.** Extend through the app-owned registries (`AgentKindRegistry`,
   `GateRegistry`, `JudgeRegistry`, `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`,
-  `StepResolverRegistry`), the kernel ports, and the runtime `gateways`. Copy the nearest good citizen
+  `StepResolverRegistry`, `FoundationalServiceRegistry`), the kernel ports, and the runtime
+  `gateways`. Copy the nearest good citizen
   instead of inventing a one-off.
 - **No shortcuts that create debt.** Don't hard-code what should be configured, widen a type to `any` to
   dodge a modelling problem, or leave a half-wired feature behind a TODO. If the clean solution needs a
@@ -771,10 +772,16 @@ pinned structurally by `dependency-install.coverage.test.ts`; what it materialis
 DIFFING untracked paths either side, never by naming well-known directories. Doc:
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
-**Foundational services** — a tiered (account ⊕ workspace) catalog of the shared capabilities an org
-already runs, each with a description and its API contracts (OpenAPI 3.x / `@toad-contracts/core` /
-`@lokalise/api-contract`), uploaded directly or synced from a linked repo through the SAME
-`repoSourceSync` engine the fragment + skill libraries use. **The catalog and the CONTRACTS are two
+**Foundational services** — a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared
+capabilities an org already runs, each with a description and its API contracts (OpenAPI 3.x /
+`@toad-contracts/core` / `@lokalise/api-contract`), registered in a deployment's CODE on the
+app-owned `FoundationalServiceRegistry`, uploaded directly, or synced from a linked repo through the
+SAME `repoSourceSync` engine the fragment + skill libraries use. **The code-registered `builtin` tier
+holds no rows** — the merge reads the registry — so a deployment's estate is present from a
+workspace's first request and cannot drift from its definitions, and boot validation holds each one
+to the same schema and document checks the write boundary applies. **A contract set is validated as
+a SET** (at least one document per declared format references that library), because a contract
+module is a module GRAPH and only its entry point names the library. **The catalog and the CONTRACTS are two
 separate reads and two separate tables, and that split IS the feature**: a `foundational-catalog`
 kind (the architect) is folded identity + capability tags + indexed operation NAMES with no document
 bodies, while a `foundational-contracts` kind (the researcher, the coder) gets the full documents for
@@ -782,9 +789,15 @@ exactly the ids the design DECLARED in its machine-read fenced block. Both arriv
 `.cat-context/` files, so the container, inline and consensus paths need no new prompt field. Three
 downstream states are kept apart because each needs a different reaction — no declaration at all
 ("nothing was checked"), an empty one ("no shared service applies") and an id the catalog does not
-know (named, with "do not guess at its API"). **Routing is by TRAIT, never a kind-id list**, so a
-deployment's own design/implementer kinds opt in by declaring one. A board opts OUT of an inherited
-account service through a suppression sub-resource, never a delete: a delete drops the board's own
+know (named, with "do not guess at its API"). A FOURTH state is the operation list itself: empty
+means "declares nothing" for a format we parse and "nobody looked" for one we do not, so
+`operationsAreIndexable` (contracts) is the ONE place that distinction lives and every renderer
+branches on it. A contract MODULE is read statically and reports its own coverage — the
+`defineApiContract(` anchor count is the declaration count, so whatever the extractor could not read
+rides `omittedOperations` rather than passing as a complete list. **Routing is by TRAIT, never a
+kind-id list**, so a deployment's own design/implementer kinds opt in by declaring one. A tier opts
+OUT of what it INHERITS (a board of its account's, either of a deployment builtin) through a
+suppression sub-resource mounted at BOTH scopes, never a delete: a delete drops that tier's own
 registration and its documents, where a suppression destroys nothing — which is why RESTORING one
 hard-deletes the tombstone rather than clearing its `deletedAt` (that would revive an EMPTY override
 that wins the merge), and why the suppression LIST is its own read (a suppressed id is by

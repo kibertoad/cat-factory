@@ -14,4 +14,10 @@ export const CONNECTION_WARNING_KEYS: Record<ConnectionWarningCode, string> = {
     'settings.providerConnection.test.warnings.runner_manifest_no_release',
   runner_manifest_no_status_path:
     'settings.providerConnection.test.warnings.runner_manifest_no_status_path',
+  github_pat_classic_account_wide:
+    'settings.providerConnection.test.warnings.github_pat_classic_account_wide',
+  github_pat_scopes_beyond_need:
+    'settings.providerConnection.test.warnings.github_pat_scopes_beyond_need',
+  github_pat_scope_unreadable:
+    'settings.providerConnection.test.warnings.github_pat_scope_unreadable',
 }

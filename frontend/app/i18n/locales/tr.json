@@ -2269,7 +2269,7 @@
       "action": "Varsayılanı seç"
     },
     "accountFoundational": {
-      "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir."
+      "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir. Bu dağıtımın kodda kaydettiği hizmetler de buraya devralınır; kimliğe göre geçersiz kılınabilir veya aşağıdan devre dışı bırakılabilir."
     }
   },
   "settings": {
@@ -2576,7 +2576,10 @@
         "warningsTitle": "Bu yapılandırmadaki eksikler",
         "warnings": {
           "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",
-          "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir."
+          "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir.",
+          "github_pat_classic_account_wide": "Bu, 'repo' kapsamına sahip klasik bir belirteç: gönderim yapabildiğiniz her depoya, bu çalışma alanının GitHub Uygulamasının hiç kurulmadığı depolar dahil, erişir. Başlattığınız çalıştırmalar bunu Uygulamaya tercih eder. Bu kurulumun depolarıyla sınırlı ince ayarlı bir belirteç daha dardır.",
+          "github_pat_scopes_beyond_need": "Bu belirteç, cat-factory'nin hiç kullanmadığı izinler veriyor. Bunları kaldırmak hiçbir şeye mal olmaz ve ele geçirilmiş bir çalıştırmanın erişebileceği alanı daraltır.",
+          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin."
         }
       },
       "toast": {
@@ -2680,6 +2683,7 @@
       "optionalField": "{label} (isteğe bağlı)",
       "testConnection": "Bağlantıyı test et",
       "tokenValid": "Belirteç geçerli",
+      "tokenReachTitle": "Bu belirtecin eriştiği alan",
       "tokenRejected": "Belirteç reddedildi",
       "secretFallback": "Gizli bilgi",
       "toast": {
@@ -3121,6 +3125,13 @@
         "body": "Her çalıştırma tamamlandıktan sonra Kaizen agent'ı, her agent adımının sorunsuz ve verimli olmaktan kafa karışık ve kaotik olmaya kadar nasıl gittiğini değerlendirir ve istem/model iyileştirmeleri önerir. Üst üste beş kez öneri olmadan yüksek not alan bir istem + agent + model birleşimi doğrulanmış olarak işaretlenir ve artık değerlendirilmez. Değerlendirme arka planda çalışır ve çalıştırma ayrıntıları ile Kaizen ekranında gösterilir. Değerlendiricinin modelini Model Yapılandırması'nda (\"Kaizen\" agent'ı) ayarlayın.",
         "toggle": "Agent çalıştırmalarını Kaizen ile değerlendir"
       },
+      "runCredential": {
+        "heading": "Çalıştırma kimlik bilgisi",
+        "body": "Varsayılan olarak bir çalıştırma, onu başlatan kişinin kayıtlı kişisel erişim belirtecini kullanarak kimlik doğrular; böylece gönderimler ve çekme istekleri o kişiye atfedilir. Belirtecin erişimi, kişinin ona verdiği kadardır ve çoğu zaman bu çalışma alanının GitHub Uygulaması kurulumunun kapsadığı depolardan daha geniştir. Her çalıştırmanın bunun yerine Uygulama kurulumu olarak kimlik doğrulaması için bu seçeneği kapatın.",
+        "toggle": "Çalıştırmalar onları başlatan kişi adına işlem yapsın",
+        "offHint": "Çalıştırmalar, onları başlatan kişi olarak değil GitHub Uygulaması olarak gönderim yapar ve çekme isteği açar.",
+        "accountFloorNote": "Hesap genelindeki bir ilke bunu her pano için yasaklayabilir; ayarlanmışsa buradaki çalıştırmalar bu anahtardan bağımsız olarak GitHub App’i kullanır."
+      },
       "metadata": {
         "heading": "Çalışma alanı meta verileri",
         "body": "Bu dağıtımın tanımladığı özel alanların değerleri. Harici araçlar bunları okuyarak bu çalışma alanı için doğru projeyi açar.",
@@ -3294,6 +3305,15 @@
         "saveFailed": "Uzlaşı grubu kaydedilemedi",
         "deleteFailed": "Uzlaşı grubu silinemedi"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Çalıştırma kimlik bilgisi ilkesi",
+      "body": "Bir pano, bir çalıştırmanın onu başlatan kişinin kişisel erişim belirteciyle kimlik doğrulamasına izin verebilir. Bu kullanışlıdır ve cat-factory’yi benimsememiş bir kurumdaki tek bir kişi için çoğu zaman tek seçenektir. Ancak kişisel bir belirteç, sahibinin verdiği her yere ulaşır — genellikle bu hesabın GitHub App kurulumundan daha geniş — ve bir pano yöneticisi panonun kendi anahtarını yeniden açabilir. Burada yasaklarsanız bu hesaptaki hiçbir pano bunu yapamaz.",
+      "toggle": "Çalıştırmaların, kendilerini başlatan kişinin kişisel erişim belirtecini kullanmasını yasakla",
+      "onHint": "Bu hesaptaki her çalıştırma GitHub App kurulumu olarak kimlik doğrulayacak. Gönderimler ve çekme istekleri, çalıştırmayı başlatan kişiden değil uygulamadan gelecek.",
+      "offHint": "Ayarlanmadı: her pano kendisi karar verir. Mevcut panolar seçimlerini korur.",
+      "saved": "Çalıştırma kimlik bilgisi ilkesi kaydedildi",
+      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi"
     }
   },
   "providers": {
@@ -5203,6 +5223,7 @@
       "subtitle": "Kuruluşunuzun hâlihazırda işlettiği ortak yetenekler; böylece bir tasarım onları yeniden inşa etmek yerine kullanır."
     },
     "tier": {
+      "builtin": "Dağıtım",
       "account": "Hesap",
       "workspace": "Pano"
     },
@@ -5213,6 +5234,8 @@
     },
     "contracts": {
       "omitted": "+{count} tanesi listelenmedi",
+      "notIndexed": "bu biçim için işlemler dizinlenmez; belgeyi açın",
+      "noOperations": "hiçbir işlem tanımlamıyor",
       "none": "Ekli API sözleşmesi yok. Ajana arayüzün bilinmediği söylenecek; tahmin etmesine izin verilmeyecek."
     },
     "catalog": {
@@ -5223,8 +5246,14 @@
       "hideDocuments": "Sözleşme belgelerini gizle"
     },
     "suppressions": {
-      "title": "Bu panoda devre dışı",
-      "intro": "Bu hesap hizmetleri, bu panodaki tasarımlardan gizlenmiştir. Hiçbir şey silinmedi; hesap onları diğer tüm panolar için korur.",
+      "title": {
+        "workspace": "Bu panoda devre dışı",
+        "account": "Bu hesapta devre dışı"
+      },
+      "intro": {
+        "workspace": "Devralınan bu hizmetler, bu panodaki tasarımlardan gizlenmiştir. Hiçbir şey silinmedi; diğer tüm panolar onları korur.",
+        "account": "Bu dağıtımın kaydettiği bu hizmetler, bu hesaptaki tüm panoların tasarımlarından gizlenmiştir. Hiçbir şey silinmedi; diğer hesaplar onları korur."
+      },
       "restore": "Yeniden sun",
       "shadowsNothing": "Şu anda bu kimlik altında devralınan bir şey yok, dolayısıyla bu devre dışı bırakma şu an hiçbir şeyi gizlemiyor."
     },
@@ -6067,6 +6096,29 @@
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
       "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+    },
+    "branchProtection": {
+      "heading": "Varsayılan dal koruması",
+      "body": "Aracı çalıştırmaları, kapsadığı her depoya yazabilen bir kimlik bilgisiyle gönderim yapar. Buradaki hiçbir şey, ele geçirilmiş bir çalıştırmanın doğrudan varsayılan dala göndermesini ya da kendi çekme isteğini barındırıcının API'si üzerinden birleştirmesini engelleyemez; her ikisini de yalnızca barındırıcıdaki dal koruması kapsar ve onu siz yapılandırırsınız. Bu denetim, korumanın var olup olmadığını gösterir.",
+      "check": "Korumayı denetle",
+      "allProtected": "Bağlı her deponun varsayılan dalı korumalı.",
+      "exposed": "{count} deponun varsayılan dalı korumasız. | {count} deponun varsayılan dalı korumasız.",
+      "unavailable": "Bağlı sağlayıcı dal korumasını bildiremiyor, bu yüzden bu denetimin söyleyecek bir şeyi yok — bu temiz bir sonuç değildir.",
+      "omitted": "Bağlı {count} depo daha denetlenmedi. | Bağlı {count} depo daha denetlenmedi.",
+      "state": {
+        "protected": "Korumalı",
+        "unprotected": "Korumasız",
+        "unknown": "Bilinmiyor"
+      },
+      "unprotectedHint": "bir çalıştırmanın kimlik bilgisi buraya doğrudan gönderim yapıp kendi çekme isteğini birleştirebilir",
+      "detailUnavailable": "korumalı, ancak kural okunamadı — doğrudan gönderimlere hâlâ izin veriyor olabilir",
+      "requiresPr": "çekme isteği zorunlu, {reviews} onaylayan inceleme, {checks} zorunlu denetim",
+      "noPrRequired": "korumalı, ancak çekme isteği zorunlu değil",
+      "unknownReason": {
+        "branch_not_found": "varsayılan dal bulunamadı — depo izdüşümü eskimiş olabilir",
+        "forbidden": "kimlik bilgisinin bu deponun dallarını okuma izni yok",
+        "error": "barındırıcıya ulaşılamadı"
+      }
     }
   },
   "tutorial": {

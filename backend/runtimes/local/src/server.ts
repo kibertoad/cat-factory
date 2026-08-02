@@ -4,6 +4,7 @@ import type { serve } from '@hono/node-server'
 import {
   type AgentKindRegistry,
   type InitiativePresetRegistry,
+  type FoundationalServiceRegistry,
   type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
@@ -86,6 +87,13 @@ export async function startLocal(
      * picklist only.
      */
     taskTypeRegistry?: TaskTypeRegistry
+    /**
+     * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES — a deployment news a
+     * `defaultFoundationalServiceRegistry()`, registers the shared capabilities its org already
+     * runs on it, and passes it here. Threaded through to `buildLocalContainer` (both the Postgres
+     * and mothership paths) as the catalog's `builtin` tier. Absent → an empty tier.
+     */
+    foundationalServiceRegistry?: FoundationalServiceRegistry
     /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
@@ -241,6 +249,7 @@ async function bootLocal(
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
+    foundationalServiceRegistry: options.foundationalServiceRegistry,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -299,6 +308,7 @@ async function startLocalMothership(
     backendRegistries?: BackendRegistries
     defaultModelPresetId?: string
     taskTypeRegistry?: TaskTypeRegistry
+    foundationalServiceRegistry?: FoundationalServiceRegistry
     seedEnvironmentHandlers?: RegisterHandlerInput[]
     seedSharedStacks?: CreateSharedStackInput[]
   },
@@ -309,6 +319,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    foundationalServiceRegistry,
     seedEnvironmentHandlers,
     seedSharedStacks,
   } = extensions
@@ -332,6 +343,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    foundationalServiceRegistry,
     seedEnvironmentHandlers,
     seedSharedStacks,
   })
@@ -340,6 +352,7 @@ async function startLocalMothership(
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
+    foundationalServiceRegistry: container.foundationalServiceRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 

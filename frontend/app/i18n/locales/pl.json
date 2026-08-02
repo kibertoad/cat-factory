@@ -2269,7 +2269,7 @@
       "action": "Wybierz domyślne"
     },
     "accountFoundational": {
-      "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa."
+      "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa. Usługi rejestrowane przez to wdrożenie w kodzie są dziedziczone również tutaj; można je nadpisać po identyfikatorze albo wyłączyć poniżej."
     }
   },
   "settings": {
@@ -2380,7 +2380,10 @@
         "warningsTitle": "Braki w tej konfiguracji",
         "warnings": {
           "runner_manifest_no_release": "Brak szablonu release: anulowanie przebiegu nie może przekazać puli, że ma zatrzymać zadanie, więc osierocone zadanie zajmuje swojego runnera, dopóki pula sama go nie odzyska.",
-          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu."
+          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu.",
+          "github_pat_classic_account_wide": "To klasyczny token z zakresem 'repo': sięga każdego repozytorium, do którego możesz wypychać zmiany, także tych, w których aplikacja GitHub tego obszaru roboczego nigdy nie została zainstalowana. Uruchomienia, które rozpoczynasz, używają go zamiast aplikacji. Token szczegółowy ograniczony do repozytoriów tej instalacji jest węższy.",
+          "github_pat_scopes_beyond_need": "Ten token przyznaje uprawnienia, z których cat-factory nigdy nie korzysta. Ich usunięcie nic nie kosztuje i zawęża to, co mogłoby osiągnąć skompromitowane uruchomienie.",
+          "github_pat_scope_unreadable": "GitHub przyjął ten token, ale nie zgłosił jego zakresów, więc jego zasięgu nie da się tu pokazać. Sprawdź w ustawieniach tokenów GitHub, co przyznaje."
         }
       },
       "toast": {
@@ -2539,6 +2542,7 @@
       "optionalField": "{label} (opcjonalnie)",
       "testConnection": "Testuj połączenie",
       "tokenValid": "Token prawidłowy",
+      "tokenReachTitle": "Do czego sięga ten token",
       "tokenRejected": "Token odrzucony",
       "secretFallback": "Sekret",
       "toast": {
@@ -2980,6 +2984,13 @@
         "body": "Po zakończeniu każdego uruchomienia agent Kaizen ocenia, jak przebiegł każdy krok agenta, od płynnego i wydajnego po chaotyczny i zagmatwany, oraz rekomenduje usprawnienia promptu/modelu. Kombinacja prompt + agent + model, która pięć razy z rzędu uzyska wysoką ocenę bez rekomendacji, jest oznaczana jako zweryfikowana i nie jest już oceniana. Ocenianie działa w tle i jest pokazywane w szczegółach uruchomienia oraz na ekranie Kaizen. Ustaw model oceniającego w Konfiguracji modeli (agent \"Kaizen\").",
         "toggle": "Oceniaj uruchomienia agentów za pomocą Kaizen"
       },
+      "runCredential": {
+        "heading": "Poświadczenie uruchomienia",
+        "body": "Domyślnie uruchomienie uwierzytelnia się osobistym tokenem dostępu osoby, która je rozpoczęła, o ile go zapisała, dzięki czemu wypchnięcia i pull requesty są przypisywane tej osobie. Zasięg jej tokenu jest taki, jaki sama mu nadała, i często obejmuje więcej repozytoriów niż instalacja aplikacji GitHub tego obszaru roboczego. Wyłącz tę opcję, aby każde uruchomienie uwierzytelniało się jako instalacja aplikacji.",
+        "toggle": "Pozwól uruchomieniom działać w imieniu osoby, która je rozpoczęła",
+        "offHint": "Uruchomienia będą wypychać zmiany i otwierać pull requesty jako aplikacja GitHub, a nie jako osoba, która je rozpoczęła.",
+        "accountFloorNote": "Zasada obowiązująca w całym koncie może tego zabronić wszystkim tablicom; jeśli jest ustawiona, uruchomienia tutaj używają aplikacji GitHub niezależnie od tego przełącznika."
+      },
       "metadata": {
         "heading": "Metadane przestrzeni roboczej",
         "body": "Wartości pól niestandardowych zdefiniowanych przez to wdrożenie. Narzędzia zewnętrzne odczytują je, aby otworzyć właściwy projekt dla tej przestrzeni roboczej.",
@@ -3282,6 +3293,15 @@
         "saveFailed": "Nie udało się zapisać grupy konsensusu",
         "deleteFailed": "Nie udało się usunąć grupy konsensusu"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Zasady poświadczeń uruchomień",
+      "body": "Tablica może pozwolić, aby uruchomienie uwierzytelniało się osobistym tokenem dostępu osoby, która je rozpoczęła. Bywa to przydatne, a dla pojedynczej osoby w organizacji, która nie wdrożyła cat-factory, często jest to jedyna możliwość. Osobisty token sięga jednak wszędzie tam, gdzie pozwolił mu właściciel — zwykle dalej niż instalacja aplikacji GitHub tego konta — a administracja tablicy może z powrotem włączyć jej przełącznik. Zakaż tego tutaj, a żadna tablica w tym koncie tego nie zrobi.",
+      "toggle": "Zakaż uruchomieniom używania osobistego tokenu dostępu osoby, która je rozpoczęła",
+      "onHint": "Każde uruchomienie w tym koncie będzie uwierzytelniać się jako instalacja aplikacji GitHub. Wypchnięcia i żądania ściągnięcia będą pochodzić od aplikacji, a nie od osoby, która rozpoczęła uruchomienie.",
+      "offHint": "Nie ustawiono: każda tablica decyduje sama. Istniejące tablice zachowują swój wybór.",
+      "saved": "Zapisano zasady poświadczeń uruchomień",
+      "saveFailed": "Nie udało się zapisać zasad poświadczeń uruchomień"
     }
   },
   "providers": {
@@ -5191,6 +5211,7 @@
       "subtitle": "Wspólne możliwości, które Twoja organizacja już utrzymuje, aby projekt z nich korzystał zamiast budować je od nowa."
     },
     "tier": {
+      "builtin": "Wdrożenie",
       "account": "Konto",
       "workspace": "Tablica"
     },
@@ -5201,6 +5222,8 @@
     },
     "contracts": {
       "omitted": "+{count} więcej, niewymienionych",
+      "notIndexed": "operacje nie są indeksowane dla tego formatu; otwórz dokument",
+      "noOperations": "nie deklaruje operacji",
       "none": "Nie dołączono kontraktu API. Agent zostanie poinformowany, że interfejs jest nieznany, zamiast go zgadywać."
     },
     "catalog": {
@@ -5211,8 +5234,14 @@
       "hideDocuments": "Ukryj dokumenty kontraktów"
     },
     "suppressions": {
-      "title": "Wyłączone na tej tablicy",
-      "intro": "Te usługi konta są ukryte przed projektami na tej tablicy. Nic nie zostało usunięte, a konto zachowuje je dla wszystkich pozostałych tablic.",
+      "title": {
+        "workspace": "Wyłączone na tej tablicy",
+        "account": "Wyłączone dla tego konta"
+      },
+      "intro": {
+        "workspace": "Te odziedziczone usługi są ukryte przed projektami na tej tablicy. Nic nie zostało usunięte, a wszystkie pozostałe tablice je zachowują.",
+        "account": "Te usługi zarejestrowane przez to wdrożenie są ukryte przed projektami na wszystkich tablicach tego konta. Nic nie zostało usunięte, a pozostałe konta je zachowują."
+      },
       "restore": "Proponuj ponownie",
       "shadowsNothing": "Pod tym identyfikatorem nic obecnie nie jest dziedziczone, więc to wyłączenie niczego teraz nie ukrywa."
     },
@@ -6055,6 +6084,29 @@
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
       "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+    },
+    "branchProtection": {
+      "heading": "Ochrona gałęzi domyślnej",
+      "body": "Uruchomienia agentów wypychają zmiany poświadczeniem, które może zapisywać w każdym objętym repozytorium. Nic tutaj nie powstrzyma skompromitowanego uruchomienia przed wypchnięciem zmian wprost na gałąź domyślną ani przed scaleniem własnego pull requesta przez API hosta — oba przypadki pokrywa wyłącznie ochrona gałęzi po stronie hosta, którą konfigurujesz sam. To sprawdzenie pokazuje, czy jest włączona.",
+      "check": "Sprawdź ochronę",
+      "allProtected": "Gałąź domyślna każdego powiązanego repozytorium jest chroniona.",
+      "exposed": "{count} repozytorium ma niechronioną gałąź domyślną. | {count} repozytoria mają niechronioną gałąź domyślną.",
+      "unavailable": "Podłączony dostawca nie potrafi zgłosić ochrony gałęzi, więc to sprawdzenie nic nie mówi — to nie jest wynik pozytywny.",
+      "omitted": "Nie sprawdzono jeszcze {count} powiązanego repozytorium. | Nie sprawdzono jeszcze {count} powiązanych repozytoriów.",
+      "state": {
+        "protected": "Chroniona",
+        "unprotected": "Niechroniona",
+        "unknown": "Nieznana"
+      },
+      "unprotectedHint": "poświadczenie uruchomienia może wypchnąć zmiany bezpośrednio i scalić własnego pull requesta",
+      "detailUnavailable": "chroniona, ale nie udało się odczytać reguły — bezpośrednie wypchnięcia mogą nadal być dozwolone",
+      "requiresPr": "wymagany pull request, {reviews} zatwierdzających recenzji, {checks} wymaganych sprawdzeń",
+      "noPrRequired": "chroniona, ale nie wymaga pull requesta",
+      "unknownReason": {
+        "branch_not_found": "nie znaleziono gałęzi domyślnej — projekcja repozytorium może być nieaktualna",
+        "forbidden": "poświadczenie nie ma prawa odczytać gałęzi tego repozytorium",
+        "error": "nie udało się połączyć z hostem"
+      }
     }
   },
   "tutorial": {

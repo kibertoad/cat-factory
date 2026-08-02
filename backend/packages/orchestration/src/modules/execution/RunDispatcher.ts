@@ -851,7 +851,9 @@ export class RunDispatcher {
       const runRepo = await this.resolveRunRepoContext?.(workspaceId, block.id)
       const headSha = runRepo?.repo.pullRequestHeadSha
       if (!headSha) return null
-      return await this.runInitiatorScope(instance.initiatedBy, () => headSha(prNumber))
+      return await this.runInitiatorScope({ workspaceId, initiatedBy: instance.initiatedBy }, () =>
+        headSha(prNumber),
+      )
     } catch {
       return null
     }

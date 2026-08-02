@@ -236,6 +236,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
     // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
     taskTypeRegistry: options.taskTypeRegistry,
+    // The app-owned foundational-service registry (the deployment's own shared-capability
+    // catalog); createCore threads it into the catalog service as the `builtin` tier and
+    // re-exposes it on Core for boot-time validation.
+    foundationalServiceRegistry: options.foundationalServiceRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

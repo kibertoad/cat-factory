@@ -11,6 +11,7 @@ import {
 } from './validation/validateRegistrations.js'
 import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
+  defaultFoundationalServiceRegistry,
   defaultGateRegistry,
   defaultPipelineRegistry,
   defaultStepResolverRegistry,
@@ -718,5 +719,69 @@ describe('agent-kind variant validation', () => {
         knownAgentKinds: new Set(['architect', 'coder']),
       }),
     ).toEqual([])
+  })
+})
+
+describe('foundational-service registry validation', () => {
+  const gates = defaultGateRegistry()
+  const kinds = defaultAgentKindRegistry()
+  const problemsFor = (
+    definitions: Parameters<ReturnType<typeof defaultFoundationalServiceRegistry>['register']>[0][],
+  ) => {
+    const foundationalServiceRegistry = defaultFoundationalServiceRegistry()
+    foundationalServiceRegistry.registerAll(definitions)
+    return collectRegistrationProblems({
+      agentKindRegistry: kinds,
+      gateRegistry: gates,
+      foundationalServiceRegistry,
+    }).filter((p) => p.code === 'foundational_service_invalid')
+  }
+
+  const valid = {
+    id: 'file-storage',
+    name: 'File Storage',
+    summary: 'Stores uploads.',
+    description: '',
+    capabilities: ['asset-storage'],
+    contracts: [
+      {
+        contractId: 'http',
+        format: 'openapi' as const,
+        title: 'HTTP API',
+        body: 'openapi: 3.0.3\npaths:\n  /files:\n    get: {}\n',
+      },
+    ],
+  }
+
+  it('passes a definition the REST write boundary would have accepted', () => {
+    expect(problemsFor([valid])).toEqual([])
+  })
+
+  it('fails boot on an id the write boundary would refuse', () => {
+    // Registering in code has no moment of refusal of its own; boot is that moment, or the
+    // deployment ships a service an Architect can never resolve.
+    const problems = problemsFor([{ ...valid, id: 'File Storage' }])
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.message).toContain('lower-kebab')
+  })
+
+  it('fails boot on a contract document that is not what it claims to be', () => {
+    const problems = problemsFor([
+      { ...valid, contracts: [{ ...valid.contracts[0]!, body: 'this is not a spec' }] },
+    ])
+    expect(problems[0]?.message).toContain('not a valid OpenAPI')
+  })
+
+  it('fails boot on a capability tag that near-misses the enforced one', () => {
+    // The failure it replaces: `asset_storage` registers, and a binary-output run is refused
+    // hours later with `not_storage_capable`.
+    const problems = problemsFor([{ ...valid, capabilities: ['asset_storage'] }])
+    expect(problems[0]?.message).toContain("'asset-storage'")
+  })
+
+  it('reports a malformed definition ONCE rather than restating it as several', () => {
+    expect(problemsFor([{ ...valid, id: 'Bad Id', capabilities: ['asset_storage'] }])).toHaveLength(
+      1,
+    )
   })
 })

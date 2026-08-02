@@ -7,6 +7,7 @@ import {
   defaultPipelineRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
+  defaultFoundationalServiceRegistry,
   defaultTaskTypeRegistry,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -30,6 +31,8 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
+    foundationalServiceRegistry:
+      dependencies.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry(),
     initiativePresetRegistry:
       dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
     workRunner: dependencies.workRunner ?? new NoopWorkRunner(),

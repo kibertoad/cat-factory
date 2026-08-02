@@ -28,6 +28,52 @@ export interface GitHubRepoRef {
   repo: string
 }
 
+/**
+ * Whether a branch is protected on the host. THREE states, not two: `unknown` is a real answer
+ * and must never render as `unprotected` — the whole point of the preflight is to tell an
+ * operator which repositories are exposed, and a probe that could not reach the host would
+ * otherwise manufacture an all-clear or a false alarm depending on which way you collapse it.
+ */
+export type BranchProtectionState = 'protected' | 'unprotected' | 'unknown'
+
+/**
+ * Why a protection state could not be determined. Kept apart because they need different
+ * fixes: a missing branch is a stale projection, a refusal is a credential problem, and an
+ * error is transient.
+ */
+export type BranchProtectionUnknownReason = 'branch_not_found' | 'forbidden' | 'error'
+
+/**
+ * The protection rule's contents, readable only by a credential with admin access to the repo
+ * — which a minimally-scoped App installation deliberately does NOT have. So this is optional
+ * beside a state that is always answerable, rather than the state itself.
+ */
+export interface BranchProtectionDetail {
+  /** Whether a pull request is required before merging (direct pushes refused). */
+  requiresPullRequest: boolean
+  /** Approving reviews required before merge; 0 when a PR is required but no reviews are. */
+  requiredApprovingReviewCount: number
+  /** Status checks that must pass, by context name. Empty ⇒ none required. */
+  requiredStatusChecks: string[]
+  /** Whether force pushes are still permitted onto the protected branch. */
+  allowsForcePush: boolean
+}
+
+/** A branch's protection posture, as much of it as the run credential could actually read. */
+export interface BranchProtectionSummary {
+  state: BranchProtectionState
+  /** Set only for `unknown`. */
+  reason?: BranchProtectionUnknownReason
+  /** Set only when the credential could read the rule (see {@link BranchProtectionDetail}). */
+  detail?: BranchProtectionDetail
+  /**
+   * Set on a `protected` branch whose rule could NOT be read, naming why. "Protected, contents
+   * unknown" is a different operator situation from "protected, and here is the rule" — the
+   * first cannot tell you whether the protection actually requires a pull request.
+   */
+  detailUnavailable?: 'forbidden' | 'error'
+}
+
 /** A page of results plus the conditional-request ETag and a rate-limit reading. */
 export interface Paged<T> {
   items: T[]
@@ -587,6 +633,22 @@ export interface GitHubClient {
     branch: string,
     number?: number,
   ): Promise<number>
+  /**
+   * A branch's protection posture — the backing read for the branch-protection preflight
+   * (`backend/docs/security-model.md`, operator checklist item 1). Branch protection on the
+   * host is the ONLY control over a stolen `Contents: write` token, covering both a direct
+   * push and a merge-API call, and nothing in-product used to tell an operator it was missing.
+   *
+   * Deliberately answers a THREE-state summary rather than a boolean, and never throws: an
+   * unreachable host is `unknown`, which the surface reports as its own state. Optional (see
+   * {@link listRequestedReviewers}); a provider that omits it makes the preflight report the
+   * capability as unavailable rather than guessing every repo is fine.
+   */
+  getBranchProtection?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    branch: string,
+  ): Promise<BranchProtectionSummary>
   /**
    * The branch a PR actually targets (`pulls/{n}.base.ref`), or null when the PR can't be
    * read. The `human-review` gate reads branch protection against THIS branch — not the repo

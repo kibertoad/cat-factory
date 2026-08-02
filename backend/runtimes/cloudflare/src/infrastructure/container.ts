@@ -59,7 +59,11 @@ import { selectTraceSink } from './container-trace-sinks.js'
 export { selectTraceSink }
 import { buildWorkerSharedServices } from './container-shared-services.js'
 import { assembleWorkerContainer } from './container-assembly.js'
-import { buildAppRegistry, buildResolveRepoTarget } from './container-vcs-identity.js'
+import {
+  buildAppRegistry,
+  buildResolveRepoTarget,
+  buildResolveRunInitiatorToken,
+} from './container-vcs-identity.js'
 // The App registry + repo-target resolvers moved to `container-vcs-identity.ts`; re-exported so
 // the sibling modules that already read them off the composition root keep one import surface.
 export { buildAppRegistry, buildResolveRepoTarget }
@@ -206,7 +210,6 @@ import {
   D1FoundationalServiceSourceRepository,
 } from './repositories/D1FoundationalServiceRepository'
 import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
-import { buildResolveUserGitHubToken } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -244,12 +247,13 @@ function selectEngineVcsClient(
 ): GitHubClient | undefined {
   if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
     const baseRegistry = buildAppRegistry(env, config, db, clock)
-    // Prefer the run initiator's per-user PAT (when stored) over the App token for the CI gate +
-    // merge reads; the engine sets the initiator in ambient context around those boundaries
-    // (runWithInitiator). Falls back to the App token otherwise.
-    const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
-    const registry = resolveUserGitHubToken
-      ? new PatPreferringAppRegistry(baseRegistry, resolveUserGitHubToken)
+    // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
+    // the App token for the CI gate + merge reads; the engine sets the run's credential scope
+    // in ambient context around those boundaries (runWithInitiator). Falls back to the App
+    // token otherwise.
+    const resolveRunInitiatorToken = buildResolveRunInitiatorToken(env, db, clock)
+    const registry = resolveRunInitiatorToken
+      ? new PatPreferringAppRegistry(baseRegistry, resolveRunInitiatorToken)
       : baseRegistry
     return new FetchGitHubClient({
       registry,

@@ -10,6 +10,7 @@ import type {
   AgentRunRepository,
   BlockRepository,
   DocInterviewRepository,
+  AccountSettingsRepository,
   DocumentRepository,
   DeployCloneTarget,
   EnvironmentProvider,
@@ -283,6 +284,18 @@ export interface ConformanceApp {
    * through the repository directly rather than an HTTP flow.
    */
   docInterviewRepository(): DocInterviewRepository
+  /**
+   * The facade's account-settings repository over its real store, so the suite can assert the
+   * NON-SECRET config read (`getConfigByAccount`) behaves identically on D1 and Postgres.
+   *
+   * Exercised through the repository rather than an HTTP flow because no route reads this
+   * method: the admin settings endpoint goes through `getByAccount` (the full row, secrets
+   * included), while `getConfigByAccount` exists precisely so the run path — and a mothership
+   * node over the machine API — can read the account's credential floor WITHOUT the secrets.
+   * A store that diverged here would not blank a panel; it would stop enforcing an account
+   * admin's refusal on one runtime only.
+   */
+  accountSettingsRepository(): AccountSettingsRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

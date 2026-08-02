@@ -7,8 +7,9 @@
 //
 // The tab split is the feature's own split, not a layout choice: "Catalog" is what an agent sees
 // (identity + operation names, never a document body), while "This tier" is what this owner
-// actually registers. An account has no tier above it, so it gets no catalog tab and no
-// suppression controls.
+// actually registers. Only a board gets the catalog tab — it is what runs agents — but BOTH
+// scopes get the suppression list, because an account inherits the deployment's code-registered
+// services exactly as a board inherits its account's.
 import { computed, ref, watch } from 'vue'
 import type { FoundationalServiceOwnerKind } from '~/types/domain'
 import {
@@ -97,11 +98,20 @@ const activeTab = computed({
       <template #catalog>
         <div class="flex flex-col gap-4">
           <FoundationalServiceCatalogList />
-          <FoundationalSuppressions />
+          <FoundationalSuppressions :kind="props.kind" :owner-id="props.ownerId" />
         </div>
       </template>
       <template #registry>
-        <FoundationalServiceRegistry :kind="props.kind" :owner-id="props.ownerId" />
+        <div class="flex flex-col gap-4">
+          <FoundationalServiceRegistry :kind="props.kind" :owner-id="props.ownerId" />
+          <!-- A scope with no catalog tab still has to be able to see (and lift) what it is
+               opting out of; with one, the list lives beside the catalog it explains. -->
+          <FoundationalSuppressions
+            v-if="!props.showCatalog"
+            :kind="props.kind"
+            :owner-id="props.ownerId"
+          />
+        </div>
       </template>
       <template #sources>
         <FoundationalServiceSources :kind="props.kind" :owner-id="props.ownerId" />

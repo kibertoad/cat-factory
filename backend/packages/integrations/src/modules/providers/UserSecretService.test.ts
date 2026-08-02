@@ -30,16 +30,19 @@ class FakeRepo implements UserSecretRepository {
   }
 }
 
-function build() {
+function build(scopeHeader?: string) {
   const repo = new FakeRepo()
   const service = new UserSecretService({
     userSecretRepository: repo,
     secretCipher: systemCipher,
     clock: { now: () => 1000 },
-    // Stub fetch so the github_pat test probe is deterministic.
+    // Stub fetch so the github_pat test probe is deterministic. `x-oauth-scopes` is what
+    // GitHub reports a CLASSIC token's grant on, and the probe classifies the token's reach
+    // from it (see `githubPatScope.ts`).
     fetch: (async (url: string) =>
       new Response(JSON.stringify({ login: 'octocat' }), {
         status: url.includes('/user') ? 200 : 404,
+        ...(scopeHeader ? { headers: { 'x-oauth-scopes': scopeHeader } } : {}),
       })) as unknown as typeof fetch,
   })
   return { repo, service }
@@ -84,10 +87,24 @@ describe('UserSecretService', () => {
     expect(descriptor?.configFields.map((f) => f.key)).toEqual(['token'])
   })
 
-  it('tests a github_pat by probing GET /user', async () => {
-    const { service } = build()
+  it('tests a github_pat by probing GET /user and states the token reach', async () => {
+    const { service } = build('repo, workflow')
     const result = await service.testConnection('github_pat', { secret: 'ghp_abc' })
-    expect(result).toEqual({ ok: true, message: 'Authenticated as octocat' })
+    expect(result.ok).toBe(true)
+    expect(result.message).toContain('Authenticated as octocat')
+    // The verdict line carries the breadth, and the account-wide grant is a WARNING beside it
+    // rather than a failure — the token is valid, which is exactly why it was invisible before.
+    expect(result.message).toContain('repo, workflow')
+    expect(result.warnings?.map((w) => w.code)).toEqual(['github_pat_classic_account_wide'])
+  })
+
+  it('reports no breadth warning for a fine-grained token', async () => {
+    // GitHub sends no scope header for fine-grained tokens; they are repository-scoped by
+    // construction, so the form must stay quiet rather than nag on every save.
+    const { service } = build()
+    const result = await service.testConnection('github_pat', { secret: 'github_pat_11ABC' })
+    expect(result.ok).toBe(true)
+    expect(result.warnings).toBeUndefined()
   })
 
   it('fires onSecretChanged after a store and a remove (viewer-repos cache invalidation)', async () => {

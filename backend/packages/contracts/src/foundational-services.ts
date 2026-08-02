@@ -12,26 +12,33 @@ import { fragmentOwnerKindSchema } from './fragment-library.js'
 // contract module, or a `@lokalise/api-contract` module), supplied either by direct
 // upload or by pointing at files/folders in a git repo (cached + autorefreshed).
 //
-// Registration is TIERED exactly like the prompt-fragment library: an `account` row is
-// shared by every workspace in the account, a `workspace` row wins over it by id. The
-// resolved catalog is what the Architect sees; the contract BODIES are read lazily,
-// only for the services the Architect declared, and only by the downstream kinds that
-// need them.
+// Registration is TIERED exactly like the prompt-fragment library: a `builtin` definition
+// registered in code by the deployment is shared by every account, an `account` row wins
+// over it, and a `workspace` row wins over both. The resolved catalog is what the Architect
+// sees; the contract BODIES are read lazily, only for the services the Architect declared,
+// and only by the downstream kinds that need them.
 // ---------------------------------------------------------------------------
 
 /** Which scope owns a foundational service / source: an account, or a workspace. */
 export const foundationalServiceOwnerKindSchema = fragmentOwnerKindSchema
 export type FoundationalServiceOwnerKind = v.InferOutput<typeof foundationalServiceOwnerKindSchema>
 
-/** The tier a resolved catalog entry originated from, lowest-precedence first. */
-export const foundationalServiceTierSchema = v.picklist(['account', 'workspace'])
+/**
+ * The tier a resolved catalog entry originated from, lowest-precedence first.
+ *
+ * `builtin` is the DEPLOYMENT's own tier: services a deployment registers in code on the
+ * app-owned `FoundationalServiceRegistry`, exactly as it registers pipelines or task types.
+ * It carries no rows, so it is present from a workspace's first request and cannot drift from
+ * the definitions; an account or workspace row of the same id still wins over it, and a
+ * tombstone at either tier suppresses it.
+ */
+export const foundationalServiceTierSchema = v.picklist(['builtin', 'account', 'workspace'])
 export type FoundationalServiceTier = v.InferOutput<typeof foundationalServiceTierSchema>
 
 /**
- * The API-contract document formats the catalog accepts. Each is stored verbatim as text;
- * only OpenAPI is additionally PARSED (into an operation index the lazy read renders as a
- * compact summary) because the other two are TypeScript modules, which cannot be evaluated
- * in a Worker isolate and are handed to the agent as source.
+ * The API-contract document formats the catalog accepts. Each is stored verbatim as text and
+ * additionally INDEXED into operation names where the format allows it — see
+ * {@link operationsAreIndexable}, which is the one place that judgement lives.
  */
 export const apiContractFormatSchema = v.picklist([
   /** An OpenAPI 3.x document, JSON or YAML. */
@@ -42,6 +49,80 @@ export const apiContractFormatSchema = v.picklist([
   'lokalise-api-contract',
 ])
 export type ApiContractFormat = v.InferOutput<typeof apiContractFormatSchema>
+
+/**
+ * Whether an operation index can be derived from a document of this format at all.
+ *
+ * This is what keeps "this interface declares no operations" apart from "this platform does not
+ * read this format": both render as an empty `operations` list, they need opposite reactions
+ * from whoever reads the catalog, and collapsing them tells an Architect that a fully-specified
+ * service offers nothing. Every surface that renders an operation list branches on it — the
+ * agent-facing catalog and the SPA's manifest row alike — so the two cannot disagree.
+ *
+ * `lokalise-api-contract` is false because its route builders' shapes are not pinned down here
+ * and a partial guess at them would be reported as fact. Adding an extractor for it means
+ * flipping this and nothing else.
+ */
+export function operationsAreIndexable(format: ApiContractFormat): boolean {
+  return format === 'openapi' || format === 'toad-contract'
+}
+
+/**
+ * The capability tag a foundational service must carry to be selectable as a binary-output
+ * step's STORAGE target (enforced at run admission — see `docs/initiatives/
+ * binary-output-foundational-storage.md`).
+ *
+ * It lives here, on the wire, rather than in the kernel alone because the people who need to
+ * spell it right are OUTSIDE the backend: a deployment registering its estate, and the SPA
+ * rendering the picker. A client that cannot import the vocabulary re-declares it, and the
+ * failure of a re-declaration is silent — `asset_storage` registers cleanly and surfaces much
+ * later as a refused run.
+ */
+export const ASSET_STORAGE_CAPABILITY = 'asset-storage'
+
+/**
+ * The CONVENTIONAL tag for a service that can scope a generation — an inventory answering
+ * "what entities exist, which lack an asset, how is each described". Deliberately NOT enforced
+ * (any service with a readable contract can inform scope), but still reserved: a picker orders
+ * by it, so a typo silently loses the ordering rather than failing.
+ */
+export const GENERATION_CONTEXT_CAPABILITY = 'generation-context'
+
+/**
+ * Capability tags the PLATFORM assigns meaning to. Everything else is free-form org taxonomy
+ * and stays that way — this list is not a closed vocabulary, it is the set of spellings a
+ * registrant must not miss by a character.
+ */
+export const RESERVED_CAPABILITY_TAGS: readonly string[] = [
+  ASSET_STORAGE_CAPABILITY,
+  GENERATION_CONTEXT_CAPABILITY,
+]
+
+/**
+ * The reserved tag `tag` was plainly TRYING to be, when it is not that tag exactly — else null.
+ *
+ * Capability tags are free-form strings, which is right (an org's taxonomy is its own) and is
+ * also why `asset_storage` / `Asset-Storage` / `assetstorage` register without complaint and
+ * fail a run hours later as `not_storage_capable`. Comparing on a form with separators and case
+ * removed catches exactly the near-misses and nothing else: a genuinely different tag does not
+ * collide with a reserved one under it.
+ *
+ * The caller REFUSES on a hit rather than silently canonicalising, because a registrant who
+ * meant a tag of their own under a colliding spelling must learn that the platform reads it as
+ * reserved, and a quiet rewrite of someone's taxonomy is its own surprise.
+ */
+export function reservedCapabilityNearMiss(tag: string): string | null {
+  if (RESERVED_CAPABILITY_TAGS.includes(tag)) return null
+  const normalized = normalizeCapabilityTag(tag)
+  return (
+    RESERVED_CAPABILITY_TAGS.find((reserved) => normalizeCapabilityTag(reserved) === normalized) ??
+    null
+  )
+}
+
+function normalizeCapabilityTag(tag: string): string {
+  return tag.toLowerCase().replace(/[\s_-]+/g, '')
+}
 
 /**
  * A contract as the CATALOG lists it — identity, format and SIZE, never the body. This is
@@ -58,14 +139,19 @@ export const apiContractSummarySchema = v.object({
   /** Repo provenance (`path`), or null when uploaded directly. */
   path: v.nullable(v.string()),
   /**
-   * The operations an OpenAPI document declares (`GET /files/{id}` …), capped. Empty for the
-   * TypeScript formats, which are not parsed. Cheap enough to ride the catalog and it is what
-   * makes the catalog actionable — an architect can name the endpoint it intends to call.
+   * The operations this document declares (`GET /files/{id}` …), capped. Cheap enough to ride
+   * the catalog and it is what makes the catalog actionable — an architect can name the
+   * endpoint it intends to call.
+   *
+   * EMPTY means one of two different things and {@link operationsAreIndexable} is what tells
+   * them apart: this format is not read at all, or it is and this document declares nothing.
    */
   operations: v.array(v.string()),
   /**
-   * How many operations were dropped from {@link operations} by the cap. Non-zero says the
-   * list is a PREFIX, so a reader never concludes the tail does not exist.
+   * How many operations the document declares that {@link operations} does NOT list — dropped
+   * by the cap, or (for a contract MODULE) declared in a shape the static extractor could not
+   * read. Non-zero says the list is incomplete, so a reader never concludes the rest does not
+   * exist.
    */
   omittedOperations: v.number(),
 })
@@ -103,24 +189,38 @@ export const foundationalServiceSchema = v.object({
 })
 export type FoundationalService = v.InferOutput<typeof foundationalServiceSchema>
 
-/** A resolved (account ⊕ workspace merged) catalog entry, carrying its winning tier. */
+/**
+ * A resolved (builtin ⊕ account ⊕ workspace merged) catalog entry, carrying its winning tier.
+ *
+ * Deliberately NARROWER than {@link foundationalServiceSchema}: the merged read carries only
+ * what every tier can honestly fill. A `builtin` entry is registered in code, so it has no
+ * owning scope, no repo provenance and no row timestamps — and the alternative to dropping
+ * those fields is filling them with placeholders that read as facts. They remain on the
+ * per-tier management read, which is where a stored row's provenance belongs.
+ */
 export const resolvedFoundationalServiceSchema = v.object({
-  ...foundationalServiceSchema.entries,
+  id: v.string(),
+  name: v.string(),
+  summary: v.string(),
+  description: v.string(),
+  capabilities: v.array(v.string()),
+  contracts: v.array(apiContractSummarySchema),
   tier: foundationalServiceTierSchema,
 })
 export type ResolvedFoundationalService = v.InferOutput<typeof resolvedFoundationalServiceSchema>
 
 /**
- * One SUPPRESSION a board is asserting: an id its workspace tier tombstones, so the account
- * service of that id loses the merge.
+ * One SUPPRESSION a tier is asserting: an id it tombstones, so the service it inherits under
+ * that id — a `builtin` the deployment registered, or (for a board) an account service — loses
+ * the merge.
  *
  * A suppressed id is by construction absent from the merged catalog, which is what makes this a
  * separate read rather than a flag on it — without it the management surface could offer no way
  * back, and suppression would be a one-way door.
  *
  * `inherited` is the honest half: `false` says the tombstone currently shadows NOTHING (the
- * account withdrew the service, or the board deleted its own registration), so a reader does not
- * conclude a capability is being withheld when there is none to withhold. The name is the
+ * tier below withdrew the service, or this tier deleted its own registration), so a reader does
+ * not conclude a capability is being withheld when there is none to withhold. The name is the
  * inherited service's when there is one and the tombstone's own otherwise, which is empty for a
  * suppression written against an id this tier never registered.
  */
@@ -162,6 +262,24 @@ export const createFoundationalServiceSchema = v.object({
   contracts: v.optional(v.array(uploadApiContractSchema)),
 })
 export type CreateFoundationalServiceInput = v.InferOutput<typeof createFoundationalServiceSchema>
+
+/**
+ * The ways `definition` fails {@link createFoundationalServiceSchema}, as readable lines — empty
+ * when it would be accepted.
+ *
+ * Exists so a caller that cannot depend on valibot (the backend's kernel and orchestration
+ * layers) can still hold a deployment's CODE-registered service to the very schema the REST
+ * write boundary applies. Re-stating those rules in a second place is how a code-registered
+ * definition ends up accepted where an uploaded one is refused.
+ */
+export function foundationalServiceDefinitionIssues(definition: unknown): string[] {
+  const parsed = v.safeParse(createFoundationalServiceSchema, definition)
+  if (parsed.success) return []
+  return parsed.issues.map((issue) => {
+    const path = issue.path?.map((segment) => String(segment.key)).join('.')
+    return path ? `${path}: ${issue.message}` : issue.message
+  })
+}
 
 /**
  * Patch a registered service. `contracts`, when present, REPLACES the whole uploaded set —

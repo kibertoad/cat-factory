@@ -3,7 +3,9 @@ import type {
   ApiContractFormat,
   ApiContractSummary,
   FoundationalServiceSelection,
+  UploadApiContract,
 } from '@cat-factory/contracts'
+import { operationsAreIndexable, reservedCapabilityNearMiss } from '@cat-factory/contracts'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 
 // ---------------------------------------------------------------------------
@@ -141,6 +143,19 @@ export function isContractCandidatePath(path: string): boolean {
   )
 }
 
+/**
+ * Whether `path` names a TypeScript/JavaScript contract MODULE rather than an OpenAPI document,
+ * derived from the same extension list {@link detectContractFormat} branches on.
+ *
+ * Exported so a caller asking "could this file be part of a contract module GRAPH?" — the repo
+ * source's supporting-module admission — asks the one list instead of re-declaring it. A second
+ * copy drifts silently, and the drift surfaces as a linked file skipped as `unrecognised` for an
+ * extension the detector beside it already recognises.
+ */
+export function isContractModulePath(path: string): boolean {
+  return endsWithAny(path.toLowerCase(), CONTRACT_MODULE_EXTENSIONS)
+}
+
 function endsWithAny(lower: string, extensions: string[]): boolean {
   return extensions.some((extension) => lower.endsWith(extension))
 }
@@ -209,6 +224,192 @@ export function indexOpenApiOperations(content: string): {
   }
 }
 
+/**
+ * Index a document's operations by its FORMAT — the one dispatch, so every write site indexes
+ * a document the same way. A format {@link operationsAreIndexable} says nothing about indexes
+ * to nothing, which is a different statement from "declares nothing" and is rendered as such.
+ */
+export function indexContractOperations(
+  format: ApiContractFormat,
+  body: string,
+): { operations: string[]; omitted: number } {
+  if (format === 'openapi') return indexOpenApiOperations(body)
+  if (format === 'toad-contract') return indexToadContractOperations(body)
+  return { operations: [], omitted: 0 }
+}
+
+// --- contract MODULE indexing ---------------------------------------------
+
+/** The call a `@toad-contracts/core` module declares each of its operations with. */
+const TOAD_ANCHOR = /defineApiContract\s*\(/g
+
+/** `method: 'post'` inside one contract's object literal. */
+const TOAD_METHOD = /\bmethod\s*:\s*['"](get|put|post|delete|patch|head|options|trace)['"]/i
+
+/** `pathResolver: () => '/x'` / `pathResolver: ({ id }) => `/x/${id}`` — the literal forms only. */
+const TOAD_PATH_RESOLVER =
+  /\bpathResolver\s*:\s*(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>\s*(`[^`]*`|'[^']*'|"[^"]*")/
+
+/** A `${…}` hole a path template may carry, when it is a plain identifier or member path. */
+const TEMPLATE_HOLE = /\$\{\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\}/g
+
+/**
+ * How much source after a `defineApiContract(` anchor is scanned for that contract's `method`
+ * and `pathResolver`. The scan stops at the NEXT anchor, so this only bounds the last (or a
+ * pathologically long) declaration; a contract whose fields sit further out than this reads as
+ * unextractable, which is a reported omission rather than a wrong answer.
+ */
+const TOAD_DECLARATION_WINDOW = 4_000
+
+/**
+ * The operations a `@toad-contracts/core` module declares, read STATICALLY from its source.
+ *
+ * A contract module cannot be evaluated (no code generation in a Worker isolate, and executing
+ * an uploaded module would be a remote-code-execution hole), so this is a deliberately partial
+ * parse of the one shape the library documents: a `defineApiContract({ method, pathResolver })`
+ * call whose resolver returns a string or template literal. `${param}` holes become `{param}`,
+ * which is the same rendering an OpenAPI path template uses.
+ *
+ * Two properties make a partial parse honest rather than a guess:
+ *
+ *  - the ANCHOR count is the declaration count. `defineApiContract(` is the only way the
+ *    library declares an operation, so what could not be read is `declared - extracted` and is
+ *    reported as `omitted` — the same channel the OpenAPI cap uses. A reader is never shown a
+ *    subset that looks complete.
+ *  - anything the extractor is not certain of is NOT emitted: a computed path, a resolver built
+ *    elsewhere, a method held in a variable. An invented operation name is worse than a missing
+ *    one, because a coder writes against it.
+ */
+export function indexToadContractOperations(content: string): {
+  operations: string[]
+  omitted: number
+} {
+  const anchors: number[] = []
+  TOAD_ANCHOR.lastIndex = 0
+  for (let m = TOAD_ANCHOR.exec(content); m !== null; m = TOAD_ANCHOR.exec(content)) {
+    anchors.push(m.index + m[0].length)
+  }
+  const found: string[] = []
+  for (const [i, start] of anchors.entries()) {
+    const end = Math.min(anchors[i + 1] ?? content.length, start + TOAD_DECLARATION_WINDOW)
+    const declaration = content.slice(start, end)
+    const method = TOAD_METHOD.exec(declaration)?.[1]
+    const path = TOAD_PATH_RESOLVER.exec(declaration)?.[1]
+    if (!method || !path) continue
+    const template = pathTemplateFrom(path)
+    if (template === null) continue
+    found.push(`${method.toUpperCase()} ${template}`)
+  }
+  found.sort()
+  const operations = found.slice(0, MAX_CATALOG_OPERATIONS)
+  return { operations, omitted: Math.max(0, anchors.length - operations.length) }
+}
+
+/**
+ * A path literal's source → its `{param}` template, or null when it interpolates something
+ * this parser cannot name (a ternary, a call, a concatenation).
+ */
+function pathTemplateFrom(literal: string): string | null {
+  const inner = literal.slice(1, -1)
+  if (!literal.startsWith('`')) return inner.startsWith('/') ? inner : null
+  const rendered = inner.replace(TEMPLATE_HOLE, (_match, name: string) => `{${name}}`)
+  if (rendered.includes('${')) return null
+  return rendered.startsWith('/') ? rendered : null
+}
+
+// --- write-boundary validation --------------------------------------------
+
+/** The package import each TypeScript contract format is recognised by. */
+const CONTRACT_LIBRARY: Partial<Record<ApiContractFormat, { package: string; label: string }>> = {
+  'toad-contract': { package: '@toad-contracts/', label: '@toad-contracts/core' },
+  'lokalise-api-contract': { package: '@lokalise/api-contract', label: '@lokalise/api-contract' },
+}
+
+/** Something wrong with a service definition, whoever supplied it. */
+export type FoundationalDefinitionProblem =
+  | { reason: 'duplicate_contract_id'; contractId: string }
+  | { reason: 'invalid_openapi_document'; contractId: string }
+  | {
+      reason: 'contract_library_not_referenced'
+      format: ApiContractFormat
+      expected: string
+      contractIds: string[]
+    }
+  | { reason: 'capability_tag_near_miss'; capability: string; expected: string }
+
+/**
+ * Refuse a service definition whose documents will read as garbage to a downstream agent, at
+ * the moment it is supplied rather than the moment a coder is handed it. Returns every problem
+ * rather than the first, so a registrant fixes one round of them.
+ *
+ * ONE function for both suppliers — the REST write boundary and a deployment's code
+ * registration — because the failure it prevents is identical and a second copy is a second
+ * place to relax a rule.
+ *
+ * The checks are deliberately shallow and per-format. `openapi` is PARSED: a document claiming
+ * to be OpenAPI but which is not produces a service whose catalog entry lists zero operations
+ * while looking perfectly registered. The TypeScript formats cannot be evaluated, so the honest
+ * check is that the SET is what it says it is.
+ *
+ * **The set, not each document.** A contract module is a module GRAPH — a
+ * `defineApiContract` module plus the schema modules it imports — and only the first of those
+ * names the contract library. Validating per document refuses the halves of one contract that
+ * are not the entry point, which leaves a registrant concatenating source files to get past the
+ * boundary; validating the set keeps the anchor requirement (a set declared as
+ * `@toad-contracts/core` must contain a `@toad-contracts/core` module) while letting the
+ * modules it imports be registered as what they are.
+ */
+export function validateFoundationalDefinition(input: {
+  capabilities?: string[]
+  contracts?: UploadApiContract[]
+}): FoundationalDefinitionProblem[] {
+  const problems: FoundationalDefinitionProblem[] = []
+  for (const capability of input.capabilities ?? []) {
+    const expected = reservedCapabilityNearMiss(capability)
+    if (expected) problems.push({ reason: 'capability_tag_near_miss', capability, expected })
+  }
+  const contracts = input.contracts ?? []
+  const seen = new Set<string>()
+  for (const contract of contracts) {
+    if (seen.has(contract.contractId)) {
+      problems.push({ reason: 'duplicate_contract_id', contractId: contract.contractId })
+    }
+    seen.add(contract.contractId)
+    if (contract.format === 'openapi' && !isOpenApiDocument(contract.body)) {
+      problems.push({ reason: 'invalid_openapi_document', contractId: contract.contractId })
+    }
+  }
+  for (const [format, library] of Object.entries(CONTRACT_LIBRARY) as [
+    ApiContractFormat,
+    { package: string; label: string },
+  ][]) {
+    const set = contracts.filter((contract) => contract.format === format)
+    if (set.length === 0) continue
+    if (set.some((contract) => contract.body.includes(library.package))) continue
+    problems.push({
+      reason: 'contract_library_not_referenced',
+      format,
+      expected: library.label,
+      contractIds: set.map((contract) => contract.contractId),
+    })
+  }
+  return problems
+}
+
+/** A human-readable statement of one problem, shared by every caller that reports one. */
+export function describeFoundationalProblem(problem: FoundationalDefinitionProblem): string {
+  switch (problem.reason) {
+    case 'duplicate_contract_id':
+      return `Duplicate contract id '${problem.contractId}'`
+    case 'invalid_openapi_document':
+      return `Contract '${problem.contractId}' is not a valid OpenAPI 3.x document (JSON or YAML)`
+    case 'contract_library_not_referenced':
+      return `No document declared as '${problem.format}' (${problem.contractIds.join(', ')}) references ${problem.expected}. A set may include the modules a contract imports, but at least one of them must be the contract itself.`
+    case 'capability_tag_near_miss':
+      return `Capability tag '${problem.capability}' differs from the reserved tag '${problem.expected}' only in case or separators. The platform matches '${problem.expected}' exactly, so this tag would be silently ignored — use it, or pick a tag that is not a near-miss of it.`
+  }
+}
+
 /** Build the catalog-facing summary of one stored contract document. */
 export function summarizeContract(input: {
   contractId: string
@@ -217,8 +418,7 @@ export function summarizeContract(input: {
   path: string | null
   body: string
 }): ApiContractSummary {
-  const indexed =
-    input.format === 'openapi' ? indexOpenApiOperations(input.body) : { operations: [], omitted: 0 }
+  const indexed = indexContractOperations(input.format, input.body)
   return {
     contractId: input.contractId,
     format: input.format,
@@ -318,19 +518,37 @@ export function renderFoundationalCatalog(services: FoundationalCatalogView[]): 
       lines.push(`  ${service.description.trim().replace(/\r?\n/g, '\n  ')}`)
     }
     for (const contract of service.contracts) {
-      const ops =
-        contract.operations.length > 0
-          ? ` — ${contract.operations.join(', ')}${
-              contract.omittedOperations > 0
-                ? ` (+${contract.omittedOperations} more operations not listed here)`
-                : ''
-            }`
-          : ''
-      lines.push(`  contract (${contract.format}): ${contract.title}${ops}`)
+      lines.push(
+        `  contract (${contract.format}): ${contract.title}${describeOperations(contract)}`,
+      )
     }
     lines.push('')
   }
   return lines.join('\n').trimEnd()
+}
+
+/**
+ * The operation clause after one contract's line in the catalog.
+ *
+ * Three states, never two. An empty list from a format we DO read means the interface declares
+ * nothing; an empty list from one we do not read means nobody looked, and saying so is what
+ * stops an Architect concluding that a fully-specified service offers no endpoints. A partial
+ * list always names how much of it is missing.
+ */
+function describeOperations(contract: ApiContractSummary): string {
+  if (!operationsAreIndexable(contract.format)) {
+    return ' — operations are not indexed for this format; read the contract document itself before naming an endpoint'
+  }
+  if (contract.operations.length === 0) {
+    return contract.omittedOperations > 0
+      ? ` — ${contract.omittedOperations} operations are declared in a form this platform could not read; read the contract document itself`
+      : ' — declares no operations'
+  }
+  const omitted =
+    contract.omittedOperations > 0
+      ? ` (+${contract.omittedOperations} more operations not listed here)`
+      : ''
+  return ` — ${contract.operations.join(', ')}${omitted}`
 }
 
 /** One contract document as the lazy read hands it downstream. */

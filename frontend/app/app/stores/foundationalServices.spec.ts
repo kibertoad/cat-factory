@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useFoundationalServicesStore } from '~/stores/foundationalServices'
+import {
+  useFoundationalServices,
+  useFoundationalServicesStore,
+} from '~/stores/foundationalServices'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 // The two store rules that the surface's correctness rests on, and that neither the backend
@@ -11,10 +14,11 @@ import { useWorkspaceStore } from '~/stores/workspace'
 //  - a suppress/restore must refresh the OPT-OUT list as well as the catalog. The two are
 //    complements — an entry leaves one exactly as it enters the other — so refreshing only the
 //    catalog leaves the way BACK stale, which is the failure the pair exists to prevent.
+//  - the ACCOUNT scope has an opt-out list too (it inherits the deployment's `builtin` tier), and
+//    it has no merged catalog to piggyback on — so the read must not be gated on that catalog.
 
 const SERVICE = {
   id: 'file-storage',
-  ownerKind: 'account' as const,
   name: 'File Storage',
   summary: 'Stores uploads.',
   description: '',
@@ -30,11 +34,6 @@ const SERVICE = {
       omittedOperations: 0,
     },
   ],
-  sourceId: null,
-  sourcePath: null,
-  pinnedCommit: null,
-  createdAt: 1,
-  updatedAt: 1,
 }
 
 function api(over: Record<string, unknown> = {}) {
@@ -117,5 +116,28 @@ describe('foundational-services store', () => {
     // control missing for the very service just hidden.
     expect(client.listFoundationalServiceSuppressions.mock.calls.length).toBe(afterProbe + 2)
     expect(client.getResolvedFoundationalServices.mock.calls.length).toBe(afterProbe + 2)
+  })
+})
+
+describe('foundational-services store at the ACCOUNT scope', () => {
+  it('loads and refreshes the opt-out list even with no merged catalog to read', async () => {
+    // An account inherits the deployment's code-registered services, so it can suppress one — but
+    // it has no `resolved` read of its own. Gating the suppression list on that read (as it was
+    // while only a board inherited anything) leaves an account able to opt out and unable to see,
+    // or lift, what it opted out of.
+    const client = api()
+    vi.stubGlobal('useApi', () => client)
+    const store = useFoundationalServices('account', 'acct1')
+    await store.probe()
+    expect(client.listFoundationalServiceSuppressions).toHaveBeenCalledWith('account', 'acct1')
+    expect(client.getResolvedFoundationalServices).not.toHaveBeenCalled()
+
+    await store.suppress('file-storage')
+    expect(client.suppressFoundationalService).toHaveBeenCalledWith(
+      'account',
+      'acct1',
+      'file-storage',
+    )
+    expect(client.listFoundationalServiceSuppressions).toHaveBeenCalledTimes(2)
   })
 })
