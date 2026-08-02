@@ -4,6 +4,10 @@ import {
   canParkOnHuman,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
+  PARKING_INLINE_KINDS,
+  parkingRefusalMessage,
+  parkSurfacesOf,
+  PUBLICLY_ANSWERABLE_PARK_SURFACES,
 } from './publicApiAdmission.js'
 
 // The public-API admission policy. Two INDEPENDENT halves, and the whole point of slice 1 is that
@@ -111,6 +115,70 @@ describe('public-API admission', () => {
 
     it('is false for an ordinary non-parking chain', () => {
       expect(canParkOnHuman({ agentKinds: ['initiative-breakdown'] })).toBe(false)
+    })
+  })
+
+  describe('parkSurfacesOf', () => {
+    it('names the gate and the kind separately when a step carries both', () => {
+      expect(parkSurfacesOf({ agentKinds: ['requirements-review'], gates: [true] })).toEqual([
+        'approval-gate',
+        'requirements-review',
+      ])
+    })
+
+    it('dedupes a surface reached by several steps', () => {
+      // Two gated steps are ONE thing to tell the caller about, not two.
+      expect(
+        parkSurfacesOf({
+          agentKinds: ['initiative-breakdown', 'task-estimator'],
+          gates: [true, true],
+        }),
+      ).toEqual(['approval-gate'])
+    })
+
+    it('is empty for a chain that cannot park', () => {
+      expect(parkSurfacesOf({ agentKinds: ['initiative-breakdown'] })).toEqual([])
+    })
+  })
+
+  describe('parkingRefusalMessage', () => {
+    it('promises an answer path ONLY for surfaces the decision surface really serves', () => {
+      // The defect this replaced: the old fixed sentence named all four park types and told the
+      // operator a `decide` key answers them through /api/v1/runs/:runId/decisions. Three of them
+      // are answerable only in the app, so the advice bought a wider-scoped key and a run whose
+      // only exit is cancel.
+      const message = parkingRefusalMessage({ agentKinds: ['clarity-review'] })
+      expect(message).toContain('clarity-review')
+      expect(message).not.toContain('/api/v1/runs/:runId/decisions')
+      expect(message).toContain('POST /api/v1/jobs/:id/cancel')
+    })
+
+    it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {
+      const message = parkingRefusalMessage({
+        agentKinds: ['requirements-review', 'initiative-breakdown'],
+        gates: [false, true],
+      })
+      expect(message).toContain(
+        "Start it with a 'decide'-scope key, which can answer requirements-review through /api/v1/runs/:runId/decisions.",
+      )
+      expect(message).toContain('cannot answer approval-gate yet')
+    })
+
+    it('mentions no cancel-only caveat when every park is answerable', () => {
+      const message = parkingRefusalMessage({ agentKinds: ['requirements-review'] })
+      expect(message).toContain('/api/v1/runs/:runId/decisions')
+      expect(message).not.toContain('cancel')
+    })
+
+    it('never claims an answer path for a surface outside the answerable set', () => {
+      // The drift guard. Landing a slice of docs/initiatives/public-api-additions.md means adding
+      // a member to PUBLICLY_ANSWERABLE_PARK_SURFACES; until then no message may advertise one.
+      for (const kind of PARKING_INLINE_KINDS) {
+        const message = parkingRefusalMessage({ agentKinds: [kind] })
+        expect(message.includes('/api/v1/runs/:runId/decisions'), kind).toBe(
+          PUBLICLY_ANSWERABLE_PARK_SURFACES.has(kind),
+        )
+      }
     })
   })
 
