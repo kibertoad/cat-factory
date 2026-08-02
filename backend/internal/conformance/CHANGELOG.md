@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.20.5
+
+### Patch Changes
+
+- Updated dependencies [be7135c]
+  - @cat-factory/server@0.191.1
+
 ## 0.20.4
 
 ### Patch Changes
