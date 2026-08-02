@@ -1,12 +1,11 @@
 import type {
-  BootstrapFailure,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseAgentFailure } from '@cat-factory/server'
 import { chunkForIn } from './chunk'
 
 /**
@@ -41,22 +40,6 @@ interface BootstrapDetail {
   repoOwner: string | null
   repoUrl: string | null
   instructions: string
-}
-
-/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
-function parseFailure(raw: string | null): BootstrapFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as BootstrapFailure
-    // LEGACY: drop a failure carrying a removed kind (e.g. `decision_timeout`); the obsolete
-    // value would fail the contract picklist and brick the snapshot. Remove after 2026-07-15.
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -98,7 +81,7 @@ function rowToRecord(row: AgentRunRow): BootstrapJobRecord {
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseAgentFailure(row.failure ?? null),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

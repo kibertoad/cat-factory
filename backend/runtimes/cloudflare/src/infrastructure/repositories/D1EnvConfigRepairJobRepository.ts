@@ -1,5 +1,4 @@
 import type {
-  AgentFailure,
   EnvConfigRepairJobRecord,
   EnvConfigRepairJobRecordPatch,
   EnvConfigRepairJobRepository,
@@ -7,7 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseAgentFailure } from '@cat-factory/server'
 
 /**
  * A row of the unified `agent_runs` table. This repository owns only the
@@ -42,20 +41,6 @@ interface EnvConfigRepairDetail {
   issues: RepoValidationIssue[]
   /** The original bootstrap form inputs, kept so a retry re-dispatches the same prompt. */
   inputs: Record<string, string> | null
-}
-
-/** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
-function parseFailure(raw: string | null): AgentFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as AgentFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -99,7 +84,7 @@ function rowToRecord(row: AgentRunRow): EnvConfigRepairJobRecord {
     inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseAgentFailure(row.failure ?? null),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

@@ -1,5 +1,4 @@
 import type {
-  BootstrapFailure,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
@@ -8,7 +7,7 @@ import type {
   ReferenceArchitectureRepository,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseAgentFailure } from '@cat-factory/server'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { agentRuns, blocks, referenceArchitectures } from '../db/schema.js'
@@ -144,21 +143,6 @@ interface BootstrapDetail {
   instructions: string
 }
 
-function parseFailure(raw: string | null): BootstrapFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as BootstrapFailure
-    // LEGACY: drop a failure carrying a removed kind (e.g. `decision_timeout`); the obsolete
-    // value would fail the contract picklist and brick the snapshot. Remove after 2026-07-15.
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
-}
-
 function parseDetail(raw: string): BootstrapDetail {
   try {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
@@ -197,7 +181,7 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     blockId: row.block_id ?? null,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseAgentFailure(row.failure ?? null),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
