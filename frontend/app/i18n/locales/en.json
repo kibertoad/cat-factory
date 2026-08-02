@@ -5554,6 +5554,7 @@
       "synced": "Synced: {updated} updated, {removed} removed",
       "syncSkipped": "{count} file looked like a contract but could not be used. | {count} files looked like contracts but could not be used.",
       "syncTruncated": "The folder holds more than one sync can take, so only part of it was read.",
+      "syncFolderMissing": "The linked folder is not in the repository. Check the path, or relink the source if it moved.",
       "syncFailed": "Could not sync the repo",
       "changesAvailable": "Changes available upstream",
       "upToDate": "Already up to date",

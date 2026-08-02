@@ -4346,6 +4346,7 @@
       "synced": "Synchronisiert: {updated} aktualisiert, {removed} entfernt",
       "syncSkipped": "{count} Datei sah wie ein Vertrag aus, war aber nicht verwendbar. | {count} Dateien sahen wie Verträge aus, waren aber nicht verwendbar.",
       "syncTruncated": "Der Ordner enthält mehr, als eine Synchronisierung aufnehmen kann; es wurde nur ein Teil gelesen.",
+      "syncFolderMissing": "Der verknüpfte Ordner ist nicht im Repository vorhanden. Prüfe den Pfad oder verknüpfe die Quelle neu, falls er verschoben wurde.",
       "syncFailed": "Repo konnte nicht synchronisiert werden",
       "changesAvailable": "Stromaufwärts liegen Änderungen vor",
       "upToDate": "Bereits aktuell",

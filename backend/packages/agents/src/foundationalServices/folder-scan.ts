@@ -1,3 +1,4 @@
+import type { FolderScanCoverage } from '@cat-factory/contracts'
 import type { RepoContentEntry } from '@cat-factory/kernel'
 import { isContractCandidatePath } from '@cat-factory/kernel'
 import pMap from 'p-map'
@@ -41,6 +42,20 @@ export const MAX_FOLDER_CONTRACT_FILES = 100
  */
 export const FOLDER_SCAN_CONCURRENCY = 8
 
+/**
+ * How large a candidate file may be before the walk declines to read it.
+ *
+ * Pinned to the host contents API's own ceiling rather than chosen freely: above 1 MiB GitHub
+ * answers a file read with EMPTY content, so fetching one can only ever cost a round trip and
+ * produce a skip. Declining it up front turns that into a reported skip with no read, and keeps
+ * a multi-megabyte document out of the YAML parser on the runtimes that do return it.
+ *
+ * A cap on the WALK, not on what a contract may be: `files` and `directory` sources name their
+ * documents, so nobody is protected from a file they asked for by name. It is the unbounded
+ * discovery that needs a bound.
+ */
+export const MAX_FOLDER_CONTRACT_FILE_BYTES = 1024 * 1024
+
 /** Lists one repo directory at the scan's pinned ref. */
 export type ListRepoDirectory = (path: string) => Promise<RepoContentEntry[]>
 
@@ -60,6 +75,8 @@ interface DirectoryYield {
   manifestPath: string | null
   /** A subdirectory was refused for sitting past {@link MAX_FOLDER_SCAN_DEPTH}. */
   depthCapped: boolean
+  /** Candidates declined unread for exceeding {@link MAX_FOLDER_CONTRACT_FILE_BYTES}. */
+  oversize: number
 }
 
 /**
@@ -79,6 +96,7 @@ function readDirectoryListing(
   const children: ScanDirectory[] = []
   let manifestPath: string | null = null
   let depthCapped = false
+  let oversize = 0
   // Code-unit order, locale-independent — the same rule the `directory` reconcile sorts by, so
   // neither walk's outcome depends on ICU collation.
   const sorted = [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
@@ -89,7 +107,16 @@ function readDirectoryListing(
         manifestPath = entry.path
         continue
       }
-      if (isContractCandidatePath(entry.path)) files.push(entry.path)
+      if (!isContractCandidatePath(entry.path)) continue
+      // A size the listing does not carry is not a size we may assume is over the cap: the
+      // read still has to happen, and an oversized body then reads back empty and is skipped
+      // there. Declining on an ABSENT size would silently drop contracts on any host whose
+      // listing omits it.
+      if (entry.size !== undefined && entry.size > MAX_FOLDER_CONTRACT_FILE_BYTES) {
+        oversize++
+        continue
+      }
+      files.push(entry.path)
       continue
     }
     if (entry.type !== 'dir' || !recursive) continue
@@ -102,7 +129,7 @@ function readDirectoryListing(
     }
     children.push({ path: entry.path, depth: dir.depth + 1 })
   }
-  return { files, children, manifestPath, depthCapped }
+  return { files, children, manifestPath, depthCapped, oversize }
 }
 
 export interface FolderScanResult {
@@ -111,11 +138,17 @@ export interface FolderScanResult {
   /** The OPTIONAL `service.md` sitting at the folder root, if there is one. */
   manifestPath: string | null
   /**
-   * A cap stopped the walk short, so {@link paths} is a PREFIX of what the folder holds. The
-   * caller reports it; it is deliberately NOT treated as a transient failure, because a
-   * re-read would truncate identically and the source would never look caught up.
+   * How much of the folder this walk saw. The caller BRANCHES on it, because "found no
+   * candidates" means opposite things depending on whether the walk finished: see the
+   * reconcile's three-way disposition.
    */
-  truncated: boolean
+  coverage: FolderScanCoverage
+  /**
+   * Candidates the walk declined to read at all (too large — {@link
+   * MAX_FOLDER_CONTRACT_FILE_BYTES}). Reported so a cap never drops a file in silence; the
+   * caller folds it into the sync's skipped count beside the files that failed on their bodies.
+   */
+  skippedCandidates: number
 }
 
 /**
@@ -140,6 +173,12 @@ export async function scanContractFolder(params: {
   let manifestPath: string | null = null
   let truncated = false
   let listings = 0
+  let skippedCandidates = 0
+  // Git cannot represent an empty directory, so a root that lists NOTHING is a root that is not
+  // there — the host answers a missing path with an empty listing rather than an error. That
+  // makes this the one observation separating "the folder holds no contracts" from "the folder
+  // is gone", which the caller must tell apart to know whether retiring the service is warranted.
+  let rootIsEmpty = false
 
   // One LEVEL at a time. The listings within a level are independent of each other, so they run
   // concurrently; the level boundary is what keeps the walk breadth-first, and therefore keeps
@@ -164,9 +203,11 @@ export async function scanContractFolder(params: {
 
     const next: ScanDirectory[] = []
     for (const { dir, entries } of listed) {
+      if (dir.depth === 0 && entries.length === 0) rootIsEmpty = true
       const yielded = readDirectoryListing(dir, entries, recursive)
       if (yielded.manifestPath) manifestPath = yielded.manifestPath
       if (yielded.depthCapped) truncated = true
+      skippedCandidates += yielded.oversize
       for (const file of yielded.files) {
         if (paths.length >= MAX_FOLDER_CONTRACT_FILES) {
           truncated = true
@@ -182,5 +223,13 @@ export async function scanContractFolder(params: {
   // prefix — say so rather than letting a full-looking list stand for a partial folder.
   if (frontier.length > 0 && paths.length >= MAX_FOLDER_CONTRACT_FILES) truncated = true
 
-  return { paths, manifestPath, truncated }
+  // `missing` outranks `truncated` because it cannot co-occur with it in any real walk: an
+  // absent root queues no children, so nothing is left for a cap to refuse. Stating the
+  // precedence anyway keeps the invariant on the page rather than in the reader's head.
+  const coverage: FolderScanCoverage = rootIsEmpty
+    ? 'missing'
+    : truncated
+      ? 'truncated'
+      : 'complete'
+  return { paths, manifestPath, coverage, skippedCandidates }
 }

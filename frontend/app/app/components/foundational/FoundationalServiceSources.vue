@@ -15,6 +15,7 @@
 // and browses to a path; otherwise the manual owner/name fields are the fallback.
 import { computed, reactive, ref, watch } from 'vue'
 import type {
+  FolderScanCoverage,
   FoundationalServiceOwnerKind,
   FoundationalServiceSourceMode,
   GitHubAvailableRepo,
@@ -93,6 +94,19 @@ const modeHints = computed<Record<FoundationalServiceSourceMode, string>>(() => 
   directory: t('foundational.sources.mode.directoryHint'),
   folder: t('foundational.sources.mode.folderHint'),
   files: t('foundational.sources.mode.filesHint'),
+}))
+
+/**
+ * What a folder scan's coverage adds to the sync toast, or null when there is nothing to say.
+ *
+ * An exhaustive Record over the union rather than an `if` per state: `complete` having no note
+ * is then a written-down decision, and a fourth coverage value fails to compile until someone
+ * decides whether it needs one.
+ */
+const folderScanNotes = computed<Record<FolderScanCoverage, string | null>>(() => ({
+  complete: null,
+  truncated: t('foundational.toast.syncTruncated'),
+  missing: t('foundational.toast.syncFolderMissing'),
 }))
 
 /** Both single-service modes name their service on the link; only `files` enumerates paths. */
@@ -185,7 +199,8 @@ async function sync(id: string) {
         notes.push(
           t('foundational.toast.syncSkipped', { count: result.skippedFiles }, result.skippedFiles),
         )
-      if (result.truncated) notes.push(t('foundational.toast.syncTruncated'))
+      const coverage = result.folderScan ? folderScanNotes.value[result.folderScan] : null
+      if (coverage) notes.push(coverage)
       toast.add({
         title: t('foundational.toast.synced', {
           updated: result.upserted,
@@ -193,7 +208,9 @@ async function sync(id: string) {
         }),
         ...(notes.length ? { description: notes.join(' ') } : {}),
         icon: 'i-lucide-refresh-cw',
-        color: result.truncated ? 'warning' : 'info',
+        // A folder we could not fully see, or could not find at all, is the one sync outcome a
+        // human has to act on — the counts alone would read as an ordinary quiet success.
+        color: coverage ? 'warning' : 'info',
       })
     } catch (e) {
       notifyError(t('foundational.toast.syncFailed'), e)

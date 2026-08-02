@@ -275,6 +275,35 @@ export type LinkFoundationalServiceSourceInput = v.InferOutput<
   typeof linkFoundationalServiceSourceSchema
 >
 
+/**
+ * How much of a `folder` source's folder its walk actually covered.
+ *
+ * A DISCRIMINATED value rather than a pair of booleans, because the three states are mutually
+ * exclusive and each needs a different fix from whoever linked the source: nothing (re-point the
+ * link), a prefix (narrow the folder or split the service), or all of it (nothing to do). They
+ * also carry different dispositions inside the sync — see the reconcile — so a shape that could
+ * express two of them at once would be a shape that can lie.
+ */
+export const folderScanCoverageSchema = v.picklist([
+  /** The walk saw the whole folder. */
+  'complete',
+  /**
+   * A scan CAP stopped the walk short (depth, directories visited, or contract files taken), so
+   * the contract set is a PREFIX of what the folder holds. Never a transient: a truncated pass
+   * that still produced contracts pins its commit, because re-reading would truncate identically
+   * and the source would never look caught up.
+   */
+  'truncated',
+  /**
+   * The folder itself is not there. Git cannot represent an empty directory, so a root listing
+   * with no entries at all means the path is absent upstream — renamed, deleted, or mistyped at
+   * link time — rather than an empty spec folder. Reported separately precisely because the two
+   * read identically (zero contracts) and need opposite reactions from a human.
+   */
+  'missing',
+])
+export type FolderScanCoverage = v.InferOutput<typeof folderScanCoverageSchema>
+
 /** Outcome of resyncing a source: counts of changed/removed/unchanged services. */
 export const foundationalServiceSyncResultSchema = v.object({
   upserted: v.number(),
@@ -290,12 +319,11 @@ export const foundationalServiceSyncResultSchema = v.object({
    */
   skippedFiles: v.number(),
   /**
-   * True when a scan CAP stopped a `folder` source's walk short (depth, directories visited, or
-   * contract files taken), so the contract set is a prefix of what the folder holds rather than
-   * all of it. Never a transient: a truncated pass still pins its commit, because re-reading
-   * would truncate identically and the source would never look caught up.
+   * How much of the folder a `folder` source's walk covered, or NULL for the modes that run no
+   * walk at all. Null is a real third answer rather than a stand-in for `complete`: a `files`
+   * source did not scan a folder completely, it never scanned one.
    */
-  truncated: v.boolean(),
+  folderScan: v.nullable(folderScanCoverageSchema),
 })
 export type FoundationalServiceSyncResult = v.InferOutput<
   typeof foundationalServiceSyncResultSchema

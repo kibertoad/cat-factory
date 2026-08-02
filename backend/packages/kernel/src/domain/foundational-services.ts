@@ -87,18 +87,54 @@ const CONTRACT_MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
 const OPENAPI_DOCUMENT_EXTENSIONS = ['.json', '.yaml', '.yml', '.openapi']
 
 /**
- * Whether a path's EXTENSION could yield a contract format at all — the half of
+ * Basenames that carry a contract EXTENSION but are never served as contracts: the package,
+ * lockfile and compiler manifests every repository root holds.
+ *
+ * Without this the extension test alone is nearly useless at a repo root, where `.json` and
+ * `.yaml` describe dependencies far more often than APIs. Two costs follow, and the second is
+ * the one that bites: a folder scan's file budget is spent on manifests before the walk ever
+ * descends to the specs, so the cap falls on exactly the documents the link exists to serve —
+ * and `skippedFiles` then reports a number that restates the repo's contents instead of
+ * explaining a thin catalog entry.
+ *
+ * Deliberately TIGHT. Everything here is a file whose name is fixed by a package manager or a
+ * compiler, so no repository can mean an API contract by it; anything repo-specific is left to
+ * the content check, which is the real boundary. Extending this list is a decision about what
+ * we SERVE, not a heuristic — a file named `package.json` is not offered as an API contract
+ * even in the absurd case that its bytes parse as one.
+ */
+const NON_CONTRACT_BASENAMES = new Set([
+  'package.json',
+  'package-lock.json',
+  'npm-shrinkwrap.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'composer.json',
+  'deno.json',
+  'jsconfig.json',
+])
+
+/** `tsconfig.json` and every `tsconfig.<variant>.json` a monorepo package carries. */
+const TSCONFIG_BASENAME = /^tsconfig(\..+)?\.json$/
+
+/**
+ * Whether a path could yield a contract format at all — the half of
  * {@link detectContractFormat} that is decidable without the body.
  *
  * A folder-mode repo source walks directories nobody enumerated by hand, so without this it
  * would fetch every README, lockfile and image in the subtree only to learn each is not a
  * contract. This keeps a scan's file reads proportional to the CANDIDATES rather than to the
- * folder's size. It is derived from the same two extension lists `detectContractFormat`
- * branches on, so the two cannot drift: a candidate may still be rejected on its content, but a
- * non-candidate can never be a contract.
+ * folder's size.
+ *
+ * The extension half is derived from the same two lists `detectContractFormat` branches on, so
+ * the two cannot drift. The basename half ({@link NON_CONTRACT_BASENAMES}) is definitional
+ * rather than derived: a candidate may still be rejected on its content, and a non-candidate is
+ * never a contract we serve.
  */
 export function isContractCandidatePath(path: string): boolean {
   const lower = path.toLowerCase()
+  const base = lower.split('/').pop() ?? lower
+  if (NON_CONTRACT_BASENAMES.has(base) || TSCONFIG_BASENAME.test(base)) return false
   return (
     endsWithAny(lower, CONTRACT_MODULE_EXTENSIONS) ||
     endsWithAny(lower, OPENAPI_DOCUMENT_EXTENSIONS)

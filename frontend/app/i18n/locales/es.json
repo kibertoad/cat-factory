@@ -5305,6 +5305,7 @@
       "synced": "Sincronizado: {updated} actualizados, {removed} eliminados",
       "syncSkipped": "{count} archivo parecía un contrato pero no se pudo usar. | {count} archivos parecían contratos pero no se pudieron usar.",
       "syncTruncated": "La carpeta contiene más de lo que cabe en una sincronización, así que solo se leyó una parte.",
+      "syncFolderMissing": "La carpeta enlazada no está en el repositorio. Revisa la ruta o vuelve a enlazar la fuente si se movió.",
       "syncFailed": "No se pudo sincronizar el repositorio",
       "changesAvailable": "Hay cambios en el origen",
       "upToDate": "Ya está actualizado",

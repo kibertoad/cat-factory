@@ -37,8 +37,25 @@ export interface ParsedServiceManifest extends ParsedServiceOverview {
  * Architect's catalog with a service that has contracts and nothing saying what it is for.
  */
 export function parseServiceOverview(content: string): ParsedServiceOverview {
+  return overviewOf(splitManifest(content))
+}
+
+/** A `service.md` split once into the two halves both parsers read. */
+interface SplitManifest {
+  meta: Record<string, unknown>
+  body: string
+}
+
+/**
+ * Split and parse a manifest ONCE. Both entry points below need the frontmatter and the body,
+ * and the name-checking one used to re-split the document to reach the overview.
+ */
+function splitManifest(content: string): SplitManifest {
   const { frontmatter, body } = splitFrontmatter(content)
-  const meta = parseSimpleYaml(frontmatter)
+  return { meta: parseSimpleYaml(frontmatter), body }
+}
+
+function overviewOf({ meta, body }: SplitManifest): ParsedServiceOverview {
   return {
     summary: str(meta.summary) || str(meta.description),
     capabilities: strList(meta.capabilities),
@@ -56,10 +73,10 @@ export function parseServiceOverview(content: string): ParsedServiceOverview {
  * rather than two rows silently claiming the same id from different folders.
  */
 export function parseServiceManifest(content: string): ParsedServiceManifest | null {
-  const { frontmatter } = splitFrontmatter(content)
-  const name = str(parseSimpleYaml(frontmatter).name)
+  const split = splitManifest(content)
+  const name = str(split.meta.name)
   if (!name) return null
-  const overview = parseServiceOverview(content)
+  const overview = overviewOf(split)
   return { ...overview, name, summary: overview.summary || name }
 }
 

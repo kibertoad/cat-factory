@@ -5305,6 +5305,7 @@
       "synced": "Synchronisé : {updated} mis à jour, {removed} retirés",
       "syncSkipped": "{count} fichier ressemblait à un contrat mais n'a pas pu être utilisé. | {count} fichiers ressemblaient à des contrats mais n'ont pas pu être utilisés.",
       "syncTruncated": "Le dossier contient plus que ce qu'une synchronisation peut prendre : seule une partie a été lue.",
+      "syncFolderMissing": "Le dossier lié n'existe pas dans le dépôt. Vérifiez le chemin, ou reliez la source si elle a été déplacée.",
       "syncFailed": "Impossible de synchroniser le dépôt",
       "changesAvailable": "Des changements sont disponibles en amont",
       "upToDate": "Déjà à jour",
