@@ -1,5 +1,105 @@
 # @cat-factory/server
 
+## 0.191.0
+
+### Minor Changes
+
+- 73708cf: Close three of the gaps `backend/docs/security-model.md` lists against the agent write path.
+
+  **`allowInitiatorPat` turns "govern your members' PATs" from advice into an enforced control, at
+  two tiers.** A run's initiator's stored personal token outranks the deployment credential, and its
+  scope is whatever that person granted it — so the blast radius of a compromised run was a property
+  of whoever pressed start. Off, every run authenticates as the App installation and the initiator's
+  token is never decrypted. All three mint sites (both facades' container dispatch and the engine's
+  GitHub client) now route through one `createResolveRunInitiatorToken` decision, and an unreadable
+  settings row fails closed to the App token.
+
+  The per-workspace switch is edited with `settings.manage`, which a member elevated on one board
+  holds — so it alone could not bind the case it exists for. An **account-wide floor** sits under it:
+  effective = account permits AND workspace permits, with the account tier out of a board admin's
+  reach. It ships UNSET, and that default is load-bearing rather than merely cautious — a personal
+  token is the right credential for someone adopting cat-factory alone inside an org that has not,
+  where there is no App installation to inherit and no account admin to ask. PAT support is
+  unchanged for them.
+
+  **A stored GitHub PAT's breadth is stated when it is tested or saved.** A classic token carrying
+  `repo` is called out as reaching every repository its owner can push to; unused scopes are flagged;
+  a token whose scopes GitHub does not report is reported as unknown rather than passing as narrow.
+
+  **A branch-protection preflight says where the operator checklist's first item is missing.** On
+  demand, the GitHub settings panel probes each linked repository's default branch and reports three
+  states — a repo it could not reach is `unknown`, not "fine" — plus whether a protected branch's rule
+  was actually readable, and how many repositories a probe cap left unchecked. It answers to
+  `integrations.manage` and probes with bounded concurrency: unlike its sibling reads it spends the
+  installation's GitHub rate limit, which the CI gate and the merger draw on for every run.
+
+  It reads **rulesets as well as classic branch protection**. Rulesets are how protection is enforced
+  org-wide and leave no classic rule behind, so a legacy-only probe reported the best-configured
+  repositories as exposed — a false alarm on a panel whose only job is naming exposed ones. The rules
+  endpoint also needs no admin, so a minimally-scoped App installation now gets real detail where it
+  previously got `detailUnavailable`.
+
+  The operator checklist now names **GitHub's own org-level PAT controls first**, since they bind
+  every tool a member uses and cannot be undone by them — with the caveat that they are the wrong
+  instrument for individual adoption, which is what ours are for. The residual-gaps list records
+  GitHub App **user-to-server tokens** as the structural fix for an unbounded initiator token
+  (`auth/GitHubOAuth.ts` already implements that flow for login), so the next iteration does not
+  re-derive "a PAT cannot be narrowed" as permanent.
+
+  BREAKING for anything constructing these directly: `RunInitiatorScope` now takes a
+  `{ workspaceId, initiatedBy }` scope rather than a bare user id, `MintInstallationToken`'s run
+  context carries `workspaceId`, and `PatPreferringAppRegistry` takes the composed token decision
+  instead of a raw `ResolveUserGitHubToken`. `currentInitiator()` is removed in favour of
+  `currentCredentialScope()`.
+
+- 876ee2d: Foundational services gain a deployment tier, honest operation indexing, and set-level contract
+  validation.
+
+  A deployment can now register its shared-capability estate in CODE, on the app-owned
+  `FoundationalServiceRegistry` injected like `PipelineRegistry` / `TaskTypeRegistry`. Registrations
+  resolve as the catalog's lowest-precedence `builtin` tier — no rows, so they are present from a
+  workspace's first request and cannot drift from the definitions — and are validated at boot against
+  the same schema and document checks the REST write boundary applies. An account or workspace row of
+  the same id still wins, and either tier can suppress an inherited service: the suppression
+  sub-resource is now mounted at BOTH scopes, since an account inherits the deployment tier exactly as
+  a board inherits its account's.
+
+  A contract set is validated as a SET rather than per document: a set declared as a TypeScript
+  contract format must contain at least one document referencing that library, so the schema modules a
+  contract imports can be registered as what they are. A `files`-mode repo source does the same for
+  the modules its link explicitly names; folder and directory scans are unchanged.
+
+  Contract MODULE operations are indexed. A `@toad-contracts/core` module is read statically
+  (`method` + a literal/template `pathResolver`), and what the extractor could not read is reported
+  through `omittedOperations` rather than passing as a complete list. Where a format is not read at
+  all, that is now stated instead of rendering as "declares no operations".
+
+  Kernel gains `isContractModulePath`, so a caller asking whether a file could be part of a contract
+  module GRAPH reads the same extension list `detectContractFormat` branches on instead of declaring
+  its own.
+
+  The enforced capability tags (`asset-storage`, `generation-context`) moved to
+  `@cat-factory/contracts` so registrants and the SPA import the same vocabulary, and the write
+  boundary refuses a tag that misses one by case or separators.
+
+  Breaking, and deliberate: the merged catalog read (`GET /workspaces/:ws/foundational-services/resolved`)
+  no longer carries `ownerKind`, `sourceId`, `sourcePath`, `pinnedCommit`, `createdAt` or `updatedAt` —
+  a `builtin` entry has none of them, and filling them with placeholders would read as fact. Those
+  fields remain on the per-tier management read. Existing stored `toad-contract` rows keep their empty
+  operation index until their next upload or repo sync re-indexes them.
+
+### Patch Changes
+
+- Updated dependencies [73708cf]
+- Updated dependencies [876ee2d]
+  - @cat-factory/contracts@0.210.0
+  - @cat-factory/kernel@0.210.0
+  - @cat-factory/integrations@0.115.0
+  - @cat-factory/orchestration@0.183.0
+  - @cat-factory/agents@0.102.0
+  - @cat-factory/prompt-fragments@0.15.34
+  - @cat-factory/spend@0.12.141
+
 ## 0.190.3
 
 ### Patch Changes
