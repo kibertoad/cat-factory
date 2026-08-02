@@ -110,5 +110,22 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,
   `GitHubPullRequestMerger`, `GitHubBranchUpdater`, and `GitHubPrReportPublisher` (upserts the
   verification report as a marker-delimited region of the PR description).
+  - The client is at a ratcheting size budget, so cohesive concerns live BESIDE it and it keeps a
+    thin delegate. Each takes the client's bound `request` rather than the client itself, which is
+    also what makes them testable without a client: `reviewPosting.ts` + `reviewThreads.ts` (the
+    REST and GraphQL halves of PR review), `searchApi.ts`, `branchProtection.ts` (the
+    security-preflight probe + the required-approvals lookup — together because they read the SAME
+    resource and must not learn failure modes separately), `viewerTokenReads.ts` (the CALLER-token
+    repo reads behind the personal-PAT picker; mints, caches and rate-limit-accounts nothing), and
+    `githubHttpHelpers.ts` (`GitHubApiError` + the shared request constants).
+  - `github/runInitiatorToken.ts` is the ONE answer to "does this run act with its initiator's own
+    token, or the deployment credential?" — asked by `PatPreferringAppRegistry` (the engine client)
+    and by both facades' container-dispatch mints, so an opted-out workspace cannot be honoured on
+    one path and missed on another. It reads the two-tier `allowInitiatorPat` policy through
+    kernel's `createInitiatorPatGate` and **fails CLOSED** on an unreadable one.
+    `runInitiatorContext.ts` is the AsyncLocalStorage scope that carries the run's
+    `{ workspaceId, initiatedBy }` to it without threading a user id through the context-free VCS
+    ports, and memoizes the whole decision per scope (one probe boundary re-mints per request).
+    See `backend/docs/security-model.md`.
 
 **See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Multi-runtime facades", "Conventions".

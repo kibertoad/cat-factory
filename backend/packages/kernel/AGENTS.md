@@ -100,6 +100,18 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})` — keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `shared/initiator-pat-gate.ts` — **`createInitiatorPatGate`**, the two-tier `allowInitiatorPat`
+  policy: may a RUN authenticate as its initiator's own personal access token instead of the
+  deployment credential? Effective = the ACCOUNT permits AND the WORKSPACE permits, and the tiers
+  are not redundant — the workspace switch is edited with `settings.manage`, which a member
+  elevated on one board holds, so only the account tier binds the case the control exists for.
+  Both defaults are permissive, deliberately: a personal token is the right credential for someone
+  adopting cat-factory alone inside an org that has not. The sibling of
+  `shared/agent-context-gate.ts`, and for the same reason — the rule is asked from three mint
+  sites, and three copies are three chances to miss an opt-out. It does NOT catch: the caller
+  (`createResolveRunInitiatorToken` in `@cat-factory/server`) fails closed, because an unreadable
+  policy is not permission to widen a run's credential. See
+  [`backend/docs/security-model.md`](../../docs/security-model.md).
 - `domain/errors.ts` — the **`DomainError` hierarchy**, the whole vocabulary a service may raise
   toward the wire: `NotFoundError` (404), `ValidationError` (422), `ConflictError` (409),
   `CredentialRequiredError` (428), `ForbiddenError` (403), `UnauthorizedError` (401),
