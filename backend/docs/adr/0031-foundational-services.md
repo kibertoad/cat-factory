@@ -45,15 +45,20 @@ edits the link, while a `folder` link re-discovers the set on every sync. Pointi
 therefore the right shape for a spec directory that grows, and naming files is the right shape for
 picking two documents out of a repo that is mostly something else.
 
-A `folder` source's walk is BOUNDED (depth, directories listed, contract files taken) and
-breadth-first over name-sorted listings, which buys two properties at once: the result is
-deterministic across syncs, so a truncated scan keeps the same contracts rather than flapping, and
-the cap falls on the deepest, least-specific files rather than on a root-level `openapi.yaml`. A
-truncation is REPORTED on the sync result (`truncated`) and is deliberately not treated as a
-transient failure — holding the pinned commit back would make the next pass truncate identically
-while the source looked permanently behind. Beside it, `skippedFiles` counts documents that LOOKED
-like contracts (an OpenAPI or contract-module extension) and were not usable; a file with no
-contract extension is never read and never counted, so the number explains a thin catalog entry
+A `folder` source's walk is BOUNDED (depth, directories listed, contract files taken, and the size
+of any one file) and breadth-first over name-sorted listings, which buys two properties at once: the
+result is deterministic across syncs, so a truncated scan keeps the same contracts rather than
+flapping, and the cap falls on the deepest, least-specific files rather than on a root-level
+`openapi.yaml`.
+
+How much of the folder the walk covered is REPORTED on the sync result as `folderScan`, one of
+`complete` / `truncated` / `missing` (null for the modes that walk nothing — a `files` source did
+not scan a folder completely, it never scanned one). It is a discriminated value rather than a pair
+of booleans because the three states are mutually exclusive, each needs a different fix from
+whoever linked the source, and each carries a different disposition inside the sync (below).
+Beside it, `skippedFiles` counts documents that LOOKED like contracts and were not usable; a file
+that could never be one — no contract extension, or a package/lockfile/compiler manifest whose name
+is fixed by a tool — is never read and never counted, so the number explains a thin catalog entry
 instead of restating the folder's contents. Contract ids inside a `folder` source are derived from
 the path RELATIVE to the folder root (`v1/users.yaml` → `v1-users`), because a recursive scan is
 exactly where the basename rule collapses `v1/users.yaml` and `v2/users.yaml` onto one id and
@@ -222,19 +227,42 @@ Gotchas the implementation surfaced, each now pinned by a test:
   directory**, so a dozen linked files still cost ONE cheap read per freshness check. A `folder`
   source anchors on the folder itself, so a whole recursive subtree costs the same single read —
   and the walk only runs at all once that read says the commit moved.
-- **A `folder` source distinguishes an EMPTY folder from a folder it failed to read**, and the two
-  dispositions are opposite. Candidates were found and none of them was usable ⇒ transient: keep the
-  prior row alive and leave the pinned commit behind so the next pass re-reads, the same disposition
-  `files` mode takes and for the same reason. NOTHING under the folder even looked like a contract
-  ⇒ stable: pin normally and let the sweep retire the service, exactly as a directory that lost its
-  `service.md` is retired. Conflating them is not a cosmetic error — an ordinary empty spec folder
-  would never pin, so every sweep would re-walk the whole subtree to reach the same answer while
-  the source reported changes upstream forever. That is why the test for "is this a failure?" is
-  whether the SCAN found candidates, not whether the reconcile produced contracts. `files` mode can
-  reuse the simpler rule only because its link is validated to carry at least one path.
-- **A TRUNCATION pins normally too**: like an empty folder it is stable rather than transient, so
+- **A `folder` source's zero-contract pass splits on whether it has EVIDENCE about the folder**,
+  never on the empty result the states share. Three reach that point and the disposition is not the
+  same for all of them.
+  - The walk saw the whole folder (`complete`) or the folder is not there (`missing`), and nothing
+    under it even looked like a contract ⇒ STABLE: pin normally and let the sweep retire the
+    service, exactly as a directory that lost its `service.md` is retired. Treating this as a
+    failure is not a cosmetic error — an ordinary empty spec folder would never pin, so every
+    sweep would re-walk the whole subtree to reach the same answer while the source reported
+    changes upstream forever.
+  - Candidates were found and none was usable ⇒ TRANSIENT: keep the prior row alive and leave the
+    pinned commit behind so the next pass re-reads, the same disposition `files` mode takes and
+    for the same reason.
+  - A cap stopped the walk BEFORE it reached any candidate (`truncated` with nothing found) ⇒
+    TRANSIENT as well, and this is the one the obvious rule gets wrong. "Found no candidates" is
+    then a statement about the WALK, not about the folder: a recursive link over a wide tree whose
+    specs sit below the visited prefix would otherwise retire a live service on the strength of
+    directories we declined to list, and pin the commit so it stayed retired.
+
+  So the test is whether the walk had the COVERAGE to conclude anything, not merely whether it
+  produced contracts. `files` mode can reuse the simpler rule only because its link is validated to
+  carry at least one path.
+
+- **A TRUNCATION that produced contracts pins normally**: it is stable rather than transient, so
   holding the commit back would make the next pass truncate identically while the source looked
-  permanently behind.
+  permanently behind. Only the ABSENCE of evidence (above) is transient.
+- **`missing` is observable only because git cannot store an empty directory.** A host answers a
+  listing of a path that is not there with an empty listing rather than an error, so an empty ROOT
+  listing means the folder is gone — renamed, deleted, or mistyped at link time — while an empty
+  folder is not a state a repository can even be in. Reported apart from `complete` because the two
+  read identically (zero contracts) and need opposite reactions from a human: add specs, or fix the
+  link. The same claim is made one step earlier for a link that has NEVER synced, where the
+  head-commit probe finds no commit for the path at all and the walk never runs — without that,
+  a mistyped folder syncs "successfully" forever.
+- **A folder scan's coverage is the only standing signal an autorefresh leaves**, since the sweep
+  discards the sync result. Both non-`complete` outcomes are therefore logged with the fix they
+  need; a manual resync also surfaces them on the SPA's toast.
 - **A directory that loses its `service.md` retires the service it described**, but a manifest that
   reads back unparseable this round keeps the prior row alive AND leaves the pinned commit behind,
   so the next pass re-reads it. Retiring a service over a transient read would silently strip a

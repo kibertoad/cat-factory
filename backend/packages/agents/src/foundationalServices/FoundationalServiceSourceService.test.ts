@@ -10,7 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FoundationalServiceSourceService } from './FoundationalServiceSourceService.js'
-import { MAX_FOLDER_CONTRACT_FILES } from './folder-scan.js'
+import { MAX_FOLDER_CONTRACT_FILES, MAX_FOLDER_SCAN_DIRECTORIES } from './folder-scan.js'
 
 // Coverage for the `folder` source mode (backend/docs/adr/0031-foundational-services.md): the
 // whole of one folder — optionally its subfolders — is ONE service's contract set, rediscovered
@@ -195,10 +195,12 @@ describe('FoundationalServiceSourceService — folder mode', () => {
     const github = fakeGitHub({
       'specs/openapi.yaml': { sha: 'a', content: OPENAPI('Billing', '/invoices') },
       'specs/events.ts': { sha: 'b', content: "import { x } from '@toad-contracts/core'" },
-      // Neither is a contract document: one has no contract extension (never read at all), the
-      // other has one but does not parse as anything we can serve.
+      // None of these is a contract document, and they are dropped at three different points:
+      // the README by extension, `tsconfig.json` by basename (both before any read), and
+      // `settings.json` only once its body turns out to be nothing we can serve.
       'specs/README.md': { sha: 'c', content: '# Billing' },
       'specs/tsconfig.json': { sha: 'd', content: '{"compilerOptions":{}}' },
+      'specs/settings.json': { sha: 'e', content: '{"retries":3}' },
     })
     const { service, services, contracts } = makeService(github)
     const source = await service.link('account', 'acct1', link)
@@ -206,11 +208,13 @@ describe('FoundationalServiceSourceService — folder mode', () => {
     const result = await service.sync('account', 'acct1', source.id)
 
     expect(result.upserted).toBe(1)
-    // Only `tsconfig.json` is counted: it LOOKED like a contract and was not one. The README is
-    // never read, so it is neither a cost nor a reported loss.
+    // Only `settings.json` is counted: it LOOKED like a contract and was not one. The other two
+    // are never read, so neither is a cost nor a reported loss — counting them would restate the
+    // folder's contents instead of explaining a thin catalog entry.
     expect(result.skippedFiles).toBe(1)
-    expect(result.truncated).toBe(false)
+    expect(result.folderScan).toBe('complete')
     expect(github.reads).not.toContain('specs/README.md')
+    expect(github.reads).not.toContain('specs/tsconfig.json')
 
     expect(services.rows.get('account|acct1|billing')?.name).toBe('Billing')
     expect(contracts.rows.map((c) => c.contractId).sort()).toEqual(['events', 'openapi'])
@@ -334,7 +338,7 @@ describe('FoundationalServiceSourceService — folder mode', () => {
 
     expect(github.listings).toEqual([])
     expect(github.reads).toEqual([])
-    expect(result).toMatchObject({ upserted: 0, unchanged: 1, skippedFiles: 0, truncated: false })
+    expect(result).toMatchObject({ upserted: 0, unchanged: 1, skippedFiles: 0, folderScan: null })
   })
 })
 
@@ -406,11 +410,97 @@ describe('FoundationalServiceSourceService — folder mode, truncation', () => {
 
     const result = await service.sync('account', 'acct1', source.id)
 
-    expect(result.truncated).toBe(true)
+    expect(result.folderScan).toBe('truncated')
     expect(contracts.rows).toHaveLength(MAX_FOLDER_CONTRACT_FILES)
     // Truncation is a STABLE outcome, so the pin advances: a re-read would truncate identically
     // and the source would otherwise look permanently behind while serving what it already serves.
     expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(result.lastSyncedCommit)
     expect(result.lastSyncedCommit).not.toBeNull()
+  })
+
+  it('keeps the service when a cap stops the walk BEFORE it reaches any candidate', async () => {
+    // The folder starts with one spec, so the service exists and the commit is pinned.
+    const github = fakeGitHub({ 'specs/openapi.yaml': { sha: 'a', content: OPENAPI('B', '/i') } })
+    const { service, services, sources } = makeService(github)
+    const source = await service.link('account', 'acct1', { ...link, recursive: true })
+    await service.sync('account', 'acct1', source.id)
+    const pinned = sources.rows.get(source.id)?.lastSyncedCommit
+
+    // The specs move under a wide tree: more first-level directories than the walk may list,
+    // and every contract sits one level BELOW them. The walk therefore spends its whole
+    // directory budget without reaching a single candidate — "found nothing" is a statement
+    // about the walk here, not about the folder.
+    delete github.files['specs/openapi.yaml']
+    for (let i = 0; i < MAX_FOLDER_SCAN_DIRECTORIES + 10; i++) {
+      github.files[`specs/d${String(i).padStart(3, '0')}/deep/openapi.yaml`] = {
+        sha: `sha${i}`,
+        content: OPENAPI(`Spec ${i}`, `/r${i}`),
+      }
+    }
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.folderScan).toBe('truncated')
+    // The absence of evidence is not evidence: retiring the service here would strip a
+    // capability from every later design on the strength of directories we declined to list...
+    expect(result.tombstoned).toBe(0)
+    expect(services.rows.get('account|acct1|billing')?.deletedAt).toBeNull()
+    // ...and pinning would make it STAY retired, since the next probe would see no change.
+    expect(sources.rows.get(source.id)?.lastSyncedCommit).toBe(pinned)
+  })
+})
+
+// "The folder holds no contracts" and "the folder is not there" both arrive as zero contracts
+// and need opposite reactions from a human, so they are reported apart. Git cannot store an
+// empty directory, which is what makes the difference observable at all.
+describe('FoundationalServiceSourceService — folder mode, a folder that is not there', () => {
+  it('reports a folder that vanished upstream as missing', async () => {
+    const github = fakeGitHub({ 'specs/openapi.yaml': { sha: 'a', content: OPENAPI('B', '/i') } })
+    const { service, services } = makeService(github)
+    const source = await service.link('account', 'acct1', link)
+    await service.sync('account', 'acct1', source.id)
+
+    // The whole folder is renamed away — nothing under `specs/` remains.
+    delete github.files['specs/openapi.yaml']
+    github.files['specifications/openapi.yaml'] = { sha: 'a', content: OPENAPI('B', '/i') }
+    const result = await service.sync('account', 'acct1', source.id)
+
+    // The service still retires (the folder it described is gone), but the result NAMES the
+    // cause, so the toast and the log can tell a moved folder from an emptied one.
+    expect(result.folderScan).toBe('missing')
+    expect(result.tombstoned).toBe(1)
+    expect(services.rows.get('account|acct1|billing')?.deletedAt).not.toBeNull()
+  })
+
+  it('reports a link whose folder never existed, rather than a clean no-op', async () => {
+    // A mistyped path on a fresh link: the head probe finds no commit, so the walk never runs
+    // and the pass short-circuits. Without a report this syncs "successfully" forever.
+    const github = fakeGitHub({ 'specs/openapi.yaml': { sha: 'a', content: OPENAPI('B', '/i') } })
+    const { service } = makeService(github)
+    const source = await service.link('account', 'acct1', { ...link, dirPath: 'sepcs' })
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    expect(result.folderScan).toBe('missing')
+    expect(result).toMatchObject({ upserted: 0, tombstoned: 0 })
+  })
+
+  it('leaves the non-folder modes reporting no scan at all', async () => {
+    const github = fakeGitHub({ 'specs/openapi.yaml': { sha: 'a', content: OPENAPI('B', '/i') } })
+    const { service } = makeService(github)
+    const source = await service.link('account', 'acct1', {
+      repoOwner: 'acme',
+      repoName: 'platform',
+      mode: 'files',
+      filePaths: ['specs/openapi.yaml'],
+      serviceId: 'billing',
+      serviceName: 'Billing',
+    })
+
+    const result = await service.sync('account', 'acct1', source.id)
+
+    // Null is not "complete": a `files` source did not scan a folder completely, it never
+    // scanned one, and a UI that renders the two the same would invent a walk that never ran.
+    expect(result.folderScan).toBeNull()
+    expect(result.upserted).toBe(1)
   })
 })

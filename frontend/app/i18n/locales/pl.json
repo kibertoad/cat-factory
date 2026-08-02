@@ -5305,6 +5305,7 @@
       "synced": "Zsynchronizowano: {updated} zaktualizowanych, {removed} usuniętych",
       "syncSkipped": "{count} plik wyglądał jak kontrakt, ale nie dało się go użyć. | {count} pliki wyglądały jak kontrakty, ale nie dało się ich użyć. | {count} plików wyglądało jak kontrakty, ale nie dało się ich użyć.",
       "syncTruncated": "Folder zawiera więcej, niż mieści jedna synchronizacja, więc odczytano tylko jego część.",
+      "syncFolderMissing": "Połączony folder nie istnieje w repozytorium. Sprawdź ścieżkę lub połącz źródło ponownie, jeśli zostało przeniesione.",
       "syncFailed": "Nie udało się zsynchronizować repozytorium",
       "changesAvailable": "W źródle są zmiany",
       "upToDate": "Już aktualne",

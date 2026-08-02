@@ -16,6 +16,7 @@ export type {
   ApiContractFormat,
   ApiContractSummary,
   CreateFoundationalServiceInput,
+  FolderScanCoverage,
   FoundationalService,
   FoundationalServiceOwnerKind,
   FoundationalServiceSelection,

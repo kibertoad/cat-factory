@@ -5317,6 +5317,7 @@
       "synced": "Eşitlendi: {updated} güncellendi, {removed} kaldırıldı",
       "syncSkipped": "{count} dosya sözleşmeye benziyordu ama kullanılamadı. | {count} dosya sözleşmeye benziyordu ama kullanılamadı.",
       "syncTruncated": "Klasör tek bir eşitlemenin alabileceğinden fazlasını içeriyor, bu yüzden yalnızca bir kısmı okundu.",
+      "syncFolderMissing": "Bağlanan klasör depoda yok. Yolu kontrol edin veya taşındıysa kaynağı yeniden bağlayın.",
       "syncFailed": "Depo eşitlenemedi",
       "changesAvailable": "Kaynakta değişiklikler var",
       "upToDate": "Zaten güncel",

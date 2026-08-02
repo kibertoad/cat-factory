@@ -4,6 +4,7 @@ import {
   MAX_CONTRACT_BODY_CHARS,
   detectContractFormat,
   indexOpenApiOperations,
+  isContractCandidatePath,
   parseFoundationalDeclaration,
   renderContractDocument,
   renderFoundationalCatalog,
@@ -60,6 +61,50 @@ describe('detectContractFormat', () => {
 
   it('returns null for an unparseable document instead of throwing', () => {
     expect(detectContractFormat('api.yaml', 'openapi: [unclosed')).toBeNull()
+  })
+})
+
+describe('isContractCandidatePath', () => {
+  it('accepts every extension detectContractFormat can recognise', () => {
+    for (const path of ['a.json', 'a.yaml', 'a.yml', 'a.openapi', 'a.ts', 'a.mts', 'a.js']) {
+      expect(isContractCandidatePath(path)).toBe(true)
+    }
+  })
+
+  it('rejects a path no format could ever come from', () => {
+    for (const path of ['README.md', 'logo.png', 'specs/notes.txt']) {
+      expect(isContractCandidatePath(path)).toBe(false)
+    }
+  })
+
+  // Without this the extension test is nearly useless at a repo root, where `.json` and `.yaml`
+  // describe dependencies far more often than APIs — and a folder scan's file budget would go
+  // to manifests before the walk ever reached the specs.
+  it('rejects the package, lockfile and compiler manifests every repo root holds', () => {
+    for (const path of [
+      'package.json',
+      'apps/web/package.json',
+      'package-lock.json',
+      'npm-shrinkwrap.json',
+      'pnpm-lock.yaml',
+      'pnpm-workspace.yaml',
+      'composer.json',
+      'deno.json',
+      'jsconfig.json',
+      'tsconfig.json',
+      'tsconfig.build.json',
+      'packages/kernel/tsconfig.test.json',
+    ]) {
+      expect(isContractCandidatePath(path)).toBe(false)
+    }
+  })
+
+  it('keeps a spec whose name merely resembles one of them', () => {
+    // The exclusion is by exact basename, not by substring: a folder is free to hold
+    // `package-api.json` or `tsconfig-service.yaml` and mean an API contract by it.
+    expect(isContractCandidatePath('specs/package-api.json')).toBe(true)
+    expect(isContractCandidatePath('specs/tsconfig-service.yaml')).toBe(true)
+    expect(isContractCandidatePath('specs/deno.yaml')).toBe(true)
   })
 })
 

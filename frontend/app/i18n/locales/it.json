@@ -4346,6 +4346,7 @@
       "synced": "Sincronizzato: {updated} aggiornati, {removed} rimossi",
       "syncSkipped": "{count} file sembrava un contratto ma non è stato utilizzabile. | {count} file sembravano contratti ma non sono stati utilizzabili.",
       "syncTruncated": "La cartella contiene più di quanto una sincronizzazione possa prendere, quindi ne è stata letta solo una parte.",
+      "syncFolderMissing": "La cartella collegata non è presente nel repository. Controlla il percorso oppure ricollega la sorgente se è stata spostata.",
       "syncFailed": "Impossibile sincronizzare il repository",
       "changesAvailable": "Sono disponibili modifiche a monte",
       "upToDate": "Già aggiornato",

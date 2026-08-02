@@ -1,4 +1,5 @@
 import type {
+  FolderScanCoverage,
   FoundationalServiceOwnerKind,
   FoundationalServiceSource,
   FoundationalServiceSourceStatus,
@@ -56,8 +57,8 @@ import {
 interface ScanReport {
   /** Candidate files that did not become a contract (unreadable, unrecognised, duplicate id). */
   skipped: number
-  /** A `folder` scan hit a cap, so its contract set is a prefix of the folder. */
-  truncated: boolean
+  /** How much of the folder a `folder` scan covered; null in the modes that walk nothing. */
+  folderScan: FolderScanCoverage | null
 }
 
 /** How one reconcile maps a contract file path to its id within the service. */
@@ -269,7 +270,7 @@ export class FoundationalServiceSourceService {
     // Accumulated by the reconcile and lifted onto the result below. The shared engine has no
     // notion of a dropped file, and giving it one would put a foundational-services concern in
     // the module the fragment and skill libraries share.
-    const report: ScanReport = { skipped: 0, truncated: false }
+    const report: ScanReport = { skipped: 0, folderScan: null }
     const outcome = await syncRepoSource<FoundationalServiceRecord>({
       source,
       installationId,
@@ -282,6 +283,14 @@ export class FoundationalServiceSourceService {
         // it moved (manifest OR contract document), so every service is unchanged and not a
         // single per-directory read is paid for.
         if (!commitMoved) {
+          // A source that has NEVER synced reaches this line only because the head probe found
+          // no commit for its path AT ALL — for a repo we can read, that means the path is not
+          // there. Say so: the walk short-circuits before it could observe the empty listing,
+          // so without this a link with a mistyped folder syncs "successfully" forever, and the
+          // author is told 0 updated / 0 removed by a source that can never produce anything.
+          if (source.mode === 'folder' && source.lastSyncedCommit === null) {
+            report.folderScan = 'missing'
+          }
           return {
             liveIds: new Set(existing.map((s) => s.serviceId)),
             upserted: 0,
@@ -311,16 +320,35 @@ export class FoundationalServiceSourceService {
       invalidate: () =>
         this.deps.invalidateCatalog?.(source.ownerKind, source.ownerId) ?? Promise.resolve(),
     })
-    if (report.truncated) {
-      this.log.warn('Foundational folder source truncated by a scan cap', {
-        sourceId: source.id,
-        ownerKind: source.ownerKind,
-        ownerId: source.ownerId,
-        dirPath: source.dirPath,
-        recursive: source.recursive,
-      })
+    this.warnAboutCoverage(source, report.folderScan)
+    return { ...outcome, skippedFiles: report.skipped, folderScan: report.folderScan }
+  }
+
+  /**
+   * Log the two coverage outcomes an operator would want to know about, each named for the fix
+   * it needs — a truncated walk asks for a narrower link, a missing folder for a corrected one.
+   *
+   * This is the ONLY standing signal an AUTOREFRESH pass leaves: the sweep discards the sync
+   * result, so a folder that vanished upstream reaches a human through this line or not at all.
+   * (A manual resync also surfaces both on the SPA's toast.)
+   */
+  private warnAboutCoverage(
+    source: FoundationalServiceSourceRecord,
+    coverage: FolderScanCoverage | null,
+  ): void {
+    if (coverage === null || coverage === 'complete') return
+    const fields = {
+      sourceId: source.id,
+      ownerKind: source.ownerKind,
+      ownerId: source.ownerId,
+      dirPath: source.dirPath,
+      recursive: source.recursive,
     }
-    return { ...outcome, skippedFiles: report.skipped, truncated: report.truncated }
+    if (coverage === 'truncated') {
+      this.log.warn('Foundational folder source truncated by a scan cap', fields)
+      return
+    }
+    this.log.warn('Foundational folder source points at a folder that is not there', fields)
   }
 
   /**
@@ -342,10 +370,11 @@ export class FoundationalServiceSourceService {
       root: source.dirPath,
       recursive: source.recursive,
     })
-    // A truncation is a STABLE outcome, so it is reported but never folded into `incomplete`:
-    // holding the pin back would make the next sync re-read, truncate identically, and the
-    // source would look permanently behind while serving exactly what it already serves.
-    report.truncated = scan.truncated
+    report.folderScan = scan.coverage
+    // Candidates the WALK declined (too large to read) join the ones that failed on their
+    // bodies: both are files that looked like contracts and are not in the catalog, which is
+    // the one question the count answers.
+    report.skipped += scan.skippedCandidates
     const contracts = await this.readContracts({
       source,
       installationId,
@@ -357,24 +386,37 @@ export class FoundationalServiceSourceService {
       contractIdFor: (path) => contractIdFromRelativePath(path, source.dirPath),
     })
     if (contracts.length === 0) {
-      // Two DIFFERENT zero-contract outcomes reach this line, and only one of them is a failure.
+      // THREE different states produce zero contracts, and the disposition splits on whether we
+      // have EVIDENCE about the folder — never on the empty result alone, which they share.
       //
-      // Nothing under the folder even LOOKED like a contract: a spec folder nobody has filled in
-      // yet, one holding only prose, or one whose contents were removed upstream (a listing of a
-      // missing path reads back empty, not as an error). That is a stable state, so the pass is
-      // COMPLETE — pin it, and let the tombstone sweep retire a service whose folder was emptied,
-      // exactly as `directory` mode retires a directory that lost its `service.md`. Calling it
-      // incomplete instead would hold the pin back forever: every later sweep would re-walk the
-      // whole subtree to reach the same answer while the source never stopped reporting changes
-      // upstream — the very re-read loop the truncation disposition above exists to avoid.
-      if (scan.paths.length === 0) return { liveIds: new Set(), upserted: 0, unchanged: 0 }
-      // Candidates WERE found and every one of them read back unusable — a transient read
-      // failure, or a tree caught mid-edit. Keep a prior row alive and leave the pin behind so
-      // the next pass re-reads, the same disposition `files` mode takes, for the same reason:
-      // retiring a service over a momentary read failure strips a capability from every
-      // subsequent design.
-      if (prior)
+      // STABLE — the walk saw the whole folder (`complete`), or the folder is not there at all
+      // (`missing`; git cannot store an empty directory, so an empty root listing means absent),
+      // and nothing under it even LOOKED like a contract. A spec folder nobody has filled in
+      // yet, one holding only prose, or one emptied upstream. Pin, and let the tombstone sweep
+      // retire the service, exactly as `directory` mode retires a directory that lost its
+      // `service.md`. Calling this incomplete instead would hold the pin back forever: every
+      // later sweep would re-walk the whole subtree to reach the same answer while the source
+      // never stopped reporting changes upstream.
+      if (scan.paths.length === 0 && scan.coverage !== 'truncated') {
+        return { liveIds: new Set(), upserted: 0, unchanged: 0 }
+      }
+      // TRANSIENT — either a cap stopped the walk BEFORE it reached any candidate, or every
+      // candidate it did reach read back unusable.
+      //
+      // The first is why the stable branch above tests coverage and not just the count: a
+      // truncated walk that found nothing is a statement about the WALK, not about the folder.
+      // A recursive link over a wide tree whose specs sit below the visited prefix would
+      // otherwise retire a live service on the strength of directories we declined to list, and
+      // pin the commit so it stayed retired. (A truncated walk that DID produce contracts is
+      // stable and pins normally — it is only the absence of evidence that is not evidence.)
+      //
+      // The second is the same disposition `files` mode takes, for the same reason: retiring a
+      // service over a momentary read failure strips a capability from every subsequent design.
+      //
+      // Both leave the pin behind so the next pass re-reads, and keep a prior row alive.
+      if (prior) {
         return { liveIds: new Set([serviceId]), upserted: 0, unchanged: 1, incomplete: true }
+      }
       return { liveIds: new Set(), upserted: 0, unchanged: 0, incomplete: true }
     }
     // An OPTIONAL `service.md` at the folder root enriches the catalog entry; it can never
@@ -572,10 +614,11 @@ export class FoundationalServiceSourceService {
    * tells a downstream agent how to read it, and a "contract" nobody can interpret is worse in
    * an agent's context than an absent one.
    *
-   * A path whose EXTENSION could never yield a format is dropped without a read and without a
-   * count — it is a README beside the specs, not a contract that failed. Everything else that
-   * fails is COUNTED on the report, because a link that produced fewer contracts than its
-   * author expected has no other explanation available to them.
+   * A path that could never yield a format is dropped without a read and without a count — it
+   * is a README or a `package.json` beside the specs, not a contract that failed. Everything
+   * else that fails is COUNTED on the report and NAMED in the log (see {@link skip}), because a
+   * link that produced fewer contracts than its author expected has no other explanation
+   * available to them.
    */
   private async readContracts(params: {
     source: FoundationalServiceSourceRecord
@@ -601,17 +644,17 @@ export class FoundationalServiceSourceService {
     )
     for (const { path, file } of fetched) {
       if (!file) {
-        report.skipped++
+        this.skip(report, source, path, 'unreadable')
         continue
       }
       const format = detectContractFormat(path, file.content)
       if (!format) {
-        report.skipped++
+        this.skip(report, source, path, 'unrecognised')
         continue
       }
       const contractId = contractIdFor(path)
       if (seen.has(contractId)) {
-        report.skipped++
+        this.skip(report, source, path, 'duplicate-contract-id', { contractId })
         continue
       }
       seen.add(contractId)
@@ -639,6 +682,33 @@ export class FoundationalServiceSourceService {
       })
     }
     return out
+  }
+
+  /**
+   * Count one dropped candidate and name it in the log.
+   *
+   * The count alone answers "did I lose anything?" but never "which file, and why?" — and one
+   * reason is undiagnosable without the log line: a DUPLICATE contract id silently keeps the
+   * first claimant, so the losing document is absent from the catalog under a name that is
+   * present. `debug` rather than `warn` because a thin catalog entry is usually intended (prose
+   * and drafts sit beside specs); the count on the sync result is what asks for attention.
+   */
+  private skip(
+    report: ScanReport,
+    source: FoundationalServiceSourceRecord,
+    path: string,
+    reason: 'unreadable' | 'unrecognised' | 'duplicate-contract-id',
+    fields?: Record<string, unknown>,
+  ): void {
+    report.skipped++
+    this.log.debug('Skipped a foundational contract candidate', {
+      sourceId: source.id,
+      ownerKind: source.ownerKind,
+      ownerId: source.ownerId,
+      path,
+      reason,
+      ...fields,
+    })
   }
 
   private async writeService(
