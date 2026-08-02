@@ -17,9 +17,11 @@ import type {
 } from '@cat-factory/kernel'
 import {
   FOUNDATIONAL_CATALOG_FILE,
+  FOUNDATIONAL_INDEX_FILE,
   noopLogger,
   parseFoundationalDeclaration,
   renderFoundationalCatalog,
+  renderFoundationalIndex,
   runBestEffort,
 } from '@cat-factory/kernel'
 
@@ -89,6 +91,15 @@ export interface ResolveFoundationalContextInput {
  * BEST-EFFORT as a whole: the catalog is enrichment, and an unreachable store must not fail a
  * run that would otherwise proceed exactly as it did before the feature existed. A failure is
  * logged with its cause rather than swallowed.
+ *
+ * **A failed read still injects its file, saying so.** Best-effort is about not failing the RUN;
+ * it is not licence to say nothing. The catalog read can genuinely fail now that a
+ * mothership-mode node resolves the `builtin` tier over the machine API
+ * (`ports/foundational-builtins.ts`), and that source throws rather than answering with an empty
+ * tier precisely so the gap is not mistaken for an empty estate — a throw this seam swallowed
+ * into an OMITTED file would have thrown that distinction away again one layer further out, and
+ * left the trait guidance pointing at a `.cat-context/` path that does not exist. So the two
+ * branches below each have a stated `unavailable` rendering, and the log line keeps the cause.
  */
 export async function resolveFoundationalContext(
   input: ResolveFoundationalContextInput,
@@ -106,11 +117,26 @@ export async function resolveFoundationalContext(
         // which is the answer the design guidance asks the agent to act on. Omitting the file
         // would leave the prompt pointing at a path that does not exist, which reads as a
         // platform fault rather than as "there are none".
-        return [{ path: FOUNDATIONAL_CATALOG_FILE, content: renderFoundationalCatalog(catalog) }]
+        return [
+          {
+            path: FOUNDATIONAL_CATALOG_FILE,
+            content: renderFoundationalCatalog({ status: 'resolved', services: catalog }),
+          },
+        ]
       },
       { workspaceId: input.workspaceId, agentKind },
     )
-    return files ?? []
+    // …and rendered when the read FAILED, as a third thing again. `undefined` is the failure
+    // (`runBestEffort` logged the cause); a successful empty catalog is `[]` above and never
+    // reaches here.
+    return (
+      files ?? [
+        {
+          path: FOUNDATIONAL_CATALOG_FILE,
+          content: renderFoundationalCatalog({ status: 'unavailable' }),
+        },
+      ]
+    )
   }
   if (hasTrait(agentKind, FOUNDATIONAL_CONTRACTS_TRAIT, agentKindRegistry)) {
     const files = await runBestEffort(
@@ -119,7 +145,18 @@ export async function resolveFoundationalContext(
       () => resolver.contextFilesFor(input.workspaceId, declaredSelection(input.priorSteps)),
       { workspaceId: input.workspaceId, agentKind },
     )
-    return files ?? []
+    // A failed read still gets its index, stating that the contracts are missing rather than
+    // that the design declared none — the resolver's own "the index is ALWAYS produced"
+    // invariant, upheld here because this is where the failure becomes visible. A run in a
+    // deployment with no catalog at all still returns a successful `[]` and no file.
+    return (
+      files ?? [
+        {
+          path: FOUNDATIONAL_INDEX_FILE,
+          content: renderFoundationalIndex({ status: 'unavailable' }),
+        },
+      ]
+    )
   }
   return []
 }

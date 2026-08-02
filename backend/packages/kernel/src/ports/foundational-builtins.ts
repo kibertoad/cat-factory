@@ -25,7 +25,10 @@ import type {
 // `GET /internal/foundational-services`, and its own in-process registry is not consulted.
 // A read failure THROWS rather than answering with an empty tier, because "the mothership is
 // unreachable" and "the deployment registers no shared services" need opposite reactions and
-// only one of them may reach an Architect's prompt.
+// only one of them may reach an Architect's prompt. The throw is a signal, not a run-killer:
+// the injection seam catches it and STATES the outage in the context file it would otherwise
+// have filled (the `unavailable` variant of `FoundationalCatalogRead`), because a swallowed
+// throw and an empty tier arrive at an agent as the same thing.
 
 /**
  * The `builtin` tier of the foundational-service catalog, as the catalog service reads it.

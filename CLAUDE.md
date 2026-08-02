@@ -166,7 +166,10 @@ its OWN `/internal/*` read from the mothership (the foundational-services `built
 the node does not consult its own copy, and the read THROWS rather than answering empty — an empty
 catalog and an unreachable mothership are the same value and opposite facts, and only one of them may
 reach an agent. Never MERGE the two: a stale local copy winning by id is the same drift with a mechanism
-that looks deliberate.
+that looks deliberate. **And a throw is only half the fix: the BEST-EFFORT seam that catches it must
+STATE the outage in what it injects, never fall through to nothing** — an omitted context file reads to
+an agent exactly like the empty answer the throw refused to give, so the "absent ≠ zero" rule binds the
+catch site as much as the read.
 
 ## No N+1 repository access
 

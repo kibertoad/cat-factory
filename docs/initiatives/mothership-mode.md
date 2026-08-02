@@ -342,7 +342,10 @@
 
   **A failed read throws rather than answering with an empty tier** — including the 404 from a
   mothership OLDER than the node — because an empty catalog reaching an Architect is precisely the
-  failure the feature exists to prevent.
+  failure the feature exists to prevent. The throw is then STATED in the injected context file
+  rather than swallowed into an omitted one: the injection seam is best-effort (an outage must not
+  fail the run), and a best-effort path that returns nothing hands the agent the same empty-estate
+  reading the throw was meant to rule out.
 
   **The general rule this sets:** state a deployment registers in CODE and a RUN resolves is org
   state in mothership mode too. It rides its own `/internal/*` read, never a second registration on
@@ -910,7 +913,7 @@ modes look like success:
   > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
   > in BOTH directions, notification DELIVERY delegation, and telemetry INGEST (below) are all
   > IMPLEMENTED. The one remaining bullet that is DESIGN ONLY is PR 4's email half — no
-  > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The six live
+  > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The eight live
   > `/internal/*` routes today are `POST /internal/persistence`,
   > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
   > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,

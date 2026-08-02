@@ -895,5 +895,33 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
   }
 }
 
-/** The default deployment shape: every registry defaulted. Unchanged for a bare re-export. */
-export default createWorker()
+/**
+ * The default worker, built on FIRST USE rather than at module evaluation.
+ *
+ * Laziness is load-bearing now that {@link createWorker} is the seam: `import { createWorker }`
+ * evaluates this module, so an eager `createWorker()` here would build a second complete app
+ * inside every deployment that only wanted the factory — paid for at module scope, which on
+ * Workers is the startup-CPU budget rather than a request's. A deployment exporting its own
+ * `createWorker({ … })` never calls this, so it never builds it.
+ */
+let defaultWorker: WorkerHandler | null = null
+function theDefaultWorker(): WorkerHandler {
+  defaultWorker ??= createWorker()
+  return defaultWorker
+}
+
+/**
+ * The default deployment shape: every registry defaulted. Unchanged for a bare re-export.
+ *
+ * `scheduled`/`queue` are the module-level handlers directly — they never touch the app, so
+ * making them go through the lazy build would construct one for a cron tick that has no use
+ * for it.
+ */
+export default {
+  // Parameters taken FROM the handler type rather than restated, so the forwarder cannot drift
+  // from the signature workerd actually calls.
+  fetch: (...args: Parameters<NonNullable<WorkerHandler['fetch']>>) =>
+    theDefaultWorker().fetch!(...args),
+  scheduled: handleScheduled,
+  queue: handleQueue,
+} satisfies WorkerHandler

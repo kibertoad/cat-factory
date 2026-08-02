@@ -11,8 +11,14 @@ Cloudflare differentiators: D1 persistence, Durable Objects (real-time + per-run
 Cloudflare Workflows (durable execution), queues/cron, and the `workers-ai` binding.
 
 **Entry:** `src/index.ts` — `createWorker(options?)` (the fetch/scheduled/queue handler) plus the
-DO/Workflow classes; `export default createWorker()` is the shape a deployment re-exports when it
-extends nothing. `src/app.ts` (`createApp()` — a thin wrapper over `@cat-factory/server`).
+DO/Workflow classes; the default export is that handler with every registry defaulted, which is
+what a deployment re-exports when it extends nothing. `src/app.ts` (`createApp()` — a thin wrapper
+over `@cat-factory/server`).
+
+**The default export builds its app LAZILY, on the first `fetch`.** Importing `createWorker`
+evaluates this module, so an eager `createWorker()` at module scope would build a second complete
+app inside every deployment that only wanted the factory — and on Workers module scope is the
+startup-CPU budget. Keep it lazy.
 
 **`createWorker` is this facade's INSTALLATION SEAM** — the counterpart of the Node facade's
 `start({ … })` and the local facade's `startLocal({ … })`. A deployment registering its own agent

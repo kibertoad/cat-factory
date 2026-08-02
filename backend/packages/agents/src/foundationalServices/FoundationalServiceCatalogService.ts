@@ -416,18 +416,24 @@ export class FoundationalServiceCatalogService {
 
   private async loadCatalog(workspaceId: string): Promise<ResolvedFoundationalService[]> {
     const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
-    const [workspaceRows, accountRows, workspaceManifest, accountManifest] = await Promise.all([
-      this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId, true),
-      accountId
-        ? this.deps.foundationalServiceRepository.listByOwner('account', accountId, true)
-        : Promise.resolve<FoundationalServiceRecord[]>([]),
-      this.deps.apiContractRepository.listManifestByOwner('workspace', workspaceId),
-      accountId
-        ? this.deps.apiContractRepository.listManifestByOwner('account', accountId)
-        : Promise.resolve<ApiContractManifestEntry[]>([]),
-    ])
+    // The `builtin` tier joins the SAME `Promise.all` as the stored tiers rather than being
+    // awaited after it: the source can be remote (a mothership-mode node), and a sequential
+    // await would put a network round trip strictly behind four others that never depended on
+    // it. In-process it resolves immediately, so this costs the default shape nothing.
+    const [builtins, workspaceRows, accountRows, workspaceManifest, accountManifest] =
+      await Promise.all([
+        this.builtins.entries(),
+        this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId, true),
+        accountId
+          ? this.deps.foundationalServiceRepository.listByOwner('account', accountId, true)
+          : Promise.resolve<FoundationalServiceRecord[]>([]),
+        this.deps.apiContractRepository.listManifestByOwner('workspace', workspaceId),
+        accountId
+          ? this.deps.apiContractRepository.listManifestByOwner('account', accountId)
+          : Promise.resolve<ApiContractManifestEntry[]>([]),
+      ])
     return mergeFoundationalTiers({
-      builtins: await this.builtins.entries(),
+      builtins,
       accountRows,
       workspaceRows,
       accountManifest: indexManifest(accountManifest),
@@ -445,12 +451,14 @@ export class FoundationalServiceCatalogService {
     ownerId: string,
   ): Promise<ResolvedFoundationalService[]> {
     if (ownerKind === 'workspace') return this.loadCatalog(ownerId)
-    const [accountRows, accountManifest] = await Promise.all([
+    // The `builtin` tier alongside the stored reads, not behind them — see `loadCatalog`.
+    const [builtins, accountRows, accountManifest] = await Promise.all([
+      this.builtins.entries(),
       this.deps.foundationalServiceRepository.listByOwner('account', ownerId, true),
       this.deps.apiContractRepository.listManifestByOwner('account', ownerId),
     ])
     return mergeFoundationalTiers({
-      builtins: await this.builtins.entries(),
+      builtins,
       accountRows,
       workspaceRows: [],
       accountManifest: indexManifest(accountManifest),

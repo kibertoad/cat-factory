@@ -189,9 +189,11 @@ export {
 // capability catalog an Architect designs against and its consumers lazily read.
 // See `domain/foundational-services.ts` and backend/docs/adr/0031-foundational-services.md.
 export {
+  type FoundationalCatalogRead,
   type FoundationalCatalogView,
   type FoundationalContractBundle,
   type FoundationalDefinitionProblem,
+  type FoundationalIndexRead,
   FOUNDATIONAL_CATALOG_FILE,
   FOUNDATIONAL_CONTEXT_DIR,
   FOUNDATIONAL_DECLARATION_TAG,

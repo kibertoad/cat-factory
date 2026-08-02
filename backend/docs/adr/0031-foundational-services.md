@@ -277,7 +277,18 @@ shape forced. Three things about it are deliberate:
   empty catalog reaching an Architect produces a design that reinvents a service the org already
   runs — the failure this whole feature exists to prevent. The case that makes this load-bearing
   rather than pedantic is a mothership one release BEHIND the node, which answers 404 for a route
-  it does not serve.
+  it does not serve. A reply the client cannot READ (a 200 whose payload is not the expected
+  shape) is refused the same way and for the same reason.
+- **…and the throw is STATED to the agent, not swallowed into an omitted file.** Throwing only
+  moves the problem if the injection seam then drops it: `resolveFoundationalContext` is
+  best-effort by design (an outage must not fail a run that would otherwise proceed), and a
+  best-effort `catch` returning no file would have restored the exact substitution the throw
+  exists to prevent — an Architect whose prompt has no catalog reads that as an empty estate,
+  and the trait guidance is left pointing at a `.cat-context/` path that does not exist. So both
+  injected files carry an explicit `unavailable` rendering, discriminated in the renderer
+  (`FoundationalCatalogRead` / `FoundationalIndexRead`) rather than expressed as an empty list,
+  so a future call site cannot spell the outage as emptiness by accident. The run still
+  proceeds; what changes is that the agent is told, and told what to do about it.
 - **The two are alternatives, never a merge.** Layering a node's own registrations over the
   mothership's would reinstate the drift, since a stale local copy of a service would win by id
   over the authoritative one — i.e. exactly the skew, now with a mechanism that looks deliberate.

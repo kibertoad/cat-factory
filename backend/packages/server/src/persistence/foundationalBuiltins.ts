@@ -20,8 +20,17 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * and "this deployment registers no shared services" are the same value and opposite facts, and
  * only one of them may reach an Architect: an empty catalog silently produces a design that
  * reinvents a service the org already runs, which is the exact failure ADR 0031 exists to
- * prevent. Throwing surfaces as a failed design dispatch — loud, and the same disposition every
- * other org read on this node already has, since the persistence RPC fails a run the same way.
+ * prevent. That covers every way the read can fail to produce a tier — a transport error, a
+ * refusal, a 404 from a mothership older than this node, and a 200 whose payload this client
+ * cannot read.
+ *
+ * Throwing is NOT the same as failing the run, and the caller is where that is decided: the
+ * catalog is enrichment, so `resolveFoundationalContext` (orchestration) keeps its best-effort
+ * disposition and renders the outage into the injected context file instead — the `unavailable`
+ * variant of `FoundationalCatalogRead` / `FoundationalIndexRead`. What this class guarantees is
+ * that the gap is never spelled as an empty estate; what the caller guarantees is that it is
+ * never spelled as silence either. Both halves are needed — a throw swallowed into an omitted
+ * file reads to an Architect exactly like the empty catalog this refuses to return.
  *
  * There is no cache here on purpose. `entries()` is called once per miss of the per-workspace
  * catalog cache that already sits in front of it, and `documentsFor` once per DESIGN (it is
@@ -45,19 +54,27 @@ export class HttpFoundationalBuiltinSource implements FoundationalBuiltinSource 
   ) {}
 
   async entries(): Promise<FoundationalServiceRegistryEntry[]> {
-    const body = await this.read<{ entries?: FoundationalServiceRegistryEntry[] }>(
-      '/internal/foundational-services',
-    )
-    return body.entries ?? []
+    const body = await this.read<{ entries?: unknown }>('/internal/foundational-services')
+    // Shape-checked rather than cast, for the same reason every other failure here throws: a
+    // reply this code cannot read is a reply whose ESTATE is unknown, and the one disposition
+    // that must never be reachable is answering an unknown estate with an empty one. A missing
+    // `entries` key is exactly as unreadable as a malformed one — an empty tier is spelled
+    // `[]`, which no honest server omits.
+    if (!Array.isArray(body.entries)) throw unreadable('entries')
+    return body.entries as FoundationalServiceRegistryEntry[]
   }
 
   async documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>> {
     if (ids.length === 0) return new Map()
-    const body = await this.read<{ documents?: Record<string, ApiContractDocument[]> }>(
+    const body = await this.read<{ documents?: unknown }>(
       '/internal/foundational-services/contracts',
       { ids },
     )
-    return new Map(Object.entries(body.documents ?? {}))
+    const documents = body.documents
+    if (!documents || typeof documents !== 'object' || Array.isArray(documents)) {
+      throw unreadable('documents')
+    }
+    return new Map(Object.entries(documents as Record<string, ApiContractDocument[]>))
   }
 
   private async read<T>(path: string, payload?: unknown): Promise<T> {
@@ -101,12 +118,23 @@ export class HttpFoundationalBuiltinSource implements FoundationalBuiltinSource 
       )
     }
     const body = (await res.json().catch(() => null)) as T | null
-    if (!body || typeof body !== 'object') {
-      throw new UnavailableError(
-        'The mothership returned an unreadable foundational-service catalog',
-        'foundational_builtins_unreachable',
-      )
-    }
+    if (!body || typeof body !== 'object') throw unreadable('body')
     return body
   }
+}
+
+/**
+ * The unreadable-reply refusal, shared by the envelope check and the two payload checks.
+ *
+ * One helper rather than three literals because they are one FACT — the mothership answered
+ * with something this node cannot resolve a tier from — and the whole point of this class is
+ * that every route to "we do not know the estate" ends at a throw. `field` names which part
+ * failed, so an operator can tell a malformed body from a route answering a different shape.
+ */
+function unreadable(field: string): UnavailableError {
+  return new UnavailableError(
+    'The mothership returned an unreadable foundational-service catalog',
+    'foundational_builtins_unreachable',
+    { field },
+  )
 }

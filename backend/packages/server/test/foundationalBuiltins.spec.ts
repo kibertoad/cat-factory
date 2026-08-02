@@ -168,6 +168,49 @@ describe('mothership-mode foundational `builtin` tier', () => {
     })
   })
 
+  it('THROWS on a well-formed 200 whose payload it cannot read', async () => {
+    // The last route to a silent empty tier: a 200 carrying a shape this client does not
+    // understand — a mothership serving a different contract, a proxy interposing its own JSON.
+    // Casting it would resolve a catalog of `[]` from a reply that asserted nothing of the kind.
+    for (const payload of [{}, { entries: 'nope' }, { entries: { id: 'x' } }]) {
+      const source = new HttpFoundationalBuiltinSource({
+        baseUrl: 'https://mothership.test',
+        token: 'tok',
+        fetchImpl: (() =>
+          Promise.resolve(
+            new Response(JSON.stringify(payload), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          )) as unknown as typeof fetch,
+      })
+      await expect(source.entries()).rejects.toMatchObject({
+        code: 'unavailable',
+        details: { reason: 'foundational_builtins_unreachable', field: 'entries' },
+      })
+    }
+  })
+
+  it('THROWS on a contracts reply whose `documents` is not an object map', async () => {
+    const source = new HttpFoundationalBuiltinSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      // An ARRAY is the shape most likely to slip through a `typeof === 'object'` check, and
+      // `Object.entries` would turn it into a map keyed by numeric index.
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ documents: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )) as unknown as typeof fetch,
+    })
+    await expect(source.documentsFor(['file-storage'])).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'foundational_builtins_unreachable', field: 'documents' },
+    })
+  })
+
   it('THROWS on a transport failure, with the cause scrubbed onto the details', async () => {
     const source = new HttpFoundationalBuiltinSource({
       baseUrl: 'https://mothership.test',
