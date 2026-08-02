@@ -303,6 +303,171 @@ describe('FetchGitLabClient — reviews, rebase and tree reads', () => {
     expect(await c.listRequestedReviewers(connection, ref, 3)).toEqual(['bob', 'cara'])
   })
 
+  it('reads the MR head ref and head sha, preferring diff_refs over the stale top-level sha', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { source_branch: 'feat/x', sha: 'stale', diff_refs: { head_sha: 'fresh' } },
+      },
+    })
+    expect(await c.getPullRequestHeadRef(connection, ref, 3)).toBe('feat/x')
+    expect(await c.getPullRequestHeadSha(connection, ref, 3)).toBe('fresh')
+  })
+
+  it('degrades every single-MR accessor to null on a 404 but propagates other failures', async () => {
+    const missing = client({ 'GET /projects/7/merge_requests/3': { status: 404 } })
+    expect(await missing.c.getPullRequestBaseRef(connection, ref, 3)).toBeNull()
+    expect(await missing.c.getPullRequestHeadRef(connection, ref, 3)).toBeNull()
+    expect(await missing.c.getPullRequestHeadSha(connection, ref, 3)).toBeNull()
+
+    // A 500 is "could not be read", NOT "does not exist" — it must stay distinguishable.
+    const broken = client({ 'GET /projects/7/merge_requests/3': { status: 500 } })
+    await expect(broken.c.getPullRequestHeadSha(connection, ref, 3)).rejects.toThrow()
+  })
+
+  it('maps MR diffs to neutral changed files, counting lines off the hunk', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3/diffs?per_page=100': {
+        body: [
+          {
+            old_path: 'src/a.ts',
+            new_path: 'src/a.ts',
+            diff: '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,2 +1,3 @@\n ctx\n+added one\n+added two\n-removed one\n',
+          },
+          { old_path: 'src/new.ts', new_path: 'src/new.ts', new_file: true, diff: '+one\n' },
+          { old_path: 'old.ts', new_path: 'moved.ts', renamed_file: true, diff: '' },
+          { old_path: 'gone.ts', new_path: 'gone.ts', deleted_file: true, diff: '-x\n' },
+          // A file GitLab truncated: no hunk to count, so zeros and a null patch — the same
+          // shape GitHub reports for a binary/oversized file.
+          { old_path: 'big.bin', new_path: 'big.bin', too_large: true },
+        ],
+      },
+    })
+    expect(await c.listChangedFiles(connection, ref, 3)).toEqual([
+      {
+        path: 'src/a.ts',
+        previousPath: null,
+        status: 'modified',
+        additions: 2,
+        deletions: 1,
+        patch:
+          '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,2 +1,3 @@\n ctx\n+added one\n+added two\n-removed one\n',
+      },
+      {
+        path: 'src/new.ts',
+        previousPath: null,
+        status: 'added',
+        additions: 1,
+        deletions: 0,
+        patch: '+one\n',
+      },
+      {
+        path: 'moved.ts',
+        previousPath: 'old.ts',
+        status: 'renamed',
+        additions: 0,
+        deletions: 0,
+        patch: null,
+      },
+      {
+        path: 'gone.ts',
+        previousPath: null,
+        status: 'removed',
+        additions: 0,
+        deletions: 1,
+        patch: '-x\n',
+      },
+      {
+        path: 'big.bin',
+        previousPath: null,
+        status: 'modified',
+        additions: 0,
+        deletions: 0,
+        patch: null,
+      },
+    ])
+  })
+
+  it('posts a review as per-comment diff discussions plus a summary note', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { diff_refs: { base_sha: 'b1', start_sha: 's1', head_sha: 'h1' } },
+      },
+      'POST /projects/7/merge_requests/3/discussions': { body: { id: 'd' } },
+      'POST /projects/7/merge_requests/3/notes': { body: { id: 1 } },
+    })
+    const result = await c.createReview(connection, ref, 3, {
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [
+        { path: 'src/a.ts', line: 12, body: 'fix this' },
+        { path: 'src/b.ts', line: 4, side: 'LEFT', body: 'removed line' },
+      ],
+    })
+    expect(result).toEqual({
+      comments: [{ posted: true }, { posted: true }],
+      bodyPosted: true,
+      bodyError: undefined,
+    })
+    const discussions = calls.filter((call) => call.url.endsWith('/discussions'))
+    expect(discussions).toHaveLength(2)
+    // A RIGHT-side (default) finding anchors on `new_line`; a LEFT-side one on `old_line`.
+    expect(discussions[0]?.body).toMatchObject({
+      body: 'fix this',
+      position: {
+        position_type: 'text',
+        base_sha: 'b1',
+        start_sha: 's1',
+        head_sha: 'h1',
+        new_path: 'src/a.ts',
+        old_path: 'src/a.ts',
+        new_line: '12',
+      },
+    })
+    const leftSide = discussions[1]?.body as { position: Record<string, unknown> } | undefined
+    expect(leftSide).toMatchObject({ position: { old_line: '4' } })
+    expect(leftSide?.position.new_line).toBeUndefined()
+  })
+
+  it('reports a partial post rather than throwing when one comment cannot anchor', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': {
+        body: { diff_refs: { base_sha: 'b1', head_sha: 'h1' } },
+      },
+      // First discussion lands, second is rejected (line outside the diff).
+      'POST /projects/7/merge_requests/3/discussions': [{ body: { id: 'd' } }, { status: 400 }],
+      'POST /projects/7/merge_requests/3/notes': { body: { id: 1 } },
+    })
+    const result = await c.createReview(connection, ref, 3, {
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [
+        { path: 'a.ts', line: 1, body: 'ok' },
+        { path: 'b.ts', line: 999, body: 'out of diff' },
+      ],
+    })
+    expect(result.comments[0]).toEqual({ posted: true })
+    expect(result.comments[1]?.posted).toBe(false)
+    expect(result.comments[1]?.error).toBeTruthy()
+    // The summary still lands, so the un-anchored finding is not silently lost.
+    expect(result.bodyPosted).toBe(true)
+  })
+
+  it('reports every comment failed when the MR has no diff refs to anchor against', async () => {
+    const { c } = client({
+      'GET /projects/7/merge_requests/3': { body: { diff_refs: null } },
+    })
+    const result = await c.createReview(connection, ref, 3, {
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [{ path: 'a.ts', line: 1, body: 'x' }],
+    })
+    expect(result.comments).toEqual([
+      { posted: false, error: expect.stringContaining('diff refs') },
+    ])
+    expect(result.bodyPosted).toBe(false)
+    expect(result.bodyError).toContain('diff refs')
+  })
+
   it('maps GitLab approvals to APPROVED reviews + the required count', async () => {
     const { c } = client({
       'GET /projects/7/merge_requests/3/approvals': {

@@ -95,6 +95,15 @@ interface ProviderConfig {
   requiredCountRoute: Route
   /** Whether the provider advances a PR branch by rebasing the MR (GitLab) vs `mergeBranch` (GitHub). */
   rebases: boolean
+  // ---- PR deep-review inputs (changed files, drift detection, publishing findings) ----
+  /** The PR/MR detail read backing head-ref + head-sha (and, on GitLab, the review anchor refs). */
+  headRoute: Route
+  /** The changed-file list backing the review slicer + the merge track record's classifier. */
+  changedFilesRoute: Route
+  /** The write that lands ONE inline review comment. */
+  inlineCommentRoute: Route
+  /** The write that lands the review's summary/body as a conversation comment. */
+  bodyCommentRoute: Route
 }
 
 const github: ProviderConfig = {
@@ -133,6 +142,26 @@ const github: ProviderConfig = {
     body: { required_approving_review_count: 2 },
   },
   rebases: false,
+  headRoute: {
+    method: 'GET',
+    match: '/repos/o/r/pulls/7',
+    body: { head: { ref: 'feat', sha: 'sha1' } },
+  },
+  changedFilesRoute: {
+    method: 'GET',
+    match: '/pulls/7/files',
+    body: [
+      {
+        filename: 'src/a.ts',
+        status: 'modified',
+        additions: 2,
+        deletions: 1,
+        patch: '@@ -1 +1,2 @@\n+one\n+two\n-gone',
+      },
+    ],
+  },
+  inlineCommentRoute: { method: 'POST', match: '/pulls/7/comments', body: { id: 1 } },
+  bodyCommentRoute: { method: 'POST', match: '/issues/7/comments', body: { id: 2 } },
 }
 
 const gitlab: ProviderConfig = {
@@ -182,6 +211,28 @@ const gitlab: ProviderConfig = {
     body: { approvals_before_merge: 2 },
   },
   rebases: true,
+  // GitLab carries the source branch AND the review-anchor commit refs on the same MR detail.
+  headRoute: {
+    method: 'GET',
+    match: '/merge_requests/7',
+    body: {
+      source_branch: 'feat',
+      diff_refs: { base_sha: 'base1', start_sha: 'start1', head_sha: 'sha1' },
+    },
+  },
+  changedFilesRoute: {
+    method: 'GET',
+    match: '/merge_requests/7/diffs',
+    body: [
+      {
+        old_path: 'src/a.ts',
+        new_path: 'src/a.ts',
+        diff: '@@ -1 +1,2 @@\n+one\n+two\n-gone',
+      },
+    ],
+  },
+  inlineCommentRoute: { method: 'POST', match: '/merge_requests/7/discussions', body: { id: 'd' } },
+  bodyCommentRoute: { method: 'POST', match: '/merge_requests/7/notes', body: { id: 2 } },
 }
 
 function defineVcsClientConformance(cfg: ProviderConfig): void {
@@ -253,6 +304,69 @@ function defineVcsClientConformance(cfg: ProviderConfig): void {
       })
     })
 
+    it('reads the PR head ref + head sha (deep-review fix target and drift check)', async () => {
+      await withFetch(cfg.authOk, [cfg.headRoute], async () => {
+        const client = cfg.makeClient()!
+        expect(await client.getPullRequestHeadRef!(1, ref, 7)).toBe('feat')
+        expect(await client.getPullRequestHeadSha!(1, ref, 7)).toBe('sha1')
+      })
+    })
+
+    it('normalises the PR changed-file list to path + status + line counts', async () => {
+      await withFetch(cfg.authOk, [cfg.changedFilesRoute], async () => {
+        const client = cfg.makeClient()!
+        const files = await client.listChangedFiles!(1, ref, 7)
+        // The merge track record classifies off `path` and the review slicer groups off the
+        // counts, so both providers must answer the SAME numbers for the same diff — GitLab has
+        // no additions/deletions fields and counts them off the hunk to get here.
+        expect(files).toEqual([
+          expect.objectContaining({
+            path: 'src/a.ts',
+            status: 'modified',
+            additions: 2,
+            deletions: 1,
+          }),
+        ])
+        expect(files[0]?.patch).toContain('+one')
+      })
+    })
+
+    it('publishes a review as inline comments plus a summary, reporting each outcome', async () => {
+      const routes = [cfg.headRoute, cfg.inlineCommentRoute, cfg.bodyCommentRoute]
+      await withFetch(cfg.authOk, routes, async (calls) => {
+        const client = cfg.makeClient()!
+        const result = await client.createReview!(1, ref, 7, {
+          event: 'COMMENT',
+          body: 'Summary',
+          comments: [{ path: 'src/a.ts', line: 3, body: 'fix this' }],
+        })
+        expect(result).toMatchObject({ comments: [{ posted: true }], bodyPosted: true })
+        const inline = calls.find(
+          (c) => c.method === 'POST' && c.path.includes(cfg.inlineCommentRoute.match),
+        )
+        expect(inline?.authed, 'the inline comment carried the provider auth header').toBe(true)
+        expect(
+          calls.some((c) => c.method === 'POST' && c.path.includes(cfg.bodyCommentRoute.match)),
+        ).toBe(true)
+      })
+    })
+
+    it('reports a review post as all-failed rather than throwing when the PR is unreadable', async () => {
+      await withFetch(cfg.authOk, [{ ...cfg.headRoute, status: 500, body: {} }], async () => {
+        const client = cfg.makeClient()!
+        // The deep-review "post" resolution records an all-failed attempt and re-parks; a throw
+        // here would fail the whole run instead, so the two providers must agree on the shape.
+        const result = await client.createReview!(1, ref, 7, {
+          event: 'COMMENT',
+          body: 'Summary',
+          comments: [{ path: 'src/a.ts', line: 3, body: 'fix this' }],
+        })
+        expect(result.comments[0]?.posted).toBe(false)
+        expect(result.comments[0]?.error).toBeTruthy()
+        expect(result.bodyPosted).toBe(false)
+      })
+    })
+
     it('exposes the branch-advancing capability appropriate to the provider', () => {
       const client = cfg.makeClient()!
       // GitLab advances a PR branch by rebasing the MR (it has no merge-branch-into-branch
@@ -262,6 +376,14 @@ function defineVcsClientConformance(cfg: ProviderConfig): void {
       // BOTH providers expose the human-review reads the gate consumes.
       expect(typeof client.listReviewThreads).toBe('function')
       expect(typeof client.getRequiredApprovingReviewCount).toBe('function')
+      // …and the PR-deep-review quartet. These are OPTIONAL on the port, and every consumer
+      // degrades silently when one is absent (the merge track record records `unknown`, which
+      // never matches a per-class rule; the review post records the selection and never reaches
+      // the PR). So assert their PRESENCE, or a provider losing one looks like a working run.
+      expect(typeof client.listChangedFiles).toBe('function')
+      expect(typeof client.getPullRequestHeadRef).toBe('function')
+      expect(typeof client.getPullRequestHeadSha).toBe('function')
+      expect(typeof client.createReview).toBe('function')
     })
   })
 }

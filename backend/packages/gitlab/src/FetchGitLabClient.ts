@@ -2,7 +2,10 @@ import type {
   BranchUpdateOutcome,
   Clock,
   CommitFilesResult,
+  CreateReviewInput,
+  CreateReviewResult,
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCodeSearchHit,
   GitHubCommit,
@@ -37,15 +40,18 @@ import {
   type GlCommitStatusPayload,
   type GlIssuePayload,
   type GlMergeRequestPayload,
+  type GlMrDiffPayload,
   type GlProjectPayload,
   mergeabilityFromStatus,
   toBranchProjection,
+  toChangedFileProjection,
   toCheckRunProjection,
   toCommitProjection,
   toIssueProjection,
   toMergeRequestProjection,
   toRepoProjection,
 } from './projection.js'
+import { postMrReview } from './reviewPosting.js'
 
 // ---------------------------------------------------------------------------
 // Thin `fetch`-based VcsClient for GitLab (REST v4), the GitLab analogue of the
@@ -459,18 +465,65 @@ export class FetchGitLabClient implements VcsClient {
 
   // ---- review reads (the human-review gate) -------------------------------
 
+  // A missing MR degrades differently per caller, but always to null: no base to gate against
+  // (the human-review gate falls back to its default), no source branch to push to (the
+  // deep-review "fix" reports it unresolvable rather than cloning the wrong ref), no head sha to
+  // compare against (the drift check skips) — the same dispositions as the GitHub half.
   async getPullRequestBaseRef(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null> {
-    try {
-      const mr = await this.getMergeRequest(connection, ref, number)
-      return mr.target_branch ?? null
-    } catch (err) {
-      if (err instanceof GitLabApiError && err.status === 404) return null
-      throw err
-    }
+    return (await this.readMergeRequest(connection, ref, number))?.target_branch ?? null
+  }
+
+  async getPullRequestHeadRef(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readMergeRequest(connection, ref, number))?.source_branch ?? null
+  }
+
+  async getPullRequestHeadSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const mr = await this.readMergeRequest(connection, ref, number)
+    // `diff_refs.head_sha` is the authoritative source-branch head; the top-level `sha` is the
+    // same value on an open MR but goes stale once it merges, so prefer the former.
+    return mr?.diff_refs?.head_sha ?? mr?.sha ?? null
+  }
+
+  async listChangedFiles(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    // `/diffs` is the paginated form of the MR's changed files (GitLab 15.7+); the older
+    // `/changes` returns every file in one unbounded payload, which would defeat the page cap.
+    return this.paginate<GitHubChangedFile>(
+      `/projects/${projectPath(ref)}/merge_requests/${number}/diffs?per_page=${PER_PAGE}`,
+      { connection },
+      (json) =>
+        (Array.isArray(json) ? (json as GlMrDiffPayload[]) : []).map(toChangedFileProjection),
+    )
+  }
+
+  createReview(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult> {
+    // The per-comment posting + partial-success reporting lives in `reviewPosting.ts` (the mirror
+    // of the GitHub half); this stays a thin transport delegate, bound to this project.
+    return postMrReview(
+      (path, opts) => this.request(`/projects/${projectPath(ref)}${path}`, { ...opts, connection }),
+      number,
+      input,
+    )
   }
 
   async listRequestedReviewers(
@@ -968,6 +1021,25 @@ export class FetchGitLabClient implements VcsClient {
     return (json ?? {}) as GlMrDetail
   }
 
+  /**
+   * {@link getMergeRequest}, but a 404 (the project has no such MR: never opened, or hard-deleted)
+   * answers null while ANY other failure throws — so a caller can tell "this MR does not exist"
+   * from "the provider could not answer". Every single-MR accessor that degrades to null is a
+   * projection of this one read, the mirror of the GitHub client's `readPullRequest`.
+   */
+  private async readMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GlMrDetail | null> {
+    try {
+      return await this.getMergeRequest(connection, ref, number)
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   /** Resolve a project's default branch (for the files API, which needs a concrete ref). */
   private async defaultBranch(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<string> {
     const repo = await this.getRepo(connection, ref)
@@ -1112,6 +1184,8 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
 /** A merge-request detail object — the fields the review + rebase reads consume. */
 interface GlMrDetail {
   target_branch?: string
+  /** The MR's source branch — the head the deep-review "fix" pass clones and pushes back onto. */
+  source_branch?: string
   reviewers?: Array<{ username?: string }>
   /** The source-branch head commit (top-level field). */
   sha?: string | null
