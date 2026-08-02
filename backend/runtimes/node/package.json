@@ -62,14 +62,14 @@
     "hono": "^4.12.32",
     "layered-loader": "^14.5.3",
     "pg": "^8.22.0",
-    "pg-boss": "^12.26.3",
+    "pg-boss": "^12.26.4",
     "toad-scheduler": "^4.1.0",
     "ws": "^8.21.1"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^26.1.1",
-    "@types/pg": "^8.20.0",
+    "@types/node": "^26.1.2",
+    "@types/pg": "^8.20.3",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "1.0.0-rc.4",
     "typescript": "7.0.2",

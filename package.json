@@ -29,12 +29,12 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.1",
     "@valibot/to-json-schema": "^1.7.1",
-    "knip": "^6.29.0",
-    "oxfmt": "^0.60.0",
-    "oxlint": "^1.75.0",
+    "knip": "^6.31.0",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
     "publint": "^0.3.22",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.7",
+    "turbo": "^2.10.8",
     "typescript": "7.0.2"
   },
   "engines": {
