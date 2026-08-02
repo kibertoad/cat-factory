@@ -44,6 +44,7 @@ import {
   canParkOnHuman,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
+  parkingRefusalMessage,
 } from './publicApiAdmission.js'
 import { createParkAnnouncer, isParked } from './publicApiStream.js'
 import {
@@ -360,14 +361,15 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     }
     // The parking half is a SCOPE question (see PARKING_INLINE_KINDS): a pipeline that can park
     // on a human decision needs a caller able to answer it, which is exactly what a `decide`-scope
-    // key asserts. A `write` key gets the pre-existing refusal, now naming the reason and the fix.
+    // key asserts. A `write` key gets the pre-existing refusal, naming THIS pipeline's park
+    // surfaces and, for any the public decision surface cannot answer yet, saying so rather than
+    // promising an answer path that does not exist (`parkingRefusalMessage`).
     if (canParkOnHuman(pipeline) && !scopeSatisfies(auth.scope, 'decide')) {
       return c.json(
         {
           error: {
             code: 'pipeline_requires_decide_scope',
-            message:
-              "This pipeline can park on a human decision (a requirements/clarity review, a brainstorm, or an approval gate). Start it with a 'decide'-scope key, which can answer the park through /api/v1/runs/:runId/decisions",
+            message: parkingRefusalMessage(pipeline),
           },
         },
         403,
