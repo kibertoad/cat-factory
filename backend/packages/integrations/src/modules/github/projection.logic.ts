@@ -1,5 +1,6 @@
 import type {
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCommit,
   GitHubIssue,
@@ -191,5 +192,40 @@ export function toCheckRunProjection(
     conclusion: p.conclusion ?? null,
     htmlUrl: p.html_url ?? null,
     syncedAt,
+  }
+}
+
+/** One entry of `GET /repos/{o}/{r}/pulls/{n}/files`. */
+export interface GhChangedFilePayload {
+  filename?: string
+  previous_filename?: string | null
+  status?: string
+  additions?: number
+  deletions?: number
+  patch?: string | null
+}
+
+/**
+ * A GitHub PR file entry → the neutral {@link GitHubChangedFile} the PR-review slicer and the
+ * merge track record's change classifier consume. Extracted from the fetch client so it sits
+ * beside its GitLab counterpart (`@cat-factory/gitlab`'s `toChangedFileProjection`): the two
+ * providers have to agree on what a neutral changed file MEANS, or every consumer downstream
+ * means something different depending on where a repo happens to be hosted.
+ *
+ * The line counts are `?? null` — "the host did not report this" — and never `?? 0`. GitHub sends
+ * both fields on every file in practice, INCLUDING a real `0` for a binary it cannot line-count,
+ * so a missing field here is the shape of an unexpected payload rather than a routine case. The
+ * distinction is load-bearing because zero is a CLAIM about the file (nothing changed) that the
+ * reviewer acts on by skipping it, and it is a live case on GitLab, which reports no counts at all
+ * and withholds the hunk they would be derived from once a diff is too large.
+ */
+export function toChangedFileProjection(f: GhChangedFilePayload): GitHubChangedFile {
+  return {
+    path: f.filename ?? '',
+    previousPath: f.previous_filename ?? null,
+    status: f.status ?? 'modified',
+    additions: f.additions ?? null,
+    deletions: f.deletions ?? null,
+    patch: f.patch ?? null,
   }
 }

@@ -12,7 +12,7 @@ import {
   defaultStepResolverRegistry,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
-import { buildInfrastructureCapabilities } from '@cat-factory/server'
+import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
 // below, then wires each gate's provider.
@@ -200,6 +200,7 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
       webhookSecret: config.gitlab.webhookSecret || undefined,
+      logger,
     })
     // Bridge the GitLab VcsClient onto the legacy GitHubClient port the engine's gate / merge /
     // RepoFiles paths consume, so a GitLab-only deployment (no GitHub App) gates on real CI and
@@ -209,6 +210,7 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
       token: env.GITLAB_TOKEN,
       apiBase: config.gitlab.apiBase,
       clock,
+      logger,
     })
   }
 

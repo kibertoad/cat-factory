@@ -1,5 +1,6 @@
 import type {
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCommit,
   GitHubIssue,
@@ -70,6 +71,23 @@ export interface GlCommitStatusPayload {
   name?: string
   status?: string
   target_url?: string | null
+}
+
+/** One entry of `GET /merge_requests/:iid/diffs` (or the `changes[]` of `/changes`). */
+export interface GlMrDiffPayload {
+  old_path?: string
+  new_path?: string
+  diff?: string
+  new_file?: boolean
+  renamed_file?: boolean
+  deleted_file?: boolean
+  /**
+   * Set when GitLab WITHHELD the hunk because the file's diff exceeds its size limit. Load-bearing
+   * rather than informational: an empty `diff` is ambiguous on its own (a pure rename and a
+   * withheld 5000-line diff both carry `''`), and this flag is the only thing that tells the two
+   * apart — so it is what decides whether the neutral file reports counts of `0` or of `null`.
+   */
+  too_large?: boolean
 }
 
 /** Owner (namespace) + name for a GitLab project, used to fill the neutral ref. */
@@ -228,6 +246,74 @@ export function checkState(state: string | undefined): {
       // created / waiting_for_resource / preparing / pending / running / scheduled
       return { status: 'in_progress', conclusion: null }
   }
+}
+
+/**
+ * A GitLab MR diff entry → the neutral {@link GitHubChangedFile} the PR-review slicer and the
+ * merge track record's change classifier consume.
+ *
+ * Two mapping decisions carry weight:
+ *
+ * - **The status vocabulary is GitHub's**, because `classifyChangedFiles` and the reviewer prompt
+ *   are written against it. GitLab reports the change as three independent booleans rather than a
+ *   single status, and a renamed-AND-edited file sets `renamed_file` alone — so `renamed` wins over
+ *   `modified` exactly as GitHub's own status does.
+ * - **Line counts are COUNTED from the hunk**, since GitLab's diff payload carries no
+ *   `additions`/`deletions` — exact whenever GitLab gave us a hunk to count. When it WITHHELD the
+ *   hunk (`too_large`) there is nothing to count and the counts are `null`, NOT `0`: those render
+ *   into the reviewer's own prompt (`### path (modified, +12/-3)`), so a withheld 5000-line diff
+ *   reported as `+0/-0` would tell the reviewer the file changed nothing, next to a note saying its
+ *   diff could not be shown. A binary file is a real `0` on both providers — GitHub reports `0`
+ *   there too, because neither host can line-count bytes.
+ */
+export function toChangedFileProjection(d: GlMrDiffPayload): GitHubChangedFile {
+  // `new_path` is empty only for a delete, where GitLab still fills it with the old path; prefer
+  // it so the path always names the file as the reviewer will refer to it.
+  const path = d.new_path || d.old_path || ''
+  const patch = d.diff ? d.diff : null
+  const counts = d.too_large ? { additions: null, deletions: null } : countDiffLines(d.diff)
+  return {
+    path,
+    previousPath: d.renamed_file ? (d.old_path ?? null) : null,
+    status: changedFileStatus(d),
+    ...counts,
+    patch,
+  }
+}
+
+function changedFileStatus(d: GlMrDiffPayload): string {
+  if (d.new_file) return 'added'
+  if (d.deleted_file) return 'removed'
+  if (d.renamed_file) return 'renamed'
+  return 'modified'
+}
+
+/**
+ * Count added/removed lines in a unified diff, reading only what follows the FIRST hunk header.
+ *
+ * The preamble is skipped POSITIONALLY rather than by prefix, because `+`/`-` mean "content" inside
+ * a hunk and "file header" only before one — and the two are not separable by their text. Testing
+ * `!line.startsWith('---')` looks equivalent and silently drops every REMOVED line whose own
+ * content starts with `--` (a YAML document separator, an SQL comment, a `--i` decrement), which
+ * undercounts exactly the diffs a reviewer most wants sized correctly. Which GitLab versions
+ * include the `--- a/x` / `+++ b/x` pair at all varies, so neither can the preamble be assumed
+ * present: a payload with no hunk header is counted whole rather than reported as zero, since an
+ * unrecognised shape must not read as "nothing changed".
+ *
+ * `\ No newline at end of file` starts with a backslash and so is naturally excluded.
+ */
+function countDiffLines(diff: string | undefined): { additions: number; deletions: number } {
+  if (!diff) return { additions: 0, deletions: 0 }
+  const lines = diff.split('\n')
+  // -1 (no hunk header found) slices from 0, i.e. counts the whole payload.
+  const firstHunk = lines.findIndex((line) => line.startsWith('@@'))
+  let additions = 0
+  let deletions = 0
+  for (const line of lines.slice(firstHunk + 1)) {
+    if (line.startsWith('+')) additions += 1
+    else if (line.startsWith('-')) deletions += 1
+  }
+  return { additions, deletions }
 }
 
 /**

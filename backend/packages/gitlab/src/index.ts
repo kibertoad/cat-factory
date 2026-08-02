@@ -2,6 +2,7 @@ import type {
   Clock,
   GitHubClient,
   GitHubInstallationRepository,
+  Logger,
   SecretCipher,
   VcsProviderRegistry,
 } from '@cat-factory/kernel'
@@ -45,8 +46,8 @@ export interface RegisterGitLabOptions {
   webhookSecret?: string
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
-  /** Optional sink warned when a listing is truncated at the page cap. */
-  logger?: { warn: (message: string) => void }
+  /** {@link BuildGitLabEngineClientOptions.logger} — required for the same reason. */
+  logger: Logger
 }
 
 /**
@@ -75,6 +76,15 @@ export interface BuildGitLabEngineClientOptions {
   apiBase: string
   clock: Clock
   fetchImpl?: typeof fetch
+  /**
+   * REQUIRED, unlike the client's own optional dep: every facade builds its GitLab engine client
+   * here, so this is the one place that can force each of them to wire a real sink. It was optional
+   * once, and the result was that no composition root passed one — leaving the engine's own reads
+   * (the changed-file list a review slices, the merge track record's classifier) able to truncate
+   * at the page cap with nothing emitted anywhere, which is the silent cap the "no silent caps"
+   * rule exists to prevent. A facade that forgets must now fail to typecheck.
+   */
+  logger: Logger
 }
 
 /**
@@ -91,6 +101,7 @@ export function buildGitLabEngineClient(options: BuildGitLabEngineClientOptions)
       tokenSource: new StaticGitLabTokenSource(options.token, options.apiBase),
       clock: options.clock,
       fetchImpl: options.fetchImpl,
+      logger: options.logger,
     }),
     provider: 'gitlab',
   })
@@ -105,7 +116,8 @@ export interface BuildGitLabConnectClientOptions {
   apiBase: string
   clock: Clock
   fetchImpl?: typeof fetch
-  logger?: { warn: (message: string) => void }
+  /** {@link BuildGitLabEngineClientOptions.logger} — required for the same reason. */
+  logger: Logger
 }
 
 /**

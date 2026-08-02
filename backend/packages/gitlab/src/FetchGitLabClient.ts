@@ -2,7 +2,10 @@ import type {
   BranchUpdateOutcome,
   Clock,
   CommitFilesResult,
+  CreateReviewInput,
+  CreateReviewResult,
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCodeSearchHit,
   GitHubCommit,
@@ -15,6 +18,7 @@ import type {
   GitHubRepo,
   GitHubReviewThread,
   ListOptions,
+  Logger,
   Paged,
   RepoContentEntry,
   RepoEntry,
@@ -23,7 +27,7 @@ import type {
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
-import { describeVcsApiError } from '@cat-factory/kernel'
+import { describeVcsApiError, noopLogger } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
@@ -37,15 +41,18 @@ import {
   type GlCommitStatusPayload,
   type GlIssuePayload,
   type GlMergeRequestPayload,
+  type GlMrDiffPayload,
   type GlProjectPayload,
   mergeabilityFromStatus,
   toBranchProjection,
+  toChangedFileProjection,
   toCheckRunProjection,
   toCommitProjection,
   toIssueProjection,
   toMergeRequestProjection,
   toRepoProjection,
 } from './projection.js'
+import { postMrReview } from './reviewPosting.js'
 
 // ---------------------------------------------------------------------------
 // Thin `fetch`-based VcsClient for GitLab (REST v4), the GitLab analogue of the
@@ -72,11 +79,14 @@ export interface FetchGitLabClientDependencies {
   /** Injected for tests; defaults to a `setTimeout`-based delay (used between rebase polls). */
   sleep?: (ms: number) => Promise<void>
   /**
-   * Optional sink, warned when a listing hits the {@link MAX_PAGES} page cap with more
-   * results still available — so a truncated sync is surfaced rather than silently dropped
-   * (CLAUDE.md "no silent caps"). Defaults to no-op.
+   * Warned when a listing hits the {@link MAX_PAGES} page cap with more results still available,
+   * and when a read falls back to a deprecated endpoint — so a truncated sync is surfaced rather
+   * than silently dropped (CLAUDE.md "no silent caps"). Optional so the client stays constructible
+   * standalone in a unit test; normalised ONCE to `noopLogger`, never null-checked per call. The
+   * FACADE-facing builders in `index.ts` take it as REQUIRED, which is what stops a composition
+   * root from quietly running the whole GitLab path on a no-op.
    */
-  logger?: { warn: (message: string) => void }
+  logger?: Logger
 }
 
 interface RequestOptions {
@@ -93,7 +103,12 @@ interface GitLabResponse {
 }
 
 export class FetchGitLabClient implements VcsClient {
-  constructor(private readonly deps: FetchGitLabClientDependencies) {}
+  /** Normalised once (CLAUDE.md's logging convention), so no call site null-checks the sink. */
+  private readonly log: Logger
+
+  constructor(private readonly deps: FetchGitLabClientDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   // ---- reads --------------------------------------------------------------
 
@@ -459,18 +474,89 @@ export class FetchGitLabClient implements VcsClient {
 
   // ---- review reads (the human-review gate) -------------------------------
 
+  // A missing MR degrades differently per caller, but always to null: no base to gate against
+  // (the human-review gate falls back to its default), no source branch to push to (the
+  // deep-review "fix" reports it unresolvable rather than cloning the wrong ref), no head sha to
+  // compare against (the drift check skips) — the same dispositions as the GitHub half.
   async getPullRequestBaseRef(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null> {
+    return (await this.readMergeRequest(connection, ref, number))?.target_branch ?? null
+  }
+
+  async getPullRequestHeadRef(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.readMergeRequest(connection, ref, number))?.source_branch ?? null
+  }
+
+  async getPullRequestHeadSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const mr = await this.readMergeRequest(connection, ref, number)
+    // `diff_refs.head_sha` is the authoritative source-branch head; the top-level `sha` is the
+    // same value on an open MR but goes stale once it merges, so prefer the former.
+    return mr?.diff_refs?.head_sha ?? mr?.sha ?? null
+  }
+
+  /**
+   * The MR's changed files, read through `/diffs` — the PAGINATED form, so a large MR is bounded by
+   * the same page cap every other listing here obeys instead of arriving as one unbounded payload.
+   *
+   * `/diffs` only exists from GitLab 15.7, and a self-managed instance older than that answers 404.
+   * That 404 falls back to the long-standing `/changes`, because the alternative is worse than a
+   * deprecated read: this method is OPTIONAL on the port precisely so a provider that cannot
+   * enumerate a PR's files degrades to the reviewer's git fallback, but it is only ABSENCE that
+   * degrades — a present method that throws propagates out of `prReviewerDiffPreOp` and FAILS the
+   * step. Version-tolerance is the adapter's job, the same way {@link mergeabilityFromStatus}
+   * prefers 15.6+ `detailed_merge_status` and falls back to the deprecated field.
+   */
+  async listChangedFiles(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    const base = `/projects/${projectPath(ref)}/merge_requests/${number}`
+    const mapDiffs = (json: unknown): GitHubChangedFile[] =>
+      (Array.isArray(json) ? (json as GlMrDiffPayload[]) : []).map(toChangedFileProjection)
     try {
-      const mr = await this.getMergeRequest(connection, ref, number)
-      return mr.target_branch ?? null
-    } catch (err) {
-      if (err instanceof GitLabApiError && err.status === 404) return null
-      throw err
+      return await this.paginate<GitHubChangedFile>(
+        `${base}/diffs?per_page=${PER_PAGE}`,
+        { connection },
+        mapDiffs,
+      )
+    } catch (error) {
+      if (!(error instanceof GitLabApiError && error.status === 404)) throw error
+      // A 404 here is EITHER "this instance predates /diffs" OR "no such MR". `/changes` tells
+      // the two apart for us: it exists on every version, so a missing MR 404s again and rethrows.
+      this.log.warn('GitLab /diffs unavailable; falling back to the deprecated /changes read', {
+        mergeRequest: number,
+        project: projectPath(ref),
+      })
+      const { json } = await this.request(`${base}/changes`, { connection })
+      return mapDiffs((json as { changes?: unknown } | null)?.changes)
     }
+  }
+
+  createReview(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<CreateReviewResult> {
+    // The per-comment posting + partial-success reporting lives in `reviewPosting.ts` (the mirror
+    // of the GitHub half); this stays a thin transport delegate, bound to this project.
+    return postMrReview(
+      (path, opts) => this.request(`/projects/${projectPath(ref)}${path}`, { ...opts, connection }),
+      number,
+      input,
+    )
   }
 
   async listRequestedReviewers(
@@ -968,6 +1054,25 @@ export class FetchGitLabClient implements VcsClient {
     return (json ?? {}) as GlMrDetail
   }
 
+  /**
+   * {@link getMergeRequest}, but a 404 (the project has no such MR: never opened, or hard-deleted)
+   * answers null while ANY other failure throws — so a caller can tell "this MR does not exist"
+   * from "the provider could not answer". Every single-MR accessor that degrades to null is a
+   * projection of this one read, the mirror of the GitHub client's `readPullRequest`.
+   */
+  private async readMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GlMrDetail | null> {
+    try {
+      return await this.getMergeRequest(connection, ref, number)
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   /** Resolve a project's default branch (for the files API, which needs a concrete ref). */
   private async defaultBranch(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<string> {
     const repo = await this.getRepo(connection, ref)
@@ -989,9 +1094,12 @@ export class FetchGitLabClient implements VcsClient {
     }
     // A `next` link still set at the cap means GitLab had more pages we did not fetch.
     if (url) {
-      this.deps.logger?.warn(
-        `GitLab listing truncated at MAX_PAGES=${MAX_PAGES} (~${PER_PAGE * MAX_PAGES} items) for "${path}"; remaining results were dropped.`,
-      )
+      this.log.warn('GitLab listing truncated at the page cap; remaining results were dropped', {
+        path,
+        maxPages: MAX_PAGES,
+        approxItemCap: PER_PAGE * MAX_PAGES,
+        fetched: all.length,
+      })
     }
     return all
   }
@@ -1112,6 +1220,8 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
 /** A merge-request detail object — the fields the review + rebase reads consume. */
 interface GlMrDetail {
   target_branch?: string
+  /** The MR's source branch — the head the deep-review "fix" pass clones and pushes back onto. */
+  source_branch?: string
   reviewers?: Array<{ username?: string }>
   /** The source-branch head commit (top-level field). */
   sha?: string | null

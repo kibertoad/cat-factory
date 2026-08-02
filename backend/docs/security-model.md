@@ -222,6 +222,14 @@ Everything the agent writes that reaches a parsed surface is treated as hostile:
 - Captured command output shown back to a model is fenced with a fence sized longer than any
   backtick run in the body (`fencedOutput`), so tool output cannot spill into what the model reads
   as instructions.
+- Published review findings (`createReview`, on both providers) are a rendered surface too, and one
+  that is **not** yet scrubbed: a finding's body is posted to the host verbatim. The exposure is
+  bounded relative to a PR body — a host auto-links `#123`/`@name` in a comment, but only a
+  DESCRIPTION or commit message can carry a closing keyword that acts on merge — and the findings a
+  human selected in the review window are the only ones posted. It is listed here because "not a
+  boundary" has to be written down to stay a decision rather than an oversight; folding these
+  through `hostMarkdown` is the obvious next step and belongs on whichever half moves first, since
+  the GitHub and GitLab posters must not diverge on it.
 - Inbound tracker-comment commands are explicit first-token commands only, behind identity,
   data-not-instructions, and iteration-budget guards, and route through the same service methods
   the UI calls — there is no parallel webhook-driven mutation path into the engine.

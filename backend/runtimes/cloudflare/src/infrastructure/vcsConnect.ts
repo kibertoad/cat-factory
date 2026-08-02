@@ -1,5 +1,6 @@
 import type { GitHubClient, Clock, GitHubInstallationRepository } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
+import { logger } from '@cat-factory/server'
 import { buildGitLabConnectClient, GitLabIdentityResolver } from '@cat-factory/gitlab'
 import { VcsPatConnectionService } from '@cat-factory/integrations'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
@@ -26,7 +27,13 @@ export function selectWorkerVcsConnectDeps(
     masterKeyBase64: gitlab.encryptionKey,
     info: 'cat-factory:vcs-token',
   })
-  const client = buildGitLabConnectClient({ installations, cipher, apiBase: gitlab.apiBase, clock })
+  const client = buildGitLabConnectClient({
+    installations,
+    cipher,
+    apiBase: gitlab.apiBase,
+    clock,
+    logger,
+  })
   const service = new VcsPatConnectionService({
     provider: 'gitlab',
     installations,
