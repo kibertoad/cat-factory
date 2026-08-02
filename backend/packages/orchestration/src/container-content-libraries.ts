@@ -10,7 +10,11 @@ import {
   SkillRunResolver,
   SkillSourceService,
 } from '@cat-factory/agents'
-import type { AppCaches, DocumentContentResolver } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  DocumentContentResolver,
+  FoundationalServiceRegistry,
+} from '@cat-factory/kernel'
 import type { CoreDependencies } from './container.js'
 import { FragmentTitleService } from './modules/fragmentLibrary/FragmentTitleService.js'
 
@@ -70,7 +74,7 @@ export interface SkillLibraryModule {
  * repositories are wired.
  */
 export interface FoundationalServiceModule {
-  /** Per-tier CRUD + the merged account ⊕ workspace catalog read (cached). */
+  /** Per-tier CRUD + the merged builtin ⊕ account ⊕ workspace catalog read (cached). */
   catalogService: FoundationalServiceCatalogService
   /** Repo-sourced definitions; present only when the GitHub client + source repo are wired. */
   sourceService?: FoundationalServiceSourceService
@@ -94,6 +98,7 @@ export interface FoundationalServiceModule {
 export function createFoundationalServiceModule(
   deps: CoreDependencies,
   caches: AppCaches,
+  registry: FoundationalServiceRegistry,
 ): FoundationalServiceModule | undefined {
   const { foundationalServiceRepository, apiContractRepository } = deps
   if (!foundationalServiceRepository || !apiContractRepository) return undefined
@@ -104,6 +109,9 @@ export function createFoundationalServiceModule(
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     catalogCache: caches.foundationalServiceCatalog,
+    // The deployment's code-registered `builtin` tier, resolved once by `resolveCoreRuntime` so
+    // the engine and the boot validation read the SAME instance.
+    registry,
   })
 
   const sourceService =

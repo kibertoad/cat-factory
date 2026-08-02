@@ -55,7 +55,8 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
  * Workspace routes are authorized by the global per-workspace gate in `app.ts` plus the
  * admin-tier `settings.manage` permission (the catalog is workspace configuration); account
  * routes guard on account membership here. The MERGED read — what an agent actually sees — is
- * workspace-only, because an account has no second tier to merge with.
+ * workspace-only, because a board is what runs agents; an account inspects what it inherits
+ * from the deployment's registered tier through the suppression list, which both scopes serve.
  */
 export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -105,6 +106,31 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
     return c.body(null, 204)
   })
 
+  // ---- opting a tier out of what it INHERITS ------------------------------
+  // Mounted at both scopes: a board inherits from its account, and either tier inherits the
+  // deployment's code-registered `builtin` services.
+
+  buildHonoRoute(app, listFoundationalServiceSuppressionsContract, async (c) => {
+    const module = requireCatalog(c)
+    return c.json(await module.catalogService.listSuppressions(ownerKind, ownerId(c)), 200)
+  })
+
+  buildHonoRoute(app, suppressFoundationalServiceContract, async (c) => {
+    const module = requireCatalog(c)
+    await module.catalogService.suppress(ownerKind, ownerId(c), c.req.valid('param').serviceId)
+    return c.body(null, 204)
+  })
+
+  buildHonoRoute(app, restoreFoundationalServiceContract, async (c) => {
+    const module = requireCatalog(c)
+    await module.catalogService.restoreInherited(
+      ownerKind,
+      ownerId(c),
+      c.req.valid('param').serviceId,
+    )
+    return c.body(null, 204)
+  })
+
   // ---- the merged catalog + the lazy contract read ------------------------
 
   if (scope === 'workspace') {
@@ -120,25 +146,6 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
       const serviceId = c.req.valid('param').serviceId
       const documents = await module.catalogService.contractsFor(ownerId(c), [serviceId])
       return c.json(documents.get(serviceId) ?? [], 200)
-    })
-
-    // Opting a board out of an inherited account service, and back in. Workspace-only for the
-    // same reason the merged read is: an account tier has nothing above it to opt out of.
-    buildHonoRoute(app, listFoundationalServiceSuppressionsContract, async (c) => {
-      const module = requireCatalog(c)
-      return c.json(await module.catalogService.listSuppressions(ownerId(c)), 200)
-    })
-
-    buildHonoRoute(app, suppressFoundationalServiceContract, async (c) => {
-      const module = requireCatalog(c)
-      await module.catalogService.suppressForWorkspace(ownerId(c), c.req.valid('param').serviceId)
-      return c.body(null, 204)
-    })
-
-    buildHonoRoute(app, restoreFoundationalServiceContract, async (c) => {
-      const module = requireCatalog(c)
-      await module.catalogService.restoreInherited(ownerId(c), c.req.valid('param').serviceId)
-      return c.body(null, 204)
     })
   }
 

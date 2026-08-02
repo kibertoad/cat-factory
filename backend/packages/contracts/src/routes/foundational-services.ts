@@ -76,8 +76,9 @@ export const getFoundationalServiceContractsContract = defineApiContract({
 })
 
 /**
- * The MERGED catalog an agent actually sees (account ⊕ workspace, workspace winning).
- * Workspace-mount only — an account has no other tier to merge with.
+ * The MERGED catalog an agent actually sees (builtin ⊕ account ⊕ workspace, the later tier
+ * winning). Workspace-mount only — it is a board's agents that read it, and an account tier
+ * inspects what it inherits from the deployment through its own suppression list instead.
  */
 export const resolvedFoundationalServicesContract = defineApiContract({
   method: 'get',
@@ -86,15 +87,17 @@ export const resolvedFoundationalServicesContract = defineApiContract({
 })
 
 /**
- * The SUPPRESSION sub-resource: opting a board out of an inherited account service, listing what
- * it is opted out of, and opting back in. Workspace-mount only, since an account tier has nothing
- * above it to opt out of.
+ * The SUPPRESSION sub-resource: opting a tier out of a service it INHERITS, listing what it is
+ * opted out of, and opting back in. Mounted at BOTH scopes, because both inherit: a board from
+ * its account, and either from the deployment's code-registered `builtin` tier. (It was
+ * workspace-only while an account had nothing below it; leaving it that way once the deployment
+ * tier existed would make a registered service un-opt-out-able for a whole account.)
  *
- * Its own sub-resource rather than a flag on the service, because a suppression is a fact the
- * WORKSPACE tier asserts about an id it does not own — there is no service row of its own to
- * patch. And note it is NOT `DELETE /foundational-services/:id`: that removes the board's OWN
- * registration and its uploaded contracts, where a suppression destroys nothing and is
- * reversible, which is exactly why the two cannot share a verb.
+ * Its own sub-resource rather than a flag on the service, because a suppression is a fact a tier
+ * asserts about an id it does not own — there is no service row of its own to patch. And note it
+ * is NOT `DELETE /foundational-services/:id`: that removes the tier's OWN registration and its
+ * uploaded contracts, where a suppression destroys nothing and is reversible, which is exactly
+ * why the two cannot share a verb.
  *
  * The LIST is what makes the pair usable at all: a suppressed id is by construction absent from
  * the merged catalog, so a surface offering suppression could otherwise offer no way back. It is

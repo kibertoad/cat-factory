@@ -3,7 +3,11 @@ import type {
   FoundationalServiceTier,
   ResolvedFoundationalService,
 } from '@cat-factory/contracts'
-import type { ApiContractManifestEntry, FoundationalServiceRecord } from '@cat-factory/kernel'
+import type {
+  ApiContractManifestEntry,
+  FoundationalServiceRecord,
+  FoundationalServiceRegistryEntry,
+} from '@cat-factory/kernel'
 
 // Pure tier-merge for the foundational-services catalog. No I/O — the service hands in the
 // two tiers' rows plus their contract manifests, so every precedence rule here is
@@ -41,6 +45,9 @@ export function toWire(
 }
 
 export interface MergeFoundationalTiersInput {
+  /** The DEPLOYMENT's own services, registered in code on the `FoundationalServiceRegistry`. */
+  builtins: FoundationalServiceRegistryEntry[]
+  /** Read `includeDeleted` — an account tombstone is what suppresses a registered builtin. */
   accountRows: FoundationalServiceRecord[]
   /** Read `includeDeleted` — a workspace tombstone is what suppresses an inherited service. */
   workspaceRows: FoundationalServiceRecord[]
@@ -49,10 +56,11 @@ export interface MergeFoundationalTiersInput {
 }
 
 /**
- * Merge the account and workspace tiers into the catalog an agent sees. The workspace tier
- * wins by id, and a workspace TOMBSTONE removes the id entirely — including an account service
- * the workspace never authored, which is the whole point of reading the workspace tier with
- * tombstones included.
+ * Merge the three tiers into the catalog an agent sees: the deployment's registered services,
+ * then the account's rows, then the workspace's, each winning by id. A TOMBSTONE at either
+ * stored tier removes the id entirely — including a service that tier never authored, which is
+ * the whole point of reading both stored tiers with tombstones included, and is what lets an
+ * account opt out of a deployment builtin exactly as a board opts out of an account service.
  *
  * Sorted by id so a catalog rendered into a prompt is byte-stable across resolves; an unstable
  * order would break prompt caching for every design dispatch in the workspace.
@@ -61,15 +69,22 @@ export function mergeFoundationalTiers(
   input: MergeFoundationalTiersInput,
 ): ResolvedFoundationalService[] {
   const merged = new Map<string, ResolvedFoundationalService>()
-  for (const row of input.accountRows) {
-    if (row.deletedAt) continue
-    merged.set(row.serviceId, entry(row, input.accountManifest, 'account'))
-  }
-  for (const row of input.workspaceRows) {
-    if (row.deletedAt) merged.delete(row.serviceId)
-    else merged.set(row.serviceId, entry(row, input.workspaceManifest, 'workspace'))
-  }
+  for (const builtin of input.builtins) merged.set(builtin.id, { ...builtin, tier: 'builtin' })
+  applyTier(merged, input.accountRows, input.accountManifest, 'account')
+  applyTier(merged, input.workspaceRows, input.workspaceManifest, 'workspace')
   return [...merged.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
+function applyTier(
+  merged: Map<string, ResolvedFoundationalService>,
+  rows: FoundationalServiceRecord[],
+  manifest: Map<string, ApiContractManifestEntry[]>,
+  tier: FoundationalServiceTier,
+): void {
+  for (const row of rows) {
+    if (row.deletedAt) merged.delete(row.serviceId)
+    else merged.set(row.serviceId, entry(row, manifest, tier))
+  }
 }
 
 function entry(
@@ -77,5 +92,14 @@ function entry(
   manifest: Map<string, ApiContractManifestEntry[]>,
   tier: FoundationalServiceTier,
 ): ResolvedFoundationalService {
-  return { ...toWire(record, manifest.get(record.serviceId) ?? []), tier }
+  const wire = toWire(record, manifest.get(record.serviceId) ?? [])
+  return {
+    id: wire.id,
+    name: wire.name,
+    summary: wire.summary,
+    description: wire.description,
+    capabilities: wire.capabilities,
+    contracts: wire.contracts,
+    tier,
+  }
 }

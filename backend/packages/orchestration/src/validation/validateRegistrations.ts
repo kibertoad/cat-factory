@@ -2,6 +2,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS } from '@cat-factory/agents'
 import type {
   AgentKind,
+  FoundationalServiceRegistry,
   GateRegistry,
   PipelineRegistry,
   TaskTypeRegistry,
@@ -11,12 +12,19 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  describeFoundationalProblem,
   isAllowedMcpHttpUrl,
   isValidMcpServerId,
   seedPipelines,
   stubGateContext,
+  validateFoundationalDefinition,
 } from '@cat-factory/kernel'
-import { isNamespacedId, isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
+import {
+  foundationalServiceDefinitionIssues,
+  isNamespacedId,
+  isValidResultViewId,
+  RESULT_VIEW_ID_SET,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -78,6 +86,14 @@ export interface ValidateRegistrationsOptions {
    * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned foundational-service registry to validate (the facade's injected instance —
+   * the SAME one it threads through `CoreDependencies.foundationalServiceRegistry`). Optional:
+   * when omitted, no deployment-registered services are checked. A facade that registers its
+   * estate in code passes it, so a malformed definition or an unparseable contract document
+   * fails at boot rather than reaching an Architect as an empty catalog entry.
+   */
+  foundationalServiceRegistry?: FoundationalServiceRegistry
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -179,6 +195,49 @@ export function collectRegistrationProblems(
   // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
   problems.push(...checkAgentKindVariants(opts, registeredKindIds))
 
+  // 8. Deployment-registered FOUNDATIONAL SERVICES (only when a registry is supplied).
+  problems.push(...checkFoundationalServices(opts))
+
+  return problems
+}
+
+/**
+ * Section 8 of {@link collectRegistrationProblems}: every foundational service a deployment
+ * registers in code must be a definition the platform would have accepted over its own write
+ * boundary.
+ *
+ * Boot is the whole point of registering in code rather than provisioning over REST. A stored
+ * row was refused at the moment someone wrote it; a code definition has no such moment, and its
+ * failures are the quiet kind — an OpenAPI document that does not parse becomes a catalog entry
+ * listing no operations while looking perfectly registered, and a capability tag that misses
+ * `asset-storage` by an underscore surfaces hours later as a refused run. Validating the SAME
+ * shape and the SAME rules the REST boundary applies (`createFoundationalServiceSchema` +
+ * `validateFoundationalDefinition`) means a deployment cannot register something it could not
+ * have uploaded.
+ */
+function checkFoundationalServices(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.foundationalServiceRegistry) return problems
+  for (const definition of opts.foundationalServiceRegistry.all()) {
+    const issues = foundationalServiceDefinitionIssues(definition)
+    if (issues.length > 0) {
+      problems.push({
+        severity: 'error',
+        code: 'foundational_service_invalid',
+        message: `Foundational service "${definition.id}" is not a valid definition: ${issues.join('; ')}`,
+      })
+      // The document checks below read fields this parse just called malformed, so reporting
+      // them too would restate one fault as several.
+      continue
+    }
+    for (const problem of validateFoundationalDefinition(definition)) {
+      problems.push({
+        severity: 'error',
+        code: 'foundational_service_invalid',
+        message: `Foundational service "${definition.id}": ${describeFoundationalProblem(problem)}`,
+      })
+    }
+  }
   return problems
 }
 

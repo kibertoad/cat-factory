@@ -2329,7 +2329,7 @@
       "action": "Standard wählen"
     },
     "accountFoundational": {
-      "intro": "Die gemeinsamen Fähigkeiten, die diese Organisation bereits betreibt - Dateiablage, Benachrichtigungen, Audit - samt ihren API-Verträgen. Jedes Board erbt sie, und einem Architekten wird gesagt, sie zu nutzen statt einen Neubau vorzuschlagen."
+      "intro": "Die gemeinsamen Fähigkeiten, die diese Organisation bereits betreibt - Dateiablage, Benachrichtigungen, Audit - samt ihren API-Verträgen. Jedes Board erbt sie, und einem Architekten wird gesagt, sie zu nutzen statt einen Neubau vorzuschlagen. Dienste, die dieses Deployment im Code registriert, werden hier ebenfalls geerbt und können per ID überschrieben oder unten abgewählt werden."
     }
   },
   "board": {
@@ -4232,6 +4232,7 @@
       "subtitle": "Die gemeinsamen Fähigkeiten, die eure Organisation bereits betreibt, damit ein Entwurf sie nutzt statt sie neu zu bauen."
     },
     "tier": {
+      "builtin": "Deployment",
       "account": "Konto",
       "workspace": "Board"
     },
@@ -4242,6 +4243,8 @@
     },
     "contracts": {
       "omitted": "+{count} weitere nicht aufgeführt",
+      "notIndexed": "Operationen werden fuer dieses Format nicht indexiert; oeffne das Dokument",
+      "noOperations": "deklariert keine Operationen",
       "none": "Kein API-Vertrag hinterlegt. Einem Agenten wird gesagt, dass die Schnittstelle unbekannt ist, statt dass er sie errät."
     },
     "catalog": {
@@ -4252,8 +4255,14 @@
       "hideDocuments": "Vertragsdokumente ausblenden"
     },
     "suppressions": {
-      "title": "Auf diesem Board abgewählt",
-      "intro": "Diese Kontodienste sind für Entwürfe auf diesem Board ausgeblendet. Nichts wurde gelöscht, und das Konto behält sie für alle anderen Boards.",
+      "title": {
+        "workspace": "Auf diesem Board abgewählt",
+        "account": "Für dieses Konto abgewählt"
+      },
+      "intro": {
+        "workspace": "Diese geerbten Dienste sind für Entwürfe auf diesem Board ausgeblendet. Nichts wurde gelöscht, und alle anderen Boards behalten sie.",
+        "account": "Diese von diesem Deployment registrierten Dienste sind für Entwürfe in allen Boards dieses Kontos ausgeblendet. Nichts wurde gelöscht, und andere Konten behalten sie."
+      },
       "restore": "Wieder anbieten",
       "shadowsNothing": "Unter dieser ID wird derzeit nichts geerbt, diese Abwahl blendet also aktuell nichts aus."
     },

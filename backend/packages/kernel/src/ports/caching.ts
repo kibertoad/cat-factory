@@ -118,7 +118,7 @@ export interface AppCaches {
    */
   skillCatalog: GroupCacheHandle<AccountSkillRecord[]>
   /**
-   * The merged (account ⊕ workspace) FOUNDATIONAL SERVICES catalog, grouped AND keyed by
+   * The merged (builtin ⊕ account ⊕ workspace) FOUNDATIONAL SERVICES catalog, grouped AND keyed by
    * workspace id. Read on every design dispatch (the Architect's prompt folds it) and by the
    * lazy contract read that follows, so it is the same read-per-dispatch profile the fragment
    * catalog has. Manifest only — the cached value carries operation names and byte sizes, never

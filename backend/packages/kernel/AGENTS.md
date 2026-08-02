@@ -19,7 +19,9 @@ else imports its **ports** and domain types from here.
   merge-rule resolution), and the **public extension
   registries**: `gate-registry.ts` + `gate-logic.ts`, `judge-registry.ts` + `judge-logic.ts`,
   `pipeline-registry.ts`, `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
-  `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
+  `foundational-service-registry.ts` (the shared capabilities a DEPLOYMENT declares in code — the
+  `builtin` tier of the foundational-services catalog, projected through `summarizeContract` and
+  validated at boot; ADR 0031), `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are

@@ -2351,7 +2351,7 @@
       "action": "Choose default"
     },
     "accountFoundational": {
-      "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild."
+      "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild. Services this deployment registers in code are inherited here too, and can be overridden by id or opted out of below."
     }
   },
   "settings": {
@@ -5440,6 +5440,7 @@
       "subtitle": "The shared capabilities your organisation already runs, so a design consumes them instead of rebuilding them."
     },
     "tier": {
+      "builtin": "Deployment",
       "account": "Account",
       "workspace": "Board"
     },
@@ -5450,6 +5451,8 @@
     },
     "contracts": {
       "omitted": "+{count} more not listed",
+      "notIndexed": "operations are not indexed for this format; open the document",
+      "noOperations": "declares no operations",
       "none": "No API contract attached. An agent will be told the interface is unknown rather than guessing at it."
     },
     "catalog": {
@@ -5460,8 +5463,14 @@
       "hideDocuments": "Hide contract documents"
     },
     "suppressions": {
-      "title": "Opted out on this board",
-      "intro": "These account services are hidden from designs on this board. Nothing was deleted, and the account keeps them for every other board.",
+      "title": {
+        "workspace": "Opted out on this board",
+        "account": "Opted out for this account"
+      },
+      "intro": {
+        "workspace": "These inherited services are hidden from designs on this board. Nothing was deleted, and every other board keeps them.",
+        "account": "These services registered by this deployment are hidden from designs in every board of this account. Nothing was deleted, and other accounts keep them."
+      },
       "restore": "Offer again",
       "shadowsNothing": "Nothing is inherited under this id right now, so this opt-out currently hides nothing."
     },

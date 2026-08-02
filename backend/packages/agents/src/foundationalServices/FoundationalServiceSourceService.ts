@@ -1,4 +1,5 @@
 import type {
+  ApiContractFormat,
   FolderScanCoverage,
   FoundationalServiceOwnerKind,
   FoundationalServiceSource,
@@ -560,6 +561,9 @@ export class FoundationalServiceSourceService {
       now,
       report,
       contractIdFor: contractIdFromPath,
+      // The link is an explicit list a human wrote, so a named module the set's contract
+      // imports rides with it rather than being dropped as unrecognised.
+      admitSupportingModules: true,
     })
     if (contracts.length === 0) {
       // Every linked file read back unusable. Keep a prior row alive and leave the pin behind
@@ -619,6 +623,16 @@ export class FoundationalServiceSourceService {
    * else that fails is COUNTED on the report and NAMED in the log (see {@link skip}), because a
    * link that produced fewer contracts than its author expected has no other explanation
    * available to them.
+   *
+   * `admitSupportingModules` relaxes exactly one of those rules, for `files` mode only: a
+   * TypeScript module that references no contract library rides along under the format the rest
+   * of the set resolved to. A contract module is a module GRAPH — the `defineApiContract` module
+   * plus the schema modules it imports — and only the entry point names the library, so without
+   * this the linked halves of ONE contract are dropped and a coder is handed imports that point
+   * at nothing. It is safe HERE and nowhere else because a `files` link is an explicit list a
+   * human wrote: the link plays the same role the `format` field plays on an upload. A `folder`
+   * or `directory` scan walks paths nobody named, so it keeps the content-led rule, or one link
+   * would sweep a repo's TypeScript into an agent's context as "contracts".
    */
   private async readContracts(params: {
     source: FoundationalServiceSourceRecord
@@ -629,6 +643,7 @@ export class FoundationalServiceSourceService {
     now: number
     report: ScanReport
     contractIdFor: ContractIdForPath
+    admitSupportingModules?: boolean
   }): Promise<ApiContractRecord[]> {
     const { source, installationId, readRef, serviceId, paths, now, report, contractIdFor } = params
     const out: ApiContractRecord[] = []
@@ -642,12 +657,19 @@ export class FoundationalServiceSourceService {
       async (path) => ({ path, file: await this.readFile(source, installationId, path, readRef) }),
       { concurrency: CONTRACT_READ_CONCURRENCY },
     )
+    // The format the SET resolved to, decided over every readable file before any is stored: a
+    // supporting module can be linked before the contract that names the library, so a
+    // left-to-right pass would drop it on the strength of files it had not read yet.
+    const setModuleFormat = params.admitSupportingModules
+      ? moduleFormatOfSet(fetched.flatMap(({ path, file }) => (file ? [{ path, ...file }] : [])))
+      : null
     for (const { path, file } of fetched) {
       if (!file) {
         this.skip(report, source, path, 'unreadable')
         continue
       }
-      const format = detectContractFormat(path, file.content)
+      const format =
+        detectContractFormat(path, file.content) ?? supportingModuleFormat(path, setModuleFormat)
       if (!format) {
         this.skip(report, source, path, 'unrecognised')
         continue
@@ -805,6 +827,37 @@ export class FoundationalServiceSourceService {
     }
     return installationId
   }
+}
+
+/** TypeScript/JavaScript module extensions — the files a contract MODULE graph is made of. */
+const MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
+
+/**
+ * The single TypeScript contract format a linked SET resolved to, or null when it resolved to
+ * none or to more than one.
+ *
+ * More than one is deliberately null rather than a pick: with a `@toad-contracts/core` module
+ * and a `@lokalise/api-contract` module in one linked set there is no telling which library an
+ * unrecognised module supports, and attaching it to the wrong one would present a coder with a
+ * module the contract beside it does not import.
+ */
+function moduleFormatOfSet(files: { path: string; content: string }[]): ApiContractFormat | null {
+  const formats = new Set(
+    files
+      .map((file) => detectContractFormat(file.path, file.content))
+      .filter((format): format is ApiContractFormat => format !== null && format !== 'openapi'),
+  )
+  return formats.size === 1 ? [...formats][0]! : null
+}
+
+/** A linked module the set's format vouches for; null for anything that is not a module. */
+function supportingModuleFormat(
+  path: string,
+  setFormat: ApiContractFormat | null,
+): ApiContractFormat | null {
+  if (!setFormat) return null
+  const lower = path.toLowerCase()
+  return MODULE_EXTENSIONS.some((extension) => lower.endsWith(extension)) ? setFormat : null
 }
 
 function toWire(record: FoundationalServiceSourceRecord): FoundationalServiceSource {
