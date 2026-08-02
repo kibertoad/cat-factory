@@ -134,7 +134,15 @@ const LEGACY_ALLOWANCES = new Map([
   // Ratcheted 1500 → 1455 by extracting `github/reviewThreads.ts` (the GraphQL review-thread
   // reads/writes, the sibling of `reviewPosting.ts`'s REST half) and folding the single-PR
   // accessors onto one `readPullRequest` when `getPullRequest` joined them.
-  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1455],
+  // Ratcheted 1455 → 1375 when the branch-protection preflight needed a new port method. Three
+  // things came out, each a concern that is NOT "authenticate as an installation and account for
+  // its rate limit": the two protection READS (`github/branchProtection.ts` — the preflight probe
+  // and the required-approvals lookup hit the same resource and must not learn failure modes
+  // separately), the CALLER-TOKEN repo reads behind the personal-PAT picker
+  // (`github/viewerTokenReads.ts`, which mints, caches and records nothing), and `GitHubApiError`
+  // plus the shared request constants (`githubHttpHelpers.ts` — several modules now classify off
+  // the error, and both callers must send the same headers).
+  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1375],
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */

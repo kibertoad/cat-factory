@@ -54,6 +54,7 @@ export function mergeWorkspaceSettings(
       patch.defaultProvisionManifestId !== undefined
         ? patch.defaultProvisionManifestId
         : current.defaultProvisionManifestId,
+    allowInitiatorPat: patch.allowInitiatorPat ?? current.allowInitiatorPat,
     // The custom-metadata bag is REPLACED wholesale when supplied (see the update contract): the
     // editor submits every declared field, so a key it omits was cleared and must go.
     // Normalisation drops a cleared value's key entirely, keeping "unset" distinguishable from

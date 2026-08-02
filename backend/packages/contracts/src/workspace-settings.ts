@@ -249,6 +249,25 @@ export const workspaceSettingsSchema = v.object({
    */
   defaultProvisionManifestId: v.nullable(manifestIdSchema),
   /**
+   * Whether a run may authenticate as its INITIATOR (their stored personal access token)
+   * instead of the deployment credential. On by default, which is the attribution behaviour
+   * the platform has always had: pushes and PRs come from the human who started the run.
+   *
+   * Turning it OFF is a security control, and the only ENFORCED one over an initiator's PAT.
+   * A personal token's scope is whatever the human who minted it granted — a classic-scope
+   * PAT reaches every repository its owner can push to, which is routinely far wider than the
+   * App installation the operator scoped. So the blast radius of a compromised run is
+   * otherwise a property of whoever STARTED it. Off ⇒ every run authenticates as the App
+   * installation (or, in local mode, the deployment's own token), at the cost of bot
+   * attribution. See `backend/docs/security-model.md`.
+   *
+   * Scope of the switch: it governs the credential a RUN acts with. It does not touch what a
+   * member's own token does on their behalf in the UI (browsing their PAT-reachable repos in
+   * the picker), which is that member reading their own account, not the platform writing to
+   * someone else's.
+   */
+  allowInitiatorPat: v.boolean(),
+  /**
    * The workspace's custom metadata values, keyed by the field keys a deployment declares
    * in code. `{}` when nothing has been filled in. See {@link workspaceMetadataSchema}.
    */
@@ -283,6 +302,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
   defaultProvisionType: v.optional(v.nullable(provisionTypeSchema)),
   defaultProvisionManifestId: v.optional(v.nullable(manifestIdSchema)),
+  allowInitiatorPat: v.optional(v.boolean()),
   /**
    * Replace the whole metadata bag. Whole-bag rather than per-key because the editor
    * renders every declared field at once, so a save states the complete intent — and a

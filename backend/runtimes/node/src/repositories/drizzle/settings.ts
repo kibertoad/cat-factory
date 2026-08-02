@@ -4,7 +4,9 @@
 // matches across stores; this layer only owns the Drizzle queries. Assembled into the
 // CoreRepositories set by ./drizzle.ts (the barrel).
 
+import { parseStoredAccountSettingsConfig } from '@cat-factory/contracts'
 import type {
+  AccountSettingsConfig,
   AccountSettingsRecord,
   AccountSettingsRepository,
   AgentPromptRepository,
@@ -360,6 +362,7 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
     defaultProvisionType:
       (row.default_provision_type as WorkspaceSettings['defaultProvisionType']) ?? null,
     defaultProvisionManifestId: row.default_provision_manifest_id,
+    allowInitiatorPat: row.allow_initiator_pat === 1,
     metadata,
   }
 }
@@ -419,6 +422,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       spend_monthly_limit: settings.spendMonthlyLimit,
       default_provision_type: settings.defaultProvisionType,
       default_provision_manifest_id: settings.defaultProvisionManifestId,
+      allow_initiator_pat: settings.allowInitiatorPat ? 1 : 0,
       metadata: JSON.stringify(settings.metadata),
     }
     await this.db
@@ -444,6 +448,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           spend_monthly_limit: values.spend_monthly_limit,
           default_provision_type: values.default_provision_type,
           default_provision_manifest_id: values.default_provision_manifest_id,
+          allow_initiator_pat: values.allow_initiator_pat,
           metadata: values.metadata,
         },
       })
@@ -476,6 +481,17 @@ export class DrizzleAccountSettingsRepository implements AccountSettingsReposito
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
+  }
+
+  // Selects the `config` COLUMN alone — never `secrets_cipher`. That is the whole reason this
+  // method can be proxied to a mothership node while `getByAccount` cannot; see the port doc.
+  async getConfigByAccount(accountId: string): Promise<AccountSettingsConfig> {
+    const rows = await this.db
+      .select({ config: accountSettings.config })
+      .from(accountSettings)
+      .where(eq(accountSettings.account_id, accountId))
+      .limit(1)
+    return parseStoredAccountSettingsConfig(rows[0]?.config)
   }
 
   async upsert(record: AccountSettingsRecord): Promise<void> {

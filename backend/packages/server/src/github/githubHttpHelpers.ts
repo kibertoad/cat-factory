@@ -65,3 +65,43 @@ export function parseLastPage(link: string | null): number | undefined {
   }
   return undefined
 }
+
+// Request constants shared by every GitHub caller here — the installation-authenticated client
+// and the viewer-token reads alike. They live with the helpers because both modules must send
+// the SAME headers and honour the same page cap; a second copy is a second thing to keep in step.
+export const USER_AGENT = 'cat-factory'
+export const API_VERSION = '2022-11-28'
+export const ACCEPT = 'application/vnd.github+json'
+export const PER_PAGE = 100
+export const MAX_PAGES = 10
+
+/**
+ * Carries the HTTP status so callers/queue can decide whether to retry.
+ *
+ * Lives with the shared HTTP helpers rather than on the client that throws it, because several
+ * modules now classify off it (`reconcileStaleRepos`, the branch-protection probe) and the
+ * client is at its size budget. `FetchGitHubClient` re-exports it, so existing importers are
+ * unaffected and `instanceof` stays authoritative — there is exactly one class.
+ */
+export class GitHubApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    /**
+     * Whether the response was rate-limited (`x-ratelimit-remaining: 0`). GitHub reports a
+     * PRIMARY rate-limit exhaustion as a 403 (only secondary limits are 429), so status alone
+     * cannot tell a rate-limit apart from a permission denial — a consumer reads this flag to
+     * classify the two differently. Retained here so the signal is available structurally
+     * instead of only baked into the human message.
+     */
+    readonly rateLimited = false,
+  ) {
+    super(message)
+    this.name = 'GitHubApiError'
+  }
+}
+
+/** The HTTP status of a GitHub API failure, or undefined for any other error shape. */
+export function githubApiStatus(error: unknown): number | undefined {
+  return error instanceof GitHubApiError ? error.status : undefined
+}

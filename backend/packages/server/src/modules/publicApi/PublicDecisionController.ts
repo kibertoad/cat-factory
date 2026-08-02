@@ -453,7 +453,7 @@ function registerJudgeRoutes(app: Hono<AppEnv>): void {
       return c.json(failureBody(gated.fail), gated.fail.status)
     }
     const { workspaceId, scoped } = gated
-    await runWithInitiator(scoped.execution.initiatedBy, () =>
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
         .executionService.resolveJudgeDecision(
@@ -476,8 +476,8 @@ function registerForkDecisionRoutes(app: Hono<AppEnv>): void {
   // scope entirely is what keeps the two surfaces equivalent: this route is keyed by run id and
   // deliberately accepts a BOARD task run as well as a headless initiative job, and a board run
   // started in the SPA does carry a `usr_*` initiator whose PAT `PatPreferringAppRegistry` resolves
-  // through `currentInitiator()`. Answering such a run over the public API must not silently demote
-  // its resumed clone/push to the deployment default. A genuinely headless run has
+  // through `currentCredentialScope()`. Answering such a run over the public API must not
+  // silently demote its resumed clone/push to the deployment default. A genuinely headless run has
   // `initiatedBy: null`, which is exactly the no-ambient-context case — so this is a no-op there.
   //
   // The grounded fork CHAT is deliberately not exposed: it is an interactive deliberation
@@ -490,7 +490,7 @@ function registerForkDecisionRoutes(app: Hono<AppEnv>): void {
       return c.json(failureBody(gated.fail), gated.fail.status)
     }
     const { workspaceId, scoped } = gated
-    await runWithInitiator(scoped.execution.initiatedBy, () =>
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
         .executionService.chooseFork(workspaceId, scoped.execution.id, c.req.valid('json')),

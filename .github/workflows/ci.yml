@@ -707,12 +707,11 @@ jobs:
       # whereas backgrounding it here hides that entirely behind setup + build. The
       # readiness wait below gates the test step. Fully job-private, exactly like the
       # service container was (each shard is its own runner VM).
+      #
+      # Both halves live in `.github/scripts/` because the e2e lane below needs exactly the
+      # same pair, and the two copies this replaced had to be fixed twice.
       - name: Start Postgres (background)
-        run: |
-          nohup bash -c 'docker run -d --name ci-postgres \
-            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=cat_factory_test \
-            -p 5432:5432 postgres:18' > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -722,23 +721,8 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Probe over TCP (-h 127.0.0.1) rather than the default unix socket: postgres's init
-      # sequence runs a temporary socket-only server, so a socket probe reports ready
-      # during init and races the real server's restart; TCP only answers once the final
-      # server is up. `docker exec` simply fails while the image is still pulling — the
-      # loop tolerates that.
       - name: Wait for Postgres
-        run: |
-          for _ in $(seq 1 90); do
-            if docker exec ci-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat "$RUNNER_TEMP/postgres-start.log" || true
-          docker logs ci-postgres || true
-          echo "::error::Postgres did not become ready"
-          exit 1
+        run: .github/scripts/wait-postgres.sh
 
       # Node + Local share this one Postgres server; the harness gives each vitest worker
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
@@ -798,15 +782,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # Background Postgres boot, same rationale + shape as `test-db` above: hide the
+      # Background Postgres boot, same rationale + same scripts as `test-db` above: hide the
       # image pull behind setup/build/browser-install; the wait below gates the tests
       # (Playwright's webServer boots the backend, whose migrate() is the first DB touch).
       - name: Start Postgres (background)
-        run: |
-          nohup bash -c 'docker run -d --name ci-postgres \
-            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=cat_factory_test \
-            -p 5432:5432 postgres:18' > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -837,19 +817,8 @@ jobs:
         if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
-      # TCP probe, not the unix socket — see the `test-db` wait step for why.
       - name: Wait for Postgres
-        run: |
-          for _ in $(seq 1 90); do
-            if docker exec ci-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat "$RUNNER_TEMP/postgres-start.log" || true
-          docker logs ci-postgres || true
-          echo "::error::Postgres did not become ready"
-          exit 1
+        run: .github/scripts/wait-postgres.sh
 
       # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
       # worker lane's note): keeps this off zizmor's template-injection radar.

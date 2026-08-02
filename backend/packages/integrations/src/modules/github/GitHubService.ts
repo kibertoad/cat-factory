@@ -1,4 +1,5 @@
-import type { Clock } from '@cat-factory/kernel'
+import pMap from 'p-map'
+import type { BranchProtectionSummary, Clock } from '@cat-factory/kernel'
 import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
@@ -34,6 +35,45 @@ export interface GitHubServiceDependencies {
   clock: Clock
 }
 
+/**
+ * How many repositories one preflight probes. Each repo costs one or two live GitHub reads, so
+ * an unbounded fan-out on a large installation would both stall the request and burn rate
+ * limit. Anything past the cap is COUNTED and reported, never silently dropped.
+ */
+const DEFAULT_PROTECTION_PROBE_LIMIT = 100
+
+/**
+ * How many of those probes are in flight at once, bounded the same way (and for the same
+ * reasons) as `GitHubSyncService`'s `REPO_SYNC_CONCURRENCY`: the cap above bounds the TOTAL
+ * cost, this bounds the BURST, and the burst is what trips GitHub's secondary (abuse) limits —
+ * which answer with a 403 that looks nothing like a rate-limit response. Each probe is up to
+ * two reads, so the real peak is 2 × this; workerd's per-request subrequest cap makes an
+ * unbounded fan-out fail on the runtime before it even reaches the vendor.
+ *
+ * Modest on purpose: this is an on-demand operator check, not a hot path, and its own latency
+ * matters far less than leaving the installation's rate limit intact for the CI gate and the
+ * merger, which share it and are on the critical path of every run.
+ */
+const PROTECTION_PROBE_CONCURRENCY = 4
+
+/** One repository's default-branch protection posture. */
+export interface RepoBranchProtection {
+  repoGithubId: number
+  owner: string
+  name: string
+  defaultBranch: string
+  protection: BranchProtectionSummary
+}
+
+/** The preflight's answer: what was probed, and what could not be. */
+export interface BranchProtectionReport {
+  /** `unavailable` ⇒ the wired VCS client cannot answer at all; `repos` is then meaningless. */
+  capability: 'ok' | 'unavailable'
+  repos: RepoBranchProtection[]
+  /** Linked repositories left unprobed by the fan-out cap. */
+  omittedRepos: number
+}
+
 interface ResolvedRepo {
   repo: GitHubRepo
   installationId: number
@@ -59,6 +99,66 @@ export class GitHubService {
 
   listIssues(workspaceId: string): Promise<GitHubIssue[]> {
     return this.deps.issueProjectionRepository.listByWorkspace(workspaceId)
+  }
+
+  // ---- security preflight -------------------------------------------------
+
+  /**
+   * Probe each linked repository's DEFAULT branch for host-side protection.
+   *
+   * This is the one control the platform can neither provide nor enforce: branch protection
+   * lives on the host and is the only thing standing between a stolen `Contents: write` token
+   * and `main` — covering a direct push AND a merge-API call alike
+   * (`backend/docs/security-model.md`, checklist item 1). Nothing in-product used to tell an
+   * operator it was missing, which is the gap this closes.
+   *
+   * Deliberately a live read on an explicitly-invoked endpoint rather than a projection column:
+   * the projection's `protected` flag is only as fresh as the last sync, and a security report
+   * that is quietly stale is worse than none. `capability: 'unavailable'` is returned rather
+   * than an empty list when the wired VCS client cannot answer at all, so "nothing to report"
+   * never impersonates "everything is protected".
+   *
+   * Two separate bounds apply, because they guard different failures — see
+   * {@link DEFAULT_PROTECTION_PROBE_LIMIT} (total cost) and
+   * {@link PROTECTION_PROBE_CONCURRENCY} (burst).
+   */
+  async checkDefaultBranchProtection(
+    workspaceId: string,
+    options: { maxRepos?: number; concurrency?: number } = {},
+  ): Promise<BranchProtectionReport> {
+    const probe = this.deps.githubClient.getBranchProtection
+    if (!probe) return { capability: 'unavailable', repos: [], omittedRepos: 0 }
+
+    const all = await this.deps.repoProjectionRepository.list(workspaceId)
+    const max = options.maxRepos ?? DEFAULT_PROTECTION_PROBE_LIMIT
+    const probed = all.slice(0, max)
+    // `pMap` preserves INPUT order, which the surface depends on: a row must not move because
+    // its probe happened to be slow.
+    const repos = await pMap(
+      probed,
+      async (repo) => {
+        // The projection can carry no default branch (a repo linked before its first sync). The
+        // probe then reports `branch_not_found` against this guess, which is the honest answer —
+        // an omitted row would read as one fewer repository to check.
+        const defaultBranch = repo.defaultBranch ?? 'main'
+        return {
+          repoGithubId: repo.githubId,
+          owner: repo.owner,
+          name: repo.name,
+          defaultBranch,
+          protection: await probe.call(
+            this.deps.githubClient,
+            repo.installationId,
+            { owner: repo.owner, repo: repo.name },
+            defaultBranch,
+          ),
+        }
+      },
+      { concurrency: options.concurrency ?? PROTECTION_PROBE_CONCURRENCY },
+    )
+    // A cap that silently truncated would read as "these are all your repositories", which on a
+    // security report is the same failure as reporting an unprobed repo as protected.
+    return { capability: 'ok', repos, omittedRepos: all.length - probed.length }
   }
 
   // ---- writes -------------------------------------------------------------

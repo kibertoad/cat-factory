@@ -7,6 +7,7 @@ import type {
   PipelineStep,
   RepoFiles,
   ResolveRunRepoContext,
+  RunCredentialScope,
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { FIXER_AGENT_KIND, getErrorMessage } from '@cat-factory/kernel'
@@ -143,8 +144,9 @@ export class PrReviewResolutionController {
       const repo = runRepo?.repo
       headRef =
         prNumber != null && repo?.pullRequestHeadRef
-          ? await this.deps.runInitiatorScope(instance.initiatedBy, () =>
-              repo.pullRequestHeadRef!(prNumber!),
+          ? await this.deps.runInitiatorScope(
+              { workspaceId, initiatedBy: instance.initiatedBy },
+              () => repo.pullRequestHeadRef!(prNumber!),
             )
           : null
       if (prNumber == null || !headRef) {
@@ -239,7 +241,10 @@ export class PrReviewResolutionController {
     // Detect branch DRIFT: if the PR head moved since the review started, the findings' frozen
     // line numbers may now point at shifted/different code, so posting inline comments would
     // anchor them to the wrong lines (see {@link detectStaleHead}).
-    const staleHead = await this.detectStaleHead(review, repo, prNumber, instance.initiatedBy)
+    const staleHead = await this.detectStaleHead(review, repo, prNumber, {
+      workspaceId,
+      initiatedBy: instance.initiatedBy,
+    })
 
     // Pre-filter against the actual PR diff so out-of-diff lines are folded into the summary
     // rather than sent as inline comments GitHub would 422 (see {@link computeCommentable}).
@@ -264,8 +269,9 @@ export class PrReviewResolutionController {
     const input = suppressBody ? { ...built.input, body: '' } : built.input
     let result: CreateReviewResult
     try {
-      result = await this.deps.runInitiatorScope(instance.initiatedBy, () =>
-        repo.createReview!(prNumber, input),
+      result = await this.deps.runInitiatorScope(
+        { workspaceId, initiatedBy: instance.initiatedBy },
+        () => repo.createReview!(prNumber, input),
       )
     } catch (error) {
       // createReview reports per-comment failures rather than throwing; an actual throw means it
@@ -316,12 +322,12 @@ export class PrReviewResolutionController {
     review: NonNullable<PipelineStep['prReview']>,
     repo: RepoFiles,
     prNumber: number,
-    initiatedBy: ExecutionInstance['initiatedBy'],
+    scope: RunCredentialScope,
   ): Promise<boolean> {
     if (!review.reviewedHeadSha || !repo.pullRequestHeadSha) return false
     try {
       const headSha = repo.pullRequestHeadSha
-      const currentHeadSha = await this.deps.runInitiatorScope(initiatedBy, () => headSha(prNumber))
+      const currentHeadSha = await this.deps.runInitiatorScope(scope, () => headSha(prNumber))
       return currentHeadSha != null && currentHeadSha !== review.reviewedHeadSha
     } catch {
       return false

@@ -68,7 +68,7 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { buildResolveUserGitHubToken, buildTestSecretsService } from './wireCredentialServices'
+import { buildTestSecretsService } from './wireCredentialServices'
 import { CryptoIdGenerator } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
@@ -79,6 +79,7 @@ import {
   buildAppRegistry,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  buildResolveRunInitiatorToken,
 } from './container-vcs-identity.js'
 
 /**
@@ -366,12 +367,15 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     clock,
     registry: defaultSubscriptionQuotaRegistry,
   })
-  // Prefer the run initiator's per-user PAT (when stored) over the App token, so the
-  // container's clone/push/PR is attributed to them. Falls back to the App token.
-  const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
+  // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
+  // the App token, so the container's clone/push/PR is attributed to them. Falls back to the
+  // App token; `resolveRunInitiatorToken` answers null for every "no" in that chain, and is
+  // the SAME builder the engine's GitHub client uses, so the workspace's `allowInitiatorPat`
+  // switch cannot bind one path and miss the other.
+  const resolveRunInitiatorToken = buildResolveRunInitiatorToken(env, db, clock)
   const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
-    if (resolveUserGitHubToken && ctx?.initiatedBy) {
-      const pat = await resolveUserGitHubToken(ctx.initiatedBy)
+    if (resolveRunInitiatorToken && ctx) {
+      const pat = await resolveRunInitiatorToken(ctx)
       if (pat) return pat
     }
     return registry.installationToken(installationId)

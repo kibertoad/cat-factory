@@ -53,7 +53,7 @@ export function notificationActEffect(
       case 'merge_review':
       case 'pipeline_complete':
         if (notification.blockId) {
-          await runWithInitiator(userId, () =>
+          await runWithInitiator({ workspaceId, initiatedBy: userId }, () =>
             container.executionService.mergePr(workspaceId, notification.blockId!, reviewEffort),
           )
         }

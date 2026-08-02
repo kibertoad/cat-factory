@@ -51,6 +51,10 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   // "no environments" choice (which is `infraless`, and silences the banner).
   defaultProvisionType: null,
   defaultProvisionManifestId: null,
+  // On: a run authenticates as its initiator when they stored a PAT, so pushes and PRs are
+  // attributed to the human who started it. An operator who would rather bound every run to
+  // the App installation's scope turns it off (see the field's contract doc).
+  allowInitiatorPat: true,
   // Empty, not seeded: which metadata FIELDS exist is declared by the deployment's app,
   // and a value only ever arrives by someone typing it in.
   metadata: {},

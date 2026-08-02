@@ -26,7 +26,6 @@ import type {
   GitHubClient,
   GitHubInstallationRepository,
   ProvisioningSubsystem,
-  ResolveUserGitHubToken,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   SubscriptionQuotaTarget,
@@ -53,6 +52,7 @@ import {
   ContainerRepoBootstrapper,
   ContainerSessionService,
   GitHubAppRegistry,
+  type ResolveRunInitiatorToken,
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
@@ -224,7 +224,15 @@ export interface NodeContainerExecutorDeps {
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
-  resolveUserGitHubToken?: ResolveUserGitHubToken
+  /**
+   * "Does THIS run act with its initiator's own GitHub token?" — the shared decision built at
+   * the composition root (so the workspace's `allowInitiatorPat` switch binds this path and
+   * the engine's GitHub client identically) and handed here rather than re-composed, since
+   * re-composing it needs a settings repository this module has no `db` to build in
+   * mothership mode. Absent ⇒ no per-user secret store is wired and the mint always uses the
+   * deployment credential.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
   agentContextObservability?: AgentContextObservabilityService
   resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>
   resolveRepoOrigin?: ResolveRepoOrigin
@@ -251,7 +259,7 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     subscriptions,
     personalSubscriptions,
     resolveAccountId,
-    resolveUserGitHubToken,
+    resolveRunInitiatorToken,
     agentContextObservability,
     resolveWebSearchAvailability,
     resolveRepoOrigin,
@@ -301,11 +309,12 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     )
     return null
   }
-  // Prefer the run initiator's per-user PAT (when stored) over the App/env token, so
-  // pushes/PRs are attributed to them. Falls back to the base mint otherwise.
+  // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
+  // the App/env token, so pushes/PRs are attributed to them. Falls back to the base mint
+  // otherwise; `resolveRunInitiatorToken` answers null for every "no" in that chain.
   const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
-    if (resolveUserGitHubToken && ctx?.initiatedBy) {
-      const pat = await resolveUserGitHubToken(ctx.initiatedBy)
+    if (resolveRunInitiatorToken && ctx) {
+      const pat = await resolveRunInitiatorToken(ctx)
       if (pat) return pat
     }
     return baseMint(installationId)

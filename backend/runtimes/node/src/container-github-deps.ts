@@ -18,7 +18,6 @@ import type {
   RateLimitRepository,
   RateLimitSnapshot,
   RepoProjectionRepository,
-  ResolveUserGitHubToken,
   TaskConnectionRepository,
   TaskSourceProvider,
   TrackerSettingsRepository,
@@ -30,6 +29,7 @@ import {
   type GitHubAppRegistry,
   type ResolveRepoTarget,
   type ResolveRepoOrigin,
+  type ResolveRunInitiatorToken,
   FetchGitHubClient,
   FetchGitHubProvisioningClient,
   GitHubBranchUpdater,
@@ -151,7 +151,12 @@ export interface NodeGitHubDepsInput {
   appRegistry: GitHubAppRegistry | undefined
   /** An injected client (the local facade's PAT-backed one) wins over the App-minted client. */
   githubClientOverride?: GitHubClient
-  resolveUserGitHubToken?: ResolveUserGitHubToken
+  /**
+   * The shared "does this run act with its initiator's own token?" decision, built once at the
+   * composition root. Absent ⇒ no per-user secret store is wired and the engine client always
+   * authenticates as the App.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
   /** The GitLab-backed engine client, used as the gate/merge fallback when no GitHub App is set. */
   gitlabEngineClient: GitHubClient | undefined
   providerRegistry: ProviderRegistry
@@ -201,7 +206,7 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
     clock,
     appRegistry,
     githubClientOverride,
-    resolveUserGitHubToken,
+    resolveRunInitiatorToken,
     gitlabEngineClient,
     providerRegistry,
     resolveRepoTarget,
@@ -222,12 +227,13 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   // is configured — one minted from the shared App registry, so a stock Node deployment
   // with an App ALSO gates on real GitHub Actions CI and merges the PR for real (parity
   // with the Worker). Undefined → these stay unwired and the gates pass through.
-  // Prefer the run initiator's per-user PAT (when stored) over the App token for the
-  // engine's CI gate + merge reads, so those are attributed to them too. The engine
-  // sets the initiator in ambient context around the gate-probe / merge boundaries.
+  // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
+  // the App token for the engine's CI gate + merge reads, so those are attributed to them too.
+  // The engine sets the run's credential scope in ambient context around the gate-probe /
+  // merge boundaries.
   const engineRegistry =
-    appRegistry && resolveUserGitHubToken
-      ? new PatPreferringAppRegistry(appRegistry, resolveUserGitHubToken)
+    appRegistry && resolveRunInitiatorToken
+      ? new PatPreferringAppRegistry(appRegistry, resolveRunInitiatorToken)
       : appRegistry
   const githubClient: GitHubClient | undefined =
     githubClientOverride ??

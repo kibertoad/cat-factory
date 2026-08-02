@@ -106,12 +106,23 @@ This is the hard bound on a _fully_ compromised run. What the token is varies by
 | Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped** (`repository_ids`): only the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged        | ~1h, minted per request |
 | Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                             | The PAT's own           |
 
-**The initiator's personal PAT OUTRANKS whichever row applies.** Wherever the per-user secret store
-is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has stored a personal GitHub PAT
-(`github_pat`, sealed, opt-in per user) uses THAT token instead of the deployment's own: the
-container push/clone mint checks it first (`container-executor-deps.ts`, both facades), and so does
-the engine's own GitHub client via `PatPreferringAppRegistry` — which covers the CI gate,
-mergeability, and the real merge call. The deployment credential is the fallback, not the default.
+**The initiator's personal PAT OUTRANKS whichever row applies, unless the workspace refuses it.**
+Wherever the per-user secret store is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has
+stored a personal GitHub PAT (`github_pat`, sealed, opt-in per user) uses THAT token instead of the
+deployment's own: the container push/clone mint checks it first (`container-executor-deps.ts`, both
+facades), and so does the engine's own GitHub client via `PatPreferringAppRegistry` — which covers
+the CI gate, mergeability, and the real merge call. The deployment credential is the fallback, not
+the default.
+
+**`allowInitiatorPat` (per workspace, on by default) is the enforced control over that.** Turned
+off, every run authenticates as the App installation (or, in local mode, the deployment's own
+token) and the initiator's PAT is never even decrypted — so the blast radius goes back to being a
+property of how the operator scoped the deployment rather than of who pressed start. It is a
+**mechanism**, not advice: all three mint sites route through the one
+`createResolveRunInitiatorToken` decision, and an unreadable settings row **fails closed** to the
+App token with the cause logged. What it does NOT touch is a member's own token acting on their
+own behalf in the UI (browsing their PAT-reachable repos in the picker) — that is them reading
+their own account, not the platform writing to someone else's.
 
 The purpose is attribution: pushes and PRs come from the human who started the run rather than from
 the bot. The security consequence is that **the bound is then the PAT's scope, not the
@@ -147,7 +158,7 @@ uses it). Narrowing the job token to the run's actual repos (primary + peers + r
 shrink the worst case of Layer 2's stated limit from "the installation" to "the repos this run was
 about". Until then, the practical mitigation is installation scope itself — see the checklist. Note
 that such a narrowing would not bound an initiator PAT, which the platform does not mint and cannot
-scope.
+scope; `allowInitiatorPat: false` is what bounds that, by declining to use it at all.
 
 ## Layer 4 — no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
@@ -240,6 +251,17 @@ is possible at all:
    `Contents: write` token — covering both a direct push and a merge-API call — and it lives on the
    host, not in this codebase. The platform never needs to push to a protected default branch
    (bootstrap targets an empty repo; everything else is work branches), so protection costs nothing.
+   **The product now tells you where this is missing**: the GitHub settings panel's
+   "Default-branch protection" preflight probes each linked repo's default branch on demand
+   (`GET /workspaces/:ws/github/branch-protection`). It reports three states, never two — a repo
+   it could not reach is `unknown`, not "fine" — says so when a branch is protected but the rule
+   itself was unreadable (a minimally-scoped App installation cannot read it, and such a rule may
+   still permit direct pushes), and states how many repos a probe cap left unchecked. A provider
+   that cannot answer at all reports `capability: 'unavailable'` rather than an empty list, which
+   is what today's GitLab connections get. It needs `integrations.manage` — the one READ on that
+   controller that does, because it spends the installation's GitHub rate limit, which the CI gate
+   and the merger draw on for every run; on the ordinary read tier a viewer could degrade the write
+   path by holding down a button. Its fan-out is bounded for the same reason.
 2. **Choose merge presets deliberately.** For anything sensitive: pin `Manual review only`, or keep
    auto-merge and add class floors for `source` and `schema`. Remember the shipped default
    auto-merges under Balanced ceilings with no floors.
@@ -249,10 +271,43 @@ is possible at all:
    repositories" of an org that also holds crown jewels.
 4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
-   silently widens every run they start to their own whole account. Ask members to store
-   fine-grained PATs limited to the working repos, or leave the personal-PAT slot empty and accept
-   bot attribution. The same fine-grained advice covers local mode's shared `GITHUB_PAT` and a
-   workspace's GitLab PAT, where the platform inherits the PAT's whole scope.
+   would otherwise silently widen every run they start to their own whole account.
+
+   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first —
+   but only if this deployment serves the whole org.** A GitHub org owner can, under
+   _Settings → Personal access tokens_, deny classic PATs access to the org outright and require
+   owner approval for fine-grained tokens (naming the repositories each may touch); SAML/SSO
+   authorization gates PATs independently. Those bind every tool the member uses, cannot be
+   undone by the member, and apply whether or not cat-factory is involved. Nothing below is a
+   substitute for them.
+
+   **They are the wrong tool for individual adoption**, which is the case our own controls exist
+   for. Someone running cat-factory alone inside an org that has not adopted it has no App
+   installation to inherit and no authority to change org policy — and restricting classic PATs
+   org-wide to constrain one person's agent runs would break every other workflow in the org. A
+   personal token is the right credential there, which is why it stays fully supported and why
+   the account floor below ships UNSET.
+
+   Ours, in the order they bind:
+   - **Enforced, account-wide**: `allowInitiatorPat: false` in account settings ("Run credential
+     policy"). No board in the account may then use an initiator's token. This is the tier a
+     workspace admin cannot lift, which matters because the workspace switch below is edited with
+     `settings.manage` — a permission a member elevated on one board holds. Unset by default.
+   - **Enforced, per board**: turn `allowInitiatorPat` off in workspace settings ("Run
+     credential"). The board then authenticates as the App installation, at the cost of bot
+     attribution. Effective = the account permits AND the board permits.
+   - **Visible**: the personal-token form states what a token actually grants the moment it is
+     tested or saved — a classic token carrying `repo` is called out as reaching every repository
+     its owner can push to, scopes the platform never uses are flagged, and a token whose scopes
+     GitHub did not report is reported as unknown rather than passing as narrow. Advice, not a
+     gate: the save still succeeds.
+
+   Beyond that, ask members to store fine-grained PATs limited to the working repos, or to leave
+   the personal-PAT slot empty. The same fine-grained advice covers local mode's shared
+   `GITHUB_PAT` and a workspace's GitLab PAT, where the platform inherits the PAT's whole scope
+   and `allowInitiatorPat` has nothing to say (it governs the INITIATOR's token, not the
+   deployment's own).
+
 5. **Treat local native mode (`LOCAL_NATIVE_AGENTS`) as trusted-input only.** No container means the
    process boundary is only the agent CLI's own sandboxing — the env allow-list still strips the
    orchestrator's secrets, but nothing stops a subverted agent from reading your filesystem. Don't
@@ -268,16 +323,35 @@ is possible at all:
 - **Job tokens are installation-wide on the standard dispatch path.** The repo-scoped mint exists
   (delegation path) and could be applied at engine dispatch. Until it is, item 3 above is the
   mitigation.
-- **An initiator's personal PAT is unbounded by anything the platform controls**, and it takes
-  precedence over the App token precisely on the path this document is about. The platform stores it
-  sealed and never logs it, but it cannot narrow it: `repository_ids` scoping is an App-token
-  mechanism with no PAT equivalent. Candidate hardening is to surface the granted scope at the point
-  a member saves a PAT (so an over-broad classic token is visible rather than silent), and to let a
-  workspace refuse personal-PAT preference entirely and always run as the App. Neither exists today;
-  item 4 above is a policy mitigation, not an enforced one.
-- **No branch-protection preflight.** The platform could probe and warn when a linked repo's
-  default branch is unprotected, instead of relying on the operator to know item 1. Today it does
-  not; nothing in-product tells you that gap exists.
+- **An initiator's personal PAT is still unbounded once it IS used.** The platform stores it sealed
+  and never logs it, but it cannot narrow it: `repository_ids` scoping is an App-token mechanism
+  with no PAT equivalent. What changed is that an account or a workspace can now decline to use it
+  at all (`allowInitiatorPat`, an enforced mechanism at both tiers) and that its breadth is stated
+  when a member tests or saves it. What has NOT changed: with the switch on, a member's classic
+  token is exactly as wide as they made it, and the breadth report is advice at save time — it does
+  not refuse the save, and it re-reads nothing later, so a token whose scopes are widened on GitHub
+  afterwards is not re-flagged.
+
+  **The structural fix is a GitHub App USER-TO-SERVER token, and it is not built.** "Cannot narrow
+  it" is a property of the stored-PAT design, not a law: a user-to-server token obtained through
+  the App's OAuth flow is bounded by the INTERSECTION of the installation's scope and the user's
+  own access, and is short-lived. That is attribution — pushes and PRs from the human who started
+  the run — with the operator's installation scoping still the real bound, which is exactly the
+  property this whole section works around. `auth/GitHubOAuth.ts` already implements that flow,
+  wired for LOGIN only (`scope: 'read:user'`, token read for identity and discarded), so what is
+  missing is the run-path plumbing (consent per user, refresh, and a fallback for a repo the App
+  is not installed on) rather than the client.
+
+  It would not replace stored PATs. An individual adopter inside a non-adopting org has no App
+  installation to obtain such a token against, so the PAT path stays — the two are for different
+  deployments, and `allowInitiatorPat` remains how an operator chooses between them.
+
+- **The branch-protection preflight is on demand and reports on the DEFAULT branch only.** It
+  tells an operator where item 1 is missing, which is what nothing in-product used to do — but it
+  is a check someone has to run, not a gate: no run is refused, and no notification is raised, for
+  a repo whose default branch is unprotected. A release branch with its own weaker rule is out of
+  its scope, and on a provider that cannot report protection (GitLab today) it answers
+  `unavailable` rather than anything actionable.
 - **Intra-container credential compartmentalization is best-effort** (Layer 2's stated limit). A
   hard fix (separate uid for the agent process, or a push executed outside the container entirely)
   is a container-image and transport change, not a policy change.

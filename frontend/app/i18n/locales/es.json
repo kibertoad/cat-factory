@@ -2380,7 +2380,10 @@
         "warningsTitle": "Carencias en esta configuración",
         "warnings": {
           "runner_manifest_no_release": "Sin plantilla de release: al cancelar una ejecución no se puede indicar al pool que detenga su trabajo, así que un trabajo huérfano ocupa su runner hasta que el pool lo recupere por su cuenta.",
-          "runner_manifest_no_status_path": "Sin ruta de estado: cada sondeo se interpreta como todavía en ejecución, así que un trabajo solo puede terminar agotando el presupuesto de sondeo de la ejecución."
+          "runner_manifest_no_status_path": "Sin ruta de estado: cada sondeo se interpreta como todavía en ejecución, así que un trabajo solo puede terminar agotando el presupuesto de sondeo de la ejecución.",
+          "github_pat_classic_account_wide": "Es un token clásico con el ámbito 'repo': alcanza todos los repositorios a los que puedes hacer push, incluidos aquellos donde nunca se instaló la App de GitHub de este espacio de trabajo. Las ejecuciones que inicias lo usan con preferencia sobre la App. Un token granular limitado a los repositorios de esta instalación es más estrecho.",
+          "github_pat_scopes_beyond_need": "Este token concede permisos que cat-factory nunca usa. Quitarlos no cuesta nada y reduce lo que podría alcanzar una ejecución comprometida.",
+          "github_pat_scope_unreadable": "GitHub aceptó este token pero no informó de sus ámbitos, así que aquí no se puede mostrar su alcance. Comprueba lo que concede en la configuración de tokens de GitHub."
         }
       },
       "toast": {
@@ -2539,6 +2542,7 @@
       "optionalField": "{label} (opcional)",
       "testConnection": "Probar conexión",
       "tokenValid": "Token válido",
+      "tokenReachTitle": "Qué alcanza este token",
       "tokenRejected": "Token rechazado",
       "secretFallback": "Secreto",
       "toast": {
@@ -2980,6 +2984,13 @@
         "body": "Al completarse cada ejecución, el agente Kaizen evalúa cómo fue cada paso del agente, desde fluido y eficiente hasta confuso y caótico, y recomienda mejoras de prompt/modelo. Una combinación de prompt + agente + modelo que obtiene una buena nota sin recomendaciones cinco veces seguidas se marca como verificada y deja de evaluarse. La evaluación se ejecuta en segundo plano y se muestra en los detalles de la ejecución y en la pantalla de Kaizen. Configura el modelo del evaluador en Configuración de modelos (el agente \"Kaizen\").",
         "toggle": "Evaluar ejecuciones de agentes con Kaizen"
       },
+      "runCredential": {
+        "heading": "Credencial de ejecución",
+        "body": "De forma predeterminada, una ejecución se autentica con el token de acceso personal de quien la inició, si esa persona guardó uno, de modo que los pushes y las solicitudes de incorporación se le atribuyen. El alcance de su token es el que ella misma le concedió, a menudo mayor que los repositorios que cubre la instalación de la App de GitHub de este espacio de trabajo. Desactiva esta opción para que cada ejecución se autentique como la instalación de la App.",
+        "toggle": "Permitir que las ejecuciones actúen como quien las inicia",
+        "offHint": "Las ejecuciones harán push y abrirán solicitudes de incorporación como la App de GitHub, no como quien las inició.",
+        "accountFloorNote": "Una política de toda la cuenta puede prohibirlo para todos los tableros; si hay una definida, las ejecuciones aquí usarán la App de GitHub sin importar este interruptor."
+      },
       "metadata": {
         "heading": "Metadatos del espacio de trabajo",
         "body": "Valores de los campos personalizados que define esta instalación. Las herramientas externas los leen para abrirse en el proyecto correcto de este espacio de trabajo.",
@@ -3282,6 +3293,15 @@
         "saveFailed": "No se pudo guardar el grupo de consenso",
         "deleteFailed": "No se pudo eliminar el grupo de consenso"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Política de credenciales de ejecución",
+      "body": "Un tablero puede permitir que una ejecución se autentique con el token de acceso personal de quien la inició. Resulta útil y, para una sola persona dentro de una organización que no ha adoptado cat-factory, suele ser la única opción. Pero un token personal alcanza todo lo que su propietario le concedió, normalmente más que la instalación de la App de GitHub de esta cuenta, y quien administre un tablero puede volver a activar su interruptor. Prohíbelo aquí y ningún tablero de esta cuenta podrá hacerlo.",
+      "toggle": "Prohibir que las ejecuciones usen el token de acceso personal de quien las inicia",
+      "onHint": "Todas las ejecuciones de esta cuenta se autenticarán como la instalación de la App de GitHub. Los envíos y las solicitudes de incorporación vendrán de la aplicación y no de la persona que inició la ejecución.",
+      "offHint": "Sin definir: cada tablero decide por sí mismo. Los tableros existentes conservan lo que hayan elegido.",
+      "saved": "Política de credenciales de ejecución guardada",
+      "saveFailed": "No se pudo guardar la política de credenciales de ejecución"
     }
   },
   "providers": {
@@ -6055,6 +6075,29 @@
       "title": "Conecta cat-factory con {provider}",
       "titleAny": "Conecta cat-factory con tus repositorios",
       "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Conecta tu proveedor de repositorios para continuar."
+    },
+    "branchProtection": {
+      "heading": "Protección de la rama predeterminada",
+      "body": "Las ejecuciones de agentes hacen push con una credencial que puede escribir en todos los repositorios que cubre. Nada de lo que hay aquí impide que una ejecución comprometida haga push directamente a una rama predeterminada, ni que fusione su propia solicitud de incorporación mediante la API del host: solo la protección de ramas en el host cubre ambos casos, y la configuras tú. Esta comprobación indica si está activa.",
+      "check": "Comprobar la protección",
+      "allProtected": "La rama predeterminada de cada repositorio vinculado está protegida.",
+      "exposed": "{count} repositorio tiene la rama predeterminada sin proteger. | {count} repositorios tienen la rama predeterminada sin proteger.",
+      "unavailable": "El proveedor conectado no puede informar de la protección de ramas, así que esta comprobación no dice nada: no es un resultado limpio.",
+      "omitted": "No se comprobó {count} repositorio vinculado más. | No se comprobaron {count} repositorios vinculados más.",
+      "state": {
+        "protected": "Protegida",
+        "unprotected": "Sin proteger",
+        "unknown": "Desconocida"
+      },
+      "unprotectedHint": "la credencial de una ejecución puede hacer push aquí directamente y fusionar su propia solicitud de incorporación",
+      "detailUnavailable": "protegida, pero no se pudo leer la regla: puede seguir permitiendo pushes directos",
+      "requiresPr": "solicitud de incorporación obligatoria, {reviews} revisión(es) de aprobación, {checks} comprobación(es) obligatoria(s)",
+      "noPrRequired": "protegida, pero no exige solicitud de incorporación",
+      "unknownReason": {
+        "branch_not_found": "no se encontró la rama predeterminada: la proyección del repositorio puede estar obsoleta",
+        "forbidden": "la credencial no tiene permiso para leer las ramas de este repositorio",
+        "error": "no se pudo contactar con el host"
+      }
     }
   },
   "tutorial": {

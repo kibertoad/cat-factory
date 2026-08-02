@@ -48,6 +48,89 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       expect(after.body.currency).toBe('USD')
     })
 
+    it('round-trips the allowInitiatorPat credential policy (D1 ⇄ Postgres)', async () => {
+      // The workspace's "may a run act as its initiator's own PAT?" switch. A boolean column
+      // is exactly the shape that silently diverges between the two stores (D1 stores 0/1,
+      // Postgres an integer we map back), and this one decides which CREDENTIAL a run pushes
+      // with — so a facade that failed to persist it would leave an operator believing they
+      // had turned the preference off. See backend/docs/security-model.md.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const settings = `/workspaces/${workspace.id}/settings`
+
+      const seeded = await call<{ allowInitiatorPat: boolean }>('GET', settings)
+      expect(seeded.status).toBe(200)
+      // Attribution is the shipped default, so a fresh workspace starts permissive.
+      expect(seeded.body.allowInitiatorPat).toBe(true)
+
+      const off = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: false,
+      })
+      expect(off.status).toBe(200)
+      expect(off.body.allowInitiatorPat).toBe(false)
+      expect(
+        (await call<{ allowInitiatorPat: boolean }>('GET', settings)).body.allowInitiatorPat,
+      ).toBe(false)
+
+      // And back on — `false` must not be a one-way door, and a patch that omits the field
+      // must not silently reinstate the default over a deliberate choice.
+      const untouched = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        waitingEscalationMinutes: 33,
+      })
+      expect(untouched.body.allowInitiatorPat).toBe(false)
+      const on = await call<{ allowInitiatorPat: boolean }>('PUT', settings, {
+        allowInitiatorPat: true,
+      })
+      expect(on.body.allowInitiatorPat).toBe(true)
+    })
+
+    it('reads the ACCOUNT-tier allowInitiatorPat floor without the secrets (D1 ⇄ Postgres)', async () => {
+      // The account floor a workspace admin cannot lift. Driven through the repository rather
+      // than HTTP on purpose: no route reads `getConfigByAccount`. The admin settings endpoint
+      // goes through `getByAccount` (the whole row, sealed secrets included), while this method
+      // exists so the RUN path — and a mothership node over the machine API — can read the floor
+      // with no secret on the wire. A store that diverged here would not blank a panel; it would
+      // stop enforcing an account admin's refusal on one runtime only.
+      //
+      // The two-tier COMBINATION is pinned as pure logic in kernel's `initiator-pat-gate.test.ts`
+      // — it is a decision, not a persisted shape. What is runtime-specific, and therefore here,
+      // is reading one key out of a JSON config column on two different stores.
+      const app = harness.makeApp()
+      const repo = app.accountSettingsRepository()
+      const accountId = `acc_conf_${Date.now().toString(36)}`
+
+      // An account with NO row must read as "no opinion" rather than as a refusal, or single-user
+      // adoption breaks on every existing deployment the moment this ships.
+      expect((await repo.getConfigByAccount(accountId)).allowInitiatorPat).toBeUndefined()
+
+      const now = Date.now()
+      await repo.upsert({
+        accountId,
+        config: JSON.stringify({ allowInitiatorPat: false }),
+        secretsCipher: 'sealed-blob-that-must-not-surface',
+        summary: '{}',
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      const config = await repo.getConfigByAccount(accountId)
+      expect(config.allowInitiatorPat).toBe(false)
+      // Nothing from the sealed column may ride along: this method's whole reason for existing
+      // over `getByAccount` is that it is safe to proxy to a laptop that has no decryption key.
+      expect(JSON.stringify(config)).not.toContain('sealed-blob')
+
+      // And back to permitted — the floor must not be a one-way door.
+      await repo.upsert({
+        accountId,
+        config: JSON.stringify({ allowInitiatorPat: true }),
+        secretsCipher: null,
+        summary: '{}',
+        createdAt: now,
+        updatedAt: now,
+      })
+      expect((await repo.getConfigByAccount(accountId)).allowInitiatorPat).toBe(true)
+    })
+
     it('counts subscription usage in /usage but excludes it from the spend budget (D1 ⇄ Postgres)', async () => {
       type UsageRow = {
         billing: string

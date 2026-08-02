@@ -62,6 +62,25 @@ export const accountSettingsConfigSchema = v.object({
    * (Cloudflare / remote Node / mothership — never plain local mode).
    */
   modelPolicy: v.optional(modelFamilyPolicySchema),
+  /**
+   * Account-wide FLOOR under the per-workspace `allowInitiatorPat`. `false` forbids every
+   * workspace in the account from letting a run authenticate as its initiator's own personal
+   * access token; a workspace may then only stay off, never opt back in.
+   *
+   * ABSENT (the default, and what every existing account has) means the account expresses no
+   * opinion and each workspace decides for itself. That default is deliberate and not merely
+   * conservative: a personal token is the RIGHT credential for someone adopting cat-factory
+   * alone inside an org that has not adopted it, where there is no GitHub App installation to
+   * inherit and no account admin to ask. This setting exists for the opposite case — an
+   * operator who scoped an App installation for the whole account and needs that scoping to be
+   * the real bound rather than a suggestion a workspace admin can undo.
+   *
+   * The workspace switch is not redundant beneath it: the two answer different questions
+   * ("may anyone here?" vs "do we, on this board?"), and only the account tier is out of reach
+   * of a workspace admin. Effective = account permits AND workspace permits. See
+   * `backend/docs/security-model.md`.
+   */
+  allowInitiatorPat: v.optional(v.boolean()),
 })
 export type AccountSettingsConfig = v.InferOutput<typeof accountSettingsConfigSchema>
 
@@ -74,6 +93,29 @@ export const DEFAULT_ACCOUNT_SETTINGS_CONFIG: AccountSettingsConfig = v.parse(
 /** Parse + fully-default a (possibly partial/legacy) stored config blob. */
 export function parseAccountSettingsConfig(raw: unknown): AccountSettingsConfig {
   return v.parse(accountSettingsConfigSchema, raw)
+}
+
+/**
+ * The stored `account_settings.config` TEXT column → a usable config, tolerating an absent row,
+ * an empty string and a malformed blob alike (all three mean "no opinion recorded").
+ *
+ * Shared rather than reimplemented per caller because the callers now sit on either side of a
+ * security boundary — `AccountSettingsService` (which also opens the secrets) and the two
+ * facades' `getConfigByAccount` (which deliberately never does) — and a config that parsed
+ * differently on the run path than in the settings panel would make an account's credential
+ * floor mean one thing to an operator reading it and another to the engine enforcing it.
+ */
+export function parseStoredAccountSettingsConfig(
+  raw: string | null | undefined,
+): AccountSettingsConfig {
+  if (!raw) return DEFAULT_ACCOUNT_SETTINGS_CONFIG
+  try {
+    return parseAccountSettingsConfig(JSON.parse(raw))
+  } catch {
+    // A blob we cannot read is not a policy: fall back to the built-in defaults, exactly as an
+    // absent row does. (Never a REFUSAL — an unparseable row must not silently forbid a feature.)
+    return DEFAULT_ACCOUNT_SETTINGS_CONFIG
+  }
 }
 
 // ---- Write-only secrets ----------------------------------------------------

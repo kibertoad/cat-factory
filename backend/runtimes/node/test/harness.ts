@@ -35,6 +35,7 @@ import { migrate } from '../src/db/migrate.js'
 import {
   DrizzleClarityReviewRepository,
   DrizzleDocInterviewRepository,
+  DrizzleAccountSettingsRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
   DrizzleWorkspaceMemberRepository,
@@ -457,6 +458,7 @@ export function makeConformanceApp(
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

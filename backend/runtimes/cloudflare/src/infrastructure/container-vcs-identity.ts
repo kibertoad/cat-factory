@@ -7,10 +7,13 @@
 // so they live beside it rather than in it: every consumer imports them from here, and none of
 // them has to import the root (which imports several of those consumers back).
 
-import { type Clock } from '@cat-factory/kernel'
+import { type Clock, createInitiatorPatGate } from '@cat-factory/kernel'
 import {
+  type ResolveRunInitiatorToken,
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
+  createResolveRunInitiatorToken,
+  logger,
 } from '@cat-factory/server'
 import { type AppConfig } from './config'
 import type { Env } from './env'
@@ -21,6 +24,10 @@ import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallat
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
+import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
+import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
+import { buildResolveUserGitHubToken } from './wireCredentialServices'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**
@@ -99,5 +106,40 @@ export function buildResolveRepoTargets(db: D1Database): ResolveRepoTargets {
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
     serviceRepository: new D1ServiceRepository({ db }),
+  })
+}
+
+/**
+ * "Does THIS run act with its initiator's own GitHub token?" — built HERE, beside the App
+ * registry, because the Worker asks it from two composition sites (the engine's GitHub client
+ * in `container.ts`, the container push-token mint in `container-executor-deps.ts`) and a
+ * per-site copy is a chance for the workspace's `allowInitiatorPat` switch to bind one and
+ * miss the other. Undefined when no per-user secret store is wired (no `ENCRYPTION_KEY`),
+ * which is the same condition that already made the preference inert.
+ */
+export function buildResolveRunInitiatorToken(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): ResolveRunInitiatorToken | undefined {
+  const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
+  if (!resolveUserGitHubToken) return undefined
+  return createResolveRunInitiatorToken({
+    resolveUserGitHubToken,
+    // No cache slice: `workspaceSettings` is `enabled: false` in the Worker's isolate-safe
+    // profile (our own mutable state, with no cross-isolate invalidation bus), so passing it
+    // would be a pass-through anyway.
+    initiatorPatGate: createInitiatorPatGate({
+      repository: new D1WorkspaceSettingsRepository({ db }),
+      // The account-wide floor, mirroring the Node facade. Config-only read, so it never
+      // touches the account's sealed secrets.
+      account: {
+        resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+        readAllowInitiatorPat: async (accountId) =>
+          (await new D1AccountSettingsRepository({ db }).getConfigByAccount(accountId))
+            .allowInitiatorPat,
+      },
+    }),
+    logger,
   })
 }

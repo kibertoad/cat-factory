@@ -1,4 +1,5 @@
 import {
+  checkGitHubBranchProtectionContract,
   commentGitHubIssueContract,
   commitGitHubFilesContract,
   connectGitHubContract,
@@ -28,7 +29,7 @@ import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
 import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { requirePermission, requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
@@ -211,6 +212,23 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubReposContract, async (c) => {
     const github = requireGitHub(c)
     return c.json(await github.service.listRepos(param(c, 'workspaceId')), 200)
+  })
+
+  // The branch-protection preflight: for each linked repo, is its DEFAULT branch protected on
+  // the host? Live (not projected) and explicitly invoked — see the contract for why.
+  //
+  // Gated IMPERATIVELY, which is the one place in this controller a READ is. The mounted
+  // `requireWorkspacePermission` deliberately lets reads through, on the premise that a read is
+  // cheap and safe; this one is neither. It spends the installation's GitHub rate limit — a
+  // shared, exhaustible budget the CI gate and the merger draw on for every run — so leaving it
+  // on the read tier would let any viewer degrade the write path by holding down a button. It is
+  // also an operator diagnostic about how the deployment is configured, which is what
+  // `integrations.manage` names. The SPA hides the affordance for the same reason, but that is
+  // presentation; this is the control.
+  buildHonoRoute(app, checkGitHubBranchProtectionContract, async (c) => {
+    requirePermission(c, 'integrations.manage')
+    const github = requireGitHub(c)
+    return c.json(await github.service.checkDefaultBranchProtection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, listGitHubBranchesContract, async (c) => {

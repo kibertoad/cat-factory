@@ -1,0 +1,12 @@
+-- Whether a run may authenticate as its INITIATOR's stored personal access token instead of
+-- the deployment credential (the App installation token). On by default, which is the
+-- attribution behaviour the platform has always had.
+--
+-- Off is a SECURITY control: a personal token's scope is whatever the human who minted it
+-- granted, so a classic-scope PAT routinely reaches repositories the App was never installed
+-- on — making the blast radius of a compromised run a property of whoever started it rather
+-- than of how the operator scoped the deployment. See `backend/docs/security-model.md`.
+--
+-- Integer 0/1 like every other boolean on this table, NOT NULL DEFAULT 1 so existing rows
+-- keep their current behaviour without a backfill.
+ALTER TABLE workspace_settings ADD COLUMN allow_initiator_pat INTEGER NOT NULL DEFAULT 1;

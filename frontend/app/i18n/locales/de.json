@@ -303,7 +303,10 @@
         "warningsTitle": "Lücken in dieser Konfiguration",
         "warnings": {
           "runner_manifest_no_release": "Kein Release-Template: Beim Abbrechen eines Laufs kann dem Pool nicht mitgeteilt werden, dass er seinen Job stoppen soll. Ein verwaister Job belegt seinen Runner, bis der Pool ihn von selbst zurücknimmt.",
-          "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist."
+          "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist.",
+          "github_pat_classic_account_wide": "Dies ist ein klassisches Token mit dem Bereich 'repo': Es erreicht jedes Repository, in das du pushen kannst, auch solche, in denen die GitHub-App dieses Arbeitsbereichs nie installiert wurde. Ausführungen, die du startest, nutzen es bevorzugt vor der App. Ein fein abgestuftes Token, das auf die Repositories dieser Installation begrenzt ist, ist enger gefasst.",
+          "github_pat_scopes_beyond_need": "Dieses Token gewährt Berechtigungen, die cat-factory nie nutzt. Sie zu entfernen kostet nichts und verkleinert das, was eine kompromittierte Ausführung erreichen könnte.",
+          "github_pat_scope_unreadable": "GitHub hat dieses Token akzeptiert, aber keine Bereiche dafür gemeldet, daher lässt sich seine Reichweite hier nicht anzeigen. Prüfe in deinen GitHub-Token-Einstellungen, was es gewährt."
         }
       },
       "toast": {
@@ -407,6 +410,7 @@
       "optionalField": "{label} (optional)",
       "testConnection": "Verbindung testen",
       "tokenValid": "Token gültig",
+      "tokenReachTitle": "Was dieses Token erreicht",
       "tokenRejected": "Token abgelehnt",
       "secretFallback": "Secret",
       "toast": {
@@ -848,6 +852,13 @@
         "body": "Nach Abschluss jeder Ausführung bewertet der Kaizen-Agent, wie jeder Agentenschritt verlief, von reibungslos und effizient bis verwirrt und chaotisch, und empfiehlt Prompt-/Modellverbesserungen. Eine Kombination aus Prompt, Agent und Modell, die fünfmal in Folge hoch bewertet wird und keine Empfehlungen erhält, wird als verifiziert markiert und nicht mehr bewertet. Die Bewertung läuft im Hintergrund und wird in den Ausführungsdetails und im Kaizen-Bildschirm angezeigt. Lege das Modell des Bewerters in der Modellkonfiguration fest (der \"Kaizen\"-Agent).",
         "toggle": "Agenten-Ausführungen mit Kaizen bewerten"
       },
+      "runCredential": {
+        "heading": "Anmeldedaten für Ausführungen",
+        "body": "Standardmäßig authentifiziert sich eine Ausführung mit dem persönlichen Zugriffstoken der Person, die sie gestartet hat, sofern sie eines hinterlegt hat. Pushes und Pull Requests werden dann dieser Person zugeordnet. Die Reichweite ihres Tokens ist genau das, was sie ihm gewährt hat, und damit oft größer als die Repositories, die die GitHub-App-Installation dieses Arbeitsbereichs abdeckt. Schalte dies aus, damit sich jede Ausführung stattdessen als App-Installation authentifiziert.",
+        "toggle": "Ausführungen im Namen der startenden Person laufen lassen",
+        "offHint": "Ausführungen pushen und öffnen Pull Requests als GitHub-App, nicht als die Person, die sie gestartet hat.",
+        "accountFloorNote": "Eine kontoweite Richtlinie kann dies für jedes Board verbieten; ist eine gesetzt, verwenden Ausführungen hier unabhängig von diesem Schalter die GitHub-App."
+      },
       "metadata": {
         "heading": "Arbeitsbereich-Metadaten",
         "body": "Werte für die benutzerdefinierten Felder dieser Installation. Externe Tools lesen sie und öffnen direkt das richtige Projekt für diesen Arbeitsbereich.",
@@ -1021,6 +1032,15 @@
         "saveFailed": "Konsensgruppe konnte nicht gespeichert werden",
         "deleteFailed": "Konsensgruppe konnte nicht gelöscht werden"
       }
+    },
+    "runCredentialPolicy": {
+      "heading": "Richtlinie für Ausführungs-Anmeldedaten",
+      "body": "Ein Board kann zulassen, dass sich eine Ausführung mit dem persönlichen Zugriffstoken derjenigen Person authentifiziert, die sie gestartet hat. Das ist nützlich, und für eine einzelne Person in einer Organisation, die cat-factory nicht eingeführt hat, ist es oft die einzige Möglichkeit. Ein persönliches Token reicht jedoch so weit, wie seine Besitzerin oder sein Besitzer es erlaubt hat — meist weiter als die GitHub-App-Installation dieses Kontos —, und eine Board-Administration kann den Schalter des Boards wieder einschalten. Verbiete es hier, dann kann es kein Board in diesem Konto mehr.",
+      "toggle": "Ausführungen verbieten, das persönliche Zugriffstoken ihrer Starterin oder ihres Starters zu verwenden",
+      "onHint": "Jede Ausführung in diesem Konto authentifiziert sich als GitHub-App-Installation. Pushes und Pull Requests stammen dann von der App und nicht von der Person, die die Ausführung gestartet hat.",
+      "offHint": "Nicht gesetzt: Jedes Board entscheidet selbst. Bestehende Boards behalten ihre Auswahl.",
+      "saved": "Richtlinie für Ausführungs-Anmeldedaten gespeichert",
+      "saveFailed": "Richtlinie für Ausführungs-Anmeldedaten konnte nicht gespeichert werden"
     }
   },
   "inspector": {
@@ -6067,6 +6087,29 @@
       "title": "cat-factory mit {provider} verbinden",
       "titleAny": "cat-factory mit Ihren Repositorys verbinden",
       "intro": "cat-factory funktioniert, indem es Pull Requests in Ihren Repositorys öffnet. Verbinden Sie Ihren Repository-Anbieter, um fortzufahren."
+    },
+    "branchProtection": {
+      "heading": "Schutz des Standard-Branch",
+      "body": "Agenten-Ausführungen pushen mit einem Zugang, der in jedes abgedeckte Repository schreiben darf. Nichts hier kann verhindern, dass eine kompromittierte Ausführung direkt auf einen Standard-Branch pusht oder ihren eigenen Pull Request über die API des Hosts merged — beides deckt nur der Branch-Schutz beim Host ab, und den richtest du selbst ein. Diese Prüfung zeigt, ob er vorhanden ist.",
+      "check": "Schutz prüfen",
+      "allProtected": "Der Standard-Branch jedes verknüpften Repositories ist geschützt.",
+      "exposed": "{count} Repository hat einen ungeschützten Standard-Branch. | {count} Repositories haben einen ungeschützten Standard-Branch.",
+      "unavailable": "Der verbundene Anbieter kann keinen Branch-Schutz melden, daher sagt diese Prüfung nichts aus — das ist kein sauberes Ergebnis.",
+      "omitted": "{count} weiteres verknüpftes Repository wurde nicht geprüft. | {count} weitere verknüpfte Repositories wurden nicht geprüft.",
+      "state": {
+        "protected": "Geschützt",
+        "unprotected": "Ungeschützt",
+        "unknown": "Unbekannt"
+      },
+      "unprotectedHint": "der Zugang einer Ausführung kann hier direkt pushen und den eigenen Pull Request mergen",
+      "detailUnavailable": "geschützt, aber die Regel konnte nicht gelesen werden — direkte Pushes sind möglicherweise weiterhin erlaubt",
+      "requiresPr": "Pull Request erforderlich, {reviews} zustimmende Review(s), {checks} erforderliche Prüfung(en)",
+      "noPrRequired": "geschützt, aber kein Pull Request erforderlich",
+      "unknownReason": {
+        "branch_not_found": "der Standard-Branch wurde nicht gefunden — die Repository-Projektion ist möglicherweise veraltet",
+        "forbidden": "der Zugang darf die Branches dieses Repositories nicht lesen",
+        "error": "der Host war nicht erreichbar"
+      }
     }
   },
   "tutorial": {

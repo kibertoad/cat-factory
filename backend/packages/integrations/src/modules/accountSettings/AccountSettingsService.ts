@@ -7,7 +7,6 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import type {
-  AccountSettingsConfig,
   AccountSettingsSecrets,
   AccountSettingsSummary,
   AccountSettingsView,
@@ -17,7 +16,7 @@ import type {
 import {
   DEFAULT_ACCOUNT_SETTINGS_CONFIG,
   accountSettingsSummary,
-  parseAccountSettingsConfig,
+  parseStoredAccountSettingsConfig,
   parseAccountSettingsSecrets,
 } from '@cat-factory/contracts'
 import * as environmentsLogic from '../environments/environments.logic.js'
@@ -89,7 +88,7 @@ export class AccountSettingsService {
   /** Load + decrypt an account's resolved settings from the repository (the cache miss path). */
   private async load(accountId: string): Promise<ResolvedAccountSettings> {
     const record = await this.repo.getByAccount(accountId)
-    const config = record ? parseConfig(record.config) : DEFAULT_ACCOUNT_SETTINGS_CONFIG
+    const config = parseStoredAccountSettingsConfig(record?.config)
     const secrets = record?.secretsCipher ? await this.openSecrets(record.secretsCipher) : {}
     return {
       config,
@@ -117,7 +116,7 @@ export class AccountSettingsService {
       }
     }
     return {
-      config: parseConfig(record.config),
+      config: parseStoredAccountSettingsConfig(record.config),
       summary: parseSummary(record.summary),
       contentStorageCapability: this.contentStorageCapability,
     }
@@ -132,9 +131,9 @@ export class AccountSettingsService {
     const now = this.clock.now()
     const existing = await this.repo.getByAccount(accountId)
     const config = input.config
-      ? parseConfig(JSON.stringify(input.config))
+      ? parseStoredAccountSettingsConfig(JSON.stringify(input.config))
       : existing
-        ? parseConfig(existing.config)
+        ? parseStoredAccountSettingsConfig(existing.config)
         : DEFAULT_ACCOUNT_SETTINGS_CONFIG
     // Decrypt the stored blob STRICTLY before re-sealing: if it can't be opened (e.g. the
     // encryption key changed) refuse rather than silently dropping the un-edited group(s) on
@@ -195,15 +194,6 @@ export class AccountSettingsService {
     } catch {
       return {}
     }
-  }
-}
-
-/** Parse + default a stored config blob, tolerating a malformed/empty value. */
-function parseConfig(raw: string): AccountSettingsConfig {
-  try {
-    return parseAccountSettingsConfig(JSON.parse(raw))
-  } catch {
-    return DEFAULT_ACCOUNT_SETTINGS_CONFIG
   }
 }
 

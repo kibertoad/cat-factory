@@ -14,6 +14,7 @@ import type {
   ResolveJudgeInput,
   RaiseNotificationInput,
   RiskPolicy,
+  RunCredentialScope,
   RunInitiatorScope,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -231,7 +232,7 @@ export class JudgeStepController {
         previousFindings: judgeState.verdict ?? null,
       },
       judge,
-      instance.initiatedBy ?? null,
+      { workspaceId, initiatedBy: instance.initiatedBy },
     )
 
     const producerIndex = this.bounceTargetIndex(instance, stepIndex, judge)
@@ -302,11 +303,11 @@ export class JudgeStepController {
     assessor: JudgeAssessor,
     subject: Parameters<JudgeAssessor['assess']>[0],
     judge: JudgeDefinition,
-    initiatedBy: string | null,
+    scope: RunCredentialScope,
   ): Promise<{ verdict: JudgeVerdict; model: string | null }> {
     const parse = judge.parseVerdict ?? parseJudgeVerdict
     try {
-      const raw = await this.deps.runInitiatorScope(initiatedBy, () => assessor.assess(subject))
+      const raw = await this.deps.runInitiatorScope(scope, () => assessor.assess(subject))
       return { verdict: parse(raw.verdict), model: raw.model }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)

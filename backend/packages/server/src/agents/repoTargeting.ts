@@ -42,10 +42,15 @@ export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promis
  * the run initiator's personal access token over the App/env default (see
  * `ResolveUserGitHubToken`). Optional ⇒ callers that don't know the run (the
  * bootstrapper, tests) call `mint(installationId)` unchanged.
+ *
+ * `workspaceId` rides alongside `initiatedBy` because whether the initiator's own token may
+ * be used is a per-WORKSPACE policy (`allowInitiatorPat`), and an installation id can serve
+ * several workspaces — so it is supplied here rather than derived, where deriving it would
+ * mean guessing which workspace's policy governs the run.
  */
 export type MintInstallationToken = (
   installationId: number,
-  ctx?: { executionId: string; initiatedBy?: string },
+  ctx?: { executionId: string; workspaceId: string; initiatedBy?: string },
 ) => Promise<string>
 
 /**

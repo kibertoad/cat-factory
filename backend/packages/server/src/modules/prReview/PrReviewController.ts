@@ -38,10 +38,12 @@ export function prReviewController(): Hono<AppEnv> {
     const { executionId } = c.req.valid('param')
     const input = c.req.valid('json')
     const userId = c.get('user')?.id
-    const state = await runWithInitiator(userId, () =>
-      c
-        .get('container')
-        .executionService.resolvePrReview(param(c, 'workspaceId'), executionId, input),
+    const state = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
+      () =>
+        c
+          .get('container')
+          .executionService.resolvePrReview(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })
@@ -52,8 +54,10 @@ export function prReviewController(): Hono<AppEnv> {
   buildHonoRoute(app, resumePrReviewContract, async (c) => {
     const { executionId } = c.req.valid('param')
     const userId = c.get('user')?.id
-    const state = await runWithInitiator(userId, () =>
-      c.get('container').executionService.resumePrReview(param(c, 'workspaceId'), executionId),
+    const state = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
+      () =>
+        c.get('container').executionService.resumePrReview(param(c, 'workspaceId'), executionId),
     )
     return c.json(state, 200)
   })
@@ -73,15 +77,17 @@ export function prReviewController(): Hono<AppEnv> {
     const { executionId, findingId } = c.req.valid('param')
     const input = c.req.valid('json')
     const userId = c.get('user')?.id
-    const state = await runWithInitiator(userId, () =>
-      c
-        .get('container')
-        .executionService.challengePrReviewFinding(
-          param(c, 'workspaceId'),
-          executionId,
-          findingId,
-          input,
-        ),
+    const state = await runWithInitiator(
+      { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
+      () =>
+        c
+          .get('container')
+          .executionService.challengePrReviewFinding(
+            param(c, 'workspaceId'),
+            executionId,
+            findingId,
+            input,
+          ),
     )
     return c.json(state, 200)
   })

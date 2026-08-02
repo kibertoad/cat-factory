@@ -194,6 +194,20 @@
   rides the later secrets-delegation slice (the provisioning writes
   `environmentRegistryRepository.insert`/`update` stay off), failing cleanly at the provisioning
   stage with cleanup until it lands.
+- **The account-wide run-credential floor** — `accountSettingsRepository.getConfigByAccount` goes
+  **remote** (`account` scope), and the shape of that decision is the reusable part. The floor
+  (`allowInitiatorPat`, see `backend/docs/security-model.md`) is read on the RUN path, so leaving it
+  un-routed would not have blanked a panel — a mothership node would have silently stopped enforcing
+  an account admin's refusal, which is the worst kind of parity gap. But the obvious carrier,
+  `getByAccount`, is deliberately mothership-INTERNAL: it returns the sealed secret blob, and the
+  machine token scopes ACCOUNTS rather than ROLES while the RPC bypasses the service layer's
+  `requireAdmin`, so proxying it would let any account member pull the account's secrets.
+  The resolution was to NARROW THE READ rather than widen the surface — a new port method selecting
+  the non-secret `config` column alone, which is exactly the "or routes them through the service"
+  escape the original classification anticipated. **Prefer that move to either horn** when a run-path
+  read is trapped behind a secret-bearing sibling: a method that carries no secret needs no role
+  dimension to be safe. `upsert` (an admin write) and `listAll` (the unscoped sweeper) stay off, and
+  a test pins that `getByAccount` is still refused.
 - **Prompt-fragment library + account onboarding reads** — four more repository surfaces widened in
   one slice (each a server-only allow-list change, symmetric by construction). (1) The tenant-scoped
   **prompt-fragment library** (`promptFragmentRepository` list/get/upsert/softDelete +

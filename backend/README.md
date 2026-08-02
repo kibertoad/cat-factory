@@ -194,7 +194,18 @@ configured. See [`docs/github-integration.md`](./docs/github-integration.md),
 What actually stops a prompt-injected or hallucinating agent from landing malicious
 code — token scoping, the push path, merge gating, and the operator hardening
 checklist (branch protection, merge presets) — is documented layer by layer in
-[`docs/security-model.md`](./docs/security-model.md).
+[`docs/security-model.md`](./docs/security-model.md). Two of that checklist's items
+are now backed in-product: `allowInitiatorPat` decides whether a run may authenticate
+as its initiator's own personal token rather than the App installation — enforced at
+every mint site through one shared decision, at two tiers (an account-wide floor a
+board admin cannot lift, and the board's own switch beneath it) — and
+`GET /workspaces/:ws/github/branch-protection` probes each linked repository's default
+branch for host-side protection across BOTH classic branch protection and rulesets,
+reporting `unknown` as its own state rather than collapsing an unreachable repo into
+either verdict. Neither narrows personal-token support: both floors ship permissive,
+because a PAT is the right credential for someone adopting cat-factory alone inside an
+org that has not. The doc's operator checklist names GitHub's own org-level PAT
+controls first, where the deployment serves a whole org.
 
 Auth uses Web Crypto (`crypto.subtle`) — a thin `fetch` `GitHubClient`, no Octokit:
 an RS256 app JWT mints short-lived installation tokens (cached in memory per

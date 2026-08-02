@@ -5,6 +5,7 @@ import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
+import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
@@ -336,6 +337,14 @@ async function disconnectEmail() {
     <!-- account-wide model-family allow/block policy (admin-only; hosted/mothership only) -->
     <section v-if="isAdmin && modelPolicySupported">
       <AccountModelPolicySettings :account-id="accountId" />
+    </section>
+
+    <!-- account-wide floor under each board's run-credential switch (admin-only). Not gated on
+         `modelPolicySupported`: unlike a model policy this binds wherever account settings
+         exist, and a deployment that could not enforce it would be the one case where saying
+         so matters most. -->
+    <section v-if="isAdmin">
+      <AccountRunCredentialSettings :account-id="accountId" />
     </section>
   </div>
 </template>

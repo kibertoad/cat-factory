@@ -413,6 +413,39 @@ function registerRbacMemberManagementTests(
       })
     }
   })
+
+  it('admin-tier enforcement: the branch-protection preflight is a gated READ, unlike every other GitHub read (slice 6)', async () => {
+    // Its own test rather than a row in the table above, because it breaks that table's premise:
+    // those are WRITES, which `requireWorkspacePermission` gates wholesale. A GET passes the
+    // mounted gate untouched by design — reads are presumed cheap and safe — so this route
+    // gates itself imperatively, and only an explicit assertion can catch that call being lost
+    // in a later refactor. The reason it must be gated is that this read is neither cheap nor
+    // safe: it spends the installation's GitHub rate limit, a budget the CI gate and the merger
+    // draw on for every run, so on the read tier any viewer could degrade the write path.
+    const app = harness.makeApp()
+    const { adminA, c, wsId } = await scenario(app)
+    const ha = bearer(await app.session({ id: adminA }))
+    await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+    const hc = bearer(await app.session({ id: c }))
+    const path = `/workspaces/${wsId}/github/branch-protection`
+
+    // A plain member holds `workspace.read` and passes the viewer floor, so a 403 here can only
+    // be the per-handler permission check.
+    expect((await app.call('GET', path, undefined, hc)).status).toBe(403)
+
+    // A plain GitHub read on the SAME controller stays open to that member — proving the 403
+    // above is this route's own gate and not the controller having become admin-only. Asserted
+    // as "not forbidden" rather than 200 because the harness wires no GitHub App, so the read
+    // resolves past the gate and then 503s on the missing module; what matters is which of the
+    // two answered.
+    expect(
+      (await app.call('GET', `/workspaces/${wsId}/github/repos`, undefined, hc)).status,
+    ).not.toBe(403)
+
+    // The admin clears the gate on the preflight itself (200 wired / 503 unwired — never 403).
+    expect((await app.call('GET', path, undefined, ha)).status).not.toBe(403)
+  })
 }
 
 /**
