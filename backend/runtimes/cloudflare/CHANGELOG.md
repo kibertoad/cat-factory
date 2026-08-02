@@ -1,5 +1,12 @@
 # @cat-factory/worker
 
+## 0.135.1
+
+### Patch Changes
+
+- Updated dependencies [be7135c]
+  - @cat-factory/server@0.191.1
+
 ## 0.135.0
 
 ### Minor Changes
