@@ -4,7 +4,7 @@ High-impact refactoring opportunities identified across the backend engine, the
 cross-runtime facades, and the frontend. Each entry is independent and can be scheduled
 on its own. Sizes/structure reflect the tree at the time of writing.
 
-The candidates are **ordered from least to most intrusive** — by blast radius and
+The candidates are **ordered from least to most intrusive**: by blast radius and
 disruption to existing code, not just effort. That ordering doubles as a recommended
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
@@ -29,39 +29,39 @@ remaining `switch (context.agentKind)` in `buildBespokeKindBody`) and
 remaining `toRunResult` `agentKind === …` chain). The dispatcher itself
 (`ContainerAgentExecutor.ts`) is down to **975 lines** (from ~1,795).
 
-**Problem.** The generic seam is now in place — a registered kind (custom _or_ migrated
+**Problem.** The generic seam is now in place: a registered kind (custom _or_ migrated
 built-in) that declares an `agent` step dispatches through `registeredAgentStep` →
 `buildRegisteredAgentBody` with **no per-kind case**, and `ContainerAgentExecutor` builds
 one shared `common` body + resolves auth once. But the built-in kinds are still the holdout,
 in **two parallel switches**:
 
-- `buildMigratedBuiltInBody` (`jobBody.ts`) — a `switch (context.agentKind)` with the 7
+- `buildMigratedBuiltInBody` (`jobBody.ts`): a `switch (context.agentKind)` with the 7
   remaining built-in cases (`CI_FIXER`, `FIXER`, `CONFLICT_RESOLVER`, `MERGER`, `ON_CALL`,
   `TESTER`, `UI_TESTER`) building kind-specific job bodies + system prompts. (`BLUEPRINTS` +
-  `SPEC_WRITER` are now real `registerAgentKind` entries — see the slice note below.)
-- `toRunResult` (`containerAgentResult.ts`) — an `if (agentKind === …)` chain coercing job
+  `SPEC_WRITER` are now real `registerAgentKind` entries: see the slice note below.)
+- `toRunResult` (`containerAgentResult.ts`): an `if (agentKind === …)` chain coercing job
   output into domain shapes (`blueprintService`, `spec`, `mergeAssessment`, `onCallAssessment`,
   `testReport`, …) for those same kinds.
 
 `CLAUDE.md` still flags this as unfinished strangler work: _"the built-in agents are not yet
-migrated to this model — their rendering still lives in the harness."_
+migrated to this model; their rendering still lives in the harness."_
 
 **Approach.** Convert the remaining built-ins onto the same `registerAgentKind` seam the
-generic path already uses — a definition carrying `systemPrompt`, `buildJobBody`, and
-`toRunResult` — one kind at a time (parity-gated, image-bumped per conversion per
+generic path already uses (a definition carrying `systemPrompt`, `buildJobBody`, and
+`toRunResult`) one kind at a time (parity-gated, image-bumped per conversion per
 `CLAUDE.md`), then delete each bespoke `switch`/`if` branch. Both switches collapse into
 registry lookups keyed off one source of truth as the last kind migrates.
 
 **Why high-impact.** Removes a documented architectural debt, lets a deployment override
 built-in prompts via the public seam, and means a new kind is a registration, not edits to
 two switches. The seam and the generic path already exist, so the remaining work is the
-per-kind migration — moderately intrusive (it touches the dispatch hot path) but each step
+per-kind migration: moderately intrusive (it touches the dispatch hot path) but each step
 is small and independently shippable.
 
 **Status (further along than first written).** The bespoke _harness_ handlers are already
 gone: every built-in kind now synthesizes an `AgentStepSpec` and dispatches through the ONE
 generic `buildRegisteredAgentBody` path (see `buildMigratedBuiltInBody` in `jobBody.ts`) with
-`kind:'agent'` — no per-kind harness endpoint, no image bump per conversion. What remains are
+`kind:'agent'`, no per-kind harness endpoint, no image bump per conversion. What remains are
 two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its synthesized spec
 
 - system/user prompt) and the `toRunResult` `agentKind === …` coercion chain
@@ -70,13 +70,13 @@ two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its s
   `buildJobBody` + `toRunResult`), so the switches collapse and a deployment can override a
   built-in's prompt through the public seam.
 
-**Slice landed — the initiative planning kinds are now real registrations.** The first two
+**Slice landed: the initiative planning kinds are now real registrations.** The first two
 built-ins whose ids live in `@cat-factory/kernel` (`initiative-analyst` / `initiative-planner`)
 are migrated onto the public `registerAgentKind` seam: their role/user prompts moved from
 `@cat-factory/server`'s `prompts.ts` down into `@cat-factory/agents`
 (`agents/kinds/initiative.ts`), and each is registered with an `agent` `AgentStepSpec`
 (`container-explore`, base-branch clone; the planner structured). The generic
-`registry.agentStep(...)` path in `buildKindBody` now renders their job body — so **both cases
+`registry.agentStep(...)` path in `buildKindBody` now renders their job body, so **both cases
 were deleted from `buildMigratedBuiltInBody`**, and the pair were removed from
 `CompositeAgentExecutor`'s hard-coded `CONTAINER_KINDS` set (container routing now follows from
 `registry.requiresContainer()`). Their `systemPrompt`/`userPrompt` resolve through
@@ -84,11 +84,11 @@ were deleted from `buildMigratedBuiltInBody`**, and the pair were removed from
 (READ_ONLY_GUARDRAIL / FINAL_ANSWER_IN_REPLY) are applied centrally instead of hand-embedded.
 This is the reference shape for the remaining built-ins.
 
-**Slice landed — `blueprints` + `spec-writer` are now real registrations.** The two
+**Slice landed: `blueprints` + `spec-writer` are now real registrations.** The two
 structured-explore + render-post-op built-ins are migrated the same way: their prompts +
 per-kind user builders moved from `@cat-factory/server`'s `prompts.ts` into
-`@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`), and — because agents can't import
-orchestration — their kind-id constants moved down beside the definitions and are re-exported
+`@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`), and, because agents can't import
+orchestration, their kind-id constants moved down beside the definitions and are re-exported
 by orchestration's `ci.logic.ts` (the pattern the inline-reviewer ids already use). Each is
 registered as a read-only structured `container-explore` kind (blueprints clones the PR
 branch; spec-writer clones the per-block work branch with `failOnUnusableFinal`), so **both
@@ -100,20 +100,20 @@ in `RunDispatcher.builtInRepoOpBranch`, which the generic clone resolution does 
 engine behaviour is unchanged. Routing their prompts through `systemPromptFor`/`userPromptFor`
 newly applies the central surface directives + declared traits (blueprints now carries the
 read-only guardrail + its `spec-aware` guidance; spec-writer the guardrail; both fold the
-block's fragments) — the enrichment the old bespoke constant bypassed.
+block's fragments): the enrichment the old bespoke constant bypassed.
 
 Still to do: the remaining orchestration-id built-ins (`ci-fixer`/`fixer`/`conflict-resolver`/
 `merger`/`on-call`/`tester`/`ui-tester`), whose prompts also need repo/`parts` context the
 registry `userPrompt(context)` seam does not yet carry (so migrating them needs a seam
-extension first — the blocker `blueprints`/`spec-writer` did not hit, as their builders need
+extension first; the blocker `blueprints`/`spec-writer` did not hit, as their builders need
 only `AgentRunContext`), and folding the `toRunResult` coercion chain onto the definitions (the
 planner's + blueprints'/spec-writer's coercions still key off their ids in
 `containerAgentResult.ts`).
 
-## 6. Module registry for the orchestration container — **landed (registry + split); DI-graph deferred**
+## 6. Module registry for the orchestration container: **landed (registry + split); DI-graph deferred**
 
 **File:** `backend/packages/orchestration/src/container.ts` (was **3,019 lines**), now split
-into `container.ts` (~1,890 lines — the `CoreDependencies`/`Core` contract + the spine
+into `container.ts` (~1,890 lines: the `CoreDependencies`/`Core` contract + the spine
 assembly), `container/modules.ts` (the ~30 optional-module factory functions), and
 `container/module-registry.ts` (the `ModuleRegistry`).
 
@@ -121,9 +121,9 @@ assembly), `container/modules.ts` (the ~30 optional-module factory functions), a
 documents, tasks, environments, runners, bootstrap, requirements, brainstorm, clarity,
 notifications, slack, merge-presets, sandbox, settings, release-health, …) were wired
 linearly, each as a `const x = createX(...)` local **plus** a matching
-`...(x ? { x } : {})` conditional spread in the `createCore()` return — ~40 of each, up from
+`...(x ? { x } : {})` conditional spread in the `createCore()` return; ~40 of each, up from
 ~38 when this was first written (the footgun was growing). Adding an optional module touched
-the creation function, the conditional wire-up, the return spread, and the `Core` interface —
+the creation function, the conditional wire-up, the return spread, and the `Core` interface:
 a four-site edit.
 
 **What landed.** The optional set is now DECLARED through a typed `ModuleRegistry`
@@ -131,12 +131,12 @@ a four-site edit.
 instantiated only when its factory yields a value (prerequisites configured), kept in the local
 `build` returns so a downstream factory can thread it in (`get(key)` reads any built module for a
 reader that holds no local), and emitted in ONE place via `...modules.assemble()` at the
-return — so the ~40 conditional return-spreads are gone and adding a module is a `build(...)`
+return, so the ~40 conditional return-spreads are gone and adding a module is a `build(...)`
 call plus its `OptionalCoreModules` field (down from four sites to two). `Core` is split into
 `CoreSpine` (always-present) + `OptionalCoreModules` (the registry-assembled optionals), and
 the ~30 `createXModule` factories moved to `container/modules.ts`, cutting the god-file from
-3,019 to ~1,890 lines. Behaviour is unchanged — the registration order below IS the old
-positional order — verified by the orchestration suite (824 tests) + cross-runtime
+3,019 to ~1,890 lines. Behaviour is unchanged (the registration order below IS the old
+positional order) verified by the orchestration suite (824 tests) + cross-runtime
 conformance, with a dedicated `module-registry.spec.ts` pinning the registry's contract.
 
 **Deferred (intentionally).** The registry is a sequential builder, NOT a topological DI
@@ -144,7 +144,7 @@ graph: the core spine keeps genuine circular late-bindings (account ⇄ spend, e
 initiative loop) that a declarative dependency resolver can't express cleanly, so the spine
 stays explicit and only the acyclic optional modules flow through the registry. Promoting the
 registry to a full declared-dependency graph (each module naming its prerequisites, resolved
-in dependency order) is the remaining slice — but the change-surface + footgun win is realized
+in dependency order) is the remaining slice, but the change-surface + footgun win is realized
 now. Pairs naturally with #8 (the shared container builder consumes this registry).
 
 ## 7. Shared base repositories (D1 ⇄ Drizzle)
@@ -154,12 +154,12 @@ now. Pairs naturally with #8 (the shared container builder consumes this registr
 (now split per-domain under `backend/runtimes/node/src/repositories/drizzle/`, see
 [Recently landed](#recently-landed) #2).
 
-**Problem.** Every persisted table has **two** repository implementations — a D1 (SQLite)
-one and a Drizzle (Postgres) one — that are behaviourally identical port implementations
+**Problem.** Every persisted table has **two** repository implementations: a D1 (SQLite)
+one and a Drizzle (Postgres) one: that are behaviourally identical port implementations
 differing only in the SQL dialect and the row shape. `CLAUDE.md`'s "keep the runtimes
 symmetric" rule means every schema change, every new batch (`listByIds`-shaped) read, and
 every new table must be written **twice**, and drift is caught only if a conformance test
-happens to cover it. The shared `mappers.ts` (the field-map factory, now landed — see
+happens to cover it. The shared `mappers.ts` (the field-map factory, now landed: see
 [Recently landed](#recently-landed)) already removes the row↔domain duplication; the
 query/CRUD bodies are what remain duplicated.
 
@@ -172,8 +172,8 @@ This was previously deferred (see the note under #8); with the Drizzle file now 
 more tractable.
 
 **Why high-impact.** Halves the per-table maintenance cost and turns "keep the runtimes
-symmetric" from a hand-enforced rule into a structural property. Highly intrusive — it
-reshapes both facades' persistence layers — so it is best done one repository pair at a time
+symmetric" from a hand-enforced rule into a structural property. Highly intrusive (it
+reshapes both facades' persistence layers) so it is best done one repository pair at a time
 behind the cross-runtime conformance suite. Compose with the now-landed Drizzle split and #8.
 
 ## 8. Shared container builder (Node ⇄ Cloudflare)
@@ -182,12 +182,12 @@ behind the cross-runtime conformance suite. Compose with the now-landed Drizzle 
 `backend/runtimes/cloudflare/src/infrastructure/container.ts` (**2,710 lines**).
 
 **Problem.** The two facade composition roots are near-identical: same repository wiring,
-same service instantiation, same gateway composition — differing essentially only in which
+same service instantiation, same gateway composition; differing essentially only in which
 concrete repository/gateway class is constructed. `CLAUDE.md`'s "keep the runtimes
 symmetric" rule is currently enforced by hand: every new repository or integration must be
 wired into **both** files, and forgetting one is a silent divergence caught only if a
 conformance test happens to cover it. (The model-provider wiring is already shared via
-`createScopedModelProviderResolver` — see [Recently landed](#recently-landed) #1 — which is
+`createScopedModelProviderResolver`: see [Recently landed](#recently-landed) #1, which is
 the proof-of-shape for doing the same to the rest of the container.)
 
 **Approach.** Extract a `buildSharedContainer(config, repoFactory, gateways)` into
@@ -241,13 +241,13 @@ table entry both runtimes pick up.
 ### 2. Split the monolithic Drizzle repositories file ✅
 
 The ~5,000-line `backend/runtimes/node/src/repositories/drizzle.ts` (39 repository classes
-in one module) is split into per-domain files under `repositories/drizzle/` — `board.ts`,
+in one module) is split into per-domain files under `repositories/drizzle/`: `board.ts`,
 `execution.ts`, `accounts.ts`, `telemetry.ts`, `settings.ts`, `reviews.ts`, `kaizen.ts`,
 `initiatives.ts`, `sandbox.ts`, `connections.ts`, plus a small `_shared.ts` for the one
 cross-domain helper. `drizzle.ts` remains as a thin barrel that assembles the
 `CoreRepositories` set (`createDrizzleRepositories`) and re-exports the handful of classes
 consumed directly, so every `./repositories/drizzle.js` importer (index/container/test
-harness) is unchanged. Pure code movement — no schema or behavioural change — verified by
+harness) is unchanged. Pure code movement, no schema or behavioural change, verified by
 the cross-runtime conformance suite. This is the precursor that makes #7 (shared base
 repositories) tractable: each Drizzle repo now sits in its own file next to its D1 twin.
 
@@ -256,12 +256,12 @@ repositories) tractable: each Drizzle repo now sits in its own file next to its 
 `backend/packages/server/src/persistence/mappers.ts` now drives EVERY non-divergent
 row↔domain mapper off a declared field table. The `blocks` win (a single `blockFields`
 table generating read/insert/patch) landed earlier; the two remaining hand-enumerated read
-mappers — `rowToWorkspace` and `rowToPipeline` — are now folded onto the same "declare each
+mappers (`rowToWorkspace` and `rowToPipeline`) are now folded onto the same "declare each
 column once" pattern via a small read-only path (`makeRowReader` + the `readScalar` /
 `readNullable` / `readJson` / `readOptJson` / `readFlag` / `readOptScalar` builders). These
 two are read-only in this module (their repos bind columns positionally on write), so they
 declare only the READ direction rather than a full three-way `FieldMapper`. `rowToExecution`
-stays deliberately bespoke — it packs/unpacks a `detail` JSON envelope with tolerant
+stays deliberately bespoke: it packs/unpacks a `detail` JSON envelope with tolerant
 per-field parsers, a shape the factory doesn't model. So the only hand-written mappers left
 are the genuinely-divergent ones. Verified by `test/mappers.spec.ts` (the flag / version /
 availability / optional-JSON read semantics are pinned).
@@ -269,8 +269,8 @@ availability / optional-JSON read semantics are pinned).
 ### 3 (candidate). Finish the store pattern-factory adoption ✅
 
 Every plain find-by-key upsert store now routes list mutation through the shared
-`useUpsertList` composable; the last holdout — the `agentRuns` store's `envConfigRepairJobs`
-list (a plain prepend + replace-in-place, no monotonic guard) — is migrated, so the only
+`useUpsertList` composable; the last holdout: the `agentRuns` store's `envConfigRepairJobs`
+list (a plain prepend + replace-in-place, no monotonic guard): is migrated, so the only
 remaining hand-rolled `findIndex` sites are the deliberately-divergent monotonic/reconcile-guarded
 stores (`execution`, `board`, `workspace`, `environmentTest`, and `agentRuns`' bootstrap list)
 plus `infraConfig`'s composite-key `upsertInto`. The `useSourceIntegration` factory already
@@ -280,12 +280,12 @@ backs the document + task source stores. Verified by `app/stores/agentRuns.spec.
 
 The 828-line `stores/ui.ts` god-store (40+ unrelated UI concerns) is decomposed into three
 cohesive, independently-testable slices under `stores/ui/`: `navigation.ts` (selection /
-focus / zoom / LOD — the hot paths, isolated from modal state), `resultViews.ts` (the
+focus / zoom / LOD; the hot paths, isolated from modal state), `resultViews.ts` (the
 `dispatchStepView` / `ui.resultView` overlay seam + the observability + Kaizen panels), and
 `modals.ts` (every modal / panel open-close flag, hub came-from markers, deep-link params,
 and the startup + AI-onboarding advisories). `ui.ts` is now a thin facade that composes the
 three and re-exports the SAME public surface (all 184 keys, verified identical), so every
-existing `useUiStore()` consumer is untouched — the split is internal. Promoting a slice to a
+existing `useUiStore()` consumer is untouched: the split is internal. Promoting a slice to a
 separately-consumed store (for selective hydration) is a future, opt-in follow-up; the
 maintainability win (each concern in its own file, no central contention point) is realized
 now. Verified by `nuxt typecheck`.
@@ -301,13 +301,13 @@ run/step lifecycle reference (and the recorded decision not to adopt XState) liv
 
 > **Follow-on watch item.** The split moved much of the complexity into
 > `RunDispatcher.ts` (**2,779 lines**, ~30 injected deps, a ~256-line `pollAgentJob`),
-> which is now the largest engine file. It is not yet a headline candidate — it is a clean,
-> freshly-extracted seam — but if it keeps accreting per-kind polling logic it is the next
+> which is now the largest engine file. It is not yet a headline candidate (it is a clean,
+> freshly-extracted seam) but if it keeps accreting per-kind polling logic it is the next
 > place to apply the same handler-registry treatment.
 
 ### Engine god-file split, round 2 (+ the re-accretion guard) ✅
 
-The watch item above came true — by the July 2026 quality review
+The watch item above came true: by the July 2026 quality review
 ([`code-quality-observability-extensibility-review-2026-07.md`](./code-quality-observability-extensibility-review-2026-07.md)
 §4/#5) `RunDispatcher.ts` had regrown to **4,217** lines and `ExecutionService.ts` to
 **3,707**. The split was resumed along the review's prescription, pure code movement with no
@@ -321,7 +321,7 @@ behaviour change (verified by the full orchestration suite + cross-runtime confo
 - `RunDispatcher.ts` → **~3,135 lines**: the deterministic deployer family (the multi-frame
   provision fan-out, the async deploy-job poll, the environment projection) moved to
   **`DeployerStepController.ts`**, and the follow-up companion gate + its human-action API
-  (file / queue / answer / dismiss) moved to **`FollowUpGateController.ts`** — both wired as
+  (file / queue / answer / dismiss) moved to **`FollowUpGateController.ts`**; both wired as
   controller collaborators exactly like the existing gate controllers, with the completion
   hub + shared poll folds injected back as callbacks so the paths can't drift.
 - **Re-accretion now fails CI instead of an audit**: `scripts/check-file-size.mjs` (run in

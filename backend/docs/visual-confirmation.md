@@ -1,13 +1,13 @@
-# Visual Confirmation gate, UI tester & binary-artifact storage — handover
+# Visual Confirmation gate, UI tester & binary-artifact storage: handover
 
 Status of the work on `claude/visual-confirmation-gate-gsmh1i`. This feature adds a pipeline
 gate where a human reviews **screenshots of new UI functionality** against **reference design
 screenshots** they supply, can dispatch a **Fixer** to make changes, and is fed by a new
-browser-driven **UI tester** — all on top of a new runtime-neutral **binary-artifact storage**
+browser-driven **UI tester**, all on top of a new runtime-neutral **binary-artifact storage**
 abstraction.
 
 It landed in three coherent, independently-verified slices plus the image definition. One
-piece — routing a job into the dedicated UI-tester image — is intentionally left as a
+piece (routing a job into the dedicated UI-tester image) is intentionally left as a
 deploy-time follow-up (see "What's left").
 
 ---
@@ -25,7 +25,7 @@ binary-artifact storage (the substrate both rely on)
 ```
 
 - The gate is modelled on the existing **`human-test`** gate (`HumanTestController`): a non-LLM,
-  human-verdict, park-on-decision engine step — NOT a polling `GateDefinition` (it has no
+  human-verdict, park-on-decision engine step, NOT a polling `GateDefinition` (it has no
   programmatic precheck).
 - The UI tester is the browser sibling of the (renamed) API tester; both share the Tester→Fixer
   loop via `isTesterKind`.
@@ -34,7 +34,7 @@ binary-artifact storage (the substrate both rely on)
 
 ## What's DONE (and how it's verified)
 
-### Part A — Binary-artifact storage abstraction ✅ verified on both runtimes
+### Part A: Binary-artifact storage abstraction ✅ verified on both runtimes
 
 - Kernel port `backend/packages/kernel/src/ports/binary-artifacts.ts`:
   `BinaryArtifactStore` composed by `createBinaryArtifactStore(metadata, blob, …)` from a
@@ -42,16 +42,16 @@ binary-artifact storage (the substrate both rely on)
   adapter interface": `put`/`get`/`delete` by key).
 - Adapters:
   - **R2** blob backend (`runtimes/cloudflare/.../storage/R2BinaryBlobBackend.ts`) + **D1**
-    metadata (`D1BinaryArtifactMetadataStore.ts`). On Cloudflare blobs ALWAYS go to R2 — there
+    metadata (`D1BinaryArtifactMetadataStore.ts`). On Cloudflare blobs ALWAYS go to R2: there
     is **no D1 blob adapter** (D1's ~1MB value limit).
   - **Postgres `bytea`** blob backend (`runtimes/node/src/storage/PostgresBinaryBlobBackend.ts`,
     size-guarded) + Drizzle metadata.
-  - **S3** blob backend — opt-in package `backend/packages/provider-s3` (modelled on
-    `provider-bedrock`); accepts explicit UI-entered credentials. **Node/local only** — S3 is
+  - **S3** blob backend: opt-in package `backend/packages/provider-s3` (modelled on
+    `provider-bedrock`); accepts explicit UI-entered credentials. **Node/local only**: S3 is
     deliberately not offered on the Worker (the AWS SDK does not belong in the Worker bundle).
   - **Filesystem** blob backend (`runtimes/node/src/storage/FilesystemBinaryBlobBackend.ts`):
     on-disk under a base path (default `.file-storage`, git-ignored). Node/local only, and
-    local-disk only — not for a scaled/ephemeral deployment (use `s3` there).
+    local-disk only, not for a scaled/ephemeral deployment (use `s3` there).
 - Metadata table `binary_artifacts` mirrored D1 (`migrations/0017_binary_artifacts.sql`) ⇄
   Drizzle (`db/schema.ts` + generated migration); Node-only `binary_artifact_blobs` `bytea`
   table for the `db` backend. `pnpm db:check` is green.
@@ -65,7 +65,7 @@ binary-artifact storage (the substrate both rely on)
 - Conformance `defineBinaryArtifactsSuite` (store/get/list/listByBlock/delete + DB size-guard).
 - **Verified:** Cloudflare suite (workerd + real D1) and Node suite (real Postgres) both pass.
 
-### Part B — Tester split (tester-api + tester-ui) ✅ code verified
+### Part B: Tester split (tester-api + tester-ui) ✅ code verified
 
 - `tester` renamed to **`tester-api`**; new **`tester-ui`** kind. Constants + helper
   `isTesterKind`/`TESTER_KINDS` in `orchestration/.../ci.logic.ts`; both share the Tester→Fixer
@@ -79,11 +79,11 @@ binary-artifact storage (the substrate both rely on)
   and upload each via the run's `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`.
 - Renamed everywhere: seed pipelines, configs/traits, the SPA palette (API Tester + UI Tester),
   and all tests/snapshots.
-- `Dockerfile.ui` (Playwright + Chromium on the slim base image) added — see "What's left" for
+- `Dockerfile.ui` (Playwright + Chromium on the slim base image) added: see "What's left" for
   routing.
 - **Verified:** Node execution conformance (38 tests) passes with the renamed kind.
 
-### Part C — Visual Confirmation gate + SPA ✅ backend verified, SPA typechecked
+### Part C: Visual Confirmation gate + SPA ✅ backend verified, SPA typechecked
 
 - Step state `visualConfirmStepStateSchema` + `pipelineStepSchema.visualConfirm`
   (`contracts/entities.ts`). Kind `VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'`.
@@ -98,8 +98,8 @@ binary-artifact storage (the substrate both rely on)
   (`/blocks/:id/visual-confirmation/{approve,request-fix,recapture}`). New `pl_visual` pipeline
   (`… tester-ui → visual-confirmation → merger`).
 - SPA: `VisualConfirmationWindow.vue` (actual-vs-reference gallery + approve/request-fix/recapture
-  - reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
-    `visual-confirm` result-view registration, notification reveal + Slack panel entries.
+  + reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
+  `visual-confirm` result-view registration, notification reveal + Slack panel entries.
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 
@@ -133,7 +133,7 @@ job body's `artifactUpload` (`{ url, token }`) to the agent as the `ARTIFACT_UPL
 `ARTIFACT_UPLOAD_TOKEN` the `tester-ui` prompt already references, and provide the Playwright
 driver. No `switch(agentKind)` belongs in the container, but the env passthrough does.
 
-**1c. Backend ingest seam — DONE.** `ContainerAgentExecutor` now injects `artifactUpload` into the
+**1c. Backend ingest seam: DONE.** `ContainerAgentExecutor` now injects `artifactUpload` into the
 `tester-ui` job body (reusing the run's existing container session token + the proxy base URL, so
 no extra credential or public-URL dependency), and `harnessArtifactController` mounts a
 container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest` that stores the bytes as a
@@ -142,7 +142,7 @@ container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest` that stores the b
 
 Until 1a + 1b land, the gate is fully usable against **manually-uploaded** reference + screenshots;
 auto-capture lights up once routing + harness passthrough are wired. The `pl_visual` pipeline still
-parks for a human regardless (manual mode), so it is safe to expose — it just won't have
+parks for a human regardless (manual mode), so it is safe to expose: it just won't have
 auto-captured shots until then.
 
 ### 2. Recapture-after-fix loop (enhancement)

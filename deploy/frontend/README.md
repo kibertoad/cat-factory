@@ -1,4 +1,4 @@
-# deploy/frontend — example Cloudflare Pages deployment
+# deploy/frontend: example Cloudflare Pages deployment
 
 This package is the **deployment** half of the frontend. All the SPA logic
 (components, stores, composables, pages, types) lives in the published
@@ -12,7 +12,7 @@ backend, and deploy.
 ## Worked example: a consumer extension module
 
 This template also ships a **worked example** of extending the SPA without forking
-the layer — the frontend analogue of the backend
+the layer: the frontend analogue of the backend
 [`@cat-factory/example-custom-agent`](../../backend/internal/example-custom-agent)
 package. `app/plugins/acme-security.client.ts` registers one module
 (`app/modular/acme-security.ts`) that contributes to every landed consumer seam at
@@ -21,7 +21,7 @@ layer's shared `ResultWindowShell` + `StepRunMeta` chrome), the palette entry th
 routes that kind to the window, a sidebar/command-palette destination, an extra
 inspector panel, and a CODE-shipped custom task type (`acme:incident`, with
 descriptor-driven create-form fields) that becomes a first-class create-task choice +
-card badge — all through the auto-imported `registerAppModule` seam, with zero host
+card badge; all through the auto-imported `registerAppModule` seam, with zero host
 edits. Its strings live in `i18n/locales/en.json` (deep-merged into the layer
 catalog). Delete `app/plugins/acme-security.client.ts` (or the whole `app/` dir) to
 drop it. See the authoring walkthrough in
@@ -42,12 +42,12 @@ on the published npm version** instead:
 
 ## Configure
 
-- `nuxt.config.ts` — override `app.head.title`/meta/favicon and any layer config.
-- `wrangler.toml` — set `name` to your Pages project.
+- `nuxt.config.ts`: override `app.head.title`/meta/favicon and any layer config.
+- `wrangler.toml`: set `name` to your Pages project.
 - The backend URL is **not** in config: it is baked in at build time from
   `NUXT_PUBLIC_API_BASE` (the SPA is `ssr: false`).
 - `NUXT_PUBLIC_UI_MODE` (optional, same build-time story) pins the interface tier every
-  visitor starts in — `basic` (the default: everyday surface only) or `advanced` (everything).
+  visitor starts in: `basic` (the default: everyday surface only) or `advanced` (everything).
   Setting it **overrides** each user's own choice and turns the in-app switcher into a
   read-only indicator, so leave it unset unless you want the tier fixed fleet-wide. See
   [the layer README](../../frontend/app/README.md#interface-modes-basic--advanced).

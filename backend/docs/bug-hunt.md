@@ -10,7 +10,7 @@ spec → architect → coder → review → merge tail) starts on it immediately
 Same reading, same ranking vocabulary and the same downstream pipeline as the recurring triage
 schedule. The one difference is **who decides**: triage claims the oldest match unattended on a
 cadence, while a hunt shows a rated shortlist and waits for a person. That is the whole reason it
-exists — a backlog worker is right for churning through known bugs, and useless for the question
+exists: a backlog worker is right for churning through known bugs, and useless for the question
 "we have an afternoon, what is actually worth fixing?".
 
 ## 1. Shape
@@ -31,7 +31,7 @@ the next click; those are shown as the errors they are.
 
 `BugHuntController` (`@cat-factory/server`) is member-tier, deliberately NOT mounted alongside the
 admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection, and what it does
-— create a task, start a run — is exactly what the member tier is for. Gating it on
+(create a task, start a run) is exactly what the member tier is for. Gating it on
 `integrations.manage` would mean only admins could pick up a bug.
 
 ### The tracker picker is also how a tracker gets ADDED
@@ -41,7 +41,7 @@ connected to this workspace yet, so the hunt's tracker selector is the same two-
 `<ContextIssuePicker>` renders (both off the shared `buildSourceChoices` /`reconcileSource` in
 `frontend/app/app/utils/taskSources.ts`): the trackers the workspace offers, then the ones it
 could add. An add entry routes to **that tracker's own connect screen** (`ui.openTaskConnect`),
-never to the Integrations hub — the hub is a directory the user then has to search, and the
+never to the Integrations hub: the hub is a directory the user then has to search, and the
 tracker they just named is the one thing we already know.
 
 Two consequences the wording and the wiring have to honour. The connect modal opens **over** the
@@ -49,7 +49,7 @@ hunt rather than replacing it, so the board scope, issue type and labels typed s
 detour; and the hunt reconciles the offered set as it changes underneath it, so the tracker the
 user left to add becomes the selection the moment it turns up offered rather than leaving them on
 the old one wondering whether the connect took. A tracker that is connected but toggled off for
-the workspace is offered as "enable", not "connect" — the same modal serves both, and a user is
+the workspace is offered as "enable", not "connect"; the same modal serves both, and a user is
 never told to connect something they already connected.
 
 ## 2. It persists nothing
@@ -59,7 +59,7 @@ live provider read plus a model call; the response IS the state, and the SPA sto
 close. A stale ranking of a board that has since moved on is worse than no ranking.
 
 The only durable effects happen at adopt time, and they are all pre-existing: an imported issue
-row, a board task, an execution. Runtime symmetry therefore comes for free — every part is either
+row, a board task, an execution. Runtime symmetry therefore comes for free: every part is either
 a provider (runtime-neutral by construction) or a service built in the shared `createTasksModule`.
 What conformance pins is the **wiring**, not a schema: a facade that forgets to thread the ranking
 assessor through `createCore` fails `defineBugHuntConformance` rather than silently offering a
@@ -69,10 +69,10 @@ board scan that never rates anything.
 
 `TaskSourceProvider` gains two optional capabilities beside `searchIssues`:
 
-- **`listBoards`** — the picker's options. A provider without it is not silently reduced to an
+- **`listBoards`**: the picker's options. A provider without it is not silently reduced to an
   empty list: the service raises, and the SPA turns that into a free-text board field, which is a
   usable answer where an empty picker is not.
-- **`listBugCandidates`** — the same `IssueIntakeQuery` vocabulary the recurring intake uses (now
+- **`listBugCandidates`**: the same `IssueIntakeQuery` vocabulary the recurring intake uses (now
   carrying `unassignedOnly`), returning the richer `BugCandidate` rows the rating reasons over
   (body excerpt, labels, priority, age, comment count).
 
@@ -84,12 +84,12 @@ is why `GitHubIssueSearchHit` grew optional `body`/`labels`/`createdAt`/`comment
 projects them in its GraphQL query.
 
 **Every predicate is pushed into the vendor query**, including the unassigned narrowing
-(`assignee IS EMPTY` / `no:assignee` / `assignee: { null: true }`) — never fetch-all-then-filter.
+(`assignee IS EMPTY` / `no:assignee` / `assignee: { null: true }`); never fetch-all-then-filter.
 The exclusion of already-adopted issues is one batched `listByWorkspace` read indexed in memory,
 the same shape `BugIntakeService` uses.
 
 The scan is capped at `BUG_HUNT_SCAN_LIMIT` (40) because the whole set goes into one rating
-prompt. A board with more matching bugs comes back `truncated: true` and the UI says so — a
+prompt. A board with more matching bugs comes back `truncated: true` and the UI says so: a
 silently shortened list reads exactly like an exhaustive one. The service asks the provider for
 **one past the cap** and trims: comparing the returned count against the cap instead cannot tell
 "exactly 40 bugs, all of them here" from "40 shown, more behind them", and would tell a user their
@@ -97,15 +97,15 @@ board holds more than they can see whenever it holds exactly 40.
 
 **The board scope is required, and validated rather than just interpolated.** A hunt's `board`
 arrives in a request body, and GitHub's `repo:` qualifier is the one value the search grammar takes
-bare — so `buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is
+bare, so `buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is
 quoted). Without that, a board of `owner/repo is:closed` would silently contradict the `is:open` /
 `no:assignee` qualifiers the whole surface rests on. Jira escapes its project key into a quoted
 JQL literal and Linear passes the team id as a GraphQL variable, so neither has the same hole.
 
 A query with NO repository at all is refused outright, for a blunter reason: `/search/issues`
 carries no implicit scope, so a boardless query returns whatever the credential can reach. Under a
-GitHub App installation token that happens to be the installation's own repos — which is why an
-unscoped query looked harmless — but under a PAT it is every public repository on GitHub. The
+GitHub App installation token that happens to be the installation's own repos (which is why an
+unscoped query looked harmless), but under a PAT it is every public repository on GitHub. The
 recurring `bug-intake` schedule runs through the same builder and does not merely display its hit:
 it imports the issue and starts a pipeline on it. So a schedule stored without a repo fails its
 fire loudly instead of scanning the world.
@@ -113,7 +113,7 @@ fire loudly instead of scanning the world.
 ## 4. Rating
 
 `BugHuntAssessor` is a kernel port and the inline `BugHuntAssessorService` is its default
-implementation — structurally the `JudgeService` twin (resolve model → `generateText` → return the
+implementation: structurally the `JudgeService` twin (resolve model → `generateText` → return the
 raw extracted JSON for the caller's parser), built in `createTasksModule` from the model
 dependencies every facade already wires. So rating needs no per-facade wiring, and a test harness
 swaps in a deterministic fake through the same seam.
@@ -129,7 +129,7 @@ Three rules govern what the model is allowed to contribute:
   ratio and its operands will sometimes return a ratio that contradicts them, at which point the
   list a human reads is sorted by something its own rationale does not explain.
 - **Tracker facts and model judgement never mix.** A candidate row is built from the provider's
-  response and the assessment is joined onto it by `externalId` (case-insensitively — the vendors
+  response and the assessment is joined onto it by `externalId` (case-insensitively; the vendors
   disagree with themselves about issue-key case). A verdict naming an issue the board did not
   return is **dropped**, because a hallucinated bug is one a human would try to fix.
 - **It judges from the report only.** It has no checkout, so the prompt forbids asserting where a
@@ -158,17 +158,17 @@ need different fixes from whoever reads them:
 
 A hunt is the platform's first **billable model call that is not behind a run start**, so the
 budget check `RunAdmission` performs before a run has no equivalent here unless it is made one:
-without it a workspace that has exhausted its budget — and therefore can no longer start the very
-run a hunt exists to start — could still spend on rating, repeatedly, from a member-tier endpoint
+without it a workspace that has exhausted its budget (and therefore can no longer start the very
+run a hunt exists to start) could still spend on rating, repeatedly, from a member-tier endpoint
 with no in-flight cap.
 
 `BugHuntService` takes the safeguard as the narrow `isOverBudget(workspaceId)` predicate (so the
 integrations layer takes no dependency on `@cat-factory/spend`), checks it **before** the call, and
-reports `over_budget` rather than folding it into `failed` — an exhausted budget is not a broken
+reports `over_budget` rather than folding it into `failed`: an exhausted budget is not a broken
 model, and "raise the budget" is not the fix for a revoked key. Unwired ⇒ no guard, exactly as an
 unwired spend service means no guard on a run.
 
-A failed rating never costs the user the scan — the board read is useful on its own — but it is
+A failed rating never costs the user the scan (the board read is useful on its own), but it is
 never presented as a ranking either. A candidate the rating skipped carries `analysis: null` and
 sorts last, rendered as "not assessed": a missing assessment must never read as a zero score.
 
@@ -185,7 +185,7 @@ construction and the human just confirmed the pipeline, so the task lands as `ta
 pinned to `BUGFIX_PIPELINE_ID` rather than as a generic `feature` to be re-classified by hand.
 
 The service stops there. Starting the run needs the execution engine and the initiator's
-personal-credential gate, so the controller composes it — the same split `BugIntakeService` uses
+personal-credential gate, so the controller composes it: the same split `BugIntakeService` uses
 (read-and-claim in integrations, the engine half outside it), and the same shape
 `PublicApiController` already uses for create-task-then-start.
 

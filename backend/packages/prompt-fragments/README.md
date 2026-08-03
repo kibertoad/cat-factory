@@ -1,6 +1,6 @@
 # @cat-factory/prompt-fragments
 
-The **built-in tier** of best-practice prompt fragments — small, curated guidance
+The **built-in tier** of best-practice prompt fragments: small, curated guidance
 snippets that get folded into an agent's system prompt at run time
 (`composeSystemPrompt`). This package is **plain, build-static data**: no I/O, no
 framework. It is the source of truth for the shipped defaults and the seed for the
@@ -8,9 +8,9 @@ tenant-scoped [prompt-fragment library](../../docs/adr/0006-prompt-fragment-libr
 
 ## What's here
 
-- `src/collections/*.ts` — fragments authored per topic. Today: `node`, `react`,
+- `src/collections/*.ts`: fragments authored per topic. Today: `node`, `react`,
   `acceptance`, `design`, `style`, `migration`. Each exports an array of `PromptFragment`.
-- `src/index.ts` — merges the collections into a single `FRAGMENTS` registry plus
+- `src/index.ts`: merges the collections into a single `FRAGMENTS` registry plus
   `FRAGMENTS_BY_ID` and `getFragment(id)` for O(1) lookup during composition.
 
 A `PromptFragment` (shape defined in [`@cat-factory/contracts`](../contracts))
@@ -36,26 +36,26 @@ relevance selector), the `body` (injected text), an optional condensed `brief`
 
 ### Two-tier bodies: `body` and `brief`
 
-An **implementer** kind (`coder` / `fixer` / `ci-fixer` / `conflict-resolver` — the kinds
+An **implementer** kind (`coder` / `fixer` / `ci-fixer` / `conflict-resolver`: the kinds
 carrying the `brief-standards` trait) runs a long agentic loop whose system prompt, standards
-included, is re-sent on **every turn**. Those kinds fold a fragment's optional `brief` — the
-same standard stated tersely — instead of its full `body`. Reviewer / planner / investigator
+included, is re-sent on **every turn**. Those kinds fold a fragment's optional `brief` (the
+same standard stated tersely) instead of its full `body`. Reviewer / planner / investigator
 kinds keep the full text: they run few turns and benefit from it when judging built work.
 
 Two rules govern authoring one:
 
 - **A `brief` must not drop a rule, only its elaboration.** It is the same standard compressed,
-  not a subset — an agent folding the brief is held to everything the body demands.
+  not a subset: an agent folding the brief is held to everything the body demands.
 - **`brief` travels WITH the body it condenses** and is never re-resolved by id downstream. A
   higher tier that overrides a built-in id supplies its OWN brief (or none), so the override's
-  own text is folded — never the built-in's condensed text over a tenant's standard.
+  own text is folded, never the built-in's condensed text over a tenant's standard.
 
 Omitting `brief` is always safe: the full `body` is used for every kind, unchanged. Fragments
 that can reach an implementer kind carry one; the ones scoped to `spec-writer` / `playwright` /
 document-authoring kinds (which are not implementers) deliberately do not.
 
 Every fragment in **this** package is comfortably under `FRAGMENT_BRIEF_MIN_BODY_CHARS`, so the
-auto-condensation below never acts on the shipped catalog — keep it that way by writing a brief
+auto-condensation below never acts on the shipped catalog: keep it that way by writing a brief
 by hand when a built-in grows past ~1,500 characters.
 
 ### Where a brief comes from at run time
@@ -64,14 +64,14 @@ The built-in `brief` above is only the first of three answers. For a fragment re
 the tenant library ([ADR 0006](../../docs/adr/0006-prompt-fragment-library.md)) the resolution
 order is:
 
-1. **The winning tier's linked `brief`** — a built-in's, or the one a tenant authored on its own
+1. **The winning tier's linked `brief`**: a built-in's, or the one a tenant authored on its own
    managed row (the library editor's short-version field, or a repo-sourced guideline file's
    `brief:` frontmatter key).
 2. **A model-GENERATED condensation**, for a body over `FRAGMENT_BRIEF_MIN_BODY_CHARS` that has
    no linked brief. Produced once on the first implementer dispatch that folds it, persisted, and
-   **regenerated whenever the body changes** — a library edit, a repo resync, or a living
+   **regenerated whenever the body changes**: a library edit, a repo resync, or a living
    document re-resolved at run time.
-3. **Nothing** — the full `body` is folded for every kind, which is also where every failure on
+3. **Nothing**: the full `body` is folded for every kind, which is also where every failure on
    that path lands (no model wired, an unreadable store, a refused condensation).
 
 Design, decisions and gotchas:
@@ -80,22 +80,22 @@ Design, decisions and gotchas:
 ## Programmatic deployment seams (custom fragments + per-task-type defaults)
 
 Two **module-global** registration seams let a deployment (local **or** hosted) extend
-the fragment behaviour at startup — an import side effect from the deployment entry, run
+the fragment behaviour at startup: an import side effect from the deployment entry, run
 **once before** `start()` / `startLocal()`, mirroring `registerAgentKind`. No fork, no
 rebuild, no per-workspace UI.
 
-- **Add custom fragments to the universal pool** — `registerPromptFragment(fragment)` /
+- **Add custom fragments to the universal pool**: `registerPromptFragment(fragment)` /
   `registerPromptFragments(fragments)`. Every `GET /prompt-fragments` catalog read and
   every run-time body lookup then sees them; re-registering an id overrides the built-in
   of that id. (`universalFragments()` is the merged built-in ∪ registered pool.)
-- **Mark fragments as the default for a task type** —
+- **Mark fragments as the default for a task type**:
   `registerTaskTypeDefaultFragments(taskType, fragmentIds)`. Every **new** task of that
   type (`document`, `review`, `feature`, …) is then seeded with those fragments onto its
   own `fragmentIds` at creation (unioned with the built-in defaults and whatever it
   inherits from its service). The board resolves a new task's seed set through
   `defaultFragmentIdsForTaskType(taskType)`; the only built-in per-type default is the
   document writing-style set (`DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`), which registered
-  ids augment rather than replace. Seeding is server-side and authoritative — it applies
+  ids augment rather than replace. Seeding is server-side and authoritative: it applies
   even for tasks created via the public API with no create-form picker.
 
 ```ts
@@ -122,7 +122,7 @@ registerTaskTypeDefaultFragments('review', ['org.review-checklist'])
 
 1. Create `src/collections/<topic>.ts` and export an array of `PromptFragment`.
 2. Spread it into `FRAGMENTS` in `src/index.ts`.
-3. Keep ids **globally unique and stable** — blocks persist them, so a renamed id
+3. Keep ids **globally unique and stable**: blocks persist them, so a renamed id
    silently drops a selection (unknown ids are skipped, never error).
 
 ```bash

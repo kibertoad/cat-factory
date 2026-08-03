@@ -1,4 +1,4 @@
-# deploy/backend — example Cloudflare Worker deployment
+# deploy/backend: example Cloudflare Worker deployment
 
 This package is the **deployment** half of the backend. The reusable logic lives
 in the published [`@cat-factory/worker`](../../backend/runtimes/cloudflare) library
@@ -24,13 +24,13 @@ instead:
 }
 ```
 
-Nothing else changes — `src/index.ts` and `wrangler.toml` stay identical.
+Nothing else changes: `src/index.ts` and `wrangler.toml` stay identical.
 
 ## Registering your own extensions
 
 The bare re-export above is the shape for a deployment that extends nothing. To register your own
 agent kinds, gates, pipelines, task types or **foundational services** (your org's shared-capability
-catalog — [ADR 0031](../../backend/docs/adr/0031-foundational-services.md)), swap the `default`
+catalog: [ADR 0031](../../backend/docs/adr/0031-foundational-services.md)), swap the `default`
 re-export for one line, keeping the class re-exports as they are:
 
 ```ts
@@ -42,8 +42,8 @@ foundationalServiceRegistry.registerAll(MY_ESTATE)
 export default createWorker({ overrides: { foundationalServiceRegistry } })
 ```
 
-`createWorker` owns everything the default export owns — the log-level read, boot-time validation
-of _your_ registrations, and the `scheduled`/`queue` handlers — so there is nothing to reassemble
+`createWorker` owns everything the default export owns (the log-level read, boot-time validation
+of _your_ registrations, and the `scheduled`/`queue` handlers) so there is nothing to reassemble
 and a handler added upstream later reaches you without a change here. It is the Cloudflare
 counterpart of `start({ … })` / `startLocal({ … })` on the Node and local facades.
 
@@ -51,20 +51,20 @@ counterpart of `start({ … })` / `startLocal({ … })` on the Node and local fa
 
 Edit `wrangler.toml`:
 
-- `name`, `[[d1_databases]].database_id` — your Worker name + D1 id
+- `name`, `[[d1_databases]].database_id`: your Worker name + D1 id
   (`wrangler d1 create cat_factory`).
-- The second `[[d1_databases]]` entry (`binding = "TELEMETRY_DB"`) — the **required**
+- The second `[[d1_databases]]` entry (`binding = "TELEMETRY_DB"`): the **required**
   dedicated telemetry database. Provision it with
   `wrangler d1 create cat_factory_telemetry` and paste its id. Telemetry
   (`llm_call_metrics`, `agent_context_snapshots`) is append-heavy/short-retention, so it
   is kept off the main DB; its schema ships under
   `node_modules/@cat-factory/worker/telemetry-migrations`.
-- `[[containers]].image` — the published runner image. Pin a version:
+- `[[containers]].image`: the published runner image. Pin a version:
   `ghcr.io/<owner>/cat-factory-executor:<version>` (see the repo's
   `docker-publish` workflow; forks publish under their own owner).
-- `[vars]` — `WORKER_PUBLIC_URL`, `CORS_ALLOWED_ORIGINS`, auth/GitHub ids, spend
+- `[vars]`: `WORKER_PUBLIC_URL`, `CORS_ALLOWED_ORIGINS`, auth/GitHub ids, spend
   budget, and the per-feature toggles. Each block documents what it needs.
-- Secrets — set with `wrangler secret put NAME` (never commit them); see
+- Secrets: set with `wrangler secret put NAME` (never commit them); see
   `.dev.vars.example` for the local-dev equivalents.
 
 The D1 schema migrations ship **with the library**; `migrations_dir` points at
@@ -76,7 +76,7 @@ in `wrangler.toml`).
 
 Every workspace's model-preset library is seeded on first use with three built-ins
 (Kimi K2.7, GLM-5.2, Claude Opus 5); the Worker marks **Kimi K2.7** the default (it runs
-on the bare Cloudflare AI binding). The library API already accepts an override — the app
+on the bare Cloudflare AI binding). The library API already accepts an override: the app
 builder reads `defaultModelPresetId` off `createApp`'s `overrides`
 (a `Partial<CoreDependencies>`):
 
@@ -90,7 +90,7 @@ const app = createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS
 The catch is that this deployment's `src/index.ts` **re-exports the library's ready-made
 `default` handler**, which is more than `fetch`: it also carries the `scheduled` cron
 sweeper (durable-run re-drive, GitHub reconcile, retention, Kaizen) and the `queue`
-consumer. So overriding the default here is not a one-line option — you have to author your
+consumer. So overriding the default here is not a one-line option: you have to author your
 own entry that calls `createApp({ overrides })` for `fetch` **and** reproduces the
 `scheduled` + `queue` handlers, or those background jobs silently stop. Use the library's
 own [`backend/runtimes/cloudflare/src/index.ts`](../../backend/runtimes/cloudflare/src/index.ts)

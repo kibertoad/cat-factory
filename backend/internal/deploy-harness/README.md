@@ -2,7 +2,7 @@
 
 The container payload for the **container-backed Kubernetes deploy adapter**. It renders
 a service's manifests with real `kubectl` / `kustomize` / `helm` and applies them into a
-per-PR namespace — the work the native in-Worker REST adapter cannot do (that path only
+per-PR namespace: the work the native in-Worker REST adapter cannot do (that path only
 applies raw, already-rendered manifests; a kustomize `secretGenerator` rewrites a
 content-hashed Secret name into every reference at build time, and helm is infeasible to
 render in-process).
@@ -24,14 +24,14 @@ Optional inbound auth via `HARNESS_SHARED_SECRET` + the `x-harness-secret` heade
 
 The job body (`src/job.ts`) is built by the backend's
 `KubernetesEnvironmentProvider.buildProvisionJob` (provision-types slice 8). Every
-templated / secret value arrives **already resolved** — the harness never sees the
+templated / secret value arrives **already resolved**; the harness never sees the
 workspace secret bundle. It carries:
 
-- `cluster` — apiserver URL + CA + bearer token + the resolved namespace.
-- `source` — git clone URL + ref + overlay/file path + `renderer` (`raw` | `kustomize`).
-- `images` / `helmReleases` / `secretInjections` — resolved kustomize image overrides,
+- `cluster`: apiserver URL + CA + bearer token + the resolved namespace.
+- `source`: git clone URL + ref + overlay/file path + `renderer` (`raw` | `kustomize`).
+- `images` / `helmReleases` / `secretInjections`: resolved kustomize image overrides,
   helm releases, and Secret / `generatorEnvFile` injections.
-- `url` — how to discover the env URL once applied (Gateway / HTTPRoute / Service /
+- `url`: how to discover the env URL once applied (Gateway / HTTPRoute / Service /
   Ingress status).
 
 ## Flow (`src/deploy.ts`)
@@ -50,5 +50,5 @@ pnpm --filter @cat-factory/deploy-harness run image:publish  # multi-arch → GH
 ```
 
 Bump the package `version` (and the deployment's pinned image tag) whenever you change
-`src/**`, the `Dockerfile`, `tsconfig.json`, or the pinned CLI versions — a fresh,
+`src/**`, the `Dockerfile`, `tsconfig.json`, or the pinned CLI versions; a fresh,
 immutable tag is what forces the rollout (see CLAUDE.md).

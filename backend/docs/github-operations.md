@@ -1,4 +1,4 @@
-# GitHub Integration — Operations Runbook
+# GitHub Integration: Operations Runbook
 
 How to create the GitHub App, configure the worker, and troubleshoot. For the
 design see [github-integration.md](./github-integration.md) and
@@ -10,29 +10,29 @@ design see [github-integration.md](./github-integration.md) and
 
 cat-factory is self-hosted, so **each deployment registers its own GitHub App.**
 An App's webhook and setup URLs point at a single host, so there is no shared or
-central App — every instance creates one pointing at its own worker host.
+central App; every instance creates one pointing at its own worker host.
 
 - **Personal accounts and orgs both work.** Create the App under either a personal
   account or an org (Settings → Developer settings → GitHub Apps); it installs on
-  whichever account owns the repos. Nothing in cat-factory requires an org — the
+  whichever account owns the repos. Nothing in cat-factory requires an org: the
   flow only binds an installation to a workspace.
 - The App can stay **private**. Create it under your own account/org and install it
-  on your own repos — the owner can always install a private App. You do **not** need
+  on your own repos; the owner can always install a private App. You do **not** need
   to make it public or list it on the GitHub Marketplace; that's only required if you
   want accounts you don't own to install your instance's App.
 - It's the **same App definition** every time (the permissions and events below);
   only the per-instance values differ: the App name (must be unique across GitHub),
   the webhook/setup URLs (your host), and the generated webhook secret and key.
 - The multi-tenant design (one installation per workspace, per-installation tokens)
-  still applies _within_ your instance — many workspaces, each bound to its own
+  still applies _within_ your instance: many workspaces, each bound to its own
   installation under your account/org.
 
-**Fast path — App Manifest.** Instead of hand-filling step 1, open
+**Fast path: App Manifest.** Instead of hand-filling step 1, open
 [`github-app-manifest.html`](./github-app-manifest.html) in a browser, enter your
 worker host (and an org, or leave it blank for a personal account), and submit. It
 posts [`github-app-manifest.json`](./github-app-manifest.json)
 to GitHub's App-creation flow with every permission, event and URL pre-filled, so
-you only confirm. Then continue from **step 2** (key conversion) — you'll still
+you only confirm. Then continue from **step 2** (key conversion); you'll still
 generate the private key and set the worker secrets yourself. Prefer the manual
 walkthrough below if you'd rather click through each field.
 
@@ -40,15 +40,15 @@ walkthrough below if you'd rather click through each field.
 
 ## 1. Create the GitHub App
 
-Create an App at **Settings → Developer settings → GitHub Apps → New GitHub App**
-— under a personal account or an org; both work. (For an org installation, create
+Create an App at **Settings → Developer settings → GitHub Apps → New GitHub App**,
+under a personal account or an org; both work. (For an org installation, create
 it from the org's developer settings.)
 
 **Webhook**
 
 - Active: ✅
 - Webhook URL: `https://<your-worker-host>/github/webhooks`
-- Webhook secret: generate a strong random string — this is `GITHUB_WEBHOOK_SECRET`.
+- Webhook secret: generate a strong random string; this is `GITHUB_WEBHOOK_SECRET`.
 
 **Callback / Setup**
 
@@ -66,7 +66,7 @@ it from the org's developer settings.)
 - Metadata: **Read-only** (mandatory)
 - Commit statuses: **Read-only** (optional, alongside checks)
 
-> **No `Administration` permission is needed** — cat-factory never creates or
+> **No `Administration` permission is needed**: cat-factory never creates or
 > deletes repositories. The "bootstrap repo" feature pushes its initial commit into
 > an **empty repository the user creates first** (the modal links to GitHub's
 > new-repo page), so `Contents: write` is sufficient. This deliberately keeps the
@@ -134,7 +134,7 @@ wrangler queues create cat-factory-github-dlq
 Then uncomment the `[[queues.producers]]` / `[[queues.consumers]]` blocks for
 `cat-factory-github-sync` in `wrangler.toml`. (They're commented out by default
 because the test pool registers one consumer per test file, which collides on a
-shared queue — the same reason `EXECUTION_QUEUE` is opt-in.)
+shared queue, the same reason `EXECUTION_QUEUE` is opt-in.)
 
 The `GITHUB_BACKFILL_WORKFLOW` binding and the `*/2 * * * *` cron reconciliation are
 always active when GitHub is configured.

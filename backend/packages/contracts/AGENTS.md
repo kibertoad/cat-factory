@@ -1,4 +1,4 @@
-# `@cat-factory/contracts` — Valibot wire contracts
+# `@cat-factory/contracts`: Valibot wire contracts
 
 The dependency **leaf** (no workspace deps). Valibot schemas shared by the SPA + every backend:
 the single source of truth for wire shapes and the domain vocabulary.
@@ -8,13 +8,13 @@ top-level files are the domain contracts.
 
 **Key files:**
 
-- `primitives.ts` — the block **type** / **status** / **level** enums. Note the two "task"
+- `primitives.ts`: the block **type** / **status** / **level** enums. There are two "task"
   axes: `frame → module → task → epic` is the block **level**, separate from the block **type**
   (`taskType`). See `docs/glossary.md`.
-- `entities.ts` — the `Block` and other entity schemas. The canonical unit of work is a
-  **block** (`task` is the tracker-boundary name, `card` the UI/events name — one thing, three
+- `entities.ts`: the `Block` and other entity schemas. The canonical unit of work is a
+  **block** (`task` is the tracker-boundary name, `card` the UI/events name: one thing, three
   names; `docs/glossary.md`).
-- `events.ts` — the `WorkspaceEvent` union pushed to the SPA; `errors.ts` — the `reason`/`code`
+- `events.ts`: the `WorkspaceEvent` union pushed to the SPA; `errors.ts`: the `reason`/`code`
   vocabulary the SPA maps to i18n keys. Both axes are declared here: `DOMAIN_ERROR_CODES` /
   `API_ERROR_CODES` are the STATUS CLASS on `error.code` (kernel's `DomainErrorCode` is derived
   from the first, so `DomainError` cannot carry a class the SPA has no wording for; the second
@@ -23,7 +23,7 @@ top-level files are the domain contracts.
   with that surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same:
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
-- `repo-url.ts` — pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
+- `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding
   it to the provider's name search). Lives here because contracts is the only package both

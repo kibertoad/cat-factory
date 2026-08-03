@@ -1,10 +1,10 @@
-# Security hardening — round 2
+# Security hardening: round 2
 
 ## Goal & rationale
 
 A second cross-cutting security review (authn/authz + multi-tenancy, crypto/secrets,
 SSRF/outbound, injection, and the HTTP/webhook layer) was run over the whole backend. As in
-[round 1](./security-hardening.md), the codebase is **already well defended** — parameterized
+[round 1](./security-hardening.md), the codebase is **already well defended**: parameterized
 queries everywhere, argv-only process execution (no shell), authenticated-encryption at rest
 with per-store HKDF domain separation, a central default-deny auth gate, audience-pinned +
 per-audience-keyed tokens, and (from round 1) per-hop redirect-revalidating SSRF fetch, CORS
@@ -18,7 +18,7 @@ item 8 (machine-token revocation) as SEC-5.
 
 Every fix lives in a **shared package** (`server`, `agents`, `integrations`, `orchestration`,
 `contracts`, `executor-harness`) or a single facade's config, so cross-runtime symmetry is
-preserved for free — the one exception is SEC-5, which adds a table and therefore carries the
+preserved for free: the one exception is SEC-5, which adds a table and therefore carries the
 symmetric D1 ⇄ Drizzle + conformance work (already scoped in round 1's item 8).
 
 ## Target pattern
@@ -30,10 +30,10 @@ symmetric D1 ⇄ Drizzle + conformance work (already scoped in round 1's item 8)
   checked against the gated scope. SEC-1 is the reference fix (`accountOf(id) === :accountId`).
 - **Any provider that fetches an org/user-supplied URL must go through the shared
   redirect-revalidating fetch** (`integrations/.../shared/safe-fetch.ts` `safeFetch`, or
-  `fetchLocalRunner` for local runners) — never a bare `fetch`/AI-SDK default fetch that
+  `fetchLocalRunner` for local runners), never a bare `fetch`/AI-SDK default fetch that
   follows 3xx unchecked. SEC-2 and SEC-7 are both "reuse the shared safe fetch" fixes.
 - **Every free-text body persisted to telemetry runs through `redactSecrets`** (kernel
-  `shared/redact-secrets.logic.ts`) before storage/fan-out — the `LlmObservabilityService`
+  `shared/redact-secrets.logic.ts`) before storage/fan-out: the `LlmObservabilityService`
   path is the reference; SEC-6 brings the agent-context path into line.
 
 ## Status checklist
@@ -44,19 +44,19 @@ Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 | ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | ------- |
 | SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ✅ done | #1207   |
 | SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ✅ done | #1358   |
-| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —       |
-| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —       |
-| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —       |
+| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —     |
+| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —     |
+| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —     |
 | SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ✅ done | round-1 |
 | SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ✅ done | #1358   |
-| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —       |
+| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —     |
 | SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ✅ done | #1358   |
 | SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ✅ done | #1358   |
-| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —       |
+| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —     |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
 
-**SEC-8 and SEC-11 are deferred to a dedicated harness PR** — both touch
+**SEC-8 and SEC-11 are deferred to a dedicated harness PR**: both touch
 `backend/internal/executor-harness/src/**`, which mandates a runner-image tag bump (see
 CLAUDE.md "Releases & changesets"). They are the two lowest-severity items (Low + Very-Low, both
 "not currently exploitable"), so they are batched into that separate image-bumping change rather
@@ -68,40 +68,40 @@ This phase closes the P0 SSRF asymmetry (SEC-2) and the shared-package P2 defens
 that need no harness image bump (SEC-7, SEC-9, SEC-10) plus the one-line `/vcs` fail-closed fix. It
 also records two items the round-2 review listed as todo that had already shipped:
 
-- **SEC-2** — `openAiCompatibleResolver` gained an optional `fetch`; the inline scoped model
+- **SEC-2**: `openAiCompatibleResolver` gained an optional `fetch`; the inline scoped model
   provider (`server/src/agents/modelProviderResolver.ts`) now wires
   `(url, init) => fetchLocalRunner(String(url), init)` for **local runner endpoints only**, so an
-  inline LLM call re-validates the SSRF allow-list on every redirect hop — symmetric with the proxy
+  inline LLM call re-validates the SSRF allow-list on every redirect hop: symmetric with the proxy
   path. Cloud vendors keep the AI-SDK default fetch. Test in `agents/providers/resolvers.test.ts`.
-- **SEC-7** — `ConfluenceProvider` now routes through the shared
+- **SEC-7**: `ConfluenceProvider` now routes through the shared
   `integrations/modules/shared/safe-fetch.ts` `safeFetch`/`readCappedText` (the local copy that
   kept `Authorization` + body across origins is deleted), so a configured Atlassian site can't 302
   the Basic-auth token to a different public host. Regression test in `ConfluenceProvider.ssrf.test.ts`.
-- **SEC-9** — a shared `server/src/webhooks/bodyLimit.ts` (`webhookBodyLimit()`, 25 MB) now guards
+- **SEC-9**: a shared `server/src/webhooks/bodyLimit.ts` (`webhookBodyLimit()`, 25 MB) now guards
   the unauthenticated `/github/webhooks` and `/vcs/:provider/webhooks` raw-body reads, and the LLM
-  proxy `/v1/chat/completions` route caps its buffered JSON at 32 MB — so an anonymous caller can't
+  proxy `/v1/chat/completions` route caps its buffered JSON at 32 MB, so an anonymous caller can't
   pin memory up to the platform request limit before the HMAC/session check. Test in `bodyLimit.test.ts`.
-- **SEC-10** — the initiative `slug` wire field is now a dedicated `slugField`
+- **SEC-10**: the initiative `slug` wire field is now a dedicated `slugField`
   (`/^[a-z0-9][a-z0-9-]*$/`), matching what the server's `initiativeSlug` generator already
   produces, so no `/`/`..` segment can reshape a committed `docs/initiatives/<slug>/…` path.
   `idField` is unchanged (pipeline/phase/item ids like `pl_full` keep underscores). Test in
   `initiative.slug.test.ts`.
-- **`/vcs` fail-closed fix** (from "Notes & accepted risks") — `/vcs` is now in `PUBLIC_PREFIXES`
+- **`/vcs` fail-closed fix** (from "Notes & accepted risks"): `/vcs` is now in `PUBLIC_PREFIXES`
   (`http/authGate.ts`), so the provider-neutral VCS webhook receiver is reachable on an
   auth-enabled deployment (it does its own per-provider signature/token check, exactly like
   `/github`). Assertion added to `test/authGate.spec.ts`.
-- **SEC-1** (already shipped in **#1207** as `SEC-RBAC-0`) — the account-tier `viaWorkspaceId` is
+- **SEC-1** (already shipped in **#1207** as `SEC-RBAC-0`): the account-tier `viaWorkspaceId` is
   re-authorized through `requireViaWorkspaceAccess`. See the workspace-rbac follow-ups tracker.
-- **SEC-6** (already shipped in **round 1's item 7**) — `AgentContextObservabilityService.record`
+- **SEC-6** (already shipped in **round 1's item 7**): `AgentContextObservabilityService.record`
   already scrubs every body (`systemPrompt`/`userPrompt`/`fragments[].body`/`contextFiles[].content`)
   through `redactSecrets` before the size budget, drops secret-shaped files, and deep-scrubs `extras`.
   No further change needed.
 
 ---
 
-## P0 — fix first
+## P0: fix first
 
-### SEC-1 (High) — Cross-tenant document disclosure via unchecked `viaWorkspaceId`
+### SEC-1 (High): Cross-tenant document disclosure via unchecked `viaWorkspaceId`
 
 **Where.**
 
@@ -120,7 +120,7 @@ also records two items the round-2 review listed as todo that had already shippe
 **The gap.** At the account scope, `viaWorkspaceId` comes straight from the request body
 (`input.viaWorkspaceId`, line 130) or query (line 151) and is passed unvalidated to the
 resolver. Nothing verifies that `viaWorkspaceId` belongs to the addressed `:accountId` (the
-one membership was proven for). The workspace-scope variant is safe — it forces
+one membership was proven for). The workspace-scope variant is safe: it forces
 `viaWorkspaceId = param('workspaceId')`, which the global gate already authorized.
 
 **Exploit.** Any authenticated user is a member of their own personal account. Where the
@@ -135,7 +135,7 @@ documents integration is configured for another tenant:
 4. The fetched body is stored as a fragment and returned via `GET .../prompt-fragments`.
 
 Attacker-controlled `source` + `ref` widen this to arbitrary pages/repos those credentials can
-reach — a cross-tenant confidentiality breach.
+reach: a cross-tenant confidentiality breach.
 
 **Fix.** In both account-scope handlers, before calling the service, require `viaWorkspaceId`
 to belong to the gated account:
@@ -148,9 +148,9 @@ if (owner !== param(c, 'accountId')) throw new NotFoundError('Workspace not foun
 `accountOf` already exists on the workspace repository/service (used by the auth gate itself,
 `http/authGate.ts:71`). Account members are entitled to that account's workspace connections,
 so equality to the gated `accountId` is sufficient. Add a `server` integration test that a
-`viaWorkspaceId` outside the account 404s. Shared-package change — symmetric by construction.
+`viaWorkspaceId` outside the account 404s. Shared-package change: symmetric by construction.
 
-### SEC-2 (Medium/High) — Inline model-provider local-runner path skips the redirect guard
+### SEC-2 (Medium/High): Inline model-provider local-runner path skips the redirect guard
 
 **Where.** `backend/packages/server/src/agents/modelProviderResolver.ts:82-91` builds a local
 endpoint resolver via `openAiCompatibleResolver({ name, apiKey, baseURL: ep.baseUrl })`
@@ -158,10 +158,10 @@ endpoint resolver via `openAiCompatibleResolver({ name, apiKey, baseURL: ep.base
 inline calls use the AI SDK's default fetch, which follows 3xx redirects automatically and
 unchecked.
 
-**The gap.** Round 1 hardened the **proxy** path — `LlmProxyController` forwards local-runner
+**The gap.** Round 1 hardened the **proxy** path: `LlmProxyController` forwards local-runner
 calls through `fetchLocalRunner`, which drives redirects manually and re-runs
 `localRunnerUrlError` on every hop. The **inline** LLM path (requirements reviewer,
-task-estimator, incorporation companion — all run inline via the scoped model-provider
+task-estimator, incorporation companion: all run inline via the scoped model-provider
 resolver, keyed by `scope.userId`) never got that guard, and does no fetch-time re-validation
 at all (only the write-boundary check in `LocalModelEndpointService.upsert` ran).
 
@@ -183,7 +183,7 @@ on the inline path.
 
 ## P1
 
-### SEC-3 (Medium) — Local-runner allow-list grants the whole RFC1918/loopback range
+### SEC-3 (Medium): Local-runner allow-list grants the whole RFC1918/loopback range
 
 **Where.** `backend/packages/integrations/src/modules/providers/localModelUrl.ts:17-51` +
 `backend/packages/kernel/src/shared/ip-host.logic.ts:12-19` (`isLoopbackOrPrivateHost`).
@@ -193,7 +193,7 @@ all of `10/8`, `172.16-31/12`, `192.168/16` (+ IPv6 ULA). On Cloudflare these ar
 (inert) and on a single-tenant local/Node box this is the intended design. But the feature
 code is shared and runs on **every** Node deployment. On a **multi-tenant** Node deployment,
 tenant A can register `http://192.168.0.1/` or `http://10.0.0.5:8500/` and reach internal LAN
-services (admin panels, Consul/etcd, other tenants' services) directly — no redirect trick
+services (admin panels, Consul/etcd, other tenants' services) directly, no redirect trick
 needed, since the allow-list itself grants the internal network. (The cloud-metadata endpoint
 is still blocked first by `isCloudMetadataHost`.)
 
@@ -202,7 +202,7 @@ narrow the allow-list to loopback-only unless the operator opts into LAN access.
 document that enabling local runners on a shared Node deployment is an internal-network SSRF
 exposure. Decide the intended deployment model first (this is partly a product decision).
 
-### SEC-4 (Medium) — Password throttle is bypassable and doesn't stop credential stuffing
+### SEC-4 (Medium): Password throttle is bypassable and doesn't stop credential stuffing
 
 **Where.** `backend/packages/server/src/modules/auth/AuthController.ts:247-273`
 (`passwordAttemptLimited`, `clientIp`), used at `:468`, `:511`, `:696`, `:718`.
@@ -211,27 +211,27 @@ exposure. Decide the intended deployment model first (this is partly a product d
 
 - **Per-node in-memory state.** The limiter is a module-global `Map`. On Cloudflare each
   isolate has its own; on Node each replica does (multi-replica is a supported deployment).
-  The effective cap is `MAX_ATTEMPTS × nodes`, not 10 — the code itself calls it "a speed bump."
+  The effective cap is `MAX_ATTEMPTS × nodes`, not 10: the code itself calls it "a speed bump."
 - **Bucket key defeats credential stuffing.** The key is `clientIp:email` (`:262`). One
   password guessed against thousands of distinct usernames from one IP gets a fresh bucket per
   email, so the cap never triggers. There is no per-IP aggregate cap and no account lockout.
 - **Spoofable client IP.** `clientIp` falls back to `x-forwarded-for` (`:254`), which is
-  attacker-controlled on a Node deployment not behind a trusted proxy that overwrites it — so
+  attacker-controlled on a Node deployment not behind a trusted proxy that overwrites it, so
   an attacker rotates XFF for unlimited fresh buckets even against a single account.
 
 PBKDF2 per-attempt cost is the only real backstop today.
 
-**Fix.** Back the limiter with a durable cross-runtime store (D1/Postgres) — the round-1 doc
+**Fix.** Back the limiter with a durable cross-runtime store (D1/Postgres): the round-1 doc
 already deferred this as a "separate initiative", but the per-email fanout + XFF-spoof angle
 raises its priority. Add a **per-IP aggregate** counter independent of email, and on Node only
 trust `x-forwarded-for` when an explicit trusted-proxy flag is set (else use the socket peer).
 Consider a coarse account-lockout / CAPTCHA step after N failures.
 
-### SEC-5 (Medium) — Machine-token revocation store (carry-forward: round-1 item 8)
+### SEC-5 (Medium): Machine-token revocation store (carry-forward: round-1 item 8)
 
 Still open from `security-hardening.md` item 8. `mintMachineToken` issues a 30-day,
 `machine`-audience token for a mothership-mode node (`POST /internal/persistence`); `nodeId`
-is minted "for future revocation" but nothing checks it — a leaked token grants account-scoped
+is minted "for future revocation" but nothing checks it: a leaked token grants account-scoped
 persistence RPC for up to 30 days with no kill switch. Full checklist (new
 `MachineTokenRevocationRepository` port, `PersistenceController` check, D1 ⇄ Drizzle ⇄ local
 sqlite table, retention prune, conformance assertion, revoke endpoint) lives in
@@ -240,13 +240,13 @@ sqlite table, retention prune, conformance assertion, revoke endpoint) lives in
 
 ---
 
-## P2 — defense-in-depth / low severity
+## P2: defense-in-depth / low severity
 
-### SEC-6 (Low) — `agent_context_snapshots` bodies not run through `redactSecrets`
+### SEC-6 (Low): `agent_context_snapshots` bodies not run through `redactSecrets`
 
 `backend/packages/orchestration/src/modules/observability/AgentContextObservabilityService.ts:112-128`
 applies only size-clamping (`budget()`) to `systemPrompt`, `userPrompt`, `fragments[].body`,
-and `contextFiles[].content` — it never calls `redactSecrets`, unlike the sibling
+and `contextFiles[].content`: it never calls `redactSecrets`, unlike the sibling
 `LlmObservabilityService.record` on the same telemetry store. `contextFiles[].content` is
 materialized from user-linked docs (PRD/RFC) and tracker issues, which frequently contain
 pasted keys. With `LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` toggle on (default
@@ -255,9 +255,9 @@ on), such a secret is stored verbatim where the LLM-metrics path would have reda
 **Fix.** Wrap each body through the shared `redactSecrets` (a `@cat-factory/kernel` export) as
 the LLM path does, e.g. `systemPrompt: budget(redactSecrets(input.systemPrompt) ?? '')`, and
 the same for `userPrompt`, each `fragments[].body`, and each `contextFiles[].content`. Keep it
-O(n) — see the round-1 gotcha about greedy quantifiers before a required literal.
+O(n): see the round-1 gotcha about greedy quantifiers before a required literal.
 
-### SEC-7 (Low) — Confluence provider keeps Basic-auth across a cross-origin redirect
+### SEC-7 (Low): Confluence provider keeps Basic-auth across a cross-origin redirect
 
 `backend/packages/integrations/src/modules/documents/ConfluenceProvider.ts:44-64`'s local
 `safeFetch` re-runs `assertSafe` (host must be public/non-private) on each hop but keeps the
@@ -269,9 +269,9 @@ workspace's Basic-auth token. Low because the site URL is org-admin-supplied.
 **Fix.** Reuse the shared `safeFetch` from `modules/shared/safe-fetch.ts` (which strips
 `Authorization`/`cookie` and drops the body on a cross-origin hop) instead of the local copy.
 
-### SEC-8 (Low, defense-in-depth) — Harness `contextFiles[].path` not re-validated at the sink
+### SEC-8 (Low, defense-in-depth): Harness `contextFiles[].path` not re-validated at the sink
 
-`backend/internal/executor-harness/src/pi.ts:233` — `writeFile(join(dir, f.path), ...)` in
+`backend/internal/executor-harness/src/pi.ts:233`: `writeFile(join(dir, f.path), ...)` in
 `materializeContextFiles` trusts `f.path`, a bare `v.string()`
 (`backend/packages/contracts/src/observability.ts:185`, despite its "Sanitized basename"
 comment). Not currently exploitable: the only producer, `contextFileName`
@@ -284,34 +284,34 @@ authenticated. But a future/alternate producer that skips sanitizing would let
 whose `path.relative(dir, resolve(dir, f.path))` starts with `..` (mirror the guard already in
 `FilesystemBinaryBlobBackend.pathFor`).
 
-### SEC-9 (Low) — Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`
+### SEC-9 (Low): Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`
 
 `GitHubWebhookController.ts:23` and `VcsWebhookController.ts:46` do `await c.req.arrayBuffer()`
 on unauthenticated public routes before HMAC verification (HMAC-over-body inherently needs the
 full body, so it can't be verified-first), and `LlmProxyController.ts:120` does
-`await c.req.json()` — none wrap `bodyLimit(...)` the way the artifact-upload routes do
+`await c.req.json()`: none wrap `bodyLimit(...)` the way the artifact-upload routes do
 (`HarnessArtifactController.ts:39`, `ArtifactController.ts:49`). An anonymous caller can pin
 memory up to the platform request limit (CF ~100 MB / Node default).
 
-**Fix.** Add an explicit `bodyLimit` to each — GitHub webhook payloads are bounded (~25 MB); a
+**Fix.** Add an explicit `bodyLimit` to each: GitHub webhook payloads are bounded (~25 MB); a
 proxy limit consistent with the upload routes. Low because platform limits already bound it.
 
-### SEC-10 (Low, within-repo only) — Initiative `slug` has no charset restriction
+### SEC-10 (Low, within-repo only): Initiative `slug` has no charset restriction
 
-`backend/packages/contracts/src/initiative.ts:34` — `idField` is length-only (no regex). The
+`backend/packages/contracts/src/initiative.ts:34`: `idField` is length-only (no regex). The
 slug feeds `initiativeDocDir(slug)` = `docs/initiatives/<slug>` and the tracker/JSON/version
 paths committed via `RepoFiles.commitFiles`
 (`backend/packages/agents/src/repo-ops/initiative.ts:281,436,438`). Impact is bounded: `RepoFiles`
 is a checkout-free Git-Data API facade, so a `../` in a slug is a git-tree path (can't escape
-the repo), and an agent with commit rights can already write anywhere in the repo — a
+the repo), and an agent with commit rights can already write anywhere in the repo; a
 data-hygiene issue, not a traversal vuln.
 
 **Fix.** Constrain `idField` (or at least the slug) to a kebab grammar like
 `/^[a-z0-9][a-z0-9-]*$/`, matching the other slug fields in `contracts/src/primitives.ts:255`.
 
-### SEC-11 (Very Low, not reachable) — `safeSegment('..')` preserves a traversal segment
+### SEC-11 (Very Low, not reachable): `safeSegment('..')` preserves a traversal segment
 
-`backend/internal/executor-harness/src/pi-workspace.ts:81-83` — `safeSegment` allows dots, so
+`backend/internal/executor-harness/src/pi-workspace.ts:81-83`: `safeSegment` allows dots, so
 `safeSegment('..')` returns `..` unchanged; used at `:122` in
 `join(persistentWorkspaceRoot(), safeSegment(repo.owner), safeSegment(repo.name))`. Not
 exploitable: `repo.owner`/`repo.name` are server-resolved from the VCS projection and neither
@@ -333,14 +333,14 @@ provider permits an owner/repo literally named `..` (and a single `..` can't esc
   Likely an intentional "workspace members are trusted" design; confirm against the product's
   role model. Not a confirmed vuln.
 - **Per-run subscription activation is single-encrypted for ≤12h** (system key only, password
-  layer dropped) so async container steps can lease it —
+  layer dropped) so async container steps can lease it:
   `PersonalSubscriptionService.ts:202-222`. By design and bounded (TTL sweep + `clearRun` on
   terminal); the one window where the double-encryption collapses. Accepted.
-- **DNS rebinding / `*.local` name-based bypass on the local-runner guard** — both the write
+- **DNS rebinding / `*.local` name-based bypass on the local-runner guard**: both the write
   guard and `fetchLocalRunner` validate the hostname string, not the resolved socket peer IP
   (`ip-host.logic.ts:6-9` says as much); `*.local`/`*.localhost` are accepted unconditionally.
   Requires local-network/DNS control; documented out-of-scope. Revisit if the feature is ever
-  exposed multi-tenant (see SEC-3) — then resolve + re-check the peer IP.
+  exposed multi-tenant (see SEC-3): then resolve + re-check the peer IP.
 - **Loopback post-login redirect** intentionally allows the session token to land on
   `localhost`/`127.x`/`::1` for mothership→local-node flows (`AuthController.ts:104`); implies
   local compromise to abuse. Accepted design.
@@ -357,10 +357,10 @@ provider permits an owner/repo literally named `..` (and a single `..` can't esc
   it through the shared `safeFetch` / `fetchLocalRunner` so redirects are revalidated per hop
   and credentials are stripped cross-origin (SEC-2, SEC-7). The proxy path being hardened does
   not mean a parallel inline path is.
-- **Keep `redactSecrets` on _every_ telemetry body sink** (SEC-6) — a new sink that stores
+- **Keep `redactSecrets` on _every_ telemetry body sink** (SEC-6): a new sink that stores
   prompt/file text must scrub, not just clamp. And keep the rules O(n) (round-1 gotcha).
 - **Re-validate filesystem paths at the `writeFile` sink** even when an upstream producer
-  sanitizes (SEC-8) — the contract type (`v.string()`) is the real boundary, not a comment.
+  sanitizes (SEC-8): the contract type (`v.string()`) is the real boundary, not a comment.
 
 ## Verification
 

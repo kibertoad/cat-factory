@@ -5,11 +5,11 @@ live, and **how** that gets stood up when a pipeline's `deployer` step runs (and
 `tester` step then runs against). This is the current, end-to-end reference for the
 **per-service provision type** model and the Kubernetes **render/deploy** path.
 
-> This doc covers the **environment-under-test** axis (the `EnvironmentProvider` port — the
+> This doc covers the **environment-under-test** axis (the `EnvironmentProvider` port: the
 > live URL the Tester hits). It is a different concern from running cat-factory's **agent
 > workload** on Kubernetes (the runner backend), which is
 > [`kubernetes-topology.md`](./kubernetes-topology.md). Two services with the same apiserver
-> client, two different jobs — don't conflate them.
+> client, two different jobs: don't conflate them.
 >
 > Companion docs: [`native-environment-adapter.md`](./native-environment-adapter.md) (writing
 > a custom environment backend), [`local-k3s-environments.md`](./local-k3s-environments.md)
@@ -25,16 +25,16 @@ The model separates two ownerships that used to be tangled in a single per-works
 `environment_connections` row plus a per-service `local`/`ephemeral` toggle:
 
 - **The service (repo) owns the "what + where".** A service-frame `Block` carries a
-  `provisioning` field declaring a **`provisionType`** plus the in-repo specifics — where its
+  `provisioning` field declaring a **`provisionType`** plus the in-repo specifics: where its
   Kubernetes manifests live, how to render them, its compose path, or a custom `manifestId`.
 - **The workspace owns the "how".** Per provision type, a **handler** = an **engine** + a
   connection (apiserver URL + token, or an HTTP management API). The same service config runs
   on whatever engine the workspace configured for its type.
 - **In local mode, a user may override the workspace handler** for a type (the "this-machine"
-  override) — e.g. point the kube handler at the developer's own cluster.
+  override), e.g. point the kube handler at the developer's own cluster.
 
-At run time the `deployer` step **merges** the two — the service's source/render inputs with
-the workspace (or per-user) engine config — resolves a provider, and stands the environment
+At run time the `deployer` step **merges** the two (the service's source/render inputs with
+the workspace or per-user engine config), resolves a provider, and stands the environment
 up. The resolved **provision type + engine + provider** are recorded on the environment record
 and surfaced in run details. There is **no** user-facing local-vs-remote toggle any more
 (`defaultTestEnvironment` was removed): local-vs-remote is purely _which handler the workspace
@@ -48,9 +48,9 @@ one of:
 | Type             | Service declares                                                                                  | Meaning                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                                                                                                       |
-| `docker-compose` | a compose path (+ a `localDevOnly` flag, + an optional `composeBuild` flag)                       | run a local docker-compose stack on the runtime's Docker (pull pre-built images, or **build from source** — clone the PR head and `docker compose build`) |
+| `docker-compose` | a compose path (+ a `localDevOnly` flag, + an optional `composeBuild` flag)                       | run a local docker-compose stack on the runtime's Docker (pull pre-built images, or **build from source**: clone the PR head and `docker compose build`) |
 | `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                                                                                                   |
-| `infraless`      | nothing                                                                                           | no environment — the `deployer` records a no-op, the Tester needs none                                                                                    |
+| `infraless`      | nothing                                                                                           | no environment: the `deployer` records a no-op, the Tester needs none                                                                                    |
 
 An **undeclared** service (no `provisioning`) falls through to the legacy single-connection
 path via the compat bridge, so pre-existing workspaces keep provisioning unchanged.
@@ -58,12 +58,12 @@ path via the compat bridge, so pre-existing workspaces keep provisioning unchang
 ## The workspace default for new services
 
 Declaring a provision type per service is right (services genuinely differ), but it made the
-COMMON case — a board where every service provisions the same way — a per-service chore, and a
+COMMON case (a board where every service provisions the same way) a per-service chore, and a
 service nobody got to silently produced no test environment.
 
 So a workspace records a default: `defaultProvisionType` (+ `defaultProvisionManifestId` for
 `custom`) on `workspace_settings`. `BoardService` stamps it onto every newly created service
-frame — both `addFrame` (drag-drop) and `addServiceFromRepo` (import a repo) — through
+frame, both `addFrame` (drag-drop) and `addServiceFromRepo` (import a repo), through
 `newServiceFrameDefaults.ts`, alongside the workspace's default fragment selection.
 
 Three properties are load-bearing:
@@ -72,22 +72,22 @@ Three properties are load-bearing:
   service's own `provisioning`, so changing the default never retroactively alters what an
   existing service provisions. It is a suggestion the user owns and edits per service in the
   inspector, exactly like the auto-detection below.
-- **`null` ≠ `infraless`.** `null` means the operator has never chosen — the state the SPA's
+- **`null` ≠ `infraless`.** `null` means the operator has never chosen: the state the SPA's
   `DefaultTestEnvBanner` nags about, on a board created by hand, one the SPA created implicitly
   on first launch, or one predating the setting. `infraless` is a real decision ("services stand
   up no environment") and silences the banner. Collapsing them would leave the banner able only
   to nag forever or never.
 - **`custom` must name its `manifestId`.** `WorkspaceSettingsService.update` refuses the pair
   without one (and clears a stale id when switching away), because a `custom` service pinning
-  nothing matches no `remote-custom` handler — a failure that would otherwise surface much later,
+  nothing matches no `remote-custom` handler: a failure that would otherwise surface much later,
   at the deployer step, on services nobody knowingly misconfigured.
 
 The setting is edited in the Infrastructure window's **Test environments** tab
 (`DefaultProvisionTypeSection.vue`), above the per-type handler configurator: what services
 PRODUCE comes before configuring how each type is handled. With nothing recorded, the section
-preselects the first **registered** custom provider when the deployment shipped one — a
+preselects the first **registered** custom provider when the deployment shipped one (a
 registered provider is evidence of a deliberate platform-level integration, so it is almost
-always the right answer — falling back to a workspace-defined custom type, and otherwise opening
+always the right answer), falling back to a workspace-defined custom type, and otherwise opening
 unset. It deliberately never guesses a built-in: `kubernetes` being in the picker says nothing
 about whether this board's services use it. The suggestion is unsaved until the operator saves,
 and says so on screen. The banner carries a shareable deep link
@@ -106,16 +106,16 @@ engine to its backend with `byEngine()`.
 | ------------------- | ---------------------------- | ---------------- | -------------------------------------------------------------- |
 | `local-k3s`         | `kubernetes`                 | `kubernetes`     | a local/in-cluster k3s (local-facade preset)                   |
 | `remote-kubernetes` | `kubernetes`                 | `kubernetes`     | an external managed cluster                                    |
-| `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker — `local-docker` is local-only      |
+| `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker: `local-docker` is local-only      |
 | `remote-custom`     | `manifest` (or a custom one) | `custom`         | a BYO HTTP management API, or a code-registered native backend |
-| `none`              | —                            | `infraless`      | nothing is provisioned                                         |
+| `none`              | (none)                       | `infraless`      | nothing is provisioned                                         |
 
 The built-in `kubernetes` backend serves `local-k3s` + `remote-kubernetes`; the generic
 `manifest` HTTP backend serves `remote-custom`. A deployment can register a narrower custom
 backend for `remote-custom` and constrain it via `acceptsManifestIds()` (see
 [Custom manifest types](#custom-manifest-types-the-open-custom-catalog)). Adding any new
 backend is the same `registry.register(provider)` seam documented in
-[`native-environment-adapter.md`](./native-environment-adapter.md) — no new config variant,
+[`native-environment-adapter.md`](./native-environment-adapter.md), no new config variant,
 table, or controller.
 
 ## The Kubernetes config split
@@ -126,22 +126,22 @@ and `handlerConfigToBackendConfig`
 at provision time:
 
 - **Service-owned** (`serviceProvisioningSchema`, on the block's `provisioning`):
-  - `manifestSource` — `colocated` (a path/dir in the PR repo, read at the PR head) **or**
+  - `manifestSource`: `colocated` (a path/dir in the PR repo, read at the PR head) **or**
     `separate` (a different `owner/repo` + optional `ref` + path), both read **checkout-free**
     over the GitHub Git Data API.
-  - `renderer` — `raw` (apiserver-ready manifests) or `kustomize` (a `kustomization.yaml` tree).
+  - `renderer`: `raw` (apiserver-ready manifests) or `kustomize` (a `kustomization.yaml` tree).
   - render inputs: `images` (kustomize image overrides), `secretInjections` (a `Secret`
     resource **or** a `generatorEnvFile` `.env` written where the overlay's own
     `secretGenerator` reads it), and per-environment `helmReleases`.
 - **Workspace-owned** (`kubernetesEngineConfigSchema`, on the handler): the **engine**
-  connection — `apiServerUrl`, the `apiToken` (sealed), `caCertPem` / `insecureSkipTlsVerify`,
+  connection; `apiServerUrl`, the `apiToken` (sealed), `caCertPem` / `insecureSkipTlsVerify`,
   the `namespaceTemplate` (default `cf-env-<pr>`), the URL-derivation source, and any
   **shared** (`scope: 'shared'`) helm releases.
 
 Merge precedence for the manifest source is `service.manifestSource` > a legacy source the
 compat bridge may have stored inline on the handler > a placeholder (validation/metadata
 paths). Shared helm releases on the engine merge with the service's per-env releases by
-release name (a same-named service release wins — no double install).
+release name (a same-named service release wins, no double install).
 
 ## Two apply paths: native REST vs the deploy container
 
@@ -159,25 +159,25 @@ each resource into the namespace, and **server-side apply**
 (`PATCH …?fieldManager=cat-factory`). Readiness converges through the status poll; the URL is
 resolved from an ingress template, or read back from a `Service`/`Ingress` LoadBalancer, a
 `Gateway`, or an `HTTPRoute`. Teardown deletes the namespace (404-tolerant). This path is
-runtime-symmetric (pure HTTP — works on the Worker, which has no filesystem) and spins up **no
+runtime-symmetric (pure HTTP: works on the Worker, which has no filesystem) and spins up **no
 container**.
 
 ### Container-backed deploy-harness (kustomize / helm / Gateway-API)
 
-The in-Worker REST path can only apply pre-rendered manifests. When rendering is needed —
+The in-Worker REST path can only apply pre-rendered manifests. Rendering is needed for
 kustomize (a `secretGenerator` rewrites a content-hashed Secret name into every reference at
 build time, so the real secret must be present at render time), helm (infeasible in-process),
-image overrides, or secret injections — the work moves into a **dedicated deploy container**
-with real `kubectl` / `kustomize` / `helm`: the private
+image overrides, or secret injections; when it is, the work moves into a **dedicated deploy
+container** with real `kubectl` / `kustomize` / `helm`: the private
 [`@cat-factory/deploy-harness`](../internal/deploy-harness/README.md) image, dispatched through
 the shared runner transport as a new **`deploy`** dispatch kind (`image: 'deploy'`).
 
-The async lifecycle (mirrors the agent execution flow — dispatch → park → poll → finalize):
+The async lifecycle (mirrors the agent execution flow: dispatch → park → poll → finalize):
 
 1. `KubernetesEnvironmentProvider.asyncProvision.buildProvisionJob` returns a `deploy`-kind job
    when `needsContainerRender`, else `null` (the synchronous REST path). The pure spec builder
    (`kubernetes-deploy.logic.ts`) renders every template and resolves every `secretRef`
-   backend-side, so **the harness never sees the workspace secret bundle** — every value
+   backend-side, so **the harness never sees the workspace secret bundle**: every value
    arrives already resolved, and the apiserver/git tokens live only for the job.
 2. `EnvironmentProvisioningService.startProvision` dispatches via the facade's `deployJobClient`,
    persists a `provisioning` env record, and parks the `deployer` step on `awaiting_job`.
@@ -209,14 +209,14 @@ The `deploy` dispatch kind is wired on every facade (the raw-manifest REST path 
   the native Kubernetes runner config gains an `imageDeploy` variant. `disableDefaultDeployJobClient`
   stops the agent transport (which lacks the k8s CLIs) backing deploy.
 - **Local** (`runtimes/local`): a `NativeCliDeployTransport` selected by **`LOCAL_DEPLOY_RUNTIME`**
-  (no default mode — unset ⇒ deploy stays off):
+  (no default mode; unset ⇒ deploy stays off):
   - `container` (recommended, works out of the box) runs the deploy-harness **image** per job,
     re-keyed by its own `jobId` so it never collides with the run's agent container. The image is
     resolved automatically to the backend-matched `RECOMMENDED_DEPLOY_IMAGE` (kept in lockstep with
     the Worker's wrangler pin + the deploy-harness version by the runner-image-tag sync);
     `LOCAL_DEPLOY_IMAGE` is only an escape hatch to override it.
   - `native` runs the deploy harness as a **host process** (requires `LOCAL_DEPLOY_HARNESS_ENTRY`)
-    driving the developer's own `kubectl`/`kustomize`/`helm` against the ambient kubeconfig — set
+    driving the developer's own `kubectl`/`kustomize`/`helm` against the ambient kubeconfig: set
     without its companion, boot breaks fast.
   - Unwired ⇒ deploy stays off (render configs fail loudly rather than silently no-op).
 
@@ -237,22 +237,22 @@ A service pins a `manifestId`; a workspace's `remote-custom` handler declares wh
 candidate exists (else a `type-mismatch`). This is how a **custom environment/deploy provider**
 (registered per [`native-environment-adapter.md`](./native-environment-adapter.md) with
 `engines: () => ['remote-custom']`) becomes a selectable run target for a service's `custom`
-type — no new table, controller, or UI window.
+type, no new table, controller, or UI window.
 
 A custom manifest type may also declare optional fields (the first two live both on the
 code-registered `RegisteredCustomManifestType` AND the workspace-editable rows; `detect` is
 code-only, since a hook is a function):
 
-- **`defaultManifestPath`** — the default in-repo manifest path (a complete `deploy/preview.yaml`
+- **`defaultManifestPath`**: the default in-repo manifest path (a complete `deploy/preview.yaml`
   or a bare `preview.yaml`). The service inspector **prefills** a service's `manifestPath` with it
   when the type is selected, and it seeds path **auto-detection** (below).
-- **`fixerPrompt`** — the coding-agent prompt to **generate** the manifest (when absent) or **fix**
+- **`fixerPrompt`**: the coding-agent prompt to **generate** the manifest (when absent) or **fix**
   it (when present but invalid). When set, the service inspector shows a **Generate / fix** button
   (`POST …/environments/custom-manifest/repair`) that dispatches the fixer as a durable
   `env-config-repair` run (see the merge-lifecycle repair flow) writing to the entered path. Absent
   ⇒ no button. Before dispatch the service runs the connected `remote-custom` provider's
   `validateRepo` (when any) to enrich the prompt, but the agent runs regardless (a double-check).
-- **`detect`** — an optional **autodetection hook** (`detect(ctx) => CustomManifestDetection | null`)
+- **`detect`**: an optional **autodetection hook** (`detect(ctx) => CustomManifestDetection | null`)
   that recognizes THIS provider from a repo's shape and locates its manifest(s). See
   [Custom-provider autodetection](#custom-provider-autodetection-the-detect-hook) below.
 
@@ -262,7 +262,7 @@ Local mode layers a per-USER override over the workspace handler (the "this-mach
 stored in the `environment_user_handlers` table (PK
 `(user_id, workspace_id, provision_type, manifest_id)`, `manifest_id` `''` sentinel for
 non-custom). The override wins in `resolveInfraHandler`. It is enforced purely by **which
-facade wires the repo** — only the local facade wires `environmentUserHandlerRepository`, so
+facade wires the repo**: only the local facade wires `environmentUserHandlerRepository`, so
 the per-user service + the `resolveUserHandlerOverrides` provisioning seam assemble only there
 (no runtime branch in shared code). The run-initiator's `userId` is threaded via
 `instance.initiatedBy`.
@@ -272,7 +272,7 @@ the per-user service + the `resolveUserHandlerOverrides` provisioning seam assem
 A deterministic, pure-TS heuristic (`provision-detect.logic.ts`, `detectProvisioning`) reads a
 service's repo **checkout-free** (targeted directory listings + YAML parsing, a hard read
 budget, no LLM, no clone) and proposes a **non-binding** recommended provisioning config. The
-user always confirms/edits — nothing is applied silently. What it infers, by confidence:
+user always confirms/edits: nothing is applied silently. What it infers, by confidence:
 
 - **High confidence (deterministic):** the manifest root (the service dir or a
   `k8s`/`kubernetes`/`deploy`/… subdir), `kubernetes` vs `docker-compose` vs `infraless`, the
@@ -282,12 +282,12 @@ user always confirms/edits — nothing is applied silently. What it infers, by c
   secret-injection **keys** read from a `.env.example` (values stay the user's), and `images`
   override candidates (default `newTagTemplate: '{{branch}}'`).
 - **Lower confidence (surfaced as candidates, never auto-picked):** **which** overlay under
-  `overlays/*` is the ephemeral one (ranked by name — `prenv`/`preview`/`pr`/`ephemeral`/`dev`),
+  `overlays/*` is the ephemeral one (ranked by name: `prenv`/`preview`/`pr`/`ephemeral`/`dev`),
   and helm releases declared parseably (`helmfile.yaml` / a `Chart.yaml` dependency).
 
 For a **`custom`** service, detection resolves the in-repo **manifest path** from the selected
 type's `defaultManifestPath` (`detectCustomManifest`, same checkout-free reader). It is
-monorepo-aware — the search is rooted at the service subtree (`directory`) or the repo root — and:
+monorepo-aware: the search is rooted at the service subtree (`directory`) or the repo root. It
 keeps the current `manifestPath` when it already points at an existing file; else checks the exact
 `<root>/<defaultPath>`; else, when the default is a **bare filename**, checks that file one level
 deep in each immediate child dir; else pre-fills the default location (noting it will be created on
@@ -300,7 +300,7 @@ Wired as `EnvironmentConnectionService.detectServiceProvisioning` → `POST
 ### Custom-provider autodetection (the `detect` hook)
 
 The `defaultManifestPath` search only locates ONE known file. A real custom **test-infrastructure
-provider** — a company's own ephemeral-environment convention — is usually recognized by a
+provider** (a company's own ephemeral-environment convention) is usually recognized by a
 **multi-file signature** (e.g. a root deploy manifest + a bring-up script + a compose stack under a
 `deploy/` directory) and carries config worth extracting (the health port/path, the deploy
 command). A custom manifest type opts into that by declaring a `detect` hook:
@@ -309,11 +309,11 @@ command). A custom manifest type opts into that by declaring a `detect` hook:
 detect(ctx: CustomManifestDetectionContext): Promise<CustomManifestDetection | null>
 ```
 
-- **Author it with the kernel probe primitives** (`@cat-factory/kernel`, kernel + contracts only —
+- **Author it with the kernel probe primitives** (`@cat-factory/kernel`, kernel + contracts only:
   no engine, no harness change): `matchManifestSignature({ required, optional, anyOf })`,
   `firstPresent` / `allPresent` / `anyPresent`, `readYamlDoc` / `readYamlDocs`, `listFiles`,
   `joinRepoPath`. They run against the shared, budget-bounded `ctx.scanner` (a `BudgetedRepoScanner`),
-  so a sweep across many providers reuses one read budget + cache — never N× round-trips.
+  so a sweep across many providers reuses one read budget + cache, never N× round-trips.
 - **Return** `{ matched, confidence, manifestPath?, secondaryPaths?, configSeed?, notes? }`, or
   `null`/`matched:false` for "not my provider". `configSeed` (extracted key/values) prefills the
   form; `secondaryPaths` are the other signature files, surfaced for context.
@@ -328,8 +328,8 @@ detect(ctx: CustomManifestDetectionContext): Promise<CustomManifestDetection | n
   additive; `@cat-factory/contracts`).
 
 The worked reference is `@cat-factory/example-custom-agent`'s `detectStackDeployProvider` +
-`registerExampleStackDeployProvider` (`backend/internal/example-custom-agent/src/stack-deploy.ts`)
-— a company-authored provider that recognizes a 3-file signature and seeds the health probe +
+`registerExampleStackDeployProvider` (`backend/internal/example-custom-agent/src/stack-deploy.ts`):
+a company-authored provider that recognizes a 3-file signature and seeds the health probe +
 deploy command from the root manifest. A deployment registers it by reference on the app-owned
 `customManifestTypeRegistry` (`createBackendRegistries()`), exactly like a custom backend.
 
@@ -368,7 +368,7 @@ Local-mode-only per-user override (`EnvironmentUserHandlerController`, mounted a
 `/workspaces` prefix, 401 without a user, 503 where unwired). Because it sits outside the
 `/workspaces/:ws/*` gate it resolves workspace access ITSELF via the shared `loadWorkspaceAccess`
 and requires `runs.execute` (workspace-rbac slice 7): a caller with no access gets a 404 (existence
-stays hidden), a resolved-but-insufficient caller a 403 — and that check runs BEFORE the 503, so an
+stays hidden), a resolved-but-insufficient caller a 403, and that check runs BEFORE the 503, so an
 unwired facade never reveals a board to a non-member:
 
 ```
@@ -388,15 +388,15 @@ endpoints remain on it for now.
 Every table/column mirrors D1 ⇄ Drizzle with a cross-runtime conformance assertion (CLAUDE.md
 "Keep the runtimes symmetric"):
 
-- `environment_connections` — rekeyed to `(workspace_id, provision_type, manifest_id)`; columns
+- `environment_connections`: rekeyed to `(workspace_id, provision_type, manifest_id)`; columns
   `provision_type`, `manifest_id`, `engine`, `backend_kind` (the registry kind that builds the
   provider), `accepts_manifest_id`, `handler_json`, and the sealed secret bundle.
-- `environment_user_handlers` — the local-only per-user override (PK
+- `environment_user_handlers`: the local-only per-user override (PK
   `(user_id, workspace_id, provision_type, manifest_id)`).
-- `custom_manifest_types` — the workspace catalog (PK `(workspace_id, manifest_id)`).
-- `environments` — gains `provision_type` / `engine`, recorded on both the success and failed
+- `custom_manifest_types`: the workspace catalog (PK `(workspace_id, manifest_id)`).
+- `environments`: gains `provision_type` / `engine`, recorded on both the success and failed
   paths.
-- `blocks` — gains `provisioning`; dropped `default_test_environment` / `test_compose_path` /
+- `blocks`: gains `provisioning`; dropped `default_test_environment` / `test_compose_path` /
   `no_infra_dependencies`.
 
 The render inputs (`renderer`/`images`/`helmReleases`/`secretInjections`) ride as nested JSON

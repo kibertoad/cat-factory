@@ -1,4 +1,4 @@
-# Model support — selection, fallbacks, harnesses & provisioning
+# Model support: selection, fallbacks, harnesses & provisioning
 
 How Cat Factory decides **which model runs a step, where it runs, and what it
 costs**. The behaviour is spread across the catalog (kernel), the routing/resolution
@@ -17,13 +17,13 @@ harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
 
 A model selection answers three independent questions:
 
-1. **Which catalog model?** — what the user picked on the block, or the default for
+1. **Which catalog model?**: what the user picked on the block, or the default for
    the step's agent kind. (§3 _Model resolution_.)
-2. **Which flavour of it?** — the same model can run on Cloudflare Workers AI, on its
+2. **Which flavour of it?**: the same model can run on Cloudflare Workers AI, on its
    vendor's direct API, or on a subscription harness. The flavour is chosen
    automatically from what's configured. (§2 _Catalog & flavours_, §4 _Flavour
    precedence_.)
-3. **Where does it run?** — inline (a single `generateText` call) or inside a per-run
+3. **Where does it run?**: inline (a single `generateText` call) or inside a per-run
    container, and through which **harness** (`pi` / `claude-code` / `codex`). (§5
    _Harnesses_.)
 
@@ -47,28 +47,28 @@ entry has a stable `id` (persisted on `Block.modelId`) and up to four flavours:
 | **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set and no direct one. |
 | **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.              |
 
-Three shapes of catalog entry fall out of this:
+Several shapes of entry fall out of this:
 
-- **Cloudflare-only** — e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
+- **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.
-- **Dual-mode** — `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`. A Cloudflare
+- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`. A Cloudflare
   base **plus** a direct, OpenRouter and/or subscription flavour. Note the **context
   window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
   Pro 131K) while the direct/subscription variant gets the full window (1M).
   `contextTokens` on the `ModelRef` surfaces this in the picker.
-- **Gateway-only** — `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
+- **Gateway-only**: `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
   reached through OpenRouter once a key is connected.
-- **Subscription-only** — `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
+- **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-opus` and
   the GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an OpenRouter
   pay-as-you-go base, so they are dual-mode rather than subscription-only.
-- **Local (per-user)** — locally-run models on a user's own runner (Ollama / LM Studio /
+- **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in
   `local_model_endpoints`), and their enabled models are appended to `GET /models`
   dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
-  `direct` flavour but need **no API key** — gated by the new `localModels` capability (the
+  `direct` flavour but need **no API key**: gated by the new `localModels` capability (the
   set of model ids the user has _enabled_, so usability is model-granular), not a `keyEnv`.
   At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
   URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
@@ -79,11 +79,11 @@ Three shapes of catalog entry fall out of this:
 
 The effective, display-ready projection (which flavour is actually active, plus
 informational cost and context window) is computed by `effectiveCatalog()` and served
-read-only at **`GET /models`** — labels and provider/model ids only, never keys.
+read-only at **`GET /models`**: labels and provider/model ids only, never keys.
 
 ---
 
-## 3. Model resolution — which model runs a step
+## 3. Model resolution, which model runs a step
 
 Resolved by `resolveStepModelRef` /
 [`agent-routing.ts`](../packages/agents/src/agents/agent-routing.ts), in precedence
@@ -108,12 +108,12 @@ Node: [`config.ts`](../runtimes/node/src/config.ts)) are deliberately tiered:
 | `coder`                                  | **Kimi K2.7** on Workers AI                          | Holds up on the longest, tool-heaviest loop. |
 
 Operators override any kind via `AGENT_MODELS` (JSON). The **ultimate fallback** is
-always Workers AI (`@cf/qwen/qwen3-30b-a3b-fp8`) — so an unconfigured deployment still
+always Workers AI (`@cf/qwen/qwen3-30b-a3b-fp8`), so an unconfigured deployment still
 runs real work with no provider key.
 
 ---
 
-## 4. Flavour precedence — "subscriptions always win"
+## 4. Flavour precedence: "subscriptions always win"
 
 Given a resolved catalog model, which flavour actually runs?
 
@@ -131,7 +131,7 @@ subscription  >  direct  >  cloudflare
   the vendor** (`hasSubscriptionToken`). So connecting a poolable coding-plan
   subscription (Kimi/DeepSeek) silently upgrades those models to the full-context,
   flat-rate harness path for that workspace. The `individualOnly` vendors (GLM, Codex,
-  Claude) are never pooled — their dual-mode flavour upgrades per-user via the personal
+  Claude) are never pooled: their dual-mode flavour upgrades per-user via the personal
   subscription a run's initiator unlocks (see §6), not via a workspace token.
 
 `DirectKeyAvailable` (`(keyEnv) => boolean`) is built per facade from the env
@@ -139,18 +139,18 @@ subscription  >  direct  >  cloudflare
 
 ---
 
-## 5. Harnesses — where a model runs
+## 5. Harnesses, where a model runs
 
 The `harness` on a `ModelRef` (`pi` | `claude-code` | `codex`, default `pi`) decides
 how a container step authenticates and reaches the model:
 
-- **`pi`** (default) — the repo-operating agent kinds (`coder`, `mocker`,
+- **`pi`** (default): the repo-operating agent kinds (`coder`, `mocker`,
   `playwright`, `blueprints`, `ci-fixer`, `conflict-resolver`, `merger`) run inside a
   per-run container and reach models through the **LLM proxy**. The proxy can only
-  serve **proxyable providers** — `workers-ai`, `qwen`, `deepseek`, `moonshot`,
+  serve **proxyable providers**: `workers-ai`, `qwen`, `deepseek`, `moonshot`,
   `openai` (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
   loudly at dispatch ("…needs a model the LLM proxy can serve…").
-- **`claude-code` / `codex`** (subscription harnesses) — talk **direct to the vendor**
+- **`claude-code` / `codex`** (subscription harnesses): talk **direct to the vendor**
   with a leased token (no proxy session): a pooled workspace token for the poolable
   vendors (Kimi/DeepSeek), or the run-initiator's per-user personal credential for the
   `individualOnly` vendors (Claude/GLM/Codex). The proxyable guard does not apply.
@@ -164,7 +164,7 @@ needs a real provider key.
 
 Because a model is shared by _every_ step of a block, a block pinned to a
 **subscription-only / container-only** model would break the inline steps (the vendor
-has no provider key — the credential is a container-only pooled token). The single
+has no provider key: the credential is a container-only pooled token). The single
 seam that prevents this is
 [`inlineModelRef(ref, fallback)`](../packages/kernel/src/ports/model-provider.ts):
 
@@ -172,7 +172,7 @@ seam that prevents this is
 > (`resolveInlineModelRef`); a `pi`/absent harness passes through unchanged.
 
 So the container steps keep the subscription harness while the inline steps fall back
-to a provider model — used by both the inline agent executor and the requirements
+to a provider model: used by both the inline agent executor and the requirements
 reviewer/rework so the two paths can't drift.
 
 ---
@@ -184,7 +184,7 @@ A workspace can connect one or more **subscription credentials per vendor** for 
 steps run on the Claude Code harness instead of an API key. See
 [`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts) for the
 vendor→harness map and base URLs. **Claude, GLM and ChatGPT/Codex are NOT in this
-pool** — each is licensed for individual use only and stored per-user (see below).
+pool**: each is licensed for individual use only and stored per-user (see below).
 
 - **Storage**: a per-workspace pool (`provider_subscription_tokens`, D1 + Postgres),
   **encrypted at rest** under an `ENCRYPTION_KEY`-derived key; tokens are write-only
@@ -195,15 +195,15 @@ pool** — each is licensed for individual use only and stored per-user (see bel
 - **Rotation**: leasing is usage-aware (least-loaded token wins, round-robin by
   `lastUsedAt`); the pool is capped per vendor.
 - **Enable/disable + default** (`PATCH …/vendor-credentials/:id`, `{ enabled?, isDefault? }`):
-  a token can be taken **out of rotation** without deleting it (`enabled: false` — still
+  a token can be taken **out of rotation** without deleting it (`enabled: false`; still
   listed and re-enablable, but never leased and not counted as "configured"), and one token
   can be **pinned as the vendor's default** (`isDefault: true`) so it is leased in preference
   to usage-aware rotation. At most one default per (workspace, vendor); a disabled default is
   ignored (leasing falls back to rotation among the remaining enabled tokens).
-- **What each vendor is**: `kimi`/`deepseek` — a coding-plan API key driven by Claude
+- **What each vendor is**: `kimi`/`deepseek`; a coding-plan API key driven by Claude
   Code against the vendor's Anthropic-compatible endpoint (Moonshot / DeepSeek).
 - `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly`
-  vendor (Claude/GLM/Codex) — those never enter the pool.
+  vendor (Claude/GLM/Codex): those never enter the pool.
 
 ### Individual-usage subscriptions: per-user, not pooled
 
@@ -218,7 +218,7 @@ separate, per-user **individual-usage restricted mode**:
   per-run activation lets the async container steps run without the user present.
 - **Recurring schedules** can't use them (no unattended unlock).
 - Organizations that need shared, programmatic access use a **direct provider API key**
-  instead — that path is unaffected by `individualOnly`.
+  instead: that path is unaffected by `individualOnly`.
 
 The full model, the safeguards, and the request flow are documented in
 **[individual-subscription-usage.md](./individual-subscription-usage.md)**.
@@ -246,7 +246,7 @@ How the gate behaves (`ExecutionService`):
 - **Mid-run:** `currentStepIsNonMetered` exempts subscription **and** local steps, so an
   over-budget run pauses **only** on a metered step; a non-metered step keeps running.
 - **Up-front:** `assertBudgetAllowsPipeline` refuses `start()`/`retry()` with a clear
-  `409` when the budget is reached **and** the pipeline has a metered step — rather than a
+  `409` when the budget is reached **and** the pipeline has a metered step, rather than a
   silent mid-run pause. A pipeline whose every step is local/subscription starts normally.
 
 ### A `0` budget is intentional ("local-/subscription-only")
@@ -255,7 +255,7 @@ How the gate behaves (`ExecutionService`):
 spend". A workspace at `0` refuses metered runs (clear up-front error) but **keeps running
 local-runner models and connected subscriptions**, since those incur no metered cost. It is
 reversible from the UI and safer than an unbounded "unlimited" that can run up a real bill.
-(Web search costs money on metered providers, so a `0` budget also blocks paid searches —
+(Web search costs money on metered providers, so a `0` budget also blocks paid searches:
 the local model itself still runs.) The budget lives on the `workspace_settings` row; there
 are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
 
@@ -301,19 +301,19 @@ unvetted id.
 
 **Bedrock contributes nothing to the picker catalog today.** No `MODEL_CATALOG` entry
 carries a `bedrock` flavour and `SelectableModel` has no field for one, so a Bedrock
-model is currently reachable only as a **routing default** — `AGENT_DEFAULT_PROVIDER` +
+model is currently reachable only as a **routing default**: `AGENT_DEFAULT_PROVIDER` +
 `AGENT_DEFAULT_MODEL`, or a per-kind `AGENT_MODELS` entry. A user cannot pin one to a
 block.
 
 **This is a gap, not a design choice, and it is being closed.** The account model policy
 already ships `trustedProviders: ['bedrock']` specifically so a blocked family can pass on
-a residency-guaranteed route — which nobody can select per task, leaving that exemption
+a residency-guaranteed route, which nobody can select per task, leaving that exemption
 reachable only by repointing the whole deployment. `BEDROCK_MODELS` is already a per-model
 allow-list, so per-model enablement falls straight out of it. Design + work items:
 [`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
 
 Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
-(`us.` / `eu.` / `jp.` / `au.` / `global.`) — several models are reachable ONLY through a
+(`us.` / `eu.` / `jp.` / `au.` / `global.`): several models are reachable ONLY through a
 cross-Region profile in a given Region, so the prefixed form is usually what you want.
 Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
 
@@ -321,7 +321,7 @@ Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
 BEDROCK_MODELS=us.anthropic.claude-opus-4-8,global.anthropic.claude-opus-4-8,openai.gpt-5.5
 ```
 
-**Bedrock lags the vendors' own APIs** — its newest Anthropic model is Opus 4.8, not the
+**Bedrock lags the vendors' own APIs**: its newest Anthropic model is Opus 4.8, not the
 Opus 5 / Sonnet 5 the subscription and OpenRouter flavours run, and its OpenAI ids are
 `openai.gpt-5.5` / `openai.gpt-5.4` rather than the GPT-5.6 tiers. Don't copy a catalog
 model id into `BEDROCK_MODELS`. The catalog spans 18 providers and 110+ variants and
@@ -331,7 +331,7 @@ that is real but not granted fails at call time, not at boot.
 
 ---
 
-## 9. Quick reference — the resolution pipeline
+## 9. Quick reference: the resolution pipeline
 
 ```
 Block.modelId ──► resolveStepModelRef

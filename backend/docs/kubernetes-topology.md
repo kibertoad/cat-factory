@@ -31,7 +31,7 @@ managed services is yours to choose.
 | **node-server**           | `@cat-factory/node-server`: the Hono REST API, the WebSocket push transport, and the pg-boss durable-execution workers (the orchestrator). With the `kubernetes` backend it also drives the apiserver to create/poll/delete the run pods.           | Long-lived Deployment, horizontally scalable for the API; pg-boss workers single-or-few.                            | You, in-cluster.                                          |
 | **LLM proxy**             | The OpenAI-compatible `/v1` egress route the executor points Pi at. Injects the real vendor key (kept out of the container), meters spend, writes telemetry. Lives in the **same** `@cat-factory/server` app, so it ships in the node-server image. | Same as node-server, or a separate Deployment of the same image scoped to egress.                                   | You, in-cluster.                                          |
 | **Postgres**              | Domain DB + the `telemetry` schema (one connection, two schemas). `migrate()` bootstraps it on boot.                                                                                                                                                | StatefulSet, or a managed service (RDS / Cloud SQL / Neon).                                                         | You, or your cloud.                                       |
-| **executor-harness pods** | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body.                                                            | **Ephemeral** — one bare Pod per RUN (named `cf-run-<runId>`); the run's steps re-attach to it, deleted on release. | You, in-cluster (the trust boundary).                     |
+| **executor-harness pods** | The published `cat-factory-executor` image: clones the repo, runs the Pi coding agent, pushes a branch / opens a PR. Carries **no** secrets; per-job tokens arrive in the dispatch body.                                                            | **Ephemeral**: one bare Pod per RUN (named `cf-run-<runId>`); the run's steps re-attach to it, deleted on release. | You, in-cluster (the trust boundary).                     |
 | **SPA**                   | `@cat-factory/app` (the Nuxt layer) built into a static bundle.                                                                                                                                                                                     | Static.                                                                                                             | A CDN / object store / nginx pod; out of cluster is fine. |
 
 ## Topology
@@ -158,11 +158,11 @@ once the run no longer needs it.
 
 - **The apiserver URL is SSRF-guarded but allows private hosts.** `assertApiServerUrlSafe`
   requires `https` and rejects the cloud-metadata endpoints (and their obfuscated IP
-  encodings), but a private cluster IP or cluster DNS name is allowed — you are explicitly
+  encodings), but a private cluster IP or cluster DNS name is allowed: you are explicitly
   pointing at your own cluster. Paste the cluster CA bundle (`caCertPem`) so the apiserver's
   TLS cert verifies; `insecureSkipTlsVerify` is for kind/dev clusters only. Custom CA /
   insecure-skip needs the Node runtime (undici), so it is rejected at registration on the
-  Cloudflare Worker — use a publicly-trusted apiserver certificate to run this backend there.
+  Cloudflare Worker: use a publicly-trusted apiserver certificate to run this backend there.
 - **RBAC, not a harness secret, gates access.** The ServiceAccount token needs `create/get/
 delete` on `pods` and `create/get` on `pods/proxy` in the runners namespace. Because the run
   pod has no Service, the RBAC-gated pod-proxy is the only way in.

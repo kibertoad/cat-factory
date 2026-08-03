@@ -6,7 +6,7 @@ Python client for the cat-factory **public API** (`/api/v1`).
 pip install cat-factory-sdk
 ```
 
-Python 3.11+. **No dependencies** — the transport is `urllib` from the standard library, so
+Python 3.11+. **No dependencies**: the transport is `urllib` from the standard library, so
 installing this cannot conflict with whatever HTTP stack your application already uses.
 
 ```python
@@ -31,7 +31,7 @@ Wire names are `camelCase`; attributes are `snake_case`.
 
 ## Resource clients
 
-`initiatives`, `services`, `tasks`, `pipelines`, `notifications`, `usage`, `decisions`, `debug` —
+`initiatives`, `services`, `tasks`, `pipelines`, `notifications`, `usage`, `decisions`, `debug`:
 one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
 
 ## Watching a run
@@ -80,20 +80,20 @@ reporting a fault.
 
 ## Models
 
-Frozen dataclasses with `from_dict` / `to_dict`. Two properties worth knowing:
+Frozen dataclasses with `from_dict` / `to_dict`. Two properties to know:
 
 - **Unknown fields are kept**, on `extra`. `/api/v1` is additive forever, so a newer deployment
-  sends fields this release has no attribute for — you can still reach them without upgrading.
+  sends fields this release has no attribute for; you can still reach them without upgrading.
 - **Enums are `StrEnum`**, so a member IS its wire string (`task.status == "done"`, and an
   f-string renders `done`). An unrecognised value decodes to the plain string rather than raising.
 
 ## Local development and mocks
 
-The base URL takes any origin — `http://localhost:8787`, a fixture server, a mock — and no scheme
+The base URL takes any origin (`http://localhost:8787`, a fixture server, a mock) and no scheme
 validation is applied. Each client also accepts a custom transport, so you can intercept in-process
 instead. See [the SDK guide](../README.md#pointing-an-sdk-at-localhost-or-a-mock).
 
 ## Notes
 
-- `cat_factory/models.py` and `operations.py` are generated — see [`../README.md`](../README.md).
+- `cat_factory/models.py` and `operations.py` are generated; see [`../README.md`](../README.md).
 - API reference: [`backend/docs/public-api.md`](../../backend/docs/public-api.md).

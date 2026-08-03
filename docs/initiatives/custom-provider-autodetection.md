@@ -5,20 +5,20 @@
 The built-in provision types (`kubernetes`, `docker-compose`) have rich, checkout-free
 autodetection (`provision-detect.logic.ts`) that proposes a non-binding config from a service's
 repo. **Custom providers had none.** A `custom` manifest type could only declare a single
-`defaultManifestPath`, and detection merely resolved that one path — so a company running its own
+`defaultManifestPath`, and detection merely resolved that one path, so a company running its own
 ephemeral-environment convention (e.g. a repo identified by a root deploy manifest plus a bring-up
 script plus a compose stack under a `deploy/` directory) could not have the platform recognize it,
 arbitrate which provider fits, or extract config from those files. Such a convention typically
 carries config worth extracting too (the health port/path, the deploy command).
 
 **End state:** a custom-provider package authors an autodetection hook using reusable
-checkout-free primitives — including MULTI-FILE signatures — and the platform arbitrates across
+checkout-free primitives (including MULTI-FILE signatures) and the platform arbitrates across
 registered providers and prefills an extracted config seed. The user always confirms; nothing is
 applied silently. The hook _logic_ itself is authored with `@cat-factory/kernel` alone (the probe
 primitives + the `CustomManifestDetection` authoring types); _registering_ the type carries it on
 the `RegisteredCustomManifestType` interface from `@cat-factory/integrations` (the registry type),
 so a provider package depends on kernel for the hook and integrations only for the one registration
-call — no engine, no harness change.
+call, no engine, no harness change.
 
 ## The target pattern (reference implementation)
 
@@ -35,7 +35,7 @@ call — no engine, no harness change.
   (`EnvironmentConnectionService.detectServiceProvisioning`) calls for the custom branch + a
   last-resort arbitration after the k8s/compose sweep.
 - **The worked example** is `@cat-factory/example-custom-agent`'s `detectStackDeployProvider` /
-  `registerExampleStackDeployProvider` (`src/stack-deploy.ts`) — copy its shape.
+  `registerExampleStackDeployProvider` (`src/stack-deploy.ts`): copy its shape.
 - **Reference doc:** `backend/docs/per-service-provisioning.md` → "Custom-provider autodetection".
 
 ## Per-item status
@@ -50,17 +50,17 @@ call — no engine, no harness change.
 | Worked example (stack-deploy provider) + unit tests                                                                       | done   | (this PR) |
 | Cross-runtime conformance assertion (detect endpoint)                                                                     | done   | (this PR) |
 | Docs (per-service-provisioning, kernel AGENTS)                                                                            | done   | (this PR) |
-| **Slice 2 — SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —         |
+| **Slice 2; SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —       |
 
 ## Conventions & gotchas
 
 - **One shared scanner across the arbitration sweep.** Pass the single `BudgetedRepoScanner` into
   every provider's hook (via `ctx.scanner`) so overlapping probes cost one read (no N+1). Never
   build a scanner per provider.
-- **A hook that finds nothing must return `null`/`matched:false`**, not throw — arbitration skips
+- **A hook that finds nothing must return `null`/`matched:false`**, not throw: arbitration skips
   it. A genuine READ fault (`scanner.readFault`) surfaces as a `RepoReadError` (→ actionable
   validation error), not a misleading "nothing found".
-- **A provider manifest may be templated** and not parse as strict YAML — `readYamlDoc` degrades to
+- **A provider manifest may be templated** and not parse as strict YAML: `readYamlDoc` degrades to
   `null`, so the config seed is best-effort while the signature match still stands. Author hooks to
   match on the SIGNATURE first, then extract config best-effort.
 - **Types without a `detect` hook can't be arbitrated** (no signature); the selected-type path still

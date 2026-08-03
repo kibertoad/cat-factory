@@ -1,6 +1,6 @@
-# Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-monolith pilot)
+# Initiative: Stack recipes & shared stacks; complex-monolith environments (acme-monolith pilot)
 
-**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 9 landed = the pilot fixtures + golden detection + drift alarm + reference configs; slice 11 landed = the programmatic config surface (compose layers as inline documents / other-repo references, repo-less stacks, `seedSharedStacks`); slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred — see the checklist) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 9 landed = the pilot fixtures + golden detection + drift alarm + reference configs; slice 11 landed = the programmatic config surface (compose layers as inline documents / other-repo references, repo-less stacks, `seedSharedStacks`); slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred: see the checklist) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -10,34 +10,34 @@
 Today cat-factory can auto-detect and provision **simple** repos as ephemeral environments: a
 single compose file (image-pull or, since `compose-build-from-source.md`, build-from-source on
 the local facade) or a Kubernetes manifest tree. The motivating pilot for this initiative is the
-opposite extreme — a **complex multi-repo system**:
+opposite extreme: a **complex multi-repo system**:
 
-- **acme-monolith** — a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
+- **acme-monolith**: a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
   variants + nginx + ~10 private-ECR microservices + 4 node watch-build containers), whose
   bring-up is **imperative**: env-file materialization → secrets → compose up → `composer
 install` → MySQL seed import → Doctrine migrations → ES index build → health-loop gate.
-- **acme-shared-services** — a _separate sibling repo_ providing the shared infra stack
+- **acme-shared-services**: a _separate sibling repo_ providing the shared infra stack
   (~17 services: MySQL/Postgres/Valkey/RabbitMQ/Kafka/ES/Mailpit/Envoy/…) that runs **once per
   machine, long-lived**, and that consumer repos attach to over an external Docker network
   (`acme-net`).
 
 Neither fits any primitive cat-factory has. The intended end state:
 
-1. **Auto-detection understands complex repos** — multi-compose layering, external networks
-   (→ "this repo depends on a shared stack"), env-file templates, profiles, seed dumps — and an
+1. **Auto-detection understands complex repos**: multi-compose layering, external networks
+   (→ "this repo depends on a shared stack"), env-file templates, profiles, seed dumps, and an
    optional LLM "environment analyst" drafts the imperative parts (setup steps, health gates)
    as a non-binding recommendation.
-2. **The spin-up system can execute them** — a declarative **stack recipe** (ordered setup
+2. **The spin-up system can execute them**: a declarative **stack recipe** (ordered setup
    steps, env files, health gate) run by the compose provider, plus a **shared stack**
    primitive (workspace-scoped, long-lived, reused across runs/PRs).
-3. **The inherently-manual parts become guided, not silent failures** — a **preflight**
+3. **The inherently-manual parts become guided, not silent failures**: a **preflight**
    framework checks machine prerequisites (docker daemon, registry auth, VPN reachability,
    mkcert CA, hosts entries) and shows copy-paste remediation instructions in a **wizard**,
    so the human does each manual step once per machine and everything after is unattended.
 
 Primary execution target: the **local facade** (host Docker daemon). Runner-pool execution is a
 stretch slice. Cloudflare Containers can never host this class of system (no host daemon, no
-privileged DinD at this scale) — that asymmetry is documented, not fought.
+privileged DinD at this scale): that asymmetry is documented, not fought.
 
 Everything here is **generic**; acme is the pilot consumer that proves the primitives, the
 way the .NET+Angular+SQL-Server app piloted build-from-source.
@@ -60,10 +60,10 @@ refuses Git-Bash/msys) performs, in order:
 7. **Vault OIDC login (Google SSO, browser)** and pull `kv/acme-monolith/dev/*` secrets into
    `.env.dev.local` + `docker/.env.<service>` files.
 8. Hand-copy `services/app/.split.yaml.dist` → `.split.yaml` (documented manual step).
-9. `docker compose pull/build/up -d` — `docker/dev.yml` + OS override
+9. `docker compose pull/build/up -d`: `docker/dev.yml` + OS override
    (`dev.wsl.override.yml` / `dev.mac.override.yml`); attaches to external `acme-net`;
    ~10 service images from **private ECR** (`053497547689.dkr.ecr.eu-central-1.amazonaws.com`,
-   `ecr.prod.acme.cloud`); no healthchecks in the compose file — ordering is imperative.
+   `ecr.prod.acme.cloud`); no healthchecks in the compose file: ordering is imperative.
 10. `composer install` inside the app container.
 11. MySQL seed import (`deployment/acme-db-dummy/acme-dummy.sql` + `acme-pre-dummy.sql`).
 12. `bin/console cache:warmup` (~4–5 min first run).
@@ -85,10 +85,10 @@ sysctl tweaks → mkcert CA + wildcard certs (`*.acme.local`, `*.acme.internal`)
 Consumer opt-in conventions (all file-drop + idempotent re-apply): `users.d/<engine>/<consumer>.sql`
 (two-user owner/app convention), `config/envoy/sites.d/<consumer>/*.yaml` L7 vhosts,
 `config/debezium-connect/connectors/<consumer>/*.json`. Only Envoy binds host ports (`+40000`
-scheme; 80/443 standard). **4 of ~17 images are private ECR** — cockroach, languagetool, okapi
+scheme; 80/443 standard). **4 of ~17 images are private ECR**: cockroach, languagetool, okapi
 (all `peer`-profile) and **fauxqs, which is a core `backends`-profile service**; the other ~11
 backends + envoy + proxysql are public images, so a **public-only subset can run fully
-unattended** (profiles/edits required — see validation plan).
+unattended** (profiles/edits required: see validation plan).
 
 ## Gap analysis (cat-factory today → what's missing)
 
@@ -104,50 +104,50 @@ detection (`provision-detect.logic.ts`), per-frame `ServiceProvisioning`
 
 | #   | Gap                                                                                                                                                                     | Covered by slice |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| G1  | No shared/long-lived stack primitive — compose projects are strictly per-PR and torn down with the run; no compose analogue of the k8s helm `scope:'shared'` singleton  | 4, 5             |
-| G2  | Compose provider takes a single `-f` file — no override layering (`dev.yml` + `dev.wsl.override.yml`), no `COMPOSE_PROFILES`, no external networks                      | 3, 5             |
-| G3  | No model of imperative setup steps (seed import, migrations, index builds, `composer install`) or health gates — provisioning is `up --wait` and done                   | 1, 3             |
+| G1  | No shared/long-lived stack primitive: compose projects are strictly per-PR and torn down with the run; no compose analogue of the k8s helm `scope:'shared'` singleton  | 4, 5             |
+| G2  | Compose provider takes a single `-f` file, no override layering (`dev.yml` + `dev.wsl.override.yml`), no `COMPOSE_PROFILES`, no external networks                      | 3, 5             |
+| G3  | No model of imperative setup steps (seed import, migrations, index builds, `composer install`) or health gates: provisioning is `up --wait` and done                   | 1, 3             |
 | G4  | No env-file materialization (`.env.dev.local-dist` → `.env.dev.local`, `.split.yaml.dist` → `.split.yaml`)                                                              | 1, 3             |
-| G5  | No prerequisite/preflight concept — VPN, registry auth, mkcert CA, hosts entries, RAM/disk fail deep inside provisioning instead of up-front with instructions          | 6                |
-| G6  | Detection is compose/k8s-layout only — no multi-compose/override detection, no `external: true` network → shared-stack inference, no env-template/seed-dump detection   | 2                |
+| G5  | No prerequisite/preflight concept: VPN, registry auth, mkcert CA, hosts entries, RAM/disk fail deep inside provisioning instead of up-front with instructions          | 6                |
+| G6  | Detection is compose/k8s-layout only, no multi-compose/override detection, no `external: true` network → shared-stack inference, no env-template/seed-dump detection   | 2                |
 | G7  | No LLM-assisted detection for the imperative parts a deterministic scan can't see (README/Makefile/CLI-encoded setup order)                                             | 8                |
 | G8  | No guided "detect → review → preflight → trial → save" wizard; no surface for built-in manual-step instructions                                                         | 7                |
-| G9  | Registry auth unmodeled (already called out as out-of-scope in `compose-build-from-source.md`) — a preflight can _check_ login state even if we never store credentials | 6                |
+| G9  | Registry auth unmodeled (already called out as out-of-scope in `compose-build-from-source.md`): a preflight can _check_ login state even if we never store credentials | 6                |
 | G10 | Heavy stacks don't fit Cloudflare containers; runner pools exist but recipes don't run there                                                                            | stretch          |
 
 ## Target architecture
 
 Each primitive names its seam. **Persistence-touching slices land D1 ⇄ Drizzle + a conformance
 assertion in the same PR** (CLAUDE.md "Keep the runtimes symmetric"); runtime-_bound_ execution
-(host daemon) registers only on the local facade — the documented compose exception.
+(host daemon) registers only on the local facade: the documented compose exception.
 
 ### 1. `StackRecipe` (contracts extension of `ServiceProvisioning`)
 
 Extend `ServiceProvisioning` (`backend/packages/contracts/src/environments.ts`) with a
-declarative recipe (all optional — existing configs parse unchanged):
+declarative recipe (all optional: existing configs parse unchanged):
 
-- `composeFiles: string[]` — ordered `-f` layering (base + overrides). Supersedes the single
+- `composeFiles: string[]`: ordered `-f` layering (base + overrides). Supersedes the single
   `composePath` for multi-file repos; single-file stays the simple case.
-- `composeProfiles: string[]` — `COMPOSE_PROFILES` for the project.
-- `envFiles: { template: string; target: string }[]` — materialize committed templates
+- `composeProfiles: string[]`: `COMPOSE_PROFILES` for the project.
+- `envFiles: { template: string; target: string }[]`: materialize committed templates
   (`.env.dev.local-dist`, `.split.yaml.dist`) into their gitignored targets inside the
   checkout before `up`. Both paths must pass the existing `escapesCheckout` guard.
-- `externalNetworks: string[]` — networks the project expects to exist (created/owned by a
+- `externalNetworks: string[]`: networks the project expects to exist (created/owned by a
   shared stack or by the engine).
-- `sharedStackRefs: string[]` — ids of `SharedStack` entities that must be up first.
-- `setupSteps: RecipeStep[]` — ordered post-`up` steps. Step kinds:
-  - `compose-exec` — `docker compose exec <service> <cmd>` (composer install, migrations,
+- `sharedStackRefs: string[]`: ids of `SharedStack` entities that must be up first.
+- `setupSteps: RecipeStep[]`: ordered post-`up` steps. Step kinds:
+  - `compose-exec`; `docker compose exec <service> <cmd>` (composer install, migrations,
     cache warmup, index builds, seed import via a client container).
-  - `copy-file` — in-checkout template copy (subset of `envFiles`, for one-offs).
-  - `wait-http` — poll a URL until 2xx/expected body (ES up, expert-search `/health`).
-  - `wait-file` — poll for a file inside the checkout/container (the `manifest.json` gate).
-  - `host-command` — arbitrary command on the orchestrator host. **Trusted local facade
+  - `copy-file`: in-checkout template copy (subset of `envFiles`, for one-offs).
+  - `wait-http`: poll a URL until 2xx/expected body (ES up, expert-search `/health`).
+  - `wait-file`: poll for a file inside the checkout/container (the `manifest.json` gate).
+  - `host-command`: arbitrary command on the orchestrator host. **Trusted local facade
     only**, behind an explicit opt-in flag (same pattern as the `build` flag), refused by
     every other backend. Escape hatch for genuinely host-side steps.
-- `healthGate` — terminal readiness check: `{ kind: 'http', url }` |
+- `healthGate`: terminal readiness check: `{ kind: 'http', url }` |
   `{ kind: 'compose-exec', service, command }` (e.g. `bin/console monitor:health`) |
   `{ kind: 'compose-healthy' }` (default, today's behaviour).
-- `teardownSteps: RecipeStep[]` — optional, before `down -v`.
+- `teardownSteps: RecipeStep[]`: optional, before `down -v`.
 
 Persisted on the service frame like today; resolved up the frame chain
 (`AgentContextBuilder.resolveServiceFrame`). Valibot schemas beside the existing provisioning
@@ -159,14 +159,14 @@ on persisted config (the build-flag rule).
 > (`StackRecipe`), composed of `recipeStepSchema` (`RecipeStep`,
 > kinds `compose-exec` / `copy-file` / `wait-http` / `wait-file` / `host-command`, each with a
 > per-step `timeoutMs`; `compose-exec` seed import pipes a dump via `stdinFile`),
-> `recipeHealthGateSchema` (`RecipeHealthGate` — `compose-healthy` default / `http` /
+> `recipeHealthGateSchema` (`RecipeHealthGate`; `compose-healthy` default / `http` /
 > `compose-exec`), and `recipeEnvFileSchema` (`RecipeEnvFile`). All fields are optional (a plain
 > `composePath` config parses unchanged); `recipe.composeFiles` supersedes `composePath` when
 > present. The recommendation gained `composeFileCandidates` (OS overrides annotated via `os`),
-> `profileCandidates` (default-off), `seedDumpCandidates`, and the report-only `repoCliHint` —
+> `profileCandidates` (default-off), `seedDumpCandidates`, and the report-only `repoCliHint`:
 > detected recipe fields (external networks, env-file pairs, base compose files) go straight into
 > `recommendation.provisioning.recipe`. Persistence rides the existing `optJsonField('provisioning')`
-> blob, so **no migration** — the D1 ⇄ Drizzle parity work begins at the SharedStack table (slice 4).
+> blob, so **no migration**: the D1 ⇄ Drizzle parity work begins at the SharedStack table (slice 4).
 
 ### 2. `SharedStack` (new entity + lifecycle service)
 
@@ -175,13 +175,13 @@ composeFiles, composeProfiles, envFiles, managedNetworks, setupSteps, healthGate
 lastError, updatedAt }`. New table mirrored D1 ⇄ Drizzle + conformance round-trip; a
 `SharedStackService` (integrations) owns lifecycle:
 
-- `ensureUp(stackId)` — idempotent: clone/refresh the stack repo into a per-stack working dir
+- `ensureUp(stackId)`: idempotent: clone/refresh the stack repo into a per-stack working dir
   (reuse the `ComposeRuntime.checkout` seam from build mode), create managed networks
   (`docker network create acme-net` if absent), `compose up -d` with profiles, wait
   healthy, run setup steps (users sync, Debezium registration). Re-entrant: already-healthy →
   no-op. Concurrent provisions coalesce on one `ensureUp`.
 - `status(stackId)` / `refresh(stackId)` / explicit `teardown(stackId)`. **Never** swept with
-  a run and never TTL-reaped — teardown is a deliberate user action.
+  a run and never TTL-reaped: teardown is a deliberate user action.
 - The compose environment provider gains `sharedStackRefs` handling in
   `buildProvisionRequest`/`provision`: ensure stacks first (provider-before-consumer, reusing
   the `orderProvisionTargets` idea from service-connections), then attach the per-PR project to
@@ -193,9 +193,9 @@ This is the compose analogue of the k8s helm `scope: 'shared'` singleton, and it
 models acme-shared-services (one stack per machine/workspace, consumers attach over
 `acme-net`).
 
-> **Landed (slice 4)** — the `SharedStack` entity + CRUD + lifecycle. Contract in
-> `contracts/src/shared-stacks.ts` (`SharedStack` reuses the recipe vocabulary — `composeFiles`
-> / `composeProfiles` / `envFiles` / `setupSteps` / `healthGate` — plus `managedNetworks` +
+> **Landed (slice 4)**: the `SharedStack` entity + CRUD + lifecycle. Contract in
+> `contracts/src/shared-stacks.ts` (`SharedStack` reuses the recipe vocabulary (`composeFiles`
+> / `composeProfiles` / `envFiles` / `setupSteps` / `healthGate`) plus `managedNetworks` +
 > `allowHostCommands`), kernel `SharedStackRepository` port, and the `shared_stacks` table mirrored
 > **D1 (`0041_shared_stacks.sql`) ⇄ Drizzle** with a cross-runtime `defineSharedStackSuite`
 > round-trip (JSON columns + the `allow_host_commands` boolean). `SharedStackService`
@@ -205,28 +205,28 @@ models acme-shared-services (one stack per machine/workspace, consumers attach o
 > setup steps + health gate (via the **extracted `recipe-runner.ts`** now shared with
 > `ComposeEnvironmentProvider`), and persists `running`/`failed` + `lastError`; it is idempotent
 > (already-`running` ⇒ no-op) and coalesces concurrent callers onto one in-flight bring-up.
-> `teardown` is `down -v` (explicit — never swept). Controller
+> `teardown` is `down -v` (explicit, never swept). Controller
 > `GET|POST|PATCH|DELETE /workspaces/:ws/shared-stacks` (+ `ensure-up`/`teardown`); the stack list
 > rides the workspace snapshot; SPA store + a "Shared stacks" panel in the Infrastructure window.
-> **Gotchas for slice 5:** (1) a shared stack runs its committed compose files AS AUTHORED — host
+> **Gotchas for slice 5:** (1) a shared stack runs its committed compose files AS AUTHORED: host
 > ports are KEPT and there is NO isolation rewrite / port-neutralize (it's trusted operator infra,
 > unlike a per-PR preview), so slice 5's consumer-attach must NOT reuse the per-PR
 > `prepareRecipeComposeFiles` path for the stack itself. (2) `ensureUp`/`teardown` need
-> `composeRuntime` — wired only on the local facade via `overrides.composeRuntime`; on Worker/Node
+> `composeRuntime`: wired only on the local facade via `overrides.composeRuntime`; on Worker/Node
 > the endpoints refuse (persistence still symmetric). (3) `managedNetworks` are created but NOT torn
-> down by `down -v` (they outlive the project, by design — consumers may still be attached);
-> `sharedStackRefs` on a service recipe are still parsed-not-attached — that ensure-first ordering +
+> down by `down -v` (they outlive the project, by design: consumers may still be attached);
+> `sharedStackRefs` on a service recipe are still parsed-not-attached: that ensure-first ordering +
 > `external: true` rewrite on the CONSUMER project is exactly slice 5. (4) per-step provisioning-log
 > streaming is a wired-but-unused `SharedStackService.provisioningLog` seam (a clean follow-up).
 >
-> **Landed (slice 5)** — a recipe's `sharedStackRefs` + `externalNetworks` now reach the consumer
+> **Landed (slice 5)**: a recipe's `sharedStackRefs` + `externalNetworks` now reach the consumer
 > project. `SharedStackService.ensureRefsUp(workspaceId, refs)` brings each referenced stack up (via
 > the idempotent `ensureUp`) IN ORDER and returns the deduped union of their `managedNetworks`, or a
-> blocking `error` (never throws) for a missing ref / failed bring-up / no host daemon — a new kernel
+> blocking `error` (never throws) for a missing ref / failed bring-up / no host daemon: a new kernel
 > `SharedStackEnsureResult`. It is exposed on the provision request as the
 > `ProvisionEnvironmentRequest.ensureSharedStacks` seam, bound in
 > `EnvironmentProvisioningService.buildProvisionRequest` (the service gained an `ensureSharedStacks`
-> dep, wired in `createCore` from the now-earlier-built `sharedStacks` module — `createEnvironmentsModule`
+> dep, wired in `createCore` from the now-earlier-built `sharedStacks` module: `createEnvironmentsModule`
 > takes the `SharedStackService`). In `ComposeEnvironmentProvider.provisionRecipe`, after the pure
 > fast-fail checks + reading the compose layers, the provider ensures the shared stacks up
 > (provider-before-consumer, streaming one `shared stacks (N)` provisioning-log step) and then attaches
@@ -235,44 +235,44 @@ models acme-shared-services (one stack per machine/workspace, consumers attach o
 > option): each network NOT already declared external in the MERGED layers is declared top-level
 > `{ external: true }` and joined by every service (preserving the implicit `default` for a service on
 > no explicit network; skipping a `network_mode`-pinned service). **Gotchas for later slices:** (1) the
-> "already external" skip is computed across ALL `-f` layers first — so a network the base wires is
+> "already external" skip is computed across ALL `-f` layers first, so a network the base wires is
 > left entirely alone and an override layer never re-adds `default` to a service the base intentionally
 > scoped. (2) ensure runs BEFORE `prepareRecipeComposeFiles` validates YAML/service-defined (it needs
 > the managed networks to attach); since `ensureUp` is idempotent-cheap once a stack is up, a
-> first-run consumer with a malformed compose can bring the (reusable) shared stack up then fail — that
-> is acceptable, not wasted work. (3) this is local-facade-bound execution (no D1⇄Drizzle work — the
+> first-run consumer with a malformed compose can bring the (reusable) shared stack up then fail: that
+> is acceptable, not wasted work. (3) this is local-facade-bound execution (no D1⇄Drizzle work: the
 > recipe rides the existing `provisioning` blob), validated by unit tests with a fake runtime, not
 > conformance; persistence parity is inherent. (4) `externalNetworks` NOT backed by a `sharedStackRef`
 > (nor pre-existing on the host) are still declared+attached but nothing CREATES them, so `up` fails
-> clearly — a preflight (slice 6) is the place to catch that up front.
+> clearly: a preflight (slice 6) is the place to catch that up front.
 
 ### 3. Preflights (machine-prerequisite checks + guided remediation)
 
 A kernel port `PreflightCheck` / `PreflightRunner`: each check =
 `{ id, title, probe(): pass|fail|warn + detail, remediation: markdown }`. **Checks are
-automated; remediation is human instructions** — this is exactly where VPN / SSO / Vault /
+automated; remediation is human instructions**: this is exactly where VPN / SSO / Vault /
 mkcert live, as guided one-time machine setup rather than pretend-automation. Built-in checks
 (local facade impl):
 
 - docker daemon reachable; free disk / RAM vs a recipe-declared minimum (acme wants ≥16 GB).
 - registry reachability + `docker login` state per registry named in the recipe's images
-  (detects "ECR token expired" _before_ a 40-image pull fails; we check, never store, creds —
+  (detects "ECR token expired" _before_ a 40-image pull fails; we check, never store, creds:
   G9 stays out of scope).
 - TCP/HTTP reachability probes for recipe-declared endpoints (a VPN-only Vault/ECR host
   unreachable → "connect Tailscale" remediation).
 - mkcert CA present in the trust store; expected `/etc/hosts` entries present.
 - env-file secrets markers present (e.g. acme's `# BOF SECRETS #` block in
-  `.env.dev.local`) — detects "Vault step not done yet" without knowing anything about Vault.
+  `.env.dev.local`): detects "Vault step not done yet" without knowing anything about Vault.
 
 Recipes declare which checks apply (`prerequisites: PreflightRef[]`, with per-check params +
 custom remediation text). Surfaced in the wizard (live re-check button) and re-run at
-provision start — a failed _required_ preflight fails fast with the remediation text in the
+provision start: a failed _required_ preflight fails fast with the remediation text in the
 provisioning log instead of a mid-provision mystery.
 
-> **Landed (slice 6)** — the preflight primitive end to end. Contracts (`contracts/src/preflights.ts`):
+> **Landed (slice 6)**: the preflight primitive end to end. Contracts (`contracts/src/preflights.ts`):
 > `PreflightCheckId` (the nine built-ins: `docker-daemon` / `disk-space` / `memory` / `registry-auth`
 > / `tcp-reachable` / `http-reachable` / `mkcert-ca` / `hosts-entries` / `env-secrets-marker`),
-> `PreflightParams` (a flat optional bag — a check reads the fields it needs), `PreflightRef`
+> `PreflightParams` (a flat optional bag; a check reads the fields it needs), `PreflightRef`
 > (`check` + `params` + `required` [default true] + operator `remediation`/`label` overrides), and
 > `PreflightResult` (title + status `pass`/`fail`/`warn` + required + detail + remediation), wired onto
 > `stackRecipeSchema.prerequisites`. Kernel (`ports/preflight.ts`): the runtime-BOUND
@@ -293,33 +293,33 @@ provisioning log instead of a mid-provision mystery.
 > adapter (memory / env-marker / HTTP / refused TCP / missing binary → verdict, never a throw).
 > **Gotchas for later slices:** (1) preflight PROBES are local-facade-bound (the documented compose
 > exception), but the declaration + API + `runPreflights` seam are runtime-neutral and the recipe
-> rides the existing `provisioning` blob — so NO migration and no D1⇄Drizzle work; validation is unit
+> rides the existing `provisioning` blob, so NO migration and no D1⇄Drizzle work; validation is unit
 > tests with fake probes, not conformance. (2) `runPreflights` mirrors `ensureSharedStacks`: a recipe
 > that DECLARES prerequisites on a deployment with no host-probe runtime fails LOUDLY rather than
 > silently skipping a safety gate. (3) `env-secrets-marker` reads a HOST path (absolute / cwd-relative)
-> — at provision start there is no checkout yet (preflights run before clone), so it can't point into
+>: at provision start there is no checkout yet (preflights run before clone), so it can't point into
 > the per-run working tree; the wizard (slice 7) points it at a persistent location. (4) `http-reachable`
 >
 > - `tcp-reachable` deliberately bypass the SSRF allow-list (they probe VPN-only LAN hosts on the
->   operator's trusted local machine, exactly what an allow-list would block — same posture as the
->   `wait-http` recipe step). (5) ~~**SharedStack preflights are NOT wired**~~ **— LANDED (slice-6
+>   operator's trusted local machine, exactly what an allow-list would block: same posture as the
+>   `wait-http` recipe step). (5) ~~**SharedStack preflights are NOT wired**~~ **LANDED (slice-6
 >   follow-up, see below).**
 >
-> **Landed (slice-6 follow-up — SharedStack preflights).** A `SharedStack` now carries a
+> **Landed (slice-6 follow-up: SharedStack preflights).** A `SharedStack` now carries a
 > `prerequisites: PreflightRef[]` (`sharedStackSchema` + the create/update bodies), and
-> `SharedStackService.bringUp` re-runs them FIRST — before the clone / managed-network / `up` work —
+> `SharedStackService.bringUp` re-runs them FIRST (before the clone / managed-network / `up` work)
 > through an injected `runPreflights` seam, streaming one provisioning-log step per check and failing
 > fast (persisting `failed` + a `formatPreflightFailure` `lastError`) when a REQUIRED check is red; a
 > non-required check downgrades to an advisory `warn`. Wired in `createSharedStacksModule` from the
 > preflight module's `PreflightService.run` (reordered so `preflight` builds before `sharedStacks`),
-> so it is present only where the host-probe seam is (the local facade — same runtime binding as
+> so it is present only where the host-probe seam is (the local facade: same runtime binding as
 > `composeRuntime`); a stack that DECLARES prerequisites on a deployment with no host daemon fails
 > loudly rather than silently skipping the gate (mirroring the compose provider's `runPreflights`).
 > Persistence is fully symmetric: a new `prerequisites` text-JSON column mirrored D1
 > (`0042_shared_stacks_prerequisites.sql`) ⇄ Drizzle (a generated migration), with the cross-runtime
 > `defineSharedStackSuite` round-trip extended to assert the column on both stores. No data migration
 > (pre-1.0; existing rows default to `[]`). The simplified `SharedStacksPanel.vue` form does NOT edit
-> `prerequisites` yet — consistent with how it already omits `setupSteps`/`envFiles`/`healthGate`
+> `prerequisites` yet: consistent with how it already omits `setupSteps`/`envFiles`/`healthGate`
 > (those ride the API / a future richer editor); the field defaults to `[]` on create and is
 > preserved by the partial update. This closes the acme-shared-services mkcert/hosts/ECR **M-rows** for
 > the shared stack itself, not just per-PR consumer recipes.
@@ -329,25 +329,25 @@ provisioning log instead of a mid-provision mystery.
 Extend `ComposeEnvironmentProvider` + the `ComposeRuntime` seam (`runtimes/local/src/compose.ts`):
 multi-`-f` invocation, `COMPOSE_PROFILES`, env-file materialization, then the ordered
 `setupSteps` with **per-step entries in `ProvisioningLogService`** (step name, duration,
-truncated output, verdict), per-step timeouts (separate budgets — the build-mode
+truncated output, verdict), per-step timeouts (separate budgets; the build-mode
 `BUILD_TIMEOUT_MS` precedent; a 5-minute cache-warmup must not eat the `up --wait` budget), and
 the `healthGate` as the terminal gate. Failure surfacing: the failed step's log tail lands on
 the environment record's `lastError` and the provisioning log, so the SPA (and the env-repair
 agent) can show exactly which step died. All build-mode safety lines stay (host-escape
-uniformity on every path-bearing reference; `include:`/cross-file `extends` refused —
+uniformity on every path-bearing reference; `include:`/cross-file `extends` refused:
 multi-`-f` layering is the sanctioned alternative; `privileged` refused).
 
-> **Landed (slice 3)** — the recipe now reaches the provider: `resolveProviderForType`
+> **Landed (slice 3)**: the recipe now reaches the provider: `resolveProviderForType`
 > (`EnvironmentConnectionService`) + `handlerConfigToBackendConfig`'s `local-docker` branch fold
 > the SERVICE's `recipe` into the compose handler's `providerConfig.recipe` (the compose analogue
 > of merging a kube `manifestSource`; `ServiceKubeInputs` → `ServiceProvisioningInputs`), so the
 > provider keys purely on the persisted, merged config. `ComposeEnvironmentProvider.provisionRecipe`
 > drives the bring-up: it always materializes a checkout (its steps + env files operate on the
 > working tree), reads + `{{var}}`-renders each `composeFiles` layer, rewrites them isolation-safe
-> per layer (`prepareRecipeComposeFiles` — host-escape-checked with the build-mode guard + host
+> per layer (`prepareRecipeComposeFiles`; host-escape-checked with the build-mode guard + host
 > ports neutralized + the probed service's publish guaranteed on whichever layer defines it), writes
 > them beside their originals + passes ordered `-f`s, materializes `envFiles`, `up -d` under
-> `COMPOSE_PROFILES` (**no `--wait`** — these stacks rarely declare healthchecks, so readiness is
+> `COMPOSE_PROFILES` (**no `--wait`**; these stacks rarely declare healthchecks, so readiness is
 > the recipe's own gate), runs `setupSteps` (`compose-exec` [seed import pipes a `.sql` via the new
 >
 > > `compose` stdin seam], `copy-file`, `wait-http`, `wait-file` [container `test -f` or checkout],
@@ -355,17 +355,17 @@ multi-`-f` layering is the sanctioned alternative; `privileged` refused).
 > > then polls the `healthGate` (`compose-healthy`/`http`/`compose-exec`). Per-step verdicts stream
 > > through the new kernel `ProvisionEnvironmentRequest.recordStep` seam (bound in
 > > `EnvironmentProvisioningService.buildProvisionRequest` to a `subsystem:'environment'` provisioning
-> > log entry) — env file, `up`, each step, health gate — so the "View logs" drawer shows which step
+> > log entry) (env file, `up`, each step, health gate) so the "View logs" drawer shows which step
 > > ran/died; a failing step tears the half-up stack down and surfaces its own error as `lastError`.
 > > New pure helpers + the `ComposeRuntime` recipe seams (`compose` stdin, `copyCheckoutFile`,
 > > `checkoutFileExists`, `hostCommand`) live in `compose-environment.logic.ts` / `runtimes/local`.
-> > **Gotchas for later slices:** recipe execution is local-facade-bound (no D1⇄Drizzle work — the
+> > **Gotchas for later slices:** recipe execution is local-facade-bound (no D1⇄Drizzle work: the
 > > recipe rides the existing `provisioning` blob, so persistence parity is inherent), so its
 > > validation is unit tests with a fake `ComposeRuntime`, not conformance. `teardownSteps` execution
 > > is deferred (`down -v` is the teardown for now). `externalNetworks`/`sharedStackRefs` are parsed
-> > but NOT yet attached — that is slice 5.
+> > but NOT yet attached: that is slice 5.
 
-### 5. Detection extensions (`provision-detect.logic.ts` — deterministic, checkout-free)
+### 5. Detection extensions (`provision-detect.logic.ts`: deterministic, checkout-free)
 
 Keep the non-binding `ProvisioningRecommendation` + per-field confidence shape. Add:
 
@@ -393,7 +393,7 @@ provisioning (the compose-build rule: never re-implement a predicate).
 > (`buildComposeRecommendation`, formerly the sync `composeRecommendation`), plus the compose-doc
 > predicates `extractExternalNetworks` / `extractComposeProfiles` in
 > `compose-environment.logic.ts` (so the slice-5 provider reuses them, not the detector). `findCompose`
-> now recognizes a bare `dev.yml` base (lowest priority — canonical names still win) and returns the
+> now recognizes a bare `dev.yml` base (lowest priority: canonical names still win) and returns the
 > containing dir's listing + the parsed external networks / profiles. A recipe is populated ONLY when
 > the repo is actually recipe-shaped, so a plain single-file compose recommendation is byte-for-byte
 > unchanged (the exact-`toEqual` regression test still passes). Mapping: base + `<stem>.override.ya?ml`
@@ -404,13 +404,13 @@ provisioning (the compose-build rule: never re-implement a predicate).
 > `seedDumpCandidates` (fullest pre-selected); `bin/*console*`/Makefile/justfile/Taskfile → the
 > report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined acme-monolith-shaped repo)
 > cover every extension. Gotcha for later slices: several existing detector tests assert the WHOLE
-> recommendation with `toEqual`, so any new always-on field breaks them — gate additions behind an
+> recommendation with `toEqual`, so any new always-on field breaks them; gate additions behind an
 > "actually detected" check, as done here.
 
-### 6. Environment analyst (LLM draft — opt-in, never silently applied)
+### 6. Environment analyst (LLM draft: opt-in, never silently applied)
 
 A new agent kind registered through the public seams (`registerAgentKind`,
-`container-explore` structured — the `example-custom-agent` shape): given a checkout, read
+`container-explore` structured: the `example-custom-agent` shape): given a checkout, read
 README / Makefile / compose files / setup scripts and return a **structured draft
 `StackRecipe`** (setup steps with rationale + source citations, prerequisites, health gate) on
 `result.custom`. The wizard merges it as a _draft_ layer: deterministic detector facts always
@@ -420,15 +420,15 @@ only thing that runs without opt-in. This is how `bin/dev-console app setup`'s o
 (composer → seed → migrate → index → health) becomes a recipe without cat-factory hardcoding
 acme knowledge.
 
-> **Landed (slice 8)** — the analyst agent kind end to end. Contract
+> **Landed (slice 8)**: the analyst agent kind end to end. Contract
 > (`contracts/src/environment-analyst.ts`): `AnalystRecipeDraft` (a proposed
 > {@link stackRecipeSchema} + per-field `AnalystRecipeNote` provenance [rationale + `AnalystCitation`
 >
 > > source citations] + a `summary`), a deliberately LENIENT LLM-output shape (`v.fallback`) that
-> > degrades field-by-field — a malformed `recipe` drops to `undefined` while the `summary`/`notes`
-> > survive — rather than discarding the whole draft (the `bugInvestigation`/`securityAssessment`
+> > degrades field-by-field (a malformed `recipe` drops to `undefined` while the `summary`/`notes`
+> > survive) rather than discarding the whole draft (the `bugInvestigation`/`securityAssessment`
 > > shape). Agents (`agents/kinds/environment-analyst.ts`): the `environment-analyst` kind, a
-> > read-only `container-explore` structured agent (`clone: { branch: 'base' }`, no post-op — its
+> > read-only `container-explore` structured agent (`clone: { branch: 'base' }`, no post-op; its
 > > whole product is the JSON on `result.custom`, rendered by `generic-structured`), registered
 > > through the public `AgentKindRegistry` seam and pre-loaded by `defaultAgentKindRegistry()`
 > > alongside `bug-investigator`/`repro-test`. Its `defineStructuredOutput` derives `agent.output`
@@ -437,37 +437,37 @@ acme knowledge.
 > > loudly instead of yielding an empty draft); the read-only guardrail + final-answer-in-reply
 > > directives are auto-appended for the container-explore surface. Kernel (`domain/seed.ts`): a
 > > seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`,
-> > `name: 'Analyze environment'`), mirroring `pl_blueprint` — a single container-explore agent run
+> > `name: 'Analyze environment'`), mirroring `pl_blueprint`; a single container-explore agent run
 > > against a service frame. **Gotchas for slice 7:** (1) the analyst is surfaced to the frontend
 > > automatically via the workspace snapshot's `customAgentKinds` (it carries `presentation` with
-> > `resultView: 'generic-structured'`), exactly like `repro-test` — NO frontend catalog change, and
+> > `resultView: 'generic-structured'`), exactly like `repro-test`, NO frontend catalog change, and
 > > `isKnownAgentKind` sees it once the snapshot registers custom kinds, so the seeded pipeline isn't
 > > flagged. `category: 'design'` puts it in the palette's "Design & research" group. (2) The
 > > DRAFT-MERGE (deterministic-detector-wins + provenance) + the "run deep analysis" trigger were
 > > DEFERRED to slice 7 (the wizard), where the merge shape is naturally coupled to how the wizard
-> > presents it — slice 8 is only the producer. The pure merge logic belongs beside
+> > presents it: slice 8 is only the producer. The pure merge logic belongs beside
 > > `provision-detect.logic.ts`, keyed on `AnalystRecipeDraft` + `ProvisioningRecommendation`.
-> > (3) No persistence change — the draft rides `result.custom` / the execution engine and the recipe
+> > (3) No persistence change: the draft rides `result.custom` / the execution engine and the recipe
 > > rides the existing `provisioning` blob, so no migration and no D1⇄Drizzle work; validation is a
 > > unit test in `@cat-factory/agents` (registration, derived output spec, surface directives, schema
 > > leniency), not conformance. (4) The wizard runs `pl_environment_analysis` against the picked frame
 > > like bootstrap runs `pl_blueprint`; the frame must have a linked repo (execution resolves it via
 > > `resolveRepoTarget`). Analyzing an arbitrary user-chosen ref (detection takes `gitRef`) is NOT
-> > supported by a frame-scoped pipeline run — if the wizard needs it, an ad-hoc `agent_runs` run
+> > supported by a frame-scoped pipeline run: if the wizard needs it, an ad-hoc `agent_runs` run
 > > (the `env-config-repair` shape) is the alternative, at the cost of a new port triple.
 
 ### 7. Wizard UX (detect → review → preflight → trial → save)
 
-A guided flow in the SPA — new `EnvironmentSetupWizard.vue` family reusing the
+A guided flow in the SPA: new `EnvironmentSetupWizard.vue` family reusing the
 descriptor-driven form machinery + the `BootstrapModal` async pattern + `stores/infraConfig.ts`:
 
 1. **Pick service** (frame) → run detection; offer "run deep analysis" (analyst agent, async
    with progress).
-2. **Review recipe** — per-field confidence + provenance chips; candidate pickers (compose
+2. **Review recipe**: per-field confidence + provenance chips; candidate pickers (compose
    file sets, profiles, shared-stack binding); inline editing.
-3. **Preflight checklist** — live checks with pass/fail/warn, copy-paste remediation
+3. **Preflight checklist**: live checks with pass/fail/warn, copy-paste remediation
    instructions per failure (the "built-in instructions" surface), re-check button.
-4. **Trial provision** — kick a real provision against a chosen ref with live step logs
+4. **Trial provision**: kick a real provision against a chosen ref with live step logs
    (`ProvisioningLogsDrawer`); on failure, jump to the failed step + its remediation if a
    preflight maps to it.
 5. **Save** to the frame's `ServiceProvisioning` (+ create/bind SharedStacks).
@@ -476,10 +476,10 @@ Plus an `InfraSetupBanner`-style nudge on service frames where detection finds a
 repo but nothing is configured. All copy through i18n with locale parity from day one;
 `data-testid` on every affordance (e2e rule).
 
-> **Landed (slice 7, part 1)** — the analyst DRAFT-MERGE core (the "review recipe" data model),
+> **Landed (slice 7, part 1)**: the analyst DRAFT-MERGE core (the "review recipe" data model),
 > the piece slice 8 deferred here. `mergeAnalystRecipeDraft(recommendation, draft)` combines the
 > deterministic `ProvisioningRecommendation` with the opt-in `AnalystRecipeDraft` into a
-> `MergedRecipeDraft` — the detector-wins `StackRecipe` plus per-field provenance
+> `MergedRecipeDraft`: the detector-wins `StackRecipe` plus per-field provenance
 > (`MergedRecipeField`: `origin` `detector`/`analyst`/`both`, the detector confidence+message OR the
 > analyst rationale+citations of whichever source WON), the analyst summary, and the verbatim
 > `analystNotes` (so the wizard can render granular per-step provenance like `setupSteps[2]`).
@@ -489,19 +489,19 @@ repo but nothing is configured. All copy through i18n with locale parity from da
 > matched exact-first, then by stripped base name (`setupSteps[1]`/`healthGate.url` → the field).
 > **Placement (divergence from the slice-8 note, by design):** it lives in **`@cat-factory/contracts`**
 > (`environment-analyst-merge.ts`), NOT in `integrations` beside `provision-detect.logic.ts` as the
-> slice-8 note anticipated — the merge is PURE and operates only on contract types, and its consumer
+> slice-8 note anticipated: the merge is PURE and operates only on contract types, and its consumer
 > is the SPA wizard, so putting it in contracts lets the wizard merge client-side with NO extra
 > endpoint (the detector must stay in integrations only because it needs the reader I/O port). This
 > is the shared-pure-helper shape contracts already hosts (`resolveFrontendBindings` /
 > `buildFrontendRunNotes`). Unit-tested from `@cat-factory/integrations`
-> (`environment-analyst-merge.logic.test.ts`) since contracts has no test runner — the same pattern
+> (`environment-analyst-merge.logic.test.ts`) since contracts has no test runner: the same pattern
 > by which `buildFrontendRunNotes` is tested from a consumer. No persistence change (pure logic).
 >
-> **Landed (slice 7, part 2)** — the wizard UI + the Deployer compose-centralization it unblocks.
+> **Landed (slice 7, part 2)**: the wizard UI + the Deployer compose-centralization it unblocks.
 > `EnvironmentSetupWizard.vue` (`components/environments/`) is a stepper shell over the
 > `environmentWizard` store: pick a service frame, review (detect via
 > `infraConfig.detectProvisioning`, opt-in "run deep analysis" that fires `pl_environment_analysis`
-> against the frame — mirroring how bootstrap runs `pl_blueprint` — and reads the draft back off the
+> against the frame (mirroring how bootstrap runs `pl_blueprint`) and reads the draft back off the
 > `environment-analyst` step's `result.custom`, merged with detector-wins provenance via
 > `mergeAnalystRecipeDraft`; per-field provenance chips; compose-file / profile / seed-dump candidate
 > pickers; a raw-recipe JSON editor), preflight (runs the recipe's `prerequisites` via the
@@ -520,7 +520,7 @@ repo but nothing is configured. All copy through i18n with locale parity from da
 > `execution.instances` directly. Every affordance carries an `env-setup-*` `data-testid`.
 > **Deferred (the one remaining slice-7 item): the `data-testid`-only e2e spec.** The wizard's
 > analyst merge needs a real detection `ProvisioningRecommendation`, and detection is GitHub-backed
-> (`ProvisioningRepoReader`), which the e2e backend deliberately leaves OFF — so a meaningful
+> (`ProvisioningRepoReader`), which the e2e backend deliberately leaves OFF, so a meaningful
 > detect/review (analyst via the `customResult` fake, already wired)/save spec first needs a new
 > `buildNodeContainer` override seam that wires a fake `ProvisioningRepoReader` returning a canned
 > compose recommendation, plus a seeded `github_repos`/service row so the frame's repo context
@@ -537,7 +537,7 @@ repo but nothing is configured. All copy through i18n with locale parity from da
 ### 8. Tester integration
 
 Recipe-provisioned environments surface through the existing `environment: 'ephemeral'` + URL
-path (`testerInfraSpec` in `backend/packages/server/src/agents/prompts.ts`) — no tester-side
+path (`testerInfraSpec` in `backend/packages/server/src/agents/prompts.ts`), no tester-side
 changes needed beyond what `tester-environment-access.md` already tracks. Acme's seeded
 login users belong in that initiative's **Slice B credential pools** (explicitly non-secret
 test data); this tracker takes a dependency on it rather than duplicating it.
@@ -572,9 +572,9 @@ with remediation instructions.
 | Test login users (register + Mailpit confirm)                       | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
 
 **Honesty note:** a full acme-monolith environment requires the five **M** rows done once per
-machine (and the ECR login refreshed ~8-hourly — the preflight makes the stale-token case a
+machine (and the ECR login refreshed ~8-hourly: the preflight makes the stale-token case a
 clear actionable failure). After that, re-provisions are unattended. The **public-image subset**
-of shared-services + a synthetic consumer runs with zero M/C rows — that is the CI-validated
+of shared-services + a synthetic consumer runs with zero M/C rows: that is the CI-validated
 configuration (see validation plan).
 
 ## Per-slice checklist
@@ -586,12 +586,12 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------ |
 | 0   | Tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | done                       | (this) |
 | 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | done                       | (this) |
-| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests                                                                                                                                                                                                                                                                                                                                                                                                                                                  | done                       | (this) |
+| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint; + fixture-driven unit tests                                                                                                                                                                                                                                                                                                                                                                                                                                                  | done                       | (this) |
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot)                                                                                                                                                                                                                                                                                                                                                                                                                                         | done                       | (this) |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | done                       | (this) |
 | 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | done                       | (this) |
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | done                       | (this) |
-| 7   | **Wizard**: detect → review → preflight → trial → save flow + inspector nudge + i18n (all locales) + `data-testid`s — **incl. the analyst draft-merge (deterministic-wins + provenance) + "run deep analysis" trigger deferred from slice 8**. _Part 1 done_: the pure `mergeAnalystRecipeDraft` draft-merge core (`@cat-factory/contracts`) + unit tests. _Part 2 done_: `EnvironmentSetupWizard.vue` + store wiring + SideBar/inspector entry points + i18n (8 locales). Only the `data-testid`-only e2e spec deferred (needs a fake `ProvisioningRepoReader` e2e seam — GitHub is off in e2e). | in progress (e2e deferred) | (this) |
+| 7   | **Wizard**: detect → review → preflight → trial → save flow + inspector nudge + i18n (all locales) + `data-testid`s; **incl. the analyst draft-merge (deterministic-wins + provenance) + "run deep analysis" trigger deferred from slice 8**. _Part 1 done_: the pure `mergeAnalystRecipeDraft` draft-merge core (`@cat-factory/contracts`) + unit tests. _Part 2 done_: `EnvironmentSetupWizard.vue` + store wiring + SideBar/inspector entry points + i18n (8 locales). Only the `data-testid`-only e2e spec deferred (needs a fake `ProvisioningRepoReader` e2e seam: GitHub is off in e2e). | in progress (e2e deferred) | (this) |
 | 8   | **Environment analyst**: agent kind (structured draft recipe on `result.custom`) + `AnalystRecipeDraft` contract + seeded `pl_environment_analysis` pipeline (draft-merge moved to slice 7)                                                                                                                                                                                                                                                                                                                                                                                                       | done                       | (this) |
 | 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, drift alarm, pilot docs. _Landed_: sanitized `__fixtures__/pilot/` snapshot of both repos (byte-for-byte reproduces the live detection), the two `*.detect.golden.json` goldens, `reference/{consumer-recipe,shared-stack}.json`, `pilot-golden.logic.test.ts`, and `scripts/pilot-detect-golden.mjs` (externalized-sanitizer drift alarm vs live clones). Live compose-up smoke is slice 10.                                                                                 | done                       | (this) |
 | 11  | **Programmatic config surface**: compose layers as `ComposeSource`s (inline document / another repo / in-repo path) on BOTH the recipe and the shared stack, a repo-less stack (nullable `clone_url`, D1 rebuild ⇄ Drizzle + conformance), and `seedSharedStacks` on `startNode`/`startLocal` (kernel `SharedStackSeeder` + boot backfill + the `WorkspaceService.create` hook)                                                                                                                                                                                                                   | done                       | (this) |
@@ -607,19 +607,19 @@ platform clones. Two shapes were unexpressible, and both matter for a deployment
 infra dependencies to live in code review rather than in a form:
 
 1. **A compose layer that is not a path in the repo being provisioned.** `ComposeEnvironmentConfig`
-   had `composeRepo`/`composeRef` for the SIMPLE single-file path only — a layered recipe read every
+   had `composeRepo`/`composeRef` for the SIMPLE single-file path only: a layered recipe read every
    `-f` from one repo, and a shared stack read every `-f` from its own clone.
-2. **A stack with no repo at all** — the shape you get when the compose document IS the declaration.
+2. **A stack with no repo at all**: the shape you get when the compose document IS the declaration.
 
-> **Landed (slice 11)** — a compose layer is now a {@link ComposeFileRef}: a bare in-repo path (the
+> **Landed (slice 11)**: a compose layer is now a {@link ComposeFileRef}: a bare in-repo path (the
 > shorthand the deterministic detector emits and the panel authors) or an explicit `ComposeSource`
-> — `{ kind: 'inline', content, path? }` or `{ kind: 'repo', repo, path, ref?, provider? }`. It
+>; `{ kind: 'inline', content, path? }` or `{ kind: 'repo', repo, path, ref?, provider? }`. It
 > rides `stackRecipeSchema.composeFiles` AND `sharedStackSchema.composeFiles`, so the recipe path
 > and the shared-stack path gained the capability together.
 >
 > - **Placement is PURE and shared** (kernel `domain/compose-sources.ts`, shape helpers in
 >   contracts' `compose-sources.ts` because the SPA needs them too): the compose PROJECT DIRECTORY
->   is the first **`path`** layer's dir — never the first layer of any kind, or prepending an
+>   is the first **`path`** layer's dir, never the first layer of any kind, or prepending an
 >   inline layer would silently move the anchor every in-repo layer's relative build contexts /
 >   binds / `env_file`s resolve against. The host-escape `baseDepth` derives from that same
 >   directory, so a layer list with no in-repo layer gets the STRICTEST depth (0) rather than
@@ -629,7 +629,7 @@ infra dependencies to live in code review rather than in a form:
 > - **A layer that NAMES where it lands is host-escape guarded, on both paths.** A generated path
 >   is escape-free by construction, but an `inline` layer may carry its own `path`, and that string
 >   becomes the `relPath` of a `writeCheckoutFile` whose runtime implementation is a bare
->   `join(checkoutDir, relPath)` — so an unguarded `../` is an arbitrary host-file WRITE with
+>   `join(checkoutDir, relPath)`, so an unguarded `../` is an arbitrary host-file WRITE with
 >   caller-chosen content, a strictly worse primitive than the read-shaped escapes the recipe guard
 >   already refused. ONE rule (`composeSourceEscapeIssues`) is called from three places: the
 >   recipe's pre-daemon `recipeCheckoutPathIssues`, `planComposeLayers` (so the shared-stack
@@ -645,15 +645,15 @@ infra dependencies to live in code review rather than in a form:
 > - **`SharedStack.cloneUrl` is NULLABLE** (D1 `0070` table rebuild ⇄ a generated Drizzle
 >   migration, both asserted by `defineSharedStackSuite`). A repo-less bring-up materializes an
 >   EMPTY working tree through the new `ComposeRuntime.workingDir` seam instead of cloning. What
->   forces a clone URL is reading a COMMITTED file — a `path` layer, an `envFiles` template, or a
->   `copy-file` / `stdinFile` step (`composeBringUpNeedsRepo`) — and that is refused at the WRITE
+>   forces a clone URL is reading a COMMITTED file: a `path` layer, an `envFiles` template, or a
+>   `copy-file` / `stdinFile` step (`composeBringUpNeedsRepo`), and that is refused at the WRITE
 >   boundary (`details.reason: 'clone_url_required'`) on the MERGED entity, not only at bring-up.
 >   The bring-up's runtime-capability gate keys off that SAME predicate, so it demands `checkout`
 >   of the committed-file shape and `workingDir` of the repo-less one, rather than a fixed set that
 >   would refuse whichever shape it wasn't written for.
 > - **`seedSharedStacks`** on `startNode`/`startLocal` (and `NodeContainerOptions`) is the
 >   programmatic surface, a direct copy of `seedEnvironmentHandlers`: kernel `SharedStackSeeder`,
->   `createSharedStackSeeder`, the `WorkspaceService.create` hook, and the boot backfill — which
+>   `createSharedStackSeeder`, the `WorkspaceService.create` hook, and the boot backfill, which
 >   generalized from `backfillEnvironmentHandlerSeeds` to `backfillDeclaredSeeds` and now runs both
 >   seeders over ONE workspace enumeration. Seeds are idempotent by NAME, so a stack an operator has
 >   since edited is never overwritten from config: a seed says "this board should have a stack called
@@ -661,11 +661,11 @@ infra dependencies to live in code review rather than in a form:
 >
 > **Gotchas for later slices:** (1) the SPA panel authors bare paths only; a stack carrying richer
 > layers renders them read-only and its save OMITS `composeFiles` entirely, so editing the name can
-> never flatten a declaration the form has no editor for — a richer layer editor is the follow-up.
+> never flatten a declaration the form has no editor for: a richer layer editor is the follow-up.
 > (2) A foreign/inline layer's own relative references still resolve against the PRIMARY checkout
 > (that is what `--project-directory` means), so those layers should pull images and wire networks;
 > a layer that builds from source belongs in the repo whose source it builds. (3) The Worker facade
-> does NOT wire `seedSharedStacks` — matching `seedEnvironmentHandlers`, which is node/local-only
+> does NOT wire `seedSharedStacks`: matching `seedEnvironmentHandlers`, which is node/local-only
 > because the option is a code-level declaration a deploy-app wrapper passes at boot; the
 > persistence and the seeder itself are runtime-neutral, so wiring it there is a pure addition.
 
@@ -674,7 +674,7 @@ infra dependencies to live in code review rather than in a form:
 The **deployer-single-provisioner** initiative made the `deployer` step the SINGLE environment
 provisioner and injects one before the first tester / human-test / playwright in every built-in
 pipeline (so consumers depend on a pre-provisioned env rather than standing infra up themselves).
-That path now provisions `docker-compose` **through the Deployer's `startProvision`** — i.e. this
+That path now provisions `docker-compose` **through the Deployer's `startProvision`**, i.e. this
 initiative's compose provider (recipe execution + `sharedStackRefs` ensure-first + preflights) runs
 inside the Deployer step, and the Tester targets the resulting env (`testerInfraSpec` already
 prefers a provisioned `envUrl` for any type).
@@ -703,14 +703,14 @@ Deployer-side gate this pairs with.
 
 ## Pilot fixtures & golden detection (slice 9)
 
-> **Landed (slice 9)** — the pilot's reference configs, fixtures, and golden detection, realizing
+> **Landed (slice 9)**: the pilot's reference configs, fixtures, and golden detection, realizing
 > validation-plan items #1 (fixture-driven detection) and #5 (golden detection run + upstream-drift
 > alarm). All under `backend/packages/integrations/src/modules/environments/__fixtures__/pilot/`
-> (+ the drift script under `.../integrations/scripts/`), and **fully sanitized** — nothing names any
+> (+ the drift script under `.../integrations/scripts/`), and **fully sanitized**: nothing names any
 > real upstream repo/product/host/registry/secret; everything uses the tracker's `acme-*` placeholders.
 >
-> - **Fixtures** — a faithful, REDUCED, sanitized snapshot of the two acceptance repos' provisioning
->   surface: `consumer-main/` (the complex monolith — `docker/dev.yml` with all 28 services in real
+> - **Fixtures**: a faithful, REDUCED, sanitized snapshot of the two acceptance repos' provisioning
+>   surface: `consumer-main/` (the complex monolith; `docker/dev.yml` with all 28 services in real
 >   declaration order, the `dev.{mac,wsl}.override.yml` OS overrides, the external `acme-net`, the
 >   `blackfire`/`datadog`/`otel` profiles, the `acme-monolith-nginx` `build:`, the `deployment/acme-db-dummy/*.sql`
 >   seed dumps, the `bin/dev-console` repo CLI + a `Makefile`, and a root `catalog-info.yaml`) and
@@ -720,47 +720,47 @@ Deployer-side gate this pairs with.
 >   ports, volumes, and healthchecks are omitted (the detector ignores them and it keeps upstream detail
 >   - secrets out of the tree). The fixtures reproduce the sanitized LIVE detection **byte-for-byte**
 >     (verified via the drift script against the live clones + an `<upstream>`→`acme` sanitize map).
-> - **Goldens** — `consumer-main.detect.golden.json` (the full `docker-compose`
+> - **Goldens**: `consumer-main.detect.golden.json` (the full `docker-compose`
 >   `ProvisioningRecommendation`) and `shared-services.detect.golden.json` (the full
 >   `SharedStackRecommendation`), generated from the fixtures by the detector itself (consistent by
 >   construction).
-> - **Reference configs** — `reference/consumer-recipe.json` (the hand-authored target `StackRecipe`:
+> - **Reference configs**: `reference/consumer-recipe.json` (the hand-authored target `StackRecipe`:
 >   the A-rows of the mapping table as ordered `setupSteps` [composer install → seed import → cache
 >   > warmup → migrations → search-index build → frontend build-file gate] + a `compose-exec` health gate
 >   - the M-rows as `prerequisites` preflights [docker-daemon / memory ≥16 / registry-auth / mkcert-ca /
 >     > hosts-entries / env-secrets-marker] with copy-paste remediation) and `reference/shared-stack.json`
->     > (the target `CreateSharedStackInput`: the PUBLIC `backends`-only subset — the CI-validatable config —
+>     > (the target `CreateSharedStackInput`: the PUBLIC `backends`-only subset (the CI-validatable config)
 >     > with `acme-net` as a managed network, the `.env.shared` materialization, users-sync + Debezium-register
 >     > setup steps, and the private-registry preflight marked NON-required so the public subset still comes up).
-> - **Golden test** — `pilot-golden.logic.test.ts` reads each fixture dir over a filesystem
+> - **Golden test**: `pilot-golden.logic.test.ts` reads each fixture dir over a filesystem
 >   `ProvisioningRepoReader` (the same port the GitHub/GitLab reader implements) and asserts detector
 >   output `toEqual` the golden, PLUS that the `reference/` configs are schema-valid (`stackRecipeSchema`
 >   / `createSharedStackSchema`) and wired together (the consumer's `sharedStackRefs` names the shared
 >   stack; its seed step's `stdinFile` exists in the fixture; the shared stack owns the network the
->   consumer attaches to). Runs everywhere via `pnpm test:run` (incl. Windows) — no clone / network /
+>   consumer attaches to). Runs everywhere via `pnpm test:run` (incl. Windows), no clone / network /
 >   Docker. `valibot` was added as an integrations devDependency (test-only, `^1.4.2` to match the
 >   workspace) for the schema-validity checks.
-> - **Drift alarm** — `scripts/pilot-detect-golden.mjs` (`pnpm --filter @cat-factory/integrations
+> - **Drift alarm**: `scripts/pilot-detect-golden.mjs` (`pnpm --filter @cat-factory/integrations
 pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens against the fixtures
 >   OR live clones (`ACME_MONOLITH_DIR` / `ACME_SHARED_SERVICES_DIR`). Sanitization for the live path is
->   EXTERNALIZED — a `{from,to}` map via `PILOT_SANITIZE_MAP` or a gitignored
->   `scripts/pilot-sanitize.local.json` — so no upstream name is ever committed. It imports the compiled
+>   EXTERNALIZED (a `{from,to}` map via `PILOT_SANITIZE_MAP` or a gitignored
+>   `scripts/pilot-sanitize.local.json`) so no upstream name is ever committed. It imports the compiled
 >   detector, so it needs a build first.
 >
 > **Gotchas / faithful artifacts (documented, not fought):** (1) the consumer's root `catalog-info.yaml`
 > parses as a `kind`+`apiVersion` doc, so the detector counts the repo root as a raw-manifest location and
-> the compose recommendation carries a low-confidence "Kubernetes manifests also exist" note — an
+> the compose recommendation carries a low-confidence "Kubernetes manifests also exist" note: an
 > incidental artifact of the real repo shape, reproduced on purpose (the golden flags it if the detector
 > ever changes). (2) The real consumer's env templates live under `services/app/` (outside the compose
-> dir) — the detector now scans the compose dir + root config dirs AND one level into the monorepo
+> dir): the detector now scans the compose dir + root config dirs AND one level into the monorepo
 > container dirs (`services/*`, `apps/*`, `packages/*`), so those templates ARE detected: the consumer
 > golden carries `recipe.envFiles` for `services/app/.env.dev.local-dist` + `.split.yaml.dist` (see the
 > "universality follow-up" note below). A template nested deeper than one level, or under a non-standard
 > container dir, still needs `ENVIRONMENTS_DETECTION_CONVENTIONS.envTemplateDirs` or the analyst. (3) No
-> persistence / migration work — everything rides the existing `provisioning` blob + the fixtures; this
-> slice is test/fixtures/docs/script-only (a patch changeset — no `dist` change, but the published
+> persistence / migration work: everything rides the existing `provisioning` blob + the fixtures; this
+> slice is test/fixtures/docs/script-only (a patch changeset, no `dist` change, but the published
 > `package.json` gains the `pilot:golden` script). (4) The repo-root `.gitignore` excludes
-> `.env.*` (keeping only `.env.example`), which would silently drop the `.env.shared.example` fixture — a
+> `.env.*` (keeping only `.env.example`), which would silently drop the `.env.shared.example` fixture: a
 > nested `__fixtures__/pilot/.gitignore` re-includes it (verified with `git check-ignore`). (5) Slice 10
 > (the live compose-up smoke of the shared-services public subset + a synthetic consumer) still needs a
 > Linux/WSL Docker host and stays TODO.
@@ -770,16 +770,16 @@ pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens
 The deterministic detector is already service-name- and tech-stack-agnostic (it keys on compose/k8s
 STRUCTURE, never on any `acme` name), but it was CONVENTION-bound (fixed file-name/dir lists) and
 shallow (root-scoped env-template scan). Three changes broaden it so a differently-shaped
-repo — different paths, different stack — is picked up without editing the detector. They are additive
-in that detection can only ever surface MORE — it never removes or changes an existing detection.
+repo (different paths, different stack) is picked up without editing the detector. They are additive
+in that detection can only ever surface MORE: it never removes or changes an existing detection.
 Two of the three (injectable conventions, the wizard nudge) leave a default-shaped repo resolving
 exactly as before; the third (item 2 below) is on by default, so a monorepo that keeps per-service
 env templates under `services/*`/`apps/*`/`packages/*` will now surface them as low-confidence,
 user-confirmed `recipe.envFiles` where it previously surfaced none.
 
 1. **Injectable detection conventions (deployment config).** `DetectionConventions`
-   (`provision-detect.logic.ts`) extends the built-in file-name/dir lists — `composeFiles` /
-   `composeDirs` / `seedDirs` / `envTemplateDirs` — and is threaded, additively (built-ins always win,
+   (`provision-detect.logic.ts`) extends the built-in file-name/dir lists (`composeFiles` /
+   `composeDirs` / `seedDirs` / `envTemplateDirs`) and is threaded, additively (built-ins always win,
    canonical compose names stay highest-priority), through both detectors. Sourced from the deployment
    config `environments.detectionConventions` (`AppConfig`), parsed from the `ENVIRONMENTS_DETECTION_CONVENTIONS`
    JSON env var by BOTH facades and carried on `CoreDependencies.detectionConventions` into the
@@ -789,11 +789,11 @@ user-confirmed `recipe.envFiles` where it previously surfaced none.
 2. **Env-template scan goes one level into monorepo container dirs** (`services/*`, `apps/*`,
    `packages/*`), closing the pilot's documented `services/app/` gap (see gotcha #2). Bounded by the same
    `READ_BUDGET` + `MAX_ENV_FILES`; root/compose-dir templates still win the dedup.
-3. **The wizard makes the analyst nudge prominent when a `repoCliHint` is detected** — a repo that ships
+3. **The wizard makes the analyst nudge prominent when a `repoCliHint` is detected**: a repo that ships
    its own imperative bring-up (a `bin/*console*` / Makefile / justfile the deterministic scan can't
    read) now surfaces a highlighted "run deep analysis" prompt in the review step, so the imperative
    steps (which are stack-specific and never deterministically derived for anyone) get translated by the
-   LLM analyst — the intended universality mechanism for the parts a structural scan can't see.
+   LLM analyst: the intended universality mechanism for the parts a structural scan can't see.
 
 ## Validation plan (no human testing)
 
@@ -802,9 +802,9 @@ and `C:\sources\acme-shared-services`; git-cloneable in CI-adjacent environments
 deploy key). The layers, cheapest first:
 
 1. **Fixture-driven detection unit tests** (slice 2, runs everywhere incl. Windows via
-   `pnpm test:run` in `backend/packages/integrations`): copy sanitized real files —
+   `pnpm test:run` in `backend/packages/integrations`): copy sanitized real files;
    `docker/dev.yml`, `dev.wsl.override.yml`/`dev.mac.override.yml`, shared-services
-   `docker-compose.yml`, `.env.dev.local-dist`, `.split.yaml.dist` — into test fixtures; assert
+   `docker-compose.yml`, `.env.dev.local-dist`, `.split.yaml.dist`; into test fixtures; assert
    the exact recommended `composeFiles` ordering, `externalNetworks: ['acme-net']`,
    profiles, envFiles pairs, seed-dump candidates, and the repo-CLI hint.
 2. **Recipe-engine unit tests** (slice 3): fake `ComposeRuntime`/command runner; assert step
@@ -815,12 +815,12 @@ deploy key). The layers, cheapest first:
    runtime (ensureUp idempotence, concurrent-coalesce, teardown-is-explicit); config
    round-trips on both facades in `@cat-factory/conformance`.
 4. **Preflight simulation tests** (slice 6): fake probe states drive every verdict +
-   remediation rendering — including the "ECR token expired", "VPN down", "secrets block
-   missing" paths — so the manual-gate UX is fully tested without any real VPN/SSO.
+   remediation rendering (including the "ECR token expired", "VPN down", "secrets block
+   missing" paths) so the manual-gate UX is fully tested without any real VPN/SSO.
 5. **Golden detection run against the live clones** (slices 9–10): a checked-in script points
    the detector's `ProvisioningRepoReader` at real checkouts (paths via env vars) and diffs the
    full recommendation against committed goldens. Doubles as an upstream-drift alarm (e.g.
-   shared-services' README already drifted from its compose file — goldens track the compose
+   shared-services' README already drifted from its compose file: goldens track the compose
    truth).
 6. **Automated end-to-end smoke** (slice 10, Linux/WSL host with Docker): bring up the
    shared-services **public-image subset** (mysql, postgres, valkey, rabbitmq, mailpit, kafka,
@@ -829,11 +829,11 @@ deploy key). The layers, cheapest first:
    compose file attaching to `acme-net`, one seed step, one `wait-http` health gate);
    assert health-gate pass, then environment teardown **leaves the shared stack running**;
    finally explicit stack teardown. Runs as a scriptable harness (local `pnpm` script first;
-   CI job once stable — same trust-earning path as the e2e suite).
-7. **Wizard e2e spec** (slice 7, Playwright suite conventions — `data-testid` only, seeded
+   CI job once stable: same trust-earning path as the e2e suite).
+7. **Wizard e2e spec** (slice 7, Playwright suite conventions: `data-testid` only, seeded
    workspace, live-push assertions): detect → review → save against a fixture repo with the
    fake executor; analyst path mocked at the backend boundary.
-8. **Full acme-monolith bring-up is explicitly NOT CI-validated** — it requires VPN + Vault +
+8. **Full acme-monolith bring-up is explicitly NOT CI-validated**: it requires VPN + Vault +
    ECR. It is validated _indirectly_: every A-row of the mapping table has a unit/smoke test
    equivalent, every M-row has a preflight simulation test, and the golden detection run pins
    the real repo's shape. A human running the pilot once per machine is a product milestone,
@@ -844,40 +844,40 @@ deploy key). The layers, cheapest first:
 - **All compose safety lines from `compose-build-from-source.md` still apply**: host-escape
   checks on every path-bearing reference (now including `envFiles` targets and recipe file
   args), `include:`/cross-file `extends` refused (multi-`-f` layering is the sanctioned
-  alternative — acme needs no `include:`), `privileged` refused, private base-image auth
+  alternative; acme needs no `include:`), `privileged` refused, private base-image auth
   stays check-only.
-- **`host-command` is the only trust boundary widening** — it must stay behind its own opt-in
+- **`host-command` is the only trust boundary widening**: it must stay behind its own opt-in
   flag, local-facade-only, and be visibly labeled in the wizard. Everything else runs inside
   the compose project's containers.
-- **Recipes must not assume the repo's own CLI is runnable on the orchestrator host** —
+- **Recipes must not assume the repo's own CLI is runnable on the orchestrator host**:
   acme's `bin/dev-console` and `bin/shared-services` both refuse Git-Bash/msys and expect
   Linux/WSL. The engine executes compose/steps itself; the analyst _translates_ a repo CLI into
   recipe steps rather than shelling out to it (that's what `host-command` + S3 are for if ever
   truly needed).
-- **Trust compose files, not READMEs** — shared-services' README service table is already
+- **Trust compose files, not READMEs**: shared-services' README service table is already
   stale vs its compose file (postgres version, fauxqs tag, missing ProxySQL). Detection and
   goldens key on compose content; the analyst must cite file paths, not prose claims.
 - **Long-lived ≠ leak-proof**: SharedStacks are deliberately excluded from the run-scoped
-  teardown/TTL sweeps — make that exclusion explicit in the sweeper code + tests, or a future
+  teardown/TTL sweeps; make that exclusion explicit in the sweeper code + tests, or a future
   "cleanup" change will helpfully reap them.
-- **Non-TTY defaults matter** — every step the engine runs must behave with no TTY (acme's
+- **Non-TTY defaults matter**: every step the engine runs must behave with no TTY (acme's
   own scripts hard-fail or default in places); never depend on interactive prompts.
 - **Local-facade-only runtime binding is the documented exception** to runtime symmetry
   (compose already is); the _persistence + contracts_ for recipes/stacks/preflights are still
   fully symmetric and conformance-asserted.
-- **Timeouts are per-step budgets**, never one shared pool — a 5-minute cache warmup or a
+- **Timeouts are per-step budgets**, never one shared pool: a 5-minute cache warmup or a
   40-image ECR pull must not starve `up --wait` (the `BUILD_TIMEOUT_MS` precedent).
 
 ## Out of scope
 
-- Automating VPN enrollment, Google-SSO Vault login, or AWS SSO — permanently manual, guided
+- Automating VPN enrollment, Google-SSO Vault login, or AWS SSO: permanently manual, guided
   by preflights. Storing registry/Vault credentials in cat-factory (S2 revisits modeling, not
   storage).
 - Running this class of stack on the Cloudflare Worker or plain-Node facades (no host daemon).
-- Replacing acme's `dev-console` for its human developers — cat-factory consumes the same
+- Replacing acme's `dev-console` for its human developers: cat-factory consumes the same
   repos but drives its own engine.
 - Kargo preenv integration (shared-services' `deployment/docker-compose.kargo.yml` is a useful
   reference shape only).
-- Envoy vhost / `users.d` / Debezium _authoring_ for new consumers — the pilot uses the
+- Envoy vhost / `users.d` / Debezium _authoring_ for new consumers: the pilot uses the
   conventions acme repos already contain; generating those files is a possible future
   analyst skill, not this initiative.

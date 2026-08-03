@@ -1,4 +1,4 @@
-# `@cat-factory/spend` — the spend safeguard
+# `@cat-factory/spend`: the spend safeguard
 
 Pricing tables + spend metering/gating.
 

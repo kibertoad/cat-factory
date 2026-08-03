@@ -13,8 +13,8 @@ Root cause, confirmed against the source:
 
 - The service frame `simpler-service3` declares `provisioning.type: "kubernetes"` (kustomize
   overlay `deployment/k8s/overlays/prenv`, ECR images tagged `{{branch}}`).
-- The tester's **run mode** is chosen purely from `provisioning.type` — `kubernetes`/`custom`
-  ⇒ `ephemeral` — in `testerInfraSpec` / `testerEnvironmentSection`
+- The tester's **run mode** is chosen purely from `provisioning.type` (`kubernetes`/`custom`
+  ⇒ `ephemeral`) in `testerInfraSpec` / `testerEnvironmentSection`
   (`packages/server/src/agents/prompts.ts:461-504`, `packages/agents/src/agents/prompts/testing.ts:184-196`).
   In ephemeral mode the tester **must not** stand the app up itself.
 - The tester's **coordinates** (the "Ephemeral environment under test" URL/creds block,
@@ -31,18 +31,18 @@ Root cause, confirmed against the source:
 
 So: a `kubernetes`/`custom` service run through a **deployer-less** pipeline is a guaranteed
 dead-end at the tester. Fixing that is workstream **A**. The user also asked about environment
-**destruction** — after TTL, on deployer re-run, on pipeline completion, and via an explicit
-**`disposer`** step for user-controlled timing. Those are workstreams **B–E**.
+**destruction**: after TTL, on deployer re-run, on pipeline completion, and via an explicit
+**`disposer`** step for user-controlled timing. Those are workstreams **B-E**.
 
 ## 1. Goals / non-goals
 
 **Goals**
 
 1. A `kubernetes`/`custom` service tested (or human-tested) by a built-in pipeline gets an
-   ephemeral environment provisioned **before** the tester runs — or fails fast with an
+   ephemeral environment provisioned **before** the tester runs, or fails fast with an
    actionable error instead of dead-ending inside the tester.
 2. Environments are **destroyed reliably**: on deployer re-run/supersede, on TTL expiry (already
-   partially works), and — optionally, under user control — at a chosen point in the pipeline via
+   partially works), and, optionally under user control, at a chosen point in the pipeline via
    a new **`disposer`** step.
 3. Injecting `deployer` into shared built-in pipelines is **safe for `docker-compose`/`infraless`
    services** (no behavior change for them).
@@ -52,8 +52,8 @@ dead-end at the tester. Fixing that is workstream **A**. The user also asked abo
 - Making local k3s actually serve PREnvs (ingress controller, host `:80/:443` mapping, local
   image builds). That's local-environment setup, out of scope here; the wrapper repo's local mode
   should prefer `docker-compose`/`infraless` frames. This plan targets the upstream engine.
-- The Kargo adapter itself (separate repo, blocked on a kernel release — see `docs/env-lifecycle.md`).
-- Cyclic env dependencies (provider needing its consumer's URL) — explicitly out of scope upstream.
+- The Kargo adapter itself (separate repo, blocked on a kernel release; see `docs/env-lifecycle.md`).
+- Cyclic env dependencies (provider needing its consumer's URL) are explicitly out of scope upstream.
 
 ## 2. Current state (grounded in the source)
 
@@ -70,8 +70,8 @@ dead-end at the tester. Fixing that is workstream **A**. The user also asked abo
   wired the step is a harmless generic pass-through.**
 - **`EnvironmentProvider.teardown` exists** (`kernel/src/ports/environment-provider.ts:367`) and is
   implemented idempotently by every concrete provider: Kubernetes (namespace DELETE, 404/409
-  tolerant), Compose (`safeDown` + `cleanupProject`), HTTP (runs the manifest `teardown:` template
-  — **no-op if the manifest omits it**), EKS. `ProvisionedEnvironment.expiresAt` (`:179`) lets a
+  tolerant), Compose (`safeDown` + `cleanupProject`), HTTP (runs the manifest `teardown:` template;
+  **no-op if the manifest omits it**), EKS. `ProvisionedEnvironment.expiresAt` (`:179`) lets a
   provider return a TTL.
 - **`EnvironmentTeardownService`** (`packages/integrations/src/modules/environments/EnvironmentTeardownService.ts`):
   `teardown(ws,id)` (one env + tombstone) and `sweepExpired(now)` (TTL sweep, best-effort,
@@ -100,17 +100,17 @@ dead-end at the tester. Fixing that is workstream **A**. The user also asked abo
 
 ## 3. Design
 
-### Workstream A — `deployer` in every tester/human-test pipeline (fixes G1, G4)
+### Workstream A: `deployer` in every tester/human-test pipeline (fixes G1, G4)
 
-**A1. Make the deployer type-aware (prerequisite — do this first).**
+**A1. Make the deployer type-aware (prerequisite; do this first).**
 Today `advanceDeployerFrames` skips only `infraless` and provisions everything else, _including
 `docker-compose`_. If we inject `deployer` into shared pipelines as-is, a `docker-compose` service
 would get a provisioned compose env, whose URL then flips the tester from **local** mode (stand
-compose up _in-container_, the current behavior) to **ephemeral** — an unintended behavior change.
+compose up _in-container_, the current behavior) to **ephemeral**, an unintended behavior change.
 
 → Extend the skip in `advanceDeployerFrames` (`RunDispatcher.ts:1439`) so the deployer **acts only
 for `kubernetes` and `custom`**, and records `{status:'skipped'}` for `docker-compose` **and**
-`infraless`. Net effect: the deployer becomes a **no-harm prefix** — it provisions exactly the
+`infraless`. Net effect: the deployer becomes a **no-harm prefix**. It provisions exactly the
 types that need an externally-reachable env, and is a fast no-op for the types whose tester
 self-provisions locally. This makes uniform injection into all 12 pipelines safe.
 
@@ -127,17 +127,17 @@ placed **after `mocker`** (where present) and **before the first `tester-*` / `h
 
 - **Parallel-array alignment:** `pl_full` (`gates`@194,`enabled`@215), `pl_fullstack`
   (`gates`@292,`enabled`@316), `pl_bug_triage` (`gates`@547) hand-author these index-aligned
-  arrays — insert a matching element (`gate=false`, `enabled=true`) at the deployer's index. The
+  arrays: insert a matching element (`gate=false`, `enabled=true`) at the deployer's index. The
   other 9 have no such arrays → plain element insert.
 - **Bump each touched built-in's `version`** (default is 1; e.g. `pl_full`→`version:2`) so
   persisted workspace copies get the reseed offer (convention at `seed.ts:658-660`; precedent
   `pl_initiative` `version:2`, `pl_document` `version:3`).
 - **Frontend:** add `SYSTEM_AGENT_META['deployer']` in `frontend/app/app/utils/catalog.ts:333`
-  (label/icon/color/description) — otherwise it renders as a generic gray "Agent".
+  (label/icon/color/description); otherwise it renders as a generic gray "Agent".
 
 **A3. Run-start guard (defense-in-depth, the actionable-error fix for G4).**
 Because the deployer self-skips compose/infraless (A1), the deployer is normally always present;
-but users can build custom pipelines or disable the step. Add a **dynamic per-run check** — the
+but users can build custom pipelines or disable the step. Add a **dynamic per-run check**: the
 static `pipelineShape.ts` validator can't see the service type, so a purely-static rule would
 over-constrain compose/infraless. Model it on the existing capability gate
 `PipelineService.assertObservabilityGatedStepAllowed` (`PipelineService.ts:82-97`), evaluated at
@@ -153,7 +153,7 @@ This turns today's silent dead-end-inside-the-tester into a fail-fast at launch.
 the **stale-env footgun**: a kubernetes service can no longer run a deployer-less pipeline and pick
 up a prior run's registry row.
 
-### Workstream B — tear down on deployer re-run / supersede (fixes G2, G5)
+### Workstream B: tear down on deployer re-run / supersede (fixes G2, G5)
 
 **B1. Teardown-on-supersede with identity comparison.** In the supersede path
 (`supersedePriorEnvironment`, reached from `recordProvisioned` and the `infraless` flip), before
@@ -164,7 +164,7 @@ soft-deleting the prior live row, compare the **provider identity** of old vs ne
   tombstone-only behavior (tearing down then re-applying the same namespace would churn/race).
 - **Different identity** (config changed → different namespace, or provider/type changed, or the
   `infraless` flip where nothing replaces it) → enqueue the superseded row to
-  `EnvironmentTeardownService.teardown` (**best-effort, async, non-blocking** — a teardown failure
+  `EnvironmentTeardownService.teardown` (**best-effort, async, non-blocking**: a teardown failure
   must not fail the new provision; the TTL reaper remains the backstop).
 
 This is the single highest-value disposal fix: it stops orphaning namespaces/projects/PREnvs on
@@ -177,10 +177,10 @@ resolution `startProvision` uses), not the legacy workspace-wide `resolveProvide
 workspace with multiple per-type handlers tears down through the wrong provider (or fails to
 resolve). Required for B1 and the disposer to be correct.
 
-### Workstream C — the `disposer` operational step (fixes G6; the user's "control" ask)
+### Workstream C: the `disposer` operational step (fixes G6; the user's "control" ask)
 
 A new **non-LLM operational step**, built exactly like `deployer` (no `AgentKindRegistry`/`roles.ts`
-entry). It lets users decide **when** an env is destroyed — e.g. run `tester-api` (automated) →
+entry). It lets users decide **when** an env is destroyed: e.g. run `tester-api` (automated) →
 `human-test` (manual) → **`disposer`** at the very end, so the env survives for manual testing and
 is torn down only after everyone's done.
 
@@ -194,14 +194,14 @@ resolve the run/block's env record(s) for the own frame + involved frames
 (via the per-type provider from B2), then `recordStepResult`. Thread `EnvironmentTeardownService`
 into `RunDispatcherDeps` (it currently lives on `ExecutionService`).
 
-**C3. Failure semantics — best-effort, never fail a shipped PR.** A disposer runs late (often after
+**C3. Failure semantics: best-effort, never fail a shipped PR.** A disposer runs late (often after
 `merger`); a teardown hiccup must **not** flip a merged pipeline to failed. Record a **warning**
 result on teardown failure and let the TTL reaper (D) catch the leftover. (Contrast the deployer,
-whose primary-frame failure is terminal — provisioning is a prerequisite, disposal is cleanup.)
+whose primary-frame failure is terminal: provisioning is a prerequisite, disposal is cleanup.)
 
-**C4. Presentation + classification.** `step-surface.test.ts:21` — add `'disposer'` to the
-"not inline model step" list. `frontend/app/app/utils/catalog.ts` — `SYSTEM_AGENT_META['disposer']`
-(system-meta only; not palette-addable unless we want users dragging it in — recommend
+**C4. Presentation + classification.** `step-surface.test.ts:21`: add `'disposer'` to the
+"not inline model step" list. `frontend/app/app/utils/catalog.ts`: `SYSTEM_AGENT_META['disposer']`
+(system-meta only; not palette-addable unless we want users dragging it in; recommend
 palette-addable with `category:'test'`/an ops category so users can place it themselves, matching
 the "control" ask). Optional `pipelineRender.ts` special case.
 
@@ -226,26 +226,26 @@ a second hidden code path. Revisit (ii) for specific pipelines if users ask for 
 > `asyncTeardown` capability + a `pollDisposerJob` branch mirroring `pollDeployerJob`. Out of scope
 > for the first cut (namespace-delete covers the k8s adapter).
 
-### Workstream D — TTL as the safety net (hardens G3, G7)
+### Workstream D: TTL as the safety net (hardens G3, G7)
 
 The reaper already works; two hardening items make it a reliable backstop under the disposer model:
 
 **D1. Guarantee a TTL is always set.** `resolveExpiry` returns `null` when neither the provider nor
 the manifest supplies one → that env is **never swept**. Apply a **deployment-wide default TTL**
 (config, e.g. `ENVIRONMENT_DEFAULT_TTL_MINUTES`) as the final fallback in `resolveExpiry` so no env
-is immortal. (Kargo already caps `online_until` at +4h — keep the default at or below provider
+is immortal. (Kargo already caps `online_until` at +4h; keep the default at or below provider
 caps; the wrapper's `KARGO_DEFAULT_TTL_MINUTES` is advisory.)
 
 **D2. Local-mothership sweeper.** Document that local-mothership relies on the remote mothership's
 cron (`runtimes/local/src/server.ts:139-144`); standalone local mode gets the Node timer. If
-standalone-local users need TTL enforcement offline, that's already covered — no change. For
+standalone-local users need TTL enforcement offline, that's already covered; no change. For
 mothership, ensure its cron actually calls `sweepExpired` (verify wiring).
 
 **D3. (Optional) Sweep lease.** Add a short claim/lease on a row before `provider.teardown` so a
 concurrent Node-timer + CF-cron (or multi-node) don't double-invoke teardown. Providers are mostly
 idempotent, so this is low priority.
 
-### Workstream E — small correctness cleanups (G8)
+### Workstream E: small correctness cleanups (G8)
 
 Align `StepGraph.resetStepForRerun` (`StepGraph.ts:62-76`) to clear the `deploy*` fields like
 `retry.logic.ts:resetStep` does, so a deployer that ever lands in a companion-rework range
@@ -261,7 +261,7 @@ companion producers); cheap to fix while here.
 - **"Dispose environment after a certain TTL automatically."** → **Already exists** (2-min reaper on
   `expires_at`). Hardening: guarantee a default TTL so nothing is immortal (D1).
 - **"Clean up if the deployer is re-run."** → Workstream B1: this is the top _real_ disposal gap
-  today — supersede only tombstones the DB row. Fix = teardown the superseded env when its provider
+  today; supersede only tombstones the DB row. Fix = teardown the superseded env when its provider
   identity differs from the new one (best-effort; TTL backstop).
 - **"After the entire pipeline has completed, I assume?"** → Recommended **not** as an always-on
   auto-teardown (people often want to inspect a merged env). Instead: explicit **`disposer`** step
@@ -273,14 +273,14 @@ companion producers); cheap to fix while here.
 
 ## 5. Sequencing
 
-1. **Phase 0 — correctness, no UX change:** B2 (provider-by-record) → B1 (teardown-on-supersede) →
+1. **Phase 0 (correctness, no UX change):** B2 (provider-by-record) → B1 (teardown-on-supersede) →
    E (reset alignment). Stops infra leaks immediately.
-2. **Phase 1 — fail-fast:** A3 run-start guard. Turns the dead-end tester into an actionable launch
+2. **Phase 1 (fail-fast):** A3 run-start guard. Turns the dead-end tester into an actionable launch
    error even before pipelines change.
-3. **Phase 2 — provisioning in built-ins:** A1 (type-aware deployer) → A2 (inject into 12 pipelines,
+3. **Phase 2 (provisioning in built-ins):** A1 (type-aware deployer) → A2 (inject into 12 pipelines,
    version bumps, frontend meta). Now kubernetes/custom services actually get an env.
-4. **Phase 3 — explicit disposal:** C (disposer kind, StepHandler, palette + meta).
-5. **Phase 4 — backstop hardening:** D1 default TTL, D2/D3 as needed.
+4. **Phase 3 (explicit disposal):** C (disposer kind, StepHandler, palette + meta).
+5. **Phase 4 (backstop hardening):** D1 default TTL, D2/D3 as needed.
 
 Phases 0–1 are independently shippable and already de-risk the reported failure.
 
@@ -288,31 +288,31 @@ Phases 0–1 are independently shippable and already de-risk the reported failur
 
 **Backend**
 
-- `packages/kernel/src/domain/seed.ts` — inject `deployer` into 12 pipelines; version bumps (A2).
-- `packages/orchestration/src/modules/execution/RunDispatcher.ts` — type-aware skip in
+- `packages/kernel/src/domain/seed.ts`: inject `deployer` into 12 pipelines; version bumps (A2).
+- `packages/orchestration/src/modules/execution/RunDispatcher.ts`: type-aware skip in
   `advanceDeployerFrames` (A1); disposer StepHandler + optional `pollDisposerJob` (C2); thread
   `environmentTeardown` into `RunDispatcherDeps`.
-- `packages/orchestration/src/modules/execution/ExecutionService.ts` — run-start deployer guard
+- `packages/orchestration/src/modules/execution/ExecutionService.ts`: run-start deployer guard
   near `:1394` (A3); wire teardown into the dispatcher.
-- `packages/orchestration/src/modules/pipelines/PipelineService.ts` — (optional) save-time
+- `packages/orchestration/src/modules/pipelines/PipelineService.ts`: (optional) save-time
   `assertDeployerBeforeTester`-style capability check, modeled on `assertObservabilityGatedStepAllowed`.
-- `packages/integrations/src/modules/environments/environments.logic.ts` — `DISPOSER_AGENT_KIND` +
+- `packages/integrations/src/modules/environments/environments.logic.ts`: `DISPOSER_AGENT_KIND` +
   `isDisposeStep` (C1); export in `integrations/src/index.ts`.
-- `packages/integrations/src/modules/environments/EnvironmentProvisioningService.ts` — teardown-on-
+- `packages/integrations/src/modules/environments/EnvironmentProvisioningService.ts`: teardown-on-
   supersede with identity compare (B1); provider-by-record in `refreshStatus` (B2); default-TTL
   fallback in `resolveExpiry` (D1).
-- `packages/integrations/src/modules/environments/EnvironmentTeardownService.ts` — provider-by-record
+- `packages/integrations/src/modules/environments/EnvironmentTeardownService.ts`: provider-by-record
   in `teardownRecord` (B2); optional sweep lease (D3).
-- `packages/agents/src/agents/kinds/step-surface.test.ts` — add `'disposer'` to not-inline list (C4).
-- `packages/orchestration/src/modules/execution/StepGraph.ts` — clear `deploy*` in
+- `packages/agents/src/agents/kinds/step-surface.test.ts`: add `'disposer'` to not-inline list (C4).
+- `packages/orchestration/src/modules/execution/StepGraph.ts`: clear `deploy*` in
   `resetStepForRerun` (E).
 
 **Frontend**
 
-- `frontend/app/app/utils/catalog.ts` — `SYSTEM_AGENT_META['deployer']` (A2) and
+- `frontend/app/app/utils/catalog.ts`: `SYSTEM_AGENT_META['deployer']` (A2) and
   `SYSTEM_AGENT_META['disposer']` (+ optional `AGENT_ARCHETYPES` entry to make disposer
   palette-addable) (C4).
-- `frontend/app/app/utils/pipelineRender.ts` — optional deployer/disposer render cases.
+- `frontend/app/app/utils/pipelineRender.ts`: optional deployer/disposer render cases.
 
 **Config / runtime**
 
@@ -326,9 +326,9 @@ Phases 0–1 are independently shippable and already de-risk the reported failur
   disposer handler tears down + is best-effort on failure (C3); `resolveExpiry` default TTL (D1).
 - **Shape/pipeline:** `pipelineShape.test.ts`; updated built-in chains in
   `internal/conformance/src/suite.ts`; `frontend/.../catalog.spec.ts`.
-- **End-to-end (the actual repro):** re-run "Quick implement" on a `kubernetes` service — expect
+- **End-to-end (the actual repro):** re-run "Quick implement" on a `kubernetes` service and expect
   either (a) with a deployer present, an env is provisioned and the tester gets coordinates, or
-  (b) without one, a fail-fast launch error naming the missing deployer — never the silent
+  (b) without one, a fail-fast launch error naming the missing deployer; never the silent
   ephemeral-with-no-coordinates dead-end. Then re-run the deployer with a changed manifest and
   confirm the superseded namespace is torn down; let an env pass its TTL and confirm the reaper
   removes it.
@@ -336,12 +336,12 @@ Phases 0–1 are independently shippable and already de-risk the reported failur
 ## 8. Open decisions (need a call before implementing)
 
 - **D-A1:** Deployer skips `docker-compose` by default? (recommended: yes.)
-- **D-C5:** Default disposal timing — TTL-only + palette disposer (recommended), terminal disposer
+- **D-C5:** Default disposal timing: TTL-only + palette disposer (recommended), terminal disposer
   in built-ins, or an opt-in auto-dispose-on-completion flag?
 - **Default TTL value** for D1 (and its relationship to provider caps, e.g. Kargo's +4h).
-- **Async/container-backed teardown** — needed now, or is namespace-DELETE sufficient for the k8s
+- **Async/container-backed teardown**: needed now, or is namespace-DELETE sufficient for the k8s
   adapter (recommended: defer)?
-- **Disposer palette-addable vs system-only** — recommended palette-addable to honor the
+- **Disposer palette-addable vs system-only**: recommended palette-addable to honor the
   user-control ask.
 
 ## 9. References (source anchors)
@@ -361,5 +361,5 @@ Phases 0–1 are independently shippable and already de-risk the reported failur
   `environments.ts:190-196` (`ProvisionType`); `pipelineShape.ts:62-206`;
   `PipelineService.ts:82-97`; `.../execution/step-handler-registry.ts`;
   `RunDispatcher.ts:2417-2656`; `frontend/app/app/utils/catalog.ts:333-571`.
-- Related existing docs: `docs/env-lifecycle.md` (repo-config validate/bootstrap/repair —
+- Related existing docs: `docs/env-lifecycle.md` (repo-config validate/bootstrap/repair, a
   different subsystem), `docs/per-service-provisioning.md`, `docs/native-environment-adapter.md`.

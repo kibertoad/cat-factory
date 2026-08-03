@@ -3,13 +3,13 @@
 A standalone, headless harness for benchmarking cat-factory's agents across
 **models** and **prompt versions**, on three tasks:
 
-- **requirement review** — the stateless reviewer (`requirementsLogic` from core)
-- **code review** — the `reviewer` agent (`AiAgentExecutor`, standard `review` phase)
-- **implementation** — the _real_ Pi coding flow (reused from `@cat-factory/executor-harness`): clone a repo, run Pi, capture the diff
+- **requirement review**: the stateless reviewer (`requirementsLogic` from core)
+- **code review**: the `reviewer` agent (`AiAgentExecutor`, standard `review` phase)
+- **implementation**: the _real_ Pi coding flow (reused from `@cat-factory/executor-harness`): clone a repo, run Pi, capture the diff
 
 It reuses the **exact same agents and prompts** as the runtime, made embeddable
 outside the Worker/container. Outputs are graded by the Claude **benchmark-arbiter**
-skill (your Claude subscription — no API key), and committed under
+skill (your Claude subscription, no API key), and committed under
 `docs/benchmarks/<run-id>/`.
 
 ## Why
@@ -22,7 +22,7 @@ matrix is a single config file, and every result records the **exact
 
 The `NodeModelProvider` is the Node twin of the Worker's `CloudflareModelProvider`.
 Direct providers use their API keys; **Workers AI is reached over the Cloudflare
-REST API** (`CF_ACCOUNT_ID` + `CF_API_TOKEN`) instead of the Worker `AI` binding —
+REST API** (`CF_ACCOUNT_ID` + `CF_API_TOKEN`) instead of the Worker `AI` binding,
 so the whole harness runs locally while still using Cloudflare AI. The Pi-driven
 implementation task likewise points Pi at Cloudflare's OpenAI-compatible endpoint.
 
@@ -52,7 +52,7 @@ Copy `bench.config.example.ts` to `bench.config.ts` and edit the `models`,
 | `GH_TOKEN`                                                                                        | cloning a private repo for the implementation task (optional for public repos) |
 | `pi` CLI on PATH                                                                                  | the implementation task                                                        |
 
-Arbiter grading needs **no key** — it runs as a Claude skill.
+Arbiter grading needs **no key**: it runs as a Claude skill.
 
 ## Prompt versioning
 

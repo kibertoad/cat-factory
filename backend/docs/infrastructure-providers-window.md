@@ -1,6 +1,6 @@
-# Infrastructure providers window — redesign (ephemeral environments + runner pool)
+# Infrastructure providers window redesign (ephemeral environments + runner pool)
 
-> **Status: SHIPPED, then partly superseded — historical design record.** The merge into one
+> **Status: SHIPPED, then partly superseded; a historical design record.** The merge into one
 > tabbed "Infrastructure" window + the in-app manifest editor shipped. The **environments
 > half** was subsequently reworked by the [per-service provisioning](./per-service-provisioning.md)
 > initiative: the per-workspace `delegateTestEnvToProvider` delegation toggle and the single
@@ -19,8 +19,8 @@
 
 ## Why
 
-The two integrations are the same idea — "bring your own infra, described by a manifest +
-write-only secrets" — split across two ports:
+The two integrations are the same idea ("bring your own infra, described by a manifest +
+write-only secrets") split across two ports:
 
 | Concern               | Port                                     | Local-mode toggle            | Backend routes                            |
 | --------------------- | ---------------------------------------- | ---------------------------- | ----------------------------------------- |
@@ -29,7 +29,7 @@ write-only secrets" — split across two ports:
 
 Today they already share **one** component (`ProviderConnectionPanel.vue`), but surface as
 **two** Integrations-Hub rows, and a **manifest-only** provider (no native code adapter)
-has **no editor** — it falls through to a disclaimer telling the operator to use the API.
+has **no editor**: it falls through to a disclaimer telling the operator to use the API.
 Net effect a user hit in practice: connecting an environment provider lit up "Provision
 Tester environments…", but "Run container agents on the runner pool" stayed disabled
 because **no runner pool can be registered from the UI at all**.
@@ -41,15 +41,15 @@ Two changes fix this:
 2. **Add a full manifest editor** so any manifest-driven provider (incl. a runner pool)
    can be registered, tested, and rotated entirely in-app.
 
-Both decisions are locked (product call): **one tabbed window**, **full manifest editor —
+Both decisions are locked (product call): **one tabbed window**, **full manifest editor,
 not a disclaimer**.
 
 ## Current state (accurate anchors)
 
-- **Two hub rows** — `frontend/app/app/components/layout/IntegrationsHub.vue` builds an
+- **Two hub rows**: `frontend/app/app/components/layout/IntegrationsHub.vue` builds an
   "Infrastructure" section with an `environment` row and a `runner-pool` row, each calling
   `ui.openProviderConnection(kind)`.
-- **One shared panel** — `frontend/app/app/components/settings/ProviderConnectionPanel.vue`
+- **One shared panel**: `frontend/app/app/components/settings/ProviderConnectionPanel.vue`
   is a single `UModal` parameterised by `ui.providerConnectionKind` (one kind at a time):
   - `canAuthor` (`:141`) = a **native** provider ships a `manifestTemplate` ⇒ render the
     **flat `describeConfig` field form** (`:436-512`), overlay onto the manifest on save
@@ -62,12 +62,12 @@ not a disclaimer**.
     (`showLocalDelegation`, `:71`); each toggle is disabled until its provider is
     registered (`runnerPoolRegistered`/`envRegistered`, `:73-74`). The runner-pool panel
     instead shows a hint pointing back to the env screen (`:363-380`).
-- **Store** — `frontend/app/app/stores/providerConnections.ts`: `register` /
+- **Store**: `frontend/app/app/stores/providerConnections.ts` with `register` /
   `updateSecrets` / `test` / `remove`, keyed by kind; `descriptorFor` / `connectionFor` /
   `needingConfig`.
-- **Composable** — `frontend/app/app/composables/api/providerConnections.ts` maps each kind
+- **Composable**: `frontend/app/app/composables/api/providerConnections.ts` maps each kind
   to its contract set (describe / get / register / updateSecrets / test / unregister).
-- **Types** — `frontend/app/app/types/providerConnections.ts`: `ProviderConnectionKind`,
+- **Types**: `frontend/app/app/types/providerConnections.ts` with `ProviderConnectionKind`,
   `ProviderDescriptor` (`kind: 'native' | 'manifest'`, `configFields`, `supportsTest`,
   `missingRequired`, optional `manifestTemplate`, optional `savedManifest`),
   `RegisterProviderInput { manifest, secrets }`, `TestProviderInput`.
@@ -84,7 +84,7 @@ not a disclaimer**.
   - **Container agents** → the runner-pool provider (connect/editor + logs).
   - **Test environments** → the environment provider (connect/editor + logs).
 - **Delegation toggles** move to the **top of the window** (shown in local mode only),
-  not buried in one tab — they're cross-cutting (each gated on its provider being
+  not buried in one tab; they're cross-cutting (each gated on its provider being
   registered, unchanged logic from `:73-74`). This removes the awkward
   `runnerPoolLocalHint` cross-link (`:363-380`) since both are now in one place.
 - **Deep-linking:** `ui.openProviderConnection(kind)` stays the entry API but now selects
@@ -97,25 +97,25 @@ For a **manifest-driven** provider (the common case for a runner pool, and for a
 environment provider without a native adapter), the tab renders an **editor** instead of
 the `:514-520` disclaimer:
 
-- **A JSON manifest editor** (monospace `<UTextarea>` to start — no new heavy editor dep;
+- **A JSON manifest editor** (monospace `<UTextarea>` to start, no new heavy editor dep;
   a CodeMirror/Monaco upgrade is a later polish) seeded from
   `descriptor.savedManifest ?? a per-kind starter template` (see open question O1).
 - **Inline validation:** parse on blur/typing; show parse errors and **shape errors**
   validated against the wire contract (runner-pool: `RunnerPoolManifest` in
-  `@cat-factory/contracts` `runners.ts`; environment: the environment manifest schema) —
-  the SAME Valibot schema the backend enforces, imported into the SPA so the operator gets
-  immediate feedback. The **server remains authoritative** (register re-validates).
+  `@cat-factory/contracts` `runners.ts`; environment: the environment manifest schema).
+  This is the SAME Valibot schema the backend enforces, imported into the SPA so the
+  operator gets immediate feedback. The **server remains authoritative** (register re-validates).
 - **A secrets sub-form:** one password input per `secretRef.key` discovered in the manifest
-  (e.g. `API_TOKEN`, OAuth `CLIENT_ID`/`CLIENT_SECRET`). Write-only — never prefilled;
+  (e.g. `API_TOKEN`, OAuth `CLIENT_ID`/`CLIENT_SECRET`). Write-only, never prefilled;
   on an existing connection, an amber "re-enter to change" hint (reuse the
   `form.reenterSecrets` copy at `:450-461`).
 - **Test / Save:** reuse `store.test` (sends `{ manifest, secrets }`) and `store.register`
-  (`{ manifest, secrets }`) — **both store paths already exist and already accept a raw
+  (`{ manifest, secrets }`): **both store paths already exist and already accept a raw
   manifest**, so **no backend or store changes are needed** for save/test.
 - **Native providers are unchanged:** when `descriptor.manifestTemplate` is present
-  (`canAuthor`), keep the existing **flat field form** — it's friendlier than raw JSON. The
+  (`canAuthor`), keep the existing **flat field form**; it's friendlier than raw JSON. The
   manifest editor is the path for `kind:'manifest'` providers (and, optionally, an
-  "advanced / edit raw manifest" toggle for native ones — open question O2).
+  "advanced / edit raw manifest" toggle for native ones, open question O2).
 
 ### State matrix the editor must cover
 
@@ -130,26 +130,26 @@ the `:514-520` disclaimer:
 
 **Frontend changes (all in `@cat-factory/app`):**
 
-- `IntegrationsHub.vue` — one Infrastructure entry instead of two.
+- `IntegrationsHub.vue`: one Infrastructure entry instead of two.
 - `ProviderConnectionPanel.vue` → becomes the **window shell with tabs**, or a new
   `InfrastructureWindow.vue` wrapping two `ProviderConnectionTab.vue` (one per kind). The
   existing flat-form + delegation logic is reused; the new piece is the editor branch.
-- New `ProviderManifestEditor.vue` — the JSON editor + secrets sub-form + validation,
+- New `ProviderManifestEditor.vue`: the JSON editor + secrets sub-form + validation,
   emitting `{ manifest, secrets }` to the tab's test/save handlers.
-- `ui` store — `providerConnectionKind` becomes the **active tab** (plus an `open` flag);
+- `ui` store: `providerConnectionKind` becomes the **active tab** (plus an `open` flag);
   `openProviderConnection(kind)` selects the tab.
-- i18n catalog (`frontend/app/i18n/locales/en.json`) — see below.
+- i18n catalog (`frontend/app/i18n/locales/en.json`): see below.
 - A patch changeset for `@cat-factory/app`.
 
 **No change required:**
 
 - `stores/providerConnections.ts`, `composables/api/providerConnections.ts`,
-  `types/providerConnections.ts` — `register`/`test` already carry a raw `{ manifest,
+  `types/providerConnections.ts`: `register`/`test` already carry a raw `{ manifest,
 secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
-- **Backend** — `register`/`test`/`describeProvider` already accept/return everything the
+- **Backend**: `register`/`test`/`describeProvider` already accept/return everything the
   editor needs (`savedManifest`, `kind`, `secretKeys`). The editor is a pure consumer.
 
-## i18n (drift guards apply — see CLAUDE.md "Internationalization")
+## i18n (drift guards apply; see CLAUDE.md "Internationalization")
 
 - **Remove:** `settings.providerConnection.manifestEditorUnavailable` (the disclaimer) and
   `settings.providerConnection.runnerPoolLocalHint` / `…ephemeralEnvironments` cross-link
@@ -169,7 +169,7 @@ secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
   `RunnerPoolManifest`, environment manifest) and run it on the parsed JSON to surface
   field-level errors before the network round-trip. This keeps the SPA's check in lockstep
   with the backend (single source of truth) per the i18n/contracts convention.
-- **Server:** unchanged — `register` re-validates (Valibot) and is authoritative; a
+- **Server:** unchanged; `register` re-validates (Valibot) and is authoritative, so a
   client that's behind still can't persist an invalid manifest.
 
 ## Non-goals / out of scope
@@ -184,15 +184,15 @@ secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
 
 ## Open questions
 
-- **O1 — starter manifest for a blank manifest-only provider.** Seed the editor from
+- **O1: starter manifest for a blank manifest-only provider.** Seed the editor from
   `savedManifest` when connected; when **not** connected there's nothing to seed. Options:
   (a) ship a small static per-kind example manifest in the SPA (fastest), or (b) add an
   optional `starterManifest` to the backend `ProviderDescriptor`. Recommendation: (a) for
   v1.
-- **O2 — raw-manifest editing for native providers.** Should a native provider (flat form)
-  also expose an "edit raw manifest" advanced mode? Recommendation: defer — the flat form
+- **O2: raw-manifest editing for native providers.** Should a native provider (flat form)
+  also expose an "edit raw manifest" advanced mode? Recommendation: defer; the flat form
   is the intended UX for native adapters.
-- **O3 — window component shape.** Extend `ProviderConnectionPanel.vue` into the tabbed
+- **O3: window component shape.** Extend `ProviderConnectionPanel.vue` into the tabbed
   shell, or introduce `InfrastructureWindow.vue` + per-kind tab child? Recommendation: new
   wrapper, keep each tab's body close to today's panel to minimise churn.
 

@@ -13,7 +13,7 @@ credentials: the App integration uses a GitHub App + installation tokens; GitHub
 login uses the GitHub **OAuth web flow**. It is also distinct from
 **machine-to-machine authentication**: an external system calls the
 key-authenticated `/api/v1` surface with a workspace-scoped public-API key, not
-a user session — see [`public-api.md`](./public-api.md).
+a user session; see [`public-api.md`](./public-api.md).
 
 ---
 
@@ -32,10 +32,10 @@ browser redirect entirely: the SPA posts credentials to `/auth/signup` or
    └── stores token, sends `Authorization: Bearer <token>` on every API call
 ```
 
-1. **`GET /auth/login`** — the Worker signs a short-lived `state` nonce (HMAC,
+1. **`GET /auth/login`**: the Worker signs a short-lived `state` nonce (HMAC,
    CSRF protection) that also carries where to land the browser afterwards, then
    redirects to GitHub's authorize page.
-2. **`GET /auth/callback`** — verifies `state`, exchanges `code` for a GitHub
+2. **`GET /auth/callback`**: verifies `state`, exchanges `code` for a GitHub
    user token, reads the user, enforces the [sign-in allowlist](#access-control)
    (named users and/or org members), then mints a signed **session token** and
    redirects to the SPA with the token in the URL **fragment** (`#token=…`, kept
@@ -45,7 +45,7 @@ browser redirect entirely: the SPA posts credentials to `/auth/signup` or
 
 Sessions are **stateless**: the token is `base64url(JSON).base64url(HMAC)` with
 an absolute expiry, verified per request (see `infrastructure/auth/signing.ts`).
-There is no server-side session store — logout is a client-side token drop, and
+There is no server-side session store: logout is a client-side token drop, and
 expiry bounds the blast radius. (Revocation lists are a possible follow-up.)
 
 The session token is carried as a bearer header rather than a cookie so the
@@ -64,7 +64,7 @@ closed**: every route except a small
 public allowlist (`/health`, `/auth/*`, the `/v1` container proxy, and `/github`
 webhooks) requires a valid session, and when auth is unconfigured those routes
 return `503 auth_not_configured` rather than serving data openly. **Production is
-therefore always authenticated** — an unconfigured deployment is locked, not open.
+therefore always authenticated**: an unconfigured deployment is locked, not open.
 
 ### Running without configured auth: `AUTH_DEV_OPEN` vs `TESTING_NO_AUTH`
 
@@ -85,14 +85,14 @@ honoured **only outside a production-like `ENVIRONMENT`** (`production` / `prod`
   default (so unauthenticated reads work while a developer signs in with a PAT/password to
   get a per-user identity). It deliberately does **NOT** change the SPA: a remote facade has
   **no anonymous tier**, so the SPA still routes to the **login screen** when the auth
-  handshake resolves with no user — a dev-open-but-unconfigured remote is a misconfiguration
+  handshake resolves with no user: a dev-open-but-unconfigured remote is a misconfiguration
   to surface, not an invitation to use the board anonymously.
 
 - **`TESTING_NO_AUTH=true`** is the stronger, narrowly-scoped hatch for running the **whole
   product with no authentication at all**. It implies `AUTH_DEV_OPEN` (so the API gate is
   open) **and** is advertised to the SPA via `GET /auth/config` (`testingNoAuth: true`), so
   the SPA renders the **board anonymously** instead of gating to login. This is what the
-  **end-to-end (Playwright) suite** opts into — the assembled product needs to boot straight
+  **end-to-end (Playwright) suite** opts into: the assembled product needs to boot straight
   to the board with the external auth providers left off. Outside that test harness there is
   no reason to set it.
 
@@ -123,7 +123,7 @@ Optional vars:
 | `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in                                                               | none (see access control) |
 | `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                                                                              | `https://github.com`      |
 | `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured                                                        | unset (prod fails closed) |
-| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` — open API + the SPA renders anonymously (no login gate). Used by the e2e suite | unset (prod refuses it)   |
+| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` (open API + the SPA renders anonymously, no login gate). Used by the e2e suite  | unset (prod refuses it)   |
 
 > **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
 > it the post-login landing comes from the request's `redirect` query (dev
@@ -210,13 +210,13 @@ an env var.
 **Org membership** is read live from GitHub during callback via `GET /user/orgs`.
 That endpoint only returns a user's private org memberships when the token holds
 the `read:org` scope, so the login flow requests `read:user read:org` whenever
-`AUTH_ALLOWED_ORGS` is non-empty (and plain `read:user` otherwise — least
+`AUTH_ALLOWED_ORGS` is non-empty (and plain `read:user` otherwise, for least
 privilege). For a GitHub App, ensure the app is permitted that scope; a classic
 OAuth App needs no pre-registration of scopes.
 
 Sessions are stateless and bounded by expiry (`AUTH_SESSION_TTL_HOURS`), so
 removing a user or org from an allowlist blocks **new** logins immediately but
-does not revoke a session already minted — it lapses at its own expiry.
+does not revoke a session already minted; it lapses at its own expiry.
 
 Example (`wrangler.toml [vars]`):
 

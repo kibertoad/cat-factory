@@ -1,6 +1,6 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
-**Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
+**Status:** in progress: `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
 targets (4 / 4 / **6**); `complexity` at **step 2 (30)**; `max-statements` at its floor (**49**);
 `max-lines-per-function` at **step 2 (300)** for product code (test suites carved off into an
 `overrides` ratchet, now at its floor **1323**); `max-lines` past **step 1** at its floor
@@ -16,91 +16,91 @@ targets · **Owner:** core · **Started:** 2026-07-20
 Before planning a slice, run `node scripts/lint-limits-report.mjs` (add `--top N` for more
 offenders, `--json` for machine output). It runs oxlint ONCE with every ratcheted rule forced to
 `max: 0` and reports, per rule: the **live ceiling** in `.oxlintrc.json`, the actual **floor** (the
-lowest `max` the tree passes at today — drop the ceiling here for free), the reasonable **target**,
+lowest `max` the tree passes at today; drop the ceiling here for free), the reasonable **target**,
 and the **top offenders** you'd split to go below the floor. This replaces the hand-rolled
-`oxlint --config <probe>.json` recipe that used to live in this doc. It is a reporting tool only —
+`oxlint --config <probe>.json` recipe that used to live in this doc. It is a reporting tool only:
 enforcement stays in `.oxlintrc.json`.
 
 ## Goal & rationale
 
 The repo lints with oxlint but enforced **nothing** about per-function complexity or
-file/function size — the only size guard was the custom `scripts/check-file-size.mjs`
+file/function size: the only size guard was the custom `scripts/check-file-size.mjs`
 (a soft per-file line budget with ratcheted legacy allowances). Nothing stopped a function
 from growing to a 141-branch, 157-statement monster (`loadNodeConfig`,
 `buildNodeContainer`), and nothing flagged a 3,100-line function.
 
 We now enforce seven oxlint rules, but to land them without a mass refactor we pinned each
-ceiling at **the current worst offender** — so the rules pass today and act purely as a
+ceiling at **the current worst offender**, so the rules pass today and act purely as a
 **ratchet**: no new code may exceed today's worst case. This initiative is the plan to walk
 those ceilings **down** to reasonable values, refactoring the offenders that block each step.
 
 The end state: complexity/size limits at industry-reasonable values, enforced as `error`,
 with the god-files (`ExecutionService`, `RunDispatcher`, the `container.ts` builders, the
-conformance suites) split along cohesive seams — the same god-file re-accretion the
+conformance suites) split along cohesive seams; the same god-file re-accretion the
 `check-file-size.mjs` guard already fights, now covered function-by-function too.
 
 ## The target pattern (how to run each slice)
 
 **Every PR here MUST be a meaningful slice, not a token one.** A slice is sized by the WORK it
-lands — refactor a rule to its next real step (or to its final target when the offenders above it
+lands: refactor a rule to its next real step (or to its final target when the offenders above it
 are a tractable, cohesive set), and prefer to carry a rule ALL THE WAY DOWN in one PR when the
 offenders are the same class of change (e.g. `max-params`' whole 20 → 6 was one options-object
 sweep). A PR whose only diff is bumping one `.oxlintrc.json` number by one notch after a single
 trivial edit does **not** earn its review + CI cost; fold that into a fuller slice (more offenders,
 a further step, or a second rule that shares the refactor) so each PR moves the initiative
 materially. When a rule genuinely can only move one step at a time (a big god-file split blocks the
-next), say so in the PR — a small slice is fine when it's small because the WORK is irreducible, not
+next), say so in the PR: a small slice is fine when it's small because the WORK is irreducible, not
 because the author stopped early.
 
 The rules live in the root [`.oxlintrc.json`](../../.oxlintrc.json) `rules` block, each as
 `["error", { "max": N }]`. A slice is:
 
 1. Pick the next rule + its next step from the checklist below (or several steps of one rule, or a
-   whole rule, when the offenders form one tractable set — see the sizing mandate above).
+   whole rule, when the offenders form one tractable set: see the sizing mandate above).
 2. Refactor **every** offender above that step's threshold (split the function/file along a
-   cohesive seam — the `RunDispatcher` controller extractions and the `max-params` options-object /
+   cohesive seam: the `RunDispatcher` controller extractions and the `max-params` options-object /
    context-bundle sweep are the models; see the file-size guard notes in
    [`CLAUDE.md`](../../CLAUDE.md) → "Run the CI guard scripts"). A refactor that touches the
    executor-harness `src/**` MUST bump the runner image tag (see the harness image rules in
    `CLAUDE.md`).
 3. Lower that rule's `max` in `.oxlintrc.json` to the step value and run the whole-tree lint
-   (`pnpm lint`, i.e. `oxlint` from the repo root — **never** a file subset).
+   (`pnpm lint`, i.e. `oxlint` from the repo root: **never** a file subset).
 4. If green, commit + update this checklist row. If a straggler remains, either fold it into
-   the same slice or hold the step until it's split — never bump the `max` back up.
+   the same slice or hold the step until it's split, never bump the `max` back up.
 
-**Finding the current floor for any rule** (what value passes right now) — run the floor-finder:
+**Finding the current floor for any rule** (what value passes right now): run the floor-finder:
 
 ```sh
 node scripts/lint-limits-report.mjs            # table: ceiling vs floor vs target + top offenders
 node scripts/lint-limits-report.mjs --top 15   # more offenders per rule
 ```
 
-## Baseline (landed) — ceilings pinned at today's max
+## Baseline (landed): ceilings pinned at today's max
 
 Every rule below currently passes with **zero** violations because its `max` equals the
 worst offender. These are the starting ceilings, not the goal.
 
 | Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                                   |
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------------ |
-| `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
-| `max-statements`         |      **49** |            **30** | at its floor — `provision-detect.logic.test.ts` / `RunDispatcher.recordStepResult` (49)                |
+| `complexity`             |      **30** |            **20** | at step 2; floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
+| `max-statements`         |      **49** |            **30** | at its floor: `provision-detect.logic.test.ts` / `RunDispatcher.recordStepResult` (49)                |
 | `max-lines-per-function` |     **300** |           **150** | product floor after the eleventh-pass >300 split (node `container.ts` 296); tests: 1323 (`overrides`)  |
-| `max-lines`              |    **1956** |          **1500** | past step 1, at its floor — `execution/ExecutionService.ts` (1956)                                     |
-| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                        |
-| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
-| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
+| `max-lines`              |    **1956** |          **1500** | past step 1, at its floor; `execution/ExecutionService.ts` (1956)                                     |
+| `max-params`             |    **6** ✅ |             **6** | at target; 0 offenders above 6                                                                        |
+| `max-depth`              |    **4** ✅ |             **4** | at target; 0 offenders above 4                                                                        |
+| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target; 0 offenders above 4                                                                        |
 
-> **Twelfth pass (landed):** `max-lines` went **past step 1 in one slice — 2648 → its floor
+> **Twelfth pass (landed):** `max-lines` went **past step 1 in one slice: 2648 → its floor
 > 1956** by splitting all six files above 2000, the last rule still sitting at a free floor and the
 > god-file split the earlier passes kept deferring to it. Each split is a cohesive MOVE, not a
-> re-slice: the engine's `ExecutionService` (2277) lost the HUMAN decision surface — resolve /
+> re-slice: the engine's `ExecutionService` (2277) lost the HUMAN decision surface; resolve /
 > approve / request-changes / reject / merge / decline-to-merge, the human-review fix request, and
-> the `assertNotIterativeGate` guard only those three approvals use — to a
+> the `assertNotIterativeGate` guard only those three approvals use; to a
 > `StepDecisionController` taking a deps object of bound engine call-backs (the `RunDispatcher`
 > controller pattern), leaving thin delegates so no HTTP call site changed; `RunDispatcher` (2390)
 > lost two, the RUNNING half of the poll branch tree (`PollRunningController`, the exact sibling of
 > the settled-poll `PollCompletionController`) and the one-shot engine steps `tracker` /
-> `bug-intake` / `initiative-committer` (`OneShotStepController` — the taxonomy bucket CLAUDE.md
+> `bug-intake` / `initiative-committer` (`OneShotStepController`; the taxonomy bucket CLAUDE.md
 > already names, whose fourth member `deployer` had its own controller since the first pass); the
 > Worker `container.ts` (2214) split three ways along the Node facade's OWN module names
 > (`container-model-resolver.ts`, `container-executor-deps.ts`, `container-vcs-identity.ts`), with
@@ -114,24 +114,24 @@ worst offender. These are the starting ceilings, not the goal.
 > allow-list tables into `persistenceRpcSurfaces.spec.ts`, de-duplicating 19 byte-identical local
 > `remoteRegistry` factories onto one shared helper on the way. Two ceilings tightened for free
 > alongside: `max-statements` 50 → **49**, and the test `overrides` ratchet for
-> `max-lines-per-function` **2453 → 1323** (the conformance suites' own floor — the old number
+> `max-lines-per-function` **2453 → 1323** (the conformance suites' own floor; the old number
 > predated their splits). Five `check-file-size.mjs` allowances ratcheted DOWN to lock the wins in
 > (RunDispatcher 2430 → 1900, ExecutionService 2300 → 2000, Worker container 2300 → 1650, node
 > schema 2150 → 1900, provision-detect 2250 → 1850). Verified by the orchestration (1299), server,
 > integrations and app unit suites plus a whole-tree typecheck (64/64); every extraction is a
 > behaviour-neutral move, and the cross-runtime conformance suites cover the two facades in CI. No
 > harness `src/**` touched, so no image bump. `complexity` / `max-lines-per-function` (product)
-> unchanged — step 2 (1500) now takes `ExecutionService` / `RunDispatcher` / node `schema.ts` /
+> unchanged: step 2 (1500) now takes `ExecutionService` / `RunDispatcher` / node `schema.ts` /
 > `provision-detect.logic.ts` again, plus the 1500–1620 band behind them.
 >
 > **Eleventh pass (landed):** `max-lines-per-function` reached **step 2 (400 → 300)** by splitting
 > all twelve product functions above 300 along cohesive, behaviour-neutral seams, and `max-lines`
 > tightened **for free** (2802 → **2648**) because two of those splits were sibling-file moves out of
 > the size-ratchet's own god-files. The engine's `ExecutionService` constructor (387) lost its two
-> construction clusters to a sibling `gate-window-controllers.ts` — `buildGateWindowControllers`
+> construction clusters to a sibling `gate-window-controllers.ts`: `buildGateWindowControllers`
 > (the Tester / Ralph / human-test / visual-confirmation / review / fork-decision / PR-review
 > windows) and `buildReviewSubjects` (the four review-gate subjects + the initiative/doc interview
-> gates) — each taking a deps object of BOUND engine call-backs, the `RunDispatcher` controller
+> gates): each taking a deps object of BOUND engine call-backs, the `RunDispatcher` controller
 > pattern (ExecutionService.ts 2752 → 2648, so its `check-file-size` allowance ratchets 2800 → 2650);
 > the inline `resolveRiskPolicy` return type is now the named `ResolvedRunRiskPolicy`. The three DI
 > composition roots followed: orchestration `createCore` (385 → 293) → `container/engine-collaborators.ts`
@@ -140,7 +140,7 @@ worst offender. These are the starting ceilings, not the goal.
 >   root's `assembleNodeCoreDependencies` (387) + `buildNodeContainer` (373 → 296) → a new
 >   `container-core-deps.ts` (the bundle contract + the literal split across a persistence/services
 >   seam, plus the four `selectNode*Deps` selectors only it used) and `container-foundation.ts`
->   (`resolveNodeContainerFoundation` + `resolveNodeAppRegistries` + `pickRepoSource`) — container.ts
+>   (`resolveNodeContainerFoundation` + `resolveNodeAppRegistries` + `pickRepoSource`); container.ts
 >   2247 → 1532, allowance 2250 → **1550**; and the Worker's `assembleWorkerContainer` (398 → 213) → an
 >   in-file `buildWorkerCoreDependencies`. The six Pinia-store setups (`execution` 393, `auth` 361,
 >   `github` 354, `initiative` 353, `board/mutations` 347, `workspace` 332) split into per-group action
@@ -157,7 +157,7 @@ worst offender. These are the starting ceilings, not the goal.
 >
 > **Tenth pass (landed):** `max-lines-per-function` moved from **step 1.5 (632) to an intermediate
 > step 1.75 (400)** by splitting all eight product functions above 400 along cohesive,
-> behaviour-neutral seams — clearing the entire >400 band. The four DI composition-root builders (the
+> behaviour-neutral seams: clearing the entire >400 band. The four DI composition-root builders (the
 > initiative's recurring size/complexity sink) drove the heavy lifting, two via sibling-file moves that
 > also shrink their tight-budget hosts: the Worker `buildContainer` (598 → 285) → a new
 > `container-assembly.ts` (`assembleWorkerContainer`, container.ts 2679 → 2345, so its
@@ -172,7 +172,7 @@ worst offender. These are the starting ceilings, not the goal.
 > suites + whole-tree typecheck (63/63); the Node/local/Worker facade behaviour is covered by the
 > cross-runtime conformance suites in CI (all extractions are byte-identical moves). No harness `src/**`
 > touched, so no image bump. The floor is now the Pinia-store tail (`execution` 393, node
-> `assembleNodeCoreDependencies`/`ExecutionService` ctor 387) — step 2's 300 target takes those + the
+> `assembleNodeCoreDependencies`/`ExecutionService` ctor 387): step 2's 300 target takes those + the
 > remaining sub-400 offenders. `complexity` / `max-statements` / `max-lines` unchanged.
 >
 > **Ninth pass (landed):** `complexity` reached **step 2 (40 → 30)** by splitting every one of the
@@ -197,7 +197,7 @@ worst offender. These are the starting ceilings, not the goal.
 > relocated to sibling files rather than raising their `check-file-size.mjs` allowances. The
 > executor-harness image was bumped (harness `src/**` changed). The floor is now **30** (`buildContext`
 > / `RunnerPoolConnectionService` / the exactly-30 tail), so 30 lands with zero violations. **Why 30,
-> not step 3's 20:** the 20–30 band is the ~102-function long tail — a separate slice.
+> not step 3's 20:** the 20–30 band is the ~102-function long tail: a separate slice.
 > `max-statements` / `max-lines` / `max-lines-per-function` unchanged.
 >
 > **Eighth pass (landed):** `complexity` moved from **step 1 (60) to an intermediate step 1.5
@@ -214,9 +214,9 @@ worst offender. These are the starting ceilings, not the goal.
 > `parseAgentPrSpec` / `assembleAgentJob` (image bumped to 1.50.11); conformance
 > `FakeAgentExecutor.run` (53) → `runStructuredKinds`. The floor dropped to **40** (`cli/args.ts`,
 > `orchestration/container/modules.ts`), so 40 lands with zero violations. **Why 40, not step 2's
-> 30:** the last functions between 30 and 40 are the deferred god-files — the Worker `buildContainer`
+> 30:** the last functions between 30 and 40 are the deferred god-files: the Worker `buildContainer`
 > (38, blocked by the `max-lines` file-split it shares) and the `RunDispatcher` step-handler tail
-> (39) — so 40 is the clean stop before step 2 has to take them on. `max-statements` / `max-lines` /
+> (39), so 40 is the clean stop before step 2 has to take them on. `max-statements` / `max-lines` /
 > `max-lines-per-function` unchanged.
 >
 > **Seventh pass (landed):** `max-lines-per-function` moved from **step 1 (1000) to step 1.5
@@ -235,12 +235,12 @@ worst offender. These are the starting ceilings, not the goal.
 > `cloudflare/container.ts` `buildContainer` (631):** it is deliberately NOT split here because that
 > file (2719 lines) sits just under the `max-lines` ceiling (2802), so ANY in-file function extraction
 > (which nets ~+120 lines of bundle interface/wrapper/call boilerplate) breaches it, and its ~30
-> container-local `select*Deps` helpers make a sibling-file move a large cascade — so the Worker
+> container-local `select*Deps` helpers make a sibling-file move a large cascade, so the Worker
 > builder's split is folded into the eventual `max-lines` step-1 file split of that god-file (step 2
 > below). `complexity` / `max-statements` / `max-lines` unchanged.
 >
 > **Sixth pass (landed):** `max-statements` went **straight from its pinned baseline (157) to
-> below 60 — step 2 (50)** in one sweep, splitting every one of the 24 functions above 50 along a
+> below 60: step 2 (50)** in one sweep, splitting every one of the 24 functions above 50 along a
 > cohesive seam (all behaviour-neutral; verified by the package unit suites + the cross-runtime
 > conformance suites on real Postgres/workerd in CI). The heaviest: `createUiModals`
 > (`app/stores/ui/modals.ts`, 157) grouped into per-domain sub-factories composed behind the shared
@@ -261,12 +261,12 @@ worst offender. These are the starting ceilings, not the goal.
 > below their pinned ceilings, so `max-lines` (3119 → **2802**) and `max-lines-per-function`
 > (3103 → **2453**) tightened for free. `max-nested-callbacks` reached its **final** target
 > (6 → **4**) after one test-file extraction, and `max-depth` moved to step 1 (6 → **5**) after
-> two loop-body extractions. `complexity` / `max-statements` / `max-params` are unchanged —
+> two loop-body extractions. `complexity` / `max-statements` / `max-params` are unchanged:
 > their floors equal their ceilings, so they need the DI-builder / god-file refactors before
 > moving.
 >
 > **Second pass (landed):** `max-depth` reached its **final** target (5 → **4**) by hoisting the
-> 18 depth-5 loop bodies into helpers — a shared `parseSubtasks` in `@cat-factory/kernel`
+> 18 depth-5 loop bodies into helpers: a shared `parseSubtasks` in `@cat-factory/kernel`
 > (de-duplicating the four bootstrap / env-config-repair repo copies at the same time), the two
 > `ExecutionWorkflow` poll loops (`drivePollLoop` / `driveGatePollLoop` + `pollOnce`), the
 > benchmark harness's per-task fixture dispatch, `provision-detect`'s seed-dump child scan,
@@ -275,7 +275,7 @@ worst offender. These are the starting ceilings, not the goal.
 > pinned at their ceilings pending the DI-builder / god-file refactors.
 >
 > **Fifth pass (landed):** `complexity` reached **step 1 (141 → 60)** by splitting the seven
-> functions above 60 along cohesive seams — all behaviour-neutral extractions (server +
+> functions above 60 along cohesive seams: all behaviour-neutral extractions (server +
 > orchestration unit suites, node/local config tests, and the cross-runtime conformance suites cover
 > them). `loadNodeConfig` (141) decomposes into per-section `AppConfig` builders
 > (`resolveProviderCaps` / `buildAgentRouting` / `buildGithubConfig` / `buildAuthConfig` /
@@ -293,8 +293,8 @@ worst offender. These are the starting ceilings, not the goal.
 > **Fourth pass (landed):** `max-lines-per-function` reached **step 1 (2453 → 1000)** by (a) carving
 > the table-driven **test suites** off into an `overrides` entry (globs `**/*.test.ts`,
 > `**/*.spec.ts`, `internal/conformance/src/**`, `internal/e2e/**`) held to their own ratchet at
-> **2453** — resolving the "decide at step 2 whether test globs warrant a looser ceiling" question
-> below in favour of an override, so product-code function limits aren't forced onto Vitest suites —
+> **2453**: resolving the "decide at step 2 whether test globs warrant a looser ceiling" question
+> below in favour of an override, so product-code function limits aren't forced onto Vitest suites:
 > and (b) splitting the lone product offender above 1000, the Node DI god-builder `buildNodeContainer`
 > (**1616 → 991**), into seven cohesive sibling `container-*-deps.ts` helpers following the existing
 > `container-executor-deps.ts` pattern: `container-github-deps.ts` (`selectNodeGitHubDeps`, mirroring
@@ -308,14 +308,14 @@ worst offender. These are the starting ceilings, not the goal.
 > their pinned ceilings, but `config.ts`/`modals.ts` still cap those rules, so they don't move yet.
 >
 > **Third pass (landed):** `max-params` reached its **final** target (20 → **6**) in one slice by
-> converting every offending function from a positional list to a bundled argument — DI builders to
+> converting every offending function from a positional list to a bundled argument: DI builders to
 > dependency objects (`NodeContainerExecutorDeps`, the Worker `WorkerExecutorDeps`,
 > `buildResolveTransport`, `selectEnvConfigRepairer`), loop-invariant step context to one object
 > (the deployer `DeployerFanOut`, the companion/Tester/gate bundles), `ExecutionService.start`'s
 > trailing options to a `RunStartOptions` object (extracted to its own file to keep
 > `ExecutionService.ts` under the `max-lines` ceiling), and the callback / identity bundles in
 > `syncResource` / `runWriterForChunk` / `runProviderValidate` / `syncSkillDir` / the harness
-> `streamCli` (which republishes the runner image — tags synced to `1.50.1`). The size/complexity
+> `streamCli` (which republishes the runner image: tags synced to `1.50.1`). The size/complexity
 > rules remain pinned pending the DI-builder / god-file refactors.
 
 `max-lines`' final target of **1500** deliberately matches `check-file-size.mjs`'s default
@@ -326,41 +326,41 @@ legacy allowances; oxlint enforces the flat global ceiling).
 
 Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each slice.
 
-### `complexity` — 141 → 20
+### `complexity`: 141 → 20
 
 | Step      | `max` | Offenders to split first                                                                                                                                                                                                                                                       | Status    |
 | --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| baseline  |   141 | —                                                                                                                                                                                                                                                                              | ✅ landed |
-| 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass                                                                             | ✅ landed |
-| 1.5       |    40 | (10) `jobBody` 54, `toRunResult` 53, `FakeAgentExecutor.run` 53, `ContainerAgentExecutor.pollJob` 47, harness `parseAgentJob` 47, node `buildAuthConfig` 46, `buildContext` 45, Worker auth 44, `coerceInitiativePlan` 42, `WorkspaceController` snapshot 42 — see eighth pass | ✅ landed |
-| 2         |    30 | (~34) — the 30–40 tail, incl. the god-files: Worker `buildContainer` 38 → `container-registries.ts`, `RunDispatcher.pollAgentJobInner` 39 → `PollCompletionController`, `ExecutionService.stepInstance` 32 → `reentrancy.logic.ts` — see ninth pass                            | ✅ landed |
-| 3 (final) |    20 | (~102) — ESLint's default; the 20–30 long tail                                                                                                                                                                                                                                 | ☐ todo    |
+| baseline  |   141 | —                                                                                                                                                                                                                                                                            | ✅ landed |
+| 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61; see fifth pass                                                                             | ✅ landed |
+| 1.5       |    40 | (10) `jobBody` 54, `toRunResult` 53, `FakeAgentExecutor.run` 53, `ContainerAgentExecutor.pollJob` 47, harness `parseAgentJob` 47, node `buildAuthConfig` 46, `buildContext` 45, Worker auth 44, `coerceInitiativePlan` 42, `WorkspaceController` snapshot 42; see eighth pass | ✅ landed |
+| 2         |    30 | (~34); the 30–40 tail, incl. the god-files: Worker `buildContainer` 38 → `container-registries.ts`, `RunDispatcher.pollAgentJobInner` 39 → `PollCompletionController`, `ExecutionService.stepInstance` 32 → `reentrancy.logic.ts`; see ninth pass                            | ✅ landed |
+| 3 (final) |    20 | (~102); ESLint's default; the 20–30 long tail                                                                                                                                                                                                                                 | ☐ todo    |
 
-### `max-statements` — 157 → 30
+### `max-statements`: 157 → 30
 
 | Step       | `max` | Offenders to split first                                                | Status    |
 | ---------- | ----: | ----------------------------------------------------------------------- | --------- |
-| baseline   |   157 | —                                                                       | ✅ landed |
-| 1 + 2      |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
+| baseline   |   157 | —                                                                     | ✅ landed |
+| 1 + 2      |    50 | (24); landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
 | free floor |    49 | — (no refactor; taken alongside the twelfth pass's `max-lines` slice)   | ✅ landed |
-| 3 (final)  |    30 | (~104) — the long tail                                                  | ☐ todo    |
+| 3 (final)  |    30 | (~104); the long tail                                                  | ☐ todo    |
 
-### `max-lines-per-function` — 3103 → 150
+### `max-lines-per-function`: 3103 → 150
 
 | Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                                                                                                                                  | Status    |
 | ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3103 | —                                                                                                                                                                                                                                                                                                                                                                                                                         | ✅ landed |
+| baseline   |  3103 | —                                                                                                                                                                                                                                                                                                                                                                                                                       | ✅ landed |
 | free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                                                                                                                                                                                                                                                  | ✅ landed |
-| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                                                                                                                                                                                                                                                    | ✅ landed |
-| 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533 — see seventh pass                                                                                                                                                                                                                                                    | ✅ landed |
-| 1.75       |   400 | (8) the 4 DI builders (Worker `buildContainer` 598 → sibling `container-assembly.ts`, `buildNodeContainer` 486, `createCore` 485 → sibling `container/foundation.ts`, `buildLocalContainer` 463), Worker `scheduled` 451, server `registerTaskRoutes` 401, `pipelines` 456 + `environmentWizard` 420 stores — see tenth pass                                                                                              | ✅ landed |
-| 2          |   300 | (12) the 6 Pinia-store setups (`execution` 393 … `workspace` 332) → per-group action factories, `ExecutionService` ctor 387 → `gate-window-controllers.ts`, node `assembleNodeCoreDependencies` 387 + `buildNodeContainer` 373 → `container-core-deps.ts` + `container-foundation.ts`, Worker `assembleWorkerContainer` 398, `createCore` 385 → `container/engine-*.ts`, local mothership harness 306 — see eleventh pass | ✅ landed |
+| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453; see fourth pass                                                                                                                                                                                                                                                                    | ✅ landed |
+| 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533; see seventh pass                                                                                                                                                                                                                                                    | ✅ landed |
+| 1.75       |   400 | (8) the 4 DI builders (Worker `buildContainer` 598 → sibling `container-assembly.ts`, `buildNodeContainer` 486, `createCore` 485 → sibling `container/foundation.ts`, `buildLocalContainer` 463), Worker `scheduled` 451, server `registerTaskRoutes` 401, `pipelines` 456 + `environmentWizard` 420 stores; see tenth pass                                                                                              | ✅ landed |
+| 2          |   300 | (12) the 6 Pinia-store setups (`execution` 393 … `workspace` 332) → per-group action factories, `ExecutionService` ctor 387 → `gate-window-controllers.ts`, node `assembleNodeCoreDependencies` 387 + `buildNodeContainer` 373 → `container-core-deps.ts` + `container-foundation.ts`, Worker `assembleWorkerContainer` 398, `createCore` 385 → `container/engine-*.ts`, local mothership harness 306; see eleventh pass | ✅ landed |
 | 3 (final)  |   150 | (product long tail, ~240)                                                                                                                                                                                                                                                                                                                                                                                                 | ☐ todo    |
 
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,
 > big `describe`/`it` blocks). **Decided (step 1):** an `overrides` entry holds the test globs
 > (`**/*.test.ts`, `**/*.spec.ts`, `internal/conformance/src/**`, `internal/e2e/**`) to their own
-> ratchet (currently **1323**, dropped from 2453 for free in the twelfth pass — the old number
+> ratchet (currently **1323**, dropped from 2453 for free in the twelfth pass: the old number
 > predated the conformance suites' own splits) so the global (product) ceiling tightens without
 > contorting the table-driven Vitest suites. Steps 2/3 walk the PRODUCT ceiling down; tighten the
 > test override separately as the suites shrink. Note the globs cover `*.spec.ts` / `*.test.ts`
@@ -369,39 +369,39 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 > globs (the persistence-RPC harness's 530-line `makeRegistry` split into four per-surface
 > builders over one shared fixtures object).
 
-### `max-lines` — 3119 → 1500
+### `max-lines`: 3119 → 1500
 
 | Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                            | Status    |
 | ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3119 | —                                                                                                                                                                                                                                                                                                                   | ✅ landed |
+| baseline   |  3119 | —                                                                                                                                                                                                                                                                                                                 | ✅ landed |
 | free floor |  2802 | — (no refactor; #1266 split the old 3119 `suites/execution.ts` + `node/container.ts` offenders)                                                                                                                                                                                                                     | ✅ landed |
 | free floor |  2648 | — (no refactor; two eleventh-pass function splits were sibling-file moves out of this rule's own god-files)                                                                                                                                                                                                         | ✅ landed |
-| 1 (→ 1956) |  2000 | (6) `persistenceRpc.spec.ts` 2445 → harness + surfaces spec, `RunDispatcher.ts` 2390 → `PollRunningController` + `OneShotStepController`, `ExecutionService.ts` 2277 → `StepDecisionController`, `provision-detect.logic.ts` 2234, Worker `container.ts` 2214 (3 ways), `node/db/schema.ts` 2078 — see twelfth pass | ✅ landed |
-| 2 (final)  |  1500 | (7) `ExecutionService.ts` 1956, `node/db/schema.ts` 1894, `RunDispatcher.ts` 1880, `provision-detect.logic.ts` 1826, `provision-detect.logic.test.ts` 1620, Worker `container.ts` 1598 — aligns with `check-file-size.mjs`                                                                                          | ☐ todo    |
+| 1 (→ 1956) |  2000 | (6) `persistenceRpc.spec.ts` 2445 → harness + surfaces spec, `RunDispatcher.ts` 2390 → `PollRunningController` + `OneShotStepController`, `ExecutionService.ts` 2277 → `StepDecisionController`, `provision-detect.logic.ts` 2234, Worker `container.ts` 2214 (3 ways), `node/db/schema.ts` 2078; see twelfth pass | ✅ landed |
+| 2 (final)  |  1500 | (7) `ExecutionService.ts` 1956, `node/db/schema.ts` 1894, `RunDispatcher.ts` 1880, `provision-detect.logic.ts` 1826, `provision-detect.logic.test.ts` 1620, Worker `container.ts` 1598; aligns with `check-file-size.mjs`                                                                                          | ☐ todo    |
 
-### `max-params` — 20 → 6
+### `max-params`: 20 → 6
 
 | Step      | `max` | Offenders to split first                                                                         | Status    |
 | --------- | ----: | ------------------------------------------------------------------------------------------------ | --------- |
-| baseline  |    20 | —                                                                                                | ✅ landed |
+| baseline  |    20 | —                                                                                              | ✅ landed |
 | 1         |    10 | (1) `buildNodeContainerExecutor` (20 positional args → options object)                           | ✅ landed |
 | 2         |     8 | (4) `DeployerStepController` 10, `cloudflare/container.ts` 9 ×2, `RequirementReviewService` 9    | ✅ landed |
 | 3 (final) |     6 | (11) DI builders + step-context bundles + `ExecutionService.start` options + harness `streamCli` | ✅ landed |
 
-### `max-depth` — 6 → 4
+### `max-depth`: 6 → 4
 
 | Step      | `max` | Offenders to split first                                                                                                                                                                                                                                                                              | Status    |
 | --------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline  |     6 | —                                                                                                                                                                                                                                                                                                     | ✅ landed |
+| baseline  |     6 | —                                                                                                                                                                                                                                                                                                   | ✅ landed |
 | 1         |     5 | (2) `RequirementReviewService.ts` (→ `applyRecommendationToTarget`), `observability-otel/src/conformity.test.ts` (→ `accumulateMetric`)                                                                                                                                                               | ✅ landed |
-| 2 (final) |     4 | (18) — ESLint's default; hoisted into helpers: shared `parseSubtasks` (kernel, de-dupes 4 repo copies), `ExecutionWorkflow` poll loops, benchmark per-task dispatch, `provision-detect` seed scan, `EnvironmentConnectionService` commit/PR path, `WorkersAiLlmUpstream` tool-calls, OTEL metric fold | ✅ landed |
+| 2 (final) |     4 | (18); ESLint's default; hoisted into helpers: shared `parseSubtasks` (kernel, de-dupes 4 repo copies), `ExecutionWorkflow` poll loops, benchmark per-task dispatch, `provision-detect` seed scan, `EnvironmentConnectionService` commit/PR path, `WorkersAiLlmUpstream` tool-calls, OTEL metric fold | ✅ landed |
 
-### `max-nested-callbacks` — 6 → 4
+### `max-nested-callbacks`: 6 → 4
 
 | Step      | `max` | Offenders to split first                                                                                                                                                          | Status    |
 | --------- | ----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline  |     6 | —                                                                                                                                                                                 | ✅ landed |
-| 1 → final |     4 | (1) `agents/src/repo-ops/render.test.ts` (→ `collectSpecIds`) — splitting the lone 6-offender dropped the floor straight to 4, so this jumped to the **final** target in one step | ✅ landed |
+| baseline  |     6 | —                                                                                                                                                                               | ✅ landed |
+| 1 → final |     4 | (1) `agents/src/repo-ops/render.test.ts` (→ `collectSpecIds`); splitting the lone 6-offender dropped the floor straight to 4, so this jumped to the **final** target in one step | ✅ landed |
 
 ## Conventions & gotchas carried between iterations
 
@@ -409,26 +409,26 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
   pattern": each PR must move the initiative materially (a full step, several steps, or a whole
   rule when the offenders are one class of change), never a lone `.oxlintrc.json` decrement bolted
   onto a trivial edit. `max-params`' 20 → 6 landed as ONE options-object / context-bundle sweep of
-  all ~15 offenders — that is the reference for "a real slice".
+  all ~15 offenders: that is the reference for "a real slice".
 - **Bundle, don't just split, for `max-params`.** The going-down move for a too-long parameter list
   is to bundle it into ONE argument along a cohesive seam: a DI **dependency object**
   (`NodeContainerExecutorDeps` / `WorkerExecutorDeps`), a **loop-invariant context** threaded
   through a call family (`DeployerFanOut`), a trailing **options bag** (`RunStartOptions`, extracted
   to its own file so the host doesn't breach `max-lines`), or a **callback / identity** bundle
   (`syncResource` handlers, `runProviderValidate`'s repo target). Destructure at the top of the body
-  so the diff below the signature is untouched — that keeps the refactor behaviour-neutral.
+  so the diff below the signature is untouched: that keeps the refactor behaviour-neutral.
 - **A refactor touching `executor-harness/src/**`republishes the runner image.** Bump the harness`version`+ run`pnpm sync:image-tags`(updates the three pins +`RECOMMENDED_HARNESS_IMAGE`) +
   add the `@cat-factory/executor-harness`changeset, and verify with`node scripts/check-runner-image-tag.mjs --since origin/main`. This is why an offender in the
   harness (e.g. `streamCli`) makes a lint slice heavier than a pure library one.
 - **Never raise a `max` back up.** Once a step lands, the ceiling only moves down. If a new
-  PR would exceed a live ceiling, the PR splits its code — that is the whole point.
+  PR would exceed a live ceiling, the PR splits its code: that is the whole point.
 - **`error`, not `warn`.** The rules match the repo's `correctness: error` posture so a
   regression fails CI (`pnpm lint`), not just prints a warning.
-- **Whole-tree lint only.** Verify a step with `pnpm lint` / `oxlint` from the repo root —
+- **Whole-tree lint only.** Verify a step with `pnpm lint` / `oxlint` from the repo root:
   never pass file paths (same rule as `oxfmt`; see CLAUDE.md).
 - **Test suites dominate the size rules.** `internal/conformance/src/suites/*` are the top
   `max-lines` / `max-lines-per-function` offenders and are legitimately large table-driven
-  suites — prefer an `overrides` looser ceiling for test globs over contorting them (decide
+  suites: prefer an `overrides` looser ceiling for test globs over contorting them (decide
   by `max-lines-per-function` step 2).
 - **`max-lines` overlaps `check-file-size.mjs`.** They are complementary, not redundant: the
   custom guard carries per-file ratcheted allowances for named legacy files; oxlint's
@@ -436,14 +436,14 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
   guard's default budget so they don't disagree.
 - **DI builders are the recurring complexity/param sink.** `buildNodeContainer` /
   `buildLocalContainer` / `cloudflare` `container.ts` top `complexity`, `max-params`, and
-  `max-lines` at once — splitting them (grouped sub-builders, an options object instead of
+  `max-lines` at once: splitting them (grouped sub-builders, an options object instead of
   positional args) knocks out several rules' step 1 in one refactor.
 - **No changeset needed for a step that only edits `.oxlintrc.json`** (root tooling config,
   not a published package). A step that also refactors a **versioned package's** source needs
-  that package's changeset as usual — even a test-file-only touch (`*.test.ts` under a published
+  that package's changeset as usual: even a test-file-only touch (`*.test.ts` under a published
   package's `src/`) counts as a package change to `changeset status`, so cover it with a patch.
 - **Re-run the floor-finder before every slice.** A file split landed for the file-size guard (or
   any unrelated refactor) can drop a rule's floor below its pinned ceiling, opening a **free**
-  tightening with no work — exactly how `max-lines` / `max-lines-per-function` moved in the first
+  tightening with no work: exactly how `max-lines` / `max-lines-per-function` moved in the first
   pass after #1266 split the conformance god-file. `node scripts/lint-limits-report.mjs` surfaces
   that gap (ceiling > floor).

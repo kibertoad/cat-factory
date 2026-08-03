@@ -3,9 +3,9 @@
 Opt-in [Langfuse](https://langfuse.com) trace sink for the Agent Architecture Board.
 
 It implements the runtime-neutral `LlmTraceSink` port from `@cat-factory/kernel`, so
-when wired into a facade every LLM call — container-agent calls (through the LLM proxy)
+when wired into a facade every LLM call: container-agent calls (through the LLM proxy)
 **and** inline calls (requirements review, document planner, fragment selector, inline
-agent) — surfaces in Langfuse as a generation grouped under its run's trace, plus
+agent): surfaces in Langfuse as a generation grouped under its run's trace, plus
 optional container tool spans.
 
 ## Why fetch-only
@@ -13,7 +13,7 @@ optional container tool spans.
 The sink talks to Langfuse's public **ingestion API** (`POST /api/public/ingestion`,
 HTTP Basic auth, batched JSON events) using only the global `fetch` / `crypto` /
 `btoa`. It deliberately does **not** depend on the official `langfuse` Node SDK or any
-`@opentelemetry/*` package — those rely on Node-only APIs that are unavailable on the
+`@opentelemetry/*` package: those rely on Node-only APIs that are unavailable on the
 Cloudflare Worker runtime (workerd). Using the raw ingestion API keeps the sink
 byte-for-byte identical on both the Worker and Node facades.
 
