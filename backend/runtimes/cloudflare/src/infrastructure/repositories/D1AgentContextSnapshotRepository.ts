@@ -2,6 +2,7 @@ import type {
   AgentContextFile,
   AgentContextFragment,
   AgentContextIndexQuery,
+  AgentContextRunPageQuery,
   AgentContextSnapshot,
   AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
@@ -192,6 +193,35 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
       .bind(...binds)
       .all<IndexRow>()
     return (results ?? []).map(rowToIndex)
+  }
+
+  async listRunPage(
+    workspaceId: string,
+    query: AgentContextRunPageQuery,
+  ): Promise<AgentContextSnapshot[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: unknown[] = [workspaceId, query.executionId]
+    if (query.stepIndex != null) {
+      clauses.push('step_index = ?')
+      binds.push(query.stepIndex)
+    }
+    if (query.cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // Same predicate, ordering and keyset as `listIndex` — bodies included. Keeping the two in
+    // step is what lets a caller page the index and then page the rows and see the same run.
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_context_snapshots
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds)
+      .all<SnapshotRow>()
+    return (results ?? []).map(rowToSnapshot)
   }
 
   async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {

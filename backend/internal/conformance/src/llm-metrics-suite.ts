@@ -79,6 +79,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
     registerMetricRollupTests(makeRepo, ids)
     registerMetricProducerTests(makeRepo, ids)
     registerMetricDebugReadTests(makeRepo, ids)
+    registerMetricRunPageTests(makeRepo, ids)
     registerMetricBatchTests(makeRepo, ids)
   })
 }
@@ -1184,4 +1185,65 @@ function registerMetricPhaseAxisTests(
   // every filter are pushed into SQL, so a runtime that implemented either in JavaScript (or
   // sliced with a different offset convention — `substr` is 1-based, `slice` is 0-based) would
   // hand a remote caller more bytes than it budgeted for, and only fail here.
+}
+
+/**
+ * The mothership-mode READ-THROUGH read: a bounded, keyset-paginated page of one run's calls with
+ * the bodies WHOLE (docs/initiatives/mothership-mode.md, PR 5).
+ *
+ * Its own registrar rather than more of {@link registerMetricDebugReadTests}, and not only for the
+ * per-function line budget: it is a different surface with a different contract. The debug reads
+ * return SLICES plus their lengths and answer a human paging a run; this returns the stored record
+ * so a node can reconstitute exactly what a direct repository call would have given it.
+ */
+function registerMetricRunPageTests(
+  makeRepo: () => LlmCallMetricRepository,
+  ids: () => MetricIds,
+): void {
+  it("pages a run's calls WITH whole bodies on the same composite keyset", async () => {
+    // The mothership-mode READ-THROUGH read (docs/initiatives/mothership-mode.md, PR 5): a
+    // laptop rendering a run whose local rows were pruned drains this from the mothership.
+    // Where `listPage` returns SLICES plus their lengths, this returns the stored record, so
+    // the node can answer `listByExecution` with exactly what a direct repo would have.
+    const repo = makeRepo()
+    const { ws, e1, e2 } = ids()
+    await repo.record(metric({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+    // Two share a millisecond — the tie a `created_at`-only cursor loses.
+    await repo.record(metric({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+    await repo.record(
+      metric({
+        id: `${ws}-c`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 20,
+        agentKind: 'merger',
+      }),
+    )
+    await repo.record(metric({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 30 }))
+
+    const first = await repo.listRunPage(ws, { executionId: e1, limit: 2 })
+    expect(first.map((c) => c.id)).toEqual([`${ws}-c`, `${ws}-b`])
+    // Whole bodies, not slices — no `totalChars`, no truncation.
+    expect(first[0]?.responseText).toBe('ok')
+    const last = first[first.length - 1]!
+    const second = await repo.listRunPage(ws, {
+      executionId: e1,
+      limit: 2,
+      cursor: { createdAt: last.createdAt, id: last.id },
+    })
+    expect(second.map((c) => c.id)).toEqual([`${ws}-a`])
+    // Drained to exhaustion it reproduces `listByExecution` exactly, which is the property the
+    // read-through relies on to answer that method from the mothership.
+    expect([...first, ...second].map((c) => c.id)).toEqual(
+      (await repo.listByExecution(ws, e1)).map((c) => c.id),
+    )
+    // The agent-kind narrowing is applied in SQL, so a caller's limit is spent on that kind.
+    expect(
+      (await repo.listRunPage(ws, { executionId: e1, limit: 10, agentKind: 'merger' })).map(
+        (c) => c.id,
+      ),
+    ).toEqual([`${ws}-c`])
+    // An unknown run pages empty rather than throwing.
+    expect(await repo.listRunPage(ws, { executionId: 'exec-nothing', limit: 10 })).toEqual([])
+  })
 }

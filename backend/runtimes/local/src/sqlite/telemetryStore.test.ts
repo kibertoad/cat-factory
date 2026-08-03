@@ -306,6 +306,36 @@ describe('SqliteLlmCallMetricRepository', () => {
     expect(oldest.map((r) => r.id)).toEqual(['c_a', 'c_b', 'c_c'])
   })
 
+  it('pages a run WITH whole bodies for the mothership read-through', async () => {
+    // `listRunPage` is what a mothership serves a node whose local rows were pruned. Unlike
+    // `listPage` it returns the stored record, and unlike `listByExecution` it carries a cursor —
+    // parity with the D1/Drizzle stores is asserted by the shared conformance suite; this pins the
+    // local mirror's own SQL.
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'c_a', createdAt: 1000 }))
+    await repo.record(metric({ id: 'c_b', createdAt: 1000 }))
+    await repo.record(metric({ id: 'c_c', createdAt: 2000, agentKind: 'merger' }))
+
+    const first = await repo.listRunPage('ws_1', { executionId: 'exec_1', limit: 2 })
+    expect(first.map((r) => r.id)).toEqual(['c_c', 'c_b'])
+    expect(first[0]!.responseText).toBe(metric({ id: 'x' }).responseText)
+    expect(
+      (
+        await repo.listRunPage('ws_1', {
+          executionId: 'exec_1',
+          limit: 2,
+          cursor: { createdAt: first[1]!.createdAt, id: first[1]!.id },
+        })
+      ).map((r) => r.id),
+    ).toEqual(['c_a'])
+    // The kind filter is applied in SQL, so a caller's limit is spent on the kind it asked for.
+    expect(
+      (
+        await repo.listRunPage('ws_1', { executionId: 'exec_1', limit: 10, agentKind: 'merger' })
+      ).map((r) => r.id),
+    ).toEqual(['c_c'])
+  })
+
   it('prunes by age and reports how many rows it reclaimed', async () => {
     const repo = store.llmCallMetricRepository
     await repo.record(metric({ id: 'old', createdAt: 500 }))
@@ -386,6 +416,20 @@ describe('SqliteAgentContextSnapshotRepository', () => {
     expect(
       (
         await repo.listIndex('ws_1', {
+          executionId: 'exec_1',
+          limit: 10,
+          cursor: { createdAt: 2000, id: 's2' },
+        })
+      ).map((r) => r.id),
+    ).toEqual(['s1'])
+
+    // The read-through's page walks the SAME predicate and keyset as the index, with the bodies.
+    const runPage = await repo.listRunPage('ws_1', { executionId: 'exec_1', limit: 1 })
+    expect(runPage.map((r) => r.id)).toEqual(['s2'])
+    expect(runPage[0]!.systemPrompt).toBe('system')
+    expect(
+      (
+        await repo.listRunPage('ws_1', {
           executionId: 'exec_1',
           limit: 10,
           cursor: { createdAt: 2000, id: 's2' },

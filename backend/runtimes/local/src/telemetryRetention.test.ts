@@ -114,9 +114,30 @@ describe('sweepLocalTelemetryRetention', () => {
       provisioningLog: 0,
       subscriptionQuotaCycles: 0,
       ingestState: 0,
+      // The run kept its fresh rows, so it is now a SUBSET locally and its marker stands. Nothing
+      // to forget yet — see the next test for the other half of the marker's life.
+      prunedRunMarkers: 0,
     })
     expect((await store.llmCallMetricRepository.listByExecution('ws_1', 'exec_1')).length).toBe(1)
     expect((await store.provisioningLogRepository.list('ws_1')).length).toBe(2)
+    expect(store.coverage.isRunLocallyComplete('ws_1', 'exec_1')).toBe(false)
+  })
+
+  it('marks a partially pruned run, then forgets the marker once its last row is gone', async () => {
+    // The marker is what stops the read-through answering a pruned run with the suffix it kept —
+    // a short list, and worse, a token total that is simply too low with nothing saying so. It is
+    // swept EXACTLY (no rows left anywhere), never on a window: ageing it out on a duration would
+    // expire it while the run's surviving rows were still being answered with.
+    await seed(store, NOW - 7 * 24 * 60 * 60 * 1000, 'week_old')
+    await seed(store, NOW - 60 * 60 * 1000, 'fresh')
+    await sweepLocalTelemetryRetention(store, RETENTION, NOW)
+    expect(store.coverage.isRunLocallyComplete('ws_1', 'exec_1')).toBe(false)
+
+    // A later sweep, far enough on that the run's remaining rows go too: now there is nothing for
+    // the marker to qualify, and the read-through's emptiness gate covers the run instead.
+    const later = NOW + 30 * 24 * 60 * 60 * 1000
+    expect((await sweepLocalTelemetryRetention(store, RETENTION, later)).prunedRunMarkers).toBe(1)
+    expect(store.coverage.isRunLocallyComplete('ws_1', 'exec_1')).toBe(true)
   })
 
   it('prunes an ingest high-water mark on the LLM window, never before its rows', async () => {

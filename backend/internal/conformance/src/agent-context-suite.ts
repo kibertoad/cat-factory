@@ -197,6 +197,53 @@ export function defineAgentContextSuite(
       expect(await repo.countByExecution(ws, 'exec-nothing')).toBe(0)
     })
 
+    it("pages a run's snapshots WITH bodies on the same keyset the index walks", async () => {
+      // The mothership-mode READ-THROUGH read (docs/initiatives/mothership-mode.md, PR 5): a
+      // laptop rendering a run whose local rows were pruned drains this from the mothership.
+      // It must page on the SAME `(createdAt, id)` composite as `listIndex` — a node that saw
+      // one ordering in the index and another in the rows would silently skip a dispatch.
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.record(
+        snapshot({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10, stepIndex: 0 }),
+      )
+      // Shares a millisecond with the next row — the tie a `created_at`-only cursor loses.
+      await repo.record(
+        snapshot({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20, stepIndex: 1 }),
+      )
+      await repo.record(
+        snapshot({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20, stepIndex: 1 }),
+      )
+      await repo.record(
+        snapshot({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 99 }),
+      )
+
+      const first = await repo.listRunPage(ws, { executionId: e1, limit: 2 })
+      expect(first.map((s) => s.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      // Unlike the index, the page carries the bodies — that is the whole point of the read.
+      expect(first[0]?.systemPrompt).toBe('system')
+      expect(first[0]?.contextFiles).toEqual([
+        { path: 'rfc.md', title: 'RFC', url: 'https://x/rfc', content: 'full body' },
+      ])
+      const last = first[first.length - 1]!
+      const second = await repo.listRunPage(ws, {
+        executionId: e1,
+        limit: 2,
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      expect(second.map((s) => s.id)).toEqual([`${ws}-a`])
+      // Drained to exhaustion the page reproduces `listByExecution` exactly, which is the
+      // property the read-through relies on to answer that method from the mothership.
+      expect([...first, ...second].map((s) => s.id)).toEqual(
+        (await repo.listByExecution(ws, e1)).map((s) => s.id),
+      )
+      // The step narrowing is the index's, applied to the same rows.
+      const step1 = await repo.listRunPage(ws, { executionId: e1, limit: 10, stepIndex: 1 })
+      expect(step1.map((s) => s.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      // Another run's snapshots never leak in, and an unknown run pages empty rather than throwing.
+      expect(await repo.listRunPage(ws, { executionId: 'exec-nothing', limit: 10 })).toEqual([])
+    })
+
     it('point-reads one snapshot with its bodies, scoped to its workspace', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()
