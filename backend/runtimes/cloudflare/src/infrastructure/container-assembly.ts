@@ -35,6 +35,7 @@ import {
   WebCryptoPasswordHasher,
   type PersistenceRegistry,
   type ServerContainer,
+  type ToolSecretChain,
   type WebSearchUpstream,
 } from '@cat-factory/server'
 import {
@@ -42,7 +43,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, RunLifecycleSink, ToolSecretResolver } from '@cat-factory/kernel'
+import type { NotificationChannel, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -176,11 +177,15 @@ export interface WorkerContainerAssemblyInput {
   /** The container executor's dedicated, uncached account-settings reader — see {@link WorkerExecutorDeps}. */
   webSearchAccountSettings: AccountSettingsService | undefined
   /**
-   * The deployment's own capability-credential resolver, built by `createWorker`'s
-   * `createToolSecretResolver` from THIS request's `env`. Absent ⇒ the executor builds the
-   * deployment-environment default. See {@link WorkerExecutorDeps.resolveToolSecrets}.
+   * The composed capability-credential chain: the resolver the container executor dispatches with,
+   * and whether the deployment's own configured vars answer BEHIND the per-workspace store.
+   *
+   * Both halves come from one `buildToolSecretChain` call at the root, so the dispatch path and
+   * the credential checklist cannot disagree about whether an unstored key still resolves. Its
+   * `environmentFallback` is undefined when a deployment supplied its own resolver: it replaced
+   * the chain, and nothing here knows what that consults.
    */
-  executorToolSecrets: ToolSecretResolver | undefined
+  toolSecretChain: ToolSecretChain
   defaultWebSearchUpstream: WebSearchUpstream | undefined
   resolveBinaryArtifactStore: ResolveBinaryArtifactStore
   githubWebhookIngest: CfGitHubWebhookIngest
@@ -327,7 +332,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     accountSettings,
     executorPackageRegistries,
     webSearchAccountSettings,
-    executorToolSecrets,
+    toolSecretChain,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -410,7 +415,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           agentContextObservability,
           resolvePackageRegistries: executorPackageRegistries,
           webSearchAccountSettings,
-          ...(executorToolSecrets ? { resolveToolSecrets: executorToolSecrets } : {}),
+          resolveToolSecrets: toolSecretChain.resolver,
         }),
         env,
         config,
@@ -544,6 +549,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     subscriptions,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretChain,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -718,6 +724,13 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
+    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
+    // describes the real chain instead of asserting the default beside it. Undefined when a
+    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
+    // what that consults.
+    ...(toolSecretChain.environmentFallback === undefined
+      ? {}
+      : { toolSecretEnvironmentFallback: toolSecretChain.environmentFallback }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,

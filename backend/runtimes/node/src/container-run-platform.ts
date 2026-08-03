@@ -20,6 +20,7 @@ import {
   GitHubAppRegistry,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  buildToolSecretChain,
   createResolveRunInitiatorToken,
   logger,
 } from '@cat-factory/server'
@@ -221,6 +222,18 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     caches: options.caches,
   })
 
+  // How a registered capability's declared credentials are resolved at dispatch, composed ONCE
+  // here rather than inside the executor builder: the credential CHECKLIST has to describe the
+  // chain the deployment actually got, and an executor cannot say what it was handed. The chain
+  // travels with its own description for that reason.
+  const toolSecretChain = buildToolSecretChain({
+    custom: options.createToolSecretResolver?.(env),
+    credentials: runServices.capabilityCredentialsService,
+    env,
+    environmentFallback: options.capabilityCredentialEnvironmentFallback,
+    logger,
+  })
+
   const container = buildNodeContainerExecutor({
     env,
     config,
@@ -240,15 +253,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolveRepoOrigin: options.resolveRepoOrigin,
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
-    // A deployment's own resolver, when it passed one; otherwise the executor composes the
-    // per-workspace store in front of the deployment environment (same place the Worker does it,
-    // so the two facades cannot disagree about the chain).
-    ...(options.createToolSecretResolver
-      ? { resolveToolSecrets: options.createToolSecretResolver(env) }
-      : {}),
-    ...(runServices.capabilityCredentialsService
-      ? { capabilityCredentials: runServices.capabilityCredentialsService }
-      : {}),
+    resolveToolSecrets: toolSecretChain.resolver,
     recordHarnessCalls: runServices.recordHarnessCalls,
     recordSubscriptionQuotaUsage: (target, usage) =>
       runServices.subscriptionQuotaProvider.recordUsage(target, usage),
@@ -322,6 +327,10 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     baseDeployMint,
     deployDeps,
     standardAgentExecutor,
+    // Surfaced so the credential checklist can state what sits behind the store — see
+    // `ServerContainer.toolSecretEnvironmentFallback`. Undefined when a deployment replaced the
+    // chain with its own resolver, which is the honest answer rather than a default.
+    toolSecretEnvironmentFallback: toolSecretChain.environmentFallback,
     githubClient,
     tasks,
     fileGitHubIssue,

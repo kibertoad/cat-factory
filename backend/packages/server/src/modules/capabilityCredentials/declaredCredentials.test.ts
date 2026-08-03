@@ -155,4 +155,12 @@ describe('buildCapabilityCredentialsView', () => {
     expect(view.environmentFallback).toBe(false)
     expect(view.declared[0]?.stored).toBe(false)
   })
+
+  it('OMITS the flag when the composed chain cannot be described', async () => {
+    // A deployment that supplied its own resolver replaced the chain. Reporting either boolean is
+    // a claim the platform cannot make, and each sends the operator the wrong way: `true` leaves a
+    // credential nothing will resolve, `false` sends them hunting for a value that already answers.
+    const view = buildCapabilityCredentialsView({ declarations, stored: [] })
+    expect(view.environmentFallback).toBeUndefined()
+  })
 })

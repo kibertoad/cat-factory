@@ -2719,6 +2719,7 @@
       "storedAt": "Definida por última vez el {date}",
       "notStoredWithFallback": "No hay nada guardado para este tablero. Esta instalación también lee la clave de su propio entorno, así que la capacidad puede seguir funcionando.",
       "notStored": "No hay nada guardado para este tablero y esta instalación no tiene respaldo en el entorno, así que la capacidad no puede autenticarse.",
+      "notStoredUnknownFallback": "No hay nada guardado para este tablero. Esta instalación aporta su propio resolutor de credenciales, así que aquí no se sabe si la clave se responde en otro sitio.",
       "setValue": "Valor",
       "replaceValue": "Sustituir el valor guardado",
       "save": "Guardar",

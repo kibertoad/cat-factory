@@ -1188,8 +1188,8 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   everything outside the platform's own configuration** is a developer's own tooling, and only the
   deployment knows what an integration may see: `{ allowKeys }`, which a deployment installing
   third-party agent packages (or a mothership-mode node) sets through its facade's
-  `createToolSecretResolver` factory. **On the Worker that factory registers PROCESS-WIDE**
-  (`registerToolSecretResolverFactory`, the `registerModelRegistry` pattern), because a Worker builds a
+  `createToolSecretResolver` factory. **On the Worker that policy registers PROCESS-WIDE**
+  (`registerToolSecretPolicy`, the `registerModelRegistry` pattern), because a Worker builds a
   container per entry point and the one that dispatches container agents is the durable driver, so an
   option held on the app would be accepted and never asked anything. **The VALUE's primary home is the
   per-workspace capability-credential store**, not the environment: every facade composes it in FRONT
@@ -1199,8 +1199,14 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   that an empty list would flatten: a stored key nothing declares (`orphaned`), a declaration read that
   FAILED (`declarationsIncomplete`, which also suppresses the orphan list, or an unreachable
   mothership reports every generator credential as stale), and a key the environment still answers
-  (`environmentFallback`). Doc:
-  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  (`environmentFallback`). **That last one is a TRI-STATE read off the chain the facade COMPOSED, never
+  a default the surface asserts beside it**: `buildToolSecretChain` is the one composition site and it
+  returns the resolver and its description together, so a deployment that declared its chain store-only
+  (`capabilityCredentialEnvironmentFallback: false`, the multi-tenant shape) reports `false` and one
+  that supplied its own resolver reports ABSENT, because that resolver replaced the chain and may read
+  Vault, the environment, or both. Guessing either way is the same mistake mirrored: `true` leaves a
+  credential nothing will resolve, `false` sends an operator hunting for a value that already answers.
+  Doc: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.

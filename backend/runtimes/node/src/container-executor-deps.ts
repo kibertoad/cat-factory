@@ -14,7 +14,6 @@ import {
   ProviderSubscriptionService,
   createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
-import type { CapabilityCredentialsService } from '@cat-factory/integrations'
 import type {
   EnvironmentBackendRegistry,
   ProvisioningLogRecorder,
@@ -58,9 +57,7 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
-  composeToolSecretResolvers,
   createEnvToolSecretResolver,
-  createWorkspaceToolSecretResolver,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -252,17 +249,14 @@ export interface NodeContainerExecutorDeps {
    * KIND of thing: a deployment concern the composition root owns. It was the one credential seam
    * with no such field, which made `ToolSecretResolver` a port with exactly one reachable
    * implementation — an indirection buying nothing a direct `env[key]` would not have bought.
+   *
+   * The composition root supplies the whole CHAIN (`buildToolSecretChain`: the per-workspace store
+   * in front of the environment, or a deployment's own resolver). It is built there rather than
+   * here because the credential CHECKLIST has to describe what was composed, and this builder
+   * returns an executor with no way to say. The bare env default below is the standalone shape,
+   * for a caller assembling this executor without that root.
    */
   resolveToolSecrets?: ToolSecretResolver
-  /**
-   * The per-workspace capability-credential store, composed in FRONT of the deployment
-   * environment below. Absent (no `ENCRYPTION_KEY`) ⇒ the environment resolver alone, which is
-   * what this deployment had before the store existed.
-   *
-   * Ignored when {@link resolveToolSecrets} is set: a deployment that supplied its own resolver
-   * replaces the whole chain rather than being wrapped by it.
-   */
-  capabilityCredentials?: CapabilityCredentialsService
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
@@ -291,7 +285,6 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     resolvePackageRegistries,
     resolveTestSecrets,
     resolveToolSecrets,
-    capabilityCredentials,
     recordHarnessCalls,
     recordSubscriptionQuotaUsage,
   } = deps
@@ -436,22 +429,11 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
-    // integration) declared. Defaults to reading them off the node's own environment; a
-    // deployment needing per-workspace credentials passes its own `ToolSecretResolver` through
-    // `startLocal`/`start`'s `createToolSecretResolver`, and the rest of the dispatch path is
-    // unchanged either way. Reads the injected `env` rather than `process.env` directly, so a
-    // caller that supplies one (tests, an embedded boot) is not silently bypassed.
-    resolveToolSecrets:
-      resolveToolSecrets ??
-      composeToolSecretResolvers(
-        [
-          ...(capabilityCredentials
-            ? [createWorkspaceToolSecretResolver({ credentials: capabilityCredentials, logger })]
-            : []),
-          createEnvToolSecretResolver(env),
-        ],
-        logger,
-      ),
+    // integration) declared. The composition root passes the composed chain (the per-workspace
+    // store in front of this node's environment, or a deployment's own resolver); absent, this
+    // falls back to the environment alone. Reads the injected `env` rather than `process.env`
+    // directly, so a caller that supplies one (tests, an embedded boot) is not silently bypassed.
+    resolveToolSecrets: resolveToolSecrets ?? createEnvToolSecretResolver(env),
     logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab

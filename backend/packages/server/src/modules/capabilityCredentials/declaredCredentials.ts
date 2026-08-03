@@ -120,7 +120,12 @@ export async function collectDeclaredCapabilityCredentials(
 export function buildCapabilityCredentialsView(input: {
   declarations: DeclaredCapabilityCredentials
   stored: CapabilityCredentialRef[]
-  environmentFallback: boolean
+  /**
+   * What the facade's COMPOSED chain does behind the store — passed through rather than decided
+   * here, and undefined when a deployment's own resolver replaced the chain. See
+   * `buildToolSecretChain`.
+   */
+  environmentFallback?: boolean
 }): CapabilityCredentialsView {
   const stored = new Map(input.stored.map((ref) => [ref.key, ref]))
   const byKey = new Map<string, DeclaredCapabilityCredential[]>()
@@ -158,7 +163,9 @@ export function buildCapabilityCredentialsView(input: {
   return {
     declared: declared.sort((a, b) => a.key.localeCompare(b.key)),
     orphaned: orphaned.sort((a, b) => a.key.localeCompare(b.key)),
-    environmentFallback: input.environmentFallback,
+    ...(input.environmentFallback === undefined
+      ? {}
+      : { environmentFallback: input.environmentFallback }),
     declarationsIncomplete: input.declarations.incomplete,
   }
 }

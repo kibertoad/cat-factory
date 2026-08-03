@@ -137,6 +137,19 @@ export interface ServerContainer extends Core {
    */
   capabilityCredentials?: CapabilityCredentialsService
   /**
+   * Whether the capability-credential chain this facade COMPOSED reads the deployment environment
+   * behind the store above — the fact the credential checklist describes, not a default it
+   * re-asserts. Projected from `buildToolSecretChain`, so the surface and the dispatch path read
+   * one composition.
+   *
+   * Undefined is a real answer and the reason this is a tri-state: a deployment that supplied its
+   * own `ToolSecretResolver` replaced the chain, and nothing here knows what it consults. It is
+   * also what a facade that wired nothing leaves behind, which renders identically (the checklist
+   * claims neither "may still resolve" nor "missing"); the wiring itself is pinned per facade by
+   * the `tool-secret-seam.coverage.*` guards, since every link in that chain is optional.
+   */
+  toolSecretEnvironmentFallback?: boolean
+  /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config
    * repository. Backs the validation-check CRUD controller; its `resolveForBlock` is also

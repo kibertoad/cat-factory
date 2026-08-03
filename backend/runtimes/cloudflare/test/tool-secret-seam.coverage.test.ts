@@ -6,8 +6,9 @@ import containerSource from '../src/infrastructure/container.ts?raw'
 import assemblySource from '../src/infrastructure/container-assembly.ts?raw'
 import executorSource from '../src/infrastructure/container-executor-deps.ts?raw'
 import {
-  clearToolSecretResolverFactory,
-  registerToolSecretResolverFactory,
+  clearToolSecretPolicy,
+  registerToolSecretPolicy,
+  registeredToolSecretEnvironmentFallback,
   resolveRegisteredToolSecretResolver,
 } from '../src/infrastructure/toolSecretResolver'
 import type { Env } from '../src/infrastructure/env'
@@ -24,28 +25,41 @@ import type { Env } from '../src/infrastructure/env'
 // optional field that a refactor could drop while still compiling and still passing every
 // behavioural test.
 
-describe('the tool-secret resolver registration', () => {
+describe('the tool-secret policy registration', () => {
   it('round-trips a factory and builds it with the caller’s env', () => {
     const resolver = { resolve: async () => ({}) }
     const seen: Env[] = []
-    registerToolSecretResolverFactory((env) => {
-      seen.push(env)
-      return resolver
+    registerToolSecretPolicy({
+      createResolver: (env) => {
+        seen.push(env)
+        return resolver
+      },
     })
     const env = { ENVIRONMENT: 'test' } as unknown as Env
     expect(resolveRegisteredToolSecretResolver(env)).toBe(resolver)
     expect(seen).toEqual([env])
-    clearToolSecretResolverFactory()
+    clearToolSecretPolicy()
     expect(resolveRegisteredToolSecretResolver(env)).toBeUndefined()
   })
 
-  it('lets the last registration win, since a container has exactly one resolver', () => {
+  it('lets the last registration win, since a container has exactly one chain', () => {
     const first = { resolve: async () => ({}) }
     const second = { resolve: async () => ({}) }
-    registerToolSecretResolverFactory(() => first)
-    registerToolSecretResolverFactory(() => second)
+    registerToolSecretPolicy({ createResolver: () => first })
+    registerToolSecretPolicy({ createResolver: () => second })
     expect(resolveRegisteredToolSecretResolver({} as unknown as Env)).toBe(second)
-    clearToolSecretResolverFactory()
+    clearToolSecretPolicy()
+  })
+
+  // The store-only declaration a multi-tenant deployment makes. Unregistered has to stay
+  // UNDEFINED rather than defaulting here: the composition owns the default, and a `false`
+  // invented at the read would turn every unregistered deployment store-only.
+  it('carries the environment-fallback declaration, undefined until one is made', () => {
+    expect(registeredToolSecretEnvironmentFallback()).toBeUndefined()
+    registerToolSecretPolicy({ environmentFallback: false })
+    expect(registeredToolSecretEnvironmentFallback()).toBe(false)
+    clearToolSecretPolicy()
+    expect(registeredToolSecretEnvironmentFallback()).toBeUndefined()
   })
 })
 
@@ -55,13 +69,27 @@ describe('the tool-secret resolver registration', () => {
 const SOURCES: Record<string, [string, string[]]> = {
   // The option a deployment sets on `createWorker`, registered process-wide rather than closed
   // over the app.
-  'src/app.ts': [appSource, ['createToolSecretResolver', 'registerToolSecretResolverFactory']],
+  'src/app.ts': [
+    appSource,
+    [
+      'createToolSecretResolver',
+      'capabilityCredentialEnvironmentFallback',
+      'registerToolSecretPolicy',
+    ],
+  ],
   // Every container build reads the registration. This is the assertion the guard exists for: it
   // holds for the durable driver, the queue consumers and the crons without naming them, because
   // they all come through this one function.
-  'src/infrastructure/container.ts': [containerSource, ['resolveRegisteredToolSecretResolver']],
-  // …carried across the assembly boundary…
-  'src/infrastructure/container-assembly.ts': [assemblySource, ['executorToolSecrets']],
+  'src/infrastructure/container.ts': [
+    containerSource,
+    ['resolveRegisteredToolSecretResolver', 'registeredToolSecretEnvironmentFallback'],
+  ],
+  // …carried across the assembly boundary, resolver and description TOGETHER, so the credential
+  // checklist describes the chain the dispatch path actually got…
+  'src/infrastructure/container-assembly.ts': [
+    assemblySource,
+    ['toolSecretChain.resolver', 'toolSecretEnvironmentFallback'],
+  ],
   // …and preferred by the executor over the platform's own resolver chain.
   'src/infrastructure/container-executor-deps.ts': [executorSource, ['deps.resolveToolSecrets']],
 }

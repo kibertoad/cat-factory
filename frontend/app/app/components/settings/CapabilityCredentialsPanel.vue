@@ -160,15 +160,21 @@ async function removeKey(key: string) {
           })
         }}
       </p>
-      <!-- An EMPTY row is not the same fact in both deployments, so it must not read the same
-           way. Behind the store the deployment's own environment may still answer for this key,
-           and calling that "missing" would send an operator hunting for a value that is already
-           resolving. -->
-      <p v-else-if="view?.environmentFallback" class="text-[11px] text-slate-500">
+      <!-- An EMPTY row is not the same fact in every deployment, so it must not read the same way.
+           Three states, and the backend reports them off the chain it actually composed: with the
+           fallback the deployment's own environment may still answer, and calling that "missing"
+           would send an operator hunting for a value that is already resolving; without it, blank
+           really does mean the capability cannot authenticate. The third is a deployment that
+           supplied its OWN resolver, which replaced the chain — neither claim is ours to make, so
+           this says what is known and stops there. -->
+      <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-slate-500">
         {{ t('settings.capabilityCredentials.notStoredWithFallback') }}
       </p>
-      <p v-else class="text-[11px] text-amber-400">
+      <p v-else-if="view?.environmentFallback === false" class="text-[11px] text-amber-400">
         {{ t('settings.capabilityCredentials.notStored') }}
+      </p>
+      <p v-else class="text-[11px] text-slate-500">
+        {{ t('settings.capabilityCredentials.notStoredUnknownFallback') }}
       </p>
 
       <div class="flex items-end gap-2">
