@@ -22,6 +22,7 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   TestSecretsService,
+  CapabilityCredentialsService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -146,6 +147,7 @@ export interface WorkerContainerAssemblyInput {
   resolveTransport: ResolveRunnerTransport | null
   subscriptions: ProviderSubscriptionService | undefined
   testSecretsService: TestSecretsService | undefined
+  capabilityCredentialsService: CapabilityCredentialsService | undefined
   validationConfigService: ValidationConfigService
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
@@ -498,6 +500,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   const {
     subscriptions,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -668,6 +671,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    ...(capabilityCredentialsService
+      ? { capabilityCredentials: capabilityCredentialsService }
+      : {}),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,

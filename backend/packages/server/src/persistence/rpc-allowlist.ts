@@ -793,6 +793,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The PER-WORKSPACE CAPABILITY CREDENTIALS — the tenant-scoped home for the secrets a registered
+  // tool server / generative binary integration declares by name. `credentials` rides a SEALED
+  // blob (sealed/decrypted in the service under the LOCAL key), so no plaintext crosses the
+  // machine API — the same precedent as `testSecretsRepository` above. This is org state a RUN
+  // resolves, so `remote` is the only bucket that works: a mothership-mode node has no `db` of its
+  // own, and a credential the operator set on the mothership must reach the dispatch that needs
+  // it. The settings CRUD (`get`/`upsert`/`delete`) and the dispatch-time read are the SAME three
+  // methods, all workspace-scoped on arg0 except the record-based `upsert`, which binds on its
+  // `workspaceId` FIELD.
+  capabilityCredentialRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The per-service PRE-PR VALIDATION CHECKS, keyed by service-frame block like
   // `releaseHealthConfigRepository` above. Nothing sealed — the commands are operator-authored
   // shell strings that run inside the run's own container — so the plain record crosses the

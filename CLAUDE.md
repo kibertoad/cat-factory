@@ -1162,7 +1162,16 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   everything outside the platform's own configuration** is a developer's own tooling, and only the
   deployment knows what an integration may see — `{ allowKeys }`, which a deployment installing
   third-party agent packages (or a mothership-mode node) sets through its facade's
-  `createToolSecretResolver` factory. That factory is also how a deployment swaps in a per-workspace
+  `createToolSecretResolver` factory. **The VALUE's primary home is the per-workspace
+  capability-credential store**, not the environment: every facade composes it in FRONT of the env
+  resolver PER KEY (a partially-filled workspace must not lose the keys it has not typed yet), so a
+  tenant brings its own vendor account and a workspace storing nothing resolves exactly as before.
+  Its surface is a CHECKLIST projected from the registries, and it keeps three states apart that an
+  empty list would flatten — a stored key nothing declares (`orphaned`), a declaration read that
+  FAILED (`declarationsIncomplete`, which also suppresses the orphan list, or an unreachable
+  mothership reports every generator credential as stale), and a key the environment still answers
+  (`environmentFallback`). Doc:
+  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md). That factory is also how a deployment swaps in a per-workspace
   sealed store; the port had no facade seam at all until it existed, which made it an env read with
   extra types.
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS

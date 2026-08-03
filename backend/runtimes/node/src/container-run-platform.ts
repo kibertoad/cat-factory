@@ -240,11 +240,14 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolveRepoOrigin: options.resolveRepoOrigin,
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
-    // A deployment's own capability-credential resolver (per-workspace store, secret manager, or
-    // just the env default narrowed by `allowKeys`). Absent ⇒ the executor builds the
-    // deployment-environment default over the same `env`.
+    // A deployment's own resolver, when it passed one; otherwise the executor composes the
+    // per-workspace store in front of the deployment environment (same place the Worker does it,
+    // so the two facades cannot disagree about the chain).
     ...(options.createToolSecretResolver
       ? { resolveToolSecrets: options.createToolSecretResolver(env) }
+      : {}),
+    ...(runServices.capabilityCredentialsService
+      ? { capabilityCredentials: runServices.capabilityCredentialsService }
       : {}),
     recordHarnessCalls: runServices.recordHarnessCalls,
     recordSubscriptionQuotaUsage: (target, usage) =>

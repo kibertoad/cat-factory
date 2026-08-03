@@ -457,6 +457,14 @@ function buildReviewAndIntegrationRepos() {
       upsert: async () => undefined,
       delete: async () => undefined,
     },
+    // The per-workspace CAPABILITY CREDENTIAL store: the settings CRUD and the dispatch-time read
+    // are the same three methods. Same shape as the sealed connections above — the blob is opaque
+    // here, which is the point: no plaintext crosses the machine API.
+    capabilityCredentialRepository: {
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      delete: async () => undefined,
+    },
     // The Kaizen screen read surface: grading history + per-run status + the verified-combo
     // library. Each echoes its workspaceId (arg0); the run-path `getByStep`/`upsert` +
     // combo `getByKey` were exposed earlier.

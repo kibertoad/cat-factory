@@ -47,7 +47,9 @@ import {
   noRunnerBackendAvailableError,
   type MintInstallationToken,
   type WebSearchUpstream,
+  composeToolSecretResolvers,
   createEnvToolSecretResolver,
+  createWorkspaceToolSecretResolver,
   operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig } from './config'
@@ -70,7 +72,10 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { buildTestSecretsService } from './wireCredentialServices'
+import {
+  buildCapabilityCredentialsService,
+  buildTestSecretsService,
+} from './wireCredentialServices'
 import { CryptoIdGenerator } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
@@ -396,6 +401,9 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
 
   // Decrypt the service frame's sensitive test credentials onto the tester job body (out of band).
   const testSecretsForDispatch = buildTestSecretsService(env, db, clock)
+  // The per-workspace credential store, for the resolver chain below. Built here rather than
+  // threaded, exactly like `testSecretsForDispatch` beside it — the store is stateless.
+  const capabilityCredentials = buildCapabilityCredentialsService(env, db, clock)
   const resolveTestSecrets = testSecretsForDispatch
     ? (workspaceId: string, blockId: string) =>
         testSecretsForDispatch.resolveValuesForBlock(workspaceId, blockId)
@@ -503,9 +511,22 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // deployment needing per-workspace credentials passes its own `ToolSecretResolver` through
     // `createWorker`'s `createToolSecretResolver`, and the rest of the dispatch path is unchanged
     // either way.
+    // How a registered capability's declared credentials are resolved at dispatch. A deployment's
+    // own resolver REPLACES the whole chain; otherwise the platform's own per-workspace sealed
+    // store answers first and the Worker's configured vars answer behind it, per KEY — a tenant's
+    // own value must win, while a workspace that has stored nothing resolves exactly as it did
+    // before the store existed.
     resolveToolSecrets:
       deps.resolveToolSecrets ??
-      createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+      composeToolSecretResolvers(
+        [
+          ...(capabilityCredentials
+            ? [createWorkspaceToolSecretResolver({ credentials: capabilityCredentials, logger })]
+            : []),
+          createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+        ],
+        logger,
+      ),
     logger,
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)

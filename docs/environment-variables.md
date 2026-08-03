@@ -15,6 +15,13 @@ hand a prompt-injectable agent the key every stored credential is sealed with. S
 is refused at boot and again at dispatch; give an integration a variable of its own
 (`ACME_IMAGE_API_KEY`) and set it beside these.
 
+Capability credentials themselves are no longer primarily environment variables: every facade
+resolves them from the per-workspace **capability-credential store** first and falls back to this
+environment per key, so a multi-tenant deployment gives each workspace its own vendor account
+instead of sharing one variable. See
+[`capability-credential-store.md`](initiatives/capability-credential-store.md). Setting a variable
+still works and is the right mechanism for a single-tenant or local install.
+
 The rule is enforced by `isReservedPlatformEnvKey`
 (`backend/packages/contracts/src/reserved-env-keys.ts`), which reserves the platform's prefix
 families (`AUTH_`, `GITHUB_`, `LOCAL_`, …) plus the remaining exact names, case-insensitively —

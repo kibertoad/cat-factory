@@ -314,11 +314,21 @@ Rules worth knowing before declaring one:
   two need opposite fixes, and setting the variable is precisely what must not help. Give the
   integration a variable of its own. This floor needs no configuration and cannot be widened.
 
+- **A workspace's OWN value wins over the deployment's.** Every facade composes the per-workspace
+  capability-credential store (sealed, `secrets.manage`-gated, edited over
+  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY — so a
+  tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
+  as it did before the store existed. The surface is a CHECKLIST, not a blank form: it projects
+  the credentials this deployment's registered capabilities declare, so an operator never has to
+  read the deployment's source to learn what to fill in. See
+  [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md).
+
 - **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
   configuration is a developer's own tooling, and only the deployment knows which of it an
   integration may see. If a deployment installs agent packages it did not author, wire
   `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` and
-  keep the credentials behind a dedicated prefix. See ADR 0029 → Consequences.
+  keep the credentials behind a dedicated prefix — note that a deployment resolver REPLACES the
+  chain above rather than being wrapped by it. See ADR 0029 → Consequences.
 
   **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary
   integration's credential (`BinaryGeneratorRegistry`, below) goes through the same port. So an

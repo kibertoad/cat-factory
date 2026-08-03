@@ -14,6 +14,7 @@ import {
   ProviderSubscriptionService,
   createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
+import type { CapabilityCredentialsService } from '@cat-factory/integrations'
 import type {
   EnvironmentBackendRegistry,
   ProvisioningLogRecorder,
@@ -57,7 +58,9 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
+  composeToolSecretResolvers,
   createEnvToolSecretResolver,
+  createWorkspaceToolSecretResolver,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -251,6 +254,15 @@ export interface NodeContainerExecutorDeps {
    * implementation — an indirection buying nothing a direct `env[key]` would not have bought.
    */
   resolveToolSecrets?: ToolSecretResolver
+  /**
+   * The per-workspace capability-credential store, composed in FRONT of the deployment
+   * environment below. Absent (no `ENCRYPTION_KEY`) ⇒ the environment resolver alone, which is
+   * what this deployment had before the store existed.
+   *
+   * Ignored when {@link resolveToolSecrets} is set: a deployment that supplied its own resolver
+   * replaces the whole chain rather than being wrapped by it.
+   */
+  capabilityCredentials?: CapabilityCredentialsService
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
@@ -279,6 +291,7 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     resolvePackageRegistries,
     resolveTestSecrets,
     resolveToolSecrets,
+    capabilityCredentials,
     recordHarnessCalls,
     recordSubscriptionQuotaUsage,
   } = deps
@@ -428,7 +441,17 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // `startLocal`/`start`'s `createToolSecretResolver`, and the rest of the dispatch path is
     // unchanged either way. Reads the injected `env` rather than `process.env` directly, so a
     // caller that supplies one (tests, an embedded boot) is not silently bypassed.
-    resolveToolSecrets: resolveToolSecrets ?? createEnvToolSecretResolver(env),
+    resolveToolSecrets:
+      resolveToolSecrets ??
+      composeToolSecretResolvers(
+        [
+          ...(capabilityCredentials
+            ? [createWorkspaceToolSecretResolver({ credentials: capabilityCredentials, logger })]
+            : []),
+          createEnvToolSecretResolver(env),
+        ],
+        logger,
+      ),
     logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
