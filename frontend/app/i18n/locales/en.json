@@ -6331,6 +6331,10 @@
       "intro": "Guided tours walk you through the app right on this screen: they highlight the actual controls and tell you what to click.",
       "start": "Start",
       "restart": "Repeat",
+      "resume": "Resume",
+      "@resume": {
+        "description": "Verb, on a button: pick a guided tour back up from where it was broken off. Not the noun (CV/resume)."
+      },
       "completed": "Completed",
       "decline": "No thanks",
       "later": "Maybe later",
@@ -6343,6 +6347,10 @@
       "done": "Finish",
       "progress": "Step {current} of {total}",
       "ariaLabel": "Tutorial step",
+      "announcement": "Step {current} of {total}. {title}. {body}",
+      "@announcement": {
+        "description": "Screen-reader-only announcement read out on every step change; it is never shown on screen. {title} and {body} are the step's own heading and full sentence, so the separators around them have to be real sentence punctuation in the target language."
+      },
       "abridged": "1 step was skipped: that control is not part of this board. | {count} steps were skipped: those controls are not part of this board.",
       "@abridged": {
         "description": "Shown on a tour's final card when steps were skipped. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of skipped steps."

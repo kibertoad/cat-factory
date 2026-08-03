@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  boardNodeIdFor,
   isSafeTargetId,
   isTargetClickAdvance,
   resolveSkip,
+  shouldFocusCard,
   stepTargetIds,
   stepTargetSelectors,
   unexpectedlySkippedSteps,
@@ -160,5 +162,49 @@ describe('unexpectedlySkippedSteps', () => {
 
   it('is empty for a tour that skipped nothing', () => {
     expect(unexpectedlySkippedSteps(new Set(), [plain, branch])).toEqual([])
+  })
+})
+
+describe('boardNodeIdFor', () => {
+  /** A stand-in for the DOM ancestry lookup: `closest` hits when the selector is the one
+   * Vue Flow wraps its nodes in, and the hit carries whatever `data-id` we hand it. */
+  const el = (nodeId: string | null) => ({
+    closest: (selector: string) =>
+      selector === '.vue-flow__node' && nodeId !== null
+        ? { getAttribute: (name: string) => (name === 'data-id' ? nodeId : null) }
+        : null,
+  })
+
+  it('reports the node id for an anchor on the board canvas', () => {
+    expect(boardNodeIdFor(el('block-42'))).toBe('block-42')
+  })
+
+  it('reports none for an anchor outside the canvas, so the caller scrolls it instead', () => {
+    // A panel row, a modal button, the sidebar: an ordinary scroll container, where a camera
+    // move would do nothing and `scrollIntoView` is the right mechanism.
+    expect(boardNodeIdFor(el(null))).toBeNull()
+    expect(boardNodeIdFor(null)).toBeNull()
+  })
+
+  it('treats an empty data-id as absent', () => {
+    // `fitView` over an unknown id silently does nothing, which would look exactly like a
+    // reveal that ran — and the step would sit pointing off screen with its budget ticking.
+    expect(boardNodeIdFor(el(''))).toBeNull()
+  })
+})
+
+describe('shouldFocusCard', () => {
+  it('takes focus when the tour starts and when the user drives it', () => {
+    // The overlay is teleported to the end of `body`, so without this a keyboard user has to
+    // tab the whole page to reach Next.
+    expect(shouldFocusCard('tour-start')).toBe(true)
+    expect(shouldFocusCard('nav-control')).toBe(true)
+  })
+
+  it('leaves focus alone when the step advanced because the user clicked the real control', () => {
+    // Such a click routinely opens a modal that autofocuses its own first field, and the next
+    // step is typically the one telling the user to type in it. Pulling focus back onto the
+    // coach mark puts their caret on a tooltip instead of the form the tour just pointed at.
+    expect(shouldFocusCard('target-click')).toBe(false)
   })
 })

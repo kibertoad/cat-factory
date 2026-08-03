@@ -20,6 +20,33 @@ export type TutorialDirection = 'forward' | 'back'
 export type SkipOutcome = { kind: 'move'; index: number } | { kind: 'complete' }
 
 /**
+ * Why the step cursor moved. The overlay's only reason for tracking this is the focus
+ * decision below, which is why it is a CAUSE rather than a boolean the call sites pass: the
+ * question "who moved the cursor" has an obvious answer at every call site, where "should
+ * this one steal focus" has to be re-derived — and getting it wrong is silent.
+ */
+export type TutorialAdvanceCause = 'tour-start' | 'nav-control' | 'target-click'
+
+/**
+ * Does the coach mark take focus now that the cursor has moved?
+ *
+ * Yes for the tour's own controls: the overlay is teleported to the end of `body`, so without
+ * this a keyboard user has to tab the whole page to reach Next.
+ *
+ * No for a `target-click` advance, and that is the whole reason this is a function. Such a
+ * step advances because the user operated a REAL control, which routinely opens a modal that
+ * rightly autofocuses its own first field — and the next step is typically the one telling
+ * them to type in it. Pulling focus back onto our card leaves the caret on a tooltip instead
+ * of the form, so the tour breaks the very interaction it just asked for.
+ *
+ * Not a focus trap either way: half the catalog asks the user to operate the control behind
+ * the card, which a trap would put out of reach.
+ */
+export function shouldFocusCard(cause: TutorialAdvanceCause): boolean {
+  return cause !== 'target-click'
+}
+
+/**
  * What a `data-testid` may look like. Every one of the ~470 test ids in this layer is
  * lowercase kebab-case, and the e2e suite's convention keeps it that way, so this rejects
  * nothing real — which is what makes it usable as a GUARD rather than as escaping.
@@ -69,6 +96,32 @@ export function resolveSkip(
 ): SkipOutcome {
   if (direction === 'back' && index > 0) return { kind: 'move', index: index - 1 }
   return index + 1 < total ? { kind: 'move', index: index + 1 } : { kind: 'complete' }
+}
+
+/**
+ * Vue Flow's per-node wrapper, which carries the node id in `data-id`. The board is a
+ * TRANSFORM-panned canvas rather than a scroll container, so an anchor inside one of these is
+ * revealed by moving the camera (`fitView({ nodes })`), where every other anchor is revealed
+ * by `scrollIntoView`. Asking the DOM which of the two an element is beats keying off the
+ * step's target id, since the same id (`task-card`) is a canvas node on the board and a plain
+ * list row in a panel.
+ */
+export const BOARD_NODE_SELECTOR = '.vue-flow__node'
+
+/** The part of an element the reveal path needs: ancestry, and that ancestor's node id. */
+interface RevealNode {
+  closest(selector: string): { getAttribute(name: string): string | null } | null
+}
+
+/**
+ * The board-canvas node id owning this element, or null when the element is not on the canvas
+ * (so the caller scrolls it into view instead). An empty `data-id` counts as absent: Vue Flow
+ * would match nothing, and a `fitView` over an unknown id silently does nothing at all — which
+ * would look exactly like a reveal that ran.
+ */
+export function boardNodeIdFor(el: RevealNode | null): string | null {
+  const id = el?.closest(BOARD_NODE_SELECTOR)?.getAttribute('data-id') ?? null
+  return id !== null && id.length > 0 ? id : null
 }
 
 /** The part of a clicked node this check needs: CSS-selector ancestry. */

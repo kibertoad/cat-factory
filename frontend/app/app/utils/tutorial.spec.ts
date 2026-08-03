@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeCoachMarkLayout, resolveTours, sortTours } from '~/utils/tutorial'
+import {
+  computeCoachMarkLayout,
+  needsReveal,
+  resolveTours,
+  sortTours,
+  visibleArea,
+} from '~/utils/tutorial'
 import type { TutorialStep, TutorialTour } from '~/utils/tutorial'
 import type { NavGates } from '~/modular/nav-contributions'
 
@@ -111,5 +117,57 @@ describe('computeCoachMarkLayout', () => {
     // Clamped inside the viewport: overlap beats disappearing off-screen.
     expect(layout.top).toBe(200 - 150 - 8)
     expect(layout.left).toBe(10)
+  })
+})
+
+describe('needsReveal', () => {
+  const viewport = { width: 1000, height: 800 }
+
+  it('leaves a fully visible anchor alone', () => {
+    expect(needsReveal({ top: 100, left: 100, width: 120, height: 40 }, viewport)).toBe(false)
+  })
+
+  it('reveals an anchor scrolled or panned clean off screen', () => {
+    // The case the runtime could not see: an element off the viewport still has layout boxes,
+    // so it passed the visibility check and the ring was drawn at coordinates nobody can see.
+    expect(needsReveal({ top: -400, left: 100, width: 120, height: 40 }, viewport)).toBe(true)
+    expect(needsReveal({ top: 100, left: 1400, width: 120, height: 40 }, viewport)).toBe(true)
+  })
+
+  it('reveals a small anchor that is only slightly on screen', () => {
+    // 25% of its width inside the right edge: enough to have a rect, not enough to point at.
+    expect(needsReveal({ top: 100, left: 970, width: 120, height: 40 }, viewport)).toBe(true)
+  })
+
+  it('leaves an anchor BIGGER than the viewport alone while it fills the screen', () => {
+    // `board-canvas` and `sidebar` can never clear a fraction of their own area, so measuring
+    // against that would pan the camera on every step that points at one of them.
+    expect(needsReveal({ top: -200, left: -200, width: 2000, height: 1600 }, viewport)).toBe(false)
+  })
+
+  it('reveals an oversized anchor that has left the screen anyway', () => {
+    expect(needsReveal({ top: -1700, left: 0, width: 2000, height: 1600 }, viewport)).toBe(true)
+  })
+
+  it('never reveals a zero-area anchor', () => {
+    // There is no position to bring anywhere, and treating it as off-screen would make every
+    // degenerate rect trigger a camera move.
+    expect(needsReveal({ top: 0, left: 0, width: 0, height: 0 }, viewport)).toBe(false)
+  })
+})
+
+describe('visibleArea', () => {
+  const viewport = { width: 1000, height: 800 }
+
+  it('is the full area when the rect is inside', () => {
+    expect(visibleArea({ top: 10, left: 10, width: 100, height: 50 }, viewport)).toBe(5000)
+  })
+
+  it('is the clipped area when the rect straddles an edge', () => {
+    expect(visibleArea({ top: 10, left: -60, width: 100, height: 50 }, viewport)).toBe(40 * 50)
+  })
+
+  it('is zero for a rect with no overlap at all', () => {
+    expect(visibleArea({ top: 10, left: 2000, width: 100, height: 50 }, viewport)).toBe(0)
   })
 })

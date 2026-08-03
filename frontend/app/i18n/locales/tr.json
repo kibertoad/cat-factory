@@ -6127,6 +6127,7 @@
       "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
       "start": "Başla",
       "restart": "Tekrarla",
+      "resume": "Devam et",
       "completed": "Tamamlandı",
       "decline": "Hayır, teşekkürler",
       "later": "Belki daha sonra",
@@ -6139,6 +6140,7 @@
       "done": "Bitir",
       "progress": "Adım {current} / {total}",
       "ariaLabel": "Eğitim adımı",
+      "announcement": "Adım {current} / {total}. {title}. {body}",
       "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
       "clickHint": "Devam etmek için vurgulanan denetime tıklayın"
