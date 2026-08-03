@@ -1,0 +1,460 @@
+// `docs/openapi.json` → a language-neutral IR the four SDK emitters render from.
+//
+// The spec is the ONE source of truth for every SDK (it is itself generated from the Valibot
+// route contracts by `scripts/generate-openapi.mjs`), so a public-API contract change flows
+// contracts → spec → four SDKs with no hand-editing anywhere in the chain. This module owns
+// everything that is a property of the SURFACE rather than of a language: which types exist,
+// what they are called, what is nullable vs absent, and which operation reaches which of them.
+// An emitter then only decides how to SPELL that in its language.
+//
+// Three things here are load-bearing beyond "walk the JSON":
+//
+//   1. **Inline schemas get stable, structural names.** Valibot inlines most of the surface —
+//      only ~29 DTOs are hoisted into `components.schemas`, and the whole `/api/v1/debug/*`
+//      surface is anonymous. A typed language needs a name for each, and that name is part of
+//      the SDK's public API, so it may not shift when an unrelated endpoint is added. Names are
+//      therefore derived from the shape's POSITION (parent + property path) and then collapsed
+//      by STRUCTURE: two positions carrying the identical shape resolve to one type. Without
+//      the collapse the debug surface alone would emit ~15 copies of the same `DebugText`.
+//   2. **A recurring shape may be NAMED explicitly** in {@link INLINE_TYPE_NAMES}, keyed by its
+//      property signature. Positional naming is correct but ugly for a shape that appears in
+//      twelve places (`GetDebugAgentContextResponseContextFileContent` for what is just a
+//      windowed text body), and these names are what a user reads. Two different shapes
+//      claiming one name FAILS generation rather than silently merging.
+//   3. **"Nullable" and "optional" stay apart.** `anyOf [X, null]` is a field that is always
+//      PRESENT and may hold null; absence from `required` is a field that may not be sent at
+//      all. The distinction survives into every emitter, because collapsing them is exactly the
+//      "absent ≠ zero" failure the platform's own degrade-loudly rule is about — a caller that
+//      cannot tell "the server said null" from "the server said nothing" cannot report either.
+
+import { readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+export const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
+
+/**
+ * Explicit names for recurring inline shapes, keyed by the shape's SIGNATURE: its property
+ * names, sorted, comma-joined. Positional naming (the fallback) is deterministic but reads
+ * badly for a shape that recurs — and these names ship in four public SDKs, so they are worth
+ * choosing rather than deriving.
+ *
+ * A signature listed here that matches nothing in the spec is a stale entry and fails
+ * generation, exactly like a name two distinct shapes both claim: both mean the spec moved
+ * under the table and someone has to look.
+ */
+const INLINE_TYPE_NAMES = {
+  'chars,matchOffset,offset,text,totalChars,truncated': 'DebugText',
+  'completed,inProgress,total': 'RunSubtaskCounts',
+  'completed,inProgress,items,total': 'DebugSubtaskCounts',
+  'label,status': 'DebugSubtaskItem',
+  'detail,hint,kind,lastSubtasks,message,occurredAt,reason,stepIndex': 'DebugRunFailure',
+  'branch,url': 'RunPullRequest',
+  'code,message': 'RunError',
+  // The judge park is the one `PublicDecision` variant the spec inlines rather than hoisting,
+  // so positional naming would ship it as `PublicDecisionVariant2` — a name that renumbers if
+  // a variant is ever added ahead of it.
+  'bounces,kind,maxBounces,rubricId,rubricName,status,stepKind,threshold,verdict':
+    'PublicJudgeDecision',
+  'findings,score,summary': 'PublicJudgeVerdict',
+  'detail,severity,title,where': 'PublicJudgeFinding',
+  'choice,feedback': 'PublicResolveJudge',
+  // The debug reads: each of these is BOTH a list item and a single-read response, and the
+  // collapse resolves them to one type — so the name has to read correctly in both places.
+  'agentKind,cacheReadTokens,cacheWriteTokens,callId,completionTokens,createdAt,elidedLeadingMessages,errorMessage,finishReason,httpStatus,messageCount,model,ok,outcome,overheadMs,phase,prompt,promptMessages,promptTokens,provider,reasoning,requestMaxTokens,response,runId,streaming,toolCount,totalMs,totalTokens,turnIndex,upstreamMs':
+    'DebugLlmCall',
+  'agentKind,contextFiles,createdAt,extras,fragments,harness,model,runId,snapshotId,stepIndex,systemPrompt,userPrompt':
+    'DebugAgentContextSnapshot',
+  'content,path,title,url': 'DebugContextFile',
+  'body,id': 'DebugContextFragment',
+  'content,index,name,role,toolCallId,toolCalls': 'DebugPromptMessage',
+  'args,name': 'DebugToolCall',
+  'diagnostics,generatedAt,kind,llm,run,signals,sinks,steps,version': 'DebugRunOverview',
+  'blockId,createdAt,currentStep,failure,pipelineId,pipelineName,runId,status,stepCount':
+    'DebugRunSummary',
+  'agentKind,contextFilesChars,createdAt,fragmentsChars,harness,model,snapshotId,stepIndex,systemPromptChars,userPromptChars':
+    'DebugAgentContextSummary',
+  'blockId,createdAt,detail,error,executionId,id,operation,outcome,providerId,subsystem,targetId,workspaceId':
+    'DebugInfraLogEntry',
+  'agentKind,createdAt,executionId,id,provider,query,resultCount,workspaceId': 'DebugSearchQuery',
+  'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks':
+    'DebugRunStep',
+  'agentKind,code,count,message,severity,stepIndex': 'DebugRunSignal',
+  'agentKind,cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,errors,maxOutputTokens,outputHeadroomRatio,overheadMs,peakCompletionTokens,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
+    'DebugLlmAgentKindRollup',
+  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,carryCostShare,carryCostTokens,completionTokens,errors,overheadMs,phase,promptTokens,truncatedCalls,upstreamMs,warnings':
+    'DebugLlmPhaseRollup',
+  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,errors,overheadMs,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
+    'DebugLlmTotals',
+}
+
+/** Enum value-sets that deserve a chosen name rather than a positional one. */
+const INLINE_ENUM_NAMES = {
+  'blocked,done,in_progress,planned,pr_ready,ready': 'TaskStatus',
+  'blocked,done,failed,paused,running': 'RunStatus',
+  'done,pending,waiting_decision,working': 'StepState',
+  'critical,high,low,medium': 'Severity',
+  'error,ok,warning': 'LlmCallOutcome',
+}
+
+/** OpenAPI/JSON-Schema scalar → IR primitive. */
+const PRIMITIVES = {
+  string: 'string',
+  number: 'number',
+  integer: 'integer',
+  boolean: 'boolean',
+}
+
+/** Irregular plurals are not worth a library; the spec's array properties are all regular. */
+function singular(name) {
+  if (name.endsWith('ies')) return `${name.slice(0, -3)}y`
+  if (name.endsWith('sses') || name.endsWith('shes') || name.endsWith('ches')) {
+    return name.slice(0, -2)
+  }
+  if (name.endsWith('s') && !name.endsWith('ss')) return name.slice(0, -1)
+  return name
+}
+
+export function pascal(text) {
+  return String(text)
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('')
+}
+
+export function camel(text) {
+  const p = pascal(text)
+  return p.charAt(0).toLowerCase() + p.slice(1)
+}
+
+export function snake(text) {
+  return String(text)
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .toLowerCase()
+    .replace(/^_+|_+$/g, '')
+}
+
+export function screamingSnake(text) {
+  return snake(text).toUpperCase()
+}
+
+/** A stable, order-independent signature for an object shape (its property names). */
+function objectSignature(schema) {
+  return Object.keys(schema.properties ?? {})
+    .sort()
+    .join(',')
+}
+
+/** A stable signature for an enum (its values). */
+function enumSignature(values) {
+  return [...values].sort().join(',')
+}
+
+/**
+ * A structural fingerprint used to COLLAPSE two identically-shaped inline schemas onto one
+ * emitted type. Key-sorted so property order in the spec cannot split a type in two, and it
+ * covers the whole subtree — two shapes that differ only in a nested field stay distinct.
+ */
+function fingerprint(node) {
+  if (Array.isArray(node)) return `[${node.map(fingerprint).join(',')}]`
+  if (node && typeof node === 'object') {
+    return `{${Object.keys(node)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${fingerprint(node[k])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(node)
+}
+
+/**
+ * Walks the document, resolving every schema to a {@link TypeRef} and registering the named
+ * object/enum/union types it discovers along the way.
+ */
+class TypeRegistry {
+  constructor(components) {
+    this.components = components
+    /** name → type definition, in discovery order. */
+    this.types = new Map()
+    /** structural fingerprint → the name it resolved to (the collapse table). */
+    this.byFingerprint = new Map()
+    /** Explicit-name tables, consumed as they are hit so a stale entry is detectable. */
+    this.unusedObjectNames = new Set(Object.keys(INLINE_TYPE_NAMES))
+    this.unusedEnumNames = new Set(Object.keys(INLINE_ENUM_NAMES))
+  }
+
+  /** Register a type under `name`, refusing a second, structurally different claim on it. */
+  define(name, def, fp) {
+    const existing = this.types.get(name)
+    if (existing) {
+      if (existing.fingerprint !== fp) {
+        throw new Error(
+          `SDK IR: two structurally different schemas both resolve to the type name '${name}'. ` +
+            'Give one of them an explicit name in INLINE_TYPE_NAMES (scripts/sdk/ir.mjs).',
+        )
+      }
+      return name
+    }
+    this.types.set(name, { ...def, name, fingerprint: fp })
+    this.byFingerprint.set(fp, name)
+    return name
+  }
+
+  /**
+   * Resolve a schema to a TypeRef, minting named types for the inline objects/enums/unions it
+   * contains. `hint` is the positional name candidate (parent + property path).
+   */
+  resolve(schema, hint) {
+    if (!schema || Object.keys(schema).length === 0) return { kind: 'unknown' }
+    if (schema.$ref) return { kind: 'ref', name: schema.$ref.replace('#/components/schemas/', '') }
+    if (schema.const !== undefined) return { kind: 'const', value: schema.const }
+
+    if (Array.isArray(schema.oneOf)) return this.resolveUnion(schema, hint, schema.oneOf)
+    if (Array.isArray(schema.anyOf)) return this.resolveAnyOf(schema, hint)
+
+    if (schema.type === 'array') {
+      return { kind: 'array', items: this.resolve(schema.items, singular(hint)) }
+    }
+    if (schema.type === 'object' || schema.properties) {
+      if (schema.properties) return { kind: 'ref', name: this.defineObject(schema, hint) }
+      // `additionalProperties` with no declared properties: an open string-keyed map.
+      return {
+        kind: 'map',
+        values: this.resolve(
+          typeof schema.additionalProperties === 'object' ? schema.additionalProperties : {},
+          `${hint}Value`,
+        ),
+      }
+    }
+    if (Array.isArray(schema.enum) && schema.type === 'string') {
+      return { kind: 'ref', name: this.defineEnum(schema.enum, hint) }
+    }
+    const primitive = PRIMITIVES[schema.type]
+    if (primitive) {
+      return { kind: primitive, format: schema.pattern ? 'pattern' : undefined }
+    }
+    return { kind: 'unknown' }
+  }
+
+  /**
+   * `anyOf` carries two very different intents in this spec and they must not be conflated:
+   * `[X, null]` is X-that-may-be-null, while a set of string members (an enum PLUS a `pattern`
+   * escape hatch — the open `taskType` vocabulary) is an OPEN string, where narrowing to the
+   * closed enum would make the SDK reject values the server accepts.
+   */
+  resolveAnyOf(schema, hint) {
+    const members = schema.anyOf.filter((m) => m.type !== 'null')
+    const nullable = members.length !== schema.anyOf.length
+    if (members.length === 0) return { kind: 'unknown', nullable }
+    if (members.length === 1) return { ...this.resolve(members[0], hint), nullable }
+    if (members.every((m) => m.type === 'string')) {
+      const closed = members.find((m) => Array.isArray(m.enum))
+      return { kind: 'string', open: true, suggestedValues: closed?.enum ?? [], nullable }
+    }
+    return { ...this.resolveUnion(schema, hint, members), nullable }
+  }
+
+  /** A tagged union (`oneOf`). Discriminated when every variant carries the same `const` field. */
+  resolveUnion(schema, hint, variants) {
+    const refs = variants.map((variant, index) => this.resolve(variant, `${hint}Variant${index}`))
+    const fp = fingerprint({ union: variants })
+    const collapsed = this.byFingerprint.get(fp)
+    if (collapsed) return { kind: 'ref', name: collapsed }
+    const name = pascal(hint)
+    return {
+      kind: 'ref',
+      name: this.define(
+        name,
+        { kind: 'union', variants: refs, discriminator: this.discriminatorOf(variants, refs) },
+        fp,
+      ),
+    }
+  }
+
+  /** The property every variant pins to a distinct `const`, if there is exactly one such. */
+  discriminatorOf(variants, refs) {
+    const resolved = variants.map((variant, index) =>
+      variant.$ref || refs[index].kind === 'ref'
+        ? (this.types.get(refs[index].name)?.source ?? this.componentSource(variant))
+        : variant,
+    )
+    if (resolved.some((v) => !v?.properties)) return null
+    const candidates = Object.keys(resolved[0].properties).filter((key) =>
+      resolved.every((v) => v.properties[key]?.const !== undefined),
+    )
+    if (candidates.length !== 1) return null
+    return {
+      property: candidates[0],
+      values: resolved.map((v) => v.properties[candidates[0]].const),
+    }
+  }
+
+  /** The raw component schema behind a `$ref` (used to inspect a union variant's discriminator). */
+  componentSource(schema) {
+    if (!schema?.$ref) return schema
+    return this.components[schema.$ref.replace('#/components/schemas/', '')]
+  }
+
+  defineObject(schema, hint) {
+    const fp = fingerprint(schema)
+    const collapsed = this.byFingerprint.get(fp)
+    if (collapsed) return collapsed
+    const signature = objectSignature(schema)
+    const chosen = INLINE_TYPE_NAMES[signature]
+    if (chosen) this.unusedObjectNames.delete(signature)
+    const name = chosen ?? pascal(hint)
+    // Reserve the name BEFORE resolving fields: a self-referential shape would otherwise
+    // recurse forever, and a sibling field would race it into the collapse table.
+    this.types.set(name, { kind: 'object', name, fields: [], fingerprint: fp, source: schema })
+    this.byFingerprint.set(fp, name)
+    const required = new Set(schema.required ?? [])
+    const fields = Object.entries(schema.properties ?? {}).map(([wireName, propSchema]) => {
+      const type = this.resolve(propSchema, `${name}${pascal(wireName)}`)
+      return {
+        wireName,
+        type,
+        required: required.has(wireName),
+        nullable: type.nullable === true,
+        doc: propSchema.description,
+        constraints: {
+          minimum: propSchema.minimum,
+          maximum: propSchema.maximum,
+          minLength: propSchema.minLength,
+          maxLength: propSchema.maxLength,
+          pattern: propSchema.pattern,
+        },
+      }
+    })
+    this.types.get(name).fields = fields
+    return name
+  }
+
+  defineEnum(values, hint) {
+    const signature = enumSignature(values)
+    const chosen = INLINE_ENUM_NAMES[signature]
+    if (chosen) this.unusedEnumNames.delete(signature)
+    const existing = [...this.types.values()].find(
+      (t) => t.kind === 'enum' && enumSignature(t.values) === signature,
+    )
+    if (existing) return existing.name
+    const name = chosen ?? pascal(hint)
+    return this.define(name, { kind: 'enum', values }, `enum:${signature}`)
+  }
+}
+
+/** Media type of an operation's success response, and the schema behind it. */
+function successResponse(operation) {
+  const codes = Object.keys(operation.responses ?? {}).filter((c) => /^2\d\d$/.test(c))
+  if (codes.length === 0) return { status: 204, mediaType: null, schema: null }
+  const status = Number(codes.sort()[0])
+  const content = operation.responses[String(status)].content ?? {}
+  const mediaType = Object.keys(content)[0] ?? null
+  return { status, mediaType, schema: mediaType ? content[mediaType].schema : null }
+}
+
+/**
+ * Build the IR from the committed OpenAPI document.
+ *
+ * @param {object} [doc] the parsed spec; read from `docs/openapi.json` when omitted.
+ */
+export async function buildIr(doc) {
+  const spec = doc ?? JSON.parse(await readFile(OPENAPI_PATH, 'utf8'))
+  const components = spec.components?.schemas ?? {}
+  const registry = new TypeRegistry(components)
+
+  // Hoisted DTOs first, so a component name always wins over a positional one and the
+  // emitted type set is stable against endpoints being added around it.
+  for (const [name, schema] of Object.entries(components)) {
+    if (schema.oneOf) {
+      registry.define(
+        name,
+        {
+          kind: 'union',
+          variants: schema.oneOf.map((v, i) => registry.resolve(v, `${name}Variant${i}`)),
+          discriminator: registry.discriminatorOf(
+            schema.oneOf,
+            schema.oneOf.map((v, i) => registry.resolve(v, `${name}Variant${i}`)),
+          ),
+        },
+        fingerprint(schema),
+      )
+    } else {
+      registry.defineObject(schema, name)
+    }
+  }
+
+  const operations = []
+  for (const [path, methods] of Object.entries(spec.paths)) {
+    for (const [method, operation] of Object.entries(methods)) {
+      const id = operation.operationId
+      const params = operation.parameters ?? []
+      const success = successResponse(operation)
+      const bodySchema = operation.requestBody?.content?.['application/json']?.schema
+      operations.push({
+        id,
+        // `httpMethod`, not `method`: the SDK surface table (scripts/sdk/surface.mjs) names each
+        // operation's METHOD on its resource client, and one of the two had to give.
+        httpMethod: method.toUpperCase(),
+        path,
+        tag: operation.tags?.[0] ?? 'Public API',
+        summary: operation.summary ?? id,
+        description: operation.description ?? '',
+        pathParams: params
+          .filter((p) => p.in === 'path')
+          .map((p) => ({ wireName: p.name, doc: p.description })),
+        queryParams: params
+          .filter((p) => p.in === 'query')
+          .map((p) => ({
+            wireName: p.name,
+            required: p.required === true,
+            type: registry.resolve(p.schema, `${pascal(id)}${pascal(p.name)}`),
+            doc: p.description,
+          })),
+        body: bodySchema ? registry.resolve(bodySchema, `${pascal(id)}Request`) : null,
+        // A stream is not a value: the SSE operations hand back a reader, so an emitter must
+        // branch on this rather than trying to decode `text/event-stream` as the result type.
+        stream: success.mediaType === 'text/event-stream',
+        status: success.status,
+        result:
+          success.mediaType === 'application/json'
+            ? registry.resolve(success.schema, `${pascal(id)}Response`)
+            : null,
+      })
+    }
+  }
+  operations.sort((a, b) => a.id.localeCompare(b.id))
+
+  if (registry.unusedObjectNames.size > 0 || registry.unusedEnumNames.size > 0) {
+    throw new Error(
+      'SDK IR: stale explicit names in scripts/sdk/ir.mjs — no schema in the spec has the ' +
+        `signature(s): ${[...registry.unusedObjectNames, ...registry.unusedEnumNames].join(' | ')}`,
+    )
+  }
+
+  return {
+    info: spec.info,
+    security: spec.components?.securitySchemes ?? {},
+    tags: spec.tags ?? [],
+    types: [...registry.types.values()]
+      .map(({ source: _source, fingerprint: _fp, ...rest }) => rest)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    operations,
+  }
+}
+
+/** Every operation grouped by its tag, tags in stable order. */
+export function operationsByTag(ir) {
+  const groups = new Map()
+  for (const operation of ir.operations) {
+    if (!groups.has(operation.tag)) groups.set(operation.tag, [])
+    groups.get(operation.tag).push(operation)
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+}
+
+/** The IR type definition for a named type. */
+export function lookup(ir, name) {
+  return ir.types.find((t) => t.name === name)
+}

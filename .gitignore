@@ -152,3 +152,15 @@ vite.config.ts.timestamp-*
 # Local filesystem binary-artifact storage (screenshots etc.) — the default content-storage
 # backend in local mode; never commit captured artifacts.
 .file-storage/
+
+# --- SDK build artifacts (sdk/*) -------------------------------------------------------------
+# Maven output for the Java/Kotlin SDK (and the smoketest classes the cross-SDK harness compiles
+# into it). `dist` above already covers the TypeScript SDK; Go builds nothing into the tree.
+target/
+
+# Python packaging + tooling output for the Python SDK.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

@@ -1,0 +1,20 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // The SDK is consumed by ordinary Node/bundler projects rather than by this repo's own
+    // build graph, so it resolves and emits like a published library: `NodeNext` so the emitted
+    // `.js` specifiers work under Node's ESM resolver without a bundler in the way.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    // The SDK's sources must be ERASABLE TypeScript: no enums, no namespaces, no parameter
+    // properties. That is what lets a consumer run them under Node's type stripping, `tsx`, or an
+    // `erasableSyntaxOnly` build — and it is a real constraint on the generator, which emitted a
+    // parameter property until this flag caught it.
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

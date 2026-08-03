@@ -384,6 +384,43 @@ GitLab deployments.
   `github_repos`/`github_installations` tables) are still GitHub-named and reused as-is. Copy the NEUTRAL
   shape for new surfaces; an un-migrated neighbour is not license to name a field `githubId`.
 
+## Public-API SDK clients: generated from the spec, never hand-edited
+
+Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java — which
+also serves Kotlin; there is deliberately no second Kotlin SDK). The chain is **contracts →
+`docs/openapi.json` → `sdk/*`** with no hand-editing at any link: `pnpm gen:sdk` renders the
+committed spec, and `pnpm check:sdk` fails CI on drift AND on version skew between a manifest and
+the constant its transport stamps into `User-Agent`. Design + the Java/Kotlin trade:
+[`sdk/README.md`](./sdk/README.md).
+
+- **Only MODELS and OPERATIONS are generated; each transport is HAND-WRITTEN** beside them. That
+  split is what keeps a contract change from rewriting behaviour and a behaviour fix from having
+  to be re-applied across 38 operations x 4 languages. Never edit a file whose header says
+  GENERATED — change the contracts or the emitter.
+- **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its
+  resource group and method. Generation FAILS without one, so a new endpoint cannot ship as an
+  un-callable hole in four clients — and the method name is a chosen, reviewed API rather than a
+  spec-internal `operationId` leaking into four published surfaces.
+- **The four honour the same invariants, each in its own idiom, and every one is about being
+  HONEST rather than convenient**: absent is not null (collapsing them turns "leave this alone"
+  into "clear it"); an unknown enum value or field never raises, because the surface is additive
+  forever and a strict client makes every additive server release an outage for whoever has not
+  upgraded; the error CLASS comes from the HTTP status while `code` is passed through verbatim
+  (it carries surface-specific values, so no SDK narrows it to an enum or keeps a second copy of
+  the vocabulary); only idempotent requests are retried, because a duplicated `start` costs real
+  LLM work; and a stream is never auto-reconnected, since only the caller knows what it already
+  acted on.
+- **`backend/internal/sdk-smoketest` is the only check that can see the four clients DISAGREE.**
+  It boots the real Node backend and drives ONE scenario through all four, comparing their
+  observation reports — so each per-SDK program OBSERVES AND RECORDS rather than asserting, and a
+  scenario step added to one must be added to all four with the same observation keys (a key some
+  SDKs record and others do not is reported as a failure, not silently skipped). CI runs it when
+  either side of the contract moves.
+- **Publishing is gated on a VERSION CHANGE, not a file change** (`.github/workflows/sdk-release.yml`),
+  so a README edit or a no-op regeneration ships nothing and a re-run cannot try to republish what
+  the registry already has. The TypeScript SDK is exempt — it is an ordinary workspace package
+  changesets already releases, and a second publisher would race it.
+
 ## Migrations
 
 ### Resolving conflicting Drizzle migrations (post-merge)

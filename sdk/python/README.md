@@ -1,0 +1,93 @@
+# `cat-factory-sdk`
+
+Python client for the cat-factory **public API** (`/api/v1`).
+
+```sh
+pip install cat-factory-sdk
+```
+
+Python 3.11+. **No dependencies** — the transport is `urllib` from the standard library, so
+installing this cannot conflict with whatever HTTP stack your application already uses.
+
+```python
+import os
+from cat_factory import CatFactoryClient
+from cat_factory.models import CreatePublicTask, StartPublicTask
+
+client = CatFactoryClient(
+    base_url="https://cat-factory.example.com",
+    api_key=os.environ["CAT_FACTORY_API_KEY"],
+)
+
+services = client.services.list().services
+task = client.tasks.create(
+    services[0].service_id,
+    CreatePublicTask(title="Add a health check endpoint", task_type="feature"),
+)
+client.tasks.start(task.task_id, StartPublicTask())
+```
+
+Wire names are `camelCase`; attributes are `snake_case`.
+
+## Resource clients
+
+`initiatives`, `services`, `tasks`, `pipelines`, `notifications`, `usage`, `decisions`, `debug` —
+one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
+
+## Watching a run
+
+```python
+with client.tasks.stream(task.task_id) as stream:
+    for event in stream:
+        if event.event == "decision":
+            # The run PARKED on a human decision and waits indefinitely. Answer it through
+            # `client.decisions` (needs a `decide`-scope key) or free it with `tasks.stop`.
+            payload = event.json()
+        if event.event in ("done", "error"):
+            break
+        # `timeout` means the deployment's connection cap was reached, NOT that the run finished.
+```
+
+Use it as a context manager (or call `close()`) so the socket is released.
+
+## Paging
+
+```python
+for task in client.tasks.list_by_service_all(service_id):
+    print(task.task_id)
+```
+
+## Errors
+
+The exception CLASS comes from the HTTP status; `code` carries the specific cause and is a plain
+string, because this surface adds new codes without a major version.
+
+```python
+from cat_factory import CatFactoryForbiddenError, CatFactoryNotFoundError
+
+try:
+    client.tasks.get(task_id)
+except CatFactoryNotFoundError:
+    return None
+except CatFactoryForbiddenError as exc:
+    if exc.code == "insufficient_scope":
+        raise RuntimeError("this key needs a higher scope") from exc
+    raise
+```
+
+Every API error carries `status`, `code`, `details`, `issues` and the `request_id` to quote when
+reporting a fault.
+
+## Models
+
+Frozen dataclasses with `from_dict` / `to_dict`. Two properties worth knowing:
+
+- **Unknown fields are kept**, on `extra`. `/api/v1` is additive forever, so a newer deployment
+  sends fields this release has no attribute for — you can still reach them without upgrading.
+- **Enums are `StrEnum`**, so a member IS its wire string (`task.status == "done"`, and an
+  f-string renders `done`). An unrecognised value decodes to the plain string rather than raising.
+
+## Notes
+
+- `cat_factory/models.py` and `operations.py` are generated — see [`../README.md`](../README.md).
+- API reference: [`backend/docs/public-api.md`](../../backend/docs/public-api.md).

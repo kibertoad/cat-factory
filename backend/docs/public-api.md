@@ -17,6 +17,9 @@ This is the **how-to and reference**. Its siblings each own a different slice:
   `read` scope), for walking a run's telemetry from outside the browser.
 - [`public-api-additions.md`](../../docs/initiatives/public-api-additions.md) — the live tracker of
   what the decision surface **cannot** answer yet. Read it before building on parked decisions.
+- [`sdk/README.md`](../../sdk/README.md) — the **official SDK clients** (TypeScript, Python, Go,
+  Java+Kotlin), generated from the spec below. Reach for one before hand-rolling HTTP: see
+  [Client SDKs](#client-sdks).
 
 ## Setup
 
@@ -33,14 +36,14 @@ In the SPA: **Integrations hub → Development → "API access tokens"**. Pick a
 full token is shown **exactly once**, on creation — store it immediately, it cannot be recovered
 (the server keeps only a one-way peppered `HMAC-SHA256` hash). Rotation = revoke + mint a new one.
 
-Over REST (session-authed, workspace-scoped — this is the one management surface that is *not* under
+Over REST (session-authed, workspace-scoped — this is the one management surface that is _not_ under
 `/api/v1`):
 
-| Method / path                                    | Permission                    | Result                                  |
-| ------------------------------------------------ | ----------------------------- | --------------------------------------- |
-| `GET /workspaces/:ws/public-api-keys`            | workspace member (read)       | `{ keys: [...] }` — metadata, no secret |
-| `POST /workspaces/:ws/public-api-keys`           | `secrets.manage` (admin tier) | `201 { key, secret }` — secret shown once |
-| `DELETE /workspaces/:ws/public-api-keys/:id`     | `secrets.manage` (admin tier) | `204` — revoked keys never authenticate |
+| Method / path                                | Permission                    | Result                                    |
+| -------------------------------------------- | ----------------------------- | ----------------------------------------- |
+| `GET /workspaces/:ws/public-api-keys`        | workspace member (read)       | `{ keys: [...] }` — metadata, no secret   |
+| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage` (admin tier) | `201 { key, secret }` — secret shown once |
+| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204` — revoked keys never authenticate   |
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
@@ -55,12 +58,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder — each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                       |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).                                                        |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                                                                              |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) — and, because of that, start an initiative on a pipeline that can park at all.                                                       |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                                                                        |
+| Scope    | Adds                                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).  |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                         |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) — and, because of that, start an initiative on a pipeline that can park at all. |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                  |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -86,11 +89,11 @@ The base URL is your **backend** origin (the Worker or Node service — e.g. wha
 with as `NUXT_PUBLIC_API_BASE`), not the frontend's. The token format is
 `cf_live_<keyId>.<secret>`; treat it as opaque. Auth failures:
 
-| Condition                                       | Response                                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Missing / malformed / unknown / revoked key     | `401` `{ "error": { "code": "unauthorized", "message": "Invalid or missing API key" } }` |
-| Key scope below the route's minimum             | `403` `{ "error": { "code": "insufficient_scope", "message": "This action requires a '<need>'-scope key; this key is scoped '<have>'" } }` |
-| Public API not configured on this deployment    | `503` `{ "error": { "code": "unavailable", … } }`                                    |
+| Condition                                    | Response                                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Missing / malformed / unknown / revoked key  | `401` `{ "error": { "code": "unauthorized", "message": "Invalid or missing API key" } }`                                                   |
+| Key scope below the route's minimum          | `403` `{ "error": { "code": "insufficient_scope", "message": "This action requires a '<need>'-scope key; this key is scoped '<have>'" } }` |
+| Public API not configured on this deployment | `503` `{ "error": { "code": "unavailable", … } }`                                                                                          |
 
 ## Conventions
 
@@ -105,20 +108,20 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   validation failure carries `issues: [{ path, message }]`.
 - **Surface-specific codes**, unique to `/api/v1` (branch on these, not on the message):
 
-  | Code                              | Status | Where                                                                      |
-  | --------------------------------- | ------ | -------------------------------------------------------------------------- |
-  | `insufficient_scope`              | 403    | any route, when the key's scope is below the minimum                       |
-  | `invalid_cursor`                  | 400    | any paginated list, on a malformed `cursor`                                |
-  | `pipeline_not_public`             | 400    | `POST /initiatives` — unknown or non-public pipeline                       |
-  | `pipeline_not_inline`             | 400    | `POST /initiatives` — pipeline has container/GitHub steps                  |
-  | `pipeline_requires_decide_scope`  | 403    | `POST /initiatives` — pipeline can park on a human, key is below `decide`  |
-  | `too_many_active_runs`            | 429    | `POST /initiatives` — the workspace already has 5 initiative runs in flight |
-  | `pipeline_required`               | 400    | `POST /tasks/:id/start` — no pinned pipeline and no `pipelineId` passed    |
-  | `service_archived`                | 409    | `POST /tasks/:id/start` — the enclosing service is archived                |
-  | `individual_model_unsupported`    | 409    | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
-  | `no_run`                          | 404/409 | task run reads (404 — never started) and stop/retry (409 — nothing to act on) |
-  | `no_review`                       | 404    | requirements decision routes — the run has no live requirements review     |
-  | `notification_not_actionable`     | 409    | `POST /notifications/:id/act` on a card with no automated headless action  |
+  | Code                             | Status  | Where                                                                                                        |
+  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                         |
+  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                  |
+  | `pipeline_not_public`            | 400     | `POST /initiatives` — unknown or non-public pipeline                                                         |
+  | `pipeline_not_inline`            | 400     | `POST /initiatives` — pipeline has container/GitHub steps                                                    |
+  | `pipeline_requires_decide_scope` | 403     | `POST /initiatives` — pipeline can park on a human, key is below `decide`                                    |
+  | `too_many_active_runs`           | 429     | `POST /initiatives` — the workspace already has 5 initiative runs in flight                                  |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start` — no pinned pipeline and no `pipelineId` passed                                      |
+  | `service_archived`               | 409     | `POST /tasks/:id/start` — the enclosing service is archived                                                  |
+  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
+  | `no_run`                         | 404/409 | task run reads (404 — never started) and stop/retry (409 — nothing to act on)                                |
+  | `no_review`                      | 404     | requirements decision routes — the run has no live requirements review                                       |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
 
 ### Pagination
 
@@ -189,6 +192,29 @@ The headless-initiative flow is the same shape one level up: `POST /api/v1/initi
 `{ pipelineId, input }` returns `202 { jobId, links: { self, events } }`; poll `GET /jobs/:id` or
 stream `GET /jobs/:id/events`. Initiative runs are **inline-only** — nothing is pushed to GitHub.
 
+## Client SDKs
+
+Official clients ship for four languages, so most integrations should not be writing HTTP by hand:
+
+| Language      | Install                                                    |
+| ------------- | ---------------------------------------------------------- |
+| TypeScript    | `npm install @cat-factory/sdk`                             |
+| Python        | `pip install cat-factory-sdk`                              |
+| Go            | `go get github.com/kibertoad/cat-factory/sdk/go@latest`    |
+| Java / Kotlin | `ai.catfactory:cat-factory-sdk` (one artifact serves both) |
+
+Their models and operation methods are **generated from [`docs/openapi.json`](../../docs/openapi.json)**
+— which is itself generated from the Valibot route contracts — so a client cannot drift from the
+surface documented below. They also implement the conventions on this page for you: keyset
+auto-pagination, SSE framing, bounded retries on idempotent requests only, and an error type per
+status class with the machine-readable `code` exposed verbatim.
+
+Details, the design rules the four share, and the Java/Kotlin story:
+[`sdk/README.md`](../../sdk/README.md).
+
+Everything below still applies — the SDKs are a typed skin over exactly these endpoints, and the
+error codes, scopes and paging rules are the same whichever you use.
+
 ## Reference
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
@@ -199,13 +225,13 @@ An initiative run executes a **public, inline pipeline** against a supplied brie
 internal block — it is not a board task and never touches GitHub. Jobs are double-scoped: this
 surface only ever sees runs it created, never the workspace's ordinary board runs.
 
-| Method / path                    | Scope   | Behaviour                                                                                                                                                                |
-| -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /api/v1/initiatives`       | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
-| `GET /api/v1/jobs`               | `read`  | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                 |
-| `GET /api/v1/jobs/:id`           | `read`  | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).       |
-| `POST /api/v1/jobs/:id/cancel`   | `write` | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                  |
-| `GET /api/v1/jobs/:id/events`    | `read`  | SSE stream — see [Streaming](#streaming-sse).                                                                                                                            |
+| Method / path                  | Scope    | Behaviour                                                                                                                                                                                            |
+| ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/initiatives`     | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
+| `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
+| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
+| `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
+| `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream — see [Streaming](#streaming-sse).                                                                                                                                                        |
 
 ¹ Starting a pipeline that can park on a human requires `decide`; the `403
 pipeline_requires_decide_scope` message names which of its park surfaces are answerable through the
@@ -217,17 +243,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                              | Scope   | Behaviour                                                                                                                                        |
-| ------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/services`                     | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
-| `POST /api/v1/services/:serviceId/tasks`   | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
-| `GET /api/v1/services/:serviceId/tasks`    | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
-| `GET /api/v1/tasks/:taskId`                | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                  |
-| `PATCH /api/v1/tasks/:taskId`              | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
-| `POST /api/v1/tasks/:taskId/start`         | `write` | Run it. Body `{ pipelineId? }` — falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
-| `POST /api/v1/tasks/:taskId/stop`          | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
-| `POST /api/v1/tasks/:taskId/retry`         | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                 |
-| `DELETE /api/v1/tasks/:taskId`             | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                     |
+| Method / path                            | Scope   | Behaviour                                                                                                                                         |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                    |
+| `POST /api/v1/services/:serviceId/tasks` | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).              |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                 |
+| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                   |
+| `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                          |
+| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }` — falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
+| `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                     |
+| `POST /api/v1/tasks/:taskId/retry`       | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                  |
+| `DELETE /api/v1/tasks/:taskId`           | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                      |
 
 Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `blocked` / `pr_ready` /
 `done`) — a decoupled public mirror of the board status, stable even if the board grows internal
@@ -240,10 +266,10 @@ open question about tightening it.
 
 ### Task runs & streaming
 
-| Method / path                       | Scope  | Behaviour                                                                                                                    |
-| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/tasks/:taskId/run`     | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
-| `GET /api/v1/tasks/:taskId/events`  | `read` | SSE stream of that projection — see [Streaming](#streaming-sse).                                                             |
+| Method / path                      | Scope  | Behaviour                                                                                                                                       |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
+| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection — see [Streaming](#streaming-sse).                                                                                |
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human —
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
@@ -255,22 +281,22 @@ Both `/events` endpoints are `text/event-stream` responses driven by a 1-second 
 persisted run. Frames are **de-duplicated** — a frame is sent only when the payload changed, and
 there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
-| Event      | Meaning                                                                                                                          |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `progress` | The run advanced; data is the full job / run projection (same shape as the GET).                                                  |
+| Event      | Meaning                                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `progress` | The run advanced; data is the full job / run projection (same shape as the GET).                                                                             |
 | `decision` | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
-| `done`     | Terminal success. Stream closes.                                                                                                  |
-| `error`    | Terminal failure. Stream closes.                                                                                                  |
-| `stopped`  | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                     |
-| `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong — reconnect to keep watching.                                    |
+| `done`     | Terminal success. Stream closes.                                                                                                                             |
+| `error`    | Terminal failure. Stream closes.                                                                                                                             |
+| `stopped`  | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                                |
+| `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong — reconnect to keep watching.                                                               |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
 poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
 
 ### Pipelines (discovery)
 
-| Method / path           | Scope  | Behaviour                                                                                              |
-| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| Method / path           | Scope  | Behaviour                                                                                                  |
+| ----------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/pipelines` | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`. |
 
 `public` marks the pipelines `POST /initiatives` accepts. `headlessStartable` means every enabled
@@ -288,17 +314,17 @@ Every action returns the run's **whole decision list**, re-read after the action
 run is waiting on a park type this surface cannot answer yet
 ([tracker](../../docs/initiatives/public-api-additions.md)) — your options are the SPA or cancel.
 
-| Method / path (under `/api/v1/runs/:runId/decisions`)   | Scope    | Behaviour                                                                                                  |
-| ------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `GET …`                                                 | `read`   | List the currently-parked decisions.                                                                        |
-| `POST …/requirements/findings/:itemId/reply`            | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                     |
-| `PATCH …/requirements/findings/:itemId`                 | `decide` | Body `{ status: "dismissed" \| "open" }` — dismiss a finding as not applicable, or reopen one.              |
-| `POST …/requirements/incorporate`                       | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous** — the response shows `incorporating`; poll or stream for the next round. |
-| `POST …/requirements/re-review`                         | `decide` | One more reviewer pass over the incorporated document.                                                      |
-| `POST …/requirements/proceed`                           | `decide` | Settle the requirements phase and advance the run.                                                          |
-| `POST …/requirements/resolve-exceeded`                  | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }` — resolve a review that hit its iteration cap. |
-| `POST …/fork/choose`                                    | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)` — choose the implementation approach. |
-| `POST …/judge/resolve`                                  | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends). |
+| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                     |
+| ----------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                          |
+| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                       |
+| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }` — dismiss a finding as not applicable, or reopen one.                                                                                |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous** — the response shows `incorporating`; poll or stream for the next round. |
+| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                        |
+| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                            |
+| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }` — resolve a review that hit its iteration cap.                                                                  |
+| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)` — choose the implementation approach.                                                 |
+| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                  |
 
 Three decision kinds appear in `decisions[]`, discriminated by `kind`:
 
@@ -322,17 +348,17 @@ The workspace's open notification cards — the human-gated run tails (a PR awai
 run whose CI could not be fixed). `act` runs the card's typed side-effect; on a `merge_review` /
 `pipeline_complete` card that is a **real merge** of the PR, which is why it sits at `admin`.
 
-| Method / path                            | Scope   | Behaviour                                                                                             |
-| ---------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated — humans keep this list short).                                       |
+| Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                        |
+| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated — humans keep this list short).                                                                                                                                                                  |
 | `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
-| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                    |
+| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
 
 ### Usage & budget
 
-| Method / path       | Scope  | Behaviour                                                       |
-| ------------------- | ------ | --------------------------------------------------------------- |
-| `GET /api/v1/usage` | `read` | The current period's spend + budget position, as one resource.  |
+| Method / path       | Scope  | Behaviour                                                      |
+| ------------------- | ------ | -------------------------------------------------------------- |
+| `GET /api/v1/usage` | `read` | The current period's spend + budget position, as one resource. |
 
 Response: `{ periodStart, currency, budget, rows }`. `budget` is the **metered** position the spend
 safeguard acts on — `costSpent`, `costLimit` and `exceeded: true` when runs are paused at the cap.

@@ -32,6 +32,7 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
+  'sdk/typescript',
 ]
 
 function expandGlob(glob) {

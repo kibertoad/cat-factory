@@ -109,6 +109,16 @@
       // sees no static import.
       "ignoreDependencies": ["@cat-factory/executor-harness"],
     },
+    // The public-API SDK clients. `src/*.generated.ts` is ignored because it is a PUBLISHED API
+    // surface by definition — 118 wire models exist for consumers to import, not for this repo to
+    // use, so "nothing here imports it" is the expected state rather than a finding. The
+    // smoketest program is an entry point in its own right (the cross-SDK harness runs it), not
+    // something `src/index.ts` reaches.
+    "sdk/typescript": {
+      "entry": ["src/index.ts", "test/**/*.test.ts", "smoketest/main.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "smoketest/**/*.ts"],
+      "ignore": ["src/*.generated.ts"],
+    },
     "backend/internal/*": {
       "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],

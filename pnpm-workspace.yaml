@@ -49,6 +49,10 @@ packages:
   - 'deploy/frontend'
   - 'deploy/node'
   - 'deploy/local'
+  # The four public-API SDK clients live together under `sdk/`; only the TypeScript one is an
+  # npm package, so it is the only member here. Python/Go/Java are built and published by their
+  # own toolchains (see sdk/README.md).
+  - 'sdk/typescript'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
