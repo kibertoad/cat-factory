@@ -50,6 +50,21 @@ const intakeSource = ref<TaskSourceKind | null>(null)
 const intakeJiraProjectKey = ref('')
 const intakeLinearTeamId = ref('')
 const intakeGithubRepo = ref('')
+/**
+ * The board scope for a DEPLOYMENT-REGISTERED source, held opaquely. Its own field rather than
+ * reusing one of the three above, mirroring `issueIntakeConfigSchema.board.boardId`: only that
+ * deployment's provider knows what its board id means, so the form carries the string and the
+ * label stays generic.
+ */
+const intakeBoardId = ref('')
+
+/** Whether the picked source is one this build ships (and so has a vendor-specific board field). */
+const intakeSourceIsBuiltin = computed(
+  () =>
+    intakeSource.value === 'jira' ||
+    intakeSource.value === 'linear' ||
+    intakeSource.value === 'github',
+)
 const intakeTitleFragment = ref('')
 const intakeLabels = ref('') // comma-separated in the UI, sent as an array
 const intakeIssueType = ref('')
@@ -119,6 +134,7 @@ watch(open, (isOpen) => {
   intakeJiraProjectKey.value = ''
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
+  intakeBoardId.value = ''
   intakeTitleFragment.value = ''
   intakeLabels.value = ''
   intakeIssueType.value = ''
@@ -147,6 +163,7 @@ const { requestClose } = useUnsavedGuard({
     intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeBoardId: intakeBoardId.value.trim(),
     intakeTitleFragment: intakeTitleFragment.value.trim(),
     intakeLabels: intakeLabels.value.trim(),
     intakeIssueType: intakeIssueType.value.trim(),
@@ -160,6 +177,9 @@ const intakeReady = computed(() => {
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  // A registered source is scoped by its opaque board id. Falling through to `false` here would
+  // make its schedule permanently unsaveable rather than merely unscoped.
+  if (intakeSource.value) return intakeBoardId.value.trim().length > 0
   return false
 })
 
@@ -180,6 +200,9 @@ function buildIssueIntake(): IssueIntakeConfig {
         : {}),
       ...(source === 'github' && intakeGithubRepo.value.trim()
         ? { githubRepo: intakeGithubRepo.value.trim() }
+        : {}),
+      ...(!intakeSourceIsBuiltin.value && intakeBoardId.value.trim()
+        ? { boardId: intakeBoardId.value.trim() }
         : {}),
     },
     predicates: {
@@ -409,6 +432,14 @@ async function add() {
           >
             <!-- A GitHub repo ref is always the literal `owner/name` path, never localized. -->
             <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
+          </UFormField>
+          <UFormField
+            v-if="intakeSource && !intakeSourceIsBuiltin"
+            :label="t('board.recurring.intakeBoardId')"
+            :help="t('board.recurring.intakeBoardIdHelp')"
+            required
+          >
+            <UInput v-model="intakeBoardId" class="w-full" />
           </UFormField>
 
           <template v-if="intakeSource">

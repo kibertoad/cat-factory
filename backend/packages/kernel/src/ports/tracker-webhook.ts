@@ -125,18 +125,13 @@ export function trackerWebhookSecret(credentials: TaskCredentials | undefined): 
 }
 
 /**
- * Every task source this build knows about — the runtime companion of the closed
- * `taskSourceKindSchema` union, so the webhook receiver can reject an unknown `:source` path
- * segment before touching the container.
+ * The task-source vocabulary, re-exported from `@cat-factory/contracts` (which owns the schema)
+ * rather than re-listed here, because a second copy of a vocabulary is a second thing to forget.
  *
- * Kept in step with `@cat-factory/contracts`' `taskSourceKindSchema` by the `TaskSourceKind` type
- * annotation: adding a member there without adding it here fails the typecheck at the
- * `readonly TaskSourceKind[]` position. Widening the union for deployment-registered trackers is a
- * deliberate follow-up (slice 4 of `docs/initiatives/tracker-webhook-intake.md`).
+ * `BUILTIN_TASK_SOURCE_KINDS` is no longer "every source that can exist": a deployment registers
+ * its own on the app-owned `TaskSourceRegistry` (slice 4 of
+ * `docs/initiatives/tracker-webhook-intake.md`), and those never appear in it. Anything deciding
+ * what a deployment ACTUALLY serves must ask the registry; the constant answers only "did we ship
+ * it", and {@link isTaskSourceKind} answers only "is this a well-formed id".
  */
-export const TASK_SOURCE_KINDS: readonly TaskSourceKind[] = ['jira', 'github', 'linear'] as const
-
-/** Type guard: is `value` one of the known {@link TaskSourceKind}s? */
-export function isTaskSourceKind(value: unknown): value is TaskSourceKind {
-  return typeof value === 'string' && (TASK_SOURCE_KINDS as readonly string[]).includes(value)
-}
+export { BUILTIN_TASK_SOURCE_KINDS, isTaskSourceKind } from '@cat-factory/contracts'

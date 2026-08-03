@@ -2556,6 +2556,8 @@
       "intakeHint": "Jeder Lauf wählt ein passendes offenes Issue aus dem Tracker und bearbeitet es von Anfang bis Ende.",
       "intakeNoSources": "Verbinden Sie zuerst eine Task-Quelle, um Issues daraus zu ziehen.",
       "intakeGithubRepo": "Repository",
+      "intakeBoardId": "Board-ID",
+      "intakeBoardIdHelp": "Das Board, Projekt oder die Warteschlange, auf die dieser Tracker die Aufnahme eingrenzt. Das Format gibt der Tracker vor.",
       "intakeTitleFragment": "Titel enthält",
       "intakeTitleFragmentPlaceholder": "z. B. crash",
       "intakeLabels": "Labels",

@@ -336,6 +336,8 @@
       "intakeHint": "各実行はトラッカーから条件に一致する未解決の課題を1件選び、最後まで対応します。",
       "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
       "intakeGithubRepo": "リポジトリ",
+      "intakeBoardId": "ボード ID",
+      "intakeBoardIdHelp": "このトラッカーが取り込み対象とするボード、プロジェクト、またはキュー。形式はトラッカーが定めます。",
       "intakeTitleFragment": "タイトルに含む",
       "intakeTitleFragmentPlaceholder": "例: crash",
       "intakeLabels": "ラベル",

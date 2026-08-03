@@ -336,6 +336,8 @@
       "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
       "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
       "intakeGithubRepo": "Repozytorium",
+      "intakeBoardId": "ID tablicy",
+      "intakeBoardIdHelp": "Tablica, projekt lub kolejka, do której ten tracker ogranicza pozyskiwanie. Format określa tracker.",
       "intakeTitleFragment": "Tytuł zawiera",
       "intakeTitleFragmentPlaceholder": "np. crash",
       "intakeLabels": "Etykiety",

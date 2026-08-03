@@ -91,8 +91,17 @@ export interface TaskSearchRepoScope {
  * {@link BugCandidate} rows the bug hunt's ranking model needs.
  */
 export interface IssueIntakeQuery {
-  /** The vendor's "board"/project scope; exactly the field for the provider's source is read. */
-  board: { jiraProjectKey?: string; linearTeamId?: string; githubRepo?: string }
+  /**
+   * The vendor's "board"/project scope; exactly the field for the provider's source is read.
+   * `boardId` is the opaque leg a DEPLOYMENT-REGISTERED source reads (see
+   * `issueIntakeConfigSchema` for why it is a separate field rather than a reused built-in one).
+   */
+  board: {
+    jiraProjectKey?: string
+    linearTeamId?: string
+    githubRepo?: string
+    boardId?: string
+  }
   /** Substring that must appear in the issue title. */
   titleFragment?: string
   /** Label(s) that must ALL be present on the issue. */

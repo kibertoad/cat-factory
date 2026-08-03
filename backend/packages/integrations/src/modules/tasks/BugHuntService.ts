@@ -249,16 +249,23 @@ export class BugHuntService {
 }
 
 /**
- * Put the caller's board id on the field the target provider reads. The three vendors' board
- * notions are structurally different (a Jira project key, a Linear team UUID, an `owner/repo`
- * slug), which is exactly why the wire carries ONE opaque string and the mapping happens here
- * rather than in the SPA — a picker that had to know which field to fill would have to be
- * forked per provider.
+ * Put the caller's board id on the field the target provider reads. The three built-in vendors'
+ * board notions are structurally different (a Jira project key, a Linear team UUID, an
+ * `owner/repo` slug), which is exactly why the wire carries ONE opaque string and the mapping
+ * happens here rather than in the SPA — a picker that had to know which field to fill would have
+ * to be forked per provider.
+ *
+ * A DEPLOYMENT-REGISTERED source takes the opaque `boardId` leg. It must not fall through to
+ * `githubRepo`: every field here is a plain string, so a fall-through would hand a registered
+ * provider's board scope to the GitHub field and fail as "no matching issues" rather than as the
+ * mis-routing it is. The default is therefore keyed on the source being a BUILT-IN, not on it
+ * being un-matched.
  */
 function boardScopeFor(source: TaskSourceKind, board: string): IssueIntakeQuery['board'] {
   if (source === 'jira') return { jiraProjectKey: board }
   if (source === 'linear') return { linearTeamId: board }
-  return { githubRepo: board }
+  if (source === 'github') return { githubRepo: board }
+  return { boardId: board }
 }
 
 /** Scrub the free-text fields of a candidate before it is sent to a model provider. */

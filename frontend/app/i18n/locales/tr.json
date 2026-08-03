@@ -336,6 +336,8 @@
       "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
       "intakeGithubRepo": "Depo",
+      "intakeBoardId": "Pano kimliği",
+      "intakeBoardIdHelp": "Bu izleyicinin alımı kapsamlandırdığı pano, proje veya kuyruk. Biçimini izleyici belirler.",
       "intakeTitleFragment": "Başlık şunu içerir",
       "intakeTitleFragmentPlaceholder": "örn. crash",
       "intakeLabels": "Etiketler",

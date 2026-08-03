@@ -10,6 +10,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import type { ConformanceHarness } from '../harness.js'
 
 export function defineSourcesConformance(harness: ConformanceHarness): void {
@@ -329,6 +330,77 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       // rather than 404 — proving the route exists symmetrically on both runtimes.
       const teams = await call('GET', `/workspaces/${ws}/task-sources/linear/teams`)
       expect(teams.status).toBe(409)
+    })
+
+    it('serves a DEPLOYMENT-REGISTERED task source through the same lifecycle', async () => {
+      // Slice 4 of `docs/initiatives/tracker-webhook-intake.md`: the source vocabulary is
+      // `builtin picklist ∪ <ns>:<name>`, so a deployment registers a fourth tracker in CODE on
+      // the app-owned `TaskSourceRegistry` and it is served by every surface that reads the
+      // registry rather than a hard-coded list. Registered here exactly as a deployment would:
+      // one more provider in the container's `taskSourceProviders`.
+      const source = new FakeTaskSourceProvider('acme:servicenow')
+      source.set('INC-7', { title: 'Checkout returns 500', labels: ['bug'] })
+      const { call, createWorkspace } = harness.makeApp({}, { taskSourceProviders: [source] })
+      const { workspace } = await createWorkspace({ seed: false })
+      const ws = workspace.id
+
+      const listed = await call<{ sources: TaskSourceState[] }>(
+        'GET',
+        `/workspaces/${ws}/task-sources`,
+      )
+      expect(listed.body.sources.some((s) => s.source === 'acme:servicenow')).toBe(true)
+
+      const connected = await call(
+        'POST',
+        `/workspaces/${ws}/task-sources/acme:servicenow/connect`,
+        {
+          credentials: { token: 'sn_secret_token_123' },
+        },
+      )
+      expect(connected.status).toBe(201)
+      expect(JSON.stringify(connected.body)).not.toContain('sn_secret_token_123')
+
+      // Importing through a registered source projects a row keyed by the namespaced kind, so
+      // persistence carries it verbatim — the widening added no encoding of its own.
+      const imported = await call<SourceTask>(
+        'POST',
+        `/workspaces/${ws}/task-sources/acme:servicenow/import`,
+        { ref: 'INC-7' },
+      )
+      expect(imported.status).toBe(201)
+      expect(imported.body.source).toBe('acme:servicenow')
+      expect(imported.body.title).toBe('Checkout returns 500')
+
+      // Read back off the projection: the namespaced kind round-trips through the persisted
+      // `source` column unchanged on every runtime, which is the whole claim that widening the
+      // vocabulary needed no migration.
+      const projected = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+      expect(projected.status).toBe(200)
+      const row = projected.body.find((t) => t.externalId === 'INC-7')
+      expect(row?.source).toBe('acme:servicenow')
+    })
+
+    it('tells a MALFORMED source id apart from an unregistered one', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace({ seed: false })
+      const ws = workspace.id
+
+      // A bare non-built-in id is a TYPO and fails the grammar — this is what keeps widening the
+      // vocabulary from turning every misspelled segment into a plausible-looking miss.
+      const malformed = await call('POST', `/workspaces/${ws}/task-sources/servicenow/import`, {
+        ref: 'INC-7',
+      })
+      expect(malformed.status).toBe(422)
+
+      // A WELL-FORMED id nothing registered is a different failure with a different fix, and it is
+      // refused by the registry rather than by the schema.
+      const unregistered = await call(
+        'POST',
+        `/workspaces/${ws}/task-sources/acme:servicenow/connect`,
+        { credentials: { token: 't' } },
+      )
+      expect(unregistered.status).toBe(422)
+      expect(JSON.stringify(unregistered.body)).toContain('acme:servicenow')
     })
   })
 

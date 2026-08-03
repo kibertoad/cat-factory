@@ -336,6 +336,8 @@
       "intakeHint": "כל הרצה בוחרת תקלה פתוחה תואמת אחת מהמעקב ומטפלת בה מקצה לקצה.",
       "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
       "intakeGithubRepo": "מאגר",
+      "intakeBoardId": "מזהה לוח",
+      "intakeBoardIdHelp": "הלוח, הפרויקט או התור שאליהם מערכת המעקב מגבילה את הקליטה. התבנית נקבעת על ידי מערכת המעקב.",
       "intakeTitleFragment": "הכותרת מכילה",
       "intakeTitleFragmentPlaceholder": "למשל crash",
       "intakeLabels": "תוויות",

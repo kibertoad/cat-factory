@@ -44,11 +44,19 @@ function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule {
   return requireCapability(c.get('container').tasks, 'Task-source integration is not configured')
 }
 
-/** Read + validate the `:source` path param as a known source kind. */
+/**
+ * Read + validate the `:source` path param against the source GRAMMAR (a built-in id, or a
+ * `<ns>:<name>` id a deployment may have registered).
+ *
+ * Deliberately NOT a registration check: the services this controller calls resolve the source on
+ * the app-owned registry (`requireProvider`) and refuse an unregistered one there, so hoisting that
+ * lookup here would put a second copy of the authority in front of it. What this rejects is a
+ * malformed segment, which is a different failure with a different fix.
+ */
 function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
   const source = param(c, 'source')
   if (!v.is(taskSourceKindSchema, source)) {
-    throw new ValidationError(`Unknown task source '${source}'`)
+    throw new ValidationError(`Malformed task source '${source}'`)
   }
   return source
 }
