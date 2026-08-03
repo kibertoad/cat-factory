@@ -43,6 +43,26 @@ describe('binaryOutputView', () => {
     expect(binaryOutputView(null)).toBeNull()
   })
 
+  // A gated-out step holds a selection it never ran with, so `configured` would tell a reader it
+  // is still running or died mid-generation — both wrong, about a step already marked skipped.
+  it('renders nothing for a step skipped by estimate gating', () => {
+    expect(
+      binaryOutputView(
+        step({ skipped: true, stepOptions: { binaryOutput: { storageServiceId: 'files' } } }),
+      ),
+    ).toBeNull()
+    // A recorded claim is never hidden, whatever else the step says about itself.
+    expect(
+      binaryOutputView(
+        step({
+          skipped: true,
+          stepOptions: { binaryOutput: { storageServiceId: 'files' } },
+          binaryOutputs: report({ stored: [artifact('files', 'a.png')] }),
+        }),
+      )?.state,
+    ).toBe('stored')
+  })
+
   // A parse failure implies an empty `stored`, so reading the list first would report it as
   // "the agent said it stored nothing" — the one misreading with a completely wrong remedy.
   it('reports an unreadable declaration as parse-failed, not as declared-none', () => {
@@ -174,22 +194,30 @@ describe('binaryOutputPickIssues', () => {
     expect(pick.unknownContextIds).toEqual(['gone', 'also-gone'])
   })
 
-  // An empty picker reads as "no services exist", which is a claim. An unreachable catalog and
-  // an empty one are opposite facts with opposite fixes.
-  it('separates an unreachable catalog from an empty one', () => {
-    expect(binaryOutputPickIssues(undefined, [], false).issues).toContain('catalog_unavailable')
+  // An empty picker reads as "no services exist", which is a claim. Not-probed-yet, unreachable
+  // and genuinely empty are three facts an empty array cannot tell apart.
+  it('separates an unreachable and an unprobed catalog from an empty one', () => {
     expect(binaryOutputPickIssues(undefined, [], true).issues).toContain('no_storage_service')
-    expect(binaryOutputPickIssues(undefined, [], false).issues).not.toContain('no_storage_service')
+    expect(binaryOutputPickIssues(undefined, [], false).issues).toEqual([
+      'catalog_unavailable',
+      'not_selected',
+    ])
+    // Before the probe lands there is nothing to say about the catalog — only about the step.
+    expect(binaryOutputPickIssues(undefined, [], null).issues).toEqual(['not_selected'])
   })
 
-  // An outage changed nothing about the selection, so it must not flag every step for re-pick.
-  it('does not judge a selection against a catalog it could not read', () => {
-    const pick = binaryOutputPickIssues(
-      { storageServiceId: 'files', contextServiceIds: ['inventory'] },
-      [],
-      false,
-    )
-    expect(pick.issues).toEqual(['catalog_unavailable'])
-    expect(pick.unknownContextIds).toEqual([])
+  // An outage (or a load still in flight) changed nothing about the selection, so neither may
+  // flag every step for re-pick.
+  it('does not judge a selection against a catalog it has not read', () => {
+    for (const available of [false, null] as const) {
+      const pick = binaryOutputPickIssues(
+        { storageServiceId: 'files', contextServiceIds: ['inventory'] },
+        [],
+        available,
+      )
+      expect(pick.issues).not.toContain('unknown_service')
+      expect(pick.issues).not.toContain('unknown_context_service')
+      expect(pick.unknownContextIds).toEqual([])
+    }
   })
 })

@@ -98,11 +98,18 @@ export interface BinaryOutputView {
  * A step carrying a SELECTION but no report still renders: it was briefed, and "briefed, with
  * nothing recorded" is a fact worth stating on a run that died mid-generation. A step carrying
  * a REPORT but no selection renders too, with a null target (see {@link BinaryOutputView.target}).
+ *
+ * The one exception is a step SKIPPED by estimate gating: it holds a selection it never ran
+ * with, so `configured` would tell a reader it is still running or died mid-generation — two
+ * causes that are both wrong, about a step the panel already marks as skipped. A skipped step
+ * genuinely has no binary-output story, so it takes the same absence as an unbriefed one. (A
+ * skipped step with a REPORT is not reachable — nothing dispatched — but if one ever were, the
+ * record wins: a recorded claim is never hidden.)
  */
 export function binaryOutputView(step: PipelineStep | null | undefined): BinaryOutputView | null {
   const report = step?.binaryOutputs ?? null
   const config = step?.stepOptions?.binaryOutput ?? null
-  if (!report && !config) return null
+  if (!report && (!config || step?.skipped)) return null
 
   const target = config?.storageServiceId ?? null
   const contextServices = config?.contextServiceIds ?? []
@@ -259,9 +266,13 @@ export interface BinaryOutputPickState {
  * services: an id offered from a stale client copy saves clean and fails at run START, one
  * refusal cycle later.
  *
- * `available` is the catalog's own probe state, threaded separately because `[]` from an
- * unreachable catalog and `[]` from an empty one are opposite facts with opposite fixes, and
- * only one of them is worth a "register a storage service" hint.
+ * `available` is the catalog's own probe state, threaded separately because it distinguishes
+ * three things an empty array cannot: NOT PROBED YET (`null`), UNREACHABLE (`false`) and
+ * genuinely EMPTY (`true`) — opposite facts with opposite fixes, and only the last is worth a
+ * "register a storage service" hint. Every judgement about the CATALOG therefore requires
+ * `available === true`; only `not_selected`, which is a fact about the STEP, holds regardless.
+ * Without that a step would be flagged for re-pick during the load that is about to resolve it,
+ * and again during an outage that changed nothing about it.
  *
  * Returns EVERY issue, not the first, for the same reason `binaryOutputConfigIssues` does:
  * naming one at a time costs a fix-and-retry cycle per lost service.
@@ -271,9 +282,10 @@ export function binaryOutputPickIssues(
   catalog: readonly Pick<ResolvedFoundationalService, 'id' | 'capabilities'>[],
   available: boolean | null,
 ): BinaryOutputPickState {
+  const resolved = available === true
   const issues: BinaryOutputPickIssue[] = []
   if (available === false) issues.push('catalog_unavailable')
-  else if (!catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY)))
+  else if (resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY)))
     issues.push('no_storage_service')
 
   const storageId = config?.storageServiceId?.trim()
@@ -282,10 +294,7 @@ export function binaryOutputPickIssues(
     return { issues, unknownContextIds: [] }
   }
 
-  // Only judge a SELECTED id against a catalog we actually have. An unreachable catalog would
-  // otherwise report every selection as unknown — flagging a step for re-pick over an outage
-  // that changed nothing about it.
-  if (available !== false) {
+  if (resolved) {
     const storage = catalog.find((s) => s.id === storageId)
     if (!storage) issues.push('unknown_service')
     else if (!storage.capabilities.includes(ASSET_STORAGE_CAPABILITY))
@@ -293,8 +302,9 @@ export function binaryOutputPickIssues(
   }
 
   const known = new Set(catalog.map((s) => s.id))
-  const unknownContextIds =
-    available === false ? [] : (config?.contextServiceIds ?? []).filter((id) => !known.has(id))
+  const unknownContextIds = resolved
+    ? (config?.contextServiceIds ?? []).filter((id) => !known.has(id))
+    : []
   if (unknownContextIds.length) issues.push('unknown_context_service')
 
   return { issues, unknownContextIds }
