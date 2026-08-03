@@ -24,8 +24,9 @@ const open = computed({
   set: (v: boolean) => (v ? tutorial.openPrompt() : tutorial.closePrompt()),
 })
 
-// Only an unanswered prompt offers the persistent "No thanks"; once a decision exists this
-// is just a picker, and the only dismissal left is a plain close.
+// Only an unanswered prompt offers the persistent "No thanks": there is a decision to save.
+// Once one exists — this window can still be opened by the store — the only dismissal left is
+// a plain close, since declining something already answered would write nothing new.
 const undecided = computed(() => tutorial.decision === null)
 </script>
 

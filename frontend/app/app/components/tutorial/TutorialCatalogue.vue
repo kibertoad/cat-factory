@@ -27,7 +27,7 @@ const open = computed({
 const rows = computed(() => buildCatalogueRows(catalogue.value, stateOf))
 const progress = computed(() => summarizeProgress(rows.value))
 
-/** Only a finished tour gets a badge in basic reading order; the rest are the default state. */
+/** A badge only where there is something to say: "not started" is the unremarkable default. */
 const showsStatus = (row: TutorialCatalogueRow) => row.state !== 'notStarted'
 
 const statusColor = (row: TutorialCatalogueRow) =>
