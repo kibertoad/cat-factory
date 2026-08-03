@@ -3,8 +3,10 @@ import type { Block } from '@cat-factory/kernel'
 import {
   ASSET_STORAGE_CAPABILITY,
   ConflictError,
+  UnavailableError,
   ValidationError,
   defaultBinaryGeneratorRegistry,
+  registryBinaryGeneratorSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
@@ -64,7 +66,10 @@ function generatorRegistry() {
   return generators
 }
 
-function admission(resolver?: FoundationalServiceResolver): RunAdmission {
+function admission(
+  resolver?: FoundationalServiceResolver,
+  generatorSource = registryBinaryGeneratorSource(generatorRegistry()),
+): RunAdmission {
   const deps = {
     workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
     blockRepository: { listByWorkspace: vi.fn(async () => []) },
@@ -77,7 +82,7 @@ function admission(resolver?: FoundationalServiceResolver): RunAdmission {
     agentKindRegistry: registry,
     spend: { isOverBudget: vi.fn(async () => false) },
     ...(resolver ? { foundationalServiceResolver: resolver } : {}),
-    binaryGeneratorRegistry: generatorRegistry(),
+    binaryGeneratorSource: generatorSource,
   } as unknown as RunAdmissionDeps
   return new RunAdmission(deps)
 }
@@ -351,5 +356,48 @@ describe('RunAdmission — generative integration selection', () => {
       ),
     )
     expect(error.details).toMatchObject({ reason: 'binary_output_generator_invalid' })
+  })
+
+  it('refuses an UNREADABLE integration set as an outage, never as an unknown generator', async () => {
+    // The disposition that carries the mothership-mode seam. Softening an unreachable source to
+    // an empty one would refuse every generator-selecting step with `unknown_generator` for the
+    // duration of the outage — a false configuration error, reported against the very step the
+    // product's own picker filled in, which is the misattribution the remote source exists to
+    // remove. Admitting anyway is the other wrong answer: the run would dispatch with no brief
+    // and no credential, and the agent would discover at the end of a paid run that it had
+    // nothing to generate with.
+    const unreachable = {
+      views: async () => {
+        throw new UnavailableError(
+          'The deployment’s generative integrations could not be read from the mothership',
+          'binary_generators_unreachable',
+          { status: 503 },
+        )
+      },
+      documentsFor: async () => new Map(),
+    }
+    await expect(
+      admission(
+        catalogResolver([{ id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }]),
+        unreachable,
+      ).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              // An id this deployment DOES register — so an empty-set reading would have called
+              // it unknown, which is exactly the claim that must not be made.
+              binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+            },
+          ],
+        },
+        null,
+      ),
+    ).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable' },
+    })
   })
 })

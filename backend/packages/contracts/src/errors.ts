@@ -171,6 +171,33 @@ export const CONFLICT_REASONS = [
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
 
 /**
+ * Machine-readable reasons behind a 503 (`error.details.reason` on an `UnavailableError`), for
+ * the ones a USER can reach — the SPA keys an exhaustive `Record<UnavailableReason, …>` of
+ * message keys off this, exactly as it does for {@link CONFLICT_REASONS}.
+ *
+ * A 503 without a reason is left to the status class's generic copy, and that copy has to say
+ * something — today "this deployment has not configured the capability this action needs". For
+ * an outage that is the WRONG claim, and precisely the misattribution the reasons below exist to
+ * prevent one layer down: a node whose mothership is unreachable would tell an operator their
+ * deployment is misconfigured, sending them to a build with nothing wrong in it. So a 503 whose
+ * cause is "reachable, just not right now" belongs here rather than on the generic fallback.
+ *
+ *  - `binary_generators_unreachable`   — the deployment's generative binary integrations could
+ *                                        not be read. On a mothership-mode node they are read
+ *                                        from the mothership, and run admission refuses rather
+ *                                        than resolving a step's `generatorIds` against an
+ *                                        unknown set. Retryable; nothing is misconfigured.
+ *  - `foundational_builtins_unreachable` — the same shape for the deployment's `builtin`
+ *                                        foundational-services tier.
+ */
+export const UNAVAILABLE_REASONS = [
+  'binary_generators_unreachable',
+  'foundational_builtins_unreachable',
+] as const
+
+export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
+
+/**
  * Machine-readable reasons a `review` task's target pull request is refused at creation
  * (`error.details.reason` on the 422). Same contract as {@link CONFLICT_REASONS} — the code is
  * the source of truth and the SPA keys an exhaustive `Record<ReviewTargetReason, …>` of message

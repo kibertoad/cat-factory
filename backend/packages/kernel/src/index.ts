@@ -271,6 +271,16 @@ export {
   BinaryGeneratorRegistry,
   defaultBinaryGeneratorRegistry,
 } from './domain/binary-generator-registry.js'
+
+// Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
+// over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a
+// second, drifting copy of what the builder's picker offered). See
+// `ports/binary-generators.ts`.
+export {
+  type BinaryGeneratorSource,
+  memoizeBinaryGeneratorViews,
+  registryBinaryGeneratorSource,
+} from './ports/binary-generators.js'
 export {
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,

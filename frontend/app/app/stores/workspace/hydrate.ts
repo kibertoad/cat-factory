@@ -102,7 +102,12 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useAgentsStore().hydrateVariants(snapshot.agentKindVariants ?? [])
   // The deployment's registered generative binary integrations, so the builder's binary-output
   // picker can offer a step's `generatorIds` from the same set run admission validates against.
-  useAgentsStore().hydrateBinaryGenerators(snapshot.binaryGenerators ?? [])
+  // …and whether that set could not be read at all, which the picker must say rather than
+  // render as an empty deployment (see `binaryGeneratorsUnavailable` on the snapshot).
+  useAgentsStore().hydrateBinaryGenerators(
+    snapshot.binaryGenerators ?? [],
+    snapshot.binaryGeneratorsUnavailable === true,
+  )
   useTaskTypesStore().hydrateCapabilities(capabilities)
   // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
   // pipeline builder's per-step skill picker has its options. A straight replace.

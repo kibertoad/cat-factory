@@ -101,6 +101,12 @@ export async function startLocal(
      * pays for on it, and passes it here. Threaded through to `buildLocalContainer` (both the
      * Postgres and mothership paths), where a step carrying the `binary-output` trait selects from
      * them (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry.
+     *
+     * **In MOTHERSHIP mode a registration here decides no run**: the set a run resolves against is
+     * read from the mothership, which is what the pipeline builder offered it from, and this
+     * node's build can only hold a second copy. Register on the mothership's own entry point
+     * instead; boot warns and names any ids registered here. (They are still boot-VALIDATED, since
+     * a laptop is the cheapest place to learn a definition is malformed.)
      */
     binaryGeneratorRegistry?: BinaryGeneratorRegistry
     /**
@@ -386,6 +392,22 @@ async function startLocalMothership(
         'mode — the catalog’s builtin tier is read from the mothership, which is authoritative ' +
         'for the deployment’s estate. Register them on the mothership’s own entry point.',
       { serviceIds: localEstate.map((entry) => entry.id) },
+    )
+  }
+
+  // The same courtesy for the generative integrations, and the one that would have told a
+  // deployment it was carrying a redundant registration: before the set crossed the machine API,
+  // registering on BOTH entry points was the only shape that worked, so the line reads like
+  // deliberate wiring rather than the workaround it was. Naming the ids is what makes it
+  // actionable — silently ignoring them would swap one invisible failure for another.
+  const localGenerators = container.binaryGeneratorRegistry.ids()
+  if (localGenerators.length > 0) {
+    logger.warn(
+      'local mode: generative binary integrations registered on this node are NOT used in ' +
+        'mothership mode — a run resolves a step’s generatorIds against the mothership, which ' +
+        'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
+        'entry point.',
+      { binaryGeneratorIds: localGenerators },
     )
   }
 

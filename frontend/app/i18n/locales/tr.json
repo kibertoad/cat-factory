@@ -497,6 +497,12 @@
         "unexpected": "Sunucu beklenmeyen bir yanıt döndürdü. Yeniden dene; sorun sürerse ayrıntıları dağıtım yöneticisiyle paylaş."
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Bu dağıtımın üretken entegrasyonları şu anda okunamadı, bu yüzden çalıştırma başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+      }
+    },
     "action": {
       "retryFailed": "Yeniden deneme başarısız oldu",
       "startFailed": "Başlatılamadı",
@@ -4108,6 +4114,7 @@
       "binaryOutputContextMissing": "Bu bağlam hizmetleri artık katalogda yok: {ids}",
       "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor.",
       "binaryOutputGenerators": "Şununla üret",
+      "binaryOutputGeneratorsUnavailable": "Bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden burada henüz bir seçim yapılamıyor. Bu bir bağlantı sorunudur, eksik bir kayıt değil.",
       "binaryOutputGeneratorsPlaceholder": "Entegrasyon seçilmedi",
       "binaryOutputModalities": "Teslim etmeli",
       "binaryOutputModalitiesPlaceholder": "Gereksinim yok",
@@ -5420,7 +5427,8 @@
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
       "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor.",
-      "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir."
+      "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
+      "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
     "unknownGeneratorBadge": "Kayıtlı değil"
   },

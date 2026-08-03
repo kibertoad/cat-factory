@@ -194,6 +194,13 @@ const state = computed(() => {
           )
         }}
       </li>
+      <!-- The third state of the same question, and the reason it is not the line above with an
+           empty list: an empty `unknownDeclaredGenerators` otherwise means every claimed id
+           checked out. Someone reading this panel to decide whether these artifacts are real
+           must not be handed a clean bill of health nobody issued. -->
+      <li v-if="view.generatorsUnverified" data-testid="binary-output-generators-unverified">
+        {{ t('binaryOutput.warning.generatorsUnverified') }}
+      </li>
       <li v-if="view.misdirected" data-testid="binary-output-misdirected-note">
         {{
           t(

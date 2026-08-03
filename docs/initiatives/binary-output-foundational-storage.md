@@ -208,11 +208,109 @@ rides the step (`binaryOutputs`), and every read goes through the existing
 `FoundationalServiceCatalogService` methods — already conformance-covered and already in the
 `remote` RPC bucket — so both facades and mothership mode are correct by construction.
 
-The generative half is stronger still: the registry is in-process composition data with no
-repository behind it, so there is no method to route, nothing to allow-list, and a mothership-mode
-node reads the SAME definitions its own build carries. (That is also its one limitation: unlike
-the catalog's `builtin` tier, an integration a node's build does not have is simply not there —
-which is correct, since the node is where the agent's job body is assembled.)
+The generative half looked stronger still, and that reading was wrong. The registry is in-process
+composition data with no repository behind it, so there is no method to route and nothing to
+allow-list — but "a mothership-mode node reads the SAME definitions its own build carries" is only
+true while both processes ship the same build, which is the exact assumption the foundational
+`builtin` tier had already been fixed for. A local node one build behind is the NORMAL state of a
+mothership deployment.
+
+It is also the case CLAUDE.md's own rule names: **state a deployment registers in CODE and a RUN
+resolves is org state**, and it rides its own `/internal/*` read rather than a second copy. This
+registry shipped in violation of that rule, and a downstream deployment (stefka) hit it on its
+first generative integration.
+
+The symptom is louder than the estate's and worse targeted. The pipeline builder's picker is fed
+from the WORKSPACE SNAPSHOT, which the mothership serves; run admission resolves the same ids on
+the node. Register on the mothership alone and a human picks an integration from the product's own
+picker, and every run of that step is refused with `unknown_generator` — a message that names the
+step's configuration when the step's configuration is correct, leaving the half-wired deployment
+invisible and the operator editing something with nothing wrong with it. Register on the node
+alone and runs work while the step is unreachable through the builder. Registering on both is what
+the shape forced, and nothing detected the skew.
+
+So the set crosses the machine API, mirroring the estate file for file:
+
+- **`BinaryGeneratorSource`** (`kernel/src/ports/binary-generators.ts`) — `views()` +
+  batched `documentsFor(ids)`, the two projections the registry already exposes, so a remote
+  implementation is a transport and never a second view of the data.
+- **`GET /internal/binary-generators`** + `POST .../contracts`, machine-token gated, no account
+  scope (one deployment-wide set with no owner), reading this process's OWN registry so a
+  satellite cannot answer for a satellite. Mounted on both facades; never 503s, because a
+  deployment that registers none is legitimately empty.
+- **`HttpBinaryGeneratorSource`**, which THROWS on every route to "we do not know the set" —
+  transport error, refusal, the 404 of a mothership older than the node, an unreadable 200.
+- A mothership-mode node injects it as `binaryGeneratorSource` and does not consult its own
+  registry for any run; `startLocal` warns at boot naming any locally registered ids it will
+  ignore. The registry is still read for BOOT VALIDATION (the same code the mothership boots, and
+  a laptop is the cheapest place to learn a definition is malformed) and to SERVE the route when
+  this process is itself a mothership.
+
+### The disposition, which is where this stops being a copy of the estate
+
+The estate is ENRICHMENT: `resolveFoundationalContext` catches the throw and renders the outage
+into the injected context file. The generative set is also an ADMISSION input, and there both
+obvious dispositions are wrong. Softening to an empty set refuses every generator-selecting step
+with `unknown_generator` for the duration of an outage — the misattribution above, now caused by
+us. Admitting anyway dispatches a run with no brief and no credential, so the agent discovers at
+the end of a paid run that it had nothing to generate with.
+
+The answer is the third one: **fail admission with the outage's own code.** The `UnavailableError`
+is re-thrown rather than re-mapped, so the caller gets a 503-shaped, retryable refusal carrying
+`binary_generators_unreachable` — never `binary_output_generator_invalid`. It is the "absent ≠
+zero" rule applied for the first time to a DECISION surface rather than an enrichment one.
+
+The two BEST-EFFORT readers keep their own dispositions, and both are safe because each already
+defines its own absence: the dispatch brief injects nothing, which the trait guidance already
+reads as "the platform could not provide storage — do not attempt any upload; report it", and the
+declaration read-back records what it CAN and says the rest was unverified.
+
+That second one is worth stating precisely, because the obvious reading of "do not file an
+unchecked id as invented" is to write no report at all — and that is wrong in the other
+direction. A settled step's report is the evidence a human reads to decide whether the run's
+artifacts are real, and the generative question is one line of it: the artifacts themselves and
+the whole STORAGE verdict resolve against the workspace catalog, which an unreachable mothership
+says nothing about. Dropping them would lose a completed generation's record over a question
+nobody asked. So `BinaryOutputReport` carries `generatorsUnverified` as its own field — never an
+empty `unknownGenerators`, which otherwise means "every claimed id checked out" — and the SPA
+renders it as its own warning line, counted by `binaryOutputHasWarnings` so a collapsed section
+cannot present an unchecked report as a clean one. It is the same three-state split as the
+picker's, at the other end of the run.
+
+Nothing named a run start's REFUSAL, though, and the generic 503 copy the SPA falls back to says
+"this deployment has not configured the capability this action needs" — which is the exact
+misattribution this whole feature removes, reappearing one layer up and in ten languages, with
+the honest wording demoted to untranslated detail behind a disclosure. So user-reachable 503
+reasons get their own translated copy, keyed off a `UNAVAILABLE_REASONS` union in
+`@cat-factory/contracts` and an exhaustive `Record` in `usePipelineErrorToast` — the
+`CONFLICT_REASONS` pattern, applied to the status class that needed it next.
+
+### The picker is part of the fix, not a follow-up
+
+Routing only admission and the dispatch would have moved the drift one surface along rather than
+removing it: `snapshotBinaryGenerators` fed the picker from the container's own registry, so a
+node that stopped double-registering would offer an empty picker while its runs resolved fine. The
+snapshot projection therefore reads the SAME source, and carries `binaryGeneratorsUnavailable` for
+the state a list cannot express — an empty picker is a claim about the deployment's BUILD, and
+acting on it during an outage sends someone to the wrong repository. It never throws: a picker on
+one step type must not take a board load down.
+
+### Version floor
+
+Closing this creates the same floor the estate's did: a node on the new `local-server` needs a
+mothership new enough to answer the route, and an older one answers 404 — which the client
+reports as an outage rather than as an empty set, so the failure is legible rather than silent.
+
+### What deliberately did NOT cross
+
+The other four registry projections in the snapshot (`customAgentKinds`, `agentKindVariants`,
+`customTaskTypes`, `initiativePresets`) stay per-process. An agent kind and an initiative preset
+carry FUNCTIONS (`systemPrompt`, `userPrompt`, `detect`), so serializing one would mean inventing a
+reduced wire form that is a second source of truth about what it DOES — the copy-drift this change
+removes. `CustomTaskType` is, contrary to the proposal's claim that this was "the second and last"
+transportable registry, pure data and could cross; it has not been asked to, and the trigger when
+it is should be the same one as here — someone hitting the drift on a real deployment — not
+symmetry for its own sake.
 
 ## How credentials reach the agent
 

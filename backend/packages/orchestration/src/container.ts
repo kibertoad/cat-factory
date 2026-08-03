@@ -101,6 +101,7 @@ import type {
 } from './container-content-libraries.js'
 import type {
   BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
@@ -334,6 +335,14 @@ export interface CoreSpine {
    */
   binaryGeneratorRegistry: BinaryGeneratorRegistry
   /**
+   * Where a RUN's generative integrations are READ from — this process's own registry above,
+   * unless a mothership-mode node injected the remote source. Re-exposed because the HTTP layer
+   * needs the SAME answer: the pipeline builder's picker is fed from the workspace snapshot, and
+   * a picker offering ids from a different set than admission resolves against is the exact
+   * drift this seam exists to remove — just moved one surface along.
+   */
+  binaryGenerators: BinaryGeneratorSource
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -543,6 +552,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryGenerators,
     foundationalBuiltins,
     initiativePresetRegistry,
     executionEventPublisher,
@@ -734,6 +744,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryGenerators,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

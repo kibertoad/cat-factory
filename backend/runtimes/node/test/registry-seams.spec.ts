@@ -23,8 +23,16 @@ import type { NodeContainerOptions } from '../src/container-options.js'
 // until `NodeContainerOptions` carries it.
 // ---------------------------------------------------------------------------
 
-/** Every app-owned registry seam on `CoreDependencies`, derived rather than restated. */
-type RegistrySeam = Extract<keyof CoreDependencies, `${string}Registry`>
+/**
+ * Every app-owned registry seam on `CoreDependencies`, derived rather than restated — plus the
+ * SOURCES that decide where such a registry is read FROM.
+ *
+ * A source belongs here for the same reason a registry does, and the same way round: it is a DI
+ * seam a facade must thread, an unthreaded one defaults to the in-process registry, and the
+ * default is indistinguishable from correct until the deployment is a mothership pair. It is
+ * exactly the shape the generative-integration registry itself shipped in.
+ */
+type RegistrySeam = Extract<keyof CoreDependencies, `${string}Registry` | `${string}Source`>
 
 /**
  * How a seam reaches `CoreDependencies` on this facade.
@@ -47,6 +55,12 @@ const SEAM_ROUTES = {
   vcsRegistry: 'option',
   foundationalServiceRegistry: 'option',
   binaryGeneratorRegistry: 'option',
+  // The two SOURCES. Both are `option` for the same reason their registries are, and both are set
+  // by exactly one caller — the local facade booting in mothership mode, which reads what the
+  // deployment registered from the mothership rather than from this node's own (stale-by-
+  // construction) build.
+  foundationalBuiltinSource: 'option',
+  binaryGeneratorSource: 'option',
   // Registered together on one `createBackendRegistries()` bundle and injected as
   // `backendRegistries`, because an environment backend and its runner backend are two halves of
   // one deployment's infrastructure and splitting them into two options would let a deployment
@@ -87,5 +101,13 @@ describe('app-owned registry seams', () => {
     // deployment's image/music generators were unreachable on Node and local while every test
     // passed. Named explicitly so the guard reads as the thing it protects.
     expect(SEAM_ROUTES.binaryGeneratorRegistry).toBe('option')
+  })
+
+  it('routes both code-registered-org-state SOURCES as options too', () => {
+    // The second half of the same failure mode. A source left unthreaded silently falls back to
+    // this process's own registry, which is precisely the drifting second copy the source exists
+    // to remove — and it only misbehaves on a mothership deployment, which no test here is.
+    expect(SEAM_ROUTES.foundationalBuiltinSource).toBe('option')
+    expect(SEAM_ROUTES.binaryGeneratorSource).toBe('option')
   })
 })

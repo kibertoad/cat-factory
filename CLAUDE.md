@@ -929,8 +929,28 @@ because one is fixed in the workspace catalog and the other in the deployment's 
 `ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a
 tool server of one id cannot collide), and it rides the job body's `generatorSecrets` into that ONE
 job's agent env. An unresolved key is not a failed dispatch: the brief already tells the agent an
-unset variable means the platform could not provide it, and to report rather than call. Doc:
-[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+unset variable means the platform could not provide it, and to report rather than call.
+
+**The registry is READ through `BinaryGeneratorSource`, never directly**, because it is exactly
+the "registers in CODE, resolves in a RUN" state the mothership rule above covers — it shipped in
+violation of that rule and a downstream deployment hit it. A mothership-mode node reads
+`GET /internal/binary-generators` (+ batched `POST .../contracts`) and does not consult its own
+registry for any run; the registry stays the subject of BOOT VALIDATION and what that route
+SERVES when this process is the mothership. **Every reader routes through the source, the workspace
+snapshot's picker projection included** — routing only the engine moves the drift to the surface
+that OFFERS the id rather than removing it. And the disposition differs from the estate's because
+this one gates ADMISSION: an unreachable source is re-thrown as `binary_generators_unreachable`
+(503, retryable), never softened to an empty set, which would refuse a correctly configured step
+as `unknown_generator` — the first application of "absent ≠ zero" to a decision surface rather
+than an enrichment one. **A user-reachable 503 reason owes TRANSLATED copy** (`UNAVAILABLE_REASONS`
+
+- an exhaustive `Record` in `usePipelineErrorToast`, the `CONFLICT_REASONS` pattern): the status
+  class's generic wording commits to "this deployment has not configured the capability", which is
+  right for an unwired module and is the misattribution itself for an outage. And the settled step's
+  read-back RECORDS what it could check and flags what it could not (`generatorsUnverified`, never an
+  empty `unknownGenerators`) — withholding the one unanswerable judgement is right, dropping the
+  artifacts and the storage verdict beside it is the same mistake mirrored. Doc:
+  [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
 `ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read

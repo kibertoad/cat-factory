@@ -130,6 +130,16 @@ export const binaryOutputReportSchema = v.object({
    * agent claimed and a reader judges it.
    */
   unknownGenerators: v.array(v.string()),
+  /**
+   * Set when the deployment's registered integrations could not be READ at settlement, so no
+   * claimed `generator` id could be checked against them (a mothership-mode node whose mothership
+   * was unreachable). Its own field rather than an empty {@link unknownGenerators}, for the
+   * reason that runs through this whole feature: "every id checked out" and "nothing could be
+   * checked" are the same value and opposite facts, and only one of them is evidence. The
+   * artifacts themselves — and the STORAGE half's verdict, which resolves against a different
+   * catalog and is unaffected — are recorded either way, because what could be derived must be.
+   */
+  generatorsUnverified: v.optional(v.literal(true)),
   /** Entries dropped because they were not an object with `service` + `location` strings. */
   invalidEntries: v.number(),
   /** Valid entries dropped past the per-report cap. */

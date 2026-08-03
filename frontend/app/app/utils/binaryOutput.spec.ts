@@ -253,6 +253,41 @@ describe('the generative half of the read model', () => {
     expect(binaryOutputHasWarnings(view!)).toBe(true)
   })
 
+  it('surfaces an UNCHECKED generative verdict, and does not let it read as a clean one', () => {
+    // The settlement-side twin of the picker's `generators_unavailable`. An empty
+    // `unknownDeclaredGenerators` normally means every claimed id checked out, so a reader
+    // deciding whether these artifacts are real would take silence here as confirmation. The
+    // flag has to reach both the line AND the collapsed summary's tone, or the one place it is
+    // stated is behind a section that looks like it has nothing to say.
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', generatorIds: ['retro'] } },
+        binaryOutputs: report({
+          stored: [{ ...artifact('files', 'a.png'), generator: 'retro' }],
+          generatorsUnverified: true,
+        }),
+      }),
+    )
+    expect(view?.generatorsUnverified).toBe(true)
+    expect(view?.unknownDeclaredGenerators).toEqual([])
+    // The artifacts themselves survived the outage — that is the whole point of recording them.
+    expect(view?.rows).toHaveLength(1)
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('reads a checked-and-clean report as clean, which is what makes the flag mean anything', () => {
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', generatorIds: ['retro'] } },
+        binaryOutputs: report({
+          stored: [{ ...artifact('files', 'a.png'), generator: 'retro' }],
+        }),
+      }),
+    )
+    expect(view?.generatorsUnverified).toBe(false)
+    expect(binaryOutputHasWarnings(view!)).toBe(false)
+  })
+
   it('carries the step selection through, and treats empty as a real state', () => {
     const configured = binaryOutputView(
       step({
@@ -331,6 +366,35 @@ describe('binaryOutputPickIssues, generative half', () => {
   it('is silent about a step that selects no integration at all', () => {
     const pick = binaryOutputPickIssues({ storageServiceId: 'files' }, catalog, true, generators)
     expect(pick.issues).toEqual([])
+  })
+
+  it('reports an UNREADABLE set as an outage and makes no claim about the selection', () => {
+    // The picker's half of the mothership-mode disposition. A failed read arrives as the same
+    // empty list an unregistering deployment produces, so judging the selection against it would
+    // tell someone their step names an integration nobody registered — about an id that is very
+    // likely fine, and with the remedy pointing at the wrong repository.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'], modalities: ['audio'] },
+      catalog,
+      true,
+      [],
+      true,
+    )
+    expect(pick.issues).toEqual(['generators_unavailable'])
+    expect(pick.unknownGeneratorIds).toEqual([])
+    expect(pick.uncoveredModalities).toEqual([])
+  })
+
+  it('still judges an EMPTY set, which is a real answer about the deployment', () => {
+    // The distinction the flag exists for: same empty list, opposite fact, opposite message.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'] },
+      catalog,
+      true,
+      [],
+      false,
+    )
+    expect(pick.issues).toContain('unknown_generator')
   })
 })
 

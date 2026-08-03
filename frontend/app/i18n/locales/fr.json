@@ -497,6 +497,12 @@
         "unexpected": "Le serveur a renvoyé une réponse inattendue. Réessayez, et transmettez les détails à l'opérateur du déploiement si le problème persiste."
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Les intégrations génératives de ce déploiement n'ont pas pu être lues pour l'instant, l'exécution n'a donc pas démarré. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "foundational_builtins_unreachable": "Les services fondamentaux intégrés de ce déploiement n'ont pas pu être lus pour l'instant. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+      }
+    },
     "action": {
       "retryFailed": "Échec de la nouvelle tentative",
       "startFailed": "Échec du démarrage",
@@ -4096,6 +4102,7 @@
       "binaryOutputContextMissing": "Ces services de contexte ne sont plus dans le catalogue : {ids}",
       "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici.",
       "binaryOutputGenerators": "Générer avec",
+      "binaryOutputGeneratorsUnavailable": "Les intégrations génératives de ce déploiement n'ont pas pu être lues, donc rien ne peut encore être choisi ici. C'est un problème de connexion, pas un enregistrement manquant.",
       "binaryOutputGeneratorsPlaceholder": "Aucune intégration sélectionnée",
       "binaryOutputModalities": "Doit livrer",
       "binaryOutputModalitiesPlaceholder": "Aucune exigence",
@@ -5408,7 +5415,8 @@
       "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
       "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
       "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés.",
-      "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail."
+      "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
+      "generatorsUnverified": "Les intégrations génératives de ce déploiement n'ont pas pu être lues à la clôture de l'étape, les intégrations citées ci-dessous n'ont donc pas été vérifiées. Les entrées sont conservées telles que déclarées."
     },
     "unknownGeneratorBadge": "Non enregistrée"
   },

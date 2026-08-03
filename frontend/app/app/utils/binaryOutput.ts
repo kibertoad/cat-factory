@@ -126,6 +126,14 @@ export interface BinaryOutputView {
    * would leave an artifact attributed to something nobody can look up, with nothing saying so.
    */
   unknownDeclaredGenerators: readonly string[]
+  /**
+   * True when the deployment's integrations could not be READ at settlement, so no claimed id was
+   * checked against them. Rendered as its own line and never as an empty
+   * {@link unknownDeclaredGenerators}: that list being empty otherwise means "every id checked
+   * out", and a reader deciding whether these artifacts are real must not be shown a clean bill
+   * of health nobody actually issued.
+   */
+  generatorsUnverified: boolean
   /** Entries dropped because they were not `{ service, location }` objects. */
   invalidEntries: number
   /** Valid entries dropped past the report's cap — so {@link rows} is a PREFIX. */
@@ -173,6 +181,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       generators,
       modalities,
       unknownDeclaredGenerators: [],
+      generatorsUnverified: false,
       invalidEntries: 0,
       omitted: 0,
       misdirected: 0,
@@ -200,6 +209,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     generators,
     modalities,
     unknownDeclaredGenerators: report.unknownGenerators,
+    generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
     omitted: report.omitted,
     misdirected: rows.filter((row) => row.misdirected).length,
@@ -275,6 +285,10 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
  * unknown service ids, dropped entries, a truncated list, or a misdirected artifact. Drives
  * the collapsed summary row's tone, so a report with losses can't read as a clean one from
  * the outside of a collapsed section.
+ *
+ * An UNCHECKED verdict counts as one of those qualifications, and it is the only member here
+ * that is not itself a loss: nothing went wrong with the run, but the report is quieter than it
+ * looks, and a collapsed section that renders it as clean would hide the one line saying so.
  */
 export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
   return (
@@ -283,6 +297,7 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.targetUnknown ||
     view.unknownDeclaredServices.length > 0 ||
     view.unknownDeclaredGenerators.length > 0 ||
+    view.generatorsUnverified ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0
@@ -310,6 +325,11 @@ export type BinaryOutputPickIssue =
   | 'catalog_unavailable'
   /** The catalog resolved, but nothing in it declares the `asset-storage` capability. */
   | 'no_storage_service'
+  /** The deployment's registered integrations could not be READ (a mothership-mode node whose
+   *  mothership is unreachable). Kept apart from an empty set for the same reason
+   *  `catalog_unavailable` is: an empty picker is a claim about the deployment's BUILD, and
+   *  acting on it during an outage sends someone looking in the wrong repository. */
+  | 'generators_unavailable'
   /** An enabled generator step with no storage selection — refused at save AND at start. */
   | 'not_selected'
   /** The selected storage id is not in the resolved catalog (kernel's `unknown_service`). */
@@ -342,16 +362,24 @@ export interface BinaryOutputPickState {
  * `binaryGeneratorSelectionIssues` so the builder surfaces the `binary_output_generator_invalid`
  * refusal before the round trip rather than inventing a second opinion.
  *
- * It needs no `available` tri-state, unlike the catalog half: the integrations ride the workspace
- * SNAPSHOT rather than their own probe, so there is no "not read yet" state distinct from the
- * board not having loaded — if the caller has a snapshot at all, this list is the whole truth. An
- * empty list is therefore a real EMPTY (this deployment registers none), which is exactly why a
- * selected id in that state is `unknown_generator` and not silence.
+ * `unavailable` is the one state that is NOT derivable from the list, which is why the snapshot
+ * carries it as its own flag. An empty list normally IS a real empty — this deployment registers
+ * none — and that is exactly why a selected id in that state is `unknown_generator` rather than
+ * silence. But on a mothership-mode deployment the set is read from the mothership, and a failed
+ * read is the same empty list about a completely different fact. Reporting `unknown_generator`
+ * there would tell someone their step names an integration nobody registered, about an id that
+ * is very likely fine — the same misattribution the backend refuses to make at admission. So an
+ * unavailable set reports THAT and stops: every other judgement below is a claim about a list
+ * nobody managed to read.
  */
 function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
   generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[],
+  unavailable: boolean,
 ): { issues: BinaryOutputPickIssue[]; unknownGeneratorIds: string[]; uncovered: BinaryModality[] } {
+  if (unavailable) {
+    return { issues: ['generators_unavailable'], unknownGeneratorIds: [], uncovered: [] }
+  }
   const byId = new Map(generators.map((g) => [g.id, g]))
   const selectedIds = config?.generatorIds ?? []
   const unknownGeneratorIds = selectedIds.filter((id) => !byId.has(id))
@@ -398,6 +426,10 @@ export function binaryOutputPickIssues(
   // omits this FLAGS a selection rather than passing it — the loud direction — and the default
   // stays a legitimate value rather than a hole.
   generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[] = [],
+  // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
+  // default, since every deployment but a mothership-mode node reads them in-process and cannot
+  // fail — so an omitting call site judges the list it was given rather than claiming an outage.
+  generatorsUnavailable = false,
 ): BinaryOutputPickState {
   const resolved = available === true
   const issues: BinaryOutputPickIssue[] = []
@@ -405,7 +437,7 @@ export function binaryOutputPickIssues(
   // resolve against different registries and a step missing its storage pick routinely has a
   // generative fault too. Reporting them one round at a time is exactly the fix-and-retry cycle
   // this function returns every issue to avoid.
-  const generative = generatorPickIssues(config, generators)
+  const generative = generatorPickIssues(config, generators, generatorsUnavailable)
   const noStorageService =
     resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY))
   if (available === false) issues.push('catalog_unavailable')

@@ -99,6 +99,7 @@ const pick = computed(() =>
     catalog.resolved,
     catalog.available,
     agents.binaryGenerators,
+    agents.binaryGeneratorsUnavailable,
   ),
 )
 function has(issue: BinaryOutputPickIssue): boolean {
@@ -247,7 +248,16 @@ function setModalities(modalities: BinaryModality[]) {
     </p>
     <!-- The generative refusals stay their own lines, and their remedies point somewhere else
          entirely: an unregistered integration is fixed in the DEPLOYMENT'S BUILD, not in this
-         workspace, which is the whole reason the backend keeps the two reason codes apart. -->
+         workspace, which is the whole reason the backend keeps the two reason codes apart.
+         Unless the set could not be READ, in which case none of them is a claim anyone can make:
+         it says so and stops, exactly as run admission does. -->
+    <p
+      v-if="has('generators_unavailable')"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-generators-unavailable"
+    >
+      {{ t('pipeline.builder.binaryOutputGeneratorsUnavailable') }}
+    </p>
     <p
       v-if="has('unknown_generator')"
       class="text-[10px] text-amber-400"
