@@ -32,7 +32,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-export const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
+const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
 
 /**
  * Explicit names for recurring inline shapes, keyed by the shape's SIGNATURE: its property
@@ -135,10 +135,6 @@ export function snake(text) {
     .replace(/[^A-Za-z0-9]+/g, '_')
     .toLowerCase()
     .replace(/^_+|_+$/g, '')
-}
-
-export function screamingSnake(text) {
-  return snake(text).toUpperCase()
 }
 
 /** A stable, order-independent signature for an object shape (its property names). */
@@ -312,10 +308,19 @@ class TypeRegistry {
     const required = new Set(schema.required ?? [])
     const fields = Object.entries(schema.properties ?? {}).map(([wireName, propSchema]) => {
       const type = this.resolve(propSchema, `${name}${pascal(wireName)}`)
+      // A property carrying a DEFAULT is absent from `required` — the caller may omit it — but it
+      // is ALWAYS PRESENT in what the server sends back, because the default is applied on the way
+      // out. For a response model, emitting it optional is simply wrong: it makes a caller
+      // null-check a field that cannot be absent, and it disagrees with the contract's own
+      // inferred output type. `assertNoDefaultedRequestField` below guarantees this reading is the
+      // right one by refusing to generate if such a property ever appears in a REQUEST body, where
+      // the opposite (optional) is correct.
+      const hasDefault = propSchema.default !== undefined
       return {
         wireName,
         type,
-        required: required.has(wireName),
+        required: required.has(wireName) || hasDefault,
+        hasDefault,
         nullable: type.nullable === true,
         doc: propSchema.description,
         constraints: {
@@ -426,6 +431,8 @@ export async function buildIr(doc) {
   }
   operations.sort((a, b) => a.id.localeCompare(b.id))
 
+  assertNoDefaultedRequestField(registry, operations)
+
   if (registry.unusedObjectNames.size > 0 || registry.unusedEnumNames.size > 0) {
     throw new Error(
       'SDK IR: stale explicit names in scripts/sdk/ir.mjs — no schema in the spec has the ' +
@@ -444,17 +451,41 @@ export async function buildIr(doc) {
   }
 }
 
-/** Every operation grouped by its tag, tags in stable order. */
-export function operationsByTag(ir) {
-  const groups = new Map()
-  for (const operation of ir.operations) {
-    if (!groups.has(operation.tag)) groups.set(operation.tag, [])
-    groups.get(operation.tag).push(operation)
+/**
+ * Refuse to generate if a REQUEST body reaches a property carrying a `default`.
+ *
+ * `defineObject` reads a default as "always present", which is right for a response and wrong for
+ * a request: on the way IN the caller may omit the field, and marking it required would force
+ * every caller to supply a value the server would have chosen for them. No request body has one
+ * today, so rather than build machinery to model a type that is both — and quietly pick a side —
+ * this fails loudly the day it happens, and whoever adds it decides.
+ */
+function assertNoDefaultedRequestField(registry, operations) {
+  const reachable = new Set()
+  const visit = (ref) => {
+    if (!ref) return
+    if (ref.kind === 'array') return visit(ref.items)
+    if (ref.kind === 'map') return visit(ref.values)
+    if (ref.kind !== 'ref' || reachable.has(ref.name)) return
+    reachable.add(ref.name)
+    const type = registry.types.get(ref.name)
+    if (!type) return
+    for (const field of type.fields ?? []) visit(field.type)
+    for (const variant of type.variants ?? []) visit(variant)
   }
-  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-}
+  for (const operation of operations) visit(operation.body)
 
-/** The IR type definition for a named type. */
-export function lookup(ir, name) {
-  return ir.types.find((t) => t.name === name)
+  const offenders = []
+  for (const name of reachable) {
+    for (const field of registry.types.get(name)?.fields ?? []) {
+      if (field.hasDefault) offenders.push(`${name}.${field.wireName}`)
+    }
+  }
+  if (offenders.length > 0) {
+    throw new Error(
+      `SDK IR: ${offenders.join(', ')} carry a \`default\` and are reachable from a REQUEST body. ` +
+        'A default means "always present" on the way OUT but "may be omitted" on the way IN, and ' +
+        'the emitters currently assume the former. Decide explicitly in scripts/sdk/ir.mjs.',
+    )
+  }
 }

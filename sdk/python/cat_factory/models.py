@@ -2289,10 +2289,9 @@ class NotificationPayloadOnCallAssessment:
     """`NotificationPayloadOnCallAssessment`, as carried on the wire."""
 
     culprit_confidence: float
+    evidence: list[str]
     rationale: str
     recommendation: NotificationPayloadOnCallAssessmentRecommendation
-    #: May be absent entirely.
-    evidence: list[str] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
@@ -2302,12 +2301,12 @@ class NotificationPayloadOnCallAssessment:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadOnCallAssessment":
         """Decode a `NotificationPayloadOnCallAssessment` from its JSON object."""
-        known = {"culpritConfidence", "rationale", "recommendation", "evidence"}
+        known = {"culpritConfidence", "evidence", "rationale", "recommendation"}
         return cls(
             culprit_confidence=data.get("culpritConfidence"),
+            evidence=[item for item in data.get("evidence") or []],
             rationale=data.get("rationale"),
             recommendation=_enum(NotificationPayloadOnCallAssessmentRecommendation, data.get("recommendation")),
-            evidence=None if data.get("evidence") is None else [item for item in data.get("evidence") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -2315,10 +2314,9 @@ class NotificationPayloadOnCallAssessment:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["culpritConfidence"] = self.culprit_confidence
+        out["evidence"] = [_encode(item) for item in self.evidence]
         out["rationale"] = self.rationale
         out["recommendation"] = _encode(self.recommendation)
-        if self.evidence is not None:
-            out["evidence"] = [_encode(item) for item in self.evidence]
         return out
 
 
@@ -2918,10 +2916,9 @@ class PublicJudgeFinding:
 class PublicJudgeVerdict:
     """`PublicJudgeVerdict`, as carried on the wire."""
 
+    findings: list[PublicJudgeFinding]
     score: float
     summary: str
-    #: May be absent entirely.
-    findings: list[PublicJudgeFinding] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
@@ -2931,21 +2928,20 @@ class PublicJudgeVerdict:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJudgeVerdict":
         """Decode a `PublicJudgeVerdict` from its JSON object."""
-        known = {"score", "summary", "findings"}
+        known = {"findings", "score", "summary"}
         return cls(
+            findings=[PublicJudgeFinding.from_dict(item) for item in data.get("findings") or []],
             score=data.get("score"),
             summary=data.get("summary"),
-            findings=None if data.get("findings") is None else [PublicJudgeFinding.from_dict(item) for item in data.get("findings") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
+        out["findings"] = [_encode(item) for item in self.findings]
         out["score"] = self.score
         out["summary"] = self.summary
-        if self.findings is not None:
-            out["findings"] = [_encode(item) for item in self.findings]
         return out
 
 

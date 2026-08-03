@@ -160,6 +160,29 @@ DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --onl
 CI runs it whenever either side of the contract moves — the SDKs and their generator, or the
 `/api/v1` contracts and controllers they talk to.
 
+## Pointing an SDK at localhost or a mock
+
+**Yes — `baseUrl` takes any origin, and no SDK validates the scheme.** `http://localhost:8787`, a
+recorded-fixture server, a WireMock/MSW/`responses` double, a preview deployment: all fine. The
+cross-SDK smoketest is itself the proof — it drives all four against `http://127.0.0.1:<port>`.
+
+| Language   | Base URL                                    | Inject your own transport         |
+| ---------- | ------------------------------------------- | --------------------------------- |
+| TypeScript | `new CatFactoryClient({ baseUrl, apiKey })` | `fetch:` (an MSW handler, a stub) |
+| Python     | `CatFactoryClient(base_url=…, api_key=…)`   | `opener=` (a `urllib` opener)     |
+| Go         | `catfactory.New(Options{BaseURL: …})`       | `HTTPClient:` (an `*http.Client`) |
+| Java       | `CatFactoryClient.builder().baseUrl(…)`     | `.httpClient(…)`                  |
+
+Two things are worth knowing when the target is a local mock:
+
+- **The Java client drops to HTTP/1.1 for cleartext origins on purpose.** `java.net.http`'s default
+  is HTTP/2, which over `http://` sends an h2c upgrade header on every request; a mock server that
+  does not speak h2c is entitled to reject it, and the real Node facade answers such a request with
+  a **404 for a route that exists**. Over `https://` the negotiation is ALPN, so HTTP/2 is kept.
+- **The key is never inspected client-side**, so a mock needs no real key — any non-empty string
+  works. Only `baseUrl` and `apiKey` being non-empty are validated, and only to fail early rather
+  than send an unauthenticated request.
+
 ### Per-SDK unit tests
 
 Each SDK also has its own tests for the **hand-written** half — above all the four independent SSE

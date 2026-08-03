@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.request
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,10 @@ class CatFactoryClient:
     Every call is scoped to the key's workspace, and each resource attribute mirrors one tag of
     the published OpenAPI surface. The client is stateless beyond its configuration, so one
     instance is safe to share across threads.
+
+    ``base_url`` may point anywhere, including a local mock or a recorded fixture server
+    (``base_url="http://localhost:8080"``): no scheme validation is applied, and ``opener`` takes
+    a custom transport if you would rather intercept in-process.
     """
 
     # Declared for type checkers only; the attributes themselves are ASSIGNED from the generated
@@ -64,6 +69,7 @@ class CatFactoryClient:
         max_retries: int = 2,
         headers: Mapping[str, str] | None = None,
         user_agent: str | None = None,
+        opener: urllib.request.OpenerDirector | None = None,
     ) -> None:
         """Build a client.
 
@@ -75,6 +81,10 @@ class CatFactoryClient:
         :param headers: headers sent on every request.
         :param user_agent: prefixed to ``User-Agent`` so a deployment's logs can attribute calls
             to your integration.
+        :param opener: a custom ``urllib`` opener — a proxy handler, a client certificate, or a
+            test double. The sibling SDKs each take the same escape hatch (TypeScript ``fetch``,
+            Go ``HTTPClient``, Java ``httpClient``); without it, Python would be the one client
+            you could not point at your own transport.
         """
         self._transport = Transport(
             base_url=base_url,
@@ -83,6 +93,7 @@ class CatFactoryClient:
             max_retries=max_retries,
             headers=headers,
             user_agent=user_agent,
+            opener=opener,
         )
         for name, resource in build_resources(self._transport).items():
             setattr(self, name, resource)

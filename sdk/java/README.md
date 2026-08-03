@@ -163,6 +163,12 @@ and HTTP/1.1 for cleartext. That is not incidental — over cleartext, `HttpClie
 HTTP/2 sends an h2c upgrade on every request, and a server that does not speak h2c may answer
 with a 404 for a route that exists. Supply your own client to override.
 
+## Local development and mocks
+
+The base URL takes any origin — `http://localhost:8787`, a fixture server, a mock — and no scheme
+validation is applied. Each client also accepts a custom transport, so you can intercept in-process
+instead. See [the SDK guide](../README.md#pointing-an-sdk-at-localhost-or-a-mock).
+
 ## Notes
 
 - Everything under `model/` and `resources/` is generated from `docs/openapi.json` — see

@@ -33,13 +33,15 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.smoketest.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run"
   },
   "devDependencies": {
+    "@cat-factory/contracts": "workspace:*",
     "@types/node": "^26.1.2",
     "typescript": "7.0.2",
+    "valibot": "^1.4.2",
     "vitest": "^4.1.10"
   },
   "engines": {

@@ -4,7 +4,6 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -12,7 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code NotificationPayloadOnCallAssessment} wire model.
  * @param culpritConfidence Range 0..1.
- * @param evidence May be absent entirely.
+ * @param evidence the {@code evidence} field.
  * @param rationale the {@code rationale} field.
  * @param recommendation the {@code recommendation} field.
  */
@@ -21,8 +20,7 @@ public record NotificationPayloadOnCallAssessment(
     /** Range 0..1. */
     @JsonProperty("culpritConfidence") Double culpritConfidence,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("evidence") @Nullable List<String> evidence,
+    @JsonProperty("evidence") List<String> evidence,
 
     @JsonProperty("rationale") String rationale,
 

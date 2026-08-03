@@ -4,21 +4,19 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicJudgeVerdict} wire model.
- * @param findings May be absent entirely.
+ * @param findings the {@code findings} field.
  * @param score Range 0..1.
  * @param summary the {@code summary} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicJudgeVerdict(
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("findings") @Nullable List<PublicJudgeFinding> findings,
+    @JsonProperty("findings") List<PublicJudgeFinding> findings,
 
     /** Range 0..1. */
     @JsonProperty("score") Double score,

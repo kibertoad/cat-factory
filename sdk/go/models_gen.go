@@ -778,11 +778,10 @@ var NotificationPayloadInitiativeReasonValues = []NotificationPayloadInitiativeR
 
 // NotificationPayloadOnCallAssessment is the `NotificationPayloadOnCallAssessment` wire model.
 type NotificationPayloadOnCallAssessment struct {
-	CulpritConfidence float64 `json:"culpritConfidence"`
-	// Evidence may be absent entirely.
-	Evidence       []string                                          `json:"evidence,omitempty"`
-	Rationale      string                                            `json:"rationale"`
-	Recommendation NotificationPayloadOnCallAssessmentRecommendation `json:"recommendation"`
+	CulpritConfidence float64                                           `json:"culpritConfidence"`
+	Evidence          []string                                          `json:"evidence"`
+	Rationale         string                                            `json:"rationale"`
+	Recommendation    NotificationPayloadOnCallAssessmentRecommendation `json:"recommendation"`
 }
 
 // NotificationPayloadOnCallAssessmentRecommendation is the `NotificationPayloadOnCallAssessmentRecommendation` vocabulary as carried on the wire.
@@ -1150,8 +1149,7 @@ type PublicJudgeFinding struct {
 
 // PublicJudgeVerdict is the `PublicJudgeVerdict` wire model.
 type PublicJudgeVerdict struct {
-	// Findings may be absent entirely.
-	Findings []PublicJudgeFinding `json:"findings,omitempty"`
+	Findings []PublicJudgeFinding `json:"findings"`
 	Score    float64              `json:"score"`
 	Summary  string               `json:"summary"`
 }

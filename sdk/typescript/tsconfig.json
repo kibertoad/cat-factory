@@ -19,9 +19,8 @@
     // program IS a Node script and gets its own config (tsconfig.smoketest.json) for that reason.
     "types": []
   },
-  // Typechecking covers the tests too — they are what exercises the hand-written SSE reader, so
-  // leaving them out would skip the half of the SDK least likely to be right. `rootDir`/`outDir`
-  // therefore live in the BUILD config, which is the one that emits and which includes `src`
-  // alone.
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  // `src` ALONE, so the `types: []` above is a real assertion about the shipped code rather than
+  // something the tests could accidentally relax. Tests and the smoketest program are typechecked
+  // by `tsconfig.dev.json`, which grants them Node types.
+  "include": ["src/**/*.ts"]
 }

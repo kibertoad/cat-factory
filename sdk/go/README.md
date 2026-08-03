@@ -103,6 +103,12 @@ A field is a **pointer** when the value can be genuinely absent or genuinely nul
 values cannot express either, so `Progress: 0` and "no progress reported" would otherwise be the
 same value. A plain field is one the contract guarantees is always sent.
 
+## Local development and mocks
+
+The base URL takes any origin — `http://localhost:8787`, a fixture server, a mock — and no scheme
+validation is applied. Each client also accepts a custom transport, so you can intercept in-process
+instead. See [the SDK guide](../README.md#pointing-an-sdk-at-localhost-or-a-mock).
+
 ## Notes
 
 - `models_gen.go` and `operations_gen.go` are generated — see [`../README.md`](../README.md).

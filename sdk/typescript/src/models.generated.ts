@@ -549,7 +549,7 @@ export const NOTIFICATION_PAYLOAD_INITIATIVE_REASON_VALUES = ['item_blocked', 'c
 export interface NotificationPayloadOnCallAssessment {
   /** Range 0..1. */
   culpritConfidence: number
-  evidence?: string[]
+  evidence: string[]
   rationale: string
   recommendation: NotificationPayloadOnCallAssessmentRecommendation
 }
@@ -701,7 +701,7 @@ export interface PublicJudgeFinding {
 }
 
 export interface PublicJudgeVerdict {
-  findings?: PublicJudgeFinding[]
+  findings: PublicJudgeFinding[]
   /** Range 0..1. */
   score: number
   summary: string

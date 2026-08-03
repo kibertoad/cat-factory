@@ -14,7 +14,7 @@
 // Go). Method names deliberately drop the `Public`/`Run` noise the operationIds carry, since
 // the group already says what resource is being addressed.
 
-export const SURFACE = {
+const SURFACE = {
   // ---- Initiatives: headless runs against a supplied brief -------------------------------
   createInitiativeJob: { group: 'initiatives', method: 'create' },
   listPublicJobs: { group: 'initiatives', method: 'list', paginates: 'jobs' },

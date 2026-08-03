@@ -87,6 +87,12 @@ Frozen dataclasses with `from_dict` / `to_dict`. Two properties worth knowing:
 - **Enums are `StrEnum`**, so a member IS its wire string (`task.status == "done"`, and an
   f-string renders `done`). An unrecognised value decodes to the plain string rather than raising.
 
+## Local development and mocks
+
+The base URL takes any origin — `http://localhost:8787`, a fixture server, a mock — and no scheme
+validation is applied. Each client also accepts a custom transport, so you can intercept in-process
+instead. See [the SDK guide](../README.md#pointing-an-sdk-at-localhost-or-a-mock).
+
 ## Notes
 
 - `cat_factory/models.py` and `operations.py` are generated — see [`../README.md`](../README.md).
