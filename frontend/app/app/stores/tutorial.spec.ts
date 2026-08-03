@@ -90,6 +90,26 @@ describe('useTutorialStore catalogue', () => {
     expect(tutorial.catalogueOpen).toBe(false)
   })
 
+  it('reports its own window as open, so the coach marks stand down', () => {
+    // The overlay renders at z-[70] to sit ABOVE the app's modals, since a step legitimately
+    // points into one. The catalogue is openable mid-tour (that is what the `continue` action
+    // is for), and there the same z-index would float a ring and a tooltip over the window the
+    // user just opened. The tour itself is untouched — only the marks go.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    expect(tutorial.ownWindowOpen).toBe(false)
+
+    tutorial.openCatalogue()
+    expect(tutorial.ownWindowOpen).toBe(true)
+    expect(tutorial.activeTourId).toBe('board-basics')
+
+    tutorial.closeCatalogue()
+    expect(tutorial.ownWindowOpen).toBe(false)
+
+    tutorial.openPrompt()
+    expect(tutorial.ownWindowOpen).toBe(true)
+  })
+
   it('resets every record of progress, including the answered offer', () => {
     // What someone handing the app to a colleague is asking for: the first-launch experience
     // back. Clearing only the completion list would leave the offer answered, so the prompt

@@ -62,6 +62,22 @@ export const useTutorialStore = defineStore(
     const touring = computed(() => activeTourId.value !== null)
 
     /**
+     * A window this feature owns — the launch prompt or the catalogue — is on screen.
+     *
+     * The coach-mark overlay STANDS DOWN while it is (see `TutorialOverlay.vue`). The marks
+     * render at `z-[70]`, deliberately above the app's own modals, because a tour step
+     * legitimately points INTO one; no step points into the tutorial's own windows, so there
+     * the same rule floats a highlight ring and a tooltip over the modal the user just opened.
+     * The catalogue reaches this state by design — it is openable mid-tour, which is what the
+     * `continue` launch action exists for.
+     *
+     * A derived FACT rather than a `coachMarksHidden` flag, because the reason is the window,
+     * not the overlay: a third tutorial-owned window inherits the behaviour by being named
+     * here, and nothing has to remember to set a flag.
+     */
+    const ownWindowOpen = computed(() => promptOpen.value || catalogueOpen.value)
+
+    /**
      * Auto-open the launch prompt, at most once per session and only while the user has
      * never answered it. Callers gate on the rest of the launch context (board ready, no
      * other startup advisory open) — see `pages/index.vue`.
@@ -243,6 +259,7 @@ export const useTutorialStore = defineStore(
       stepIndex,
       interrupted,
       touring,
+      ownWindowOpen,
       maybeOfferOnLaunch,
       openPrompt,
       closePrompt,

@@ -118,6 +118,17 @@ describe('resolveTourCatalogue', () => {
     expect(entry?.unmet).toEqual([])
   })
 
+  it('reports a tour that is both blocked and stepless as blocked', () => {
+    // Precedence, pinned. A step's `when` reads the same gates the requirements do, so with the
+    // requirements unmet the step filter is answering a hypothetical — what would apply on a
+    // board this one is by construction not. Calling that `not-applicable` would tell the reader
+    // nothing can be done about a tour they can in fact unlock.
+    const t = withSteps('a', [step('advancedOnly', (g) => g.advancedMode)], [needsAdvanced])
+    const [entry] = resolveTourCatalogue([t], gates(false))
+    expect(entry?.availability).toBe('blocked')
+    expect(entry?.unmet.map((r) => r.id)).toEqual(['advanced'])
+  })
+
   it('is sorted, and agrees with resolveTours about what is ready', () => {
     const tours = [
       withSteps('c', [step('one')], [needsAdvanced]),

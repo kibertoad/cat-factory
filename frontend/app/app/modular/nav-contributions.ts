@@ -562,7 +562,9 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       // entries append rather than interleave.
       group: 'workspace',
       order: 100,
-      labelKey: 'layout.commandBar.cmd.tutorial',
+      // No `labelKey` override: the palette shows "Tutorials" too, so an override would be a
+      // second key holding the same word in ten locales — two places to keep in step and one
+      // of them free to drift. `layout.commandBar.cmd.tutorial` was deleted with it.
       keywordsKey: 'layout.commandBar.keywords.tutorial',
     },
   },

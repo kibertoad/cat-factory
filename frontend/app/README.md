@@ -220,7 +220,18 @@ repo was linked, and "2 of 2 completed" on a board with four walkthroughs still 
 a finished tutorial. `Reset progress` clears the completions, the resume point AND the saved
 launch answer, because everyone who asks for it (demoing, handing the app to a colleague) wants
 the first-launch experience back; it leaves a RUNNING tour alone, since a click about history
-must not end the walkthrough in progress.
+must not end the walkthrough in progress. **It is therefore offered whenever ANY of those three
+is set, not only when a tour was taken** — someone who answered "No thanks" and stopped there has
+nothing completed and nothing paused, and that saved answer is the whole of what stands between
+them and the offer they came to restore.
+
+**The coach marks stand down while a tutorial-owned window is open** (`ownWindowOpen`). The
+overlay renders at `z-[70]`, above the app's own modals, because a step legitimately points INTO
+one — but no step points into the prompt or the catalogue, so there the same rule would float a
+highlight ring and a tooltip over the window the user just opened. The catalogue reaches that
+state by design: it is openable mid-tour, which is what the `continue` action is for. The overlay
+is SUPPRESSED rather than unmounted, because it holds the running tour's resolved script and a
+remount would re-resolve it against gates that may have flipped since the tour started.
 
 The arc this surface is being built along — what has landed, what each slice learned, and what
 is still open — is tracked in

@@ -60,6 +60,8 @@ describe('buildCatalogueRows', () => {
 })
 
 describe('summarizeProgress', () => {
+  /** The launch offer is still unanswered, so only the rows can make anything resettable. */
+  const unanswered = { launchOfferAnswered: false }
   const rows = (map: Record<string, TutorialTourState>, ids: string[]) =>
     buildCatalogueRows(
       ids.map((id) => entry(id, 'ready')),
@@ -74,12 +76,28 @@ describe('summarizeProgress', () => {
       [entry('a', 'ready'), entry('b', 'blocked'), entry('c', 'not-applicable')],
       states({ a: 'completed' }),
     )
-    expect(summarizeProgress(all)).toMatchObject({ completed: 1, total: 3 })
+    expect(summarizeProgress(all, unanswered)).toMatchObject({ completed: 1, total: 3 })
   })
 
   it('offers a reset for a paused tour, not only for completed ones', () => {
-    expect(summarizeProgress(rows({}, ['a', 'b'])).resettable).toBe(false)
-    expect(summarizeProgress(rows({ a: 'paused' }, ['a', 'b'])).resettable).toBe(true)
-    expect(summarizeProgress(rows({ a: 'completed' }, ['a', 'b'])).resettable).toBe(true)
+    expect(summarizeProgress(rows({}, ['a', 'b']), unanswered).resettable).toBe(false)
+    expect(summarizeProgress(rows({ a: 'paused' }, ['a', 'b']), unanswered).resettable).toBe(true)
+    expect(summarizeProgress(rows({ a: 'completed' }, ['a', 'b']), unanswered).resettable).toBe(
+      true,
+    )
+  })
+
+  it('offers a reset to a user who only ever answered the launch offer', () => {
+    // The case keying Reset off the rows alone got wrong, and the one that matters most: someone
+    // who clicked "No thanks" and took no tour has nothing completed and nothing paused, yet the
+    // saved answer is exactly what stops the prompt returning. Hiding the control left them no
+    // route back to the first-launch experience Reset promises.
+    expect(summarizeProgress(rows({}, ['a', 'b']), { launchOfferAnswered: true }).resettable).toBe(
+      true,
+    )
+  })
+
+  it('offers no reset on a genuinely untouched install', () => {
+    expect(summarizeProgress([], unanswered).resettable).toBe(false)
   })
 })

@@ -274,6 +274,18 @@ describe('tour availability across the catalog', () => {
     }
   })
 
+  it('gives every tour a step that always applies, so none can be listed then not run', () => {
+    // The authoring rule `resolveTourCatalogue` documents. `blocked` outranks `not-applicable`,
+    // which is right — but it means a tour COULD be named in the catalogue as unlockable and
+    // then, once the reader has gone and done the thing it asked for, resolve to no applicable
+    // steps and still refuse to start. An unconditional step (every built-in has an intro and a
+    // finish card) makes `steps` non-empty under any gates, so that outcome is unreachable.
+    for (const tour of TUTORIAL_TOURS) {
+      const unconditional = tour.steps.filter((s) => !s.when).map((s) => s.id)
+      expect(unconditional, tour.id).not.toEqual([])
+    }
+  })
+
   it('declares its requirements from the shared set', () => {
     // A tour with an inline requirement object is not wrong, but a duplicate of a shared one
     // is: two copies of "a service on the board" drift into two different sentences about the

@@ -64,7 +64,10 @@ export interface TutorialProgressSummary {
   completed: number
   /** Every tour this deployment ships, available or not — the honest denominator. */
   total: number
-  /** Whether there is any progress to clear (what the Reset control keys off). */
+  /**
+   * Whether there is anything for Reset to clear — which is everything `resetProgress` writes,
+   * not only what this list shows. See {@link summarizeProgress}.
+   */
   resettable: boolean
 }
 
@@ -75,14 +78,25 @@ export interface TutorialProgressSummary {
  * every time they linked a repo or finished a run — "2 of 2 completed" on a board with four
  * more walkthroughs waiting behind requirements reads as a finished tutorial, which is the
  * one thing this surface exists to disprove.
+ *
+ * `launchOfferAnswered` is the store's `decision`, and it is here rather than derived from the
+ * rows because `resetProgress` clears it too — Reset restores the FIRST-LAUNCH experience, and
+ * the saved answer to "would you like a tour?" is most of that. Keying the control on the rows
+ * alone hid it from the one user who most needs it: someone who clicked "No thanks" and took no
+ * tour has nothing completed and nothing paused, so the only route back to the offer was the
+ * control that was not being drawn.
  */
-export function summarizeProgress(rows: readonly TutorialCatalogueRow[]): TutorialProgressSummary {
+export function summarizeProgress(
+  rows: readonly TutorialCatalogueRow[],
+  input: { launchOfferAnswered: boolean },
+): TutorialProgressSummary {
   const completed = rows.filter((row) => row.state === 'completed').length
   return {
     completed,
     total: rows.length,
     // A paused tour is progress too: clearing it is exactly what someone handing this to a
     // colleague wants, and offering Reset only for completions would leave it behind.
-    resettable: completed > 0 || rows.some((row) => row.state === 'paused'),
+    resettable:
+      completed > 0 || rows.some((row) => row.state === 'paused') || input.launchOfferAnswered,
   }
 }

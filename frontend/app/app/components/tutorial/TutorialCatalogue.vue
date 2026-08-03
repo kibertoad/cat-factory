@@ -25,7 +25,9 @@ const open = computed({
 })
 
 const rows = computed(() => buildCatalogueRows(catalogue.value, stateOf))
-const progress = computed(() => summarizeProgress(rows.value))
+const progress = computed(() =>
+  summarizeProgress(rows.value, { launchOfferAnswered: tutorial.decision !== null }),
+)
 
 /** A badge only where there is something to say: "not started" is the unremarkable default. */
 const showsStatus = (row: TutorialCatalogueRow) => row.state !== 'notStarted'

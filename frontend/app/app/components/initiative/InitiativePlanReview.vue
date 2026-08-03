@@ -107,7 +107,17 @@ async function copyPlan() {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col lg:flex-row" data-testid="initiative-plan-review">
+  <!-- The gate's id is published because a send-back is only observable through it. The rail is
+       torn down and rebuilt for the re-plan's NEW gate, but the gap between the two is not a state
+       the SPA is guaranteed to see: the send-back's own `ws.refresh()` races the re-plan, which
+       with a fast planner can park again first, so the rail goes straight from one gate to the
+       next. Asserting the absence was a race; asserting WHICH gate is on screen is the invariant
+       underneath it. Read by `initiative-plan-review.spec.ts`. -->
+  <div
+    class="flex min-h-0 flex-1 flex-col lg:flex-row"
+    data-testid="initiative-plan-review"
+    :data-approval-id="approval.id"
+  >
     <!-- Navigation column: the outline OUTSIDE the document rather than splitting its width — a
          sidebar of the window, as the step reader's is. Narrower than the reader's (`w-52` against
          its `w-72`) and held back to `lg` rather than its `md`, because this is a THREE-column

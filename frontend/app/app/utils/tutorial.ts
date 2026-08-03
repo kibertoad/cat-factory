@@ -185,6 +185,14 @@ export function sortTours(tours: readonly TutorialTour[]): TutorialTour[] {
  * repository, start a run), while `not-applicable` is a tour whose every step is about a
  * branch this board isn't on — nothing to fix, and telling someone to fix it would send them
  * looking for a control that was never missing.
+ *
+ * `blocked` OUTRANKS `not-applicable` when a tour is both, and that order is load-bearing: a
+ * step's `when` reads the same gates the requirements do, so under UNMET requirements the step
+ * filter is answering a hypothetical — what would apply on a board that, by construction, this
+ * one is not. Reporting that as `not-applicable` would tell the reader there is nothing to be
+ * done about a tour they can in fact unlock. The cost is the reverse case: a tour can be named
+ * as unlockable and still turn out `not-applicable` once the requirement is met. See
+ * {@link resolveTourCatalogue} for why a tour should not be authored that way.
  */
 export type TutorialAvailability = 'ready' | 'blocked' | 'not-applicable'
 
@@ -210,6 +218,13 @@ export interface TutorialCatalogueEntry {
  * `gates` is nullable for the same reason `navSlotFilter` passes everything through when no
  * gates service is wired (a bare install / dev-open parity): with nothing to gate against,
  * nothing is withheld — including the per-step branches, which must not be silently thinned.
+ *
+ * AUTHORING RULE, and the reason `blocked` outranks `not-applicable` is safe in practice: give
+ * every tour at least one step with NO `when`. An intro and a finish card qualify, which is why
+ * every built-in has two (pinned by `tutorial-tours.spec.ts`). Then `steps` can never be empty,
+ * `not-applicable` is reachable only for a tour authored as branch-specific END TO END, and a
+ * tour named in the catalogue as unlockable can never turn out unstartable after the reader has
+ * gone and done the thing it asked for.
  *
  * Pure, total and sorted, so both consumers (the launch prompt's offer list and the
  * catalogue) read one resolution rather than each re-deriving availability, and the rules

@@ -103,6 +103,48 @@ test.describe('the tutorial catalogue', () => {
     await expect(
       catalogue.getByTestId('tutorial-catalogue-requirements-review-merge'),
     ).toBeVisible()
+
+    // Reset is offered to THIS user, who has completed nothing and paused nothing — the saved
+    // "no thanks" is itself the thing standing between them and the first-launch experience, and
+    // it is the state a demo machine is in. Keying the control on the tour rows alone hid it from
+    // exactly the person who came to clear it. (Page-scoped rather than `catalogue`-scoped: the
+    // control sits in the modal's FOOTER, while `tutorial-catalogue` is the body holding the list.)
+    await expect(page.getByTestId('tutorial-catalogue-reset')).toBeVisible()
+  })
+
+  test('stands the coach marks down while it is open, and steps back into the tour', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+
+    await page.getByTestId('nav-tutorial').click()
+    await page.getByTestId('tutorial-catalogue-start-board-basics').click()
+    // Asserted on the TOOLTIP, not the `tutorial-overlay` wrapper: every mark inside it is
+    // `position: fixed`, so the wrapper's own box is empty and Playwright reads a rendered
+    // overlay as hidden. The tooltip is also the thing that would actually be floating over the
+    // catalogue, so it is what this test is about.
+    const tooltip = page.getByTestId('tutorial-tooltip')
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await tooltip.getByTestId('tutorial-next').click()
+
+    // The catalogue is reachable mid-tour (nothing about the overlay blocks the sidebar). The
+    // marks sit at z-[70] so a step can point INTO an app modal, so without standing them down
+    // they would float a ring and a tooltip over the window the user just opened — only the
+    // assembled product can show that they don't.
+    await page.getByTestId('nav-tutorial').click()
+    await expect(page.getByTestId('tutorial-catalogue')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(tooltip).toBeHidden()
+    await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
+
+    // The running tour is offered back, not restarted — and stepping into it restores the marks
+    // where they were, which is what proves the overlay was suppressed rather than torn down.
+    await page.getByTestId('tutorial-catalogue-start-board-basics').click()
+    await expect(page.getByTestId('tutorial-catalogue')).toBeHidden()
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+    // Still on step 2, where Next left it: `continue` steps out of the way, and a plain start
+    // would have put the cursor back to step 1.
+    await expect(tooltip).toContainText('Step 2 of')
   })
 
   test('starts a tour, offers it back where it stopped, and resets that record', async ({
