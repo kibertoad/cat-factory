@@ -28,6 +28,7 @@ import {
 import { type CoreDependencies } from '@cat-factory/orchestration'
 import {
   type AppConfig,
+  bedrockAllowListFromEnv,
   runWithInitiator,
   WebCryptoPasswordHasher,
   WebCryptoSecretCipher,
@@ -469,6 +470,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     runLifecycleSink,
     accountSettings,
   } = bundle
+  // The Bedrock allow-list gating `bedrock`-flavour selectability: one deployment-level env
+  // read (Bedrock uses the deployment's own AWS credentials, so nothing resolves per
+  // workspace), from the same parser that constrains the resolver itself.
+  const bedrockModels = bedrockAllowListFromEnv(env)
   return {
     issueWritebackProvider,
     idGenerator,
@@ -622,6 +627,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          ...(bedrockModels ? { bedrockModels } : {}),
           baseUrlFor: (provider) => baseUrlForNode(provider, env),
           localModelEndpoints,
           openRouterCatalog,

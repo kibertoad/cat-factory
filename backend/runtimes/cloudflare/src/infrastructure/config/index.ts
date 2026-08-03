@@ -11,6 +11,7 @@ import {
 } from '@cat-factory/kernel'
 import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
+import { bedrockModelsCapability } from '../ai/registries'
 import { type AgentsConfig, loadAgentsConfig } from './agents'
 import { type ExecutionConfig, loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
@@ -74,10 +75,17 @@ export function loadConfig(env: Env): AppConfig {
   // time from the DB pool), so none are known here; Cloudflare Workers AI is opt-in
   // (the `AI` binding). The per-workspace `/models` endpoint recomputes selectability
   // against each workspace's configured keys + subscriptions.
+  // Bedrock is the exception to "no direct route is known here": it is reached with the
+  // deployment's own AWS credentials, so its per-model allow-list is a deployment fact and the
+  // deployment catalog can state which Bedrock models are selectable. Granted through
+  // `bedrockModelsCapability`, which also requires a registered registry that can serve the
+  // route: on this runtime the env vars alone don't prove the provider package was mixed in.
+  const bedrockModels = bedrockModelsCapability(env)
   const caps: ProviderCapabilities = {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
     cloudflareEnabled: !!env.AI,
+    ...(bedrockModels ? { bedrockModels } : {}),
   }
   const spend = loadSpendPricing(env)
   return {

@@ -585,13 +585,26 @@ export const modelCostSchema = v.object({
 export type ModelCost = v.InferOutput<typeof modelCostSchema>
 
 /**
+ * The routes a catalog model can resolve to. Listed in the DEFAULT order they are
+ * preferred (see kernel's `DEFAULT_PROVIDER_PREFERENCE`, which is pinned against this
+ * picklist): a model's own provider API when its key is configured, then AWS Bedrock
+ * when the account's allow-list carries the model, then the OpenRouter gateway, then
+ * the always-available Workers AI fallback, and finally a Claude Code / Codex harness
+ * run on a stored subscription token.
+ */
+export const modelFlavorSchema = v.picklist([
+  'direct',
+  'bedrock',
+  'openrouter',
+  'cloudflare',
+  'subscription',
+])
+export type ModelFlavor = v.InferOutput<typeof modelFlavorSchema>
+
+/**
  * A selectable LLM model, resolved to the flavour actually in use for this
- * deployment (`GET /models`). `flavor` is `direct` when the model's own provider
- * API key is configured, `openrouter` when it routes through the OpenRouter
- * gateway, `cloudflare` for the Workers AI fallback, or `subscription` for a
- * Claude Code / Codex model run via a stored subscription token. `provider`/`model`
- * are the effective {@link ModelRef} parts the agent will run with; the picker
- * stores only `id`.
+ * deployment (`GET /models`). `provider`/`model` are the effective {@link ModelRef}
+ * parts the agent will run with; the picker stores only `id`.
  */
 export const modelOptionSchema = v.object({
   /** Stable id persisted on a block (`Block.modelId`). */
@@ -601,11 +614,12 @@ export const modelOptionSchema = v.object({
   /** One-line description shown in the picker. */
   description: v.string(),
   /** Which flavour is active for this deployment. */
-  flavor: v.picklist(['cloudflare', 'direct', 'openrouter', 'subscription']),
+  flavor: modelFlavorSchema,
   /**
    * Whether this model is actually selectable given what the workspace has
    * configured: a direct key for its provider, a subscription token for its vendor,
-   * or the opt-in Cloudflare lib enabled. The picker disables an unavailable model.
+   * the model in the deployment's Bedrock allow-list, or the opt-in Cloudflare lib
+   * enabled. The picker disables an unavailable model.
    */
   available: v.optional(v.boolean()),
   /**
