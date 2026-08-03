@@ -8,13 +8,13 @@ import { resolveIndividualVendors } from './individualVendors.logic.js'
 //   glm              — dual-mode (Cloudflare base + individual GLM subscription)
 //   claude-opus      — dual-mode (OpenRouter base + individual Claude subscription)
 //   claude-sonnet    — subscription-only, individual (Claude)
-//   gpt-5.5          — dual-mode (OpenRouter base + individual Codex subscription)
-//   gpt-5.4          — subscription-only, individual (Codex)
+//   gpt-5.6-sol      — dual-mode (OpenRouter base + individual Codex subscription)
 //   kimi             — dual-mode, POOLABLE (never a personal credential)
 
 const noSubs = (): boolean => false
 const hasGlm = (v: SubscriptionVendor): boolean => v === 'glm'
 const hasClaude = (v: SubscriptionVendor): boolean => v === 'claude'
+const hasCodex = (v: SubscriptionVendor): boolean => v === 'codex'
 
 describe('resolveIndividualVendors', () => {
   it('returns no vendor for a block pinned to a Cloudflare model', async () => {
@@ -49,13 +49,13 @@ describe('resolveIndividualVendors', () => {
     ).toEqual(['claude'])
   })
 
-  it('gates a subscription-only individual model (Codex)', async () => {
+  it('gates a dual-mode Codex model for a user who has the personal subscription', async () => {
     expect(
-      await resolveIndividualVendors('gpt-5.4', ['coder'], async () => undefined, noSubs),
+      await resolveIndividualVendors('gpt-5.6-sol', ['coder'], async () => undefined, hasCodex),
     ).toEqual(['codex'])
   })
 
-  // Claude Opus / GPT-5.5 are now ALSO dual-mode: an OpenRouter pay-as-you-go base behind the
+  // Claude Opus / the GPT-5.6 tiers are ALSO dual-mode: an OpenRouter pay-as-you-go base behind the
   // individual subscription. A user WITHOUT the personal subscription runs the OpenRouter route,
   // so the gate must NOT fire (mirrors resolveEffectiveRef leaving the ref on the base). A user
   // WITH the subscription runs on it, so it does fire.
@@ -71,9 +71,9 @@ describe('resolveIndividualVendors', () => {
     ).toEqual(['claude'])
   })
 
-  it('does NOT gate dual-mode GPT-5.5 (OpenRouter base) for a non-subscriber', async () => {
+  it('does NOT gate dual-mode GPT-5.6 Sol (OpenRouter base) for a non-subscriber', async () => {
     expect(
-      await resolveIndividualVendors('gpt-5.5', ['coder'], async () => undefined, noSubs),
+      await resolveIndividualVendors('gpt-5.6-sol', ['coder'], async () => undefined, noSubs),
     ).toEqual([])
   })
 

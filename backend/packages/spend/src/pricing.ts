@@ -71,17 +71,24 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // recorded against it must keep costing correctly.
   'anthropic:claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'anthropic:claude-opus-4-8': { inputPerMillion: 4.6, outputPerMillion: 23 },
+  'anthropic:claude-sonnet-5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
   'anthropic:claude-sonnet-4-6': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-haiku-4-5': { inputPerMillion: 0.92, outputPerMillion: 4.6 },
   anthropic: { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   // OpenAI (approximate list prices, USD→EUR ~0.92).
   'openai:gpt-4o': { inputPerMillion: 2.3, outputPerMillion: 9.2 },
   'openai:gpt-4o-mini': { inputPerMillion: 0.14, outputPerMillion: 0.55 },
-  // ChatGPT/Codex subscription models (informational list prices, USD→EUR ~0.92).
-  'openai:gpt-5.5-codex': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
-  'openai:gpt-5.4-codex': { inputPerMillion: 2.3, outputPerMillion: 13.8 },
+  // ChatGPT/Codex subscription models (informational list prices, USD→EUR ~0.92). Keys are
+  // the Codex `--model` slugs the catalog dispatches, so the GPT-5.6 tiers and plain GPT-5.5
+  // — never a `-codex`-suffixed id, which no longer exists past GPT-5.3.
+  'openai:gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  'openai:gpt-5.6-terra': { inputPerMillion: 0.92, outputPerMillion: 5.52 },
+  'openai:gpt-5.6-luna': { inputPerMillion: 0.09, outputPerMillion: 0.55 },
+  'openai:gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
-  // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free.
+  // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free. Every model
+  // BELOW is a per-token-billed exception — see the note on the Kimi entries: a model with
+  // real per-token pricing and no entry here meters at ~0.00 and escapes the budget gate.
   'workers-ai': { inputPerMillion: 0.1, outputPerMillion: 0.1 },
   // DeepSeek V4 Pro runs on Workers AI but is a partner model billed at provider
   // rates (served via Fireworks), not the near-free neuron rate above, so it needs
@@ -98,13 +105,34 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'workers-ai:@cf/moonshotai/kimi-k2.5': { inputPerMillion: 0.55, outputPerMillion: 2.76 },
   'workers-ai:@cf/moonshotai/kimi-k2.6': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
   'workers-ai:@cf/moonshotai/kimi-k2.7-code': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
-  // DeepSeek API (approximate list prices for deepseek-chat, USD→EUR ~0.92).
+  // The remaining per-token-billed Workers AI models the catalog exposes. GLM-5.2 is the
+  // default architect/reviewer routing and the R1 distill is the DeepSeek Cloudflare
+  // fallback, so both were metering at the near-free neuron rate above.
+  'workers-ai:@cf/zai-org/glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05 },
+  'workers-ai:@cf/zai-org/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.37 },
+  'workers-ai:@cf/openai/gpt-oss-120b': { inputPerMillion: 0.32, outputPerMillion: 0.69 },
+  'workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct': {
+    inputPerMillion: 0.25,
+    outputPerMillion: 0.78,
+  },
+  'workers-ai:@cf/qwen/qwen3-30b-a3b-fp8': { inputPerMillion: 0.05, outputPerMillion: 0.31 },
+  'workers-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b': {
+    inputPerMillion: 0.46,
+    outputPerMillion: 4.49,
+  },
+  // DeepSeek API. The `deepseek-chat` / `deepseek-reasoner` aliases were retired in July
+  // 2026 in favour of the V4 pair; the old key is kept so historical spend rows recorded
+  // against it keep costing correctly. (USD→EUR ~0.92.)
+  'deepseek:deepseek-v4-flash': { inputPerMillion: 0.13, outputPerMillion: 0.26 },
+  'deepseek:deepseek-v4-pro': { inputPerMillion: 0.4, outputPerMillion: 0.8 },
   'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
-  deepseek: { inputPerMillion: 0.26, outputPerMillion: 1.01 },
-  // Alibaba DashScope (approximate qwen3-max list prices, USD→EUR ~0.92).
+  deepseek: { inputPerMillion: 0.4, outputPerMillion: 0.8 },
+  // Alibaba DashScope (approximate qwen3.7-max list prices, USD→EUR ~0.92).
+  'qwen:qwen3.7-max': { inputPerMillion: 2.3, outputPerMillion: 6.9 },
   'qwen:qwen3-max': { inputPerMillion: 1.1, outputPerMillion: 5.5 },
-  qwen: { inputPerMillion: 1.1, outputPerMillion: 5.5 },
-  // Moonshot AI direct (approximate kimi-k2.6 list prices, USD→EUR ~0.92).
+  qwen: { inputPerMillion: 2.3, outputPerMillion: 6.9 },
+  // Moonshot AI direct (approximate list prices, USD→EUR ~0.92).
+  'moonshot:kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'moonshot:kimi-k2.6': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
   moonshot: { inputPerMillion: 0.55, outputPerMillion: 2.3 },
   // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
@@ -114,10 +142,20 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:anthropic/claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openrouter:anthropic/claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
-  'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
-  'openrouter:deepseek/deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
-  'openrouter:moonshotai/kimi-k2.7-code': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
+  'openrouter:google/gemini-3.1-pro-preview': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
+  'openrouter:google/gemini-3.6-flash': { inputPerMillion: 1.38, outputPerMillion: 6.9 },
+  'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 0.92, outputPerMillion: 5.52 },
+  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.09, outputPerMillion: 0.55 },
+  'openrouter:openai/gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.03, outputPerMillion: 0.16 },
+  'openrouter:deepseek/deepseek-v4-flash': { inputPerMillion: 0.13, outputPerMillion: 0.26 },
+  'openrouter:deepseek/deepseek-v4-pro': { inputPerMillion: 0.4, outputPerMillion: 0.8 },
+  'openrouter:moonshotai/kimi-k2.7-code': { inputPerMillion: 0.67, outputPerMillion: 3.22 },
+  'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
+  'openrouter:z-ai/glm-5.2': { inputPerMillion: 1.09, outputPerMillion: 3.44 },
+  'openrouter:z-ai/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.37 },
+  'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
   // model it routes to, which we can't know here. Default to the generic fallback rate.

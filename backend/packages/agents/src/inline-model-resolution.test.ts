@@ -23,7 +23,7 @@ const CLAUDE_SUB: ModelRef = {
   harness: 'claude-code',
 }
 const GLM_SUB: ModelRef = { provider: 'zai', model: 'glm-5.2', harness: 'claude-code' }
-const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
+const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.6-sol', harness: 'codex' }
 const QWEN_DIRECT: ModelRef = { provider: 'qwen', model: 'qwen3-max' }
 
 describe('nativeVendorForRef', () => {
@@ -59,7 +59,7 @@ describe('subscriptionVendorForRef', () => {
     expect(
       subscriptionVendorForRef({
         provider: 'deepseek',
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         harness: 'claude-code',
       }),
     ).toBe('deepseek')
