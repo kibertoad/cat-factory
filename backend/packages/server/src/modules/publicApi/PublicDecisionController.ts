@@ -46,18 +46,18 @@ import { authorize } from './publicApiAuth.js'
 //     one entity it touched — so returning the list saves the caller a follow-up read and makes
 //     "the review moved on" self-evident.
 //
-// Keyed by RUN id, so one surface serves both a headless initiative job and a board task run.
+// Keyed by RUN id, so one surface serves both a headless job and a board task run.
 
 /** A run resolved for the caller's key, with the block it is anchored on. */
 interface ScopedRun {
   execution: ExecutionInstance
-  /** The run's anchor block id — a board task, or a headless initiative anchor. */
+  /** The run's anchor block id — a board task, or a headless job anchor. */
   blockId: string
 }
 
 /**
  * Load a run by id for an authenticated key, scoped to the key's workspace. Accepts BOTH shapes the
- * public surface can create: a headless initiative anchor (`getInternalTask`) and an ordinary board
+ * public surface can create: a headless job anchor (`getInternalTask`) and an ordinary board
  * task (`getServiceTask`) — their union is exactly the set of runs this key may already read
  * through `GET /api/v1/jobs/:id` and `GET /api/v1/tasks/:taskId/run`, so nothing new is exposed.
  * Anything else in the workspace (or in another workspace) is a 404.
@@ -474,7 +474,7 @@ function registerForkDecisionRoutes(app: Hono<AppEnv>): void {
   // (`c.get('user')?.id`) so the resumed run's container work uses their per-user credentials, and
   // an external key has no user to pass. Taking the initiator off the run rather than skipping the
   // scope entirely is what keeps the two surfaces equivalent: this route is keyed by run id and
-  // deliberately accepts a BOARD task run as well as a headless initiative job, and a board run
+  // deliberately accepts a BOARD task run as well as a headless job, and a board run
   // started in the SPA does carry a `usr_*` initiator whose PAT `PatPreferringAppRegistry` resolves
   // through `currentCredentialScope()`. Answering such a run over the public API must not
   // silently demote its resumed clone/push to the deployment default. A genuinely headless run has

@@ -45,8 +45,7 @@ public final class TasksClient {
 
     /**
      * Get a task's status
-     * Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one
-     * exists).
+     * Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).
      * {@code GET /api/v1/tasks/{taskId}} (operation {@code getPublicTask}).
      */
     public PublicTask get(String taskId) {
@@ -114,8 +113,9 @@ public final class TasksClient {
     /**
      * Start (run) a task
      * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A
-     * task on an individual-usage model cannot be started through the API (no headless
-     * personal-credential unlock).
+     * pipeline that can park on a human decision requires a `decide`-scope key. A task on an
+     * individual-usage model cannot be started through the API (no headless personal-credential
+     * unlock).
      * {@code POST /api/v1/tasks/{taskId}/start} (operation {@code startPublicTask}).
      */
     public PublicTask start(String taskId, StartPublicTask body) {

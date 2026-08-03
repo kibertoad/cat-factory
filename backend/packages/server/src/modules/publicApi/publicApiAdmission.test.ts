@@ -14,7 +14,7 @@ import {
 // they stopped being one flat refusal:
 //
 //  - inline-only is ABSOLUTE (no scope lifts it) — an external key must never trigger container
-//    work or a GitHub write through the initiative surface;
+//    work or a GitHub write through the jobs surface;
 //  - parking is a SCOPE question — a pipeline that can park needs a caller able to answer, which
 //    is exactly what a `decide` key asserts.
 //
@@ -35,7 +35,7 @@ describe('public-API admission', () => {
 
     it('rejects a chain containing a container/repo step', () => {
       // The non-negotiable half: `coder` clones and pushes, so no key of any scope may launch it
-      // through the initiative surface.
+      // through the jobs surface.
       expect(isInlineOnlyPipeline({ agentKinds: ['coder'] }, registry)).toBe(false)
       expect(
         isInlineOnlyPipeline({ agentKinds: ['initiative-breakdown', 'coder'] }, registry),
@@ -151,6 +151,18 @@ describe('public-API admission', () => {
       expect(message).toContain('clarity-review')
       expect(message).not.toContain('/api/v1/runs/:runId/decisions')
       expect(message).toContain('POST /api/v1/jobs/:id/cancel')
+    })
+
+    it('names the exit route of the surface being refused, not always the jobs cancel', () => {
+      // The board-task start applies the same rule, but its abandoned park is freed with `stop`,
+      // not with the jobs cancel, so a refusal steering a task caller at `/jobs/:id/cancel` would
+      // name a route that 404s for the run it is about.
+      const message = parkingRefusalMessage(
+        { agentKinds: ['clarity-review'] },
+        { cancelPath: 'POST /api/v1/tasks/:taskId/stop' },
+      )
+      expect(message).toContain('POST /api/v1/tasks/:taskId/stop')
+      expect(message).not.toContain('/jobs/:id/cancel')
     })
 
     it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {

@@ -1,5 +1,6 @@
 // Public-API ADMISSION: what an external, key-authenticated caller may launch through
-// `/api/v1/initiatives`, and the `headlessStartable` flag pipeline discovery reports.
+// `POST /api/v1/jobs` and `POST /api/v1/tasks/:taskId/start`, and the `headlessStartable`
+// flag pipeline discovery reports.
 //
 // Extracted from `PublicApiController` so the policy is unit-testable in isolation: the built-in
 // public pipeline is READ-ONLY, so there is no way to construct a public-and-parking pipeline over
@@ -26,7 +27,7 @@ import {
  *
  * The guard these drive used to be a FLAT refusal, because a public run was headless with no way
  * to answer: the run would sit `blocked` forever while its anchor stayed `in_progress`, permanently
- * consuming one of the workspace's `MAX_ACTIVE_INITIATIVE_RUNS` slots. Note what is NOT available
+ * consuming one of the workspace's `MAX_ACTIVE_JOB_RUNS` slots. Note what is NOT available
  * as a backstop — a parked run waits for a human INDEFINITELY (`ExecutionWorkflow` re-arms its
  * `waitForEvent` on expiry rather than failing the run; the old hard decision timeout was removed
  * deliberately), so "it will eventually time out" was never true.
@@ -88,7 +89,7 @@ function enabledSteps(pipeline: AdmissiblePipelineShape): { kind: string; i: num
 /**
  * Whether every enabled step of a pipeline runs INLINE — no container, no repo, no push. This is
  * the non-negotiable half of public admission: an external key must never be able to trigger
- * container work or a GitHub write through the initiative surface, whatever its scope.
+ * container work or a GitHub write through the jobs surface, whatever its scope.
  */
 export function isInlineOnlyPipeline(
   pipeline: AdmissiblePipelineShape,
@@ -134,11 +135,20 @@ export function parkSurfacesOf(pipeline: AdmissiblePipelineShape): string[] {
  * got a run whose only exit is `POST /api/v1/jobs/:id/cancel` — the platform's degrade-loudly rule
  * inverted, since the refusal was confidently describing a capability it does not have.
  *
- * What is ADMITTED is unchanged: whether a start path should refuse a park nothing can answer is a
- * policy question left open for the maintainer in the tracker. This only stops the refusal lying
- * about the surface while that question is open.
+ * Both public start paths apply the parking rule now: `POST /jobs` always has, and
+ * `POST /tasks/:taskId/start` adopted it with the API-stability commitment (the tracker's open
+ * question, settled): a `write` key must not be able to set in motion a park it is by definition
+ * not trusted to answer. The board start passes its own `cancelPath`, because an abandoned board
+ * park is freed with `stop`, not the jobs cancel.
  */
-export function parkingRefusalMessage(pipeline: AdmissiblePipelineShape): string {
+export function parkingRefusalMessage(
+  pipeline: AdmissiblePipelineShape,
+  options: { cancelPath?: string } = {},
+): string {
+  // Which route frees an abandoned park differs per start surface: a headless job is cancelled,
+  // a board task is stopped. The caller being refused is about to use one of them, so the
+  // message must name the right one.
+  const cancelPath = options.cancelPath ?? 'POST /api/v1/jobs/:id/cancel'
   const surfaces = parkSurfacesOf(pipeline)
   const answerable = surfaces.filter((s) => PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
   const unanswerable = surfaces.filter((s) => !PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
@@ -150,7 +160,7 @@ export function parkingRefusalMessage(pipeline: AdmissiblePipelineShape): string
   )
   if (unanswerable.length > 0) {
     parts.push(
-      `The public decision surface cannot answer ${unanswerable.join(', ')} yet, so a run that parks there can only be ended with POST /api/v1/jobs/:id/cancel.`,
+      `The public decision surface cannot answer ${unanswerable.join(', ')} yet, so a run that parks there can only be answered in the app or ended with ${cancelPath}.`,
     )
   }
   return parts.join(' ')

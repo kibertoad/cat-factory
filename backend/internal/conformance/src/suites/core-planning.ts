@@ -78,7 +78,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
     // A missing key is refused; a valid key starts the run.
     expect(
       (
-        await call('POST', '/api/v1/initiatives', {
+        await call('POST', '/api/v1/jobs', {
           pipelineId: 'pl_initiative_breakdown',
           input: 'x',
         })
@@ -86,7 +86,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
     ).toBe(401)
     const started = await call<{ jobId: string; status: string }>(
       'POST',
-      '/api/v1/initiatives',
+      '/api/v1/jobs',
       { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
       auth,
     )
@@ -132,7 +132,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
         (
           await call(
             'POST',
-            '/api/v1/initiatives',
+            '/api/v1/jobs',
             { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
             auth,
           )
@@ -143,7 +143,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
       (
         await call(
           'POST',
-          '/api/v1/initiatives',
+          '/api/v1/jobs',
           { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
           auth,
         )
@@ -153,8 +153,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
 
     // A non-public pipeline id is refused; a revoked key no longer authenticates.
     expect(
-      (await call('POST', '/api/v1/initiatives', { pipelineId: 'pl_blueprint', input: 'x' }, auth))
-        .status,
+      (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_blueprint', input: 'x' }, auth)).status,
     ).toBe(400)
     expect(
       (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`)).status,
@@ -224,7 +223,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
     expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(409)
 
     // Start it (async — left running until driven), then read the rich run projection.
-    const started = await call<{ executionId: string | null }>(
+    const started = await call<{ runId: string | null }>(
       'POST',
       `/api/v1/tasks/${taskId}/start`,
       { pipelineId: 'pl_simple' },
@@ -916,14 +915,8 @@ function registerPublicApiListTests(harness: ConformanceHarness): void {
     // Three headless initiative runs, driven to completion so they settle `succeeded`.
     for (const input of ['job one', 'job two', 'job three']) {
       expect(
-        (
-          await call(
-            'POST',
-            '/api/v1/initiatives',
-            { pipelineId: 'pl_initiative_breakdown', input },
-            auth,
-          )
-        ).status,
+        (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_initiative_breakdown', input }, auth))
+          .status,
       ).toBe(202)
     }
     await drive(wsId)

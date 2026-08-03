@@ -109,6 +109,46 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
       expect(uiRun?.intakeOrigin).toBeUndefined()
     })
 
+    it('requires a decide-scope key to start a board task on a parking pipeline', async () => {
+      // The SAME rule as `POST /api/v1/jobs`, now on the board start too: the `decide` scope is
+      // the operator asserting "this integration answers this workspace's parked decisions", and
+      // a plain `write` key must not be able to set a park in motion it is by definition not
+      // trusted to answer. This start path used to apply no pipeline admission at all; the wire
+      // test lives here (not only in publicApiAdmission.test.ts) because each facade wires the
+      // pipeline read the check runs against.
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      // An approval gate on an enabled step is the simplest park: no review module involved.
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Gated coder',
+        agentKinds: ['coder'],
+        gates: [true],
+      })
+
+      const writeAuth = await mintKey(app, wsId, 'write')
+      const refused = await app.call<{ error: { code: string; message: string } }>(
+        'POST',
+        `/api/v1/tasks/task_login/start`,
+        { pipelineId: pipeline.body.id },
+        writeAuth,
+      )
+      expect(refused.status).toBe(403)
+      expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+      // The refusal names the exit route of THIS surface, not the jobs cancel.
+      expect(refused.body.error.message).toContain('POST /api/v1/tasks/:taskId/stop')
+
+      const decideAuth = await mintKey(app, wsId, 'decide')
+      const started = await app.call(
+        'POST',
+        `/api/v1/tasks/task_login/start`,
+        { pipelineId: pipeline.body.id },
+        decideAuth,
+      )
+      expect(started.status).toBe(202)
+    })
+
     it('lists a parked review over the public API and answers it through the same services', async () => {
       // The end-to-end headless loop: read the run's open findings, answer one, and see the answer
       // reflected — all over `/api/v1`, all delegating to the SAME service methods the SPA calls.
@@ -228,7 +268,7 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
     it('cancels a headless job, freeing the in-flight slot its park was holding', async () => {
       // This route is what makes admitting a PARKING pipeline safe at all: a parked run waits for
       // a human indefinitely (there is deliberately no run-killing timeout — decision D1) while
-      // its anchor holds one of the workspace's MAX_ACTIVE_INITIATIVE_RUNS slots. Without a way to
+      // its anchor holds one of the workspace's MAX_ACTIVE_JOB_RUNS slots. Without a way to
       // give up, the concurrency cap is a wall with no door.
       //
       // It belongs in conformance rather than a unit test because cancelling is per-runtime work:
@@ -241,7 +281,7 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
 
       const created = await app.call<{ jobId: string }>(
         'POST',
-        '/api/v1/initiatives',
+        '/api/v1/jobs',
         { pipelineId: 'pl_initiative_breakdown', input: 'Ship a headless clarification loop.' },
         auth,
       )
@@ -291,7 +331,7 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
 
       const created = await app.call<{ jobId: string }>(
         'POST',
-        '/api/v1/initiatives',
+        '/api/v1/jobs',
         { pipelineId: 'pl_initiative_breakdown', input: 'A run another tenant must not touch.' },
         ownerAuth,
       )

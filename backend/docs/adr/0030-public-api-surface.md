@@ -178,9 +178,11 @@ routes on and an empty title is honest about what could be read.
 
 ## Consequences
 
-- **`/api/v1` is additive forever.** There is no v2. Pre-1.0 back-compat is a non-goal repo-wide,
-  but this surface is the one place to be deliberate about breaking callers: flag any breaking
-  shape change prominently in the changeset.
+- **`/api/v1` is additive forever.** _Superseded by
+  [ADR 0032](./0032-public-api-stability.md):_ the "be deliberate, flag it prominently" posture
+  became a hard stability commitment (additive freely; anything else needs an incremental
+  migration path plus a version change), adopted together with the final pre-stability breaking
+  polish (the `/jobs` path unification, `publicTask.runId`, the board-start scope rule).
 - **`docs/openapi.json` is generated from these Valibot contracts** (`pnpm gen:openapi`) and CI
   fails on drift (`pnpm check:openapi`). Every change that adds or alters a public contract commits
   the regenerated spec in the same PR, and a new named DTO needs its `COMPONENT_SCHEMAS` +
@@ -210,9 +212,10 @@ routes on and an empty title is honest about what could be read.
 - **The parked-decision surface is INCOMPLETE, and what is missing is tracked in
   [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md)**: the public
   decision surface answers three park types (requirements review, fork, judge) while the engine has
-  more, and both `POST /initiatives` (via the `decide` scope) and `POST /tasks/:taskId/start` (which
-  applies no pipeline admission at all) can create a run parked on one of the others. That tracker
-  ranks the additions, and records what was considered and rejected.
+  more, and both start paths admit (for a `decide`-scope key; since
+  [ADR 0032](./0032-public-api-stability.md) the board start applies the same parking rule as
+  `POST /jobs`) a run that can park on one of the others. That tracker ranks the additions, and
+  records what was considered and rejected.
 - **An incomplete surface must not ADVERTISE what it cannot do.** The `pipeline_requires_decide_scope`
   refusal originally told the operator a `decide` key answers the park through
   `/api/v1/runs/:runId/decisions`, which held for one of the five parks it named: selling a scope

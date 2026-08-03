@@ -1,7 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** investigation complete; A0 landed, A1–C2 not started · **Owner:** core · **Started:**
-2026-08-02
+**Status:** investigation complete; A0 landed, the start-path scope question settled by
+[ADR 0032](../../backend/docs/adr/0032-public-api-stability.md), A1–C2 not started · **Owner:**
+core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -34,9 +35,10 @@ surface discovered later belongs in this table rather than in a revised number:
 | visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
 
 Which start path can reach which differs, and that difference matters when ranking:
-`POST /api/v1/initiatives` is inline-only, so it reaches the review, brainstorm, approval-gate,
-judge and agent-decision rows; `POST /api/v1/tasks/:taskId/start` applies no admission at all
-(§2 below), so it reaches **every** row, container-backed ones included.
+`POST /api/v1/jobs` is inline-only, so it reaches the review, brainstorm, approval-gate,
+judge and agent-decision rows; `POST /api/v1/tasks/:taskId/start` admits container pipelines
+(behind the same parking scope rule; see §2 below, since resolved), so it reaches **every** row,
+container-backed ones included, for a `decide`-scope key.
 
 This tracker records what is missing, ranks it, and records what was considered and rejected so the
 next iteration does not re-propose it.
@@ -45,11 +47,12 @@ The headline finding is not "an endpoint is missing" but an **asymmetry between 
 key start and what the decision surface lets it answer**. A caller can put a run into a state only
 the SPA can get it out of.
 
-**What gates the first slice:** nothing technical: A1 is ready to pick up. The [open
-question](#open-question-for-the-maintainer) below only decides whether the `POST /tasks/:taskId/start`
-scope rule tightens, and the recommendation is to answer it AFTER A1–A4 land. When the committed
-scope completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md);
-if it is instead abandoned, say so here rather than deleting it, so the investigation is not redone.
+**What gates the first slice:** nothing technical: A1 is ready to pick up. The former [open
+question](#open-question-for-the-maintainer-settled) about the `POST /tasks/:taskId/start` scope
+rule is settled (tightened, with [ADR 0032](../../backend/docs/adr/0032-public-api-stability.md)).
+When the committed scope completes, this tracker converts to a numbered ADR under
+`backend/docs/adr/` (per CLAUDE.md); if it is instead abandoned, say so here rather than deleting
+it, so the investigation is not redone.
 
 ## The gap, precisely
 
@@ -77,17 +80,16 @@ For four of those five that was false, so the refusal was selling a scope upgrad
 whose only exit is cancel. That is the platform's degrade-loudly rule inverted: not an incomplete
 surface reporting itself honestly, but one describing a capability it does not have.
 
-**2. `POST /api/v1/tasks/:taskId/start` applies no pipeline admission at all.** Unlike
-`POST /api/v1/initiatives`, the board-task start path never calls `isInlineOnlyPipeline` or
-`canParkOnHuman`. Its only refusals are archived-service, pipeline-required, and the personal-model
-gate. So a plain `write` key (one deliberately NOT granted `decide`) can start any board pipeline,
-including one carrying an approval gate on an enabled step, and park it.
-
-That asymmetry is defensible on its own terms (a board task is a first-class board citizen; the
-inline-only rule exists to keep the INITIATIVE surface off GitHub, not to constrain board work). It
-becomes a defect only in combination with the missing answer paths: the `decide` scope is supposed to
-be the operator asserting "this integration is the headless overseer for these runs", and a `write`
-key can currently create the overseer's job without the scope that gates it.
+**2. `POST /api/v1/tasks/:taskId/start` gates parking pipelines on `decide` (RESOLVED with
+[ADR 0032](../../backend/docs/adr/0032-public-api-stability.md)).** It used to apply no pipeline
+admission at all, so a plain `write` key (one deliberately NOT granted `decide`) could start any
+board pipeline, including one carrying an approval gate on an enabled step, and park it. It now
+applies the same `canParkOnHuman` scope rule as the jobs surface (the inline-only rule stays
+jobs-only on purpose: it exists to keep headless jobs off GitHub, not to constrain board work).
+The refusal names this surface's exit route, `POST /api/v1/tasks/:taskId/stop`. What the rule can
+see is the STATIC parks (gates plus the four inline kinds); a park raised dynamically mid-run (an
+agent-raised decision, a judge `park`) is not knowable at start time, which is one more reason the
+answer paths below still matter.
 
 **The notification inbox is not the escape hatch.** `notificationActEffect` handles `merge_review`,
 `pipeline_complete`, `merge_tag_request`, `ci_failed`, `test_failed` and `key_drift`. None of them
@@ -113,7 +115,8 @@ The design point worth keeping: `PUBLICLY_ANSWERABLE_PARK_SURFACES` is a set hel
 from `PARKING_INLINE_KINDS`, so the asymmetry this tracker documents is machine-readable rather than
 prose-only. **Landing any of A1–A4 means adding that surface to the set**: the message and its
 drift-guard test then update themselves, where a hand-written sentence would go on promising an
-answer path nobody built. What is ADMITTED is unchanged; that stays the open question below.
+answer path nobody built. (What is admitted was unchanged by A0; the board-start scope rule was
+later tightened by ADR 0032, see the settled question below.)
 
 ### A1: Approval gates (highest value, lowest cost) ⬜
 
@@ -240,15 +243,13 @@ Recorded so these are not re-proposed:
   the same PR: its reference tables (routes, scopes, error codes) are hand-maintained, and a slice
   that ships without the doc leaves the API documenting itself as narrower than it is.
 
-## Open question for the maintainer
+## Open question for the maintainer: SETTLED
 
-Should `POST /api/v1/tasks/:taskId/start` require `decide` when the resolved pipeline can park
-(`canParkOnHuman`), matching the initiative surface? It is the smaller, more consistent rule, but it
-is a **breaking change for existing `write` keys** that start gated board pipelines today: exactly
-the kind of change ADR 0030 says to flag prominently. The alternative is to leave the start path
-permissive and rely on A1–A6 making every park answerable, which removes the harm without taking
-capability away from a live integration. Recommended: land A1–A4 first, then revisit, because the
-answer is much cheaper once no park is a dead end.
-
-A0 deliberately does NOT pre-empt this: it changed what the refusal SAYS, never what is admitted.
-Both answers to the question above remain equally open.
+Settled by [ADR 0032](../../backend/docs/adr/0032-public-api-stability.md), against this tracker's
+"land A1..A4 first" recommendation and for a reason the recommendation could not see when written:
+the API-stability commitment closed the tightening window. Under that commitment, taking capability
+away from a live `write` key later would itself be a breaking change needing a migration path, so
+the permissive rule would have become permanent. `POST /api/v1/tasks/:taskId/start` now requires
+`decide` when the resolved pipeline can park (`canParkOnHuman`), matching the jobs surface; the
+stricter rule can still be RELAXED later without breaking anyone, which is the direction the
+commitment permits. A1..A6 are unaffected (all additive) and still worth landing.

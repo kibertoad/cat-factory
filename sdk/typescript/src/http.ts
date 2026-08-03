@@ -22,7 +22,7 @@ export interface RequestOptions {
   headers?: Record<string, string>
   /**
    * Override the retry budget for this call. Note the default policy below: a non-idempotent
-   * request is never retried automatically, so raising this does not make `POST /initiatives`
+   * request is never retried automatically, so raising this does not make `POST /jobs`
    * retry-safe.
    */
   maxRetries?: number
@@ -71,7 +71,7 @@ export function encodePathSegment(value: string): string {
 function isRetriable(method: string, status: number | null): boolean {
   // A transport failure with no response (status null) tells us nothing about whether the
   // server acted, so only a method that is idempotent BY DEFINITION may be replayed. `POST
-  // /initiatives` and `POST /tasks/:id/start` both cost real LLM work, and a duplicate is not
+  // /jobs` and `POST /tasks/:id/start` both cost real LLM work, and a duplicate is not
   // something the SDK may decide to risk on the caller's behalf.
   const idempotent = method === 'GET' || method === 'HEAD' || method === 'DELETE'
   if (!idempotent) return false

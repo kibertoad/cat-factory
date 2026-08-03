@@ -82,7 +82,7 @@ await step('tasks.create', async () => {
   // A required-but-NULLABLE field: the server always sends it, and it is null here. Recording it
   // as an explicit `null` (not `undefined`) is what proves the four SDKs agree that "the server
   // said null" and "the server said nothing" are different facts.
-  observations.createdExecutionIdIsNull = task.executionId === null
+  observations.createdRunIdIsNull = task.runId === null
   observations.createdPullRequestUrlIsNull = task.pullRequestUrl === null
 })
 
@@ -173,7 +173,7 @@ await step('error: insufficient scope', async () => {
 await step('tasks.start', async () => {
   const task = await client.tasks.start(taskId, pipelineId ? { pipelineId } : {})
   observations.startedStatus = task.status
-  observations.startedHasExecutionId = task.executionId !== null
+  observations.startedHasRunId = task.runId !== null
 })
 
 await step('tasks.stream (SSE)', async () => {

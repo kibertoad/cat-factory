@@ -61,8 +61,8 @@ Scopes are an ordered, **inclusive** ladder; each rung can do everything below i
 | Scope    | Adds                                                                                                                                                  |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                        |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start an initiative on a pipeline that can park at all.  |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                           |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park. |
 | `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                 |
 
 Two things to know before minting `decide` or `admin`:
@@ -112,10 +112,10 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
   | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                         |
   | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                  |
-  | `pipeline_not_public`            | 400     | `POST /initiatives`: unknown or non-public pipeline                                                          |
-  | `pipeline_not_inline`            | 400     | `POST /initiatives`: pipeline has container/GitHub steps                                                     |
-  | `pipeline_requires_decide_scope` | 403     | `POST /initiatives`: pipeline can park on a human, key is below `decide`                                     |
-  | `too_many_active_runs`           | 429     | `POST /initiatives`: the workspace already has 5 initiative runs in flight                                   |
+  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                 |
+  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                            |
+  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                |
+  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                            |
   | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                       |
   | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                   |
   | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
@@ -150,10 +150,21 @@ both clear a park at the cost of the run's work. This matters doubly because the
 does not yet answer every park type the engine has; the
 [additions tracker](../../docs/initiatives/public-api-additions.md) is the authoritative list.
 
-### Versioning
+### Versioning & stability
 
-`/api/v1` is **additive forever**: there is no v2 planned, and breaking shape changes are flagged
-prominently in changesets. Build clients to tolerate new fields.
+**The public API is stable** ([ADR 0032](./adr/0032-public-api-stability.md)): `/api/v1`, the SDK
+clients, and the webhook delivery contract do not change incompatibly. What that commits to:
+
+- **Changes are additive**: new endpoints, new optional fields, new enum values, new error codes.
+  Build clients to tolerate them (the official SDKs do by design); an addition bumps the OpenAPI
+  `info.version` minor.
+- **A breaking change never lands in place.** It ships as an incremental migration path plus a
+  version change: the old shape keeps working while the new one is served beside it (a new field
+  beside the old, a new `/api/v2` prefix for a path or semantics change), the deprecation and its
+  window are documented here, and the old half is removed only in a later release after consumers
+  have had time to move.
+- **Scope semantics only ever widen without a migration path**; narrowing what a key may do is a
+  break like any other.
 
 ## Quick start
 
@@ -188,9 +199,9 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 curl -s -H "$AUTH" "$BASE/api/v1/usage"
 ```
 
-The headless-initiative flow is the same shape one level up: `POST /api/v1/initiatives` with
+The headless-job flow is the same shape one level up: `POST /api/v1/jobs` with
 `{ pipelineId, input }` returns `202 { jobId, links: { self, events } }`; poll `GET /jobs/:id` or
-stream `GET /jobs/:id/events`. Initiative runs are **inline-only**: nothing is pushed to GitHub.
+stream `GET /jobs/:id/events`. Headless jobs are **inline-only**: nothing is pushed to GitHub.
 
 ## Client SDKs
 
@@ -219,15 +230,15 @@ error codes, scopes and paging rules are the same whichever you use.
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
 
-### Initiatives & jobs (headless runs)
+### Jobs (headless runs)
 
-An initiative run executes a **public, inline pipeline** against a supplied brief, anchored on an
+A headless job executes a **public, inline pipeline** against a supplied brief, anchored on an
 internal block; it is not a board task and never touches GitHub. Jobs are double-scoped: this
 surface only ever sees runs it created, never the workspace's ordinary board runs.
 
 | Method / path                  | Scope    | Behaviour                                                                                                                                                                                            |
 | ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/initiatives`     | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
+| `POST /api/v1/jobs`            | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
 | `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
 | `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
 | `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
@@ -248,7 +259,7 @@ mapping, so it always agrees with the field it filters on.
 | `GET /api/v1/services`                   | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
 | `POST /api/v1/services/:serviceId/tasks` | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
 | `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
-| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                  |
+| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                        |
 | `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
 | `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
 | `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
@@ -259,10 +270,14 @@ Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `bloc
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
-Board-task `start` deliberately applies **no pipeline admission** (unlike `POST /initiatives`): a
-`write` key can start any board pipeline, including one that parks. See the
-[additions tracker](../../docs/initiatives/public-api-additions.md) for the implications and the
-open question about tightening it.
+Board-task `start` applies the **same parking rule** as `POST /jobs`: a pipeline that can park on
+a human (an approval gate on an enabled step, a review/brainstorm kind) needs a `decide`-scope
+key (`403 pipeline_requires_decide_scope`; the refusal names this surface's exit,
+`POST /tasks/:taskId/stop`). The inline-only rule stays jobs-only: a `decide` key may start
+container pipelines on board tasks. Parks raised dynamically mid-run (an agent-raised decision, a
+judge park) are not statically knowable, so they do not gate the start; see the
+[additions tracker](../../docs/initiatives/public-api-additions.md) for which parks the decision
+surface can answer.
 
 ### Task runs & streaming
 
@@ -299,7 +314,7 @@ poll; for push at scale, register the [outbound webhook](#outbound-webhook-push)
 | ----------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/pipelines` | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`. |
 
-`public` marks the pipelines `POST /initiatives` accepts. `headlessStartable` means every enabled
+`public` marks the pipelines `POST /jobs` accepts. `headlessStartable` means every enabled
 step is inline **and** nothing can park on a human: the pipeline can run end-to-end with no
 interactive user. A pipeline can be startable on a board task without being either.
 

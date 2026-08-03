@@ -26,7 +26,7 @@ await client.tasks.start(task.taskId, {})
 
 ## Resource clients
 
-`initiatives`, `services`, `tasks`, `pipelines`, `notifications`, `usage`, `decisions`, `debug`:
+`jobs`, `services`, `tasks`, `pipelines`, `notifications`, `usage`, `decisions`, `debug`:
 one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
 
 ## Watching a run

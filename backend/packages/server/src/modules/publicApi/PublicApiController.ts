@@ -2,7 +2,7 @@ import {
   type Block,
   actPublicNotificationContract,
   cancelPublicJobContract,
-  createInitiativeJobContract,
+  createPublicJobContract,
   createPublicTaskContract,
   deletePublicTaskContract,
   dismissPublicNotificationContract,
@@ -59,8 +59,8 @@ import {
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
 // gate (its `/api` prefix is in the authGate bypass list); every route authenticates IN-CONTROLLER
 // by a public-API key (`Authorization: Bearer cf_live_…`) resolved to a workspace scope, mirroring
-// how `/internal` self-authenticates with a machine token. First use-case: "break down an
-// initiative" — start a public, inline pipeline headlessly and retrieve its DB-persisted result
+// how `/internal` self-authenticates with a machine token. First use-case: "headless jobs":
+// start a public, inline pipeline headlessly (`POST /jobs`) and retrieve its DB-persisted result
 // asynchronously (poll `GET /jobs/:id` or stream `GET /jobs/:id/events`). Nothing is pushed to
 // GitHub: the pipeline is inline-only, so the run produces its output purely in the DB.
 //
@@ -78,9 +78,9 @@ const SSE_MAX_MS = 5 * 60 * 1000
 /** Re-verify the caller's key at most this often on a live stream, so a mid-stream revoke cuts it. */
 const SSE_REAUTH_MS = 5000
 
-/** Max headless "initiative" runs a single workspace may have in flight at once (a public-API
+/** Max headless jobs a single workspace may have in flight at once (a public-API
  *  concurrency backstop: bounds the LLM spend one — possibly leaked — key can drive). */
-const MAX_ACTIVE_INITIATIVE_RUNS = 5
+const MAX_ACTIVE_JOB_RUNS = 5
 
 /** Default page sizes when a list request passes no `?limit=`. The hard ceiling (100) is enforced
  *  by the query contract, so a caller can never ask for the whole table in one response. */
@@ -131,7 +131,9 @@ function toPublicTask(block: Block, serviceId: string): PublicTask {
     taskType: block.taskType ?? 'feature',
     status: block.status,
     progress: block.progress,
-    executionId: block.executionId,
+    // The public name is `runId`, one vocabulary with `publicRun.runId` and `/runs/:runId/...`;
+    // `executionId` is the internal engine name for the same id.
+    runId: block.executionId,
     pullRequestUrl: block.pullRequest?.url ?? null,
   }
 }
@@ -188,7 +190,7 @@ function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
 /**
  * Project an internal pipeline onto the external pipeline resource: its id/name, the enabled
  * step chain (in order), and the two headless-relevant flags a caller needs to choose a
- * `pipelineId` for `start` — `public` (initiative-startable) and `headlessStartable` (safe to
+ * `pipelineId` for `start` — `public` (job-startable via `POST /jobs`) and `headlessStartable` (safe to
  * run with no interactive user). Archived pipelines are filtered out by the caller.
  */
 function toPublicPipeline(
@@ -215,7 +217,7 @@ function toPublicPipeline(
  * Load a public JOB by id for an authenticated key: the persisted execution, but ONLY when it is
  * anchored on a HEADLESS internal block (a run this public surface created). Returns null when no
  * such run exists in the key's workspace OR the id points at a normal board execution — so an
- * external key can never read an arbitrary in-workspace run's output, only its own initiative jobs.
+ * external key can never read an arbitrary in-workspace run's output, only its own headless jobs.
  * Runtime-symmetric: one `executionRepository.get` + one `boardService.getInternalTask` point-read.
  */
 async function loadPublicJob<E extends AppEnv>(
@@ -231,7 +233,7 @@ async function loadPublicJob<E extends AppEnv>(
 }
 
 /**
- * Best-effort, event-free rollback of a headless initiative run: drop the persisted run (the
+ * Best-effort, event-free rollback of a headless job run: drop the persisted run (the
  * execution + its live-run row, via `deleteByBlock`) THEN the anchor block. Used when a start fails
  * partway or is rolled back over the cap, so nothing survives for the stale-run sweeper to re-drive
  * against a since-deleted block. `deleteByBlock` is the same primitive `ExecutionService.cancel`
@@ -328,9 +330,9 @@ function registerUsageRoutes(app: Hono<AppEnv>): void {
 }
 
 function registerJobRoutes(app: Hono<AppEnv>): void {
-  // Start an initiative run: validate the pipeline is public + inline, create a headless internal
+  // Start a headless job: validate the pipeline is public + inline, create a headless internal
   // block to anchor the run, and start it. Returns 202 with the job id + follow-up links.
-  buildHonoRoute(app, createInitiativeJobContract, async (c) => {
+  buildHonoRoute(app, createPublicJobContract, async (c) => {
     const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
@@ -379,12 +381,12 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     // Concurrency backstop: cap the workspace's in-flight external runs so a leaked/abusive key
     // can't spin up unbounded LLM work. Counted in SQL, checked before the run is created.
     const active = await container.boardService.countActiveInternalTasks(auth.workspaceId)
-    if (active >= MAX_ACTIVE_INITIATIVE_RUNS) {
+    if (active >= MAX_ACTIVE_JOB_RUNS) {
       return c.json(
         {
           error: {
             code: 'too_many_active_runs',
-            message: `This workspace already has ${MAX_ACTIVE_INITIATIVE_RUNS} initiative runs in flight; wait for one to finish`,
+            message: `This workspace already has ${MAX_ACTIVE_JOB_RUNS} headless jobs in flight; wait for one to finish`,
           },
         },
         429,
@@ -421,13 +423,13 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     // backstop holds under a parallel burst and not merely sequentially. Strict `>` keeps the
     // sequential case exact (the Nth start that lands on the cap boundary still succeeds).
     const activeNow = await container.boardService.countActiveInternalTasks(auth.workspaceId)
-    if (activeNow > MAX_ACTIVE_INITIATIVE_RUNS) {
+    if (activeNow > MAX_ACTIVE_JOB_RUNS) {
       await rollbackInitiativeRun(c, auth.workspaceId, block.id)
       return c.json(
         {
           error: {
             code: 'too_many_active_runs',
-            message: `This workspace already has ${MAX_ACTIVE_INITIATIVE_RUNS} initiative runs in flight; wait for one to finish`,
+            message: `This workspace already has ${MAX_ACTIVE_JOB_RUNS} headless jobs in flight; wait for one to finish`,
           },
         },
         429,
@@ -446,7 +448,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     )
   })
 
-  // List the workspace's headless initiative jobs, newest first. Closes the gap where an
+  // List the workspace's headless jobs, newest first. Closes the gap where an
   // integration that lost its stored job ids (a restart, a redeploy) could never re-discover its
   // own in-flight runs, since `GET /jobs/:id` needs an id it no longer has. The `internal` scope
   // is applied IN SQL by `listInternal` (the list form of `loadPublicJob`'s double-scope), so it
@@ -494,7 +496,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     )
   })
 
-  // Poll a job's status + result. Scoped to the key's workspace AND to headless initiative runs
+  // Poll a job's status + result. Scoped to the key's workspace AND to headless job runs
   // (see loadPublicJob), so a job in another workspace — or a normal board run — is a 404.
   buildHonoRoute(app, getPublicJobContract, async (c) => {
     const gate = await authorize(c, 'read')
@@ -511,9 +513,9 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicJob(execution), 200)
   })
 
-  // Cancel a headless initiative run. This is what makes admitting a PARKING pipeline safe (see
+  // Cancel a headless job run. This is what makes admitting a PARKING pipeline safe (see
   // PARKING_INLINE_KINDS): a parked run waits for a human indefinitely while its anchor holds one
-  // of the workspace's MAX_ACTIVE_INITIATIVE_RUNS slots, so a caller that decides not to answer
+  // of the workspace's MAX_ACTIVE_JOB_RUNS slots, so a caller that decides not to answer
   // must be able to free it — otherwise the concurrency cap is a wall with no door. Delegates to
   // the SAME `stopRun` the board `stop` route uses: idempotent (a terminal run comes back as-is)
   // and it records a `cancelled` terminal state rather than deleting the run, so the job stays
@@ -529,7 +531,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     }
     const { auth } = gate
     const { id } = c.req.valid('param')
-    // Same headless-job scoping as the poll read: only an initiative run this surface created.
+    // Same headless-job scoping as the poll read: only a headless run this surface created.
     const execution = await loadPublicJob(c, auth.workspaceId, id)
     if (!execution) {
       return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
@@ -558,7 +560,7 @@ function registerJobStreamRoute(app: Hono<AppEnv>): void {
     const { auth } = gate
     const id = c.req.param('id')
     const container = c.get('container')
-    // Same headless-job scoping as the poll read: only an initiative run this surface created.
+    // Same headless-job scoping as the poll read: only a headless run this surface created.
     const initial = await loadPublicJob(c, auth.workspaceId, id)
     if (!initial) {
       return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
@@ -777,6 +779,30 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
         400,
       )
     }
+    // The SAME parking rule as `POST /jobs`: a pipeline that can park the run on a human
+    // decision (an approval gate on an enabled step, a review/brainstorm kind) needs a caller
+    // able to answer it, which is what the `decide` scope asserts. This start path used to
+    // apply no pipeline admission at all, so a plain `write` key (one deliberately NOT
+    // granted `decide`) could create exactly the parked run the scope ladder says it must
+    // not oversee. Board runs stay visible in the SPA, so a human can still answer them
+    // there; the rule is about what the KEY may set in motion, not about recoverability. An
+    // unknown pipeline id skips the check and fails inside `start` as before.
+    const boardPipeline = (await container.pipelineService.list(auth.workspaceId)).find(
+      (p) => p.id === pipelineId,
+    )
+    if (boardPipeline && canParkOnHuman(boardPipeline) && !scopeSatisfies(auth.scope, 'decide')) {
+      return c.json(
+        {
+          error: {
+            code: 'pipeline_requires_decide_scope',
+            message: parkingRefusalMessage(boardPipeline, {
+              cancelPath: 'POST /api/v1/tasks/:taskId/stop',
+            }),
+          },
+        },
+        403,
+      )
+    }
     // A headless key has no user/password to unlock a personal (individual-usage)
     // subscription, so refuse a task whose model resolves to such a vendor (Claude / Codex)
     // up front. The gate throws `CredentialRequiredError` (→ 428) for exactly that case; it
@@ -809,7 +835,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // Headless / system-initiated: no `usr_*` initiator. The engine's own start-time gates
     // (per-service running-task cap, dependency gate, runnability) apply as for any board start;
     // their `DomainError`s map to the right HTTP status via the shared error handler. This is the
-    // abuse backstop for board starts — the analogue of the initiative surface's active-run cap.
+    // abuse backstop for board starts — the analogue of the jobs surface's active-run cap.
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
       initiatedBy: null,
       intakeOrigin: 'public-api',
@@ -889,7 +915,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicTask(projected.block, projected.service.id), 200)
   })
 
-  // Retry a task's failed run. Mirrors the initiative/start refusals: a headless key has no
+  // Retry a task's failed run. Mirrors the jobs/start refusals: a headless key has no
   // user/password to unlock an individual-usage (personal) subscription, so refuse a run
   // whose model resolves to such a vendor up front (→ 409). Uses `personalGateForRun` (the
   // same primitive the SPA retry path uses): it resolves the individual vendors from the

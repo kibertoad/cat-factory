@@ -9,13 +9,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code CreateInitiativeJob} wire model.
+ * The {@code CreatePublicJob} wire model.
  * @param input Length 1..50000.
  * @param pipelineId Length 1..unbounded.
  * @param title May be absent entirely. Length 0..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record CreateInitiativeJob(
+public record CreatePublicJob(
     /** Length 1..50000. */
     @JsonProperty("input") String input,
 
@@ -26,13 +26,13 @@ public record CreateInitiativeJob(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("title") @Nullable String title
 ) {
 
-    /** A new builder for {@link CreateInitiativeJob}. */
+    /** A new builder for {@link CreatePublicJob}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link CreateInitiativeJob}.
+     * Fluent builder for {@link CreatePublicJob}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -60,9 +60,9 @@ public record CreateInitiativeJob(
             return this;
         }
 
-        /** Build the {@link CreateInitiativeJob}. */
-        public CreateInitiativeJob build() {
-            return new CreateInitiativeJob(input, pipelineId, title);
+        /** Build the {@link CreatePublicJob}. */
+        public CreatePublicJob build() {
+            return new CreatePublicJob(input, pipelineId, title);
         }
     }
 }
