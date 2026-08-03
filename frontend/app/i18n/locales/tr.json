@@ -6214,7 +6214,7 @@
       "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
       "decline": "Hayır, teşekkürler",
       "later": "Belki daha sonra",
-      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok.",
+      "empty": "Bu panodaki rolünüz için henüz ilk adım turu yok, ama tam katalogda yapabileceğiniz bir tur bulunabilir.",
       "browse": "Tüm eğitimleri gör"
     },
     "catalogue": {
@@ -6246,7 +6246,10 @@
       "service": "Panoda bir servis",
       "task": "Panoda bir görev",
       "waitingAnswer": "Yanıtınızı bekleyen bir çalıştırma",
-      "finishedRun": "Başarıyla tamamlanmış bir çalıştırma"
+      "finishedRun": "Başarıyla tamamlanmış bir çalıştırma",
+      "integrationsManage": "Entegrasyonları yönetme izni",
+      "settingsManage": "Çalışma alanı ayarlarını yönetme izni",
+      "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi"
     },
     "overlay": {
       "next": "İleri",
@@ -6438,6 +6441,102 @@
           "finish": {
             "title": "Teslim edildi",
             "body": "Birleştirilen iş, görevi panoda tamamlandı olarak işaretler. Bütün döngü bu: planla, çalıştır, yanıtla, gözden geçir, birleştir."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Bir model sağlayıcısı bağlayın",
+        "description": "Çalışma alanını ajanlarınızın çalıştığı motorlara yönlendirin.",
+        "steps": {
+          "intro": {
+            "title": "Ajanlar bir motora ihtiyaç duyar",
+            "body": "Her hattın her adımı bir model çağrısıdır, dolayısıyla bu çalışma alanı bir sağlayıcıya erişmedikçe hiçbir şey çalışmaz. Bu tur, o bağlantının nerede durduğunu gösteriyor."
+          },
+          "open": {
+            "title": "Model sağlayıcıları",
+            "body": "Bu, sağlayıcı merkezini açar: bu kurulumun bağlayabildiği her motor, hazır olanlar bağlı olarak işaretlenmiş halde."
+          },
+          "hub": {
+            "title": "Nasıl bağlanacağınızı seçin",
+            "body": "Tek bir geçit anahtarı geniş bir kataloğu bir kerede açar. Bir sağlayıcı anahtarı, kişisel bir abonelik ya da kendi makinenizdeki bir model çalıştırıcısı da aynı işi görür ve birkaçını birlikte tutabilirsiniz."
+          },
+          "finish": {
+            "title": "Sonra ajan başına seçin",
+            "body": "Kenar çubuğunun aynı bölümündeki model yapılandırması, her ajan türünün hangi modeli kullandığını belirler. Ucuz adımlar ucuz modellerde, zor olanlar en iyi modelinizde çalışabilir; tek bir hattı bile değiştirmeniz gerekmez."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Bir hat tasarlayın",
+        "description": "Bir görevi teslim eden ajanları birleştirin ve her görev için kaydedin.",
+        "steps": {
+          "intro": {
+            "title": "Sıra sizin elinizde",
+            "body": "Hat, bir görevi birleştirilmiş bir pull request'e dönüştüren sıralı ajan dizisidir. Hazır gelenler işin çoğunu karşılar; bu tur, kendinizinkini şekillendirebileceğiniz oluşturucuyu açıyor."
+          },
+          "open": {
+            "title": "Bir hat oluşturun",
+            "body": "Oluşturucu panonun yanında açılır, böylece akışı şekillendirirken iş göz önünde kalır."
+          },
+          "palette": {
+            "title": "Ajan paleti",
+            "body": "Bu kurulumun sunduğu tüm ajan türleri burada listelenir: işi planlayanlardan gözden geçirenlere, test edenlere ve birleştirenlere kadar. Bir adım olarak eklemek için birine tıklayın."
+          },
+          "chain": {
+            "title": "Kurduğunuz zincir",
+            "body": "Adımlar yukarıdan aşağıya çalışır ve her satırın kendi anahtarları vardır: puanı düşük kaldığında adımı geri gönderen gözden geçireni ekleyin, bir sonraki başlamadan önce onayınızı zorunlu kılın ya da adımı birden çok modelden oluşan bir panel olarak çalıştırın."
+          },
+          "save": {
+            "title": "Hattınızı kaydetmek",
+            "body": "Taslakta en az bir adım olduğunda kaydetme etkinleşir. Kaydedilen bir hat bu penceredeki kütüphaneye katılır ve bir görevin hat seçtiği her yerde sunulur; onu içindeki ajanlara göre değil yaptığı işe göre adlandırın, çünkü sonradan seçim yaparken göreceğiniz tek şey o addır."
+          },
+          "finish": {
+            "title": "Çalıştırmaya hazır",
+            "body": "Hazır bir hattı klonlamak en hızlı başlangıçtır: en yakın olanı kopyalayın, bir adımı değiştirin, kendi adınızla kaydedin. Kaydettiğiniz hiçbir şey, onunla bir görev başlatılmadıkça devreye girmez."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Ajanların uyduğu standartları belirleyin",
+        "description": "Her ajanın kodunuza dokunmadan önce okuduğu yönergeleri düzenleyin.",
+        "steps": {
+          "intro": {
+            "title": "Standartlar, talimat değil",
+            "body": "Bağlam parçaları evin kurallarıdır: her çalıştırmada ajanın istemine katılan kurallar, gözden geçirme ölçütleri ve iyi uygulamalar. Bunları düzenlemek, aynı kuralları her görevde yeniden yazmak yerine sonucu yönlendirmenin yoludur."
+          },
+          "open": {
+            "title": "Bağlam parçaları",
+            "body": "Bu, bu panonun kütüphanesini açar."
+          },
+          "library": {
+            "title": "Tek bir birleşik katalog",
+            "body": "Hazır katalog, hesabınızın parçaları ve bu panonun kendi parçaları tek bir listede birleşir; daha yakın katman kazanır. Burada bir parça yazabilir, bir belge içe aktarabilir ya da bir depo klasörünü bağlayarak zaten baktığınız dosyaların doğruluk kaynağı olarak kalmasını sağlayabilirsiniz."
+          },
+          "finish": {
+            "title": "Nereye ulaşırlar",
+            "body": "Bir servis ya da görev, ajanlarının hangi parçaları alacağını daraltabilir; pano genelindeki varsayılanlar çalışma alanı ayarlarındadır. Kod yazan ajanlara her parçanın kısaltılmış bir özeti verilir, böylece uzun bir standart görevin kendisini gölgede bırakmaz."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Zaten kullandığınız sistemleri bağlayın",
+        "description": "İzleyiciler, belgeler, sohbet ve izleme araçları ve her birinin bir çalıştırmaya kattığı şey.",
+        "steps": {
+          "intro": {
+            "title": "Çalıştırmalar daha uzağa uzanabilir",
+            "body": "Kayıtlar izleyicinizden, gereksinimler belgelerinizden, bildirimler ekibinizin sohbetine, sürüm sağlığı da izleme araçlarınızdan gelebilir. Her bağlantı isteğe bağlıdır ve her biri bir çalıştırmanın ne görebileceğini ya da ne söyleyebileceğini değiştirir."
+          },
+          "open": {
+            "title": "Entegrasyon merkezi",
+            "body": "Bu çalışma alanının bağlayabileceği tüm dış sistemlerin tek listesi, hâlihazırda bağlı olanlar işaretli."
+          },
+          "hub": {
+            "title": "İhtiyacınız olanı bağlayın",
+            "body": "Önce kaynak kontrolü gelir, çünkü hatların üzerinde çalışacağı koda ihtiyacı var. Gerisi soru ortaya çıkana kadar bekleyebilir: kayıt çekmek için bir izleyici, gereksinim bağlamı için bir belge kaynağı, bildirimler için sohbet, yayına çıkan bir sürümü izlemek için izleme araçları."
+          },
+          "finish": {
+            "title": "Sizin mi, çalışma alanının mı",
+            "body": "Bazı girdiler panoya değil size aittir; kişisel bir erişim jetonu ya da abonelik gibi, yalnızca sizin başlattığınız çalıştırmalarda kullanılır. Merkez hangisinin hangisi olduğunu işaretler, Kurulumum ise sizin olanları bir arada tutar."
           }
         }
       }

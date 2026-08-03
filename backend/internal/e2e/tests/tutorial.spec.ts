@@ -33,6 +33,12 @@ test.describe('in-app tutorial', () => {
     const prompt = page.getByTestId('tutorial-prompt')
     await expect(prompt).toBeVisible({ timeout: LIVE_TIMEOUT })
 
+    // It asks about the delivery arc only. The platform tours are startable on this board (they
+    // need a permission, not board state), so their absence here is the offer/library split
+    // doing its job rather than a gate — see the catalogue test below, which starts one.
+    await expect(prompt.getByTestId('tutorial-start-board-basics')).toBeVisible()
+    await expect(prompt.getByTestId('tutorial-start-design-pipeline')).toBeHidden()
+
     await prompt.getByTestId('tutorial-start-board-basics').click()
     await expect(prompt).toBeHidden({ timeout: LIVE_TIMEOUT })
 
@@ -100,6 +106,9 @@ test.describe('the tutorial catalogue', () => {
     await expect(catalogue.getByTestId('tutorial-catalogue-entry-board-basics')).toBeVisible()
     await expect(catalogue.getByTestId('tutorial-catalogue-start-run-task')).toBeEnabled()
     await expect(catalogue.getByTestId('tutorial-catalogue-start-review-merge')).toBeDisabled()
+    // The other half of the split the launch prompt asserts: a tour kept out of that one-question
+    // offer is fully present HERE, listed and startable, not merely gated away somewhere.
+    await expect(catalogue.getByTestId('tutorial-catalogue-start-design-pipeline')).toBeEnabled()
     await expect(
       catalogue.getByTestId('tutorial-catalogue-requirements-review-merge'),
     ).toBeVisible()

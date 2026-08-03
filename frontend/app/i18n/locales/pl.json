@@ -6202,7 +6202,7 @@
       "intro": "Interaktywne przewodniki pokazują aplikację bezpośrednio na tym ekranie: podświetlają prawdziwe elementy interfejsu i mówią, co kliknąć.",
       "decline": "Nie, dziękuję",
       "later": "Może później",
-      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników.",
+      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników na start, ale w pełnym katalogu może znaleźć się taki, który zrobisz.",
       "browse": "Zobacz wszystkie samouczki"
     },
     "catalogue": {
@@ -6234,7 +6234,10 @@
       "service": "Usługa na tablicy",
       "task": "Zadanie na tablicy",
       "waitingAnswer": "Uruchomienie czekające na twoją odpowiedź",
-      "finishedRun": "Uruchomienie zakończone powodzeniem"
+      "finishedRun": "Uruchomienie zakończone powodzeniem",
+      "integrationsManage": "Uprawnienie do zarządzania integracjami",
+      "settingsManage": "Uprawnienie do zarządzania ustawieniami obszaru roboczego",
+      "library": "Włączona w tym wdrożeniu biblioteka fragmentów kontekstu"
     },
     "overlay": {
       "next": "Dalej",
@@ -6426,6 +6429,102 @@
           "finish": {
             "title": "Dostarczone",
             "body": "Scalona praca oznacza zadanie na tablicy jako zrobione. To cała pętla: zaplanuj, uruchom, odpowiedz, przejrzyj, scal."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Podłącz dostawcę modeli",
+        "description": "Wskaż obszarowi roboczemu silniki, na których pracują twoi agenci.",
+        "steps": {
+          "intro": {
+            "title": "Agenci potrzebują silnika",
+            "body": "Każdy krok każdego potoku to wywołanie modelu, więc nic nie zadziała, dopóki ten obszar roboczy nie dosięgnie dostawcy. Ta wycieczka pokazuje, gdzie znajduje się to połączenie."
+          },
+          "open": {
+            "title": "Dostawcy modeli",
+            "body": "To otwiera centrum dostawców: wszystkie silniki, jakie może podłączyć to wdrożenie, z już gotowymi oznaczonymi jako podłączone."
+          },
+          "hub": {
+            "title": "Wybierz sposób połączenia",
+            "body": "Jeden klucz do bramki odblokowuje od razu szeroki katalog. Klucz konkretnego dostawcy, prywatny plan albo własny runner modeli na twojej maszynie działają równie dobrze, a możesz mieć kilka naraz."
+          },
+          "finish": {
+            "title": "Potem wybierz dla każdego agenta",
+            "body": "Konfiguracja modelu, w tej samej sekcji panelu bocznego, ustala, jakiego modelu używa każdy rodzaj agenta. Tanie kroki mogą działać na tanich modelach, a te trudne na twoim najlepszym, bez zmiany choćby jednego potoku."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Zaprojektuj potok",
+        "description": "Złóż agentów, którzy realizują zadanie, i zapisz potok dla dowolnego zadania.",
+        "steps": {
+          "intro": {
+            "title": "Kolejność należy do ciebie",
+            "body": "Potok to uporządkowany zestaw agentów, który zamienia zadanie w scalony pull request. Wbudowane potoki obsługują większość pracy, a ta wycieczka otwiera kreator, w którym ułożysz własny."
+          },
+          "open": {
+            "title": "Zbuduj potok",
+            "body": "Kreator otwiera się obok tablicy, więc praca pozostaje w zasięgu wzroku, kiedy układasz przebieg."
+          },
+          "palette": {
+            "title": "Paleta agentów",
+            "body": "Tu wypisane są wszystkie rodzaje agentów, jakie daje to wdrożenie, od tych planujących pracę do tych, którzy ją recenzują, testują i scalają. Kliknij jeden, żeby dodać go jako krok."
+          },
+          "chain": {
+            "title": "Łańcuch, który budujesz",
+            "body": "Kroki wykonują się z góry na dół, a każdy wiersz ma własne przełączniki: dołącz recenzenta, który cofa krok przy zbyt niskiej ocenie, wymagaj swojej zgody przed startem następnego albo uruchom krok jako panel kilku modeli."
+          },
+          "save": {
+            "title": "Zapisywanie potoku",
+            "body": "Zapis staje się dostępny, gdy szkic zawiera co najmniej jeden krok. Zapisany potok dołącza do biblioteki w tym oknie i jest proponowany wszędzie tam, gdzie zadanie wybiera potok; nazwij go od pracy, którą wykonuje, a nie od agentów w środku, bo tylko tę nazwę zobaczysz przy wyborze."
+          },
+          "finish": {
+            "title": "Gotowy do uruchomienia",
+            "body": "Sklonowanie wbudowanego potoku to najszybszy start: skopiuj najbliższy, zmień jeden krok, zapisz pod własną nazwą. Nic z tego, co zapiszesz, nie zadziała, dopóki nie uruchomisz z tym zadania."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Ustal standardy, których trzymają się agenci",
+        "description": "Zadbaj o wytyczne, które czyta każdy agent, zanim tknie twój kod.",
+        "steps": {
+          "intro": {
+            "title": "Standardy, nie polecenia",
+            "body": "Fragmenty kontekstu to zasady domu: konwencje, kryteria recenzji i dobre praktyki wplatane w prompt agenta przy każdym uruchomieniu. Dbanie o nie tutaj to sposób, żeby kierować wynikiem, zamiast powtarzać te same reguły w każdym zadaniu."
+          },
+          "open": {
+            "title": "Fragmenty kontekstu",
+            "body": "To otwiera bibliotekę dla tej tablicy."
+          },
+          "library": {
+            "title": "Jeden połączony katalog",
+            "body": "Wbudowany katalog, fragmenty twojego konta i te z tej tablicy łączą się w jedną listę, a wygrywa poziom bliższy. Możesz napisać fragment tutaj, zaimportować dokument albo podłączyć folder repozytorium, żeby pliki, które już utrzymujesz, zostały źródłem prawdy."
+          },
+          "finish": {
+            "title": "Gdzie trafiają",
+            "body": "Usługa albo zadanie może zawęzić, które fragmenty dostają ich agenci, a domyślne ustawienia dla całej tablicy są w ustawieniach obszaru roboczego. Agenci, którzy piszą kod, dostają skrócone streszczenie każdego fragmentu, żeby długi standard nie wypchnął samego zadania."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Podłącz systemy, z których już korzystasz",
+        "description": "Trackery, dokumenty, czat i monitoring, oraz co każdy z nich wnosi do uruchomienia.",
+        "steps": {
+          "intro": {
+            "title": "Uruchomienia mogą sięgać dalej",
+            "body": "Zgłoszenia mogą przychodzić z twojego trackera, wymagania z twoich dokumentów, powiadomienia na czat zespołu, a zdrowie wydania z twojego monitoringu. Każde połączenie jest opcjonalne i każde zmienia to, co uruchomienie widzi albo mówi."
+          },
+          "open": {
+            "title": "Centrum integracji",
+            "body": "Jedna lista wszystkich systemów zewnętrznych, jakie może podłączyć ten obszar roboczy, z oznaczeniem tego, co już jest podłączone."
+          },
+          "hub": {
+            "title": "Podłącz to, czego potrzebujesz",
+            "body": "Kontrola wersji jest pierwsza, bo potoki potrzebują kodu do pracy. Reszta może poczekać, aż pojawi się potrzeba: tracker, z którego pobierzesz zgłoszenia, źródło dokumentów dla kontekstu wymagań, czat do powiadomień, monitoring do obserwowania wydania po jego opublikowaniu."
+          },
+          "finish": {
+            "title": "Twoje albo obszaru roboczego",
+            "body": "Część wpisów należy do ciebie, a nie do tablicy, na przykład osobisty token dostępu albo plan, i służy tylko uruchomieniom, które sam zaczynasz. Centrum zaznacza, co jest czym, a Moja konfiguracja zbiera to, co twoje."
           }
         }
       }

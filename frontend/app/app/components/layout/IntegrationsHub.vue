@@ -364,7 +364,9 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
     :ui="{ content: 'max-w-xl' }"
   >
     <template #body>
-      <div class="space-y-5">
+      <!-- Named for the same reason `model-providers-hub` is: the tutorial tour that explains
+           what a connection adds to a run points at this list. -->
+      <div class="space-y-5" data-testid="integrations-hub">
         <p class="text-xs text-slate-400">
           {{ t('layout.integrationsHub.intro') }}
         </p>

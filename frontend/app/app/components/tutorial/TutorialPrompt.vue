@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // The tutorial launch prompt: asks once on first launch whether the user wants a guided tour,
-// listing the tours this board can actually run right now (first-party + consumer, resolved
-// against the same gates the nav uses), so it grows with the catalog rather than hard-coding
-// tours.
+// listing the first-run tours this board can actually run right now (first-party + consumer,
+// resolved against the same gates the nav uses), so it grows with the catalog rather than
+// hard-coding tours.
 //
-// It is the OFFER, not the library: the full list — including the walkthroughs this board
-// can't run yet and what would unlock them — is `TutorialCatalogue.vue`, one button away in
-// the footer and permanently reachable from the sidebar's Help section. That split is why
-// this stays a short, answerable question instead of growing into a browsing surface.
+// It is the OFFER, not the library: the full list — the platform walkthroughs that are kept out
+// of this question (`offeredAtLaunch: false`), plus the ones this board can't run yet and what
+// would unlock them — is `TutorialCatalogue.vue`, one button away in the footer and permanently
+// reachable from the sidebar's Help section. That split is why this stays a short, answerable
+// question instead of growing into a browsing surface, and why it reads `offered` rather than
+// every startable tour.
 //
 // The decision semantics live in the store: starting a tour or "No thanks" is SAVED (the
 // prompt never auto-opens again), while closing without answering defers to next launch.
@@ -15,7 +17,7 @@ import { TUTORIAL_ACTION_KEYS } from '~/utils/tutorial'
 
 const { t } = useI18n()
 const tutorial = useTutorialStore()
-const { tours } = useTutorialTours()
+const { offered } = useTutorialTours()
 // Start / Resume / Repeat is decided in one place for both surfaces — see `useTutorialLaunch`.
 const { actionFor, launch } = useTutorialLaunch()
 
@@ -41,7 +43,7 @@ const undecided = computed(() => tutorial.decision === null)
         <p class="text-sm text-slate-300">{{ t('tutorial.prompt.intro') }}</p>
         <ul class="space-y-2">
           <li
-            v-for="tour in tours"
+            v-for="tour in offered"
             :key="tour.id"
             class="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3"
           >
@@ -75,9 +77,15 @@ const undecided = computed(() => tutorial.decision === null)
             </UButton>
           </li>
         </ul>
-        <!-- Every tour gated away (e.g. a viewer on a write-only catalog): say so rather
-             than showing an unexplained empty list. -->
-        <p v-if="tours.length === 0" class="text-sm text-slate-400">
+        <!-- Every first-run tour gated away: say so rather than showing an unexplained empty
+             list. The copy points at the catalogue rather than declaring the deployment empty,
+             because with the split this state no longer implies there is nothing to take: what
+             is missing is the FIRST-RUN arc, and the catalogue-only walkthroughs gate on a
+             permission that this user may well hold. (Unreachable with the built-in catalog
+             alone, where `board-basics` requires nothing at all — but a consumer's own slot
+             filter can produce it, and "no tours exist" would be the wrong thing to say then.)
+             The footer's browse button is the way on, so it stays. -->
+        <p v-if="offered.length === 0" class="text-sm text-slate-400">
           {{ t('tutorial.prompt.empty') }}
         </p>
       </div>

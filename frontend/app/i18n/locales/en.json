@@ -6419,7 +6419,7 @@
       "intro": "Guided tours walk you through the app right on this screen: they highlight the actual controls and tell you what to click.",
       "decline": "No thanks",
       "later": "Maybe later",
-      "empty": "No tours are available for your role on this board yet.",
+      "empty": "No first-run walkthroughs are available for your role on this board yet, but the full catalogue may still hold one you can take.",
       "browse": "See all tutorials"
     },
     "catalogue": {
@@ -6460,7 +6460,10 @@
       "service": "A service on the board",
       "task": "A task on the board",
       "waitingAnswer": "A run waiting for your answer",
-      "finishedRun": "A run that finished successfully"
+      "finishedRun": "A run that finished successfully",
+      "integrationsManage": "Permission to manage integrations",
+      "settingsManage": "Permission to manage workspace settings",
+      "library": "The context fragment library enabled on this deployment"
     },
     "overlay": {
       "next": "Next",
@@ -6661,6 +6664,102 @@
           "finish": {
             "title": "Shipped",
             "body": "Merged work marks the task done on the board. That is the whole loop: plan, run, answer, review, merge."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Connect a model provider",
+        "description": "Point the workspace at the engines your agents run on.",
+        "steps": {
+          "intro": {
+            "title": "Agents need an engine",
+            "body": "Every step of every pipeline is a model call, so nothing runs until this workspace can reach a provider. This tour shows where that connection lives."
+          },
+          "open": {
+            "title": "Model providers",
+            "body": "This opens the providers hub: every engine this deployment can connect, with the ones already wired marked as connected."
+          },
+          "hub": {
+            "title": "Pick how you connect",
+            "body": "One gateway key unlocks a wide catalogue at once. A vendor key, a personal plan or a model runner on your own machine work just as well, and you can hold several at the same time."
+          },
+          "finish": {
+            "title": "Then choose per agent",
+            "body": "Model configuration, in the same sidebar section, sets which model each agent kind uses. Cheap steps can run on cheap models and the hard ones on your best, without editing a single pipeline."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Design a pipeline",
+        "description": "Assemble the agents that deliver a task, and save it for any task to run.",
+        "steps": {
+          "intro": {
+            "title": "The sequence is yours",
+            "body": "A pipeline is the ordered set of agents that turns a task into a merged pull request. The built-in ones cover most work, and this tour opens the builder where you can shape your own."
+          },
+          "open": {
+            "title": "Build a pipeline",
+            "body": "The builder opens beside the board, so the work stays in view while you shape the flow."
+          },
+          "palette": {
+            "title": "The agent palette",
+            "body": "Every agent kind this deployment ships is listed here, from the ones that plan the work to the ones that review, test and merge it. Click one to append it as a step."
+          },
+          "chain": {
+            "title": "The chain you are building",
+            "body": "Steps run top to bottom, and each row carries its own switches: attach the reviewer that sends a step back when it scores too low, require your approval before the next one starts, or run a step as a panel of several models."
+          },
+          "save": {
+            "title": "Saving your pipeline",
+            "body": "Save becomes available once the draft holds at least one step. A saved pipeline joins the library in this window and is offered wherever a task picks one; name it for the job it does rather than the agents in it, because that name is all you see when choosing later."
+          },
+          "finish": {
+            "title": "Ready to run",
+            "body": "Cloning a built-in is the quickest start: copy the closest one, change a step, save it under your own name. Nothing you save takes effect until a task is actually started with it."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Set the standards agents follow",
+        "description": "Curate the guidelines every agent reads before it touches your code.",
+        "steps": {
+          "intro": {
+            "title": "Standards, not instructions",
+            "body": "Context fragments are the house rules: conventions, review criteria and best practices folded into an agent's prompt on every run. Curating them is how you steer the output instead of restating the same rules in every task."
+          },
+          "open": {
+            "title": "Context fragments",
+            "body": "This opens the library for this board."
+          },
+          "library": {
+            "title": "One merged catalog",
+            "body": "The built-in catalog, your account's fragments and this board's own are merged into a single list, with the closer tier winning. You can write one here, import a document, or link a repository folder so files you already maintain stay the source of truth."
+          },
+          "finish": {
+            "title": "Where they land",
+            "body": "A service or a task can narrow which fragments its agents get, and the board-wide defaults live in Workspace settings. Agents that write code are given a condensed brief of each fragment, so a long standard never crowds out the task itself."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Connect the systems you already use",
+        "description": "Trackers, documents, chat and monitors, and what each one adds to a run.",
+        "steps": {
+          "intro": {
+            "title": "Runs can reach further",
+            "body": "Issues can arrive from your tracker, requirements from your documents, notifications in your team chat, and release health from your monitors. Every connection is optional, and each one changes what a run can see or say."
+          },
+          "open": {
+            "title": "The integrations hub",
+            "body": "One list of every external system this workspace can link, with whatever is connected already marked."
+          },
+          "hub": {
+            "title": "Connect what you need",
+            "body": "Source control comes first, because pipelines need code to work on. The rest can wait until the question comes up: a tracker to pull issues from, a document source for requirements context, chat for notifications, monitors to watch a release after it ships."
+          },
+          "finish": {
+            "title": "Yours or the workspace's",
+            "body": "Some entries belong to you rather than to the board, such as a personal access token or plan, and are used only for runs you start. The hub marks which is which, and My setup collects the ones that are yours."
           }
         }
       }
