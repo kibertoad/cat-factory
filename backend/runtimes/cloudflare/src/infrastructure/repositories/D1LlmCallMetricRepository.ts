@@ -8,6 +8,7 @@ import {
   type LlmCallMetricSummary,
   type LlmCallOutcomeFilter,
   type LlmCallPageQuery,
+  type LlmCallRunPageQuery,
   type LlmPromptChainTip,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -437,6 +438,32 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
          LIMIT ?`,
       )
       .bind(workspaceId, executionId, agentKind ?? null, agentKind ?? null, limit ?? -1)
+      .all<MetricRow>()
+    return (results ?? []).map(rowToMetric)
+  }
+
+  async listRunPage(workspaceId: string, query: LlmCallRunPageQuery): Promise<LlmCallMetric[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: unknown[] = [workspaceId, query.executionId]
+    if (query.agentKind != null) {
+      clauses.push('agent_kind = ?')
+      binds.push(query.agentKind)
+    }
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY, for the same reason `listPage`'s is composite.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // `SELECT *` — the bodies WHOLE, unlike `listPage`, which returns slices plus their lengths.
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM llm_call_metrics
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds)
       .all<MetricRow>()
     return (results ?? []).map(rowToMetric)
   }

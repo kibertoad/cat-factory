@@ -40,90 +40,7 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
     })
   })
 
-  describe('mothership-mode machine API', () => {
-    it('serves /internal/persistence with the registry attached + machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The endpoint is mounted by the shared controller and the session auth gate bypasses
-      // `/internal`, so an unauthenticated call reaches the controller. With the facade's
-      // repository registry attached (both runtimes must do this — the symmetric wiring), a
-      // missing/invalid machine token is rejected 403. A facade that FORGOT to attach its
-      // registry would instead 503 here, so this is the drift guard for that symmetric change.
-      const res = await call('POST', '/internal/persistence', {
-        repo: 'workspaceRepository',
-        method: 'get',
-        args: ['ws_x'],
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('serves /internal/github/installation-token with the machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The GitHub delegation endpoint is mounted by the shared controller on both facades
-      // and checks the machine token FIRST (before the "is a GitHub App wired" 503), so an
-      // unauthenticated call is a 403 everywhere — the drift guard that the endpoint exists
-      // and is machine-gated regardless of whether this facade configures a GitHub App.
-      const res = await call('POST', '/internal/github/installation-token', {
-        installationId: 1,
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('serves /internal/notifications/deliver with the machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The notification DELIVERY endpoint (a mothership-mode node asks the mothership to deliver
-      // a notification it raised through the org's external transports) is mounted by the shared
-      // controller on both facades and checks the machine token FIRST — before the "does this
-      // facade have an external channel" 503 — so an unauthenticated call is a 403 everywhere.
-      // The drift guard that the endpoint exists and is machine-gated regardless of whether this
-      // facade wires Slack.
-      const res = await call('POST', '/internal/notifications/deliver', {
-        workspaceId: 'ws_x',
-        notificationId: 'ntf_x',
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('serves /internal/telemetry/ingest with the machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The telemetry INGEST endpoint (a mothership-mode node uploading a finished run's locally
-      // captured observability so hosted teammates can read it and it outlives the node's local
-      // retention window). Mounted by the shared controller on both facades and machine-gated
-      // FIRST — before the "is this facade a mothership" 503 and before any body parsing — so an
-      // unauthenticated call is a 403 everywhere. The drift guard that the endpoint exists and
-      // cannot be probed without a token.
-      const res = await call('POST', '/internal/telemetry/ingest', {
-        workspaceId: 'ws_x',
-        executionId: 'exec_x',
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('serves /internal/foundational-services with the machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The catalog's `builtin` TIER read (a mothership-mode node resolving the deployment's
-      // estate from the mothership rather than from its own, necessarily drifting, copy). Both
-      // routes are mounted by the shared controller on both facades and machine-gated FIRST, so
-      // an unauthenticated call is a 403 everywhere — including on a deployment that registers no
-      // foundational services at all, which is exactly the case where a mistakenly ungated
-      // endpoint would look like it was working (an empty list is a legitimate answer).
-      expect((await call('GET', '/internal/foundational-services')).status).toBe(403)
-      expect(
-        (await call('POST', '/internal/foundational-services/contracts', { ids: ['file-storage'] }))
-          .status,
-      ).toBe(403)
-    })
-
-    it('serves /internal/events/subscribe/:ws with the machine-token gate active', async () => {
-      const { call } = harness.makeApp()
-      // The INBOUND real-time leg (a mothership-mode node subscribing to a workspace's stream so
-      // org activity reaches the laptop's SPA). Mounted by the shared controller on both facades
-      // and machine-gated FIRST — before the upgrade-shape check and before any realtime-transport
-      // probe — so an unauthenticated call is a 403 everywhere, whatever this facade wires. The
-      // drift guard that the endpoint exists and cannot be probed without a token.
-      const res = await call('GET', '/internal/events/subscribe/ws_x')
-      expect(res.status).toBe(403)
-    })
-  })
+  defineMachineApiGate(harness)
 
   describe('workspaces', () => {
     it('creates a seeded board and returns a full snapshot', async () => {
@@ -394,6 +311,120 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       const createdSet = new Set(createdIds)
       const listed = snapshot.body.blocks.map((b) => b.id).filter((id) => createdSet.has(id))
       expect(listed).toEqual(createdIds)
+    })
+  })
+}
+
+/**
+ * The mothership-mode `/internal/*` machine API gate assertions.
+ *
+ * Extracted from {@link defineCoreWorkspacesConformance} purely to stay inside the per-function
+ * line budget; every assertion is unchanged. It is a cohesive group in its own right: each case
+ * pins that ONE machine endpoint is mounted by the shared controller on BOTH facades and refuses
+ * an unauthenticated caller BEFORE any capability probe, which is the drift guard for the
+ * symmetric wiring each of them needs.
+ */
+function defineMachineApiGate(harness: ConformanceHarness): void {
+  describe('mothership-mode machine API', () => {
+    it('serves /internal/persistence with the registry attached + machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The endpoint is mounted by the shared controller and the session auth gate bypasses
+      // `/internal`, so an unauthenticated call reaches the controller. With the facade's
+      // repository registry attached (both runtimes must do this — the symmetric wiring), a
+      // missing/invalid machine token is rejected 403. A facade that FORGOT to attach its
+      // registry would instead 503 here, so this is the drift guard for that symmetric change.
+      const res = await call('POST', '/internal/persistence', {
+        repo: 'workspaceRepository',
+        method: 'get',
+        args: ['ws_x'],
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/github/installation-token with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The GitHub delegation endpoint is mounted by the shared controller on both facades
+      // and checks the machine token FIRST (before the "is a GitHub App wired" 503), so an
+      // unauthenticated call is a 403 everywhere — the drift guard that the endpoint exists
+      // and is machine-gated regardless of whether this facade configures a GitHub App.
+      const res = await call('POST', '/internal/github/installation-token', {
+        installationId: 1,
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/notifications/deliver with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The notification DELIVERY endpoint (a mothership-mode node asks the mothership to deliver
+      // a notification it raised through the org's external transports) is mounted by the shared
+      // controller on both facades and checks the machine token FIRST — before the "does this
+      // facade have an external channel" 503 — so an unauthenticated call is a 403 everywhere.
+      // The drift guard that the endpoint exists and is machine-gated regardless of whether this
+      // facade wires Slack.
+      const res = await call('POST', '/internal/notifications/deliver', {
+        workspaceId: 'ws_x',
+        notificationId: 'ntf_x',
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/telemetry/ingest with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The telemetry INGEST endpoint (a mothership-mode node uploading a finished run's locally
+      // captured observability so hosted teammates can read it and it outlives the node's local
+      // retention window). Mounted by the shared controller on both facades and machine-gated
+      // FIRST — before the "is this facade a mothership" 503 and before any body parsing — so an
+      // unauthenticated call is a 403 everywhere. The drift guard that the endpoint exists and
+      // cannot be probed without a token.
+      const res = await call('POST', '/internal/telemetry/ingest', {
+        workspaceId: 'ws_x',
+        executionId: 'exec_x',
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/telemetry/read with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The telemetry READ-THROUGH endpoint (the ingest's dual: a mothership-mode node serving a
+      // run whose LOCAL rows were pruned — or that another node drove entirely — from the
+      // mothership's copy). Mounted by the shared controller on both facades and machine-gated
+      // FIRST, before the "is this facade a mothership" 503, the method-table lookup and any
+      // scope resolution, so an unauthenticated call is a 403 everywhere. This is the endpoint
+      // where an ungated slip would be worst: the table is a READ surface over every account's
+      // captured prompts and responses.
+      const res = await call('POST', '/internal/telemetry/read', {
+        workspaceId: 'ws_x',
+        repo: 'llmCallMetricRepository',
+        method: 'summarizeByExecution',
+        args: ['exec_x'],
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/foundational-services with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The catalog's `builtin` TIER read (a mothership-mode node resolving the deployment's
+      // estate from the mothership rather than from its own, necessarily drifting, copy). Both
+      // routes are mounted by the shared controller on both facades and machine-gated FIRST, so
+      // an unauthenticated call is a 403 everywhere — including on a deployment that registers no
+      // foundational services at all, which is exactly the case where a mistakenly ungated
+      // endpoint would look like it was working (an empty list is a legitimate answer).
+      expect((await call('GET', '/internal/foundational-services')).status).toBe(403)
+      expect(
+        (await call('POST', '/internal/foundational-services/contracts', { ids: ['file-storage'] }))
+          .status,
+      ).toBe(403)
+    })
+
+    it('serves /internal/events/subscribe/:ws with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The INBOUND real-time leg (a mothership-mode node subscribing to a workspace's stream so
+      // org activity reaches the laptop's SPA). Mounted by the shared controller on both facades
+      // and machine-gated FIRST — before the upgrade-shape check and before any realtime-transport
+      // probe — so an unauthenticated call is a 403 everywhere, whatever this facade wires. The
+      // drift guard that the endpoint exists and cannot be probed without a token.
+      const res = await call('GET', '/internal/events/subscribe/ws_x')
+      expect(res.status).toBe(403)
     })
   })
 }

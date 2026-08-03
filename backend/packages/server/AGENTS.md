@@ -102,9 +102,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   external transports), and `telemetry/machineTelemetry.ts` +
   `modules/telemetry/TelemetryIngestController.ts` (the batch upload of a finished run's
   local-first telemetry — its own endpoint precisely because per-row remote writes are what the
-  local-first bucket exists to prevent). Each pairs a mothership-side controller + `ServerContainer`
-  seam with the client half a mothership-mode node consumes — except the telemetry ingest, which
-  needs no seam: it appends through the mothership's own `repositories` registry.
+  local-first bucket exists to prevent) beside `telemetry/machineTelemetryRead.ts` +
+  `modules/telemetry/TelemetryReadController.ts` (that upload's DUAL: a closed, per-method-bounded
+  table of run-scoped READS, so a node whose local store holds nothing for a run renders the
+  mothership's copy instead of an empty panel). Each pairs a mothership-side controller +
+  `ServerContainer` seam with the client half a mothership-mode node consumes — except the two
+  telemetry endpoints, which need no seam: both go through the mothership's own `repositories`
+  registry.
 - `github/FetchGitHubClient.ts` — the GitHub client. Its siblings implement the engine-facing
   VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
   deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,

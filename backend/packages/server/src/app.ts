@@ -47,6 +47,7 @@ import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
 import { notificationRelayController } from './modules/notifications/NotificationRelayController.js'
 import { telemetryIngestController } from './modules/telemetry/TelemetryIngestController.js'
+import { telemetryReadController } from './modules/telemetry/TelemetryReadController.js'
 import { pipelineController } from './modules/pipelines/PipelineController.js'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController.js'
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
@@ -171,6 +172,14 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // its repository registry. Mounted on both facades so either can be a mothership. See
   // docs/initiatives/mothership-mode.md.
   app.route('/', telemetryIngestController())
+  // Mothership-mode telemetry READ-THROUGH (`/internal/telemetry/read`): the dual of the ingest
+  // above. A mothership-mode node whose LOCAL store holds no rows for a run — pruned, or driven
+  // by someone else entirely — serves its observability, rollup and debug surfaces from the
+  // mothership's copy through a closed table of BOUNDED reads, rather than rendering the empty
+  // panel that reads as "this run spent nothing". Machine-token gated like the persistence RPC;
+  // 503 unless the facade attached its repository registry. Mounted on both facades so either
+  // can be a mothership. See docs/initiatives/mothership-mode.md.
+  app.route('/', telemetryReadController())
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())

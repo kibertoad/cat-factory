@@ -77,6 +77,29 @@ export interface AgentContextIndexQuery {
   cursor?: { createdAt: number; id: string }
 }
 
+/**
+ * A bounded, keyset-paginated query over ONE run's captured dispatches returning the snapshots
+ * WHOLE — the mothership-mode READ-THROUGH read (`POST /internal/telemetry/read`,
+ * docs/initiatives/mothership-mode.md, PR 5).
+ *
+ * Same shape as {@link AgentContextIndexQuery}, deliberately declared apart rather than reused:
+ * the index query's contract is that it reads no body bytes, which is exactly what this one
+ * cannot promise. A single type serving both would make "bounded" mean two different things
+ * (row count here, bytes there) at the same call site.
+ */
+export interface AgentContextRunPageQuery {
+  executionId: string
+  /** Narrow to one step's dispatches (a retried step records one snapshot per attempt). */
+  stepIndex?: number
+  /**
+   * Hard cap on rows returned. Sized SMALL by callers: one snapshot carries the whole composed
+   * prompt plus every injected context file's body, so a page of them moves megabytes.
+   */
+  limit: number
+  /** EXCLUSIVE keyset on the `(createdAt, id)` composite the ordering uses. */
+  cursor?: { createdAt: number; id: string }
+}
+
 export interface AgentContextSnapshotRepository {
   /** Append one captured dispatch context. */
   record(snapshot: AgentContextSnapshot): Promise<void>
@@ -106,6 +129,14 @@ export interface AgentContextSnapshotRepository {
     workspaceId: string,
     query: AgentContextIndexQuery,
   ): Promise<AgentContextSnapshotIndex[]>
+  /**
+   * One BOUNDED page of a run's snapshots WITH their bodies, newest first — the read the
+   * mothership-mode read-through walks. Distinct from
+   * {@link AgentContextSnapshotRepository.listByExecution}, which returns every snapshot of a
+   * run in one un-resumable response: a node fetching that over the machine API is the bulk
+   * read the telemetry bucket exists to forbid.
+   */
+  listRunPage(workspaceId: string, query: AgentContextRunPageQuery): Promise<AgentContextSnapshot[]>
   /**
    * One snapshot by id, with its bodies. Whole rather than sliced: the fragment and
    * context-file bodies live inside JSON columns, so there is no portable way to budget them

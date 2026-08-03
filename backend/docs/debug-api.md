@@ -295,5 +295,15 @@ telemetry is local-first by design, so a mothership-mode node serves every bound
 and `?phase=` predicates and the match offsets. Routing a page over a long run through the persistence proxy is
 exactly the bulk read that bucket exists to forbid. Adding a read here therefore means adding it to
 THREE stores, and classifying it `telemetry` in the drift guard's map
-(`runtimes/node/test/mothership-allowlist.spec.ts`). See
+(`runtimes/node/test/mothership-allowlist.spec.ts`).
+
+A page the node's own store cannot answer falls through to `POST /internal/telemetry/read`, the
+mothership-mode READ-THROUGH: its own machine-authed endpoint with its own CLOSED table of
+per-method-bounded reads, never the persistence proxy (whose registry resolves a repository whole,
+writes included). So a run whose local rows were pruned — or that another node drove entirely —
+still pages here, and a mothership that cannot answer produces a FAILED request rather than an
+empty page, which on this surface would read as a run that captured nothing. A run the prune took
+only PART of falls through too: the local store records what it deleted, because a surviving suffix
+answered as the whole run is the same false picture with rows in it. A read added to the three
+stores is worth adding to that table too, or it works locally and stops at the seam. See
 [`docs/initiatives/mothership-mode.md`](../../docs/initiatives/mothership-mode.md).

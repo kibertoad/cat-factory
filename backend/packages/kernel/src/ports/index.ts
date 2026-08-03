@@ -103,6 +103,7 @@ export type {
   LlmCallOutcomeFilter,
   LlmCallPageQuery,
   LlmCallRollupTotals,
+  LlmCallRunPageQuery,
   LlmPromptChainTip,
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
@@ -127,6 +128,7 @@ export type {
   AgentContextFragment,
   AgentContextIndexQuery,
   AgentContextRecorder,
+  AgentContextRunPageQuery,
   AgentContextSnapshot,
   AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
