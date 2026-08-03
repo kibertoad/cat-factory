@@ -46,6 +46,22 @@ transport + the GitHub token/client seams differ.
   when the node holds no machine token yet, which THROWS rather than resolving empty, because the
   sweep's success path advances that mark. Only rows scoped to a run sync up: an inline LLM call
   that resolved no `executionId` stays local and is eventually pruned.
+- `telemetryReadThrough.ts` — the sync DOWN, and the reason the prune is not a blind spot: it
+  decorates the three RUN-SCOPED sinks so a read the local store answers with NOTHING is served
+  from the mothership's copy over `POST /internal/telemetry/read`. It covers two runs that used to
+  render blank, neither of which reported a problem — one whose local rows were pruned, and (the
+  common case, since a mothership-mode SPA shows the whole org's board) one another node drove
+  entirely, and a third the first cut missed — one the prune took only PART of, where the store
+  answers with a suffix and nothing looks missing. Local wins where it is WHOLE rather than merely
+  non-empty (`sqlite/telemetryCoverage.ts` supplies the difference), so the capture path never pays
+  a round trip; `record`/`recordMany`/`latestChainTip`/`deleteOlderThan` are not decorated at all;
+  a page the mothership refuses for SIZE is halved and re-asked rather than failing the run; and a
+  failed fallback THROWS rather than degrading back into the empty answer it was called to replace.
+- `sqlite/telemetryCoverage.ts` — which runs the local store is still AUTHORITATIVE for. The prune
+  deletes by `created_at`, so a run straddling the cutoff keeps a subset, and a subset answered as
+  though it were the run is how a pruned run's token rollup silently reads low. Each sink records
+  what its own prune took (`telemetry_pruned_runs`) BEFORE deleting, since afterwards there is
+  nothing left to tell; the retention sweep forgets a marker once its run has no local rows left.
 - `harnessImage.ts` — `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
   boot (must stay a matched set with the backend — `CLAUDE.md` → "Releases & changesets").
 - `harnessInline.ts` — serving an enabled subscription harness ref as an INLINE call: the

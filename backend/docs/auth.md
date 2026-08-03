@@ -10,7 +10,10 @@ signed in.
 This is **user authentication** (who is signing in), which is distinct from the
 **GitHub App integration** (how a workspace acts on repos). They use different
 credentials: the App integration uses a GitHub App + installation tokens; GitHub
-login uses the GitHub **OAuth web flow**.
+login uses the GitHub **OAuth web flow**. It is also distinct from
+**machine-to-machine authentication**: an external system calls the
+key-authenticated `/api/v1` surface with a workspace-scoped public-API key, not
+a user session — see [`public-api.md`](./public-api.md).
 
 ---
 

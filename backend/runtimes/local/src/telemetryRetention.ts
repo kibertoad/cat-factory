@@ -38,6 +38,8 @@ export interface LocalTelemetryRetentionResult {
   subscriptionQuotaCycles: number
   /** Upstream-ingest high-water marks (PR 5's sync UP) whose runs' rows are long gone. */
   ingestState: number
+  /** Partial-prune markers (PR 5's read-through) for runs the store now holds nothing of. */
+  prunedRunMarkers: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -84,6 +86,13 @@ export async function sweepLocalTelemetryRetention(
     ingestState: await prune(retention.llmCallMetricsMs, now, async (c) =>
       store.ingestReader.deleteIngestStateOlderThan(c),
     ),
+    // LAST, and unconditionally: the three prunes above are what create these markers, so sweeping
+    // before them would leave a pass's own markers behind for an hour. It takes no window of its
+    // own — a marker is spent exactly when the run it names has no local rows left, at which point
+    // the read-through's emptiness gate already falls through to the mothership. Ageing it out on
+    // a duration instead would expire it while the run's SURVIVING rows were still being answered
+    // with, which is the one moment it is load-bearing.
+    prunedRunMarkers: store.coverage.forgetSettledRuns(),
   }
 }
 

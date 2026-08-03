@@ -71,6 +71,9 @@ class MemoryRepo implements LlmCallMetricRepository {
   async listPage(): Promise<LlmCallMetricPage[]> {
     return []
   }
+  async listRunPage(): Promise<LlmCallMetric[]> {
+    return []
+  }
   async get(): Promise<LlmCallMetricPage | null> {
     return null
   }
