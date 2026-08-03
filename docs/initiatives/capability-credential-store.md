@@ -117,7 +117,7 @@ which reconfigure the run instead of authenticating a call.
       the environment resolver, and the view reports what was composed. The DEFAULT is untouched
       (`true`), because whether a hosted deployment should ship store-only is a product call and
       this slice deliberately does not make it.
-      ([PR #1629](https://github.com/kibertoad/cat-factory/pull/1629).)
+      ([PR #1631](https://github.com/kibertoad/cat-factory/pull/1631).)
 
 ### Three decisions the SPA slice forced
 
