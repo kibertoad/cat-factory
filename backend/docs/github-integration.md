@@ -33,7 +33,7 @@ of installations.
 
 ## Architecture
 
-The integration follows the existing hexagonal layering — `contracts` (wire
+The integration follows the existing hexagonal layering: `contracts` (wire
 schemas) → `core` (ports + services) → `worker` (adapters + HTTP). It is **opt-in**:
 the core `github` module is assembled only when all its dependencies are present,
 which the worker wires only when a GitHub App is configured (`GITHUB_APP_ID` +
@@ -59,41 +59,41 @@ secrets). With it unconfigured, nothing about the existing system changes.
 
 ### Core ports (`backend/packages/kernel/src/ports`)
 
-- **`GitHubClient`** (`github-client.ts`) — the narrow REST surface we use
+- **`GitHubClient`** (`github-client.ts`): the narrow REST surface we use
   (installation discovery, reads, and writes incl. the Git Data API). Read methods
   return projection-shaped entities.
 - **`*ProjectionRepository` + `GitHubInstallationRepository` + `RateLimitRepository`**
-  (`github-repositories.ts`) — persistence ports for the projections, the
+  (`github-repositories.ts`): persistence ports for the projections, the
   workspace↔installation binding (with cached token), and the rate-limit ledger.
-- **`WebhookVerifier`** (`webhook-verifier.ts`) — HMAC verification of deliveries.
+- **`WebhookVerifier`** (`webhook-verifier.ts`): HMAC verification of deliveries.
 
 ### Core services (`backend/packages/integrations/src/modules/github`)
 
-- **`GitHubInstallationService`** — connect/disconnect, the workspace↔installation
+- **`GitHubInstallationService`**: connect/disconnect, the workspace↔installation
   binding, and `requireInstallation`.
-- **`GitHubSyncService`** — the _pull_ side: fetch from `GitHubClient`, persist
-  projections, advance per-repo cursors. Drives incremental resync and full backfill.
-- **`WebhookService`** — the _push_ side: apply the resource embedded in a verified
-  delivery directly to the projection (no extra API call) and handle install lifecycle.
-- **`GitHubService`** — the read/write facade for the API controller (reads from D1;
+- **`GitHubSyncService`**: the _pull_ side. Fetches from `GitHubClient`, persists
+  projections, advances per-repo cursors; drives incremental resync and full backfill.
+- **`WebhookService`**: the _push_ side. Applies the resource embedded in a verified
+  delivery directly to the projection (no extra API call) and handles install lifecycle.
+- **`GitHubService`**: the read/write facade for the API controller (reads from D1;
   writes via `GitHubClient`, then opportunistically refresh the projection).
-- **`projection.logic.ts`** — pure GitHub-JSON → projection-entity mappers, shared by
+- **`projection.logic.ts`**: pure GitHub-JSON → projection-entity mappers, shared by
   the fetch client and the webhook consumer.
 
 ### Worker adapters (`backend/runtimes/cloudflare/src/infrastructure/github`)
 
-- **`GitHubAppAuth`** — RS256 app JWT + installation-token mint/cache, all on Web Crypto.
-- **`FetchGitHubClient`** — the only code that calls `api.github.com`; auth,
+- **`GitHubAppAuth`**: RS256 app JWT + installation-token mint/cache, all on Web Crypto.
+- **`FetchGitHubClient`**: the only code that calls `api.github.com`; auth,
   rate-limit accounting, conditional requests, pagination, Git Data API writes.
-- **`WebCryptoWebhookVerifier`** — HMAC-SHA-256 verification.
-- **`state.ts`** — HMAC-signed `state` for the connect flow (CSRF / binding guard).
-- **`sync-consumer.ts`** — queue consumer + cron reconciliation orchestration.
+- **`WebCryptoWebhookVerifier`**: HMAC-SHA-256 verification.
+- **`state.ts`**: HMAC-signed `state` for the connect flow (CSRF / binding guard).
+- **`sync-consumer.ts`**: queue consumer + cron reconciliation orchestration.
 
 ---
 
 ## Authentication
 
-All crypto uses the Workers-native Web Crypto API (`crypto.subtle`) — no Octokit,
+All crypto uses the Workers-native Web Crypto API (`crypto.subtle`): no Octokit,
 no Node `crypto`.
 
 - **App JWT (RS256)** authenticates as the App, to mint tokens and read
@@ -102,7 +102,7 @@ no Node `crypto`.
   `{ iat: now-60s, exp: now+9m, iss: appId }`.
 - **Installation token** (`POST /app/installations/:id/access_tokens`, ~1h TTL) is
   cached in the `github_installations` row and reused until ~5 min before expiry; a
-  cache miss simply re-mints.
+  cache miss re-mints.
 - **Webhook signatures** are verified with HMAC-SHA-256 over the **raw** request
   body against `X-Hub-Signature-256`, before any JSON parsing.
 
@@ -120,7 +120,7 @@ no Node `crypto`.
    inline repo discovery that the cron pass then deepens.
 
 A programmatic `POST /workspaces/:id/github/connect { installationId }` exists for
-testing and headless setups. User-to-server OAuth is **not** needed — installation
+testing and headless setups. User-to-server OAuth is **not** needed: installation
 tokens cover repo read/write.
 
 ---
@@ -135,15 +135,15 @@ full reconciliation converge without losing history.
 
 Three resync mechanisms keep projections fresh:
 
-1. **Webhook-driven (push)** — the primary path. `POST /github/webhooks` verifies the
+1. **Webhook-driven (push)**: the primary path. `POST /github/webhooks` verifies the
    signature, acks fast (`202`), and enqueues the delivery; the consumer applies the
    embedded resource via `WebhookService` (no extra API call for the common events).
    Handled events: `pull_request`, `issues`, `push`, `check_run`, and the
    `installation` / `installation_repositories` lifecycle.
-2. **On-demand (pull)** — `POST /workspaces/:id/github/resync`:
+2. **On-demand (pull)**: `POST /workspaces/:id/github/resync`, either
    incremental for the whole workspace, a single repo (`repoGithubId`), or a full
    durable backfill (`full: true` → `GitHubBackfillWorkflow`).
-3. **Periodic reconciliation** — the existing `*/2 * * * *` cron also runs
+3. **Periodic reconciliation**: the existing `*/2 * * * *` cron also runs
    `reconcileStaleRepos`, enqueuing an incremental resync for any tracked repo whose
    projection is older than the staleness window (catches missed webhooks).
 

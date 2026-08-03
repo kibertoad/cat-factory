@@ -11,7 +11,7 @@ without re-deriving context.
 
 Nearly all changes live in **shared packages** (`kernel`, `server`, `integrations`,
 `orchestration`) or a single facade's config, so cross-runtime symmetry is preserved for
-free — the one exception is the machine-token revocation store (item 8), which adds a table
+free: the one exception is the machine-token revocation store (item 8), which adds a table
 and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
 
 ## Status checklist
@@ -35,7 +35,7 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   runner-pool + environment providers (and `probeConnection`) per-hop redirect revalidation +
   a streamed byte cap, AND drops the request body + strips credential headers on any
   cross-origin redirect hop (so a permitted host can't bounce the secrets to a _different_
-  public host — re-establishing the cross-origin stripping the manual redirect follower had
+  public host: re-establishing the cross-origin stripping the manual redirect follower had
   bypassed); the account-configured SearXNG URL is guarded at the write boundary
   (`AccountSettingsService.write`) and on every fetch hop (public host, http/https, no
   private/internal/metadata target).
@@ -53,20 +53,20 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   prompts.
 - **Key separation (9):** `HmacSigner` derives an independent HKDF-SHA256 subkey per token
   audience (`info = "cat-factory:token:<aud>"`), so each token class is cryptographically
-  isolated; audience-less — or unrecognised-audience — payloads fall back to the raw-secret
+  isolated; audience-less, or unrecognised-audience, payloads fall back to the raw-secret
   key (tests/legacy). Derivation is bounded to the fixed known-audience set because `verify`
   picks the key from the token's attacker-controlled claimed `aud` before the MAC check, so an
   unbounded set of junk audiences must NOT each mint+cache a subkey (CPU/memory DoS).
 
 ## Conventions & gotchas carried forward
 
-- **`redactSecrets` is O(n) — keep it that way.** Any new rule with a greedy `X*` before a
+- **`redactSecrets` is O(n): keep it that way.** Any new rule with a greedy `X*` before a
   required literal (e.g. a scheme before `://`) will backtrack quadratically on long
   repetitive input (real LLM prompts are large). Bound such quantifiers (`{0,39}`).
 - The SSRF `safeFetch` takes an injected `assertSafe` + error factory (and an optional
   `doFetch` for tests). Reuse it for any new provider that fetches an org-supplied URL;
   don't reintroduce a bare `fetch` with `redirect: 'follow'`. It also strips the body +
-  credential headers on a cross-origin redirect — a manual `redirect: 'manual'` follower must
+  credential headers on a cross-origin redirect: a manual `redirect: 'manual'` follower must
   do this by hand, since it loses the platform fetch's built-in cross-origin credential
   stripping.
 - CORS reflect-when-unset is **opt-in** on an explicitly recognised development `ENVIRONMENT`
@@ -74,16 +74,16 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   default-deny (fail safe). e2e/dev set their own `CORS_ALLOWED_ORIGINS`, so they're
   unaffected regardless.
 - Any signer/verifier that selects a key from a claimed, attacker-controlled field BEFORE the
-  MAC check must bound the derive/cache to a known finite set — else the field is an
+  MAC check must bound the derive/cache to a known finite set: else the field is an
   unbounded cache-growth + per-request-derivation DoS (`HmacSigner.keyFor`).
 
 ---
 
-## Item 8 — Machine-token revocation (todo, its own PR)
+## Item 8: Machine-token revocation (todo, its own PR)
 
 **Problem.** `mintMachineToken` issues a 30-day, `machine`-audience HMAC token for a
 mothership-mode local node (presented on `POST /internal/persistence`). `nodeId` is minted
-"for future revocation" but nothing checks it — a leaked token grants account-scoped
+"for future revocation" but nothing checks it: a leaked token grants account-scoped
 persistence RPC for up to 30 days with no kill switch.
 
 **Approach.** A revocation store keyed by `nodeId`, checked in `PersistenceController` after
@@ -92,7 +92,7 @@ persistence work. Consider also shortening `DEFAULT_MACHINE_TOKEN_TTL_MS`.
 
 **Checklist (keep the runtimes symmetric):**
 
-- [ ] `kernel`: add a `MachineTokenRevocationRepository` port — `isRevoked(nodeId)`,
+- [ ] `kernel`: add a `MachineTokenRevocationRepository` port; `isRevoked(nodeId)`,
       `revoke(nodeId, revokedAt)`, `listRevoked(before?)` (for pruning). Add to the ports index.
 - [ ] `server`: in `PersistenceController`, after `verify(...aud: machine)` succeeds, reject
       (403) when `await revocationRepo.isRevoked(payload.nodeId)`. Resolve the repo from the
@@ -103,7 +103,7 @@ persistence work. Consider also shortening `DEFAULT_MACHINE_TOKEN_TTL_MS`.
       `runtimes/cloudflare/migrations/`) + `D1MachineTokenRevocationRepository`, wired in
       `infrastructure/container.ts`.
 - [ ] Node: `revokedMachineNodes` Drizzle table in `db/schema.ts` + a generated migration
-      (`pnpm db:generate` — a fresh table won't trigger the interactive rename prompt) +
+      (`pnpm db:generate`; a fresh table won't trigger the interactive rename prompt) +
       `DrizzleMachineTokenRevocationRepository`, wired in `runtimes/node/src/container.ts`.
 - [ ] Local: mirror in `runtimes/local/src/sqlite` (the local mothership uses sqlite).
 - [ ] Retention: prune revoked rows past the max token TTL in the existing retention sweep
@@ -119,8 +119,8 @@ suite runs on Linux/macOS). Drive a mothership persistence call with a revoked n
 
 ## Deferred / considered, not taken
 
-- **Machine-token TTL shortening** — fold into item 8.
-- **Master-key rotation / versioned key envelope** for `WebCryptoSecretCipher` — a larger
+- **Machine-token TTL shortening**: fold into item 8.
+- **Master-key rotation / versioned key envelope** for `WebCryptoSecretCipher`: a larger
   operational feature (multi-key decrypt, re-seal); out of scope for this pass.
-- **Durable cross-runtime rate limiter** for password + personal-password endpoints — the
+- **Durable cross-runtime rate limiter** for password + personal-password endpoints: the
   in-isolate limiter is a documented speed bump; a durable one is a separate initiative.

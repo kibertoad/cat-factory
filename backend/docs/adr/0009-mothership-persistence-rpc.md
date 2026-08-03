@@ -9,7 +9,7 @@
 
 Local mode runs the whole product on a developer's machine. Historically that meant the
 Node facade's own Postgres + pg-boss, so a developer's work was **siloed in their laptop
-database** — no collaboration on shared org projects and durability resting on a local DB.
+database**, no collaboration on shared org projects and durability resting on a local DB.
 
 **Mothership mode** keeps local mode's fast differentiators (local per-run agent containers,
 local execution, the SPA served from localhost) but **delegates all org/durable state to a
@@ -35,25 +35,25 @@ delegated to the mothership through a **repository-level machine RPC**, not thro
 | Concern                 | Mothership mode mechanism                                                                                                                                                                                                                                                                                                                   |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SPA → backend           | One origin: the SPA only ever calls its **local node** (`NUXT_PUBLIC_API_BASE` = localhost). No knowledge of the mothership URL in the request path.                                                                                                                                                                                        |
-| Org/durable persistence | `POST /internal/persistence` — a machine-authed RPC in `@cat-factory/server` that reflects over the mothership's real repository registry. Body `{ repo, method, args }` → `{ result }`.                                                                                                                                                    |
-| Local composition       | `composeMothership` builds `createRemoteRepositoryRegistry(client)` — a `Proxy`-backed full-surface `CoreRepositories` where every entry forwards to the RPC — and `buildLocalContainer` threads it into `buildNodeContainer` with `db: undefined`. Credentials stay local (`node:sqlite`).                                                 |
+| Org/durable persistence | `POST /internal/persistence`: a machine-authed RPC in `@cat-factory/server` that reflects over the mothership's real repository registry. Body `{ repo, method, args }` → `{ result }`.                                                                                                                                                    |
+| Local composition       | `composeMothership` builds `createRemoteRepositoryRegistry(client)` (a `Proxy`-backed full-surface `CoreRepositories` where every entry forwards to the RPC) and `buildLocalContainer` threads it into `buildNodeContainer` with `db: undefined`. Credentials stay local (`node:sqlite`).                                                 |
 | Security gate           | Default-deny per-repo method **allow-list** (`REMOTE_PERSISTENCE_METHODS`) + **account scope binding** (resolve the arg's owning account, reject out-of-scope as 404) + a `machine` token audience. Admin-gated mutations and global sweeper reads are excluded.                                                                            |
 | Auth/login              | The **only** direct SPA↔mothership interaction is the OAuth login round-trip. The SPA captures the mothership session from the redirect fragment and hands it to its **own** node (`POST /local/mothership/connect`, same origin, no CORS), which exchanges it for a cached opaque machine token and mints a **local** session for the SPA. |
 | Durable execution       | Runs execute **locally** in this process via `SqliteWorkRunner` → `driveExecution` (the no-Postgres pg-boss analogue), reading/writing org state over the same remote `CoreRepositories`.                                                                                                                                                   |
 
 The SPA never issues a CRUD call to the mothership. Persistence is delegated one layer below
-the SPA — at the repository port — so the SPA, the HTTP controllers, and the local engine all
+the SPA (at the repository port) so the SPA, the HTTP controllers, and the local engine all
 operate against one composed `CoreRepositories`.
 
 ## Rationale
 
 ### 1. The engine is the primary consumer, and it lives at the repository layer
 
-The decisive fact: the RPC's main consumer is **not the SPA** — it's the local orchestration
+The decisive fact: the RPC's main consumer is **not the SPA**; it's the local orchestration
 engine. Agent runs execute in local containers here, and `driveExecution` advances a run _in
 this process_, reading and writing blocks, executions, notifications, and requirement reviews
 against `CoreRepositories` as it goes. That local↔mothership persistence path **must exist
-regardless of what the SPA does.** So the repository RPC isn't overhead added for the SPA — it
+regardless of what the SPA does.** So the repository RPC isn't overhead added for the SPA: it
 is the engine's substrate, and routing SPA CRUD through the same controllers/repositories is
 nearly free. Design (B) would not remove this path; it would add a _second, parallel_ one.
 
@@ -88,7 +88,7 @@ a per-repo-method allow-list, per-call account scoping that fails closed on any 
 and own-property-only table lookup so an attacker-supplied `__proto__`/`constructor` can't
 reach a non-spec member. The machine token scopes **accounts, not roles**, which is exactly
 why admin-gated mutations are excluded. Design (B) instead exposes the mothership's _full
-public HTTP API_ to a browser-held session cross-origin — a far larger, harder-to-reason-about
+public HTTP API_ to a browser-held session cross-origin: a far larger, harder-to-reason-about
 attack surface.
 
 ### 6. Drift-proof, uniform composition
@@ -102,18 +102,18 @@ A facade cannot silently diverge.
 
 ## Alternatives considered
 
-- **(B) Frontend targets the mothership directly for CRUD** — the alternative that prompted
+- **(B) Frontend targets the mothership directly for CRUD**: the alternative that prompted
   this ADR. Its one genuine advantage is real: it would let pure, side-effect-free CRUD hit
   the mothership's existing **session-authed public controllers**, getting service-layer
   validation for free and side-stepping the per-method `REMOTE_PERSISTENCE_METHODS`
   allow-list (the bulk of the Phase-3 grind). But it does **not** remove the repository RPC
-  (the local engine still needs org-state access — Rationale 1), so it is additive, not a
+  (the local engine still needs org-state access: Rationale 1), so it is additive, not a
   replacement; and it imposes CORS + dual sessions + dual WebSockets + a fragile
   CRUD/execution partition (Rationale 2–4). Net: more moving parts and a new class of
   desync bug, to save allow-list toil on a subset of endpoints. Rejected as the primary
   design.
 
-- **HTTP/controller-level passthrough** — a middle path: keep the SPA on one origin, but have
+- **HTTP/controller-level passthrough**: a middle path: keep the SPA on one origin, but have
   the local node forward _whole authed requests_ to the mothership for a designated set of
   pure-CRUD controllers, collapsing the gate from per-method to per-controller. This is the
   most promising way to cut allow-list toil **without** the dual-backend costs. It is not
@@ -124,7 +124,7 @@ A facade cannot silently diverge.
   the allow-list maintenance becomes painful.
 
 - **Keep a local Postgres (status quo before mothership mode).** Rejected: it is the exact
-  problem mothership mode exists to solve — siloed per-laptop state, no cross-developer
+  problem mothership mode exists to solve; siloed per-laptop state, no cross-developer
   collaboration on shared org projects, and durability resting on a laptop database.
 
 ## Consequences

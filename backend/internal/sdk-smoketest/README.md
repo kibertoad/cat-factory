@@ -16,8 +16,8 @@ DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --onl
 
 **The comparison, not the individual runs.** A per-SDK test can only assert that a client matches
 what its own author expected. Four reports compared against each other catch the class of bug this
-SDK family is most exposed to — one language decoding a field differently, mapping a refusal to
-the wrong error class, dropping a null, or paginating one page short — because those show up as a
+SDK family is most exposed to: one language decoding a field differently, mapping a refusal to
+the wrong error class, dropping a null, or paginating one page short, because those show up as a
 DISAGREEMENT even when nobody wrote down what the right answer was.
 
 It earned that immediately: the Java client's default HTTP/2 was sending an h2c upgrade on
@@ -26,7 +26,7 @@ SDKs agreeing is what made it obvious that the fault was in the client, not the 
 
 ## How it runs
 
-1. **Boot** the REAL Node facade by spawning `@cat-factory/e2e`'s `testServer.ts` — the same
+1. **Boot** the REAL Node facade by spawning `@cat-factory/e2e`'s `testServer.ts`: the same
    shared Hono app, real Postgres, real pg-boss, with only the LLM/agent side faked. Reusing the
    e2e server rather than composing a second wiring is deliberate: a smoketest against a bespoke
    composition would prove the SDKs work against _that_, and the wiring is the likeliest thing to
@@ -51,19 +51,19 @@ in isolation, where a recorded observation is comparable across four.
 
 ## The comparison
 
-Three kinds of problem, and all of them are reported (not just the first — divergences usually
+Three kinds of problem, and all of them are reported (not just the first: divergences usually
 share one root cause and reading them together is what shows it):
 
-- **`expectation`** — an absolute claim every SDK must satisfy (`notFoundStatus` is 404,
+- **`expectation`**: an absolute claim every SDK must satisfy (`notFoundStatus` is 404,
   `forbiddenCode` is `insufficient_scope`, `pagedHasDuplicates` is false). Catches all four being
   wrong the same way, which a purely comparative check cannot see.
-- **`disagreement`** — the SDKs observed different values for the same thing.
-- **`missing`** — some SDKs recorded an observation and others did not.
+- **`disagreement`**: the SDKs observed different values for the same thing.
+- **`missing`**: some SDKs recorded an observation and others did not.
 
 A small `ENVIRONMENTAL` allow-list covers observations that may legitimately differ (how far a
 run had progressed when each client looked). Every entry there is a place a real divergence would
 go unreported, so the bar for adding one is "these two SDKs cannot be expected to observe the same
-value" — never "these numbers move around".
+value", never "these numbers move around".
 
 ## Notes
 

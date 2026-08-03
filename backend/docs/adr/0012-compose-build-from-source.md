@@ -12,7 +12,7 @@ reads a repo's compose file with a single `RepoFiles.getFile` and hard-rejects a
 directive, host bind mount, relative `env_file`, or `privileged: true`, because none of those
 can resolve without the repo on disk and the stack runs on a shared host daemon.
 
-That excludes a common real-world case — an application repo whose `docker-compose.yml` builds
+That excludes a common real-world case: an application repo whose `docker-compose.yml` builds
 its images from Dockerfiles and host-mounts init/seed scripts (e.g. a .NET + Angular + SQL
 Server app). Autodetection makes it worse: it recognizes such a compose file at high confidence
 but is content-blind, so it recommends `docker-compose` and the provision then fails.
@@ -29,7 +29,7 @@ host-escaping reference stay refused in both modes.
 Key mechanics:
 
 - **Persisted, explicit `build` flag** (`ComposeEnvironmentConfig.build` /
-  `ServiceProvisioning.composeBuild`) — the provider keys purely on this flag and never
+  `ServiceProvisioning.composeBuild`): the provider keys purely on this flag and never
   inspects file content to decide to build; autodetection only _recommends_ the flag.
 - **One source of truth for the safety predicates** (`hasBuildDirective`, `bindMountSource`,
   `escapesCheckout`) shared by provisioning and autodetection.
@@ -38,21 +38,21 @@ Key mechanics:
   reaps it.
 - **Rewrite inside the checkout**, run with `--project-directory` pointed at that directory so
   relative contexts/binds/env_files resolve as authored.
-- **Split timeouts** — a longer budget for `compose build`, kept separate from the existing
+- **Split timeouts**: a longer budget for `compose build`, kept separate from the existing
   `up --wait` timeout.
 
 ## Rationale
 
 - **Host-escape is the core safety line, applied uniformly.** Build mode rejects escaping
   sources for bind mounts, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:`
-  `file:` sources alike — only in-checkout relatives are allowed. Special-casing one reference
+  `file:` sources alike: only in-checkout relatives are allowed. Special-casing one reference
   kind and forgetting the others is exactly the hole a build-mode preview env would exploit.
-- **`include:` and cross-file `extends: { file }` stay refused in both modes** — the daemon
+- **`include:` and cross-file `extends: { file }` stay refused in both modes**: the daemon
   merges those files from disk at build/up time, bypassing this backend's single-file parse and
   its guards entirely, so a merged file could smuggle a privileged container or host bind past
   validation.
 - **Runtime-bound asymmetry is deliberate.** Build registers only on the docker-family local
-  runtime (compose is already a local-only feature), not Node-plain or the Worker — there is no
+  runtime (compose is already a local-only feature), not Node-plain or the Worker: there is no
   local daemon on those facades.
 
 ## Consequences

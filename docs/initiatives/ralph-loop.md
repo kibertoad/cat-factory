@@ -1,6 +1,6 @@
 # Initiative: Ralph loop task type
 
-Tracker for the "Ralph loop" task type — a persistent retry-until-done loop whose exit
+Tracker for the "Ralph loop" task type: a persistent retry-until-done loop whose exit
 condition is a harness-run programmatic validation command. Full design + rationale:
 [`backend/docs/ralph-loop.md`](../../backend/docs/ralph-loop.md). Read that FIRST.
 
@@ -18,9 +18,9 @@ anti-runaway budget).
   discoverability sugar. The loop is driven the Tester→Fixer way (verdict on the job result →
   `RalphController` + a `ralph-verdict` `StepCompletionInterceptor`), NOT as a backend-probe
   gate, because the validation must EXECUTE in a checkout. Loop state rides `step.ralph`
-  (persisted in the run `detail` blob — no migration), which is what makes it restart-safe.
+  (persisted in the run `detail` blob, no migration), which is what makes it restart-safe.
 
-## Status (v1 — complete; v1.1 hardening — complete)
+## Status (v1: complete; v1.1 hardening: complete)
 
 | Area                                                                                  | Status | Notes                         |
 | ------------------------------------------------------------------------------------- | ------ | ----------------------------- |
@@ -37,19 +37,19 @@ anti-runaway budget).
 ## Conventions & gotchas carried forward
 
 - The iteration number the fake/engine keys off is `step.ralph.attempts + 1`, folded via the
-  `AgentContextBuilder` per dispatch — robust to how the job is re-dispatched.
+  `AgentContextBuilder` per dispatch: robust to how the job is re-dispatched.
 - `stopRunContainer` clears the run's jobs before re-dispatch (step.jobId already cleared →
   uses the run id), so a fresh iteration re-runs with the new context; `dispatchEpochFor` adds
   `step.ralph.attempts` so each iteration gets a distinct harness job id.
 - The validation command is per-task agent config (inherently repo-specific), not a merge
-  preset knob — so no schema migration. The start-time guard + the SPA both require it.
-- `ValidationError` surfaces as HTTP 422 (not 400) — the start-guard conformance test asserts 422.
+  preset knob, so no schema migration. The start-time guard + the SPA both require it.
+- `ValidationError` surfaces as HTTP 422 (not 400): the start-guard conformance test asserts 422.
 
-## v1.1 — gaps closed after v1
+## v1.1: gaps closed after v1
 
 - **A re-run silently un-looped the step.** `retry.logic.resetStep` rebuilds a step from a field
   list and so DROPPED `step.ralph`; unlike `step.test` (seeded lazily when the report arrives)
-  the loop state is needed BEFORE the dispatch — it is what puts the `validation` block on the
+  the loop state is needed BEFORE the dispatch: it is what puts the `validation` block on the
   job body. A retried or restarted ralph run therefore dispatched a plain coding pass, returned
   no verdict, never fired the interceptor, and finished as an ungated one-shot coder. The
   loop-back reset (`StepGraph.resetStepForRerun`) had the mirror-image bug: it kept the state
@@ -57,7 +57,7 @@ anti-runaway budget).
   now go through the pure `restartRalphState` (frozen config kept, counters zeroed).
 - **The validation command starved the inactivity watchdog.** `JOB_INACTIVITY_MS` (10 min) is
   tighter than the command's own watchdog (15 min) and a harness-spawned command emits no
-  activity, so any validation past 10 minutes aborted the iteration as a wedge — and made the
+  activity, so any validation past 10 minutes aborted the iteration as a wedge, and made the
   15-minute watchdog unreachable at stock settings. Now on a 30s heartbeat, like the two sibling
   harness-run phases.
 - **A third copy of the captured-command seam.** `runRalphValidation` predated
@@ -78,7 +78,7 @@ anti-runaway budget).
 - **Multi-repo ralph** (fan out over involved-service repos, like `repro-test`).
 - **CI-green as an alternative completion criterion** (vs the in-container command).
 - **Workspace-level default validation command**.
-- **Playwright e2e spec** — the loop is covered by conformance + unit tests; a live-pushed-UI
+- **Playwright e2e spec**: the loop is covered by conformance + unit tests; a live-pushed-UI
   spec is a follow-up (the `RalphLoopResultView` already carries `data-testid`s).
 
 When these are picked up (or explicitly dropped), convert this tracker into a numbered ADR

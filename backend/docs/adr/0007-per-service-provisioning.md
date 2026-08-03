@@ -1,4 +1,4 @@
-# ADR 0007: Service-owned provisioning — the what/where ÷ how split
+# ADR 0007: Service-owned provisioning; the what/where ÷ how split
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-07-01
@@ -17,9 +17,9 @@ docker-compose file, a third a custom manifest" and route each to a different en
 and it conflated two genuinely separate ownerships in one place.
 
 It also only ever applied **raw, apiserver-ready** manifests (the in-Worker REST
-adapter). A real production ephemeral environment usually needs rendering —
-Kustomize overlays, a Helm-installed controller, Gateway-API routing, a
-`secretGenerator` fed from live secrets — none of which is feasible in-process on a
+adapter). A real production ephemeral environment usually needs rendering
+(Kustomize overlays, a Helm-installed controller, Gateway-API routing, a
+`secretGenerator` fed from live secrets), none of which is feasible in-process on a
 Worker that cannot shell out.
 
 ## Decisions
@@ -36,7 +36,7 @@ Worker that cannot shell out.
   a connection (apiserver URL + token, or an HTTP management API). The same service
   config runs on whatever engine the workspace configured for that type.
 - **In local mode a user may override the workspace handler** per type (the
-  "this-machine" override) — e.g. point the kube handler at the developer's own
+  "this-machine" override), e.g. point the kube handler at the developer's own
   cluster. Enforced purely by which facade wires the per-user repo/service, not a
   runtime branch in shared code.
 
@@ -46,7 +46,7 @@ workspace/user engine config), resolves a provider via `resolveInfraHandler`
 or `acceptsManifestId`), and stands the environment up. The resolved **provision type +
 engine + provider** are recorded on the environment record and surfaced in run details.
 
-### 2. One uniform path — no local/ephemeral toggle
+### 2. One uniform path: no local/ephemeral toggle
 
 `defaultTestEnvironment` is removed. Every service gets its environment from the
 workspace's handler for its declared type; a `local-docker` handler and a remote
@@ -69,7 +69,7 @@ programmatically-registered providers (a `CustomManifestTypeRegistry`, mirroring
 For anything past raw manifests (`renderer: 'kustomize'`, or any helm release / image
 override / secret injection) the provider's `asyncProvision.buildProvisionJob` emits a
 `deploy`-kind job (`image: 'deploy'`) dispatched through the **same runner transport**
-as agent jobs, to `@cat-factory/deploy-harness` — a container carrying real
+as agent jobs, to `@cat-factory/deploy-harness`, a container carrying real
 `kubectl`/`kustomize`/`helm`. Plain raw manifests keep the synchronous in-Worker REST
 path. Real binaries (not an in-process JS renderer) are required because kustomize
 `secretGenerator` rewrites a content-hash secret-name suffix into every reference at
@@ -86,13 +86,13 @@ the native REST `status()` path.
 
 ### 5. Facade wiring keeps the runtimes symmetric
 
-- **Cloudflare** — a per-run `DeployContainer` Durable Object (the deploy-harness image),
+- **Cloudflare**: a per-run `DeployContainer` Durable Object (the deploy-harness image),
   bound as `DEPLOY_CONTAINER`; `image: 'deploy'` routes there, agent jobs stay on
   `EXEC_CONTAINER`.
-- **Node** — deploys on the workspace's self-hosted runner pool (the analogue of the
+- **Node**: deploys on the workspace's self-hosted runner pool (the analogue of the
   Worker's DeployContainer); the pool forwards the `image` dispatch option and the native
   Kubernetes runner gains an `imageDeploy` variant.
-- **Local** — a `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME=native|container`):
+- **Local**: a `NativeCliDeployTransport` (`LOCAL_DEPLOY_RUNTIME=native|container`):
   `native` shells out to the developer's own `kubectl`/`kustomize`/`helm`; `container`
   runs the deploy image per job, re-keyed so it never collides with the run's agent
   container.
@@ -104,7 +104,7 @@ checkout-free over a minimal `RepoFiles`-shaped reader and proposes a **recommen
 config: `renderer`, manifest-source path (ranking `overlays/*`), URL source from
 manifest kinds, pinned namespace, `generatorEnvFile` secret keys (from `.env.example`),
 image overrides, and helm releases as low-confidence candidates. The user always
-confirms/edits — nothing is applied silently. An LLM `explore` pass for the ambiguous
+confirms/edits; nothing is applied silently. An LLM `explore` pass for the ambiguous
 cases is a deliberate, unimplemented future option.
 
 ## Consequences
@@ -122,7 +122,7 @@ cases is a deliberate, unimplemented future option.
   `cat-factory-deploy:0.2.2`).
 - The **environment-under-test** axis (the live URL the Tester hits) stays distinct from
   running cat-factory's own agent workload on Kubernetes (the runner backend, ADR 0004 /
-  `kubernetes-topology.md`) — same apiserver client, two different jobs.
+  `kubernetes-topology.md`): same apiserver client, two different jobs.
 
 ## References
 
@@ -131,5 +131,5 @@ cases is a deliberate, unimplemented future option.
   ephemeral-environment providers); [ADR 0004](./0004-self-hosted-runner-pool.md)
   (the runner transport this reuses for deploy jobs).
 - This ADR supersedes the initiative tracker that drove the 11-slice delivery (removed
-  once complete; slice history is in the git log — search commits for "Per-service
+  once complete; slice history is in the git log; search commits for "Per-service
   provision types").

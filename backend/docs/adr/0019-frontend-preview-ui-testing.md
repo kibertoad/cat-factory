@@ -24,7 +24,7 @@ no way to distinguish a frontend/library/document repo from a backend service.
 - A **self-contained UI-test flow**: one `ui`-variant harness container builds the frontend from
   its branch, injects the bound ephemeral backend URL(s), stands up WireMock (seeded from a
   `mocks/` directory in the repo) for every other upstream, serves the built app, and runs the
-  existing `tester-ui` agent kind against it — reusing the kind, image, and result view rather
+  existing `tester-ui` agent kind against it, reusing the kind, image, and result view rather
   than inventing a parallel test surface.
 - A **browsable dev preview** as a second, local/node-only serve topology: a long-lived
   build+serve+WireMock process that stays alive after the job completes, exposed via a new
@@ -36,8 +36,8 @@ no way to distinguish a frontend/library/document repo from a backend service.
   `{{input.frontendOrigins}}` (manifest provider) / `{{frontendOrigins}}` (Kubernetes adapter), so
   an operator can fold them into the backend's CORS allow-list.
 - The local preview's host port is **pinned to the serve port** (not left ephemeral) so the
-  browsable preview origin and the injected CORS origin are the identical string — Docker-family
-  runtimes only; Apple `container` (no pinnable localhost) is excluded from the injection.
+  browsable preview origin and the injected CORS origin are the identical string (Docker-family
+  runtimes only); Apple `container` (no pinnable localhost) is excluded from the injection.
 
 ## Rationale
 
@@ -48,11 +48,11 @@ no way to distinguish a frontend/library/document repo from a backend service.
 - WireMock gives a single, consistent mocking mechanism for every non-bound upstream instead of a
   bespoke stub server per case.
 - Treating the browsable preview as a **topology capability** (not a per-run engine gate) matches
-  how the SPA actually consumes it — a static "can this runtime serve a preview" fact, not a
+  how the SPA consumes it: a static "can this runtime serve a preview" fact, not a
   per-run precondition.
 - Pinning the preview's host port to the serve port was chosen over a distinct "preview port"
   config field or an ephemeral-port fallback specifically because browsers treat `localhost` and
-  `127.0.0.1` as different CORS origins — a mismatch would silently break the exact scenario the
+  `127.0.0.1` as different CORS origins; a mismatch would silently break the exact scenario the
   preview exists to support.
 
 ## Consequences

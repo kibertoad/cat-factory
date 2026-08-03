@@ -34,7 +34,7 @@ Every method takes a `context.Context` first and honours its cancellation.
 
 ## Resource services
 
-`Initiatives`, `Services`, `Tasks`, `Pipelines`, `Notifications`, `Usage`, `Decisions`, `Debug` —
+`Initiatives`, `Services`, `Tasks`, `Pipelines`, `Notifications`, `Usage`, `Decisions`, `Debug`:
 one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
 
 ## Watching a run
@@ -99,17 +99,17 @@ work with `errors.As` / `errors.Is`.
 
 ## Pointers
 
-A field is a **pointer** when the value can be genuinely absent or genuinely null — Go's zero
+A field is a **pointer** when the value can be genuinely absent or genuinely null; Go's zero
 values cannot express either, so `Progress: 0` and "no progress reported" would otherwise be the
 same value. A plain field is one the contract guarantees is always sent.
 
 ## Local development and mocks
 
-The base URL takes any origin — `http://localhost:8787`, a fixture server, a mock — and no scheme
+The base URL takes any origin (`http://localhost:8787`, a fixture server, a mock) and no scheme
 validation is applied. Each client also accepts a custom transport, so you can intercept in-process
 instead. See [the SDK guide](../README.md#pointing-an-sdk-at-localhost-or-a-mock).
 
 ## Notes
 
-- `models_gen.go` and `operations_gen.go` are generated — see [`../README.md`](../README.md).
+- `models_gen.go` and `operations_gen.go` are generated; see [`../README.md`](../README.md).
 - API reference: [`backend/docs/public-api.md`](../../backend/docs/public-api.md).

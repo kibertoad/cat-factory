@@ -13,8 +13,8 @@ fragments**. Today that catalog is build-static code: hand-authored collections
 served read-only via `GET /prompt-fragments`, and a block selects a subset by
 storing `fragmentIds[]`. At run time `composeSystemPrompt(baseSystem,
 fragmentIds)` folds the chosen bodies into the agent system prompt
-(`core/src/modules/agents/prompt-fragments.ts`). Selection is entirely manual —
-a human picks ids on a block — and the catalog is the same for every tenant.
+(`core/src/modules/agents/prompt-fragments.ts`). Selection is entirely manual
+(a human picks ids on a block) and the catalog is the same for every tenant.
 
 The reviewer agent (the `review` phase in `standard-prompts.ts`) consumes the
 same fragments. We want the reviewer's guidance to be **smart**: a PR that only
@@ -32,7 +32,7 @@ cannot give us:
 3. **Guidelines that live in a repo.** Most teams already keep engineering
    guidelines as Markdown in a repo. We must be able to **link** such a repo,
    **preserve the source** (so the catalog entry remembers where it came from),
-   and offer a **check-for-changes / resync** action — mirroring how
+   and offer a **check-for-changes / resync** action, mirroring how
    `github_repos` projections track an upstream with a sync cursor.
 
 On top of curation, the catalog must be **selected from intelligently per run**:
@@ -52,11 +52,11 @@ Introduce a persisted `prompt_fragments` table. A resolved catalog for a
 workspace is the merge of **three tiers**, later tiers overriding earlier ones by
 the fragment's stable `id`:
 
-1. **built-in** — the existing `@cat-factory/prompt-fragments` collections,
+1. **built-in**: the existing `@cat-factory/prompt-fragments` collections,
    unchanged. They remain the source of truth for the shipped defaults and the
    seed for new accounts; they are never written to D1.
-2. **account** — fragments owned by the workspace's parent account.
-3. **workspace** — fragments owned by the workspace itself.
+2. **account**: fragments owned by the workspace's parent account.
+3. **workspace**: fragments owned by the workspace itself.
 
 Override-by-id means a workspace (or account) can **shadow** a built-in or
 account fragment by defining one with the same id, and can **suppress** one with
@@ -64,7 +64,7 @@ a tombstone row (`deleted_at`). This is the same "inherit-then-override"
 behaviour the GitHub installation/repo linkage already uses: account-bound by
 default, refined per workspace.
 
-`composeSystemPrompt` is unchanged — it still takes a base prompt and a list of
+`composeSystemPrompt` is unchanged: it still takes a base prompt and a list of
 fragment **bodies/ids**. The only change downstream is that ids now resolve
 against the merged tenant catalog (a `FragmentCatalog` resolver) instead of the
 static `FRAGMENTS_BY_ID` map. Unknown ids are still skipped so stale selections
@@ -132,7 +132,7 @@ CREATE TABLE fragment_sources (
 A source can be linked at **either tier** (account or workspace), so an account
 can publish an org-wide guidelines repo that every workspace inherits, while a
 workspace can add its own. We reuse the account-bound GitHub installation and
-the existing `GitHubClient` for reads — no new credential store (guidelines are
+the existing `GitHubClient` for reads: no new credential store (guidelines are
 read from repos the account already connected; nothing is persisted encrypted,
 unlike document-sources).
 
@@ -171,7 +171,7 @@ Add a `FragmentSelector` port. At run time, for the agent on a block (the
 reviewer especially), the selector is given:
 
 - the **resolved catalog** reduced to `{ id, title, summary, tags, appliesTo }`
-  (bodies are _not_ sent — summaries keep the call cheap), and
+  (bodies are _not_ sent; summaries keep the call cheap), and
 - the **PR context**: changed file paths + diff stat from the coder's push, the
   block type, and the agent kind.
 
@@ -196,7 +196,7 @@ whose blob sha differs from the stored `source_sha`, re-reads + re-parses it and
 **upserts** the fragment row (owner = the source's owner); files removed upstream
 are **tombstoned**; `last_synced_sha/at` are updated on success. "Check for
 changes" (`GET …/fragment-sources/:id/status`) compares the remote ref/tree sha
-to `last_synced_sha` and returns a changed-count without writing — that powers
+to `last_synced_sha` and returns a changed-count without writing; that powers
 the resync button's badge.
 
 For the first cut sync runs inline (bounded directory, a handful of small files),
@@ -211,8 +211,8 @@ Following the document-sources / GitHub precedent, the whole feature is an
 opt-in module wired in `createCore` / `selectFragmentLibraryDeps` only when
 enabled (`PROMPT_LIBRARY_ENABLED`, selector mode `PROMPT_LIBRARY_SELECTOR =
 llm|deterministic`). When off, the static `@cat-factory/prompt-fragments`
-catalog and today's manual `fragmentIds` flow are **untouched** — the resolver
-simply returns the built-in tier and selection is the existing manual list.
+catalog and today's manual `fragmentIds` flow are **untouched**: the resolver
+returns the built-in tier and selection is the existing manual list.
 
 ### 8. HTTP surface: account-scoped and workspace-scoped, resolution stays one read
 
@@ -230,7 +230,7 @@ DELETE /:scope/fragment-sources/:id             # unlink (tombstones its fragmen
 GET    /:scope/fragment-sources/:id/status      # check-for-changes (no writes)
 POST   /:scope/fragment-sources/:id/sync        # resync now
 
-# Resolution (what an agent actually sees) — supersedes today's GET /prompt-fragments
+# Resolution (what an agent actually sees) - supersedes today's GET /prompt-fragments
 GET    /workspaces/:workspaceId/prompt-fragments/resolved   # merged builtin∪account∪workspace
 ```
 
@@ -270,7 +270,7 @@ authorization gate in `app.ts`.
   scope (org-wide) or workspace scope (board-specific), with workspace overriding
   account overriding built-in by stable id.
 - Guidelines kept as Markdown in a repo are first-class: linked, source-preserved
-  (`source_id/path/sha`), and resyncable with a cheap change check — the same
+  (`source_id/path/sha`), and resyncable with a cheap change check, the same
   upstream-tracking model as `github_repos`.
 - Reviews get sharper and cheaper: only the fragments relevant to the PR's diff
   are injected, chosen by the model from summaries, with a deterministic
@@ -281,14 +281,10 @@ authorization gate in `app.ts`.
   hexagonal stack, an extra (cheap, summaries-only) model call per agent run when
   the selector is in `llm` mode, and new HTTP surface at both scopes.
 - **Open questions / deferred:** (a) no dedicated sweeper for an evicted large
-  resync — acceptable while sync is inline; (b) whether `appliesTo.agentKinds`
+  resync, acceptable while sync is inline; (b) whether `appliesTo.agentKinds`
   should hard-gate a fragment to specific agents _before_ the selector sees it,
   or only inform it; (c) fragment **versioning/pinning** for reproducible replays
   (today resolution is "latest"); (d) frontmatter `id` collisions across two
-  sources in the same tier (last-sync-wins vs. error) — proposed: namespace
+  sources in the same tier (last-sync-wins vs. error); proposed: namespace
   sourced ids as `src:<sourceId>:<path>` so they cannot collide, with the
   optional frontmatter `id` only used to _shadow_ a built-in.
-
-```
-
-```

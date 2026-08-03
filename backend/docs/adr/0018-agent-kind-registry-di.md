@@ -6,20 +6,20 @@
 
 ## Context
 
-PR #783 (bug-triage phase F) went CI-red on the Cloudflare worker shard only — Node and
+PR #783 (bug-triage phase F) went CI-red on the Cloudflare worker shard only; Node and
 local passed. Root cause: the conformance suite's custom-agent/custom-gate `describe`
 blocks call `afterEach(() => clearRegisteredAgentKinds())`, which cleared a
 **module-global** `Map` in `@cat-factory/agents`. The built-in kinds (`bug-investigator`,
 `document`, `initiative`) were registered only as a one-time import side effect and were
 never restored after a clear. On the **worker**, the entire conformance suite runs in one
 module instance, so a later test that needed a built-in kind found it gone. On **Node/local**
-each conformance file is its own module, so the pollution never surfaced — a facade
+each conformance file is its own module, so the pollution never surfaced: a facade
 asymmetry caused entirely by shared process state.
 
 The gate registry already had a band-aid for this class of bug (`registerBuiltinGates()`
 re-registers built-in gates after a clear). Extending that pattern to agent kinds would have
-fixed the symptom but left the module-global registry — and the general external-adapter
-module-identity hazard it creates — in place.
+fixed the symptom but left the module-global registry (and the general external-adapter
+module-identity hazard it creates) in place.
 
 ## Decision
 
@@ -39,7 +39,7 @@ Each facade (Cloudflare, Node, local) resolves `overrides.agentKindRegistry ??
 defaultAgentKindRegistry()`, spreads it into `CoreDependencies`, and attaches it onto the
 `ServerContainer`; local shares the same instance into `buildNodeContainer`. The free
 `registerAgentKind(s)`/`registered*`/`clearRegisteredAgentKinds` exports were removed
-outright — a deliberate breaking change (pre-1.0, no shim) — in favour of injecting a
+outright, a deliberate breaking change (pre-1.0, no shim), in favour of injecting a
 pre-loaded registry through the existing container/`start()`/`startLocal()` seams, mirroring
 how a deployment already registers backend registries by reference.
 

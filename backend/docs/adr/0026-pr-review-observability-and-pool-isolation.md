@@ -1,6 +1,6 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Fully implemented — D1–D7 all landed. NOTE: D2.1 (live slice progress) and D3
+- **Status:** Fully implemented: D1–D7 all landed. NOTE: D2.1 (live slice progress) and D3
   (subagent token usage) shipped here but did NOT deliver their signal on the parallel-subagent
   shape they targeted; that was diagnosed and fixed in [ADR 0027](./0027-pr-review-observability-followup.md),
   which supersedes their "landed" status.
@@ -29,11 +29,11 @@ The slicing itself was cheap. The `prReviewerDiffPreOp` hands the agent the chan
 
 Five distinct issues, ordered by how directly they caused the "looks broken" experience.
 
-### P1 — Misleading terminal failure text
+### P1: Misleading terminal failure text
 
 A run that clones, spawns the agent, and does 17 minutes of review, then loses its container to an eviction and fails its single recovery, is reported as "The container failed to start." That comes from the catch-all in `classifyDispatchFailure` (`backend/packages/orchestration/src/modules/execution/job.logic.ts`): any throw from the recovery re-dispatch that is not a `DomainError`, a container-eviction error, or a `DispatchError` is framed as a fresh-start failure. The message contradicts the fact that work had already happened, which is why the incident read as "reruns start broken."
 
-### P2 — "Slicing…" is inferred from the absence of a parent todo list
+### P2: "Slicing…" is inferred from the absence of a parent todo list
 
 `frontend/app/app/components/prReview/PrReviewWindow.vue` computes the slicing sub-phase as:
 
@@ -43,29 +43,29 @@ const slicing = computed(() => status.value === 'reviewing' && isSlicingChunks(s
 
 `isSlicingChunks` (in `~/utils/prReviewProgress`) means "no todo list yet." The `prReviewStatus` enum in `@cat-factory/contracts` has no `slicing` member at all (`reviewing → awaiting_selection → … → done`); "slicing" is a UI-only sub-phase derived from an empty subtask list. The design assumed the reviewer maintains a parent-level TodoWrite plan (one entry per slice) that surfaces progress. When the agent reviews via parallel subagents, it never writes that parent todo list, so `subtasks` stays empty and the UI is pinned at "Slicing…" for the whole review. The heuristic "no todo list yet ⇒ still slicing" is wrong for the subagent execution shape.
 
-### P3 — Subagent work is invisible to the harness
+### P3: Subagent work is invisible to the harness
 
 The executor-harness reconstructs progress, activity, and telemetry from the parent `claude` process's `stream-json` stdout (`streamCli` and the `onEvent` accumulator in `backend/internal/executor-harness/src/agent-runner.ts`). Subagent turns are written to separate `subagents/*.jsonl` transcript files and do not appear on the parent stream between the Task dispatch and its final tool_result. Three consequences:
 
 - **Progress:** the `TodoWrite → onProgress` path never fires for subagent-driven review, so the step's progress stays 0 (feeds P2).
-- **Heartbeat:** the backend's `agent_runs.updated_at` only advances on progress changes, so it froze at the moment the agent started (07:06:15) even though the run was alive and working. A quiet-but-alive run is indistinguishable from a wedged one from the DB. (Two layers to this: D2.1/D3 restored the harness-side liveness heartbeat and the _watchdog_; the _observable_ heartbeat — forwarding it across the transport boundary so it actually advances `updated_at` and drives an "active Ns ago" UI signal — is D3.1 below.)
+- **Heartbeat:** the backend's `agent_runs.updated_at` only advances on progress changes, so it froze at the moment the agent started (07:06:15) even though the run was alive and working. A quiet-but-alive run is indistinguishable from a wedged one from the DB. (Two layers to this: D2.1/D3 restored the harness-side liveness heartbeat and the _watchdog_; the _observable_ heartbeat (forwarding it across the transport boundary so it actually advances `updated_at` and drives an "active Ns ago" UI signal) is D3.1 below.)
 - **Telemetry:** `token_usage` for the execution stayed at 0 rows during the whole review because usage is recorded at job end, not incrementally. Cost accrued invisibly (hundreds of thousands of output tokens, larger input).
 
-### P4 — No early signal for a genuine cold-start wedge
+### P4, No early signal for a genuine cold-start wedge
 
 The inactivity watchdog (default 10 min, `JOB_INACTIVITY_MS`; `git.ts` derives its own timeout strictly below it) is the only backstop. It eventually fires, but it is a blunt, late instrument. The pre-seed of `.claude.json` (`hasCompletedOnboarding`, `bypassPermissionsModeAccepted`, `hasTrustDialogAccepted`) exists precisely because a fresh config home otherwise blocks `claude -p` on interactive onboarding with zero output. If a future CLI adds a new first-run gate the pre-seed does not cover, the symptom is identical to a healthy-but-quiet subagent run: no stdout, low CPU. Today nothing tells the two apart until the 10-minute window elapses.
 
-### P5 — Warm-pool cross-install contamination
+### P5: Warm-pool cross-install contamination
 
 `backend/runtimes/local/src/container.ts` runs a warm pool of pre-warmed executor containers, reaped and re-warmed at startup. Pooled containers bake `HARNESS_SHARED_SECRET` (and other config) in at creation. This machine runs two installs against one Docker daemon (`checkbox-cat-factory-postgres-1` on 5433 and the upstream monorepo's `local-postgres-1` on 5432). If the startup reaper adopts a container that the other install pre-warmed, its baked `HARNESS_SHARED_SECRET` will not match this backend's, and the orchestrator's authenticated calls to it fail. Whether this can happen today depends on whether pool members are namespaced per-install by a Docker label; that needs verification, and if they are not namespaced, this is a real poisoning vector.
 
-### P6 — ENCRYPTION_KEY drift is discovered lazily, per-secret, at the worst time
+### P6: ENCRYPTION_KEY drift is discovered lazily, per-secret, at the worst time
 
 The `ENCRYPTION_KEY` decrypt errors in the backend log (`A stored secret could not be decrypted … does not match the one it was sealed under`) are all on `GET /environments/connection|provider`, the frontend polling the Environments panel. They are not on the review path; the review's stored subscription token decrypted fine. This is partial, per-secret drift: specific `environment_connections` rows were sealed under a different key and persist in the Postgres volume across a key change, most likely written before the current key existed. It is not caused by any Docker image (`ENCRYPTION_KEY` is host-side and never enters a container).
 
 The root drift is operational, but the way we find out about it is a real gap. Today drift surfaces only when some request or run happens to touch a stale secret, one opaque error at a time, with no boot-time signal and no inventory of what is affected. Two structural reasons, both in `WebCryptoSecretCipher` (`backend/packages/server/src/crypto/WebCryptoSecretCipher.ts`): the `v1.<salt>.<iv>.<ciphertext>` envelope carries a version tag but **no key identifier or fingerprint**, and the per-record random HKDF salt means nothing about a record reveals which master key sealed it short of attempting an AES-GCM decrypt (the auth-tag check is the only signal). So drift can only be learned piecemeal, on access. D6 closes that; the value itself, once sealed under a lost key, is unrecoverable without restoring that key.
 
-### P7 — The browser personal-password cache is not scoped per installation
+### P7: The browser personal-password cache is not scoped per installation
 
 This is a different key from P6, and the two must not be conflated. `frontend/app/app/stores/personalSubscriptions.ts` caches the signed-in user's personal-subscription **password** in localStorage under a single global key, `CACHE_KEY = 'cf.personal-pw'`, with a 40h TTL, and rides it on gated actions as the `X-Personal-Password` header. That password unlocks the per-user personal token server-side; it is explicitly **not** the at-rest `ENCRYPTION_KEY` (the store's own comment: "the real at-rest protection is the server's system encryption, which the cache doesn't touch"). So it did not cause the P6 drift.
 
@@ -75,11 +75,11 @@ But the cache key is scoped only by browser origin. It carries no installation, 
 
 Close P1–P4 in the review/observability path, fix P5's pool hygiene, add early detection and guarded remediation for key drift (P6), and scope the browser password cache per installation (P7). Each carries its own design below. They are independent and can land separately.
 
-### D1 — Preserve run history in the failure classifier (fixes P1)
+### D1: Preserve run history in the failure classifier (fixes P1)
 
 Give `classifyDispatchFailure` (and the eviction-recovery path in `RunDispatcher`) the knowledge that the step had already reached the agent phase. When a run that has begun work fails on a recovery re-dispatch, do not use the "container failed to start" framing. Instead surface an eviction-aware message ("The review container was evicted after N minutes of work and could not be recovered") and set `failureKind: 'evicted'` rather than `'dispatch'`. Carry the last known phase (clone done, agent running) and any partial slice count in the failure detail so the board and the PR-review window can render "work was in progress" rather than "never started." `MAX_EVICTION_RECOVERIES` stays at 1; the change is purely how the terminal state is described and typed.
 
-### D2 — Make the reviewer's execution shape explicit and observable (fixes P2, P3)
+### D2: Make the reviewer's execution shape explicit and observable (fixes P2, P3)
 
 The root cause of P2 and P3 is a design assumption (sequential, in-context, TodoWrite-driven slicing) that the current CLI version does not follow (it parallelizes via subagents). Two viable directions; the ADR proposes doing both, in this order:
 
@@ -88,19 +88,19 @@ The root cause of P2 and P3 is a design assumption (sequential, in-context, Todo
 
 If we instead decide the reviewer should not parallelize, the alternative is to disallow the Task tool for the `pr-reviewer` kind so it follows the sequential, TodoWrite-driven design the prompt already describes. That restores observability trivially but loses parallelism and the clean per-slice context bound. The ADR recommends D2.1 + D2.2 over disabling subagents, because bounded per-slice context is the behaviour ADR 0023 wanted in the first place.
 
-### D3 — Capture agent token usage incrementally, including subagents (fixes P3 telemetry)
+### D3: Capture agent token usage incrementally, including subagents (fixes P3 telemetry)
 
 Record `token_usage` as the run progresses rather than only at job end, and include subagent usage. Subagent transcripts carry per-turn usage; if the harness is already tailing them for D2.1, sum their usage into the execution's telemetry as it accrues. This makes mid-run cost visible and stops a long review from looking like zero spend. Attribute subagent usage to the same execution id so billing and the agent-context snapshot are complete.
 
-### D4 — Early cold-start heartbeat check (fixes P4)
+### D4: Early cold-start heartbeat check (fixes P4)
 
 Add a short, first-output watchdog distinct from the 10-minute inactivity window: if the agent process produces zero stream bytes within a small window after spawn (for example 90–120s, tunable and safely under clone-inclusive phases), emit a structured diagnostic ("agent produced no output N s after start; possible onboarding/auth wedge") and surface it on the step. This does not kill the run; it makes a genuine wedge legible early instead of waiting out the full inactivity timeout. Pair it with a one-line assertion, after the config-home pre-seed, that the pre-seeded onboarding keys still match the installed CLI's expectations, logged when they do not.
 
-### D5 — Namespace the warm pool per install (fixes P5)
+### D5: Namespace the warm pool per install (fixes P5)
 
 Label every pooled and job container with a per-install identity (for example a stable `cat-factory.install-id` derived from the deployment's config, plus the existing kind labels), and make the startup reaper and the pool adopter filter strictly on that label. A container that lacks this install's id is never adopted; it is left alone (it belongs to another install) rather than reaped or reused. This removes the cross-install poisoning path regardless of how many installs share the Docker daemon, and it makes the reap safe to run without fear of touching a neighbour's containers. Document the label contract in `backend/docs/container-reaping.md`.
 
-### D6 — Detect, surface, and offer guarded remediation for key drift (fixes P6)
+### D6: Detect, surface, and offer guarded remediation for key drift (fixes P6)
 
 Three parts, increasing in cost. They answer the direct question "can we identify drift early, surface it, and propose dropping the stale value" with yes, yes, and yes-but-guarded.
 
@@ -112,7 +112,7 @@ Three parts, increasing in cost. They answer the direct question "can we identif
 
 Forward-looking: adopt a `v2` envelope that embeds the key fingerprint per record, so future drift is classifiable per-record without a decrypt attempt and records sealed under different historical keys are distinguishable. `v1` records carry no fingerprint and continue to need a decrypt attempt; the sweep handles both.
 
-### D7 — Scope the personal-password cache per installation and per user (fixes P7)
+### D7: Scope the personal-password cache per installation and per user (fixes P7)
 
 Key the cache by discriminators the client already has: the configured API base (`useRuntimeConfig().public.apiBase`, distinct per installation even when the frontend origin is shared) and the signed-in user id. Use `cf.personal-pw:<hash(apiBase)>:<userId>` rather than the bare `cf.personal-pw`. A cached password is then reachable only by the same installation and the same user that entered it; another installation or user on the same origin sees no cache and challenges normally. Per-workspace scoping is not needed and would only add redundant prompts: the backend applies one password to all of a run's individual-usage vendors for a user, so the password is a per-user secret, not a per-workspace one. On read, ignore or migrate any legacy bare `cf.personal-pw` value so the upgrade does not strand a still-valid entry. This is a small, self-contained frontend change and is the browser-layer instance of the same "never reuse a cached secret across installations" hygiene that D5 enforces at the container layer.
 
@@ -122,7 +122,7 @@ Key the cache by discriminators the client already has: the configured API base 
 - A genuinely wedged run surfaces within a couple of minutes instead of ten.
 - A run that dies to infrastructure after doing work reports that honestly, so "reruns start broken" stops being the reasonable read of a normal eviction.
 - Warm pools stop being a shared-daemon hazard.
-- Key drift is caught at boot (the fingerprint) with an inventory of the affected credentials in the scanned sources — currently environment + observability connections, a floor rather than a total (see the deferred note below) — instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
+- Key drift is caught at boot (the fingerprint) with an inventory of the affected credentials in the scanned sources: currently environment + observability connections, a floor rather than a total (see the deferred note below): instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
 - The browser password cache stops being reachable across installations or users on a shared origin.
 - D2.1 and D3 add a dependency on the CLI's subagent transcript layout. That format is not a stable contract, so the watcher must degrade gracefully (fall back to today's parent-stream-only behaviour) if the layout changes, and it should be covered by a harness test against a recorded transcript fixture.
 
@@ -130,43 +130,43 @@ Key the cache by discriminators the client already has: the configured API base 
 
 Independent changes; suggested order by value and blast radius:
 
-1. D1 (small, high value, no behavioural risk). **✅ Landed** — `classifyDispatchFailure` now
+1. D1 (small, high value, no behavioural risk). **✅ Landed**: `classifyDispatchFailure` now
    takes the step's run history (`evictionRecoveries`, `startedAt`, partial slice count) and
    frames a container lost after work began as `evicted` with an "evicted after N minutes of work"
    message, not "container failed to start".
 2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false
-   "slicing" claim even before D2.1 lands). **✅ D2.2 landed** — the reviewer's no-plan state is a
+   "slicing" claim even before D2.1 lands). **✅ D2.2 landed**: the reviewer's no-plan state is a
    neutral `planning` phase ("Reviewing…"), never a "slicing" assertion inferred from an empty
-   todo list. **✅ D2.1 landed** — the Claude Code runner derives per-slice progress from the
+   todo list. **✅ D2.1 landed**: the Claude Code runner derives per-slice progress from the
    parent stream's `Task` dispatches + their tool_results (both DO appear there), so a
    subagent-driven review advances instead of pinning at 0%, and a best-effort watcher tails the
    CLI's `subagents/*.jsonl` transcripts (`subagents.ts`) for the heartbeat + usage. Degrades to
    parent-stream-only behaviour if the transcript layout changes.
 3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation
-   cache scoping that also closes a cross-install credential-reuse path). **✅ D7 landed** — the
+   cache scoping that also closes a cross-install credential-reuse path). **✅ D7 landed**: the
    personal-password cache is keyed `cf.personal-pw:<hash(apiBase)>:<userId>` and the retired
-   global key is purged on sight. **✅ D6.1 landed** — a non-secret
+   global key is purged on sight. **✅ D6.1 landed**: a non-secret
    `HKDF(masterKey, "cat-factory:key-fingerprint")[:8]` fingerprint is persisted once in a new
    `key_fingerprint` singleton (D1 + Drizzle, mirrored per runtime) and recompared on every boot
    (Node right after `migrate()`; the Worker on its daily cron), logging a definitive drift signal
    before any request touches a stale secret. `SecretCipher.decrypt` now also throws a typed
-   `SecretDecryptError` with a `reason: 'key-mismatch' | 'corrupt'` discriminant — the D6.2
+   `SecretDecryptError` with a `reason: 'key-mismatch' | 'corrupt'` discriminant: the D6.2
    foundation, so a sweep can bucket a failure without parsing message text.
-4. D5 (prevents a class of local-mode failures on multi-install machines). **✅ Landed** — every
+4. D5 (prevents a class of local-mode failures on multi-install machines). **✅ Landed**: every
    managed local container is namespaced by a secret-derived install id (Docker label /
    Apple name prefix) and the reaper/adopter/enumerations filter strictly on it; see the
    label contract in `backend/docs/container-reaping.md`.
-5. D3 and D4 (telemetry and early-wedge diagnostics). **✅ Landed** — D3: the subagent-transcript
+5. D3 and D4 (telemetry and early-wedge diagnostics). **✅ Landed**: D3: the subagent-transcript
    watcher (D2.1) sums each subagent turn's token usage into the run's `usage` + per-call
    telemetry and feeds the heartbeat, so a long parallel review no longer reports ~0 tokens and
    no longer looks wedged; subagent cost lands in `llm_call_metrics` via the existing terminal
    recorder. D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s) records a
-   structured diagnostic — without killing the run — when a job produces no output early, plus a
+   structured diagnostic (without killing the run) when a job produces no output early, plus a
    one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
    **✅ D4.1 landed (the diagnostic reaches the run).** D4 recorded the cold-start diagnostic but
    only the container log and the `GET /jobs/{id}` view could see it, so on the failure it was
-   meant to explain the operator got a bare exit code. `describeFailure` now folds it — plus a
-   measurement of how long the run had been silent — into the failure `detail`, which the backend
+   meant to explain the operator got a bare exit code. `describeFailure` now folds it (plus a
+   measurement of how long the run had been silent) into the failure `detail`, which the backend
    already carries onto the step, so no new transport field was needed; the still-RUNNING view
    (the early warning proper) is tracked in
    [`observability-logging-gaps.md`](../../../docs/initiatives/observability-logging-gaps.md)
@@ -178,7 +178,7 @@ Independent changes; suggested order by value and blast radius:
    carries `heartbeatAt` (Cloudflare/local cast the harness view verbatim; the runner pool maps an
    optional `heartbeatPath`), `pollJob` forwards it as the running `AgentJobUpdate.lastActivityAt`,
    and the engine folds it onto the step's `lastActivityAt` **throttled** (`shouldPersistActivity`,
-   a 20s window well under the 5-min sweeper lease) — so a live-but-quiet run keeps its `updated_at`
+   a 20s window well under the 5-min sweeper lease), so a live-but-quiet run keeps its `updated_at`
    fresh while a wedged run's frozen heartbeat correctly lets it go stale. The field rides the step
    JSON, so both runtimes persist it with no migration; the SPA surfaces "active Ns ago" in
    `StepRunMeta` (and thus the PR-review window) distinct from the elapsed clock.
@@ -186,27 +186,27 @@ Independent changes; suggested order by value and blast radius:
    drop/re-seal remediation). **✅ Landed.** Both ride the `SealedSecretInventory` kernel port
    (`listSealed` + `drop`), implemented per runtime (D1 + Drizzle, asserted by
    `defineSealedSecretInventorySuite`) over the two sources the incident named
-   (`environment_connections`, `observability_connections`) — extending it to another source is a
+   (`environment_connections`, `observability_connections`): extending it to another source is a
    change to the inventory pair, never the sweep. **D6.2:** `sweepKeyDriftAndRaise` (runtime-neutral,
    in `@cat-factory/server`) attempts a decrypt of every sealed secret, buckets each via the typed
    `SecretDecryptError` `reason`, and raises ONE `key_drift` notification per affected workspace
    (listing the affected credentials by source / id / label / reason / seal time, NEVER the value;
    it de-dupes on the affected set and auto-clears once a workspace recovers). It runs at Node boot
    (after the container is built) and on the Worker's daily cron, next to the D6.1 fingerprint
-   check. **D6.3:** dropping is explicit + per-secret — the `key_drift` card's action drops every
+   check. **D6.3:** dropping is explicit + per-secret: the `key_drift` card's action drops every
    credential it lists ("drop all stale"), the `pnpm --filter @cat-factory/node-server
 key-drift:drop --source … --id …` operator CLI drops one, and both route through
    `inventory.drop` (env connection → soft-delete tombstone; observability → row delete, since the
    sealed columns are NOT NULL and can't be nulled in place). The value stays unrecoverable, so the
-   card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead — the drop
+   card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead: the drop
    is never automatic.
 
-   **Deferred — inventory coverage is intentionally partial.** The sweep currently scans only the
+   **Deferred: inventory coverage is intentionally partial.** The sweep currently scans only the
    two sources the incident named (`environment_connections`, `observability_connections`), not the
    full set of ~15 sealed-secret domains (`provider-api-keys`, `provider-subscriptions`,
    `personal-subscriptions`, `package-registries`, `incident-enrichment`, `test-secrets`,
    `user-secret`, `runners`, `slack`, …). Consequently the surfaced card's count is a FLOOR, not a
-   total — its copy reads "at least N" and warns that other credential types may be affected by the
+   total: its copy reads "at least N" and warns that other credential types may be affected by the
    same key change, so an operator doesn't read it as an exhaustive inventory. This is safe because
    the D6.1 boot fingerprint still detects the key change globally; the per-credential inventory is
    the incremental part. Extending coverage is a change to the `SealedSecretInventory` pair (its two

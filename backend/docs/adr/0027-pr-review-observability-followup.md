@@ -1,13 +1,13 @@
-# ADR 0027: PR-review observability, follow-up — D2.1 and D3 don't work for the parallel-subagent shape
+# ADR 0027: PR-review observability, follow-up; D2.1 and D3 don't work for the parallel-subagent shape
 
-- **Status:** Accepted — every confirmed defect (A–D) fixed (see the **Landed** note under each fix)
+- **Status:** Accepted: every confirmed defect (A–D) fixed (see the **Landed** note under each fix)
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/executor-harness`, `@cat-factory/agents`, `@cat-factory/orchestration`)
 - **Relates to:** ADR 0026 (marks D2.1/D3/D4 "landed"), ADR 0023 (PR deep review)
 
 ## Context
 
-ADR 0026 records D2.1 (live per-slice progress off the parent stream) and D3 (sum subagent token usage) as "Fully implemented — landed." A second `pr-reviewer` run against the same PR (`checkboxsurvey/Checkbox-Application#4558`, 518 files) shows neither works for the shape they were written for.
+ADR 0026 records D2.1 (live per-slice progress off the parent stream) and D3 (sum subagent token usage) as "Fully implemented: landed." A second `pr-reviewer` run against the same PR (`checkboxsurvey/Checkbox-Application#4558`, 518 files) shows neither works for the shape they were written for.
 
 The run is `exec_1c129edbc1754247896a3755`, pipeline `pl_review`, executor image `1.50.10` (D2.1/D3/D4 all present, per the `@cat-factory/executor-harness` changelog for 1.50.8), backend `@cat-factory/server@0.140.5` + `@cat-factory/orchestration@0.131.5` (both carry the D3.1 heartbeat forwarding). I investigated it live in local mode (Docker executor, Postgres on 5433) and after it parked at `awaiting_selection`.
 
@@ -24,7 +24,7 @@ Healthy, and the same parallel shape ADR 0026 described. Timeline from the execu
 
 The slice/finding data is real and correct. The problem is purely observability, as in 0026.
 
-## Defect A — subagent token usage is never counted: the watcher watches a directory that never exists
+## Defect A: subagent token usage is never counted: the watcher watches a directory that never exists
 
 `token_usage` for the execution holds one row: 155,651 input / 9,135 output, `billing=subscription`. That is the parent agent's terminal `result` usage only. The four `Review … slice` subagents (272-514 KB of transcript each) contributed nothing, which is the exact failure D3 was written to fix.
 
@@ -60,13 +60,13 @@ The D3 heartbeat still advanced, but only incidentally: `onActivity` also fires 
 Point the watcher at the real location. The session UUID isn't known before the CLI creates it, so either:
 
 - watch `<configHome>/projects` recursively and treat any `**/subagents/*.jsonl` as a subagent transcript, or
-- resolve the project/session directory first — it's the same subtree `retainSessionTranscripts` already walks — and watch `<that>/subagents`.
+- resolve the project/session directory first (it's the same subtree `retainSessionTranscripts` already walks) and watch `<that>/subagents`.
 
 Either way, add a harness test against a recorded transcript fixture laid out the way the CLI actually writes it. ADR 0026's own consequences section asked for exactly this fixture test ("covered by a harness test against a recorded transcript fixture"); it would have caught this.
 
-**Landed.** Took the first option: `startSubagentWatcher` now takes the `projects` root and `findSubagentTranscripts` walks it, collecting any `*.jsonl` under a `subagents/` directory while EXCLUDING the sibling parent session transcript (so the parent's usage — already totalled by the `result` event — is never double-counted). `agent-runner.ts` watches `join(configHome, 'projects')`. `test/subagents.test.ts` lays the `projects/<encoded-cwd>/<session-uuid>/subagents/` tree out exactly as the CLI writes it and asserts the parent transcript is skipped; `test/agent-runner.test.ts`'s fake `claude` was writing to the old (never-created) `<configHome>/subagents` — it now writes to the real per-session path, so the suite exercises the fix instead of the bug.
+**Landed.** Took the first option: `startSubagentWatcher` now takes the `projects` root and `findSubagentTranscripts` walks it, collecting any `*.jsonl` under a `subagents/` directory while EXCLUDING the sibling parent session transcript (so the parent's usage (already totalled by the `result` event) is never double-counted). `agent-runner.ts` watches `join(configHome, 'projects')`. `test/subagents.test.ts` lays the `projects/<encoded-cwd>/<session-uuid>/subagents/` tree out exactly as the CLI writes it and asserts the parent transcript is skipped; `test/agent-runner.test.ts`'s fake `claude` was writing to the old (never-created) `<configHome>/subagents`: it now writes to the real per-session path, so the suite exercises the fix instead of the bug.
 
-## Defect B — no live slice progress: the todo-plan source and the D2.1 fallback cancel out
+## Defect B, no live slice progress: the todo-plan source and the D2.1 fallback cancel out
 
 `progress` stayed 0 for the whole review and the deep-review window showed no slice breakdown until the findings landed. The end-to-end wiring is intact (verified `subtasks: view.progress` and `lastActivityAt: view.heartbeatAt` in the installed `server@0.140.5`, and `applySubtaskProgress` in the installed orchestration), so this is not a missing-code or version problem. Two design facts combine to produce zero live signal.
 
@@ -99,19 +99,19 @@ Any of, roughly in order of value:
 - **Count in-flight `Task` dispatches as signal.** Surface "N slices in progress" rather than a 0% bar, since a parallel review has no completed slices until the end.
 - **Reconcile the prompt with reality.** If the CLI parallelizes regardless, either tell it to update the parent todo as each subagent returns, or drop the sequential-todo instruction and rely on the tracker. The prompt currently claims "keeping this todo list up to date is what surfaces review progress," which is not what happens.
 
-**Landed.** Took the first two together. The `sawTodoPlan` gate is gone; a new pure `pickProgress(todo, slice)` reconciles the parent plan and the slice tracker on every update, preferring whichever is further along — more `completed`, then more `inProgress` (so live in-flight slices beat an all-pending, once-written plan), then more `total`, else the plan. So the parallel shape now surfaces "N in progress → N/N" off the subagent dispatches, and a genuinely sequential run still rides its advancing plan. The pr-reviewer prompt's progress sentence is corrected to say progress comes from the task list AND from parallel subagent dispatches (the prompt is unversioned, so no version bump). `pickProgress` is unit-tested for both shapes and the tie-breaks.
+**Landed.** Took the first two together. The `sawTodoPlan` gate is gone; a new pure `pickProgress(todo, slice)` reconciles the parent plan and the slice tracker on every update, preferring whichever is further along: more `completed`, then more `inProgress` (so live in-flight slices beat an all-pending, once-written plan), then more `total`, else the plan. So the parallel shape now surfaces "N in progress → N/N" off the subagent dispatches, and a genuinely sequential run still rides its advancing plan. The pr-reviewer prompt's progress sentence is corrected to say progress comes from the task list AND from parallel subagent dispatches (the prompt is unversioned, so no version bump). `pickProgress` is unit-tested for both shapes and the tie-breaks.
 
-### Defect C — the tool names this ADR was written against are not the ones the CLI emits
+### Defect C: the tool names this ADR was written against are not the ones the CLI emits
 
-**Found 2026-07-23** on run `exec_a7d46b8` (executor image `1.52.0`, CLI `2.1.207`). Defect B's fix had landed and progress still read 0% for the whole run: `agent_runs.subtasks` was `NULL` and the step's `subtasks` key was never set — while the run had in fact fanned out across 5 slice subagents.
+**Found 2026-07-23** on run `exec_a7d46b8` (executor image `1.52.0`, CLI `2.1.207`). Defect B's fix had landed and progress still read 0% for the whole run: `agent_runs.subtasks` was `NULL` and the step's `subtasks` key was never set, while the run had in fact fanned out across 5 slice subagents.
 
-Both progress signals were matching tool names the CLI does not emit. The CLI ships the authoritative set as `sdk-tools.d.ts`, and its `ToolInputSchemas` union contains **no `TaskInput`**: subagent dispatch is `AgentInput` (the same `description` / `prompt` / `subagent_type` shape, plus newer fields). The plan, meanwhile, arrived as the incremental `TaskCreate` / `TaskUpdate` pair rather than `TodoWrite`. The observed parent stream carried `Agent` ×5, `TaskCreate` ×6, `TaskUpdate` ×6, `TaskGet` ×1 — and zero `Task`, zero `TodoWrite`. Statements above that refer to `Task` dispatches describe what are now `Agent` dispatches.
+Both progress signals were matching tool names the CLI does not emit. The CLI ships the authoritative set as `sdk-tools.d.ts`, and its `ToolInputSchemas` union contains **no `TaskInput`**: subagent dispatch is `AgentInput` (the same `description` / `prompt` / `subagent_type` shape, plus newer fields). The plan, meanwhile, arrived as the incremental `TaskCreate` / `TaskUpdate` pair rather than `TodoWrite`. The observed parent stream carried `Agent` ×5, `TaskCreate` ×6, `TaskUpdate` ×6, `TaskGet` ×1, and zero `Task`, zero `TodoWrite`. Statements above that refer to `Task` dispatches describe what are now `Agent` dispatches.
 
 Note the failure mode: call telemetry looked healthy throughout, because it derives from the `assistant` events' `usage` envelopes and the subagent transcript tailer, both of which are tool-name-agnostic. Only the two name-matched signals went dark, which is why this survived Defect B's fix unnoticed.
 
-**Landed.** `createSliceTracker` matches both `Agent` and the legacy `Task`. The plan side moved to a dedicated `progress.ts`, which reads `TodoWrite` **and** `TaskCreate`/`TaskUpdate` — the latter needs the tool RESULTS too, since `TaskCreate`'s input carries no id (the CLI mints it, returned as `TaskCreateOutput` / the rendered `"Task #N created successfully: …"` result string). `pickProgress` reconciles all three views. Both vocabularies remain live in the shipped schema, so the harness reads both rather than betting on one, and every matcher degrades to "no signal from this source" rather than throwing — the tool vocabulary is not a stable contract, and a future rename must cost signal, not the run.
+**Landed.** `createSliceTracker` matches both `Agent` and the legacy `Task`. The plan side moved to a dedicated `progress.ts`, which reads `TodoWrite` **and** `TaskCreate`/`TaskUpdate`: the latter needs the tool RESULTS too, since `TaskCreate`'s input carries no id (the CLI mints it, returned as `TaskCreateOutput` / the rendered `"Task #N created successfully: …"` result string). `pickProgress` reconciles all three views. Both vocabularies remain live in the shipped schema, so the harness reads both rather than betting on one, and every matcher degrades to "no signal from this source" rather than throwing: the tool vocabulary is not a stable contract, and a future rename must cost signal, not the run.
 
-### Defect D — the reconciliation was an either/or, so the rendered slice list COLLAPSED
+### Defect D: the reconciliation was an either/or, so the rendered slice list COLLAPSED
 
 **Found 2026-07-28**, operator-reported. Defect B's and C's fixes had landed and the deep-review
 window did show a live slice list, but it behaved backwards: while the review was planning, every
@@ -124,8 +124,8 @@ was in flight the callout disappeared entirely and the window looked like it had
 
 `pickProgress` treats the parent plan and the slice tracker as competing answers to the same
 question and returns the further-along one. They are not competing answers; they are two halves of
-one. The plan is the INVENTORY — it names every slice, and it is the ONLY place a not-yet-dispatched
-slice is named at all — while the dispatch view is the live STATUS, and it knows nothing about a
+one. The plan is the INVENTORY (it names every slice, and it is the ONLY place a not-yet-dispatched
+slice is named at all) while the dispatch view is the live STATUS, and it knows nothing about a
 slice until the `Agent` call that starts it. So `completed: 1` on the dispatch view beats a plan
 sitting at `completed: 0`, the picker switches views, and `total` drops from the plan's size to the
 number dispatched so far. Every queued slice is dropped from the render along with it.
@@ -137,7 +137,7 @@ for the COUNTS (the plan really is stale) and the wrong one for the ITEMS.
 choosing between them: paired by normalised slice name (exact, then containment), then positionally
 into the leftover pending entries in dispatch order, with an unpairable dispatch APPENDED rather
 than dropped. So the list can only grow, a status can only advance, and the counts still come from
-whichever half actually moved. `pickProgress` survives for what it is genuinely good at — resolving
+whichever half actually moved. `pickProgress` survives for what it is genuinely good at: resolving
 the two plan VOCABULARIES, where a run really does use one or the other. The pr-reviewer prompt now
 also names each dispatch after its task entry, so the pairing is deterministic by construction
 rather than by heuristic, and marks each entry in progress on dispatch / completed on return.
@@ -147,7 +147,7 @@ Two things travelled with the fix, both of which the collapse had been masking:
 - **The fan-out is now bounded to 5 concurrent slice subagents** (`MAX_PARALLEL_SLICE_SUBAGENTS`).
   It was unbounded, and a large PR slices into dozens: each is a concurrent conversation on the same
   account, so a full-width wave buys provider rate-limiting rather than speed, and every slice's
-  findings land in one burst at the end. This is a prompt-level budget — the CLI owns tool dispatch,
+  findings land in one burst at the end. This is a prompt-level budget: the CLI owns tool dispatch,
   so the harness can observe the in-flight count but cannot refuse a call. An over-wide wave is a
   prompt-adherence problem, not a broken guard.
 - **The "Reviewing now" callout stays mounted for the whole reviewing phase**, showing an idle line
@@ -159,12 +159,12 @@ Two things travelled with the fix, both of which the collapse had been masking:
 - ADR 0026's "landed" status for D2.1 and D3 is wrong for the parallel-subagent shape those items name. The correct status is: the code shipped, the wiring is intact, and neither delivers its signal on the shape it targeted. This ADR supersedes those two status claims; D1, D4, D5, D6, D7 are unaffected.
 - Defect A undercounts cost on every subscription-billed subagent-parallel run, not just pr-review. Any kind that fans out via `Task` has the same blind spot.
 - Both fixes are small and independent. Defect A is a path change plus a fixture test. Defect B is a change to the fallback gate and/or the prompt.
-- The live signal these defects are about is only half the problem. Even with slice progress rendering correctly, the review's WORK stayed in container memory until the terminal structured output, so anything that killed the run first discarded all of it — and a long silent aggregation turn produces no stream events at all, so `lastActivityAt` freezes and such a run reads as wedged. Both are addressed by the per-slice capture channel and the manual resume recorded in [ADR 0023](./0023-pr-deep-review.md#durable-per-slice-capture--a-manual-resume-follow-up); the frozen heartbeat itself is not, for the reason given there.
+- The live signal these defects are about is only half the problem. Even with slice progress rendering correctly, the review's WORK stayed in container memory until the terminal structured output, so anything that killed the run first discarded all of it, and a long silent aggregation turn produces no stream events at all, so `lastActivityAt` freezes and such a run reads as wedged. Both are addressed by the per-slice capture channel and the manual resume recorded in [ADR 0023](./0023-pr-deep-review.md#durable-per-slice-capture--a-manual-resume-follow-up); the frozen heartbeat itself is not, for the reason given there.
 
 ## Appendix: evidence
 
 - Run `exec_1c129edbc1754247896a3755`, pipeline `pl_review`, `pr-reviewer`, model `anthropic:claude-opus-4-8`, executor image `1.50.10`.
-- `token_usage`: one row, `agent_kind=pr-reviewer`, 155,651 input / 9,135 output, `billing=subscription` — parent only.
+- `token_usage`: one row, `agent_kind=pr-reviewer`, 155,651 input / 9,135 output, `billing=subscription`; parent only.
 - Recovered subagent transcripts under `…/projects/-tmp-agent-explore-Z0Fhxx/aeb3854a-…/subagents/`: four files, 272-514 KB, last written 18:59-19:01.
 - Watcher target `<configHome>/subagents` (`agent-runner.ts:454`) vs actual `<configHome>/projects/<cwd>/<session>/subagents` (`transcript-retention.ts:61`).
 - `sawTodoPlan` gate: `agent-runner.ts:334-339`, set at `356-360`, read at `336`.
