@@ -4403,6 +4403,10 @@
     "unknownBadge": "Fuori catalogo",
     "storedCount": "{outcome}, 1 artefatto | {outcome}, {count} artefatti",
     "state": {
+      "notStarted": {
+        "summary": "Non ancora avviato",
+        "detail": "Questo passo non è ancora iniziato. Quando verrà eseguito, archivierà i suoi output binari tramite il servizio indicato sotto."
+      },
       "configured": {
         "summary": "Ancora nulla di registrato",
         "detail": "Questo passo è configurato per archiviare output binari, ma non ne ha ancora segnalato alcuno. È ancora in corso, oppure si è concluso prima di segnalarlo."
@@ -4425,7 +4429,7 @@
     },
     "warning": {
       "unknownServices": "Ha indicato un servizio che il catalogo non contiene: {ids}. La voce viene conservata come dichiarata; verifica l'identificativo nel catalogo della board. | Ha indicato servizi che il catalogo non contiene: {ids}. Le voci vengono conservate come dichiarate; verifica gli identificativi nel catalogo della board.",
-      "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({ids}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
+      "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
       "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco."

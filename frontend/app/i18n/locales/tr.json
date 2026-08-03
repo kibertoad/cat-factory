@@ -5374,6 +5374,10 @@
     "unknownBadge": "Katalogda yok",
     "storedCount": "{outcome}, 1 ürün | {outcome}, {count} ürün",
     "state": {
+      "notStarted": {
+        "summary": "Henüz başlamadı",
+        "detail": "Bu adım henüz başlamadı. Çalıştığında ikili çıktılarını aşağıdaki hizmet üzerinden depolayacak."
+      },
       "configured": {
         "summary": "Henüz bir şey kaydedilmedi",
         "detail": "Bu adım ikili çıktıları depolayacak şekilde ayarlandı ama henüz hiçbirini bildirmedi. Ya hâlâ çalışıyor ya da bildirmeden önce sona erdi."
@@ -5396,7 +5400,7 @@
     },
     "warning": {
       "unknownServices": "Katalogda bulunmayan bir hizmet adı verdi: {ids}. Kayıt bildirildiği gibi saklanır; kimliği pano kataloguyla karşılaştır. | Katalogda bulunmayan hizmet adları verdi: {ids}. Kayıtları bildirildiği gibi saklanır; kimlikleri pano kataloguyla karşılaştır.",
-      "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({ids}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
+      "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
       "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor."

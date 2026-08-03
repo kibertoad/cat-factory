@@ -34,8 +34,13 @@ import type { ResolvedFoundationalService } from '~/types/domain'
  * do. A row saying "no binary output was expected here" would ride every step of every run.
  */
 export type BinaryOutputState =
-  /** The step selected a storage service but no declaration has been recorded — it is still
-   *  running, or it died before settlement. NOT "stored nothing". */
+  /** The step selected a storage service and has not started yet, so there is nothing to have
+   *  recorded. Its own fact, for the same reason a SKIPPED step renders nothing: `configured`
+   *  says "running, or it died", and a queued step is neither. What it does say is worth
+   *  saying — this is where the artifacts will land — so it renders rather than disappearing. */
+  | 'not-started'
+  /** The step STARTED, selected a storage service, and no declaration has been recorded — it is
+   *  still running, or it died before settlement. NOT "stored nothing". */
   | 'configured'
   /** The step settled and its reply carried no declaration block at all. The agent may or may
    *  not have stored something; nothing was recorded either way. */
@@ -74,14 +79,24 @@ export interface BinaryOutputView {
   /** The context services the step selected, in selection order. */
   contextServices: readonly string[]
   rows: readonly BinaryOutputRow[]
-  /** Distinct declared service ids the catalog did not contain, verbatim. */
-  unknownServices: readonly string[]
   /**
-   * The step's OWN configured target is among {@link unknownServices} — the catalog changed
-   * under the run, rather than the agent naming a service that never existed. Different
-   * causes, different fixes: re-register the service, versus correct the declaration.
+   * The step's OWN configured target was not in the resolved catalog when the declaration was
+   * parsed — the catalog changed under the run, rather than the agent naming a service that
+   * never existed. Different causes, different fixes: re-register the service, versus correct
+   * the declaration.
    */
   targetUnknown: boolean
+  /**
+   * Unknown service ids the AGENT named, verbatim and EXCLUDING the step's own target, which
+   * {@link targetUnknown} already owns.
+   *
+   * The exclusion is what makes the two facts DISJOINT, and it lives here rather than in a
+   * renderer on purpose: the report's own `unknownServices` mixes them, so a surface reading it
+   * raw either reports the lost target twice or — the way this shipped — labels every unknown
+   * id as "this step's own storage service" and drops the invented ones entirely. Two fields
+   * that cannot overlap is the only shape where naming one cannot mis-state the other.
+   */
+  unknownDeclaredServices: readonly string[]
   /** Entries dropped because they were not `{ service, location }` objects. */
   invalidEntries: number
   /** Valid entries dropped past the report's cap — so {@link rows} is a PREFIX. */
@@ -100,11 +115,12 @@ export interface BinaryOutputView {
  * a REPORT but no selection renders too, with a null target (see {@link BinaryOutputView.target}).
  *
  * The one exception is a step SKIPPED by estimate gating: it holds a selection it never ran
- * with, so `configured` would tell a reader it is still running or died mid-generation — two
- * causes that are both wrong, about a step the panel already marks as skipped. A skipped step
- * genuinely has no binary-output story, so it takes the same absence as an unbriefed one. (A
- * skipped step with a REPORT is not reachable — nothing dispatched — but if one ever were, the
- * record wins: a recorded claim is never hidden.)
+ * with, so no state describing a dispatch is true of it, and the panel already marks it as
+ * skipped. A skipped step genuinely has no binary-output story, so it takes the same absence as
+ * an unbriefed one. A step that has not started YET is the neighbouring case and resolves the
+ * other way — it still has a story ahead of it, told by `not-started`. (Either with a REPORT is
+ * not reachable — nothing dispatched — but if one ever were, the record wins: a recorded claim
+ * is never hidden.)
  */
 export function binaryOutputView(step: PipelineStep | null | undefined): BinaryOutputView | null {
   const report = step?.binaryOutputs ?? null
@@ -115,12 +131,14 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
   const contextServices = config?.contextServiceIds ?? []
   if (!report) {
     return {
-      state: 'configured',
+      // A step still queued has not had the chance to record anything, which is a different
+      // fact from having had it and not taken it.
+      state: step?.state === 'pending' ? 'not-started' : 'configured',
       target,
       contextServices,
       rows: [],
-      unknownServices: [],
       targetUnknown: false,
+      unknownDeclaredServices: [],
       invalidEntries: 0,
       omitted: 0,
       misdirected: 0,
@@ -140,8 +158,8 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     target,
     contextServices,
     rows,
-    unknownServices: report.unknownServices,
     targetUnknown: target !== null && unknown.has(target),
+    unknownDeclaredServices: report.unknownServices.filter((id) => id !== target),
     invalidEntries: report.invalidEntries,
     omitted: report.omitted,
     misdirected: rows.filter((row) => row.misdirected).length,
@@ -174,6 +192,12 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
   BinaryOutputState,
   { icon: string; tone: string; summary: string; detail: string }
 > = {
+  'not-started': {
+    icon: 'i-lucide-clock',
+    tone: 'text-slate-400',
+    summary: 'binaryOutput.state.notStarted.summary',
+    detail: 'binaryOutput.state.notStarted.detail',
+  },
   configured: {
     icon: 'i-lucide-hourglass',
     tone: 'text-slate-300',
@@ -216,7 +240,8 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
   return (
     view.state === 'parse-failed' ||
     view.state === 'undeclared' ||
-    view.unknownServices.length > 0 ||
+    view.targetUnknown ||
+    view.unknownDeclaredServices.length > 0 ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0
@@ -275,7 +300,13 @@ export interface BinaryOutputPickState {
  * and again during an outage that changed nothing about it.
  *
  * Returns EVERY issue, not the first, for the same reason `binaryOutputConfigIssues` does:
- * naming one at a time costs a fix-and-retry cycle per lost service.
+ * naming one at a time costs a fix-and-retry cycle per lost service. The ONE subsumption is
+ * `no_storage_service`, which suppresses the per-selection storage judgements below it: both
+ * of those tell the user to pick another service, and there is none to pick — an instruction
+ * the surface cannot carry out is worse than silence, and the remedy that IS actionable
+ * (register one) is already stated. The CONTEXT half is unaffected: it is a different
+ * selection, judged on existence alone, and stays actionable whatever the storage tier looks
+ * like.
  */
 export function binaryOutputPickIssues(
   config: BinaryOutputConfig | undefined,
@@ -284,9 +315,10 @@ export function binaryOutputPickIssues(
 ): BinaryOutputPickState {
   const resolved = available === true
   const issues: BinaryOutputPickIssue[] = []
+  const noStorageService =
+    resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY))
   if (available === false) issues.push('catalog_unavailable')
-  else if (resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY)))
-    issues.push('no_storage_service')
+  else if (noStorageService) issues.push('no_storage_service')
 
   const storageId = config?.storageServiceId?.trim()
   if (!storageId) {
@@ -294,7 +326,7 @@ export function binaryOutputPickIssues(
     return { issues, unknownContextIds: [] }
   }
 
-  if (resolved) {
+  if (resolved && !noStorageService) {
     const storage = catalog.find((s) => s.id === storageId)
     if (!storage) issues.push('unknown_service')
     else if (!storage.capabilities.includes(ASSET_STORAGE_CAPABILITY))

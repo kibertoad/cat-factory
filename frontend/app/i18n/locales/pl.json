@@ -5362,6 +5362,10 @@
     "unknownBadge": "Spoza katalogu",
     "storedCount": "{outcome}, 1 artefakt | {outcome}, {count} artefakty | {outcome}, {count} artefaktów",
     "state": {
+      "notStarted": {
+        "summary": "Jeszcze nie rozpoczęto",
+        "detail": "Ten krok jeszcze się nie rozpoczął. Gdy zostanie uruchomiony, zapisze swoje wyjścia binarne przez usługę wskazaną poniżej."
+      },
       "configured": {
         "summary": "Nic jeszcze nie zapisano",
         "detail": "Ten krok jest skonfigurowany do przechowywania wyjść binarnych, ale jeszcze żadnego nie zgłosił. Nadal trwa albo zakończył się, zanim zdążył zgłosić."
@@ -5384,7 +5388,7 @@
     },
     "warning": {
       "unknownServices": "Wskazał usługę, której nie ma w katalogu: {ids}. Wpis zachowano w zadeklarowanej postaci; sprawdź identyfikator w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy.",
-      "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({ids}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
+      "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({id}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
       "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
       "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
       "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście."

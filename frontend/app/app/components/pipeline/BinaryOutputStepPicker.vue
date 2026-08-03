@@ -60,7 +60,7 @@ function has(issue: BinaryOutputPickIssue): boolean {
  * only mean anything as scope for a generation that has somewhere to land, and a step carrying
  * context alone would persist a shape the backend has no rule for.
  */
-function setStorage(storageServiceId: string) {
+function setStorage(storageServiceId: string | undefined) {
   const contextServiceIds = config.value?.contextServiceIds
   pipelines.setDraftBinaryOutput(
     props.index,

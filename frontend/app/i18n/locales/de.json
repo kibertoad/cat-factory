@@ -4403,6 +4403,10 @@
     "unknownBadge": "Nicht im Katalog",
     "storedCount": "{outcome}, 1 Artefakt | {outcome}, {count} Artefakte",
     "state": {
+      "notStarted": {
+        "summary": "Noch nicht gestartet",
+        "detail": "Dieser Schritt hat noch nicht begonnen. Wenn er läuft, speichert er seine binären Ausgaben über den unten genannten Dienst."
+      },
       "configured": {
         "summary": "Noch nichts erfasst",
         "detail": "Dieser Schritt ist auf das Speichern binärer Ausgaben eingerichtet, hat aber noch keine gemeldet. Er läuft noch, oder er endete vor seiner Meldung."
@@ -4425,7 +4429,7 @@
     },
     "warning": {
       "unknownServices": "Nennt einen Dienst, den der Katalog nicht enthält: {ids}. Der Eintrag bleibt wie angegeben erhalten; prüfe die Kennung gegen den Katalog des Boards. | Nennt Dienste, die der Katalog nicht enthält: {ids}. Die Einträge bleiben wie angegeben erhalten; prüfe die Kennungen gegen den Katalog des Boards.",
-      "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({ids}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
+      "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
       "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt."

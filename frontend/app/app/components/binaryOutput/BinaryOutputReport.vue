@@ -3,10 +3,10 @@
 // foundational service the step selected, and — with equal weight — every way that record is
 // incomplete. See docs/initiatives/binary-output-foundational-storage.md.
 //
-// The engine's parse keeps five outcomes apart on purpose (still running, no declaration, an
-// unreadable one, an explicit "stored nothing", and actual artifacts), because each needs a
-// different reaction and four of them are NOT "an empty list". This renders the discriminant
-// `binaryOutputView` derives, never a list that happens to be empty.
+// The engine's parse keeps six outcomes apart on purpose (not started, still running, no
+// declaration, an unreadable one, an explicit "stored nothing", and actual artifacts), because
+// each needs a different reaction and five of them are NOT "an empty list". This renders the
+// discriminant `binaryOutputView` derives, never a list that happens to be empty.
 //
 // It is a plain presenter over the STEP's own record — no fetch, no catalog read — so it drops
 // into both of the surfaces a step opens on (the result-window shell's trailing section and the
@@ -139,15 +139,25 @@ const state = computed(() => {
          one "some entries were dropped": the fix for an unknown service id is not the fix for
          a malformed entry, and neither is the fix for a list that stops short of the tail. -->
     <ul class="space-y-1 text-[11px] text-amber-400">
-      <li v-if="view.unknownServices.length" data-testid="binary-output-unknown-services">
+      <!-- The step's OWN target went missing from the catalog, and an id the AGENT invented,
+           are two different failures with two different fixes (re-register it, versus correct
+           the declaration). `binaryOutputView` returns them as DISJOINT fields precisely so
+           these can be two independent lines: sharing one line meant the lost target's message
+           named every unknown id as if it were the step's own service, and silently dropped
+           the invented ones. -->
+      <li v-if="view.targetUnknown" data-testid="binary-output-target-unknown">
+        {{ t('binaryOutput.warning.targetUnknown', { id: view.target }) }}
+      </li>
+      <li v-if="view.unknownDeclaredServices.length" data-testid="binary-output-unknown-services">
         {{
-          view.targetUnknown
-            ? t('binaryOutput.warning.targetUnknown', { ids: view.unknownServices.join(', ') })
-            : t(
-                'binaryOutput.warning.unknownServices',
-                { ids: view.unknownServices.join(', '), count: view.unknownServices.length },
-                view.unknownServices.length,
-              )
+          t(
+            'binaryOutput.warning.unknownServices',
+            {
+              ids: view.unknownDeclaredServices.join(', '),
+              count: view.unknownDeclaredServices.length,
+            },
+            view.unknownDeclaredServices.length,
+          )
         }}
       </li>
       <li v-if="view.misdirected" data-testid="binary-output-misdirected-note">

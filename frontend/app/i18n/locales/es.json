@@ -5362,6 +5362,10 @@
     "unknownBadge": "Fuera del catálogo",
     "storedCount": "{outcome}, 1 artefacto | {outcome}, {count} artefactos",
     "state": {
+      "notStarted": {
+        "summary": "Aún no ha empezado",
+        "detail": "Este paso todavía no ha empezado. Cuando se ejecute, almacenará sus salidas binarias a través del servicio indicado abajo."
+      },
       "configured": {
         "summary": "Aún sin registrar nada",
         "detail": "Este paso está configurado para almacenar salidas binarias, pero aún no ha informado de ninguna. Sigue en curso, o terminó antes de informar."
@@ -5384,7 +5388,7 @@
     },
     "warning": {
       "unknownServices": "Nombró un servicio que el catálogo no contiene: {ids}. La entrada se conserva tal como se declaró; comprueba el identificador con el catálogo del tablero. | Nombró servicios que el catálogo no contiene: {ids}. Sus entradas se conservan tal como se declararon; comprueba los identificadores con el catálogo del tablero.",
-      "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({ids}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
+      "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({id}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
       "misdirected": "1 artefacto fue a un servicio distinto de {target}. | {count} artefactos fueron a un servicio distinto de {target}.",
       "invalidEntries": "Se descartó 1 entrada declarada: no nombraba servicio ni ubicación. | Se descartaron {count} entradas declaradas: no nombraban servicio ni ubicación.",
       "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista."

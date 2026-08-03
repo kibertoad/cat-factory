@@ -134,20 +134,30 @@ window is already about.
 
 The rules the surface itself holds to:
 
-- **Five outcomes, one discriminant** (`binaryOutputView`): `configured` (briefed, nothing
-  recorded yet — still running, or dead before settlement) / `undeclared` / `parse-failed` /
-  `declared-none` / `stored`. Four are NOT "an empty list", and copy comes from ONE exhaustive
-  `Record` so a sixth outcome fails the typecheck rather than rendering a missing key.
-- **"Never briefed" is the section's ABSENCE.** A step with neither a report nor a selection
-  renders nothing at all, exactly as the effort section does — a row saying "no binary output was
-  expected here" would ride every step of every run.
-- **Every counted loss keeps its own line and its own number.** `unknownServices` names the ids,
-  `invalidEntries` and `omitted` state their counts, and `omitted` says the list is a PREFIX.
+- **Six outcomes, one discriminant** (`binaryOutputView`): `not-started` (briefed, still queued) /
+  `configured` (briefed and dispatched, nothing recorded yet — still running, or dead before
+  settlement) / `undeclared` / `parse-failed` / `declared-none` / `stored`. Five are NOT "an empty
+  list", and copy comes from ONE exhaustive `Record` so a seventh outcome fails the typecheck
+  rather than rendering a missing key.
+- **"Never briefed" is the section's ABSENCE**, and so is a SKIPPED step's. A step with neither a
+  report nor a selection renders nothing at all, exactly as the effort section does — a row saying
+  "no binary output was expected here" would ride every step of every run. A gated-out step takes
+  the same absence: it holds a selection it never ran with, so no state describing a dispatch is
+  true of it. A step not started YET is the neighbouring case and resolves the other way — it has
+  a story ahead of it, and where the artifacts will land is worth stating in advance.
+- **Every counted loss keeps its own line and its own number.** `invalidEntries` and `omitted`
+  state their counts, and `omitted` says the list is a PREFIX.
 - **The join is derived from the step's own record**, never a catalog read: a `stored` row whose
   service differs from `stepOptions.binaryOutput.storageServiceId` is marked, and the step's own
-  target appearing in `unknownServices` (`targetUnknown`) separates "the catalog changed under the
-  run" from "the agent named a service that never existed". A step with NO selection has a null
-  target and marks nothing misdirected — there was nowhere it was supposed to go.
+  target being unknown (`targetUnknown`) separates "the catalog changed under the run" from "the
+  agent named a service that never existed". A step with NO selection has a null target and marks
+  nothing misdirected — there was nowhere it was supposed to go.
+- **The two unknown-service facts are DISJOINT FIELDS, not one list plus a flag.** The report's own
+  `unknownServices` mixes the lost target with ids the agent invented, so a surface reading it raw
+  either states the target twice or labels every unknown id as the step's own storage service and
+  drops the invented ones. `targetUnknown` owns the first and `unknownDeclaredServices` (the same
+  list, minus the target) owns the second, so naming either cannot mis-state the other — the
+  exclusion belongs in the read model, where it is tested, not in a renderer's filter.
 
 ### The picker needed the trait on the wire
 

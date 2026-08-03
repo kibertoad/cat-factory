@@ -20,15 +20,24 @@ surface follow the record, costs a deployment no registration, and leaves a gene
 declare a result view for its own output rather than choosing between its output and its
 artifacts.
 
-The parse keeps five outcomes apart on purpose — still running, no declaration, an unreadable
-one, an explicit "stored nothing", and actual artifacts — and four of them are not an empty list,
-so the surface renders the discriminant rather than a list that happens to be empty; state copy
-comes from one exhaustive `Record`, so a sixth outcome fails the typecheck instead of rendering a
-missing key. Every counted loss keeps its own line and its own number (an unknown service id is
-not a malformed entry is not a truncated tail), and the one join the report cannot make itself —
-did the artifact go through the service the step actually pointed at? — is derived from the
-step's own recorded selection, so it needs no catalog read and reads the same on a run whose
-services were withdrawn since. "Never briefed" is the section's ABSENCE, not a row.
+The parse keeps six outcomes apart on purpose — not started, still running, no declaration, an
+unreadable one, an explicit "stored nothing", and actual artifacts — and five of them are not an
+empty list, so the surface renders the discriminant rather than a list that happens to be empty;
+state copy comes from one exhaustive `Record`, so a seventh outcome fails the typecheck instead of
+rendering a missing key. Every counted loss keeps its own line and its own number (an unknown
+service id is not a malformed entry is not a truncated tail), and the one join the report cannot
+make itself — did the artifact go through the service the step actually pointed at? — is derived
+from the step's own recorded selection, so it needs no catalog read and reads the same on a run
+whose services were withdrawn since. "Never briefed" is the section's ABSENCE, and so is a
+gated-out step's; a step not started YET resolves the other way, since where its artifacts will
+land is worth stating before it runs.
+
+The two unknown-service facts are DISJOINT FIELDS rather than one list plus a flag: the report's
+own `unknownServices` mixes the step's lost target with ids the agent invented, so a surface
+reading it raw labels every unknown id as the step's own storage service and drops the invented
+ones. `targetUnknown` owns the first and `unknownDeclaredServices` owns the second, so naming
+either cannot mis-state the other — the exclusion lives in the read model, where it is tested,
+not in a renderer's filter.
 
 For the picker, the SPA had no way to know which kinds are generators: `BINARY_OUTPUT_TRAIT`
 never left the backend. It is now projected onto the snapshot's custom-kind entry as a boolean

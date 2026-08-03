@@ -18,12 +18,16 @@ function report(patch: Partial<BinaryOutputReport> = {}): BinaryOutputReport {
 const artifact = (service: string, location: string) => ({ service, location })
 
 describe('binaryOutputView', () => {
-  // The regression this whole surface exists to prevent: four of the five outcomes are NOT
+  // The regression this whole surface exists to prevent: five of the six outcomes are NOT
   // "an empty list", so each must resolve to its own state (and, through the shared key map,
   // its own copy). Collapsing any pair reports a run that stored nothing and a run whose
   // declaration was unreadable as the same thing.
-  it('keeps the five outcomes apart', () => {
+  it('keeps the six outcomes apart', () => {
     const cases: [PipelineStep, string][] = [
+      [
+        step({ state: 'pending', stepOptions: { binaryOutput: { storageServiceId: 'files' } } }),
+        'not-started',
+      ],
       [step({ stepOptions: { binaryOutput: { storageServiceId: 'files' } } }), 'configured'],
       [step({ binaryOutputs: report({ undeclared: true }) }), 'undeclared'],
       [step({ binaryOutputs: report({ parseFailed: true }) }), 'parse-failed'],
@@ -41,6 +45,32 @@ describe('binaryOutputView', () => {
   it('renders nothing for a step that was never briefed', () => {
     expect(binaryOutputView(step({}))).toBeNull()
     expect(binaryOutputView(null)).toBeNull()
+  })
+
+  // A queued step has not had the chance to record anything, which `configured` ("running, or it
+  // died") states as the opposite of what is true. It still renders — unlike a SKIPPED step it
+  // has a story ahead of it, and where the artifacts will land is worth saying in advance.
+  it('separates a step that has not started from one that started and recorded nothing', () => {
+    const config = { binaryOutput: { storageServiceId: 'files' } }
+    const queued = binaryOutputView(step({ state: 'pending', stepOptions: config }))
+    expect(queued?.state).toBe('not-started')
+    expect(queued?.target).toBe('files')
+    // Nothing has gone wrong yet, so the section must not open itself expanded.
+    expect(binaryOutputHasWarnings(queued!)).toBe(false)
+
+    for (const state of ['working', 'waiting_decision', 'done'] as const)
+      expect(binaryOutputView(step({ state, stepOptions: config }))?.state).toBe('configured')
+
+    // A recorded claim still wins over either, exactly as it does for a skipped step.
+    expect(
+      binaryOutputView(
+        step({
+          state: 'pending',
+          stepOptions: config,
+          binaryOutputs: report({ undeclared: true }),
+        }),
+      )?.state,
+    ).toBe('undeclared')
   })
 
   // A gated-out step holds a selection it never ran with, so `configured` would tell a reader it
@@ -82,7 +112,7 @@ describe('binaryOutputView', () => {
     )
     // The claim is recorded, not dropped — a reader judges it.
     expect(view?.rows).toHaveLength(2)
-    expect(view?.unknownServices).toEqual(['ghost'])
+    expect(view?.unknownDeclaredServices).toEqual(['ghost'])
     expect(view?.rows[1]?.unknown).toBe(true)
     expect(view?.rows[0]?.unknown).toBe(false)
   })
@@ -122,6 +152,8 @@ describe('binaryOutputView', () => {
     )
     expect(lost?.targetUnknown).toBe(true)
 
+    expect(lost?.unknownDeclaredServices).toEqual([])
+
     const invented = binaryOutputView(
       step({
         stepOptions: { binaryOutput: { storageServiceId: 'files' } },
@@ -129,6 +161,40 @@ describe('binaryOutputView', () => {
       }),
     )
     expect(invented?.targetUnknown).toBe(false)
+    expect(invented?.unknownDeclaredServices).toEqual(['flies'])
+  })
+
+  // Both at once is where sharing one field went wrong: the report's own `unknownServices` mixes
+  // the lost target with the invented ids, so a surface reading it raw named ALL of them as "this
+  // step's own storage service" and dropped the invented ones entirely. The two fields are
+  // disjoint by construction, so no renderer can restate one as the other.
+  it('keeps a lost target out of the invented-id list when both happened', () => {
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files' } },
+        binaryOutputs: report({
+          stored: [artifact('files', 'a.png'), artifact('ghost', 'b.png')],
+          unknownServices: ['files', 'ghost', 'phantom'],
+        }),
+      }),
+    )
+    expect(view?.targetUnknown).toBe(true)
+    expect(view?.unknownDeclaredServices).toEqual(['ghost', 'phantom'])
+    expect(view?.unknownDeclaredServices).not.toContain('files')
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  // A lost target with nothing else unknown is still a warning — it is the whole comparison the
+  // surface exists to make, and the list it used to be counted in is now empty.
+  it('treats a lost target alone as a warning', () => {
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files' } },
+        binaryOutputs: report({ stored: [artifact('files', 'a.png')], unknownServices: ['files'] }),
+      }),
+    )
+    expect(view?.unknownDeclaredServices).toEqual([])
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
   })
 
   // Without the count, a capped list reads as the whole list and its tail as nonexistent.
@@ -182,6 +248,24 @@ describe('binaryOutputPickIssues', () => {
     expect(
       binaryOutputPickIssues({ storageServiceId: 'inventory' }, catalog, true).issues,
     ).toContain('not_storage_capable')
+  })
+
+  // "Pick another" is not a remedy when there is nothing to pick: with no storage service in the
+  // catalog at all, the per-selection judgements would print an instruction the surface cannot
+  // carry out, beside the one that is actionable. The context half is a different selection,
+  // judged on existence alone, so it stays.
+  it('suppresses the per-selection storage judgements when the catalog has no storage service', () => {
+    const contextOnly = [service('inventory', ['generation-context'])]
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'gone', contextServiceIds: ['inventory', 'vanished'] },
+      contextOnly,
+      true,
+    )
+    expect(pick.issues).toContain('no_storage_service')
+    expect(pick.issues).not.toContain('unknown_service')
+    expect(pick.issues).not.toContain('not_storage_capable')
+    expect(pick.issues).toContain('unknown_context_service')
+    expect(pick.unknownContextIds).toEqual(['vanished'])
   })
 
   it('names every unresolved context id, not just the first', () => {

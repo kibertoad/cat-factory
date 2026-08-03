@@ -179,7 +179,7 @@ watch(
 
 /**
  * The collapsed row's line: the OUTCOME, plus the artifact count only when there are artifacts.
- * Deliberately not "N artifacts" for every state — four of the five have none, and a `0` there
+ * Deliberately not "N artifacts" for every state — five of the six have none, and a `0` there
  * would render "declared nothing", "never declared" and "unreadable declaration" identically,
  * which is the exact conflation the report's bookkeeping exists to prevent.
  */
@@ -359,8 +359,8 @@ const panelClass = computed(() => [
 
         <!-- Shared trailing section: what this step's agent declared it stored through a
              foundational storage service (see `binaryOutputs` above for why it lives here and
-             not in a window). The collapsed row states the OUTCOME, never a count — four of
-             the five outcomes have no artifacts to count, and "0" is the one thing they must
+             not in a window). The collapsed row states the OUTCOME, never a count — five of
+             the six outcomes have no artifacts to count, and "0" is the one thing they must
              not all read as. -->
         <section
           v-if="binaryOutputs"

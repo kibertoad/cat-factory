@@ -5362,6 +5362,10 @@
     "unknownBadge": "Hors catalogue",
     "storedCount": "{outcome}, 1 artefact | {outcome}, {count} artefacts",
     "state": {
+      "notStarted": {
+        "summary": "Pas encore démarrée",
+        "detail": "Cette étape n'a pas encore démarré. Lorsqu'elle s'exécutera, elle stockera ses sorties binaires via le service indiqué ci-dessous."
+      },
       "configured": {
         "summary": "Rien d'enregistré pour l'instant",
         "detail": "Cette étape est configurée pour stocker des sorties binaires, mais elle n'en a encore signalé aucune. Elle est toujours en cours, ou elle s'est terminée avant de le signaler."
@@ -5384,7 +5388,7 @@
     },
     "warning": {
       "unknownServices": "A nommé un service absent du catalogue : {ids}. L'entrée est conservée telle que déclarée ; vérifiez l'identifiant dans le catalogue du tableau. | A nommé des services absents du catalogue : {ids}. Leurs entrées sont conservées telles que déclarées ; vérifiez les identifiants dans le catalogue du tableau.",
-      "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({ids}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
+      "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({id}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
       "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
       "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
       "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés."
