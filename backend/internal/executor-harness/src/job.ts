@@ -1125,7 +1125,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
 /** The one-shot inline completion job. `harness` must be a subscription harness. */
 export interface InlineJob extends HarnessAuthFields {
   jobId: string
-  /** Real vendor model id, e.g. `claude-opus-4-8` / `gpt-5.5-codex`. */
+  /** The vendor's own model id (what the agent CLI is invoked with), never a catalog id. */
   model: string
   /** Composed role + best-practice fragments (Claude: `--append-system-prompt`; Codex: prepended). */
   systemPrompt: string

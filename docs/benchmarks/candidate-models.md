@@ -29,22 +29,22 @@ direct-key "go premium" overrides, out of scope here. Note: OpenAI's **open-weig
 **Excluded — superseded / old models** (brief: "only use latest"). Dropped from
 candidacy and not benchmarked:
 
-| Excluded model                                         | Superseded by                                                                           |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `@cf/meta/llama-2-7b-chat-fp16`                        | Llama 3.2 / 3.3 / 4                                                                     |
-| `@cf/meta/llama-3-8b-instruct` (+ `-awq`)              | `llama-3.2-3b`, `llama-4-scout`                                                         |
-| `@cf/meta/llama-3.1-8b-instruct` (+ `-fp8/-awq/-fast`) | `llama-3.3-70b`, `llama-4-scout` — _but this is the current codebase default; see note_ |
-| `@cf/meta/llama-3.1-70b-instruct-fp8-fast`             | `llama-3.3-70b-instruct-fp8-fast`                                                       |
-| `@cf/mistral/mistral-7b-instruct-v0.1`                 | `mistral-small-3.1-24b`                                                                 |
-| `@cf/google/gemma-3-12b-it`                            | `gemma-4-26b-a4b-it`                                                                    |
-| `@cf/moonshotai/kimi-k2.5`                             | `kimi-k2.6` / `kimi-k2.7-code`                                                          |
-| `@cf/qwen/qwq-32b`                                     | Qwen3 reasoning (`qwen3-30b-a3b`)                                                       |
+| Excluded model                                         | Superseded by                                 |
+| ------------------------------------------------------ | --------------------------------------------- |
+| `@cf/meta/llama-2-7b-chat-fp16`                        | Llama 3.2 / 3.3 / 4                           |
+| `@cf/meta/llama-3-8b-instruct` (+ `-awq`)              | `llama-3.2-3b`, `llama-4-scout`               |
+| `@cf/meta/llama-3.1-8b-instruct` (+ `-fp8/-awq/-fast`) | `llama-3.3-70b`, `llama-4-scout` — _see note_ |
+| `@cf/meta/llama-3.1-70b-instruct-fp8-fast`             | `llama-3.3-70b-instruct-fp8-fast`             |
+| `@cf/mistral/mistral-7b-instruct-v0.1`                 | `mistral-small-3.1-24b`                       |
+| `@cf/google/gemma-3-12b-it`                            | `gemma-4-26b-a4b-it`                          |
+| `@cf/moonshotai/kimi-k2.5`                             | `kimi-k2.6` / `kimi-k2.7-code`                |
+| `@cf/qwen/qwq-32b`                                     | Qwen3 reasoning (`qwen3-30b-a3b`)             |
 
-> **Note on `llama-3.1-8b-instruct`:** it is still wired as the platform default
-> (`models.ts:41`) and the generic Workers AI fallback. It is _old_ by this doc's
-> bar; one outcome of benchmarking should be deciding its replacement as the
-> always-on default (the leading candidate is `qwen3-30b-a3b-fp8`). Kept out of the
-> candidate tiers, tracked here only as the incumbent baseline.
+> **Note on `llama-3.1-8b-instruct`:** Cloudflare **deprecated** it (with the rest of
+> the Llama 2/3/3.1 line) on 30 May 2026 with no alias, so it is no longer runnable at
+> all. The catalog's `cloudflare-llama` entry now serves `llama-4-scout`, and the generic
+> Workers AI fallback is `qwen3-30b-a3b-fp8`. Kept here only as the historical baseline
+> this doc's tiers were drawn against.
 
 ## The demand side — agent role workload profiles
 

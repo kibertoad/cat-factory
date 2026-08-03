@@ -122,7 +122,7 @@ describe('inlineModelRef', () => {
   })
 
   it('degrades a codex subscription ref to the fallback', () => {
-    const ref: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
+    const ref: ModelRef = { provider: 'openai', model: 'gpt-5.6-sol', harness: 'codex' }
     expect(inlineModelRef(ref, fallback)).toBe(fallback)
   })
 })

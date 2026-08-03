@@ -315,6 +315,36 @@ export interface LlmCallPageQuery {
 }
 
 /**
+ * A bounded, keyset-paginated query over ONE run's calls returning the rows WHOLE — the
+ * mothership-mode READ-THROUGH read (`POST /internal/telemetry/read`,
+ * docs/initiatives/mothership-mode.md, PR 5).
+ *
+ * It is not {@link LlmCallPageQuery} with `bodyChars: Infinity`: that page returns
+ * {@link LlmCallMetricPage} rows, whose whole contract is that a body is a SLICE plus the
+ * length of what was sliced. The read-through has to reconstitute exactly what a direct
+ * repository call would have returned to `listByExecution`, so it needs the stored
+ * {@link LlmCallMetric} itself. It is not `listByExecution` either, which takes a row cap and
+ * no cursor: a node fetching a long run's calls in one un-resumable response is the bulk read
+ * this bucket exists to forbid.
+ *
+ * Newest-first, like every other read of a run's calls, so a caller that stops early has the
+ * rows a reader looks at first.
+ */
+export interface LlmCallRunPageQuery {
+  executionId: string
+  /** Narrow to one step kind's conversation, applied in SQL. */
+  agentKind?: string
+  /** Hard cap on rows returned. */
+  limit: number
+  /**
+   * EXCLUSIVE keyset on the `(createdAt, id)` composite the ordering uses, for the same reason
+   * {@link LlmCallPageQuery.cursor} is composite — a same-millisecond burst is routine, and a
+   * timestamp-only cursor would silently drop rows from the next page.
+   */
+  cursor?: { createdAt: number; id: string }
+}
+
+/**
  * One completed INLINE (non-proxied) LLM call, as the instrumented model provider observes it.
  *
  * A container agent reaches its model through the LLM proxy (or, on a subscription harness,
@@ -477,6 +507,13 @@ export interface LlmCallMetricRepository {
    * narrowed or un-previewed page does not read rows (or text columns) it will discard.
    */
   listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]>
+  /**
+   * One BOUNDED, keyset-paginated page of a run's calls with the bodies WHOLE — the read the
+   * mothership-mode read-through walks (see {@link LlmCallRunPageQuery} for why neither
+   * {@link LlmCallMetricRepository.listPage} nor
+   * {@link LlmCallMetricRepository.listByExecution} can serve it).
+   */
+  listRunPage(workspaceId: string, query: LlmCallRunPageQuery): Promise<LlmCallMetric[]>
   /**
    * One call by id, each body sliced to the window (omit for the whole stored bodies). The
    * window's `offset` is what makes the TAIL of a large body reachable — the last tool result

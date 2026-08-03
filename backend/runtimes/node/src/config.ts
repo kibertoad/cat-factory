@@ -261,11 +261,11 @@ function buildAgentRouting(
     maxOutputTokens: envMaxOutputTokens ?? 12000,
   }
   // The conflict-resolver clones a PR head with merge conflicts and rewrites the
-  // conflicted hunks against the base — a focused, diff-heavy reasoning task. Kimi K2.5
+  // conflicted hunks against the base — a focused, diff-heavy reasoning task. Kimi K2.6
   // (a 1T-param agentic model native on Workers AI, 256K window) handles it better than
   // the small default MoE (mirrors the Worker's routing).
   const conflictResolverDefault: AgentModelConfig = {
-    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
+    ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     temperature: envTemperature ?? 0.3,
     maxOutputTokens: envMaxOutputTokens ?? 5000,
   }

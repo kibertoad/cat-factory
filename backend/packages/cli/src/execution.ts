@@ -51,9 +51,10 @@ export interface NativeModel {
  */
 export const NATIVE_MODELS: NativeModel[] = [
   { id: 'claude-opus', label: 'Claude Opus 5', harness: 'claude-code' },
-  { id: 'claude-sonnet', label: 'Claude Sonnet 4.6', harness: 'claude-code' },
+  { id: 'claude-sonnet', label: 'Claude Sonnet 5', harness: 'claude-code' },
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', harness: 'codex' },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', harness: 'codex' },
   { id: 'gpt-5.5', label: 'GPT-5.5', harness: 'codex' },
-  { id: 'gpt-5.4', label: 'GPT-5.4', harness: 'codex' },
 ]
 
 /** The models that run natively for the given set of enabled native harnesses. */

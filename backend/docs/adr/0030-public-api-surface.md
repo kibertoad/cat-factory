@@ -9,6 +9,10 @@
 Supersedes the `public-api-expansion` initiative tracker, whose committed scope (Tiers 1–3 plus the
 per-key scope prerequisite) is complete. Tier 4 stays deliberately deferred — see Consequences.
 
+> This is the design record. The operator/integrator documentation — key setup, scopes,
+> conventions, the full endpoint reference and the webhook delivery contract — is
+> [`../public-api.md`](../public-api.md).
+
 ## Context
 
 The key-authenticated external API started as two use-cases: headless initiative runs

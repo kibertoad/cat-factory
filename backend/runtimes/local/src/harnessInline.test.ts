@@ -45,7 +45,7 @@ const CLAUDE_SUB: ModelRef = {
   model: 'claude-opus-5',
   harness: 'claude-code',
 }
-const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
+const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.6-sol', harness: 'codex' }
 const GLM_SUB: ModelRef = { provider: 'zai', model: 'glm-5.2', harness: 'claude-code' }
 const KIMI_SUB: ModelRef = { provider: 'moonshot', model: 'kimi-k2.6', harness: 'claude-code' }
 const QWEN: ModelRef = { provider: 'qwen', model: 'qwen3-max' }

@@ -54,11 +54,15 @@ const openRouterOnlyModels = MODEL_CATALOG.filter(
   (m) => m.openrouter && !m.cloudflare && !m.direct && !m.subscription,
 )
 
-/** The ref the base resolver lands on with no direct/gateway key: the Cloudflare base, else a
- *  subscription model's subscription ref (its vendor is connected in `noKeys`), else the
- *  best-effort gateway then direct ref — matching `effectiveVariant`'s precedence. */
+/** The ref the base resolver lands on with no direct/gateway key. Two of `effectiveVariant`'s
+ *  branches, in order: what is USABLE under `noKeys` (the Cloudflare base, else a subscription
+ *  model's subscription ref — its vendor is connected here), then, for a model with neither,
+ *  its BEST-EFFORT ref, which walks the same direct > openrouter precedence the usable branch
+ *  does. `direct` must precede `openrouter` here for that reason: a model carrying both and no
+ *  base (Kimi K3) resolves to its native provider, not the gateway. This helper duplicates that
+ *  ordering, so it has to be corrected in step with the resolver. */
 const baseRef = (m: (typeof MODEL_CATALOG)[number]) =>
-  m.cloudflare ?? m.subscription?.ref ?? m.openrouter?.ref ?? m.direct?.ref
+  m.cloudflare ?? m.subscription?.ref ?? m.direct?.ref ?? m.openrouter?.ref
 
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {

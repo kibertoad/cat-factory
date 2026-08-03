@@ -31,6 +31,9 @@ function fakeRepo() {
     async listIndex() {
       return []
     },
+    async listRunPage() {
+      return []
+    },
     async get(_w, id) {
       return rows.find((r) => r.id === id) ?? null
     },
