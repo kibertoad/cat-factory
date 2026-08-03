@@ -10,6 +10,7 @@ import {
   defaultStepResolverRegistry,
   defaultFoundationalServiceRegistry,
   defaultTaskTypeRegistry,
+  registryBinaryGeneratorSource,
   registryBuiltinSource,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -32,6 +33,10 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   // someone registers.
   const foundationalServiceRegistry =
     dependencies.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry()
+  // The same pairing for the generative integrations, and for the same reason: the registry the
+  // boot validation reads and the default source that wraps it must be ONE instance.
+  const binaryGeneratorRegistry =
+    dependencies.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry()
   return {
     agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
     gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
@@ -45,8 +50,15 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // Empty by default, exactly like the foundational registry above and for the same reason: a
     // facade injects the one instance it registered on, so the engine, the boot validation and
     // the dispatch brief can never be looking at different sets.
-    binaryGeneratorRegistry:
-      dependencies.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    binaryGeneratorRegistry,
+    // Where those integrations are READ from — the exact sibling of `foundationalBuiltins`
+    // below, defaulting to this process's own registry and overridden by a mothership-mode node
+    // with the REMOTE source. It is a separate entry from the registry above because the two
+    // answer different questions on such a node: the registry is what THIS build registers (the
+    // boot validation's subject, and what `/internal/binary-generators` serves when this process
+    // is the mothership), while the source is what any RUN resolves against.
+    binaryGenerators:
+      dependencies.binaryGeneratorSource ?? registryBinaryGeneratorSource(binaryGeneratorRegistry),
     // Where the catalog's `builtin` tier is READ from. Defaults to this process's own registry
     // (the same instance, so the engine and the boot validation can never disagree); a
     // mothership-mode node injects the REMOTE source instead, because the estate is org state

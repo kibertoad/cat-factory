@@ -1,7 +1,7 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
 import type {
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   ExecutionInstance,
   InjectedContextFile,
   Logger,
@@ -39,7 +39,7 @@ export interface CatalogRunContextDeps {
    * read-back resolves ids against both — keeping them apart would be two places for a dispatch
    * and its settlement to disagree about which integrations existed.
    */
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  binaryGeneratorSource?: BinaryGeneratorSource
   logger?: Logger
 }
 
@@ -95,7 +95,7 @@ export class CatalogRunContext {
    * the container executor turns into resolved credentials on the job body. The counterpart of
    * {@link binaryOutputContextFor}: same gate, same selection, the other channel.
    */
-  binaryGeneratorsFor(agentKind: string, step: PipelineStep): ResolvedBinaryGenerator[] {
+  binaryGeneratorsFor(agentKind: string, step: PipelineStep): Promise<ResolvedBinaryGenerator[]> {
     return dispatchBinaryGeneratorsFor({ ...this.deps, agentKind, step })
   }
 

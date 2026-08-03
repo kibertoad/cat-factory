@@ -4223,6 +4223,7 @@
       "binaryOutputContextMissing": "These context services are no longer in the catalog: {ids}",
       "binaryOutputUnavailable": "The foundational services catalog is unreachable, so nothing can be picked here yet.",
       "binaryOutputGenerators": "Generate with",
+      "binaryOutputGeneratorsUnavailable": "This deployment's generative integrations could not be read, so nothing can be picked here yet. This is a connection problem, not a missing registration.",
       "binaryOutputGeneratorsPlaceholder": "No integration selected",
       "binaryOutputModalities": "Must deliver",
       "binaryOutputModalitiesPlaceholder": "No requirement",

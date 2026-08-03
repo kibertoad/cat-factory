@@ -4108,6 +4108,7 @@
       "binaryOutputContextMissing": "Bu bağlam hizmetleri artık katalogda yok: {ids}",
       "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor.",
       "binaryOutputGenerators": "Şununla üret",
+      "binaryOutputGeneratorsUnavailable": "Bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden burada henüz bir seçim yapılamıyor. Bu bir bağlantı sorunudur, eksik bir kayıt değil.",
       "binaryOutputGeneratorsPlaceholder": "Entegrasyon seçilmedi",
       "binaryOutputModalities": "Teslim etmeli",
       "binaryOutputModalitiesPlaceholder": "Gereksinim yok",

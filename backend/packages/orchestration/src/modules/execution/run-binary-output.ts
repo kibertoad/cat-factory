@@ -3,7 +3,7 @@ import { BINARY_OUTPUT_TRAIT, hasTrait } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
 import type {
   AgentKind,
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   InjectedContextFile,
   Logger,
   ResolvedBinaryGenerator,
@@ -39,7 +39,7 @@ export interface ResolveBinaryOutputContextInput {
   step: PipelineStep
   foundationalServiceResolver?: FoundationalServiceResolver
   /** The deployment's generative integrations. Absent ⇒ none resolve, and the brief says so. */
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  binaryGeneratorSource?: BinaryGeneratorSource
   logger?: Logger
 }
 
@@ -53,6 +53,12 @@ export interface ResolveBinaryOutputContextInput {
  * trait guidance names the ABSENT brief as meaningful ("the platform could not provide
  * storage — do not attempt any upload; report it"), so the failure degrades into a stated
  * refusal rather than a guessed storage endpoint. The failure itself is logged with its cause.
+ *
+ * That disposition is what lets the GENERATIVE source be remote too. On a mothership-mode node
+ * its read can throw, and the absent brief already means "the platform could not provide" —
+ * which is true of an unreachable integration set exactly as it is of an unreachable catalog.
+ * What must never happen is a brief that RESOLVES and reports the step's integrations as
+ * unregistered, which is why the source throws instead of answering empty.
  */
 export async function resolveBinaryOutputContext(
   input: ResolveBinaryOutputContextInput,
@@ -67,7 +73,7 @@ export async function resolveBinaryOutputContext(
       resolver.binaryOutputContextFilesFor(
         input.workspaceId,
         input.step.stepOptions?.binaryOutput,
-        input.binaryGeneratorRegistry,
+        input.binaryGeneratorSource,
       ),
     { workspaceId: input.workspaceId, agentKind: input.agentKind },
   )
@@ -84,23 +90,32 @@ export async function resolveBinaryOutputContext(
  * what puts a value there. A kind that gets one without the other is either an agent told to use
  * a credential nobody delivered, or a credential delivered to an agent with no idea it exists.
  *
- * Resolved SYNCHRONOUSLY and outside the best-effort wrapper above: the registry is in-process
- * composition data with no I/O, so there is nothing here that can fail at run time — an id that
- * does not resolve is simply not in the result, and the brief is where that is stated.
+ * BEST-EFFORT and independently of the brief, which is safe in BOTH directions precisely because
+ * each half already defines its own absence. A brief with no credentials behind it is the state
+ * the brief itself describes ("an unset variable means the platform could not provide the key —
+ * report rather than call"); credentials with no brief reach an agent that was never told the
+ * integrations exist and so never calls them. Sharing one read between the two would buy
+ * consistency the failure modes do not need, at the price of a cache with no invalidation path.
  */
-export function dispatchBinaryGeneratorsFor(input: {
+export async function dispatchBinaryGeneratorsFor(input: {
   agentKind: AgentKind
   agentKindRegistry: AgentKindRegistry
   step: PipelineStep
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
-}): ResolvedBinaryGenerator[] {
-  if (!input.binaryGeneratorRegistry) return []
+  binaryGeneratorSource?: BinaryGeneratorSource
+  logger?: Logger
+}): Promise<ResolvedBinaryGenerator[]> {
+  const source = input.binaryGeneratorSource
+  if (!source) return []
   if (!hasTrait(input.agentKind, BINARY_OUTPUT_TRAIT, input.agentKindRegistry)) return []
+  const views = await runBestEffort(
+    input.logger ?? noopLogger,
+    'binaryOutput.generators',
+    () => source.views(),
+    { agentKind: input.agentKind },
+  )
+  if (!views) return []
   return dispatchBinaryGenerators(
-    resolveBinaryGeneratorSelection(
-      input.step.stepOptions?.binaryOutput,
-      input.binaryGeneratorRegistry.views(),
-    ),
+    resolveBinaryGeneratorSelection(input.step.stepOptions?.binaryOutput, views),
   )
 }
 
@@ -157,7 +172,7 @@ export type BinaryOutputDeclarationRecorder = (
 export function createBinaryOutputDeclarationRecorder(deps: {
   agentKindRegistry: AgentKindRegistry
   foundationalServiceResolver?: FoundationalServiceResolver
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  binaryGeneratorSource?: BinaryGeneratorSource
   logger?: Logger
 }): BinaryOutputDeclarationRecorder {
   return async (workspaceId, step, output) => {
@@ -169,11 +184,17 @@ export function createBinaryOutputDeclarationRecorder(deps: {
         const services = deps.foundationalServiceResolver
           ? await deps.foundationalServiceResolver.catalogIdsFor(workspaceId)
           : []
-        // The generative ids come from deployment code, so — unlike the catalog — they are known
-        // without a read and cannot fail. An unwired registry checks against an EMPTY set, which
-        // is the honest answer on a deployment that registers no integrations: every id the agent
-        // claimed lands in `unknownGenerators` rather than being quietly accepted.
-        const generators = deps.binaryGeneratorRegistry?.ids() ?? []
+        // The generative ids resolve through the same source the dispatch did, so a run on a
+        // mothership-mode node classifies its declaration against the set the mothership
+        // registers rather than whatever this node's build happens to hold. An UNWIRED source
+        // checks against an EMPTY set — the honest answer on a deployment that registers no
+        // integrations, where every claimed id lands in `unknownGenerators` rather than being
+        // quietly accepted. An unreachable one is different and must not read as that: the
+        // throw propagates into the best-effort wrapper below, which leaves the step
+        // unannotated, because "we could not check" may not be filed as "the agent invented it".
+        const generators = deps.binaryGeneratorSource
+          ? (await deps.binaryGeneratorSource.views()).map((view) => view.id)
+          : []
         step.binaryOutputs = parseBinaryOutputDeclaration(output, { services, generators })
       },
       { workspaceId, agentKind: step.agentKind },

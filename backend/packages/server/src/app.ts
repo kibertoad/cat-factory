@@ -93,6 +93,7 @@ import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberC
 import { persistenceController } from './modules/persistence/PersistenceController.js'
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
+import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
@@ -152,6 +153,13 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // persistence RPC; never 503s (an unregistered estate is legitimately empty). Mounted on both
   // facades so either can be a mothership. See backend/docs/adr/0031-foundational-services.md.
   app.route('/', foundationalBuiltinsController())
+  // Mothership-mode GENERATIVE BINARY INTEGRATIONS (`/internal/binary-generators` + the batched
+  // `POST .../contracts`): the same story as the tier above, one registry along. What a
+  // deployment registers in code is what the pipeline builder's picker OFFERS, so a node
+  // resolving its own copy refuses a step the product itself filled in. Machine-token gated;
+  // never 503s (a deployment registering none is legitimately empty). Mounted on both facades so
+  // either can be a mothership. See docs/initiatives/binary-output-foundational-storage.md.
+  app.route('/', binaryGeneratorsController())
   // Mothership-mode real-time upstream (`/internal/events/publish`): a mothership-mode local node
   // POSTs its engine events here so the mothership's own realtime fan-out (hosted teammates on the
   // shared board) sees the local node's activity live. Machine-token gated like the persistence

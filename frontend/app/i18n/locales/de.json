@@ -3744,6 +3744,7 @@
       "binaryOutputContextMissing": "Diese Kontextdienste sind nicht mehr im Katalog: {ids}",
       "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen.",
       "binaryOutputGenerators": "Erzeugen mit",
+      "binaryOutputGeneratorsUnavailable": "Die generativen Integrationen dieser Installation konnten nicht gelesen werden, daher lässt sich hier noch nichts auswählen. Das ist ein Verbindungsproblem, keine fehlende Registrierung.",
       "binaryOutputGeneratorsPlaceholder": "Keine Integration ausgewählt",
       "binaryOutputModalities": "Muss liefern",
       "binaryOutputModalitiesPlaceholder": "Keine Anforderung",

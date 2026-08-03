@@ -282,6 +282,16 @@ export interface EnvToolSecretResolverOptions {
    * That is fine for a deployment whose agent packages are all its own. Set this when it is not —
    * an installed third-party agent package is exactly the case the option exists for.
    *
+   * **A MOTHERSHIP-MODE node is the third case, and it breaks the "grants nothing new on Node"
+   * reasoning above.** A generative integration's definition now reaches such a node over
+   * `/internal/binary-generators`, so the key name is chosen by the MOTHERSHIP rather than by
+   * code this process runs, and the value it names is read from a developer's own laptop
+   * environment. That is not a new grant in the adversarial sense — a mothership already supplies
+   * the pipelines, prompts and repo targets of every run the node executes, so it can reach that
+   * environment through any agent it dispatches — but it does turn a mis-declared key into a
+   * developer's own token silently riding a job body. A node that wants a mis-declaration to fail
+   * loudly instead sets this.
+   *
    * It gates EVERY subject this resolver serves, not only tool servers: a generative binary
    * integration's credential (`BinaryGeneratorRegistry`) is resolved through the same port and is
    * held to the same list. So a `MCP_…`-prefixed convention is no longer sufficient on its own —

@@ -4,6 +4,7 @@ import {
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_DECLARATION_TAG,
   defaultBinaryGeneratorRegistry,
+  registryBinaryGeneratorSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
@@ -190,8 +191,8 @@ describe('createBinaryOutputDeclarationRecorder', () => {
 })
 
 describe('dispatchBinaryGeneratorsFor', () => {
-  it('projects the step’s selected integrations for a trait-carrying dispatch', () => {
-    expect(
+  it('projects the step’s selected integrations for a trait-carrying dispatch', async () => {
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'image-generator',
         agentKindRegistry: registry,
@@ -200,9 +201,9 @@ describe('dispatchBinaryGeneratorsFor', () => {
             binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
           },
         }),
-        binaryGeneratorRegistry: generatorRegistry(),
+        binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
       }),
-    ).toEqual([
+    ).resolves.toEqual([
       {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
@@ -212,11 +213,11 @@ describe('dispatchBinaryGeneratorsFor', () => {
     ])
   })
 
-  it('projects nothing for a kind without the trait — the SAME gate the brief uses', () => {
+  it('projects nothing for a kind without the trait — the SAME gate the brief uses', async () => {
     // The two are halves of one hand-off: the brief tells the agent to read `$RD_TOKEN`, and this
     // is what puts a value there. A kind that got one without the other is either an agent told
     // to use a credential nobody delivered, or a credential delivered in silence.
-    expect(
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'coder',
         agentKindRegistry: registry,
@@ -226,13 +227,13 @@ describe('dispatchBinaryGeneratorsFor', () => {
             binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
           },
         }),
-        binaryGeneratorRegistry: generatorRegistry(),
+        binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
       }),
-    ).toEqual([])
+    ).resolves.toEqual([])
   })
 
-  it('projects nothing when the deployment registers no integrations', () => {
-    expect(
+  it('projects nothing when the deployment registers no integrations', async () => {
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'image-generator',
         agentKindRegistry: registry,
@@ -242,6 +243,6 @@ describe('dispatchBinaryGeneratorsFor', () => {
           },
         }),
       }),
-    ).toEqual([])
+    ).resolves.toEqual([])
   })
 })

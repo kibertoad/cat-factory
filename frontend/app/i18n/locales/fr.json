@@ -4096,6 +4096,7 @@
       "binaryOutputContextMissing": "Ces services de contexte ne sont plus dans le catalogue : {ids}",
       "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici.",
       "binaryOutputGenerators": "Générer avec",
+      "binaryOutputGeneratorsUnavailable": "Les intégrations génératives de ce déploiement n'ont pas pu être lues, donc rien ne peut encore être choisi ici. C'est un problème de connexion, pas un enregistrement manquant.",
       "binaryOutputGeneratorsPlaceholder": "Aucune intégration sélectionnée",
       "binaryOutputModalities": "Doit livrer",
       "binaryOutputModalitiesPlaceholder": "Aucune exigence",

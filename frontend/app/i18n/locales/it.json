@@ -3744,6 +3744,7 @@
       "binaryOutputContextMissing": "Questi servizi di contesto non sono più nel catalogo: {ids}",
       "binaryOutputUnavailable": "Il catalogo dei servizi fondamentali non è raggiungibile, quindi qui non si può ancora scegliere nulla.",
       "binaryOutputGenerators": "Genera con",
+      "binaryOutputGeneratorsUnavailable": "Non è stato possibile leggere le integrazioni generative di questa installazione, quindi qui non si può ancora scegliere nulla. È un problema di connessione, non una registrazione mancante.",
       "binaryOutputGeneratorsPlaceholder": "Nessuna integrazione selezionata",
       "binaryOutputModalities": "Deve fornire",
       "binaryOutputModalitiesPlaceholder": "Nessun requisito",

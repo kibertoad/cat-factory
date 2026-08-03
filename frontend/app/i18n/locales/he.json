@@ -4107,6 +4107,7 @@
       "binaryOutputContextMissing": "שירותי ההקשר האלה כבר אינם בקטלוג: {ids}",
       "binaryOutputUnavailable": "קטלוג שירותי הבסיס אינו זמין, ולכן עדיין אי אפשר לבחור כאן דבר.",
       "binaryOutputGenerators": "ליצור באמצעות",
+      "binaryOutputGeneratorsUnavailable": "לא ניתן היה לקרוא את האינטגרציות הגנרטיביות של הפריסה הזו, ולכן עדיין אי אפשר לבחור כאן דבר. זו תקלת חיבור, לא רישום חסר.",
       "binaryOutputGeneratorsPlaceholder": "לא נבחרה אינטגרציה",
       "binaryOutputModalities": "חייב לספק",
       "binaryOutputModalitiesPlaceholder": "ללא דרישה",

@@ -3,7 +3,7 @@ import type {
   AgentExecutor,
   AgentPromptRepository,
   WorkspaceAgentSettingsRepository,
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   BlockRepository,
   BlueprintService,
   BrainstormSessionRepository,
@@ -277,14 +277,18 @@ export interface ExecutionServiceDependencies {
    */
   foundationalServiceResolver?: FoundationalServiceResolver
   /**
-   * Optional: the deployment's GENERATIVE BINARY INTEGRATIONS (`BinaryGeneratorRegistry`), which a
-   * binary-generating step selects from to PRODUCE its artifacts — the twin of the catalog seam
-   * above, which is where those artifacts GO. Read at admission (a selected integration must be
-   * registered, and must cover every content type the step declares) and at dispatch (the brief,
-   * plus the non-secret projection the container executor resolves credentials from). Absent ⇒
-   * no integration resolves, and both the refusal and the brief state that.
+   * Optional: the deployment's GENERATIVE BINARY INTEGRATIONS, which a binary-generating step
+   * selects from to PRODUCE its artifacts — the twin of the catalog seam above, which is where
+   * those artifacts GO. Read at admission (a selected integration must be registered, and must
+   * cover every content type the step declares) and at dispatch (the brief, plus the non-secret
+   * projection the container executor resolves credentials from). Absent ⇒ no integration
+   * resolves, and both the refusal and the brief state that.
+   *
+   * A SOURCE rather than the registry itself, because on a mothership-mode node the set is the
+   * MOTHERSHIP's: the picker that selected an id and the admission that resolves it must be
+   * looking at one set, and this node's own build can only hold a second, drifting copy.
    */
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  binaryGeneratorSource?: BinaryGeneratorSource
   /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal

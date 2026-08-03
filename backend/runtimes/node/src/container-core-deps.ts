@@ -251,6 +251,9 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // createCore threads it into the execution service and re-exposes it on Core for boot-time
     // validation.
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    // …and where those integrations are READ from when it is not the registry above (mothership
+    // mode), for the same reason its foundational sibling exists.
+    binaryGeneratorSource: options.binaryGeneratorSource,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

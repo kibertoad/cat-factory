@@ -332,6 +332,35 @@ describe('binaryOutputPickIssues, generative half', () => {
     const pick = binaryOutputPickIssues({ storageServiceId: 'files' }, catalog, true, generators)
     expect(pick.issues).toEqual([])
   })
+
+  it('reports an UNREADABLE set as an outage and makes no claim about the selection', () => {
+    // The picker's half of the mothership-mode disposition. A failed read arrives as the same
+    // empty list an unregistering deployment produces, so judging the selection against it would
+    // tell someone their step names an integration nobody registered — about an id that is very
+    // likely fine, and with the remedy pointing at the wrong repository.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'], modalities: ['audio'] },
+      catalog,
+      true,
+      [],
+      true,
+    )
+    expect(pick.issues).toEqual(['generators_unavailable'])
+    expect(pick.unknownGeneratorIds).toEqual([])
+    expect(pick.uncoveredModalities).toEqual([])
+  })
+
+  it('still judges an EMPTY set, which is a real answer about the deployment', () => {
+    // The distinction the flag exists for: same empty list, opposite fact, opposite message.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'] },
+      catalog,
+      true,
+      [],
+      false,
+    )
+    expect(pick.issues).toContain('unknown_generator')
+  })
 })
 
 describe('binaryOutputPickIssues', () => {

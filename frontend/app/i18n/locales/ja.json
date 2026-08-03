@@ -4108,6 +4108,7 @@
       "binaryOutputContextMissing": "これらのコンテキストサービスはカタログに存在しません: {ids}",
       "binaryOutputUnavailable": "基盤サービスのカタログに接続できないため、ここではまだ何も選択できません。",
       "binaryOutputGenerators": "生成に使用",
+      "binaryOutputGeneratorsUnavailable": "このデプロイメントの生成系インテグレーションを読み取れなかったため、ここではまだ何も選択できません。これは接続の問題であり、登録漏れではありません。",
       "binaryOutputGeneratorsPlaceholder": "統合が未選択",
       "binaryOutputModalities": "提供が必要",
       "binaryOutputModalitiesPlaceholder": "要件なし",

@@ -4096,6 +4096,7 @@
       "binaryOutputContextMissing": "Цих служб контексту більше немає в каталозі: {ids}",
       "binaryOutputUnavailable": "Каталог базових служб недосяжний, тому тут ще нічого не можна обрати.",
       "binaryOutputGenerators": "Генерувати за допомогою",
+      "binaryOutputGeneratorsUnavailable": "Не вдалося прочитати генеративні інтеграції цього розгортання, тож тут поки що немає з чого обирати. Це проблема зі з'єднанням, а не відсутня реєстрація.",
       "binaryOutputGeneratorsPlaceholder": "Інтеграцію не вибрано",
       "binaryOutputModalities": "Має надати",
       "binaryOutputModalitiesPlaceholder": "Без вимоги",
