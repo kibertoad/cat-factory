@@ -3,6 +3,7 @@ import {
   LLM_WARNING_FINISH_REASONS,
   escapeLikePattern,
   type AgentContextIndexQuery,
+  type AgentContextRunPageQuery,
   type AgentContextSnapshot,
   type AgentContextSnapshotIndex,
   type AgentContextSnapshotRepository,
@@ -16,6 +17,7 @@ import {
   type LlmCallMetricSummary,
   type LlmCallOutcomeFilter,
   type LlmCallPageQuery,
+  type LlmCallRunPageQuery,
   type LlmPromptChainTip,
   type ProvisioningLogQuery,
   type ProvisioningLogRecord,
@@ -489,6 +491,31 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     return rows.map(rowToMetric)
   }
 
+  async listRunPage(workspaceId: string, query: LlmCallRunPageQuery): Promise<LlmCallMetric[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.agentKind != null) {
+      clauses.push('agent_kind = ?')
+      binds.push(query.agentKind)
+    }
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY, for the same reason `listPage`'s is composite.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // `SELECT *` — the bodies WHOLE, unlike `listPage`, which returns slices plus their lengths.
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM llm_call_metrics
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as MetricRow[]
+    return rows.map(rowToMetric)
+  }
+
   async listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]> {
     const ascending = query.order === 'oldest'
     const clauses = ['workspace_id = ?', 'execution_id = ?']
@@ -750,6 +777,34 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
       )
       .all(...binds) as unknown as IndexRow[]
     return rows.map(rowToIndex)
+  }
+
+  async listRunPage(
+    workspaceId: string,
+    query: AgentContextRunPageQuery,
+  ): Promise<AgentContextSnapshot[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.stepIndex != null) {
+      clauses.push('step_index = ?')
+      binds.push(query.stepIndex)
+    }
+    if (query.cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // Same predicate, ordering and keyset as `listIndex` — bodies included. Keeping the two in
+    // step is what lets a caller page the index and then page the rows and see the same run.
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM agent_context_snapshots
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as SnapshotRow[]
+    return rows.map(rowToSnapshot)
   }
 
   async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {

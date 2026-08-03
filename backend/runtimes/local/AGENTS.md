@@ -46,6 +46,14 @@ transport + the GitHub token/client seams differ.
   when the node holds no machine token yet, which THROWS rather than resolving empty, because the
   sweep's success path advances that mark. Only rows scoped to a run sync up: an inline LLM call
   that resolved no `executionId` stays local and is eventually pruned.
+- `telemetryReadThrough.ts` — the sync DOWN, and the reason the prune is not a blind spot: it
+  decorates the three RUN-SCOPED sinks so a read the local store answers with NOTHING is served
+  from the mothership's copy over `POST /internal/telemetry/read`. It covers two runs that used to
+  render blank, neither of which reported a problem — one whose local rows were pruned, and (the
+  common case, since a mothership-mode SPA shows the whole org's board) one another node drove
+  entirely. Local always wins where it HAS rows, so the capture path never pays a round trip;
+  `record`/`recordMany`/`latestChainTip`/`deleteOlderThan` are not decorated at all; and a failed
+  fallback THROWS rather than degrading back into the empty answer it was called to replace.
 - `harnessImage.ts` — `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
   boot (must stay a matched set with the backend — `CLAUDE.md` → "Releases & changesets").
 - `harnessInline.ts` — serving an enabled subscription harness ref as an INLINE call: the

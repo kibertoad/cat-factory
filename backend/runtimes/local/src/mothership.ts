@@ -7,6 +7,7 @@ import {
   HttpMachineEventClient,
   HttpMachineNotificationClient,
   HttpMachineTelemetryClient,
+  HttpMachineTelemetryReadClient,
   HttpFoundationalBuiltinSource,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
@@ -18,6 +19,7 @@ import {
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
+import { withTelemetryReadThrough } from './telemetryReadThrough.js'
 import { MothershipEventSubscriber } from './mothershipSubscriber.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
 import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
@@ -203,13 +205,26 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const telemetryStore = createLocalTelemetryStore(
     localDbPath(env.LOCAL_MOTHERSHIP_TELEMETRY_DB, 'telemetry.sqlite'),
   )
+  // READ-THROUGH: the three RUN-SCOPED sinks answer a read the local store has no rows for from
+  // the mothership's copy (`POST /internal/telemetry/read`), so a run whose local rows were
+  // pruned — or that another node drove entirely — renders instead of reading as a run that
+  // spent nothing. Wrapped HERE rather than at each consumer for the same reason the bucket is
+  // declared once: the registry is the composition seam, so the recorders, the observability
+  // endpoints, the board rollups and the debug surface all get it with no per-consumer wiring.
+  // The other two sinks are deliberately NOT wrapped — a provisioning log and a quota cycle are
+  // never ingested, so there is nothing on the mothership to read through to.
+  const readThrough = withTelemetryReadThrough(
+    telemetryStore,
+    new HttpMachineTelemetryReadClient({ baseUrl, token: machineToken }),
+    logger,
+  )
   // Typed by `LocalFirstPersistenceRepository` (the server-side declaration of the bucket), so
   // the map can never be HALF-wired: omitting an entry fails to typecheck rather than silently
   // leaving that repository on a remote proxy the allow-list only ever answers `unknown_method`.
   const localFirst: Record<LocalFirstPersistenceRepository, unknown> = {
-    llmCallMetricRepository: telemetryStore.llmCallMetricRepository,
-    agentContextSnapshotRepository: telemetryStore.agentContextSnapshotRepository,
-    agentSearchQueryRepository: telemetryStore.agentSearchQueryRepository,
+    llmCallMetricRepository: readThrough.llmCallMetricRepository,
+    agentContextSnapshotRepository: readThrough.agentContextSnapshotRepository,
+    agentSearchQueryRepository: readThrough.agentSearchQueryRepository,
     provisioningLogRepository: telemetryStore.provisioningLogRepository,
     subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
   }

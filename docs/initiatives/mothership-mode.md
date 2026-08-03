@@ -1,6 +1,6 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; telemetry local-first AND synced up, read-through pending; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; telemetry local-first, synced up AND read back through — PR 5 COMPLETE; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
@@ -577,11 +577,7 @@
     `runtimes/local/src/mothership.test.ts` (the client wire shape), the three telemetry
     conformance suites (`recordMany` parity on D1 + Drizzle), and the shared cross-runtime suite
     (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on BOTH facades).
-    **Still open in PR 5:** the READ-THROUGH fallback — a mothership-mode node rendering a run whose
-    LOCAL rows have already been pruned still shows nothing, even though the mothership now holds
-    them. The rows are readable on the mothership's own surfaces (that is what this slice bought);
-    what is missing is a bounded machine read that lets the laptop fall back to them. Also
-    deliberately out of scope: `provisioningLogRepository`, whose `executionId` is NULLABLE because
+    **Deliberately out of scope for the sync UP:** `provisioningLogRepository`, whose `executionId` is NULLABLE because
     an environment outlives the run that provisioned it, so "a finished run's rows" does not
     identify them; `subscriptionQuotaCycleRepository`, whose both scopes key on laptop-held
     credentials; and an LLM call that resolved NO run (`execution_id IS NULL` — an inline call whose
@@ -592,6 +588,73 @@
     already remote in `tokenUsageRepository`, which the budget gate reads. Closing it needs a
     second, workspace-keyed candidate query, and is worth doing only if those rows turn out to
     matter to a deployment-wide view.
+
+**Telemetry READ-THROUGH (PR 5, third half — PR 5 COMPLETE)**
+
+- **`POST /internal/telemetry/read`** closes the loop the ingest opened, and it turns out the gap
+  was wider than the tracker had it. The framing was "a run whose LOCAL rows were pruned"; the
+  bigger case is a run that was **never local at all**. A mothership-mode SPA shows the whole
+  org's board, so most runs a developer opens were driven by a hosted teammate or another
+  laptop — and every one of them rendered an empty observability panel, a zero token rollup and
+  no web-search log, with nothing anywhere reporting a problem. That is the precise shape this
+  initiative treats as the worst kind of gap: absent and zero rendering identically.
+  - **It is the ingest's dual, and a DEDICATED endpoint for one more reason than the ingest had.**
+    ADR 0009 already says a cross-cutting concern gets its own `/internal/*` surface. On top of
+    that, the drift guard asserts a `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` repository appears in
+    NO `REMOTE_PERSISTENCE_METHODS` entry — and it must, because the persistence registry resolves
+    a repository WHOLE: naming a telemetry repo there to get its reads would route its hot-path
+    WRITES over the network, which is the entire thing the bucket exists to prevent. A separate
+    table, reached only by the read-through decorator, keeps that invariant intact.
+  - **The table is CLOSED and each entry is BOUNDED** (`TELEMETRY_READ_METHODS`), obeying the
+    debug API's rule that a response's size is computable BEFORE the request. `listByExecution`
+    is deliberately absent from it on all three sinks: it takes no cursor, so a node asking a long
+    run for "everything" is the un-resumable bulk read this bucket forbids. The node answers those
+    methods by DRAINING the paged reads instead. An over-cap or unstated limit is REFUSED (413),
+    never clamped — a node that asked for 500 rows and silently got 100 would take its next cursor
+    from a page it believes was complete and lose everything between.
+  - **The workspace is STAMPED, not passed.** Every method in the table takes `workspaceId` first;
+    the controller prepends the SCOPE-BOUND id and the request's `args` carry everything after it,
+    so a node cannot read a workspace it did not address even by naming one positionally. Same
+    machine-audience pin (checked FIRST), same uniform 404, same 503-on-a-non-mothership as every
+    other `/internal/*` surface. Own-property table lookup, like the persistence allow-list.
+  - **Two new kernel port methods, `listRunPage`** on `llmCallMetricRepository` and
+    `agentContextSnapshotRepository` (mirrored D1 ⇄ Drizzle ⇄ the local `node:sqlite` store, with
+    conformance parity assertions) — the bounded, keyset-paginated, WHOLE-BODY page of one run's
+    rows. Neither existing read could serve it: `listPage` returns SLICES plus their lengths (a
+    different type, by contract), and `listByExecution` has no cursor. `agentSearchQueryRepository`
+    needed none — its `listPage` already returns whole rows on the same keyset, because a search
+    row carries no unbounded body.
+  - **On the laptop the rule is LOCAL WINS, fall through only on nothing** (`telemetryReadThrough.ts`,
+    composed into the SAME `localFirst` map that declares the bucket, so every consumer — the
+    recorders, the observability endpoints, the board rollups, `/api/v1/debug/*` — gets it with no
+    per-consumer wiring). The local store is both the fresher copy (it holds the run in flight,
+    before any ingest) and the cheaper one, so a run this node is driving stops paying for round
+    trips the moment it records its first call. Capture is NOT decorated at all: `record` /
+    `recordMany` / `latestChainTip` / `deleteOlderThan` go straight to the local store — the chain
+    tip especially, or the node would store a prompt delta against a tip it cannot reproduce.
+  - **A failed fallback THROWS; it never degrades to the empty answer it was called to replace.**
+    The whole defect is that "no rows here" and "no rows anywhere" render identically, so a
+    swallowed failure reinstates it with an extra step. This is safe on the one hot-path caller
+    because `RunStateMachine.attachStepMetrics` already treats a metrics read as best-effort and
+    swallows — a mothership outage costs a board counter, never the run.
+  - **It composes with keyset paging rather than fighting it**, which is what makes a
+    partially-pruned run read continuously: a debug client gets local rows while local has them and
+    falls through on the first page local cannot fill, with the SAME cursor — exact, because the
+    ingest preserves each row's id and `createdAt`. A drain that stops at its cap is LOGGED with
+    the run it stopped on, since a list that quietly ends partway reads as the whole run.
+  - **The two sinks the ingest deliberately skips are deliberately NOT decorated**: there is
+    nothing upstream to read through to, and wrapping them would buy a guaranteed-empty round trip
+    per read.
+  - Tested in `packages/server/test/telemetryRead.spec.ts` (auth pin, scope binding, the
+    workspace-stamping property, the closed table incl. prototype members, the refuse-don't-clamp
+    bounds, the byte backstop, 503/500 edges, and the client's throw-never-empty contract),
+    `runtimes/local/src/telemetryReadThrough.test.ts` (local-hit costs no round trip, the drain and
+    its cursor across a shared millisecond, the partial-prune stitch, the throw, and that capture
+    is undecorated), `runtimes/local/src/sqlite/telemetryStore.test.ts` +
+    `runtimes/local/src/mothership.test.ts` (the local `listRunPage` SQL and the composed wiring),
+    the two telemetry conformance suites (`listRunPage` parity on D1 + Drizzle), and the shared
+    cross-runtime suite (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on
+    BOTH facades).
 
 **Login (PR 3)**
 
@@ -863,23 +926,25 @@ never remotely invocable (mothership-internal cron).
 | durable execution work queue          | ✅ done | PR 1 (in-proc) → PR 2 (durable)   |
 | cached mothership machine token       | ✅ done | PR 3                              |
 
-**Telemetry (local-first `node:sqlite` — PR 5; batch sync UP landed, read-through still to come):**
+**Telemetry (local-first `node:sqlite` — PR 5; capture, sync UP and read-through all landed):**
 
-| Port                               | Status  | Notes                                                                         |
-| ---------------------------------- | ------- | ----------------------------------------------------------------------------- |
-| `llmCallMetricRepository`          | ✅ done | whole repo local (`summarizeByExecution` stopgap removed from the allow-list) |
-| `agentContextSnapshotRepository`   | ✅ done | whole repo local                                                              |
-| `agentSearchQueryRepository`       | ✅ done | whole repo local                                                              |
-| `subscriptionQuotaCycleRepository` | ✅ done | whole repo local (both scopes key on laptop-held credentials)                 |
-| `provisioningLogRepository`        | ✅ done | whole repo local (the node provisions the infra these rows describe)          |
+| Port                               | Status  | Notes                                                                             |
+| ---------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `llmCallMetricRepository`          | ✅ done | local + synced up + read through (`summarizeByExecution` stopgap de-allow-listed) |
+| `agentContextSnapshotRepository`   | ✅ done | local + synced up + read through                                                  |
+| `agentSearchQueryRepository`       | ✅ done | local + synced up + read through                                                  |
+| `subscriptionQuotaCycleRepository` | ✅ done | whole repo local (both scopes key on laptop-held credentials)                     |
+| `provisioningLogRepository`        | ✅ done | whole repo local (the node provisions the infra these rows describe)              |
 
 Batch-ingesting a FINISHED run's rows up to the mothership (so hosted teammates can read them, and
 they survive the local prune) has LANDED for the three run-scoped sinks, via
-`POST /internal/telemetry/ingest` — see "Cross-cutting delegation". `provisioningLogRepository`
-(nullable `executionId` — an environment outlives the run that provisioned it),
-`subscriptionQuotaCycleRepository` (both scopes key on laptop-held credentials) and an LLM call
-that resolved no run at all (`execution_id IS NULL`) are deliberately NOT ingested. What remains is
-the READ-THROUGH fallback for a run whose local rows were pruned.
+`POST /internal/telemetry/ingest`, and reading them back down for a run this node holds no rows for
+has LANDED via `POST /internal/telemetry/read` — see "Cross-cutting delegation".
+`provisioningLogRepository` (nullable `executionId` — an environment outlives the run that
+provisioned it), `subscriptionQuotaCycleRepository` (both scopes key on laptop-held credentials) and
+an LLM call that resolved no run at all (`execution_id IS NULL`) are deliberately in NEITHER
+direction: nothing keys their upload, so there is nothing upstream to read through to, and the
+read-through pointedly does not decorate them rather than buying a guaranteed-empty round trip.
 
 Two properties of the sweep are load-bearing and easy to undo by accident, because both failure
 modes look like success:
@@ -913,12 +978,12 @@ modes look like success:
   > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
   > in BOTH directions, notification DELIVERY delegation, and telemetry INGEST (below) are all
   > IMPLEMENTED. The one remaining bullet that is DESIGN ONLY is PR 4's email half — no
-  > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The eight live
+  > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The nine live
   > `/internal/*` routes today are `POST /internal/persistence`,
   > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
   > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,
-  > `POST /internal/telemetry/ingest`, `GET /internal/foundational-services`, and
-  > `POST /internal/foundational-services/contracts`.
+  > `POST /internal/telemetry/ingest`, `POST /internal/telemetry/read`,
+  > `GET /internal/foundational-services`, and `POST /internal/foundational-services/contracts`.
 
 - **Real-time — BOTH directions ✅ landed.** The OUTBOUND leg is
   built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a
@@ -965,9 +1030,17 @@ modes look like success:
   already reach. The append is idempotent by row id (the ports' `recordMany`), which is what makes
   a lost-ack chunk safely retryable and what lets a failed upload leave the run's high-water mark
   alone. See "Landed so far" for the full shape.
-  **Still open:** READ-THROUGH — a node rendering a run whose LOCAL rows were already pruned still
-  shows nothing, though the mothership now holds them and its own surfaces render them. That needs
-  a bounded machine read (never a bulk one), and is the last piece of PR 5.
+- **Telemetry read-through ✅ landed (PR 5, third half).** The ingest's dual:
+  `POST /internal/telemetry/read`, a CLOSED table of per-method-bounded, run-scoped reads (never a
+  bulk one — `listByExecution` is absent from it on all three sinks, and the node drains the paged
+  reads instead), plus the laptop-side decorator that falls through only when the LOCAL store
+  answers with nothing. It covers more than the pruned-run case the plan named: in mothership mode
+  the SPA shows the whole org's board, so most runs a developer opens were never local at all. A
+  failed fallback THROWS rather than answering empty, because an empty telemetry panel is exactly
+  the false zero the feature exists to remove. Its own endpoint rather than allow-listed RPC
+  methods for ADR 0009's reason AND a sharper one: the persistence registry resolves a repository
+  WHOLE, so admitting a telemetry repo's reads there would route its hot-path writes over the
+  network. See "Landed so far" for the full shape.
 
 ## Phased delivery
 
@@ -1016,11 +1089,14 @@ residuals — PR 3 landed them; see "Landed so far".)
   far"). Email delegation is deliberately deferred until it has a reachable consumer (see
   "Cross-cutting delegation"). **Remaining:** mothership-side delivery of a laptop-sealed Slack
   connection (rides the secrets-delegation slice).
-- **PR 5 — telemetry/logs local-first sync.** ◑ The local-first CAPTURE half (the `node:sqlite`
-  telemetry store, the registry composition seam, the spend-ledger split, the local prune) and the
-  batch sync UP (`POST /internal/telemetry/ingest`, the ports' `recordMany`, the node's
-  quiescence-driven sweep) have both **landed** — see "Landed so far". **Remaining:** the
-  read-through fallback, so a node still renders a run whose local rows were pruned.
+- **PR 5 — telemetry/logs local-first sync.** ✅ **landed, all three halves.** The local-first
+  CAPTURE half (the `node:sqlite` telemetry store, the registry composition seam, the spend-ledger
+  split, the local prune), the batch sync UP (`POST /internal/telemetry/ingest`, the ports'
+  `recordMany`, the node's quiescence-driven sweep) and the READ-THROUGH back down
+  (`POST /internal/telemetry/read`, the ports' `listRunPage`, the local-wins decorator) — see
+  "Landed so far". The residual losses are stated there and are deliberate: an inline LLM call
+  that resolved no run never syncs up, and the provisioning log + quota cycles are laptop-only by
+  construction.
 - **PR 6 — UI labeling + hardening** (whitelisting admin, token rotation, rate-limiting, security
   review).
 

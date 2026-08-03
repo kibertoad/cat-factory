@@ -199,6 +199,20 @@ export {
   HttpMachineTelemetryClient,
   MachineTokenUnavailableError,
 } from './telemetry/machineTelemetry.js'
+export {
+  MAX_TELEMETRY_READ_CHARS,
+  TELEMETRY_READ_METHODS,
+  TELEMETRY_READ_PAGE_SIZES,
+  type HttpMachineTelemetryReadClientOptions,
+  type MachineTelemetryReadClient,
+  type TelemetryReadBound,
+  type TelemetryReadRepository,
+  type TelemetryReadRequest,
+  type TelemetryReadResponse,
+  type TelemetryReadResults,
+  HttpMachineTelemetryReadClient,
+  MachineTokenUnavailableForReadError,
+} from './telemetry/machineTelemetryRead.js'
 export { mountAuthGate } from './http/authGate.js'
 export {
   REQUEST_ID_HEADER,
