@@ -513,13 +513,27 @@ export const MODEL_CATALOG: SelectableModel[] = [
     family: 'gemini',
     label: 'Gemini 3.1 Pro',
     description:
-      "Google's flagship Gemini Pro via OpenRouter — 1M-token context, billed at Google rates.",
+      "Google's flagship Gemini Pro via OpenRouter — 1M-token context, billed at Google rates. " +
+      'Still the newest Pro: 3.5 Pro has slipped repeatedly and the 3.x Pro line stops here.',
     openrouter: {
       ref: {
         provider: 'openrouter',
         model: 'google/gemini-3.1-pro-preview',
         contextTokens: 1_048_576,
       },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'gemini-flash',
+    family: 'gemini',
+    label: 'Gemini 3.6 Flash',
+    description:
+      "Google's newest model and its positioned workhorse — 1M-token context at a fraction of " +
+      'Pro pricing. Via OpenRouter, billed at Google rates.',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'google/gemini-3.6-flash', contextTokens: 1_048_576 },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },

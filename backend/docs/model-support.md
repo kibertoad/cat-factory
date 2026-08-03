@@ -56,8 +56,8 @@ Three shapes of catalog entry fall out of this:
   window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
   Pro 131K) while the direct/subscription variant gets the full window (1M).
   `contextTokens` on the `ModelRef` surfaces this in the picker.
-- **Gateway-only** — `gemini`, `kimi-k3`. No Cloudflare/direct base; reached through
-  OpenRouter once a key is connected.
+- **Gateway-only** — `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
+  reached through OpenRouter once a key is connected.
 - **Subscription-only** — `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-opus` and

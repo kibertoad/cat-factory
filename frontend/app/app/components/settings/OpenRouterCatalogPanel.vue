@@ -35,6 +35,7 @@ const RECOMMENDED_SLUGS = [
   'openai/gpt-5.6-sol',
   'openai/gpt-5.6-terra',
   'google/gemini-3.1-pro-preview',
+  'google/gemini-3.6-flash',
   'deepseek/deepseek-v4-flash',
   'moonshotai/kimi-k2.7-code',
   'z-ai/glm-5.2',
