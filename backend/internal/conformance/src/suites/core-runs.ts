@@ -393,17 +393,22 @@ function registerLiveRunInvariantTests(harness: ConformanceHarness): void {
         initiatedBy: null,
       })
 
+      // `listStale` is the sweeper's CROSS-WORKSPACE read, so it also returns identically-named
+      // runs this suite created under earlier workspaces. Match on the workspace too, or the
+      // assertion reads whichever `exec_redrive` came first and only passes against a database
+      // nothing has run before — a pass that depends on CI provisioning a fresh Postgres.
+      const ours = (rows: Awaited<ReturnType<typeof runs.listStale>>) =>
+        rows.find((r) => r.id === 'exec_redrive' && r.workspaceId === workspace.id)
+
       // A run nobody has re-driven reads 0, not null/undefined: the sweeper compares it, and a
       // nullish value would silently disable the comparison on whichever facade produced it.
-      const before = await runs.listStale(Date.now() + 60_000)
-      expect(before.find((r) => r.id === 'exec_redrive')?.redriveCount).toBe(0)
+      expect(ours(await runs.listStale(Date.now() + 60_000))?.redriveCount).toBe(0)
 
       // `recordRedrive` increments and returns the NEW total in one statement, so nothing races
       // between a read and a write.
       expect(await runs.recordRedrive(workspace.id, 'exec_redrive')).toBe(1)
       expect(await runs.recordRedrive(workspace.id, 'exec_redrive')).toBe(2)
-      const after = await runs.listStale(Date.now() + 60_000)
-      expect(after.find((r) => r.id === 'exec_redrive')?.redriveCount).toBe(2)
+      expect(ours(await runs.listStale(Date.now() + 60_000))?.redriveCount).toBe(2)
 
       // A run that has since vanished answers 0 rather than throwing: this is bookkeeping ABOUT
       // a recovery and must never be able to fail one.
