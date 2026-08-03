@@ -263,7 +263,27 @@ zero" rule applied for the first time to a DECISION surface rather than an enric
 The two BEST-EFFORT readers keep their own dispositions, and both are safe because each already
 defines its own absence: the dispatch brief injects nothing, which the trait guidance already
 reads as "the platform could not provide storage — do not attempt any upload; report it", and the
-declaration read-back leaves the step unannotated rather than filing every claimed id as invented.
+declaration read-back records what it CAN and says the rest was unverified.
+
+That second one is worth stating precisely, because the obvious reading of "do not file an
+unchecked id as invented" is to write no report at all — and that is wrong in the other
+direction. A settled step's report is the evidence a human reads to decide whether the run's
+artifacts are real, and the generative question is one line of it: the artifacts themselves and
+the whole STORAGE verdict resolve against the workspace catalog, which an unreachable mothership
+says nothing about. Dropping them would lose a completed generation's record over a question
+nobody asked. So `BinaryOutputReport` carries `generatorsUnverified` as its own field — never an
+empty `unknownGenerators`, which otherwise means "every claimed id checked out" — and the SPA
+renders it as its own warning line, counted by `binaryOutputHasWarnings` so a collapsed section
+cannot present an unchecked report as a clean one. It is the same three-state split as the
+picker's, at the other end of the run.
+
+Nothing named a run start's REFUSAL, though, and the generic 503 copy the SPA falls back to says
+"this deployment has not configured the capability this action needs" — which is the exact
+misattribution this whole feature removes, reappearing one layer up and in ten languages, with
+the honest wording demoted to untranslated detail behind a disclosure. So user-reachable 503
+reasons get their own translated copy, keyed off a `UNAVAILABLE_REASONS` union in
+`@cat-factory/contracts` and an exhaustive `Record` in `usePipelineErrorToast` — the
+`CONFLICT_REASONS` pattern, applied to the status class that needed it next.
 
 ### The picker is part of the fix, not a follow-up
 

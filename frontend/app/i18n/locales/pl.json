@@ -497,6 +497,12 @@
         "unexpected": "Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie, a jeśli problem się powtarza, przekaż szczegóły operatorowi wdrożenia."
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+      }
+    },
     "action": {
       "retryFailed": "Ponowienie nie powiodło się",
       "startFailed": "Nie udało się uruchomić",
@@ -5409,7 +5415,8 @@
       "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
       "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
       "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście.",
-      "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym."
+      "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym.",
+      "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
     "unknownGeneratorBadge": "Niezarejestrowana"
   },

@@ -36,7 +36,7 @@ import type {
 // facts, and here the second one is ADMISSION policy — answering it for the first would refuse
 // a correctly configured step with `unknown_generator` during a transient outage, which is the
 // misattribution above with a different cause. Each caller states the outage in its own
-// vocabulary instead: admission refuses with `binary_generators_unavailable` (503-shaped and
+// vocabulary instead: admission refuses with `binary_generators_unreachable` (503-shaped and
 // retryable, deliberately not `binary_output_generator_invalid`), the brief renderer keeps its
 // best-effort disposition and injects nothing (which the trait guidance already defines as "do
 // not attempt any upload; report it"), and the builder's picker says it could not be read
@@ -75,5 +75,39 @@ export function registryBinaryGeneratorSource(
   return {
     views: async () => registry.views(),
     documentsFor: async (ids) => new Map(ids.map((id) => [id, registry.documentsFor(id)] as const)),
+  }
+}
+
+/**
+ * A source whose `views()` is read AT MOST ONCE, for the lifetime of the returned object.
+ *
+ * Scoped to ONE dispatch and thrown away with it (`CatalogRunContext.sliceFor`), which is what
+ * makes this a memo rather than the homebrew cache the `AppCaches` seam exists to keep out: it
+ * has no TTL to tune and no invalidation path to get wrong, because it cannot outlive the single
+ * read wave that created it. Two halves of one dispatch need the same set — the brief that tells
+ * an agent which integrations it has, and the credential projection that puts a value behind
+ * each — and issuing that as two round trips to the mothership bought nothing but latency and a
+ * window in which the two halves could describe different sets.
+ *
+ * The settled result is stored as a VALUE, never a rejected promise, so a dispatch whose other
+ * consumer short-circuits before awaiting cannot leave an unhandled rejection behind. Every
+ * caller still sees the original error thrown, so each keeps its own disposition: the brief
+ * degrades to absent ("the platform could not provide storage"), the credential projection to
+ * none. `documentsFor` is deliberately NOT memoised — it is read once per dispatch already, and
+ * a per-id memo would have to model partial selections for no caller that has one.
+ */
+export function memoizeBinaryGeneratorViews(source: BinaryGeneratorSource): BinaryGeneratorSource {
+  let read: Promise<{ ok: true; views: BinaryGeneratorView[] } | { ok: false; error: unknown }>
+  return {
+    views: async () => {
+      read ??= source.views().then(
+        (views) => ({ ok: true, views }) as const,
+        (error) => ({ ok: false, error }) as const,
+      )
+      const result = await read
+      if (!result.ok) throw result.error
+      return result.views
+    },
+    documentsFor: (ids) => source.documentsFor(ids),
   }
 }

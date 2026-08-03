@@ -4,8 +4,6 @@ import type {
   WorkspaceAgentSettingsRepository,
   AgentRunContext,
   BinaryGeneratorSource,
-  InjectedContextFile,
-  ResolvedBinaryGenerator,
   Block,
   BlockRepository,
   BrainstormSessionRepository,
@@ -427,7 +425,8 @@ export class AgentContextBuilder {
       // Everything this dispatch gets from the CATALOG side — the foundational-services files,
       // the binary-output brief, and the generative integrations the executor resolves
       // credentials from. One entry rather than three because they share a collaborator, a
-      // failure policy and (on a mothership-mode node) a transport; see `catalogSliceFor`.
+      // failure policy and (on a mothership-mode node) a transport, so the collaborator owns
+      // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
@@ -455,7 +454,7 @@ export class AgentContextBuilder {
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
-      this.catalogSliceFor(workspaceId, agentKind, step, instance),
+      this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -1261,45 +1260,6 @@ export class AgentContextBuilder {
    * per call invites someone to give it per-call state it cannot keep.
    */
   private catalogRunContext?: CatalogRunContext
-
-  /**
-   * The CATALOG slice of one dispatch, resolved concurrently as a single entry in the context
-   * read wave.
-   *
-   * Three reads that belong together rather than three wave entries that happen to be adjacent:
-   *
-   * - the FOUNDATIONAL SERVICES files (the catalog for a design kind, the declared services' API
-   *   contracts for a consumer kind, nothing for anything else);
-   * - the BINARY-OUTPUT brief for a kind carrying the trait, off the step's own selection;
-   * - the GENERATIVE INTEGRATIONS that selection names — the non-secret projection the container
-   *   executor turns into credentials on the job body.
-   *
-   * All three go through `CatalogRunContext`, all three are BEST-EFFORT inside (each gap has a
-   * stated rendering: an `unavailable` catalog file, an absent brief the trait guidance defines
-   * as "do not attempt any upload", no integrations to hand credentials for), and on a
-   * mothership-mode node all three can cross the machine API — which is why the last one moved
-   * into the wave at all rather than being resolved after it, where it would have serialised a
-   * round trip behind the others for no reason.
-   */
-  private async catalogSliceFor(
-    workspaceId: string,
-    agentKind: string,
-    step: PipelineStep,
-    instance: ExecutionInstance,
-  ): Promise<{
-    foundationalContextFiles: InjectedContextFile[]
-    binaryOutputContextFiles: InjectedContextFile[]
-    binaryGenerators: ResolvedBinaryGenerator[]
-  }> {
-    const catalog = this.catalogContext()
-    const [foundationalContextFiles, binaryOutputContextFiles, binaryGenerators] =
-      await Promise.all([
-        catalog.foundationalContextFor(workspaceId, agentKind, instance),
-        catalog.binaryOutputContextFor(workspaceId, agentKind, step),
-        catalog.binaryGeneratorsFor(agentKind, step),
-      ])
-    return { foundationalContextFiles, binaryOutputContextFiles, binaryGenerators }
-  }
 
   private catalogContext(): CatalogRunContext {
     this.catalogRunContext ??= new CatalogRunContext({

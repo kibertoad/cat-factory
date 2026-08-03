@@ -22,8 +22,9 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * cannot read.
  *
  * Throwing is NOT the same as failing the run, and each caller decides what it means for it.
- * Admission converts it into `binary_generators_unavailable` (503-shaped and retryable, kept
- * deliberately apart from `binary_output_generator_invalid`); the dispatch brief keeps its
+ * Admission RE-THROWS it unchanged — it is already 503-shaped and retryable, and its
+ * `binary_generators_unreachable` reason is kept deliberately apart from
+ * `binary_output_generator_invalid`; the dispatch brief keeps its
  * best-effort disposition and injects nothing, which the trait guidance already defines as "the
  * platform could not provide storage — do not attempt any upload; report it"; the workspace
  * snapshot marks the picker unreadable rather than empty. What this class guarantees is that the
@@ -66,7 +67,15 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
     // missing `generators` key is exactly as unreadable as a malformed one — an empty registry
     // is spelled `[]`, which no honest server omits.
     if (!Array.isArray(body.generators)) throw unreadable('generators')
-    return body.generators as BinaryGeneratorView[]
+    // The ELEMENTS are checked too, not just the envelope. A view whose `id` is not a string
+    // cannot be matched against a step's `generatorIds` by any caller here, so a reply carrying
+    // one is a reply we cannot resolve a selection against — the very thing this class promises
+    // never to answer quietly. Checked shallowly and structurally (an id to match on, the
+    // content types admission compares): this is a trusted peer serving a projection of its own
+    // registry, so the job is to catch a WRONG SHAPE (a route answering something else, a
+    // version skew) rather than to re-validate a definition the mothership already boot-checked.
+    if (!body.generators.every(isGeneratorView)) throw unreadable('generators')
+    return body.generators
   }
 
   async documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>> {
@@ -78,7 +87,13 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
     if (!documents || typeof documents !== 'object' || Array.isArray(documents)) {
       throw unreadable('documents')
     }
-    return new Map(Object.entries(documents as Record<string, ApiContractDocument[]>))
+    const entries = Object.entries(documents)
+    // Same rule one level in: a value that is not an array would reach the brief renderer's
+    // `.map()` as a TypeError — an unreadable reply escaping as a generic crash instead of the
+    // one `UnavailableError` every route to "we do not know what is registered" is supposed to
+    // end at, and one the caller's best-effort wrapper would then log under the wrong cause.
+    if (!entries.every(([, docs]) => Array.isArray(docs))) throw unreadable('documents')
+    return new Map(entries as [string, ApiContractDocument[]][])
   }
 
   private async read<T>(path: string, payload?: unknown): Promise<T> {
@@ -125,6 +140,18 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
     if (!body || typeof body !== 'object') throw unreadable('body')
     return body
   }
+}
+
+/**
+ * The shallow structural check one served view must pass to be resolvable here: an `id` to match
+ * a step's `generatorIds` against, and the `modalities` admission compares a step's declared
+ * content types to. Everything else a view carries is rendered rather than decided on, so a
+ * missing field degrades a brief instead of silently changing a verdict.
+ */
+function isGeneratorView(value: unknown): value is BinaryGeneratorView {
+  if (!value || typeof value !== 'object') return false
+  const view = value as Partial<BinaryGeneratorView>
+  return typeof view.id === 'string' && Array.isArray(view.modalities)
 }
 
 /**

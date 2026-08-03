@@ -7,6 +7,7 @@ import type {
   Logger,
   ResolvedBinaryGenerator,
 } from '@cat-factory/kernel'
+import { memoizeBinaryGeneratorViews } from '@cat-factory/kernel'
 import {
   type FoundationalDeclarationRecorder,
   type FoundationalServiceResolver,
@@ -29,6 +30,17 @@ import {
 // optional-spread deps shape is easy to get subtly wrong four times — which is exactly why they
 // live behind one object.
 // ---------------------------------------------------------------------------
+
+/**
+ * Everything one dispatch takes from the CATALOG side, as {@link CatalogRunContext.sliceFor}
+ * returns it: the two injected-file groups the agent reads, and the structured integration
+ * projection the container executor turns into credentials on the job body.
+ */
+export interface CatalogRunSlice {
+  foundationalContextFiles: InjectedContextFile[]
+  binaryOutputContextFiles: InjectedContextFile[]
+  binaryGenerators: ResolvedBinaryGenerator[]
+}
 
 export interface CatalogRunContextDeps {
   agentKindRegistry: AgentKindRegistry
@@ -58,50 +70,65 @@ export class CatalogRunContext {
   }
 
   /**
-   * The FOUNDATIONAL SERVICES slice of a dispatch's `.cat-context/` — the catalog for a design
-   * kind, the declared services' contracts for a consumer kind, nothing for anything else. Reads
-   * only the steps BEFORE the one being dispatched, so a re-dispatched design cannot read its
-   * own prior round.
+   * ALL THREE catalog-backed reads of one dispatch, resolved concurrently — the ONE entry the
+   * context read wave takes, so the builder holds a single wave slot rather than three:
+   *
+   * - the FOUNDATIONAL SERVICES files (the catalog for a design kind, the declared services' API
+   *   contracts for a consumer kind, nothing for anything else), read only from the steps BEFORE
+   *   the one being dispatched so a re-dispatched design cannot read its own prior round;
+   * - the BINARY-OUTPUT brief for a kind carrying the trait, off the step's own selection;
+   * - the GENERATIVE INTEGRATIONS that selection names — the non-secret projection the container
+   *   executor turns into credentials on the job body.
+   *
+   * They belong together rather than merely being adjacent: all three go through this
+   * collaborator, all three are BEST-EFFORT inside (each gap has a stated rendering — an
+   * `unavailable` catalog file, an absent brief the trait guidance already defines as "do not
+   * attempt any upload", no integrations to hand credentials for), and on a mothership-mode node
+   * all three can cross the machine API. That last point is why the generative half belongs in
+   * the wave at all rather than after it, where it would serialise a round trip behind the
+   * others for nothing.
+   *
+   * Exposed as the WHOLE slice rather than three per-read methods, because the sharing below is
+   * only correct within one dispatch: a caller that could take the halves separately could take
+   * them at different times, which is the drift this collaborator exists to prevent.
+   *
+   * The two halves of the binary-output selection share ONE `views()` read
+   * ({@link memoizeBinaryGeneratorViews}), scoped to this call and discarded with it. The brief
+   * that tells an agent which integrations it has and the projection that puts a credential
+   * behind each are answers about the same set, so reading it twice bought a second round trip
+   * and a window in which they could disagree. Sharing costs no coherence: on a failure both
+   * degrade, which is the pair's coherent state (an agent told nothing, handed nothing), and
+   * each still applies its own disposition rather than one failing the other.
    */
-  foundationalContextFor(
-    workspaceId: string,
-    agentKind: string,
-    instance: ExecutionInstance,
-  ): Promise<InjectedContextFile[]> {
-    return resolveFoundationalContext({
-      ...this.deps,
-      workspaceId,
-      agentKind,
-      priorSteps: instance.steps.slice(0, instance.currentStep),
-    })
-  }
-
-  /**
-   * The BINARY-OUTPUT slice of a dispatch's `.cat-context/` — the storage/context brief +
-   * contract files for a kind carrying the `binary-output` trait, resolved off the step's own
-   * `stepOptions.binaryOutput` selection. Sibling of {@link foundationalContextFor}, off the
-   * same resolver and failure policy.
-   */
-  binaryOutputContextFor(
+  async sliceFor(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
-  ): Promise<InjectedContextFile[]> {
-    return resolveBinaryOutputContext({ ...this.deps, workspaceId, agentKind, step })
-  }
-
-  /**
-   * The GENERATIVE INTEGRATIONS this dispatch carries on its run context — the non-secret half
-   * the container executor turns into resolved credentials on the job body. The counterpart of
-   * {@link binaryOutputContextFor}: same gate, same selection, the other channel.
-   */
-  binaryGeneratorsFor(agentKind: string, step: PipelineStep): Promise<ResolvedBinaryGenerator[]> {
-    return dispatchBinaryGeneratorsFor({ ...this.deps, agentKind, step })
+    instance: ExecutionInstance,
+  ): Promise<CatalogRunSlice> {
+    const deps = this.deps.binaryGeneratorSource
+      ? {
+          ...this.deps,
+          binaryGeneratorSource: memoizeBinaryGeneratorViews(this.deps.binaryGeneratorSource),
+        }
+      : this.deps
+    const [foundationalContextFiles, binaryOutputContextFiles, binaryGenerators] =
+      await Promise.all([
+        resolveFoundationalContext({
+          ...deps,
+          workspaceId,
+          agentKind,
+          priorSteps: instance.steps.slice(0, instance.currentStep),
+        }),
+        resolveBinaryOutputContext({ ...deps, workspaceId, agentKind, step }),
+        dispatchBinaryGeneratorsFor({ ...deps, agentKind, step }),
+      ])
+    return { foundationalContextFiles, binaryOutputContextFiles, binaryGenerators }
   }
 
   /**
    * Read back what a settled DESIGN step declared, and record it on the step — the counterpart
-   * of {@link foundationalContextFor}, so the completion hub takes no dependency of its own for
+   * of the catalog half of {@link sliceFor}, so the completion hub takes no dependency of its own for
    * it.
    */
   recordFoundationalDeclaration(
@@ -114,7 +141,7 @@ export class CatalogRunContext {
 
   /**
    * Read back what a settled BINARY-GENERATING step declared it stored, and record it on the
-   * step — the counterpart of {@link binaryOutputContextFor}.
+   * step — the counterpart of the binary-output half of {@link sliceFor}.
    */
   recordBinaryOutputDeclaration(
     workspaceId: string,

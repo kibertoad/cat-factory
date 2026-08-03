@@ -178,14 +178,32 @@ export function parseBinaryOutputDeclaration(
   known: {
     /** Ids in the workspace's resolved foundational catalog (the storage/context half). */
     services: Iterable<string>
-    /** Ids the deployment registers on its `BinaryGeneratorRegistry` (the generative half). */
+    /**
+     * Ids the deployment registers on its `BinaryGeneratorRegistry` (the generative half).
+     * Absent/empty is a real answer — a deployment that registers none — so every claimed id is
+     * then reported as unknown. For "could not be read at all", pass {@link generatorsUnverified}
+     * instead; the two must never be spelled the same way.
+     */
     generators?: Iterable<string>
+    /**
+     * Set when the generative set could not be READ, so no claimed id may be judged against it.
+     * `unknownGenerators` is then left EMPTY and the report says `generatorsUnverified` — the
+     * platform states what it could not check rather than filing it as an invention. The storage
+     * half is still judged: it resolves against the workspace catalog, which this says nothing
+     * about, and dropping a verdict that WAS computable is the other half of the same mistake.
+     */
+    generatorsUnverified?: boolean
   },
 ): BinaryOutputReport {
+  // The unverified flag rides EVERY return below, the early ones included: "nobody could check
+  // the integrations" is true of an undeclared or unparseable reply exactly as it is of a parsed
+  // one, and a reader comparing two settlements must not see the fact appear and disappear with
+  // the shape of the agent's reply.
   const empty: BinaryOutputReport = {
     stored: [],
     unknownServices: [],
     unknownGenerators: [],
+    ...(known.generatorsUnverified ? { generatorsUnverified: true as const } : {}),
     invalidEntries: 0,
     omitted: 0,
   }
@@ -225,11 +243,27 @@ export function parseBinaryOutputDeclaration(
       unknownServices.push(artifact.service)
     }
     const generator = artifact.generator
-    if (generator && !knownGenerators.has(generator) && !unknownGenerators.includes(generator)) {
+    // Skipped entirely when the set could not be read: with nothing to compare against, every
+    // claimed id would land in `unknownGenerators` and read as an agent naming integrations that
+    // do not exist — a fabricated accusation, on the surface a human reviews to decide whether
+    // the run's artifacts are real.
+    if (
+      generator &&
+      !known.generatorsUnverified &&
+      !knownGenerators.has(generator) &&
+      !unknownGenerators.includes(generator)
+    ) {
       unknownGenerators.push(generator)
     }
   }
-  return { stored, unknownServices, unknownGenerators, invalidEntries, omitted }
+  return {
+    stored,
+    unknownServices,
+    unknownGenerators,
+    ...(known.generatorsUnverified ? { generatorsUnverified: true as const } : {}),
+    invalidEntries,
+    omitted,
+  }
 }
 
 function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {

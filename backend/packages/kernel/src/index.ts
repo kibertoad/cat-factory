@@ -278,6 +278,7 @@ export {
 // `ports/binary-generators.ts`.
 export {
   type BinaryGeneratorSource,
+  memoizeBinaryGeneratorViews,
   registryBinaryGeneratorSource,
 } from './ports/binary-generators.js'
 export {

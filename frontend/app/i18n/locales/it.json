@@ -4446,7 +4446,8 @@
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
       "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco.",
-      "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro."
+      "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
+      "generatorsUnverified": "Non è stato possibile leggere le integrazioni generative di questa installazione alla chiusura del passaggio, quindi le integrazioni indicate sotto non sono state verificate. Le voci sono conservate come dichiarate."
     },
     "unknownGeneratorBadge": "Non registrata"
   },
@@ -4908,6 +4909,12 @@
         "internal": "Si è verificato un errore sul server. Riprova e, se continua, condividi i dettagli con l'operatore del deployment.",
         "network": "Non è stato possibile raggiungere il server. Controlla la connessione, poi riprova.",
         "unexpected": "Il server ha restituito una risposta inattesa. Riprova e, se continua, condividi i dettagli con l'operatore del deployment."
+      }
+    },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
       }
     },
     "action": {

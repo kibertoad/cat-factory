@@ -253,6 +253,41 @@ describe('the generative half of the read model', () => {
     expect(binaryOutputHasWarnings(view!)).toBe(true)
   })
 
+  it('surfaces an UNCHECKED generative verdict, and does not let it read as a clean one', () => {
+    // The settlement-side twin of the picker's `generators_unavailable`. An empty
+    // `unknownDeclaredGenerators` normally means every claimed id checked out, so a reader
+    // deciding whether these artifacts are real would take silence here as confirmation. The
+    // flag has to reach both the line AND the collapsed summary's tone, or the one place it is
+    // stated is behind a section that looks like it has nothing to say.
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', generatorIds: ['retro'] } },
+        binaryOutputs: report({
+          stored: [{ ...artifact('files', 'a.png'), generator: 'retro' }],
+          generatorsUnverified: true,
+        }),
+      }),
+    )
+    expect(view?.generatorsUnverified).toBe(true)
+    expect(view?.unknownDeclaredGenerators).toEqual([])
+    // The artifacts themselves survived the outage — that is the whole point of recording them.
+    expect(view?.rows).toHaveLength(1)
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('reads a checked-and-clean report as clean, which is what makes the flag mean anything', () => {
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', generatorIds: ['retro'] } },
+        binaryOutputs: report({
+          stored: [{ ...artifact('files', 'a.png'), generator: 'retro' }],
+        }),
+      }),
+    )
+    expect(view?.generatorsUnverified).toBe(false)
+    expect(binaryOutputHasWarnings(view!)).toBe(false)
+  })
+
   it('carries the step selection through, and treats empty as a real state', () => {
     const configured = binaryOutputView(
       step({

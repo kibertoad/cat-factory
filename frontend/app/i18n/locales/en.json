@@ -548,6 +548,12 @@
         }
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "This deployment's generative integrations could not be read just now, so the run was not started. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+      }
+    },
     "action": {
       "retryFailed": "Retry failed",
       "startFailed": "Failed to start",
@@ -5658,7 +5664,8 @@
       "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
       "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
       "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed.",
-      "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace."
+      "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace.",
+      "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
     "unknownGeneratorBadge": "Not registered"
   },

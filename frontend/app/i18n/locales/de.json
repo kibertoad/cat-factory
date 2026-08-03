@@ -4446,7 +4446,8 @@
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
       "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt.",
-      "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace."
+      "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace.",
+      "generatorsUnverified": "Die generativen Integrationen dieser Installation konnten beim Abschluss des Schritts nicht gelesen werden, daher wurden die unten genannten Integrationen nicht dagegen geprüft. Die Einträge bleiben wie angegeben erhalten."
     },
     "unknownGeneratorBadge": "Nicht registriert"
   },
@@ -4908,6 +4909,12 @@
         "internal": "Auf dem Server ist ein Fehler aufgetreten. Versuche es erneut und gib die Details an den Betreiber des Deployments weiter, wenn es weiterhin auftritt.",
         "network": "Der Server war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
         "unexpected": "Der Server hat eine unerwartete Antwort zurückgegeben. Versuche es erneut und gib die Details an den Betreiber des Deployments weiter, wenn es weiterhin auftritt."
+      }
+    },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Die generativen Integrationen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde der Lauf nicht gestartet. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "foundational_builtins_unreachable": "Die integrierten Basisdienste dieser Installation konnten gerade nicht gelesen werden. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
       }
     },
     "action": {

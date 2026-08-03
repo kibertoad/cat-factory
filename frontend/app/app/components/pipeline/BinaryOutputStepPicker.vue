@@ -193,7 +193,7 @@ function setModalities(modalities: BinaryModality[]) {
         value-key="value"
         size="xs"
         :placeholder="t('pipeline.builder.binaryOutputGeneratorsPlaceholder')"
-        :disabled="!generatorItems.length || has('generators_unavailable')"
+        :disabled="!generatorItems.length"
         data-testid="binary-output-generator-select"
         @update:model-value="setGenerators($event)"
       />

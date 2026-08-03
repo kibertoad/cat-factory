@@ -126,6 +126,14 @@ export interface BinaryOutputView {
    * would leave an artifact attributed to something nobody can look up, with nothing saying so.
    */
   unknownDeclaredGenerators: readonly string[]
+  /**
+   * True when the deployment's integrations could not be READ at settlement, so no claimed id was
+   * checked against them. Rendered as its own line and never as an empty
+   * {@link unknownDeclaredGenerators}: that list being empty otherwise means "every id checked
+   * out", and a reader deciding whether these artifacts are real must not be shown a clean bill
+   * of health nobody actually issued.
+   */
+  generatorsUnverified: boolean
   /** Entries dropped because they were not `{ service, location }` objects. */
   invalidEntries: number
   /** Valid entries dropped past the report's cap — so {@link rows} is a PREFIX. */
@@ -173,6 +181,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       generators,
       modalities,
       unknownDeclaredGenerators: [],
+      generatorsUnverified: false,
       invalidEntries: 0,
       omitted: 0,
       misdirected: 0,
@@ -200,6 +209,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     generators,
     modalities,
     unknownDeclaredGenerators: report.unknownGenerators,
+    generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
     omitted: report.omitted,
     misdirected: rows.filter((row) => row.misdirected).length,
@@ -275,6 +285,10 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
  * unknown service ids, dropped entries, a truncated list, or a misdirected artifact. Drives
  * the collapsed summary row's tone, so a report with losses can't read as a clean one from
  * the outside of a collapsed section.
+ *
+ * An UNCHECKED verdict counts as one of those qualifications, and it is the only member here
+ * that is not itself a loss: nothing went wrong with the run, but the report is quieter than it
+ * looks, and a collapsed section that renders it as clean would hide the one line saying so.
  */
 export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
   return (
@@ -283,6 +297,7 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.targetUnknown ||
     view.unknownDeclaredServices.length > 0 ||
     view.unknownDeclaredGenerators.length > 0 ||
+    view.generatorsUnverified ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0

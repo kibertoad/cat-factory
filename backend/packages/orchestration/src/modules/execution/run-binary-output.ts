@@ -168,6 +168,29 @@ export type BinaryOutputDeclarationRecorder = (
   output: string | undefined,
 ) => Promise<void>
 
+/**
+ * The registered generator ids for a settlement read-back, as the three states
+ * `parseBinaryOutputDeclaration` distinguishes: a real set, a real EMPTY set (no source wired —
+ * this deployment registers none), or UNVERIFIED (the source is remote and could not be read).
+ *
+ * Kept apart from the caller so the failure is caught at the exact read that can fail, rather
+ * than by a wrapper that would also swallow the catalog read and the parse beside it. The read
+ * is best-effort with the outage logged; the flag it returns is what carries the fact onto the
+ * step, where a human reviewing the run's artifacts can see it.
+ */
+async function readGenerativeIds(deps: {
+  binaryGeneratorSource?: BinaryGeneratorSource
+  logger?: Logger
+}): Promise<{ generators: string[]; generatorsUnverified?: true }> {
+  const source = deps.binaryGeneratorSource
+  if (!source) return { generators: [] }
+  const views = await runBestEffort(deps.logger ?? noopLogger, 'binaryOutput.generatorIds', () =>
+    source.views(),
+  )
+  if (!views) return { generators: [], generatorsUnverified: true }
+  return { generators: views.map((view) => view.id) }
+}
+
 /** Bind a {@link BinaryOutputDeclarationRecorder} to the dispatcher's collaborators. */
 export function createBinaryOutputDeclarationRecorder(deps: {
   agentKindRegistry: AgentKindRegistry
@@ -189,13 +212,17 @@ export function createBinaryOutputDeclarationRecorder(deps: {
         // registers rather than whatever this node's build happens to hold. An UNWIRED source
         // checks against an EMPTY set — the honest answer on a deployment that registers no
         // integrations, where every claimed id lands in `unknownGenerators` rather than being
-        // quietly accepted. An unreachable one is different and must not read as that: the
-        // throw propagates into the best-effort wrapper below, which leaves the step
-        // unannotated, because "we could not check" may not be filed as "the agent invented it".
-        const generators = deps.binaryGeneratorSource
-          ? (await deps.binaryGeneratorSource.views()).map((view) => view.id)
-          : []
-        step.binaryOutputs = parseBinaryOutputDeclaration(output, { services, generators })
+        // quietly accepted.
+        //
+        // An UNREACHABLE one is a third state and gets its own disposition, caught HERE rather
+        // than left to the wrapper below. Letting it abort the record would have discarded the
+        // whole report — the artifacts the agent stored and the STORAGE half's verdict, which
+        // resolves against the workspace catalog and was never in doubt — over a question about
+        // the generative half nobody could answer. So the report is written with what IS known
+        // and says the rest was unverified: the run's evidence survives an outage, and the one
+        // claim that cannot be made is not made.
+        const generative = await readGenerativeIds(deps)
+        step.binaryOutputs = parseBinaryOutputDeclaration(output, { services, ...generative })
       },
       { workspaceId, agentKind: step.agentKind },
     )

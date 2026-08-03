@@ -189,6 +189,52 @@ describe('mothership-mode generative binary integrations', () => {
     }
   })
 
+  it('THROWS on a well-formed list whose ELEMENTS it cannot resolve a selection against', async () => {
+    // The envelope being an array is not enough. A view with no `id` cannot be matched against a
+    // step's `generatorIds`, and one with no `modalities` cannot be checked for content-type
+    // coverage — so a reply carrying either is a reply whose registered set is unknown, which is
+    // the one thing this class must never answer quietly. The realistic source is a version
+    // skew, not a hostile peer.
+    for (const generators of [[{ modalities: ['image'] }], [{ id: 'retro' }], [null], ['retro']]) {
+      const source = new HttpBinaryGeneratorSource({
+        baseUrl: 'https://mothership.test',
+        token: 'tok',
+        fetchImpl: (() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ generators }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          )) as unknown as typeof fetch,
+      })
+      await expect(source.views()).rejects.toMatchObject({
+        code: 'unavailable',
+        details: { reason: 'binary_generators_unreachable', field: 'generators' },
+      })
+    }
+  })
+
+  it('THROWS on a documents map whose VALUES are not arrays', async () => {
+    // Otherwise this escapes as a `TypeError` from the brief renderer's `.map()` — an unreadable
+    // reply surfacing as a generic crash instead of the one error every route to "we do not know
+    // what is registered" is supposed to end at, logged by the caller under the wrong cause.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ documents: { 'retro-diffusion': 'nope' } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )) as unknown as typeof fetch,
+    })
+    await expect(source.documentsFor(['retro-diffusion'])).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable', field: 'documents' },
+    })
+  })
+
   it('THROWS on a contracts reply whose `documents` is not an object map', async () => {
     const source = new HttpBinaryGeneratorSource({
       baseUrl: 'https://mothership.test',

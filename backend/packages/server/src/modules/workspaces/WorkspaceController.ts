@@ -592,13 +592,16 @@ export function workspaceController(): Hono<AppEnv> {
     // account/user tier status + editable settings), because the SPA hydrates its stores
     // directly from this create response — omitting them would leave a freshly-created
     // workspace with no operator caps / tier meters until a separate snapshot refresh.
-    const [spend, infraSetup, budgetTiers, skills] = await Promise.all([
+    // In the SAME wave as the rest, not awaited after it: on a mothership-mode node one of these
+    // projections crosses the machine API, and serialising that round trip behind the batch adds
+    // its latency to every workspace create for nothing.
+    const [spend, infraSetup, budgetTiers, skills, registryProjections] = await Promise.all([
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
       snapshotSkills(container, accountId),
+      snapshotRegistryProjections(container),
     ])
-    const registryProjections = await snapshotRegistryProjections(container)
     // The creator's resolved access. The gate doesn't run for the id-less create route, so resolve
     // it here (the creator is auto-enrolled admin, so this is always an admin grant when signed in).
     const resolved = user
@@ -637,6 +640,15 @@ export function workspaceController(): Hono<AppEnv> {
     // Every ingredient below is an independent read keyed by the workspace id (only the
     // service catalog chains on the owning account), so they run concurrently: the
     // board-load latency is the slowest read, not the sum of ~15 sequential round-trips.
+    //
+    // The registry projections join that wave rather than following it. They are in-process on
+    // every deployment but one — a mothership-mode node reads its generative integrations over
+    // the machine API — and a board load is the hottest path this handler has, so awaiting them
+    // afterwards put a whole round trip on the end of every refresh for nothing.
+    const [slices, registryProjections] = await Promise.all([
+      loadSnapshotSlices(container, workspaceId, budgetAccountId),
+      snapshotRegistryProjections(container),
+    ])
     const {
       snapshot,
       spend,
@@ -658,8 +670,7 @@ export function workspaceController(): Hono<AppEnv> {
       infraSetup,
       repoProjections,
       skills,
-    } = await loadSnapshotSlices(container, workspaceId, budgetAccountId)
-    const registryProjections = await snapshotRegistryProjections(container)
+    } = slices
 
     // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
     // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so

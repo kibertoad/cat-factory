@@ -942,8 +942,15 @@ that OFFERS the id rather than removing it. And the disposition differs from the
 this one gates ADMISSION: an unreachable source is re-thrown as `binary_generators_unreachable`
 (503, retryable), never softened to an empty set, which would refuse a correctly configured step
 as `unknown_generator` — the first application of "absent ≠ zero" to a decision surface rather
-than an enrichment one. Doc:
-[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+than an enrichment one. **A user-reachable 503 reason owes TRANSLATED copy** (`UNAVAILABLE_REASONS`
+
+- an exhaustive `Record` in `usePipelineErrorToast`, the `CONFLICT_REASONS` pattern): the status
+  class's generic wording commits to "this deployment has not configured the capability", which is
+  right for an unwired module and is the misattribution itself for an outage. And the settled step's
+  read-back RECORDS what it could check and flags what it could not (`generatorsUnverified`, never an
+  empty `unknownGenerators`) — withholding the one unanswerable judgement is right, dropping the
+  artifacts and the storage verdict beside it is the same mistake mirrored. Doc:
+  [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
 `ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read
