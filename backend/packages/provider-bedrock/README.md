@@ -27,17 +27,17 @@ The Node facade wires Bedrock automatically **when `BEDROCK_REGION` is set** (se
 `bedrockRegistry(...)` to the composite's extra registries:
 
 ```ts
-if (env.BEDROCK_REGION) {
+// ONE pair of readers, shared with the model catalog's `bedrock` capability: see below.
+const bedrockRegion = bedrockRegionFromEnv(env)
+if (bedrockRegion) {
+  const supportedModels = bedrockAllowListFromEnv(env)
   extraRegistries.push(
     bedrockRegistry({
-      region: env.BEDROCK_REGION,
+      region: bedrockRegion,
       accessKeyId: env.AWS_ACCESS_KEY_ID,
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
       sessionToken: env.AWS_SESSION_TOKEN,
-      // BEDROCK_MODELS="anthropic.claude-…,meta.llama3-…" → the allow-list below
-      supportedModels: env.BEDROCK_MODELS?.split(',')
-        .map((m) => m.trim())
-        .filter(Boolean),
+      ...(supportedModels ? { supportedModels: [...supportedModels] } : {}),
     }),
   )
 }
@@ -47,6 +47,13 @@ So a Node/local deployment opts in purely with env: `BEDROCK_REGION` (required t
 optional `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (omit to use the
 ambient AWS credential chain; instance role, `~/.aws`, etc.), and optional `BEDROCK_MODELS`
 (comma-separated allow-list).
+
+**`BEDROCK_MODELS` does double duty**, which is why it is parsed by
+`bedrockAllowListFromEnv` (`@cat-factory/server`) rather than inline: the same value becomes
+this resolver's allow-list AND `ProviderCapabilities.bedrockModels`, which decides whether a
+catalog model's `bedrock` flavour is selectable in the picker. Parsed separately, the picker
+could offer an id this resolver throws on. Details:
+[`model-support.md` §8](../../docs/model-support.md).
 
 ### Cloudflare Worker facade: via `registerModelRegistry`
 
@@ -65,6 +72,13 @@ Registration is process-wide and read by every `buildContainer(env)` call, so th
 reaches all paths (HTTP requests, the durable Workflow driver, and the cron sweeper) not just
 one entry point. The factory receives the runtime `env`, so credentials/region come from the
 deployment's configuration.
+
+**The registration is also what unlocks the picker flavour on this facade.** The Worker reads
+`BEDROCK_REGION` / `BEDROCK_MODELS` for the per-model enablement, but grants the capability only
+when a registered registry can actually serve `bedrock` (`bedrockModelsCapability` in
+`ai/registries.ts`): the env vars alone don't prove this package was mixed in, and offering the
+flavour on them would put rows in the picker whose dispatch fails. Set-but-unregistered logs a
+warning naming the missing `registerModelRegistry` call.
 
 ## How it resolves a model
 

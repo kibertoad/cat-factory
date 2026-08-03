@@ -18,6 +18,7 @@ import {
   DOCS,
   ENV_HELP,
   ENV_VARS_ANCHORS,
+  bedrockAllowListFromEnv,
   configProblem,
   logger,
   parseDetectionConventions,
@@ -215,10 +216,15 @@ function resolveProviderCaps(env: NodeJS.ProcessEnv): ProviderCapabilities {
       { ...cfHalfSet, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
     )
   }
+  const bedrockModels = bedrockAllowListFromEnv(env)
   return {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
     cloudflareEnabled: !!(cfAccountId && cfApiToken),
+    // Bedrock is reached with the DEPLOYMENT's own AWS credentials, so unlike a direct
+    // provider key it is fully known here: the deployment catalog can state which Bedrock
+    // models are selectable without waiting for a per-workspace recompute.
+    ...(bedrockModels ? { bedrockModels } : {}),
   }
 }
 

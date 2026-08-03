@@ -34,18 +34,35 @@ Cloudflare Workers AI.
 
 ---
 
-## 2. The catalog & its three flavours
+## 2. The catalog & its flavours
 
 The curated picker catalog is
 [`MODEL_CATALOG`](../packages/kernel/src/domain/models.ts) (`SelectableModel[]`). Each
-entry has a stable `id` (persisted on `Block.modelId`) and up to four flavours:
+entry has a stable `id` (persisted on `Block.modelId`) and one flavour per route it can be
+reached on. The vocabulary is `MODEL_FLAVORS`, listed here in the order
+`DEFAULT_PROVIDER_PREFERENCE` prefers them:
 
-| Flavour          | Field on the model              | When it's used                                                                       |
-| ---------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| **Cloudflare**   | `cloudflare: ModelRef`          | Always available (the `AI` Workers-AI binding / Cloudflare-over-REST). The fallback. |
-| **Direct**       | `direct: { ref, keyEnv }`       | Transparently replaces Cloudflare **when `keyEnv`'s API key is set**.                |
-| **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set and no direct one. |
-| **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.              |
+| Flavour          | Field on the model              | When it's used                                                                         |
+| ---------------- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| **Direct**       | `direct: { ref, keyEnv }`       | The model's own provider API, **when a key for it is configured**.                     |
+| **Bedrock**      | `bedrock: { baseModelId }`      | AWS Bedrock, when the deployment's `BEDROCK_MODELS` allow-list carries the model (§8). |
+| **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set.                     |
+| **Cloudflare**   | `cloudflare: ModelRef`          | Always available (the `AI` Workers-AI binding / Cloudflare-over-REST). The floor.      |
+| **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.                |
+
+Two rules set that order: a **first-party route wins over an aggregator that resells it**
+(`direct`/`bedrock` before `openrouter`), and Cloudflare is the always-available floor
+below every route a key or account grant unlocks. `subscription` sits last **only because
+the "subscriptions always win" rule is applied separately, one layer up**; see §4, which
+also explains why moving it is its own piece of work.
+
+`effectiveVariant` walks that order twice: first over what the capabilities make USABLE,
+then over what the entry merely DECLARES, so a caller always gets a ref to display even
+when nothing is configured (`available: false` is what says it can't run). Both walks
+follow the same order, or the picker would name one route and the run would take another.
+Each flavour supplies its `declared`/`usable`/`build` arms through an exhaustive
+`Record<ModelFlavor, …>`, so **adding a route fails to compile until every arm is
+handled**.
 
 Several shapes of entry fall out of this:
 
@@ -58,6 +75,11 @@ Several shapes of entry fall out of this:
   `contextTokens` on the `ModelRef` surfaces this in the picker.
 - **Gateway-only**: `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
   reached through OpenRouter once a key is connected.
+- **Bedrock-only**: `claude-opus-4-8`. Reachable only in an AWS account whose allow-list
+  carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
+  because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
+  to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
+  `gpt-oss-120b`) does carry the flavour directly.
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-opus` and
@@ -121,9 +143,11 @@ Given a resolved catalog model, which flavour actually runs?
 subscription  >  direct  >  cloudflare
 ```
 
-- **Base flavour** (`effectiveVariant`, kernel `models.ts`): `direct` when its
-  `keyEnv` key is configured, else `cloudflare`. This is what `GET /models` shows as
-  the model's active flavour for the deployment.
+- **Base flavour** (`effectiveVariant`, kernel `models.ts`): the first route in
+  `DEFAULT_PROVIDER_PREFERENCE` the capabilities make usable: `direct` when a key for its
+  provider is in the pool, else `bedrock` when the allow-list carries the model, else
+  `openrouter`, else `cloudflare` (§2). This is what `GET /models` shows as the model's
+  active flavour.
 - **Subscription override** (`subscriptionOptionFor` + the executor's
   `resolveEffectiveRef`, [`ContainerAgentExecutor.ts`](../packages/server/src/agents/ContainerAgentExecutor.ts)):
   a subscription-only model carries its harness already; a **dual-mode** model is
@@ -134,8 +158,18 @@ subscription  >  direct  >  cloudflare
   Claude) are never pooled: their dual-mode flavour upgrades per-user via the personal
   subscription a run's initiator unlocks (see §6), not via a workspace token.
 
-`DirectKeyAvailable` (`(keyEnv) => boolean`) is built per facade from the env
-(Cloudflare `config/utils.ts`, Node `config.ts`); it's what gates the direct flavour.
+**Why the two layers live apart.** `subscription` is LAST in the kernel preference tuple
+and FIRST in effect, which reads like a contradiction until you see what each layer knows.
+The override needs per-workspace / per-run-initiator token state
+(`hasSubscriptionToken` / `hasPersonalSubscription`), and the kernel resolver is ALSO called
+with deployment-level capabilities that assert every vendor (`resolveBlockModel` is built
+once at boot, before any workspace is in hand) and from inline paths that cannot drive a CLI
+harness at all (which is why each degrades through `inlineModelRef`). Promoting
+`subscription` in the tuple alone would therefore dispatch subscription runs for workspaces
+holding no token, and degrade a dual-mode pin to the _routing default_ at every inline call
+site rather than to the model's own base. Unifying them is the right end state and is
+tracked as its own slice in
+[`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
 
 ---
 
@@ -299,22 +333,41 @@ enforces a **supported-model allow-list** (`BEDROCK_MODELS`): a model id outside
 list throws `Unsupported Bedrock model: <model>` rather than forwarding an
 unvetted id.
 
-**Bedrock contributes nothing to the picker catalog today.** No `MODEL_CATALOG` entry
-carries a `bedrock` flavour and `SelectableModel` has no field for one, so a Bedrock
-model is currently reachable only as a **routing default**: `AGENT_DEFAULT_PROVIDER` +
-`AGENT_DEFAULT_MODEL`, or a per-kind `AGENT_MODELS` entry. A user cannot pin one to a
-block.
+**`BEDROCK_MODELS` is also the per-model picker enablement.** A catalog entry carrying a
+`bedrock` flavour (§2) becomes selectable exactly when this list holds its model, which is
+what makes the account policy's `trustedProviders: ['bedrock']` reachable per task: a user
+can pin one block to a residency-guaranteed route instead of repointing the whole
+deployment's routing default. The list is parsed ONCE, by
+`bedrockAllowListFromEnv` (`@cat-factory/server`), and that one value feeds both the
+resolver's allow-list and the capability set. Parsed twice, the picker could offer an id
+the resolver throws on.
 
-**This is a gap, not a design choice, and it is being closed.** The account model policy
-already ships `trustedProviders: ['bedrock']` specifically so a blocked family can pass on
-a residency-guaranteed route, which nobody can select per task, leaving that exemption
-reachable only by repointing the whole deployment. `BEDROCK_MODELS` is already a per-model
-allow-list, so per-model enablement falls straight out of it. Design + work items:
-[`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
+Two consequences worth knowing:
+
+- **`BEDROCK_REGION` with no `BEDROCK_MODELS`** leaves the resolver UNCONSTRAINED (any id
+  is forwarded to AWS) and contributes **no picker flavour**. Bedrock access is granted per
+  account and per Region, so with nothing enumerated the platform cannot know which entries
+  are callable, and offering them would surface models AWS rejects at call time. Bedrock
+  stays reachable as a routing default (`AGENT_DEFAULT_PROVIDER` + `AGENT_DEFAULT_MODEL`, or
+  a per-kind `AGENT_MODELS` entry); naming a model here is how you opt it into the picker.
+- **The Worker does not bundle the Bedrock package** (a deployment mixes it in via the
+  `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`). It reads the
+  same two env vars, but grants the capability only when a registered registry can actually
+  serve `bedrock` (`bedrockModelsCapability`): on Node the env that enables the flavour also
+  registers the resolver, whereas here the vars alone don't prove the mix-in happened, and
+  offering the flavour on them would put rows in the picker whose dispatch fails on an
+  unregistered provider. Set-but-unregistered logs a warning naming the missing call.
 
 Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
 (`us.` / `eu.` / `jp.` / `au.` / `global.`): several models are reachable ONLY through a
 cross-Region profile in a given Region, so the prefixed form is usually what you want.
+**The catalog therefore declares only the UNPREFIXED base id** (`baseModelId`) and
+`resolveBedrockModelId` matches an allow-list entry that IS the base or ends in `.<base>`,
+running that entry verbatim. That is what lets one catalog be correct in every Region, and
+it means the prefix set is never enumerated in code (a prefix AWS adds later just works).
+Where you list two profiles for one model, **the first one wins**, so ordering the var is
+how you choose between a regional and a global profile.
+
 Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
 
 ```

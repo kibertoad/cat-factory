@@ -144,6 +144,7 @@ export {
   resolveWorkspaceCapabilities,
   type CapabilityServices,
 } from './agents/providerCapabilities.js'
+export { bedrockAllowListFromEnv, bedrockRegionFromEnv, type BedrockEnv } from './agents/bedrock.js'
 export {
   ContainerRepoBootstrapper,
   type ContainerRepoBootstrapperDependencies,

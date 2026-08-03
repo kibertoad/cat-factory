@@ -160,6 +160,16 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
   // model it routes to, which we can't know here. Default to the generic fallback rate.
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
+  // AWS Bedrock: deliberately a BARE provider entry with no per-model keys, because a
+  // Bedrock ref carries the operator's geo/global inference prefix (`eu.anthropic.…`), which
+  // differs per Region, and `priceFor` matches `provider:model` EXACTLY: a per-model key
+  // would silently never match and fall through anyway. The rate errs HIGH, at the frontier
+  // tier this catalog can select on Bedrock (Opus 4.8 / GPT-5.5, ~$5 in / $30 out per 1M),
+  // for the same reason the dynamic-OpenRouter overlay skips a zero price: a budget
+  // safeguard must never undercount, and `defaultPrice` would meter an Opus-on-Bedrock run
+  // at roughly a thirtieth of its real cost. Accurate per-model Bedrock pricing needs
+  // prefix-aware matching in `priceFor`; see the initiative doc.
+  bedrock: { inputPerMillion: 4.6, outputPerMillion: 27.6 },
 }
 
 /** Default budget: roughly 100 EUR of tokens per calendar month. */
