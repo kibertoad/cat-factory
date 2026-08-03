@@ -92,14 +92,14 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Model providers
 
-| Variable                                                                                                                    | Modes    | Default            | Description                                                   |
-| --------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------ | ------------------------------------------------------------- |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY`                           | CF, Node | none               | Direct vendor API keys.                                       |
-| `OPENROUTER_BASE_URL`                                                                                                       | CF, Node | public gateway     | OpenRouter gateway base URL.                                  |
-| `LITELLM_BASE_URL`                                                                                                          | CF, Node | required to enable | Operator-hosted LiteLLM gateway (no public default).          |
-| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_AI_GATEWAY`                                                  | CF, Node | none               | Cloudflare Workers AI over REST (Node) + AI Gateway.          |
-| `BEDROCK_REGION` / `AWS_*` / `BEDROCK_MODELS`                                                                               | Node     | none               | Opt-in AWS Bedrock resolver + its supported-model allow-list. |
-| `AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL` / `AGENT_DEFAULT_TEMPERATURE` / `AGENT_MAX_OUTPUT_TOKENS` / `AGENT_MODELS` | CF, Node | built-in routing   | Default agent routing + per-kind model overrides.             |
+| Variable                                                                                                                    | Modes    | Default            | Description                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY`                           | CF, Node | none               | Direct vendor API keys.                                                                                                                    |
+| `OPENROUTER_BASE_URL`                                                                                                       | CF, Node | public gateway     | OpenRouter gateway base URL.                                                                                                               |
+| `LITELLM_BASE_URL`                                                                                                          | CF, Node | required to enable | Operator-hosted LiteLLM gateway (no public default).                                                                                       |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_AI_GATEWAY`                                                  | CF, Node | none               | Cloudflare Workers AI over REST (Node) + AI Gateway.                                                                                       |
+| `BEDROCK_REGION` / `AWS_*` / `BEDROCK_MODELS`                                                                               | CF, Node | none               | Opt-in AWS Bedrock. `BEDROCK_MODELS` is both the resolver's allow-list and the per-model picker enablement (unset ⇒ routing-default only). |
+| `AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL` / `AGENT_DEFAULT_TEMPERATURE` / `AGENT_MAX_OUTPUT_TOKENS` / `AGENT_MODELS` | CF, Node | built-in routing   | Default agent routing + per-kind model overrides.                                                                                          |
 
 ## Web search
 

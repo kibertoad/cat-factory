@@ -15,6 +15,7 @@ import {
   type ServerContainer,
   ContainerSessionService,
   GitHubIdentityResolver,
+  bedrockAllowListFromEnv,
   testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
   makePreviewJobBuilder,
@@ -384,6 +385,11 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     openRouterCatalog,
     traceSink,
   } = bundle
+  // The Bedrock allow-list that gates `bedrock`-flavour selectability. Derived from `env` here
+  // (like `baseUrlFor` below) rather than threaded from the model deps: it is one
+  // deployment-level env read, and the SAME parser feeds the resolver's own allow-list, so the
+  // picker cannot offer a Bedrock id the resolver would throw on.
+  const bedrockModels = bedrockAllowListFromEnv(env)
   return {
     ...createCore(dependencies),
     config,
@@ -513,6 +519,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     notificationWebhooks,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    ...(bedrockModels ? { bedrockModels } : {}),
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
     // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
     baseUrlFor: (provider) => baseUrlForNode(provider, env),

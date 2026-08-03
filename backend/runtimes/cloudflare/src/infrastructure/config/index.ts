@@ -1,5 +1,6 @@
 import {
   type AppConfig,
+  bedrockAllowListFromEnv,
   requireEncryptionKey,
   resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
@@ -74,10 +75,15 @@ export function loadConfig(env: Env): AppConfig {
   // time from the DB pool), so none are known here; Cloudflare Workers AI is opt-in
   // (the `AI` binding). The per-workspace `/models` endpoint recomputes selectability
   // against each workspace's configured keys + subscriptions.
+  // Bedrock is the exception to "no direct route is known here": it is reached with the
+  // deployment's own AWS credentials, so its per-model allow-list is a deployment fact and the
+  // deployment catalog can state which Bedrock models are selectable.
+  const bedrockModels = bedrockAllowListFromEnv(env)
   const caps: ProviderCapabilities = {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
     cloudflareEnabled: !!env.AI,
+    ...(bedrockModels ? { bedrockModels } : {}),
   }
   const spend = loadSpendPricing(env)
   return {

@@ -10,7 +10,11 @@ import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { parseOtlpHeaders } from '@cat-factory/observability-otel'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
-import { type InlineInstrumentation, createScopedModelProviderResolver } from '@cat-factory/server'
+import {
+  type InlineInstrumentation,
+  bedrockAllowListFromEnv,
+  createScopedModelProviderResolver,
+} from '@cat-factory/server'
 
 // The Node deployment's BASE ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
@@ -109,18 +113,18 @@ export function createNodeModelProviderResolver(
     )
   }
 
-  // Opt-in Bedrock: registered only when a region is configured.
+  // Opt-in Bedrock: registered only when a region is configured. The allow-list comes from the
+  // SAME parser the model catalog's `bedrock` capability reads, so a model the picker offers is
+  // never one this resolver throws on (and vice versa).
   if (env.BEDROCK_REGION) {
-    const supportedModels = env.BEDROCK_MODELS?.split(',')
-      .map((m) => m.trim())
-      .filter(Boolean)
+    const supportedModels = bedrockAllowListFromEnv(env)
     extraRegistries.push(
       bedrockRegistry({
         region: env.BEDROCK_REGION,
         accessKeyId: env.AWS_ACCESS_KEY_ID,
         secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
         sessionToken: env.AWS_SESSION_TOKEN,
-        supportedModels: supportedModels?.length ? supportedModels : undefined,
+        ...(supportedModels ? { supportedModels: [...supportedModels] } : {}),
       }),
     )
   }

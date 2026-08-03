@@ -172,6 +172,14 @@ export interface ServerContainer extends Core {
    */
   cloudflareModelsEnabled?: boolean
   /**
+   * The deployment's AWS Bedrock allow-list (`BEDROCK_MODELS`, gated on `BEDROCK_REGION`),
+   * built by `bedrockAllowListFromEnv`. Spread into the per-workspace capability set, where
+   * it decides which catalog entries' `bedrock` flavour is selectable. Absent ⇒ no `bedrock`
+   * flavour is offered; Bedrock is a deployment-credential route, so there is nothing
+   * per-workspace to resolve.
+   */
+  bedrockModels?: Set<string>
+  /**
    * The deployment's direct-provider base-URL resolver (env override → built-in default,
    * or null when none — e.g. an unconfigured operator-hosted LiteLLM gateway). The model
    * catalog uses it to gate selectability: an OpenAI-compatible provider is only

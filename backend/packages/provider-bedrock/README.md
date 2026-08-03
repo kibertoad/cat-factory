@@ -28,16 +28,15 @@ The Node facade wires Bedrock automatically **when `BEDROCK_REGION` is set** (se
 
 ```ts
 if (env.BEDROCK_REGION) {
+  // ONE parser, shared with the model catalog's `bedrock` capability — see below.
+  const supportedModels = bedrockAllowListFromEnv(env)
   extraRegistries.push(
     bedrockRegistry({
       region: env.BEDROCK_REGION,
       accessKeyId: env.AWS_ACCESS_KEY_ID,
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
       sessionToken: env.AWS_SESSION_TOKEN,
-      // BEDROCK_MODELS="anthropic.claude-…,meta.llama3-…" → the allow-list below
-      supportedModels: env.BEDROCK_MODELS?.split(',')
-        .map((m) => m.trim())
-        .filter(Boolean),
+      ...(supportedModels ? { supportedModels: [...supportedModels] } : {}),
     }),
   )
 }
@@ -47,6 +46,13 @@ So a Node/local deployment opts in purely with env: `BEDROCK_REGION` (required t
 optional `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (omit to use the
 ambient AWS credential chain; instance role, `~/.aws`, etc.), and optional `BEDROCK_MODELS`
 (comma-separated allow-list).
+
+**`BEDROCK_MODELS` does double duty**, which is why it is parsed by
+`bedrockAllowListFromEnv` (`@cat-factory/server`) rather than inline: the same value becomes
+this resolver's allow-list AND `ProviderCapabilities.bedrockModels`, which decides whether a
+catalog model's `bedrock` flavour is selectable in the picker. Parsed separately, the picker
+could offer an id this resolver throws on. Details:
+[`model-support.md` §8](../../docs/model-support.md).
 
 ### Cloudflare Worker facade: via `registerModelRegistry`
 

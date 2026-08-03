@@ -2,6 +2,7 @@ import {
   type ModelCost,
   type ModelFamily,
   type ModelFamilyPolicy,
+  type ModelFlavor,
   type ModelOption,
   type OpenRouterModelMeta,
   type SubscriptionVendor,
@@ -9,6 +10,39 @@ import {
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 import { providerCachesPrompts } from './cache-policy.js'
+
+/**
+ * Every route a catalog model can resolve to, as an ordered tuple. `satisfies` pins the
+ * tuple to the wire vocabulary in one direction (a member here that contracts doesn't
+ * know fails to compile); `model-flavors.test.ts` pins the other (a member contracts
+ * gained that is missing here would never be TRIED, which no typecheck can see, since a
+ * resolver walks this tuple rather than the union).
+ */
+export const MODEL_FLAVORS = [
+  'direct',
+  'bedrock',
+  'openrouter',
+  'cloudflare',
+  'subscription',
+] as const satisfies readonly ModelFlavor[]
+
+/**
+ * The order routes are preferred in when a model has several usable ones. A model's own
+ * provider API wins, then AWS Bedrock (a first-party, residency-guaranteed route), then
+ * the OpenRouter gateway that resells them, then the always-available Cloudflare floor,
+ * and finally the subscription harness.
+ *
+ * NOTE: the subscription position here is NOT where the design lands. "A subscription is
+ * flat-rate quota already paid for, so spending metered tokens beside it is waste" makes
+ * `subscription` the FIRST preference, but today that rule is applied on top, separately,
+ * by `ModelRouter.resolveEffectiveRef` (which alone knows whether THIS workspace/user
+ * holds a token) and by each inline call site's `inlineModelRef` degradation (which alone
+ * knows whether the caller can drive a harness at all). Moving it here means re-plumbing
+ * both, so the flip is its own slice — see
+ * `docs/initiatives/model-provider-preference.md`. Until then this tuple keeps the
+ * historical order so a Bedrock route changes nothing else about how a model resolves.
+ */
+export const DEFAULT_PROVIDER_PREFERENCE: readonly ModelFlavor[] = MODEL_FLAVORS
 
 // How each subscription vendor authenticates and which harness runs it. Claude
 // Code is an Anthropic-API client that honours ANTHROPIC_BASE_URL +
@@ -72,15 +106,16 @@ export const SUBSCRIPTION_VENDORS: Record<SubscriptionVendor, SubscriptionVendor
 // persists as a stable `id` on the block (see `Block.modelId`); at run time the
 // executor resolves that id to a concrete {@link ModelRef}.
 //
-// Each model has up to four flavours: a Cloudflare Workers AI variant that is
-// always available (via the `AI` binding); a `direct` variant for models that
-// offer their own API; an `openrouter` variant reaching the same model through
-// the OpenRouter gateway; and a `subscription` variant. The effective flavour is
-// resolved per workspace by `effectiveVariant` in the precedence
-// direct → openrouter → cloudflare, so connecting an OpenRouter key (with no
-// native direct key) transparently routes the model through OpenRouter while a
-// native direct key still wins. This makes "go direct / go gateway" a zero-config
-// upgrade with an automatic Cloudflare fallback.
+// Each model declares one flavour per route it can be reached on (see
+// {@link MODEL_FLAVORS}): an always-available Cloudflare Workers AI variant (via the `AI`
+// binding); a `direct` variant for models that offer their own API; a `bedrock` variant
+// for models an AWS account can call on Bedrock; an `openrouter` variant reaching the same
+// model through the OpenRouter gateway; and a `subscription` variant. `effectiveVariant`
+// resolves the flavour actually in use per workspace by walking
+// {@link DEFAULT_PROVIDER_PREFERENCE}, so connecting an OpenRouter key (with no native
+// direct key) transparently routes the model through OpenRouter while a native direct key
+// still wins. This makes "go direct / go gateway" a zero-config upgrade with an automatic
+// Cloudflare fallback.
 
 export interface ModelVariant {
   ref: ModelRef
@@ -88,6 +123,23 @@ export interface ModelVariant {
   keyEnv: string
   /** Short provider label shown in the picker, e.g. `DashScope`. */
   providerLabel: string
+}
+
+/**
+ * An AWS Bedrock variant. `baseModelId` is the UNPREFIXED Bedrock id
+ * (`anthropic.claude-opus-4-8`); the id an account actually calls carries a geo/global
+ * inference prefix (`us.` / `eu.` / `global.` / …) that differs per Region, so any prefix
+ * baked in here would be wrong for every deployment but one. {@link resolveBedrockModelId}
+ * matches this base against the deployment's `BEDROCK_MODELS` allow-list and runs the
+ * matching entry verbatim, which is what lets ONE catalog be correct in every Region and
+ * why enablement is naturally per model: an id absent from that list is a model this
+ * account cannot call.
+ */
+export interface BedrockVariant {
+  /** The unprefixed Bedrock model id, matched against the allow-list. */
+  baseModelId: string
+  /** Context window at Bedrock, when known (often differs from the vendor's own API). */
+  contextTokens?: number
 }
 
 /**
@@ -118,6 +170,14 @@ export interface SelectableModel {
   cloudflare?: ModelRef
   /** Optional direct-provider variant, used when its key is configured. */
   direct?: ModelVariant
+  /**
+   * Optional AWS Bedrock variant, used when the deployment's `BEDROCK_MODELS` allow-list
+   * carries this model (see {@link BedrockVariant}). Bedrock LAGS the vendors' own APIs, so
+   * a bedrock flavour is only ever declared on an entry whose model Bedrock actually
+   * serves — never assumed equal to the direct/subscription flavour's model, which is
+   * routinely a generation ahead.
+   */
+  bedrock?: BedrockVariant
   /**
    * Optional OpenRouter gateway variant: the same logical model reached through
    * OpenRouter (`provider: 'openrouter'`, model = the OpenRouter `vendor/model`
@@ -182,6 +242,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
       model: '@cf/openai/gpt-oss-120b',
       contextTokens: 128_000,
     },
+    bedrock: { baseModelId: 'openai.gpt-oss-120b', contextTokens: 131_072 },
     openrouter: {
       ref: { provider: 'openrouter', model: 'openai/gpt-oss-120b', contextTokens: 131_072 },
       keyEnv: 'OPENROUTER_API_KEY',
@@ -420,6 +481,21 @@ export const MODEL_CATALOG: SelectableModel[] = [
       vendor: 'claude',
     },
   },
+  {
+    id: 'claude-opus-4-8',
+    family: 'claude',
+    label: 'Claude Opus 4.8 (Bedrock)',
+    description:
+      "Anthropic's previous-generation flagship, on AWS Bedrock in your own account and " +
+      'Region — the residency-guaranteed route for Claude work. Bedrock lags Anthropic: ' +
+      'Opus 5 is subscription/OpenRouter only.',
+    // Bedrock-ONLY on purpose. This is a different MODEL from `claude-opus`, not another
+    // route to it, so it is its own entry: folding a `bedrock` flavour onto `claude-opus`
+    // would silently run 4.8 for a block pinned to 5. No `contextTokens`: Bedrock's window
+    // for this model is per-account and we have none verified, and an invented number would
+    // cap the proxy's output budget against a limit nobody measured.
+    bedrock: { baseModelId: 'anthropic.claude-opus-4-8' },
+  },
   // The GPT-5.6 tiers are what Codex actually serves today: `sol` (flagship), `terra`
   // (balanced everyday) and `luna` (cheapest). The model id IS the Codex `--model` slug —
   // the `-codex` suffixed family ended at GPT-5.3, so a `gpt-5.5-codex`-shaped id makes the
@@ -491,7 +567,10 @@ export const MODEL_CATALOG: SelectableModel[] = [
     label: 'GPT-5.5',
     description:
       "OpenAI's previous-generation frontier model, still served by Codex — run on your " +
-      'ChatGPT subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+      'ChatGPT subscription, pay-as-you-go through OpenRouter (billed at OpenAI rates), or ' +
+      'on AWS Bedrock. The newest OpenAI generation Bedrock serves: the GPT-5.6 tiers are ' +
+      'Codex/OpenRouter only.',
+    bedrock: { baseModelId: 'openai.gpt-5.5', contextTokens: 1_050_000 },
     openrouter: {
       ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 1_050_000 },
       keyEnv: 'OPENROUTER_API_KEY',
@@ -622,6 +701,37 @@ export function isAllowedByFamilyPolicy(
   return policy.mode === 'blocklist' ? !listed : listed
 }
 
+/**
+ * Whether a concrete Bedrock model id addresses a catalog BASE id: it either IS the base or
+ * carries a geo/global inference prefix in front of it (`eu.anthropic.claude-opus-4-8`
+ * addresses `anthropic.claude-opus-4-8`). The ONE place that relation is defined, shared by
+ * allow-list resolution and the context-window lookup, so neither enumerates AWS's prefixes
+ * and a prefix AWS adds tomorrow needs no change here.
+ */
+function matchesBedrockBase(candidate: string, baseModelId: string): boolean {
+  return candidate === baseModelId || candidate.endsWith(`.${baseModelId}`)
+}
+
+/**
+ * The Bedrock model id THIS deployment should call for a catalog base id, or undefined when
+ * the account's allow-list (`BEDROCK_MODELS` → {@link ProviderCapabilities.bedrockModels})
+ * doesn't carry the model — which is exactly the statement "this account cannot call it", so
+ * the flavour is unusable rather than the id being guessed at.
+ *
+ * The matching entry is returned VERBATIM, so the operator's own Region-correct id is what
+ * gets called. The FIRST match in declaration order wins, which is how an operator who lists
+ * both a regional and a global inference profile for one model chooses between them.
+ */
+export function resolveBedrockModelId(
+  baseModelId: string,
+  caps: ProviderCapabilities,
+): string | undefined {
+  for (const allowed of caps.bedrockModels ?? []) {
+    if (matchesBedrockBase(allowed, baseModelId)) return allowed
+  }
+  return undefined
+}
+
 // Context window (total input + output tokens) for every concrete ref the catalog
 // declares one for, keyed by `${provider}:${model}` across all flavours. A model can
 // appear under several flavours with DIFFERENT windows (e.g. DeepSeek 80K on Cloudflare
@@ -641,6 +751,15 @@ const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
   return map
 })()
 
+// Bedrock windows are keyed by the catalog BASE id, not by a concrete ref: the ref a run
+// carries is the operator's PREFIXED allow-list entry, which differs per Region, so no exact
+// key could cover it. Looked up through `matchesBedrockBase` below.
+const BEDROCK_CONTEXT_BY_BASE: Map<string, number> = new Map(
+  MODEL_CATALOG.flatMap((model) =>
+    model.bedrock?.contextTokens ? [[model.bedrock.baseModelId, model.bedrock.contextTokens]] : [],
+  ),
+)
+
 /**
  * The total context window (input + output tokens) the catalog declares for a concrete
  * model ref, matched by provider + model. Returns undefined for a ref the catalog does
@@ -650,7 +769,13 @@ const CONTEXT_WINDOW_BY_REF: Map<string, number> = (() => {
  * (Workers AI error 8007 → HTTP 502) when the output floor alone fills the window.
  */
 export function contextWindowFor(ref: { provider: string; model: string }): number | undefined {
-  return CONTEXT_WINDOW_BY_REF.get(`${ref.provider}:${ref.model}`)
+  const exact = CONTEXT_WINDOW_BY_REF.get(`${ref.provider}:${ref.model}`)
+  if (exact !== undefined) return exact
+  if (ref.provider !== 'bedrock') return undefined
+  for (const [base, tokens] of BEDROCK_CONTEXT_BY_BASE) {
+    if (matchesBedrockBase(ref.model, base)) return tokens
+  }
+  return undefined
 }
 
 /**
@@ -666,6 +791,15 @@ export interface ProviderCapabilities {
   subscriptionVendors: Set<SubscriptionVendor>
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareEnabled: boolean
+  /**
+   * The Bedrock model ids this deployment may call, VERBATIM as the operator listed them in
+   * `BEDROCK_MODELS` (so each carries whatever geo/global inference prefix their Region
+   * needs). Absent/empty ⇒ no bedrock flavour is usable, which covers both "Bedrock isn't
+   * configured" and "configured but this model isn't granted": the allow-list IS the
+   * per-model enablement. ITERATION ORDER MATTERS — it is the operator's declared order,
+   * which {@link resolveBedrockModelId} uses to pick between two profiles for one model.
+   */
+  bedrockModels?: Set<string>
   /**
    * The dynamic local-runner model ids (`"<provider>:<model>"`, e.g. `ollama:gemma3`) the
    * resolving USER has enabled. A local model needs no pooled key — the user's configured
@@ -699,7 +833,7 @@ export type ModelCostResolver = (ref: ModelRef) => ModelCost | undefined
 /** The effective variant a catalog model resolves to for a given capability set. */
 interface EffectiveVariant {
   ref: ModelRef
-  flavor: 'cloudflare' | 'direct' | 'openrouter' | 'subscription'
+  flavor: ModelFlavor
   providerLabel: string
   vendor?: SubscriptionVendor
 }
@@ -713,6 +847,9 @@ function directUsable(model: SelectableModel, caps: ProviderCapabilities): boole
   // key), but it's only usable when THIS specific model is enabled — keyed by its id.
   return isLocalRunner(provider) && (caps.localModels?.has(model.id) ?? false)
 }
+function bedrockUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
+  return !!model.bedrock && !!resolveBedrockModelId(model.bedrock.baseModelId, caps)
+}
 function openRouterUsable(model: SelectableModel, caps: ProviderCapabilities): boolean {
   return !!model.openrouter && caps.directProviders.has('openrouter')
 }
@@ -724,9 +861,75 @@ function subscriptionUsable(model: SelectableModel, caps: ProviderCapabilities):
 }
 
 /**
+ * One route's arms: whether the model declares it, whether the capabilities make it usable,
+ * and how to build its variant. An exhaustive `Record<ModelFlavor, …>`, so a route added to
+ * the wire vocabulary fails to compile until every arm is handled.
+ */
+interface FlavorHandler {
+  declared: (model: SelectableModel) => boolean
+  usable: (model: SelectableModel, caps: ProviderCapabilities) => boolean
+  build: (model: SelectableModel, caps: ProviderCapabilities) => EffectiveVariant
+}
+
+const FLAVOR_HANDLERS: Record<ModelFlavor, FlavorHandler> = {
+  direct: {
+    declared: (m) => !!m.direct,
+    usable: directUsable,
+    build: (m) => ({
+      ref: m.direct!.ref,
+      flavor: 'direct',
+      providerLabel: m.direct!.providerLabel,
+    }),
+  },
+  bedrock: {
+    declared: (m) => !!m.bedrock,
+    usable: bedrockUsable,
+    build: (m, caps) => ({
+      ref: {
+        provider: 'bedrock',
+        // An unresolvable base falls back to the base id itself: this arm is reached on the
+        // best-effort walk (nothing is configured), where the caller needs SOMETHING to
+        // display and `available: false` is what says it can't be run. Returning no ref
+        // instead would make the resolver throw for a Bedrock-only entry on every
+        // deployment that hasn't configured Bedrock, which is most of them.
+        model: resolveBedrockModelId(m.bedrock!.baseModelId, caps) ?? m.bedrock!.baseModelId,
+        ...(m.bedrock!.contextTokens ? { contextTokens: m.bedrock!.contextTokens } : {}),
+      },
+      flavor: 'bedrock',
+      providerLabel: 'AWS Bedrock',
+    }),
+  },
+  openrouter: {
+    declared: (m) => !!m.openrouter,
+    usable: openRouterUsable,
+    build: (m) => ({
+      ref: m.openrouter!.ref,
+      flavor: 'openrouter',
+      providerLabel: m.openrouter!.providerLabel,
+    }),
+  },
+  cloudflare: {
+    declared: (m) => !!m.cloudflare,
+    usable: cloudflareUsable,
+    build: (m) => ({ ref: m.cloudflare!, flavor: 'cloudflare', providerLabel: 'Cloudflare' }),
+  },
+  subscription: {
+    declared: (m) => !!m.subscription,
+    usable: subscriptionUsable,
+    build: (m) => ({
+      ref: m.subscription!.ref,
+      flavor: 'subscription',
+      providerLabel: SUBSCRIPTION_VENDORS[m.subscription!.vendor].label,
+      vendor: m.subscription!.vendor,
+    }),
+  },
+}
+
+/**
  * Whether a catalog model is selectable for the given capabilities — it has at least
- * one usable flavour (a configured direct key, an enabled Cloudflare lib, or a
- * connected subscription vendor). Unknown ids are not usable.
+ * one usable flavour (a configured direct key, the model in the Bedrock allow-list, an
+ * OpenRouter key, an enabled Cloudflare lib, or a connected subscription vendor).
+ * Unknown ids are not usable.
  */
 export function isModelUsable(id: string | undefined | null, caps: ProviderCapabilities): boolean {
   const model = getSelectableModel(id)
@@ -745,55 +948,32 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
     }
     return false
   }
-  return (
-    directUsable(model, caps) ||
-    openRouterUsable(model, caps) ||
-    cloudflareUsable(model, caps) ||
-    subscriptionUsable(model, caps)
-  )
+  return MODEL_FLAVORS.some((flavor) => FLAVOR_HANDLERS[flavor].usable(model, caps))
 }
 
-// The effective variant a model resolves to for a capability set: prefer a usable
-// direct key, else the Cloudflare lib, else a connected subscription. When NOTHING is
-// usable it still returns a best-effort ref (direct → cloudflare → subscription) so
-// callers always get a ref; selectability is reported separately by `isModelUsable`.
-// A dual-mode model's subscription flavour ("subscriptions win") is preferred
-// per-workspace by the executor + frontend, not here.
+/**
+ * The effective variant a model resolves to for a capability set: the most preferred flavour
+ * the capabilities make USABLE, else the most preferred one the model merely DECLARES, so
+ * callers always get a ref to show/run (selectability is reported separately by
+ * {@link isModelUsable}, and the start guard gates actual use).
+ *
+ * Both walks follow the SAME order, or an unconfigured deployment would show one route in
+ * the picker and run another. A dual-mode model's subscription flavour ("subscriptions win")
+ * is still preferred per-workspace by the executor + frontend rather than here; see
+ * {@link DEFAULT_PROVIDER_PREFERENCE}.
+ */
 function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): EffectiveVariant {
-  const direct = (): EffectiveVariant => ({
-    ref: model.direct!.ref,
-    flavor: 'direct',
-    providerLabel: model.direct!.providerLabel,
-  })
-  const openrouter = (): EffectiveVariant => ({
-    ref: model.openrouter!.ref,
-    flavor: 'openrouter',
-    providerLabel: model.openrouter!.providerLabel,
-  })
-  const cloudflare = (): EffectiveVariant => ({
-    ref: model.cloudflare!,
-    flavor: 'cloudflare',
-    providerLabel: 'Cloudflare',
-  })
-  const subscription = (): EffectiveVariant => ({
-    ref: model.subscription!.ref,
-    flavor: 'subscription',
-    providerLabel: SUBSCRIPTION_VENDORS[model.subscription!.vendor].label,
-    vendor: model.subscription!.vendor,
-  })
-  // Prefer a usable flavour: native direct > OpenRouter gateway > Cloudflare > subscription.
-  if (directUsable(model, caps)) return direct()
-  if (openRouterUsable(model, caps)) return openrouter()
-  if (cloudflareUsable(model, caps)) return cloudflare()
-  if (subscriptionUsable(model, caps)) return subscription()
-  // Nothing usable: a best-effort ref so the caller still has something to show/run
-  // (the guard / `available` flag gate actual use).
-  if (model.direct) return direct()
-  if (model.openrouter) return openrouter()
-  if (model.cloudflare) return cloudflare()
-  if (model.subscription) return subscription()
+  for (const eligible of [
+    (h: FlavorHandler) => h.usable(model, caps),
+    (h: FlavorHandler) => h.declared(model),
+  ]) {
+    for (const flavor of DEFAULT_PROVIDER_PREFERENCE) {
+      const handler = FLAVOR_HANDLERS[flavor]
+      if (eligible(handler)) return handler.build(model, caps)
+    }
+  }
   throw new Error(
-    `Model '${model.id}' has no resolvable variant (no cloudflare/direct/openrouter/subscription)`,
+    `Model '${model.id}' has no resolvable variant (declares none of ${MODEL_FLAVORS.join(', ')})`,
   )
 }
 
@@ -1007,7 +1187,9 @@ export function personalCredentialVendorForModelId(
   const model = getSelectableModel(id)
   const sub = model?.subscription
   if (!sub || !isIndividualVendor(sub.vendor)) return null
-  const hasBase = !!model.cloudflare || !!model.direct || !!model.openrouter
+  const hasBase = MODEL_FLAVORS.some(
+    (flavor) => flavor !== 'subscription' && FLAVOR_HANDLERS[flavor].declared(model),
+  )
   if (!hasBase) return sub.vendor
   return hasPersonalSubscription(sub.vendor) ? sub.vendor : null
 }

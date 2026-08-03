@@ -26,6 +26,7 @@ import type {
   UserSecretService,
 } from '@cat-factory/integrations'
 import {
+  bedrockAllowListFromEnv,
   logger,
   operationalMetrics,
   runWithInitiator,
@@ -282,6 +283,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     providerRegistry,
   } = registries
+  // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
+  // (like `baseUrlFor` below) because it is one deployment-level env read with nothing
+  // per-workspace to resolve: Bedrock is reached with the deployment's own AWS credentials.
+  const bedrockModels = bedrockAllowListFromEnv(env)
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -466,6 +471,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           subscriptions,
           personalSubscriptions,
           cloudflareModelsEnabled,
+          ...(bedrockModels ? { bedrockModels } : {}),
           baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
           openRouterCatalog,
@@ -505,6 +511,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   } = input
   const { environmentBackendRegistry, runnerBackendRegistry, providerRegistry, vcsRegistry } =
     registries
+  const bedrockModels = bedrockAllowListFromEnv(env)
   // The domain dependency object (built in its own function to stay within the size budget);
   // the post-override wiring below still reads + mutates THIS instance, exactly as before.
   const dependencies = buildWorkerCoreDependencies(input)
@@ -678,6 +685,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     notificationWebhooks: notificationWebhookSupport?.service,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
+    // The Bedrock allow-list gating `bedrock`-flavour selectability (see the sibling read in
+    // `buildWorkerCoreDependencies`; both come from the one parser).
+    ...(bedrockModels ? { bedrockModels } : {}),
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
     // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
     baseUrlFor: (provider) => baseUrlFor(provider, env),

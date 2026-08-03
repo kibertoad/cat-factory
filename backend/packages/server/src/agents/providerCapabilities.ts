@@ -25,6 +25,14 @@ export interface CapabilityServices {
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareModelsEnabled?: boolean
   /**
+   * The deployment's Bedrock allow-list (`BEDROCK_MODELS`), VERBATIM and in declared order,
+   * and ONLY when the `bedrock` resolver is actually registered — a list with no
+   * `BEDROCK_REGION` behind it would offer routes that throw at dispatch. This is a
+   * deployment-level capability, not a per-workspace one: Bedrock is reached with the
+   * deployment's own AWS credentials, so there is no key to lease per scope.
+   */
+  bedrockModels?: Set<string>
+  /**
    * The deployment's base-URL resolver (the same one the model-provider resolver uses).
    * OpenAI-compatible providers (everything but `openai`/`anthropic`) cannot resolve
    * without a base URL — most carry a built-in default, but an operator-hosted gateway
@@ -136,6 +144,7 @@ export async function resolveWorkspaceCapabilities(
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
     localModels,
     openRouterModels,
+    ...(services.bedrockModels?.size ? { bedrockModels: services.bedrockModels } : {}),
     ...(modelPolicy ? { modelPolicy } : {}),
   }
 }
