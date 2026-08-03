@@ -6202,7 +6202,7 @@
       "intro": "Los recorridos guiados te muestran la aplicación directamente en esta pantalla: resaltan los controles reales y te dicen dónde hacer clic.",
       "decline": "No, gracias",
       "later": "Quizás más tarde",
-      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero.",
+      "empty": "Todavía no hay recorridos de primer contacto disponibles para tu rol en este tablero, pero el catálogo completo puede tener alguno que sí puedas hacer.",
       "browse": "Ver todos los tutoriales"
     },
     "catalogue": {
@@ -6475,8 +6475,8 @@
             "body": "Los pasos se ejecutan de arriba abajo, y cada fila tiene sus propios interruptores: añadir el revisor que devuelve un paso cuando puntúa demasiado bajo, exigir tu aprobación antes de que arranque el siguiente, o ejecutar un paso como un panel de varios modelos."
           },
           "save": {
-            "title": "Guárdalo",
-            "body": "Un pipeline guardado se suma a la biblioteca de esta ventana y se ofrece allí donde una tarea elige uno. Nómbralo por el trabajo que hace y no por los agentes que contiene, porque ese nombre es todo lo que verás al elegir después."
+            "title": "Guardar tu pipeline",
+            "body": "Guardar se habilita en cuanto el borrador tiene al menos un paso. Un pipeline guardado se suma a la biblioteca de esta ventana y se ofrece allí donde una tarea elige uno; nómbralo por el trabajo que hace y no por los agentes que contiene, porque ese nombre es todo lo que verás al elegir después."
           },
           "finish": {
             "title": "Listo para ejecutar",

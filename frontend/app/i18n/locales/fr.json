@@ -6202,7 +6202,7 @@
       "intro": "Les visites guidées vous montrent l'application directement à l'écran : elles mettent en évidence les vrais contrôles et vous indiquent où cliquer.",
       "decline": "Non merci",
       "later": "Peut-être plus tard",
-      "empty": "Aucune visite n'est encore disponible pour votre rôle sur ce tableau.",
+      "empty": "Aucune visite de premiers pas n'est encore disponible pour votre rôle sur ce tableau, mais le catalogue complet peut tout de même en contenir une accessible.",
       "browse": "Voir tous les tutoriels"
     },
     "catalogue": {
@@ -6475,8 +6475,8 @@
             "body": "Les étapes s'exécutent de haut en bas, et chaque ligne a ses propres interrupteurs : attacher le relecteur qui renvoie une étape lorsqu'elle est trop mal notée, exiger votre approbation avant le démarrage de la suivante, ou faire tourner une étape comme un panel de plusieurs modèles."
           },
           "save": {
-            "title": "Enregistrez-le",
-            "body": "Un pipeline enregistré rejoint la bibliothèque de cette fenêtre et est proposé partout où une tâche en choisit un. Nommez-le d'après le travail qu'il fait plutôt que d'après les agents qu'il contient, car ce nom est tout ce que vous verrez au moment de choisir."
+            "title": "Enregistrer votre pipeline",
+            "body": "Enregistrer devient actif dès que le brouillon contient au moins une étape. Un pipeline enregistré rejoint la bibliothèque de cette fenêtre et est proposé partout où une tâche en choisit un ; nommez-le d'après le travail qu'il fait plutôt que d'après les agents qu'il contient, car ce nom est tout ce que vous verrez au moment de choisir."
           },
           "finish": {
             "title": "Prêt à tourner",

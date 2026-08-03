@@ -55,9 +55,10 @@ authority; this tracker records the arc and what each slice learned.
       out of the prompt by omission. The alternative, capping the prompt's list, was rejected: a cap
       would pick which walkthroughs to bury by sort order rather than by what they are for.
       The second learning was that "each tour requires what renders the control it clicks" could
-      not stay a convention: it now binds through `navRequirementDrift`, which reads the nav
-      catalog's own gates, because the two edits that break it (tightening an entry's `gate`,
-      marking one `advanced`) are both invisible to every other check.
+      not stay a convention checked by restating the permission: it now binds through
+      `navRequirementDrift`, which reads the nav catalog's own gates, because the two edits that
+      break it (tightening an entry's `gate`, marking one `advanced` and so hiding it from the
+      DEFAULT tier) are both invisible to every other check and to the tour itself.
 - [ ] **5: Reaching the user who needs it.** The catalogue is now discoverable; whether it is
       DISCOVERED is unmeasured. Two candidates, in rough order of expected value: a CONTEXTUAL
       offer, surfacing the one relevant tour beside the surface it explains (the first time a run

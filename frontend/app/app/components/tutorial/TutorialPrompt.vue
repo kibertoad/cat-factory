@@ -77,9 +77,14 @@ const undecided = computed(() => tutorial.decision === null)
             </UButton>
           </li>
         </ul>
-        <!-- Every first-run tour gated away (e.g. a viewer on a write-only catalog): say so
-             rather than showing an unexplained empty list. The footer's browse button stays,
-             because the catalogue may well hold something this user can take. -->
+        <!-- Every first-run tour gated away: say so rather than showing an unexplained empty
+             list. The copy points at the catalogue rather than declaring the deployment empty,
+             because with the split this state no longer implies there is nothing to take: what
+             is missing is the FIRST-RUN arc, and the catalogue-only walkthroughs gate on a
+             permission that this user may well hold. (Unreachable with the built-in catalog
+             alone, where `board-basics` requires nothing at all — but a consumer's own slot
+             filter can produce it, and "no tours exist" would be the wrong thing to say then.)
+             The footer's browse button is the way on, so it stays. -->
         <p v-if="offered.length === 0" class="text-sm text-slate-400">
           {{ t('tutorial.prompt.empty') }}
         </p>

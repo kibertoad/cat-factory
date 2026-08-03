@@ -6419,7 +6419,7 @@
       "intro": "Guided tours walk you through the app right on this screen: they highlight the actual controls and tell you what to click.",
       "decline": "No thanks",
       "later": "Maybe later",
-      "empty": "No tours are available for your role on this board yet.",
+      "empty": "No first-run walkthroughs are available for your role on this board yet, but the full catalogue may still hold one you can take.",
       "browse": "See all tutorials"
     },
     "catalogue": {
@@ -6710,8 +6710,8 @@
             "body": "Steps run top to bottom, and each row carries its own switches: attach the reviewer that sends a step back when it scores too low, require your approval before the next one starts, or run a step as a panel of several models."
           },
           "save": {
-            "title": "Save it",
-            "body": "A saved pipeline joins the library in this window and is offered wherever a task picks one. Name it for the job it does rather than the agents in it, because that name is all you see when choosing later."
+            "title": "Saving your pipeline",
+            "body": "Save becomes available once the draft holds at least one step. A saved pipeline joins the library in this window and is offered wherever a task picks one; name it for the job it does rather than the agents in it, because that name is all you see when choosing later."
           },
           "finish": {
             "title": "Ready to run",

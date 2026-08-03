@@ -6214,7 +6214,7 @@
       "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
       "decline": "Hayır, teşekkürler",
       "later": "Belki daha sonra",
-      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok.",
+      "empty": "Bu panodaki rolünüz için henüz ilk adım turu yok, ama tam katalogda yapabileceğiniz bir tur bulunabilir.",
       "browse": "Tüm eğitimleri gör"
     },
     "catalogue": {
@@ -6487,8 +6487,8 @@
             "body": "Adımlar yukarıdan aşağıya çalışır ve her satırın kendi anahtarları vardır: puanı düşük kaldığında adımı geri gönderen gözden geçireni ekleyin, bir sonraki başlamadan önce onayınızı zorunlu kılın ya da adımı birden çok modelden oluşan bir panel olarak çalıştırın."
           },
           "save": {
-            "title": "Kaydedin",
-            "body": "Kaydedilen bir hat bu penceredeki kütüphaneye katılır ve bir görevin hat seçtiği her yerde sunulur. Onu içindeki ajanlara göre değil yaptığı işe göre adlandırın; sonradan seçim yaparken göreceğiniz tek şey o addır."
+            "title": "Hattınızı kaydetmek",
+            "body": "Taslakta en az bir adım olduğunda kaydetme etkinleşir. Kaydedilen bir hat bu penceredeki kütüphaneye katılır ve bir görevin hat seçtiği her yerde sunulur; onu içindeki ajanlara göre değil yaptığı işe göre adlandırın, çünkü sonradan seçim yaparken göreceğiniz tek şey o addır."
           },
           "finish": {
             "title": "Çalıştırmaya hazır",

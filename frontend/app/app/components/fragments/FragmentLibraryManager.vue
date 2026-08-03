@@ -599,10 +599,11 @@ async function unlinkSource(id: string) {
 </script>
 
 <template>
-  <!-- Named so the tutorial tour about steering agents with standards can point at the library
-       as a whole; the tour requires the library to be enabled, so it never lands on the
-       unavailable notice below. -->
-  <div class="flex flex-col gap-4" data-testid="fragment-library">
+  <!-- Deliberately UNNAMED. This manager is mounted at two scopes (the board's library modal and
+       the account settings' fragment tab), so a `data-testid` on its root would be one id over
+       two elements. The tutorial tour's anchor is named by the WORKSPACE entry point instead —
+       see `FragmentLibraryPanel.vue`. -->
+  <div class="flex flex-col gap-4">
     <!-- The library is opt-out; if a deployment disabled it, don't offer forms that
          would fail with a raw 503 — say so instead (any entry point lands here). -->
     <div

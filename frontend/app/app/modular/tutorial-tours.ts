@@ -585,6 +585,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         // NOT `target-click`, and not for `run-task`'s budget reason: Save is DISABLED until the
         // draft holds a step, and a click-to-advance step on a control that cannot be clicked
         // strands the tour — the tooltip drops its Next button, so there is no way forward.
+        //
+        // Which is also why the copy DESCRIBES saving rather than instructing it, and says what
+        // lights the button up. The previous step invites a click on the palette but doesn't
+        // require one, so this step is routinely read with Save greyed out; an imperative title
+        // over a dead control reads as a tour pointing at something broken.
         id: 'save',
         target: 'pipeline-builder-save',
         placement: 'top',

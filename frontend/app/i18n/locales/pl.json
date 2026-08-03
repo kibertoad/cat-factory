@@ -6202,7 +6202,7 @@
       "intro": "Interaktywne przewodniki pokazują aplikację bezpośrednio na tym ekranie: podświetlają prawdziwe elementy interfejsu i mówią, co kliknąć.",
       "decline": "Nie, dziękuję",
       "later": "Może później",
-      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników.",
+      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników na start, ale w pełnym katalogu może znaleźć się taki, który zrobisz.",
       "browse": "Zobacz wszystkie samouczki"
     },
     "catalogue": {
@@ -6475,8 +6475,8 @@
             "body": "Kroki wykonują się z góry na dół, a każdy wiersz ma własne przełączniki: dołącz recenzenta, który cofa krok przy zbyt niskiej ocenie, wymagaj swojej zgody przed startem następnego albo uruchom krok jako panel kilku modeli."
           },
           "save": {
-            "title": "Zapisz go",
-            "body": "Zapisany potok dołącza do biblioteki w tym oknie i jest proponowany wszędzie tam, gdzie zadanie wybiera potok. Nazwij go od pracy, którą wykonuje, a nie od agentów w środku, bo tylko tę nazwę zobaczysz przy wyborze."
+            "title": "Zapisywanie potoku",
+            "body": "Zapis staje się dostępny, gdy szkic zawiera co najmniej jeden krok. Zapisany potok dołącza do biblioteki w tym oknie i jest proponowany wszędzie tam, gdzie zadanie wybiera potok; nazwij go od pracy, którą wykonuje, a nie od agentów w środku, bo tylko tę nazwę zobaczysz przy wyborze."
           },
           "finish": {
             "title": "Gotowy do uruchomienia",

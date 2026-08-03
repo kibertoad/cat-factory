@@ -48,7 +48,7 @@ over the WebSocket. How that sync works is written up in
 | Path              | Contents                                                                                                                                              |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                          |
+| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
 | `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
 | `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
 | `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
@@ -311,17 +311,16 @@ sidebar entry anyway, and each declares exactly the permission that renders the 
 since a weaker requirement offers a tour to someone with no such control and it then reports itself
 abridged.
 
-**That pairing is DERIVED from the nav catalog, not restated.** A tour whose step clicks a
-`nav-*` anchor is checked by `navRequirementDrift` (`utils/tutorial.ts`, pure) against the
-`NavContribution`'s OWN `gate`, over a permutation matrix of the gate fields either side reads: a
-gate set that satisfies the tour's `requires` must also render the entry. Restating the permission
-in a spec's gate literal would not have caught the two edits that actually break it, because
-neither one touches the tour. Tightening an entry's `gate` is the obvious one. The other is
-marking it `advanced: true`, which hides it from BASIC mode, and basic is the shipped default,
-so the tour would be offered to almost everyone and find nothing: the guard therefore reads
-`advanced` too, and a tour clicking an advanced entry has to declare
-`TUTORIAL_REQUIREMENTS.advancedMode`. Scoped to anchors that ARE nav entries, since a tour
-pointing into a modal has no contribution to pair with.
+**That pairing is DERIVED from the nav catalog, not restated.** A step whose anchor IS a nav
+entry's `testId` is checked by `navRequirementDrift` (`tutorial-tours.spec.ts`, beside the anchor
+guard) against that `NavContribution`'s OWN `gate`: over every combination of the `NavGates`
+booleans, a gate set satisfying the tour's `requires` must also be one the entry RENDERS in.
+Restating the permission in a spec's gate literal is what this replaced, and it could not catch
+either edit that really breaks the pairing, because neither one touches the tour. Tightening an
+entry's `gate` is the obvious one. The subtler one is marking it `advanced: true`, which hides it
+from BASIC mode; basic is the shipped default, so that tour would be offered to nearly everyone
+and find nothing. "Renders" therefore means the gate AND the tier, and a tour that wants an
+advanced entry has to declare the tier as a requirement of its own.
 
 Two deliberate asymmetries about click-to-advance: `run-task` points at Start without it,
 because starting a run spends real model budget and nobody should discover they agreed to that by

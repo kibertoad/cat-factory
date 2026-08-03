@@ -6214,7 +6214,7 @@
       "intro": "Geführte Touren zeigen dir die App direkt auf diesem Bildschirm: Sie heben die echten Bedienelemente hervor und sagen dir, was du anklicken sollst.",
       "decline": "Nein danke",
       "later": "Vielleicht später",
-      "empty": "Für deine Rolle auf diesem Board sind noch keine Touren verfügbar.",
+      "empty": "Für deine Rolle auf diesem Board sind noch keine Einstiegstouren verfügbar, im vollständigen Katalog kann aber trotzdem eine für dich liegen.",
       "browse": "Alle Tutorials anzeigen"
     },
     "catalogue": {
@@ -6487,8 +6487,8 @@
             "body": "Schritte laufen von oben nach unten, und jede Zeile hat ihre eigenen Schalter: den Reviewer anhängen, der einen Schritt bei zu niedriger Bewertung zurückschickt, deine Freigabe verlangen, bevor der nächste startet, oder einen Schritt als Panel aus mehreren Modellen laufen lassen."
           },
           "save": {
-            "title": "Speichern",
-            "body": "Eine gespeicherte Pipeline landet in der Bibliothek in diesem Fenster und wird überall angeboten, wo eine Aufgabe eine auswählt. Benenne sie nach der Arbeit, die sie erledigt, nicht nach den Agenten darin, denn dieser Name ist alles, was du später siehst."
+            "title": "Die Pipeline speichern",
+            "body": "Speichern wird verfügbar, sobald der Entwurf mindestens einen Schritt enthält. Eine gespeicherte Pipeline landet in der Bibliothek in diesem Fenster und wird überall angeboten, wo eine Aufgabe eine auswählt; benenne sie nach der Arbeit, die sie erledigt, nicht nach den Agenten darin, denn dieser Name ist alles, was du später siehst."
           },
           "finish": {
             "title": "Bereit zum Ausführen",

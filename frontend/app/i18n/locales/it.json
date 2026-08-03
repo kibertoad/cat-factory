@@ -6214,7 +6214,7 @@
       "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
       "decline": "No grazie",
       "later": "Forse più tardi",
-      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board.",
+      "empty": "Non ci sono ancora tour introduttivi disponibili per il tuo ruolo su questa board, ma il catalogo completo potrebbe averne uno che puoi seguire.",
       "browse": "Vedi tutti i tutorial"
     },
     "catalogue": {
@@ -6487,8 +6487,8 @@
             "body": "I passi girano dall'alto in basso, e ogni riga ha i suoi interruttori: agganciare il revisore che rimanda indietro un passo quando il punteggio è troppo basso, richiedere la tua approvazione prima che parta il successivo, oppure eseguire un passo come panel di più modelli."
           },
           "save": {
-            "title": "Salvala",
-            "body": "Una pipeline salvata entra nella libreria di questa finestra e viene proposta ovunque un'attività ne scelga una. Dalle il nome del lavoro che fa e non degli agenti che contiene, perché quel nome è tutto ciò che vedrai quando sceglierai."
+            "title": "Salvare la pipeline",
+            "body": "Salva diventa attivo appena la bozza contiene almeno un passo. Una pipeline salvata entra nella libreria di questa finestra e viene proposta ovunque un'attività ne scelga una; dalle il nome del lavoro che fa e non degli agenti che contiene, perché quel nome è tutto ciò che vedrai quando sceglierai."
           },
           "finish": {
             "title": "Pronta per l'uso",

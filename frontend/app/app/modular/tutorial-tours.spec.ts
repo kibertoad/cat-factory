@@ -9,7 +9,9 @@ import {
 } from '~/modular/tutorial-tours'
 import { isLaunchOffer, resolveTourCatalogue, resolveTours } from '~/utils/tutorial'
 import { isSafeTargetId } from '~/components/tutorial/TutorialOverlay.logic'
-import type { NavGates } from '~/modular/nav-contributions'
+import { NAV_CONTRIBUTIONS, navItemVisible } from '~/modular/nav-contributions'
+import type { NavContribution, NavGates } from '~/modular/nav-contributions'
+import type { TutorialStep, TutorialTour } from '~/utils/tutorial'
 
 const ALL_GATES: NavGates = {
   canWriteBoard: true,
@@ -100,6 +102,90 @@ function declaredAnchors(): { label: string; id: string }[] {
   return out
 }
 
+/**
+ * Every step whose anchor IS a nav entry, paired with the contribution it points at.
+ *
+ * Those steps are the ones a tour's `requires` has to agree with, because the anchor only
+ * exists while the sidebar/palette renders that entry. An anchor that is NOT a nav entry (a
+ * control inside the modal the click opens) has no contribution to pair with and is left to
+ * the anchor guard above; `altTargets` are included, since a fallback anchor is reached on
+ * exactly the same terms as the primary one.
+ */
+function navAnchoredSteps(): {
+  tour: TutorialTour
+  step: TutorialStep
+  item: NavContribution
+  label: string
+}[] {
+  const byTestId = new Map(
+    NAV_CONTRIBUTIONS.flatMap((item) => (item.testId ? [[item.testId, item] as const] : [])),
+  )
+  return TUTORIAL_TOURS.flatMap((tour) =>
+    tour.steps.flatMap((step) =>
+      [step.target, ...(step.altTargets ?? [])].flatMap((target) => {
+        const item = target === undefined ? undefined : byTestId.get(target)
+        return item ? [{ tour, step, item, label: `${tour.id}/${step.id} -> ${item.id}` }] : []
+      }),
+    ),
+  )
+}
+
+/**
+ * Every combination of the {@link NavGates} booleans, yielded lazily so the 2^N gate sets are
+ * never all live at once.
+ *
+ * Enumerating rather than reasoning is deliberate. The pairing below is an IMPLICATION over
+ * gate sets — anything that satisfies a tour must also render its entry — between two
+ * predicates written independently in two files, and nothing about their shape is guaranteed
+ * (either may be a conjunction, a disjunction, or read a field the other doesn't). At fifteen
+ * fields the whole matrix costs milliseconds, which is a fair price for a guard that needs no
+ * assumption about how either side is spelled.
+ */
+function* everyGateSet(): Generator<NavGates> {
+  const keys = Object.keys(ALL_GATES) as (keyof NavGates)[]
+  for (let mask = 0; mask < 2 ** keys.length; mask++) {
+    const gates = {} as Record<keyof NavGates, boolean>
+    for (const [bit, key] of keys.entries()) gates[key] = (mask & (1 << bit)) !== 0
+    yield gates as NavGates
+  }
+}
+
+/** The gate fields a witness has turned OFF — the interesting half of a failure message. */
+function absentGates(gates: NavGates): readonly string[] {
+  return Object.entries(gates)
+    .filter(([, value]) => value === false)
+    .map(([key]) => key)
+}
+
+/**
+ * A gate set that OFFERS this tour while the entry its step clicks is NOT rendered, or
+ * `undefined` when no such set exists (what the guard wants). A step the gate set DROPS
+ * (`when`) needs no anchor, so it cannot be a counterexample.
+ *
+ * Of the many counterexamples one break produces, the one reported is the SMALLEST: the gate
+ * set closest to fully-permitted, so its absent fields are exactly the ones that matter. The
+ * first witness the matrix happens to reach names most of `NavGates` and reads as noise, which
+ * is the difference between a failure that says "declare `advancedMode`" and one that says
+ * "something about fourteen gates".
+ */
+function navRequirementDrift(
+  pair: ReturnType<typeof navAnchoredSteps>[number],
+): NavGates | undefined {
+  let smallest: NavGates | undefined
+  let fewestAbsent = Number.POSITIVE_INFINITY
+  for (const gates of everyGateSet()) {
+    if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) continue
+    if (pair.step.when && !pair.step.when(gates)) continue
+    if (navItemVisible(pair.item, gates)) continue
+    const absent = absentGates(gates).length
+    if (absent < fewestAbsent) {
+      fewestAbsent = absent
+      smallest = gates
+    }
+  }
+  return smallest
+}
+
 /** Every static test id this layer actually renders. */
 function renderedTestIds(): Set<string> {
   const ids = new Set<string>()
@@ -188,6 +274,39 @@ describe('the built-in tutorial tour catalog', () => {
       .filter((anchor) => !rendered.has(anchor.id))
       .map((anchor) => anchor.label)
     expect(missing).toEqual([])
+  })
+
+  it('requires, of every step that clicks a nav entry, whatever renders that entry', () => {
+    // The other drift guard, and the one the availability cases below CANNOT stand in for.
+    // Those assert this pairing by restating the permission in a hand-built gate set, which
+    // says nothing about the nav catalog: both edits that really break the pairing happen in
+    // `nav-contributions.ts` and touch no tour.
+    //
+    //  - an entry's `gate` gains a clause the tour doesn't require;
+    //  - an entry is marked `advanced: true`, which removes it from BASIC mode — and basic is
+    //    the SHIPPED DEFAULT, so the tour would then be offered to nearly every user and find
+    //    nothing.
+    //
+    // Both land on the same production failure: the tour is offered, hunts for an anchor that
+    // this user's sidebar never renders, skips the step (no `when`, so the miss COUNTS) and
+    // leaves them on a permanent "you missed N steps" notice about a walkthrough that could
+    // not have gone any other way. So the requirement is derived from the entry's OWN
+    // visibility rule (`navItemVisible`, the function `navSlotFilter` itself filters with)
+    // rather than spelled out a second time here.
+    const pairs = navAnchoredSteps()
+    // Guard the guard, twice over. A pairing that matched nothing would pass vacuously, and
+    // there is one per tour that opens a sidebar surface: `add-service` plus the four platform
+    // tours. And a gate field that is not a boolean would silently never vary across the
+    // matrix, leaving whatever it gates unexercised.
+    expect(pairs.length).toBeGreaterThanOrEqual(5)
+    expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
+
+    const drifted = pairs.flatMap((pair) => {
+      const witness = navRequirementDrift(pair)
+      if (witness === undefined) return []
+      return [`${pair.label} is offered without ${absentGates(witness).join(' / ')}`]
+    })
+    expect(drifted).toEqual([])
   })
 
   it('is contributed to the tutorialTours slot by the module', () => {
