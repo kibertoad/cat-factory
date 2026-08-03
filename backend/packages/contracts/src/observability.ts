@@ -461,11 +461,29 @@ export type PlatformObservability = v.InferOutput<typeof platformObservabilitySc
  *   - `duration_p99_high` — the p99 wall-clock run duration exceeded the ceiling (a slow-run
  *                           tail the average hides).
  *   - `backlog_high`      — the live running/blocked/paused/pending depth exceeded the ceiling.
+ *   - `throughput_stalled` — NO runs were created in the recent part of the window, while the
+ *                           earlier part of the same window was busy. The condition that
+ *                           exists because every other one reads a RATIO or a PERCENTILE over
+ *                           runs, and all of them go silent at `total = 0` — so a deployment
+ *                           that stopped accepting work entirely (a wedged queue, a dead
+ *                           admission path, an expired credential) looked byte-for-byte
+ *                           identical to a quiet healthy one.
+ *   - `failure_kind_dominant` — one failure kind accounts for nearly all failures. 100%
+ *                           `evicted` and 100% `agent` are the same `failure_rate_high` and
+ *                           completely different incidents — infrastructure versus the model
+ *                           — so the dominant kind is its own signal rather than a detail
+ *                           buried in the dashboard.
+ *   - `sweep_degraded`    — a background sweeper has been failing repeatedly. Alerting on the
+ *                           WATCHER, because a sweep that stopped running makes every signal
+ *                           above stale without making any of them fire.
  */
 export const platformAlertReasonSchema = v.picklist([
   'failure_rate_high',
   'duration_p99_high',
   'backlog_high',
+  'throughput_stalled',
+  'failure_kind_dominant',
+  'sweep_degraded',
 ])
 export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema>
 

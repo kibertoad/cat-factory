@@ -20,6 +20,16 @@ export interface AgentRunRef {
  */
 export interface StaleAgentRun extends AgentRunRef {
   updatedAt: number
+  /**
+   * How many times a sweeper has already re-driven this run (0 for one that never has been).
+   * PERSISTED rather than held in the sweeper's per-process `orphanedSince` map, which is the
+   * whole point: that map is lost on a restart and, on Cloudflare, on every isolate eviction,
+   * so "was this run re-driven three times or is this the first?" was answerable only by
+   * grepping logs — and on the Worker not even that, since the sweep logs aggregates with no
+   * run ids. A run that recovers keeps its count: the fact that it needed three re-drives is
+   * exactly what an operator wants after it finally succeeds.
+   */
+  redriveCount: number
 }
 
 /**
@@ -52,4 +62,16 @@ export interface AgentRunRepository {
    * since gone terminal or away in a single query rather than a point-read per container.
    */
   liveRunIds(ids: string[]): Promise<string[]>
+  /**
+   * Record that a sweeper re-drove this run: increment `redrive_count` and return the NEW
+   * total. Deliberately NOT part of the re-drive's own transaction and deliberately not
+   * rev-guarded — it is a monotonic counter about the run rather than a value derived from
+   * the run's state, so two racing sweepers double-counting is a far better failure than a
+   * lost update, and a `rev` bump here would collide with the driver's own writes and make
+   * bookkeeping able to fail a re-drive.
+   *
+   * Returns 0 for a run that has since vanished, so a caller can tell "counted" from
+   * "nothing to count" without a second read.
+   */
+  recordRedrive(workspaceId: string, id: string): Promise<number>
 }

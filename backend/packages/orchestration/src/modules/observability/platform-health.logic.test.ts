@@ -12,6 +12,8 @@ function snapshot(over: {
   outcomes?: Partial<PlatformObservability['outcomes']>
   durations?: Partial<PlatformObservability['durations']>
   live?: Partial<PlatformObservability['live']>
+  failures?: PlatformObservability['failures']
+  trendPoints?: PlatformObservability['trend']['points']
 }): PlatformObservability {
   return {
     window: '1h',
@@ -28,8 +30,8 @@ function snapshot(over: {
       successRate: 1,
       ...over.outcomes,
     },
-    trend: { bucketMs: 300_000, points: [] },
-    failures: [],
+    trend: { bucketMs: 300_000, points: over.trendPoints ?? [] },
+    failures: over.failures ?? [],
     live: { running: 0, blocked: 0, paused: 0, pending: 0, ...over.live },
     durations: {
       count: 20,
@@ -128,5 +130,131 @@ describe('platformHealthCardContent', () => {
     expect(body).toContain('slow run durations')
     expect(body).toContain('the last 24 hours')
     expect(body).not.toContain(' and ')
+  })
+})
+
+// A trend series: `busy` buckets each carrying `perBucket` completed runs, then `idle` empty
+// ones. The shape the stall condition reads — no second query, just the projection's own trend.
+function trend(busy: number, idle: number, perBucket = 4) {
+  const points: PlatformObservability['trend']['points'] = []
+  for (let i = 0; i < busy; i++)
+    points.push({ start: i * 300_000, done: perBucket, failed: 0, other: 0 })
+  for (let i = 0; i < idle; i++)
+    points.push({ start: (busy + i) * 300_000, done: 0, failed: 0, other: 0 })
+  return points
+}
+
+describe('evaluatePlatformHealth: throughput_stalled', () => {
+  it('fires when a busy window goes completely silent', () => {
+    // The condition that exists because every OTHER one divides by runs and goes quiet at
+    // total = 0 — so a deployment that stopped accepting work read as a quiet healthy one.
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(6, 3) }), T)
+    expect(platformAlertReasons(alerts)).toContain('throughput_stalled')
+  })
+
+  it('stays quiet for a deployment that is merely idle', () => {
+    // An empty window is not a stall: nobody asked it to do anything. Alerting here is how a
+    // zero-throughput alert gets muted, which costs the signal on the night it matters.
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(6, 3, 0) }), T)
+    expect(platformAlertReasons(alerts)).not.toContain('throughput_stalled')
+  })
+
+  it('stays quiet while work is still landing in the trailing buckets', () => {
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(6, 2) }), T)
+    expect(platformAlertReasons(alerts)).not.toContain('throughput_stalled')
+  })
+
+  it('cannot fire on a window too short to hold both halves', () => {
+    // Not enough history to distinguish "stalled" from "just started" — the honest answer is
+    // no alert, not a guess.
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(0, 3) }), T)
+    expect(platformAlertReasons(alerts)).not.toContain('throughput_stalled')
+  })
+
+  it('reports how far the silence ACTUALLY reaches, not the threshold it cleared', () => {
+    // The platform COMPUTES the magnitude. Reporting `stalledBuckets` back made a stall that
+    // had lasted all night read identically on the card to one that had just crossed the bar.
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(2, 7) }), T)
+    const stalled = alerts.find((a) => a.reason === 'throughput_stalled')
+    expect(stalled).toEqual({ reason: 'throughput_stalled', value: 7, threshold: T.stalledBuckets })
+    expect(stalled!.value).toBeGreaterThan(stalled!.threshold)
+  })
+})
+
+describe('evaluatePlatformHealth: failure_kind_dominant', () => {
+  it('fires when nearly every failure shares one kind', () => {
+    // 100% `evicted` and 100% `agent` produce an identical failure RATE and need opposite
+    // fixes, so the concentration is its own signal.
+    const alerts = evaluatePlatformHealth(
+      snapshot({
+        outcomes: { total: 20, done: 10, failed: 10, successRate: 0.5 },
+        failures: [
+          { kind: 'evicted', count: 9 },
+          { kind: 'agent', count: 1 },
+        ],
+      }),
+      T,
+    )
+    expect(platformAlertReasons(alerts)).toContain('failure_kind_dominant')
+  })
+
+  it('stays quiet when failures are spread across kinds', () => {
+    const alerts = evaluatePlatformHealth(
+      snapshot({
+        outcomes: { total: 20, done: 10, failed: 10, successRate: 0.5 },
+        failures: [
+          { kind: 'evicted', count: 5 },
+          { kind: 'agent', count: 5 },
+        ],
+      }),
+      T,
+    )
+    expect(platformAlertReasons(alerts)).not.toContain('failure_kind_dominant')
+  })
+
+  it('respects the minimum-sample gate, so one early failure is never "100% evicted"', () => {
+    const alerts = evaluatePlatformHealth(
+      snapshot({
+        outcomes: { total: 1, done: 0, failed: 1, successRate: 0 },
+        failures: [{ kind: 'evicted', count: 1 }],
+      }),
+      T,
+    )
+    expect(platformAlertReasons(alerts)).not.toContain('failure_kind_dominant')
+  })
+})
+
+describe('evaluatePlatformHealth: sweep_degraded', () => {
+  it('fires once a sweeper has failed the threshold number of consecutive passes', () => {
+    const alerts = evaluatePlatformHealth(snapshot({}), T, { sweep: 'retention', consecutive: 3 })
+    expect(platformAlertReasons(alerts)).toContain('sweep_degraded')
+  })
+
+  it('stays quiet below the threshold', () => {
+    const alerts = evaluatePlatformHealth(snapshot({}), T, { sweep: 'retention', consecutive: 1 })
+    expect(platformAlertReasons(alerts)).not.toContain('sweep_degraded')
+  })
+
+  it('cannot fire when the caller tracks no streak', () => {
+    // Absent is "not tracked", not "nothing failed" — the caller that supplies nothing gets no
+    // claim either way.
+    expect(platformAlertReasons(evaluatePlatformHealth(snapshot({}), T))).not.toContain(
+      'sweep_degraded',
+    )
+  })
+})
+
+describe('platformHealthCardContent covers every reason', () => {
+  it('renders a phrase for each new reason rather than the fallback', () => {
+    // The `Record<PlatformAlertReason, string>` makes a missing phrase a typecheck failure, but
+    // not a WRONG one — this pins that each new reason reaches the body.
+    for (const reason of [
+      'throughput_stalled',
+      'failure_kind_dominant',
+      'sweep_degraded',
+    ] as const) {
+      const { body } = platformHealthCardContent([reason], '1h')
+      expect(body).not.toContain('a health threshold was crossed')
+    }
   })
 })

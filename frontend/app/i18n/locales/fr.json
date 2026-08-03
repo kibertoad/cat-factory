@@ -549,6 +549,7 @@
         "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets",
         "foundational_service_exists": "Ce service fondamental existe déjà",
         "binary_output_service_invalid": "Service des sorties binaires introuvable",
+        "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
         "foundational_service_not_inherited": "Ce tableau a enregistré ce service"
       },
       "description": {
@@ -580,6 +581,7 @@
         "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification.",
         "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception.",
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
+        "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau."
       },
       "action": {
@@ -4092,7 +4094,20 @@
       "binaryOutputMissing": "Ce service de stockage n'est plus dans le catalogue ; choisissez-en un autre.",
       "binaryOutputNotStorage": "Ce service ne déclare plus la capacité {capability}, les exécutions seront donc refusées ; choisissez-en un autre.",
       "binaryOutputContextMissing": "Ces services de contexte ne sont plus dans le catalogue : {ids}",
-      "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici."
+      "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici.",
+      "binaryOutputGenerators": "Générer avec",
+      "binaryOutputGeneratorsPlaceholder": "Aucune intégration sélectionnée",
+      "binaryOutputModalities": "Doit livrer",
+      "binaryOutputModalitiesPlaceholder": "Aucune exigence",
+      "binaryOutputGeneratorMissing": "Ce déploiement n'enregistre pas ces intégrations génératives : {ids}. Elles s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
+      "binaryOutputModalityUncovered": "Aucune intégration sélectionnée ne produit {modalities}, que cette étape doit livrer.",
+      "binaryOutputModality": {
+        "image": "Images",
+        "audio": "Audio",
+        "video": "Vidéo",
+        "3d": "Modèles 3D",
+        "document": "Documents"
+      }
     },
     "progress": {
       "status": {
@@ -5392,8 +5407,10 @@
       "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({id}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
       "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
       "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
-      "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés."
-    }
+      "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés.",
+      "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail."
+    },
+    "unknownGeneratorBadge": "Non enregistrée"
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",

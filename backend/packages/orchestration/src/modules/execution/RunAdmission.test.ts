@@ -1,6 +1,11 @@
 import { AgentKindRegistry } from '@cat-factory/agents'
 import type { Block } from '@cat-factory/kernel'
-import { ASSET_STORAGE_CAPABILITY, ConflictError, ValidationError } from '@cat-factory/kernel'
+import {
+  ASSET_STORAGE_CAPABILITY,
+  ConflictError,
+  ValidationError,
+  defaultBinaryGeneratorRegistry,
+} from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import { RunAdmission, type RunAdmissionDeps } from './RunAdmission.js'
@@ -37,6 +42,28 @@ function catalogResolver(
   }
 }
 
+/** A deployment registering one image integration and one music integration. */
+function generatorRegistry() {
+  const generators = defaultBinaryGeneratorRegistry()
+  generators.registerAll([
+    {
+      id: 'retro-diffusion',
+      name: 'Retro Diffusion',
+      summary: 'Pixel-art image generation.',
+      description: '',
+      modalities: ['image'],
+    },
+    {
+      id: 'studio-music',
+      name: 'Studio Music',
+      summary: 'Instrumental music generation.',
+      description: '',
+      modalities: ['audio'],
+    },
+  ])
+  return generators
+}
+
 function admission(resolver?: FoundationalServiceResolver): RunAdmission {
   const deps = {
     workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
@@ -50,6 +77,7 @@ function admission(resolver?: FoundationalServiceResolver): RunAdmission {
     agentKindRegistry: registry,
     spend: { isOverBudget: vi.fn(async () => false) },
     ...(resolver ? { foundationalServiceResolver: resolver } : {}),
+    binaryGeneratorRegistry: generatorRegistry(),
   } as unknown as RunAdmissionDeps
   return new RunAdmission(deps)
 }
@@ -222,5 +250,106 @@ describe('RunAdmission — binary-output selection', () => {
         null,
       ),
     ).resolves.toBeUndefined()
+  })
+})
+
+describe('RunAdmission — generative integration selection', () => {
+  const storageOnly = () =>
+    catalogResolver([{ id: 'asset-store', capabilities: [ASSET_STORAGE_CAPABILITY] }])
+
+  it('admits a selection whose integrations cover every content type the step declares', async () => {
+    await expect(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion', 'studio-music'],
+                modalities: ['image', 'audio'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses an integration id the deployment does not register, under its OWN reason', async () => {
+    // A separate reason from `binary_output_service_invalid` on purpose: that one is fixed in the
+    // workspace catalog, this one in the deployment's build. One reason would send half the
+    // readers to the wrong place.
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['ghost-synth'] },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'unknown_generator',
+      generatorId: 'ghost-synth',
+    })
+  })
+
+  it('refuses a content type no selected integration produces', async () => {
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion'],
+                modalities: ['image', 'audio'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'modality_uncovered',
+      modality: 'audio',
+    })
+    expect(error.message).toContain('audio')
+  })
+
+  it('refuses the generative half even with NO catalog seam wired', async () => {
+    // The registry is in-process composition data, so this check needs no I/O and must not be
+    // skipped alongside the catalog read — a deployment with no catalog can still point a step at
+    // an integration it never registered.
+    const error = await refusal(
+      admission().assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            { binaryOutput: { storageServiceId: 'anything', generatorIds: ['ghost-synth'] } },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_output_generator_invalid' })
   })
 })

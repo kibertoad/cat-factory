@@ -26,6 +26,7 @@ import type {
   ResolvedToolServer,
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
+import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
@@ -242,6 +243,18 @@ export interface AgentRunContext {
    * that mid-run, and the run's snapshot records why. Absent ⇒ every declared server was wired.
    */
   unavailableToolServers?: UnavailableToolServer[]
+  /**
+   * The GENERATIVE BINARY INTEGRATIONS this step selected (`stepOptions.binaryOutput.generatorIds`),
+   * resolved by the ENGINE against the deployment's `BinaryGeneratorRegistry`. The container
+   * executor reads it to resolve each declared credential onto the job body; the agent's own
+   * instructions come from the injected `.cat-context/binary-output/brief.md`, so nothing here is
+   * a second copy of the prompt.
+   *
+   * Non-secret (a credential's KEY NAME, never its value), so the agent-context snapshot may
+   * record it. Absent ⇒ the step selected none, which is a real state: it generates through what
+   * its agent already has, and the brief says so.
+   */
+  binaryGenerators?: ResolvedBinaryGenerator[]
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

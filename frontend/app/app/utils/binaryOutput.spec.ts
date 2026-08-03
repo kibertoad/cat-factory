@@ -12,7 +12,14 @@ function step(patch: Partial<PipelineStep>): PipelineStep {
 }
 
 function report(patch: Partial<BinaryOutputReport> = {}): BinaryOutputReport {
-  return { stored: [], unknownServices: [], invalidEntries: 0, omitted: 0, ...patch }
+  return {
+    stored: [],
+    unknownServices: [],
+    unknownGenerators: [],
+    invalidEntries: 0,
+    omitted: 0,
+    ...patch,
+  }
 }
 
 const artifact = (service: string, location: string) => ({ service, location })
@@ -217,6 +224,113 @@ describe('binaryOutputView', () => {
       }),
     )
     expect(binaryOutputHasWarnings(view!)).toBe(false)
+  })
+})
+
+describe('the generative half of the read model', () => {
+  // The schema gained `unknownGenerators` and a per-artifact `generator`; both are RETAINED
+  // claims, so a surface that drops them attributes an artifact to something nobody can look up
+  // with nothing saying so — the exact silent loss `unknownDeclaredServices` exists to close.
+  it('names integrations the deployment does not register, and badges their rows', () => {
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', generatorIds: ['retro'] } },
+        binaryOutputs: report({
+          stored: [
+            { ...artifact('files', 'a.png'), generator: 'retro' },
+            { ...artifact('files', 'b.png'), generator: 'ghost' },
+            artifact('files', 'c.png'),
+          ],
+          unknownGenerators: ['ghost'],
+        }),
+      }),
+    )
+    expect(view?.unknownDeclaredGenerators).toEqual(['ghost'])
+    expect(view?.rows.map((r) => r.generatorUnknown)).toEqual([false, true, false])
+    // An UNATTRIBUTED row is not an unknown one: generating without a registered integration is
+    // legal (a model with native image output), so it must not be flagged as a bad id.
+    expect(view?.rows[2]?.generator).toBeUndefined()
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('carries the step selection through, and treats empty as a real state', () => {
+    const configured = binaryOutputView(
+      step({
+        state: 'pending',
+        stepOptions: {
+          binaryOutput: {
+            storageServiceId: 'files',
+            generatorIds: ['retro'],
+            modalities: ['image'],
+          },
+        },
+      }),
+    )
+    expect(configured?.generators).toEqual(['retro'])
+    expect(configured?.modalities).toEqual(['image'])
+    const bare = binaryOutputView(
+      step({ state: 'pending', stepOptions: { binaryOutput: { storageServiceId: 'files' } } }),
+    )
+    expect(bare?.generators).toEqual([])
+    expect(bare?.modalities).toEqual([])
+  })
+})
+
+describe('binaryOutputPickIssues, generative half', () => {
+  const catalog = [{ id: 'files', capabilities: ['asset-storage'] }]
+  const generators = [
+    { id: 'retro', modalities: ['image' as const] },
+    { id: 'studio', modalities: ['audio' as const] },
+  ]
+
+  it('mirrors the admission refusal for an id this deployment does not register', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'ghost'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toContain('unknown_generator')
+    expect(pick.unknownGeneratorIds).toEqual(['ghost'])
+  })
+
+  it('names a declared content type nothing selected can produce', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'], modalities: ['image', 'audio'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toContain('modality_uncovered')
+    expect(pick.uncoveredModalities).toEqual(['audio'])
+  })
+
+  it('reports BOTH faults when an unknown id was the one covering a requirement', () => {
+    // One edit should clear the step. Naming only the missing id would leave the user to
+    // discover the uncovered requirement on the next round trip.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['ghost'], modalities: ['audio'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toEqual(expect.arrayContaining(['unknown_generator', 'modality_uncovered']))
+  })
+
+  it('judges the generative half even when no storage target is picked yet', () => {
+    // The early return for `not_selected` must not hide a second, independent fault.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: '', generatorIds: ['ghost'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toEqual(expect.arrayContaining(['not_selected', 'unknown_generator']))
+  })
+
+  it('is silent about a step that selects no integration at all', () => {
+    const pick = binaryOutputPickIssues({ storageServiceId: 'files' }, catalog, true, generators)
+    expect(pick.issues).toEqual([])
   })
 })
 

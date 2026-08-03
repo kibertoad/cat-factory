@@ -330,7 +330,16 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
       job.packageRegistries,
       scopeDir ? { isolatedDir: scopeDir } : {},
     )
-    const scoped = withAgentEnv(opts, registryEnv)
+    // The credentials of this job's GENERATIVE BINARY INTEGRATIONS, layered on for EVERY mode
+    // rather than inside one of them: the kinds that carry the `binary-output` trait are a
+    // deployment's own and may be explore or coding agents, and a key delivered to one mode and
+    // not the other would be an integration that works or 401s depending on how its step was
+    // registered. Per-job env like everything else here — never `process.env`, which the shared
+    // native host process makes a cross-job leak.
+    const scoped = withAgentEnv(opts, {
+      ...registryEnv,
+      ...secretEnv(job.generatorSecrets),
+    })
     if (job.mode === 'preview') return await runPreviewMode(job, scoped)
     return job.mode === 'coding'
       ? await runCodingMode(job, scoped)
@@ -454,6 +463,16 @@ async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
  * the restore step entirely.
  */
 export function testSecretEnv(secrets: TestSecretSpec[] | undefined): Record<string, string> {
+  return secretEnv(secrets)
+}
+
+/**
+ * The shared `{ key, value }[]` → child-env projection behind {@link testSecretEnv} and the
+ * generative integrations' credentials. One implementation because both channels owe the same two
+ * things — the values registered for redaction, and the env returned rather than written to
+ * `process.env` — and a second copy is a second place to forget the redaction.
+ */
+export function secretEnv(secrets: TestSecretSpec[] | undefined): Record<string, string> {
   if (!secrets?.length) return {}
   registerKnownSecrets(secrets.map((s) => s.value))
   return Object.fromEntries(secrets.map(({ key, value }) => [key, value]))

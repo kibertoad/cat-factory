@@ -1,5 +1,104 @@
 # @cat-factory/contracts
 
+## 0.212.0
+
+### Minor Changes
+
+- 233e279: Register generative binary integrations (image / music / video generation APIs) in a deployment's own code, and let binary-generating agent steps select them.
+
+  `BinaryGeneratorRegistry` is a new app-owned registry beside the foundational-service one: an integration declares the content types it produces (`image | audio | video | 3d | document`), its media types, endpoint, API contracts and the credential it needs BY NAME. A step picks from it via `stepOptions.binaryOutput.generatorIds` and states the content types it must deliver via `.modalities`; run admission refuses an unregistered id or an uncovered content type under the new `binary_output_generator_invalid` conflict reason. The agent's `.cat-context/binary-output/brief.md` now leads with a Generation section describing each integration, and the credential value reaches only that job's agent process (job body `generatorSecrets`), never a prompt or the telemetry snapshot.
+
+  All three facades take the registry as their own DI option (`binaryGeneratorRegistry`), so a deployment registers integrations on Node and local exactly as on the Worker, and each facade boot-validates the instance it was handed. A new `registry-seams` guard derives the app-owned registry set from `CoreDependencies` and holds each one to a declared route, so the next registry cannot land threaded on one runtime and inert on another.
+
+  The SPA follows the shapes through: the binary-output step picker offers the generative selection (from the workspace snapshot's new `binaryGenerators`, identity only — never a credential key name) and mirrors both new refusals inline, and the report names the integration that produced each artifact plus any the deployment does not register.
+
+  Breaking, pre-1.0: `PipelineStep.binaryOutputs` gains a required `unknownGenerators` array, so reports recorded before this change no longer parse — an affected step's declaration record is re-created on its next run. `ToolSecretResolver.resolve` takes a discriminated `subject` (`tool-server` | `binary-generator`) in place of `serverId`; a deployment implementing that port per workspace must update its signature, and one passing `allowKeys` to the env-backed default must extend the list to cover its integrations' credential keys or they resolve to nothing.
+
+- 54d531d: Count the deployment's operational EVENTS, and let the health alerts see a dead one.
+
+  The platform-observability projection answers "how are the runs doing" by aggregating
+  `agent_runs`. It structurally cannot answer what an operator asks during an incident — how often
+  container dispatch is failing, whether the sweeper is re-driving more than it was, whether a queue
+  is draining — because none of those are rows in a table. A new kernel `OperationalMetrics` port
+  counts them, and the OTLP platform exporter ships them as delta sums beside the existing gauges.
+  Wired at the sweepers, the container seam, the trace sinks, the notification webhook and every
+  app-cache read; `agent_runs` gained a persisted `redrive_count`, so "was this run re-driven three
+  times?" is answerable after the process (or the isolate) that did it is gone.
+
+  `platform_health` gained three conditions. The important one is zero-throughput: every existing
+  condition divides by runs and goes silent at zero, so a deployment that stopped accepting work
+  read identically to a quiet healthy one. Alongside it, a dominant-failure-kind condition (100%
+  `evicted` and 100% `agent` produce the same failure rate and need opposite fixes) and one that
+  alerts on the sweepers themselves, since a wedged sweeper makes every other signal stale without
+  making any of them fire. A sweep pass reports its rate and its failure streak through ONE call
+  (`SweepHealthTracker.recordFailure`), and the Worker drives its crons through a `SweepTick` that
+  is the facade-symmetric twin of Node's `startSweeper` — so both runtimes cover the same set of
+  sweepers, and the tick's counters are flushed after its passes have settled rather than before.
+
+  Also: retention pruning is now isolated per table (one sick table used to abort the whole pass,
+  indefinitely, and report zeroes indistinguishable from an empty table); `/ready` round-trips
+  pg-boss's own connection instead of trusting a process-local boolean, and the Worker gained a
+  bindings-probing `/ready`; and every pg-boss queue is created with a dead-letter sibling whose
+  depth rides the `queue.depth` gauge under `state: dead_letter`, with an hourly sweep logging the
+  source queue to go and look at.
+
+## 0.211.0
+
+### Minor Changes
+
+- 87ed4f9: Give binary-output steps their two SPA surfaces: a place their stored artifacts are read, and a
+  place their storage service is picked.
+
+  `PipelineStep.binaryOutputs` has been recorded since the feature landed and nothing rendered it,
+  so a deployment running a generator kind could see that a step succeeded and had no way to find
+  what it delivered. The read surface is a shared section resolved from the active step in
+  `ResultWindowShell` (plus the generic step-detail panel, which the shell is not involved in),
+  beside the effort and pre-PR-validation sections — deliberately NOT a `presentation.resultView`
+  a generator declares. The record's scope is a union the declared-view seam structurally cannot
+  follow: the engine writes it when the step's KIND carries the trait **or** the STEP carries a
+  selection, so a trait-carrying kind dispatched under an overriding kind records artifacts against
+  a step whose own kind declares some other window. Resolving off the step instead makes the
+  surface follow the record, costs a deployment no registration, and leaves a generator free to
+  declare a result view for its own output rather than choosing between its output and its
+  artifacts.
+
+  The parse keeps six outcomes apart on purpose — not started, still running, no declaration, an
+  unreadable one, an explicit "stored nothing", and actual artifacts — and five of them are not an
+  empty list, so the surface renders the discriminant rather than a list that happens to be empty;
+  state copy comes from one exhaustive `Record`, so a seventh outcome fails the typecheck instead of
+  rendering a missing key. Every counted loss keeps its own line and its own number (an unknown
+  service id is not a malformed entry is not a truncated tail), and the one join the report cannot
+  make itself — did the artifact go through the service the step actually pointed at? — is derived
+  from the step's own recorded selection, so it needs no catalog read and reads the same on a run
+  whose services were withdrawn since. "Never briefed" is the section's ABSENCE, and so is a
+  gated-out step's; a step not started YET resolves the other way, since where its artifacts will
+  land is worth stating before it runs.
+
+  The two unknown-service facts are DISJOINT FIELDS rather than one list plus a flag: the report's
+  own `unknownServices` mixes the step's lost target with ids the agent invented, so a surface
+  reading it raw labels every unknown id as the step's own storage service and drops the invented
+  ones. `targetUnknown` owns the first and `unknownDeclaredServices` owns the second, so naming
+  either cannot mis-state the other — the exclusion lives in the read model, where it is tested,
+  not in a renderer's filter.
+
+  For the picker, the SPA had no way to know which kinds are generators: `BINARY_OUTPUT_TRAIT`
+  never left the backend. It is now projected onto the snapshot's custom-kind entry as a boolean
+  beside `container` — the precedent that the snapshot carries the facts the SPA branches on, not
+  the backend's trait vocabulary — and asked of the REGISTRY rather than read off the declaration,
+  so a trait ASSIGNED to an existing kind projects like a declared one. The picker offers the
+  RESOLVED catalog (`asset-storage`-tagged for the storage half; the whole catalog with
+  `generation-context` first for the context half, since that tag is conventional and admission
+  enforces only existence), because admission re-validates against that same catalog at every
+  start — an id offered from a stale client copy would save clean and fail a refusal cycle later.
+  It mirrors the admission refusals inline, in translated copy keyed off the same issue vocabulary,
+  and stays in BOTH interface tiers: this is a required input, not an override, and hiding it in
+  basic mode would leave a step that cannot be saved with no way to find out why.
+
+  Reviewers: the load-bearing decision is the surface's PLACEMENT (shell section, not a declared
+  result view) — §1.2 of the downstream proposal argued the other way and accepted "a step whose
+  kind declares a different view has nowhere showing its artifacts" as a consequence; that is the
+  exact case the union recording rule creates, so it is not one to accept.
+
 ## 0.210.1
 
 ### Patch Changes

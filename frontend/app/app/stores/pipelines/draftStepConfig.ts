@@ -180,15 +180,21 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * An EMPTY `contextServiceIds` is dropped rather than stored, for the reason the consensus
    * tier set drops its own empty array: the field's absence means "no scope service was
    * selected", while `[]` reads as "context was considered and rejected" — a different claim,
-   * and one the brief renderer would repeat to the agent.
+   * and one the brief renderer would repeat to the agent. `generatorIds` and `modalities` take
+   * the same treatment for the same reason: an absent `generatorIds` means the step generates
+   * through whatever its agent already has, and an absent `modalities` imposes no delivery
+   * requirement — both of which the brief STATES, so persisting `[]` would have it state the
+   * wrong thing.
    */
   function setDraftBinaryOutput(index: number, config: BinaryOutputConfig | undefined) {
     const next: StepOptions = { ...draftStepOptions.value[index] }
     if (config?.storageServiceId) {
-      const { storageServiceId, contextServiceIds } = config
+      const { storageServiceId, contextServiceIds, generatorIds, modalities } = config
       next.binaryOutput = {
         storageServiceId,
         ...(contextServiceIds?.length ? { contextServiceIds } : {}),
+        ...(generatorIds?.length ? { generatorIds } : {}),
+        ...(modalities?.length ? { modalities } : {}),
       }
     } else delete next.binaryOutput
     draftStepOptions.value[index] = Object.keys(next).length ? next : null

@@ -61,6 +61,17 @@ export {
   createRecordingLogger,
   noopLogger,
 } from './logging.js'
+export {
+  type OperationalCounter,
+  type OperationalCounterSample,
+  type OperationalDimensions,
+  type OperationalGauge,
+  type OperationalGaugeSample,
+  type OperationalMetrics,
+  type OperationalMetricsCollector,
+  createOperationalMetricsCollector,
+  noopOperationalMetrics,
+} from './operational-metrics.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { DocInterviewRepository } from './doc-interview-repositories.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
@@ -149,6 +160,7 @@ export type {
   InlineAttribution,
   InlineAttributionScope,
   InlineObservabilityContext,
+  TraceSinkObservability,
 } from './llm-trace-sink.js'
 export {
   INLINE_OBSERVABILITY_NS,
@@ -169,7 +181,7 @@ export type {
   AsyncAgentExecutor,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
-export type { ToolSecretResolver } from './agent-tools.js'
+export type { ToolSecretResolver, ToolSecretSubject } from './agent-tools.js'
 export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {

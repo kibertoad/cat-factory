@@ -240,4 +240,77 @@ describe('PlatformMetricsOtelExporter (fetch OTLP gauges)', () => {
     await expect(exporter.export(snapshot(), { accountId: 'acc-1' })).resolves.toBeUndefined()
     expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
   })
+
+  describe('exportOperational', () => {
+    it('encodes counters as monotonic DELTA sums and gauges as gauges', async () => {
+      // Temporality is the load-bearing detail: the counters are accumulated per process
+      // (Node) or per isolate (Worker) and flushed independently, so only a DELTA sums
+      // correctly in the backend across the flushers.
+      const { fetchImpl, calls } = capturingFetch()
+      const exporter = new PlatformMetricsOtelExporter({ endpoint: COLLECTOR, fetchImpl })
+
+      await exporter.exportOperational(
+        [
+          { counter: 'container.evicted', dimensions: { kind: 'crash' }, value: 3 },
+          { counter: 'container.evicted', dimensions: { kind: 'transient' }, value: 1 },
+          { counter: 'cache.hit', dimensions: { cache: 'repo-projection' }, value: 42 },
+        ],
+        [
+          {
+            gauge: 'queue.depth',
+            dimensions: { queue: 'execution.advance', state: 'ready' },
+            value: 9,
+          },
+        ],
+        1_700_000_000_000,
+      )
+
+      const metrics = metricsOf(calls[0]!.body)
+      const evictions = metrics.find((m) => m.name === 'cat_factory.platform.container_evictions')!
+      const sum = evictions.sum as {
+        aggregationTemporality: number
+        isMonotonic: boolean
+        dataPoints: Record<string, unknown>[]
+      }
+      expect(sum.aggregationTemporality).toBe(1) // DELTA
+      expect(sum.isMonotonic).toBe(true)
+      // One metric carrying a point per dimension set, not the same metric repeated.
+      expect(sum.dataPoints).toHaveLength(2)
+      expect(attrMap(sum.dataPoints[0]!.attributes as KV[])['cat_factory.kind']).toBe('crash')
+      expect(sum.dataPoints[0]!.asInt).toBe('3')
+
+      // The gauge stays a gauge — a reading, never accumulated.
+      const depth = metrics.find((m) => m.name === 'cat_factory.platform.queue_depth')!
+      expect(depth.gauge).toBeDefined()
+      expect(gaugePoints(depth)[0]!.asInt).toBe('9')
+      expect(attrMap(gaugePoints(depth)[0]!.attributes as KV[])['cat_factory.queue']).toBe(
+        'execution.advance',
+      )
+    })
+
+    it('sends NOTHING when there is nothing to report', async () => {
+      // An unflushed zero and a genuine zero are different facts, and the Worker calls this on
+      // every invocation — an empty flush must cost no request at all.
+      const { fetchImpl, calls } = capturingFetch()
+      const exporter = new PlatformMetricsOtelExporter({ endpoint: COLLECTOR, fetchImpl })
+      await exporter.exportOperational([], [], 1_000)
+      expect(calls).toEqual([])
+    })
+
+    it('never throws when the OTLP endpoint fails', async () => {
+      const fetchImpl = (async () => {
+        throw new Error('down')
+      }) as unknown as typeof fetch
+      const logger = createRecordingLogger()
+      const exporter = new PlatformMetricsOtelExporter({ endpoint: COLLECTOR, logger, fetchImpl })
+      await expect(
+        exporter.exportOperational(
+          [{ counter: 'sweep.failed', dimensions: { sweep: 'retention' }, value: 1 }],
+          [],
+          1_000,
+        ),
+      ).resolves.toBeUndefined()
+      expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
+    })
+  })
 })

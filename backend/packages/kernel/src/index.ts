@@ -238,21 +238,47 @@ export {
 // artifacts and stores them through a selected foundational service, scoped by further
 // selected context services. See `domain/binary-outputs.ts` and
 // docs/initiatives/binary-output-foundational-storage.md.
+// The `.cat-context/` PATH vocabulary is exported from the leaf that owns it, not through either
+// half: the two halves import each other, so a value read across that cycle at module-init time
+// is a boot crash the typecheck cannot see (see `domain/binary-output-paths.ts`).
+export {
+  BINARY_GENERATOR_CONTEXT_DIR,
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_CONTEXT_DIR,
+  binaryContextFileFor,
+  binaryGeneratorContextFileFor,
+} from './domain/binary-output-paths.js'
 export {
   type BinaryOutputBriefInput,
   type BinaryOutputConfigIssue,
-  BINARY_OUTPUT_BRIEF_FILE,
-  BINARY_OUTPUT_CONTEXT_DIR,
   BINARY_OUTPUT_DECLARATION_TAG,
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
   MAX_BINARY_OUTPUT_ENTRIES,
-  binaryContextFileFor,
   binaryOutputConfigIssues,
   describeBinaryOutputConfigIssues,
   parseBinaryOutputDeclaration,
   renderBinaryOutputBrief,
 } from './domain/binary-outputs.js'
+
+// The GENERATIVE half of a binary-output step: the app-owned registry a DEPLOYMENT registers its
+// image / music / video generation integrations on, and the pure logic that resolves a step's
+// selection against it, refuses one that cannot deliver the step's content types, and renders
+// what the agent is told about each. See `domain/binary-generators.ts`.
+export {
+  type BinaryGeneratorDefinition,
+  type BinaryGeneratorView,
+  BinaryGeneratorRegistry,
+  defaultBinaryGeneratorRegistry,
+} from './domain/binary-generator-registry.js'
+export {
+  type ResolvedBinaryGenerator,
+  type ResolvedBinaryGeneratorSelection,
+  binaryGeneratorSelectionIssues,
+  describeBinaryGeneratorSelectionIssues,
+  dispatchBinaryGenerators,
+  resolveBinaryGeneratorSelection,
+} from './domain/binary-generators.js'
 
 // The shared reader for an agent's machine-read ` ```<tag> ` declaration block — the LAST one
 // wins, because every contract using it asks the agent to END its reply with it.

@@ -1,3 +1,4 @@
+import { DEFAULT_PLATFORM_ALERT_THRESHOLDS } from '@cat-factory/orchestration'
 import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/kernel'
@@ -70,12 +71,7 @@ function makeContainer(opts: {
         enabled: opts.enabled ?? true,
         window: '1h' as PlatformObservabilityWindow,
         intervalMs: 60_000,
-        thresholds: {
-          minRuns: 5,
-          maxFailureRate: 0.5,
-          maxP99DurationMs: 60 * 60_000,
-          maxBacklog: 50,
-        },
+        thresholds: DEFAULT_PLATFORM_ALERT_THRESHOLDS,
       },
     },
     workspaceService: { list: async () => opts.workspaces },

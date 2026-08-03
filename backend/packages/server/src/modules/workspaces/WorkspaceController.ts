@@ -19,6 +19,8 @@ import type {
   AgentKindVariant,
   CustomAgentKind,
   CustomTaskType,
+  InitiativePresetDescriptor,
+  RegisteredBinaryGenerator,
   SkillSummary,
   SpendStatus,
   UserSettings,
@@ -30,7 +32,13 @@ import {
   recordedUnreachableAreas,
   resolveWorkspaceAccess,
 } from '@cat-factory/kernel'
-import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
+import type {
+  AccountRole,
+  BinaryGeneratorRegistry,
+  ModelRef,
+  TaskTypeRegistry,
+  WorkspaceRole,
+} from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -171,6 +179,63 @@ function snapshotAgentKindVariants(registry: AgentKindRegistry): AgentKindVarian
 function snapshotCustomTaskTypes(registry: TaskTypeRegistry): CustomTaskType[] | undefined {
   const types = registry.all()
   return types.length > 0 ? types : undefined
+}
+
+/**
+ * The deployment's GENERATIVE BINARY INTEGRATIONS as the snapshot carries them, for the pipeline
+ * builder's binary-output step picker. Read off the app-owned registry the container carries —
+ * static, identical for every workspace and both facades, exactly like {@link snapshotCustomTaskTypes}.
+ *
+ * Projects IDENTITY ONLY. The view also holds each integration's credential declaration, endpoint
+ * and contract summaries, and none of them may cross to a workspace VIEWER: the credential's key
+ * name discloses the deployment's environment for no benefit (the picker never uses it), and the
+ * endpoint and contracts are the AGENT's interface, delivered as injected context at dispatch.
+ *
+ * Returns undefined when the deployment registers none — the default, since the platform ships no
+ * integrations — so the field is simply absent on the stock product.
+ */
+function snapshotBinaryGenerators(
+  registry: BinaryGeneratorRegistry,
+): RegisteredBinaryGenerator[] | undefined {
+  const generators = registry.views().map((view) => ({
+    id: view.id,
+    name: view.name,
+    summary: view.summary,
+    modalities: view.modalities,
+    ...(view.mediaTypes.length > 0 ? { mediaTypes: view.mediaTypes } : {}),
+  }))
+  return generators.length > 0 ? generators : undefined
+}
+
+/**
+ * Every snapshot field projected from an APP-OWNED REGISTRY, in one read.
+ *
+ * The five have identical provenance and identical lifetime — deployment-registered composition
+ * data on the request container, workspace-independent, the same for both facades — and both
+ * snapshot routes need the whole set. Computing them one const at a time duplicated the block
+ * across the two handlers and put every future registry's line into `workspaceController` twice,
+ * which is what pushed that function over its budget when the generative-integration projection
+ * arrived. Adding the next one is now a line HERE and nothing in the handlers.
+ *
+ * Each member is `undefined` rather than empty when its registry holds nothing, so the field is
+ * absent on the wire for the stock product and the SPA's `?? []` fallbacks are what answer.
+ */
+function snapshotRegistryProjections(container: ServerContainer): {
+  customAgentKinds: CustomAgentKind[] | undefined
+  agentKindVariants: AgentKindVariant[] | undefined
+  customTaskTypes: CustomTaskType[] | undefined
+  binaryGenerators: RegisteredBinaryGenerator[] | undefined
+  initiativePresets: InitiativePresetDescriptor[]
+} {
+  return {
+    customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
+    agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
+    customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry),
+    binaryGenerators: snapshotBinaryGenerators(container.binaryGeneratorRegistry),
+    // The registered initiative presets (built-in generic + any a deployment mixed in), driving
+    // the initiative create picker and which planning pipeline "Run planning" starts.
+    initiativePresets: container.initiativePresetRegistry.descriptors(),
+  }
 }
 
 /**
@@ -503,13 +568,13 @@ export function workspaceController(): Hono<AppEnv> {
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
       snapshotSkills(container, accountId),
     ])
-    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
-    const agentKindVariants = snapshotAgentKindVariants(container.agentKindRegistry)
-    const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
-    // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
-    // app-owned registry the container carries — identical for every workspace and both facades —
-    // attached here in the shared controller (like `customAgentKinds`) rather than per-facade.
-    const initiativePresets = container.initiativePresetRegistry.descriptors()
+    const {
+      customAgentKinds,
+      agentKindVariants,
+      customTaskTypes,
+      binaryGenerators,
+      initiativePresets,
+    } = snapshotRegistryProjections(container)
     // The creator's resolved access. The gate doesn't run for the id-less create route, so resolve
     // it here (the creator is auto-enrolled admin, so this is always an admin grant when signed in).
     const resolved = user
@@ -530,6 +595,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...(agentKindVariants ? { agentKindVariants } : {}),
         ...(customTaskTypes ? { customTaskTypes } : {}),
+        ...(binaryGenerators ? { binaryGenerators } : {}),
         ...(initiativePresets.length ? { initiativePresets } : {}),
         ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
@@ -570,13 +636,13 @@ export function workspaceController(): Hono<AppEnv> {
       repoProjections,
       skills,
     } = await loadSnapshotSlices(container, workspaceId, budgetAccountId)
-    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
-    const agentKindVariants = snapshotAgentKindVariants(container.agentKindRegistry)
-    const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
-    // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
-    // app-owned registry the container carries — identical for every workspace and both facades —
-    // attached here in the shared controller (like `customAgentKinds`) rather than per-facade.
-    const initiativePresets = container.initiativePresetRegistry.descriptors()
+    const {
+      customAgentKinds,
+      agentKindVariants,
+      customTaskTypes,
+      binaryGenerators,
+      initiativePresets,
+    } = snapshotRegistryProjections(container)
 
     // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
     // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so
@@ -651,6 +717,7 @@ export function workspaceController(): Hono<AppEnv> {
           customAgentKinds,
           agentKindVariants,
           customTaskTypes,
+          binaryGenerators,
           initiativePresets: initiativePresets.length ? initiativePresets : undefined,
           skills,
         }),

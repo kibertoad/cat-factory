@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { defaultFoundationalServiceRegistry } from '@cat-factory/kernel'
+import {
+  defaultBinaryGeneratorRegistry,
+  defaultFoundationalServiceRegistry,
+} from '@cat-factory/kernel'
 import { resetRegistrationValidationGuard } from '@cat-factory/orchestration'
 import { createWorker } from '../src/index'
 import type { Env } from '../src/infrastructure/env'
@@ -55,6 +58,25 @@ describe('createWorker', () => {
     await expect(
       (async () => worker.fetch!(new Request('https://x.test/health'), noEnv, noCtx))(),
     ).rejects.toThrow(/file-storage/)
+  })
+
+  it('boot-validates the INJECTED generative-binary-integration registry', async () => {
+    const binaryGeneratorRegistry = defaultBinaryGeneratorRegistry()
+    binaryGeneratorRegistry.register({
+      id: 'retro-diffusion',
+      name: 'Retro Diffusion',
+      summary: 'Pixel-art image generation.',
+      description: 'Sprites and tiles.',
+      modalities: ['image'],
+      // Plain http off loopback, with a credential riding every request — the registration that
+      // would otherwise put that key on the wire from inside a run container.
+      endpoint: 'http://api.retrodiffusion.ai/v1',
+      credential: { key: 'RD_TOKEN' },
+    })
+    const worker = createWorker({ overrides: { binaryGeneratorRegistry } })
+    await expect(
+      (async () => worker.fetch!(new Request('https://x.test/health'), noEnv, noCtx))(),
+    ).rejects.toThrow(/retro-diffusion/)
   })
 
   it('leaves the default export validating the platform defaults (an empty estate is valid)', async () => {

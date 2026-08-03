@@ -13,11 +13,11 @@ import type { AppConfig } from './config'
 import type { Env } from './env'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import { resolveWorkerRegistries } from './container-registries.js'
+import { buildAccountSettings } from './container-account-settings.js'
+import { cloudflareContentStorage } from './container-artifact-storage.js'
 import {
-  buildAccountSettings,
   buildNotificationWebhookSupportForWorker,
   buildResolvePackageRegistries,
-  cloudflareContentStorage,
   selectEventPublisher,
 } from './container.js'
 import {

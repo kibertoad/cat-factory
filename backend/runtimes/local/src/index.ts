@@ -82,6 +82,17 @@ export {
   type FoundationalServiceDefinition,
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
+// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// video generation APIs it pays for on it, and passes it via the `binaryGeneratorRegistry`
+// option. A pipeline step whose kind carries the `binary-output` trait then SELECTS from them
+// (`stepOptions.binaryOutput.generatorIds`), and the engine briefs the agent on each one's
+// content types, contract and credential variable.
+export {
+  BinaryGeneratorRegistry,
+  type BinaryGeneratorDefinition,
+  defaultBinaryGeneratorRegistry,
+} from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).

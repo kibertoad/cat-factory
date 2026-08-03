@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { binaryModalitySchema } from './binary-modalities.js'
 
 // Wire vocabulary for BINARY-OUTPUT agent steps (docs/initiatives/binary-output-foundational-storage.md):
 // a step whose kind GENERATES binary artifacts (image generation is the canonical example) and
@@ -38,6 +39,29 @@ export const binaryOutputConfigSchema = v.object({
    * context files are the whole scope.
    */
   contextServiceIds: v.optional(v.array(serviceId)),
+  /**
+   * The GENERATIVE INTEGRATIONS this step may call to produce its artifacts — ids from the
+   * deployment's code-registered `BinaryGeneratorRegistry` (see `binary-generators.ts`).
+   *
+   * A separate half of the selection from the two above, because it answers a different
+   * question: those say where an artifact GOES, this says what MAKES it. Absent ⇒ the step
+   * generates through whatever its agent already has (a model with native image output, a tool
+   * server), and its brief says so rather than naming an integration it does not have.
+   * Validated at run admission against the registry, never against a saved copy.
+   */
+  generatorIds: v.optional(v.array(serviceId)),
+  /**
+   * The CONTENT TYPES this step is expected to deliver. Every one of them must be covered by a
+   * selected generator, or the run is refused at admission — a step that must produce a theme
+   * song and selected only an image generator cannot do its job, and the failure would
+   * otherwise surface as an agent apologising at the end of a paid run.
+   *
+   * Absent ⇒ no requirement is imposed and the selected generators' own modalities are the
+   * whole story. It is deliberately NOT defaulted from the selection: "this step must produce
+   * audio" is a statement about the WORK, and deriving it from the current selection would make
+   * removing the audio generator look like a change of requirements rather than a break.
+   */
+  modalities: v.optional(v.array(binaryModalitySchema)),
 })
 export type BinaryOutputConfig = v.InferOutput<typeof binaryOutputConfigSchema>
 
@@ -61,6 +85,21 @@ export const binaryOutputArtifactSchema = v.object({
   contentType: v.optional(v.string()),
   /** A one-line description of what was generated. */
   description: v.optional(v.string()),
+  /**
+   * The generative integration the agent says PRODUCED the artifact, lowercased on read-back
+   * like {@link service}. Optional because a step may generate without a registered integration
+   * (a model with native image output), and a claim of "no generator" is a different fact from
+   * a claim naming one the deployment does not register — which is why an unrecognised id is
+   * NAMED in the report rather than dropped.
+   */
+  generator: v.optional(v.string()),
+  /**
+   * The CONTENT TYPE of the artifact, DERIVED in code from {@link contentType} — never read off
+   * the model's prose. Absent when no media type was declared, or when the declared one is not
+   * one the platform recognises: "we do not know what this is" and "this is not an image" are
+   * different answers, and only the second could justify a warning.
+   */
+  modality: v.optional(binaryModalitySchema),
 })
 export type BinaryOutputArtifact = v.InferOutput<typeof binaryOutputArtifactSchema>
 
@@ -83,6 +122,14 @@ export const binaryOutputReportSchema = v.object({
   stored: v.array(binaryOutputArtifactSchema),
   /** Distinct `service` ids named in entries that the resolved catalog does not contain. */
   unknownServices: v.array(v.string()),
+  /**
+   * Distinct `generator` ids named in entries that the deployment does not register. Kept apart
+   * from {@link unknownServices} because they resolve against different registries and need
+   * different fixes — a storage id points at the workspace's foundational catalog, a generator
+   * id at the deployment's code. Entries are RETAINED either way: the platform records what the
+   * agent claimed and a reader judges it.
+   */
+  unknownGenerators: v.array(v.string()),
   /** Entries dropped because they were not an object with `service` + `location` strings. */
   invalidEntries: v.number(),
   /** Valid entries dropped past the per-report cap. */

@@ -3,6 +3,7 @@ import type {
   AgentPromptRepository,
   WorkspaceAgentSettingsRepository,
   AgentRunContext,
+  BinaryGeneratorRegistry,
   Block,
   BlockRepository,
   BrainstormSessionRepository,
@@ -304,6 +305,13 @@ export interface AgentContextBuilderDeps {
    */
   foundationalServiceResolver?: FoundationalServiceResolver
   /**
+   * Optional: the deployment's GENERATIVE BINARY INTEGRATIONS (image / music / video generation
+   * APIs registered in code). Read for a binary-generating step's brief and for the non-secret
+   * projection the container executor resolves credentials from. Absent ⇒ no integration
+   * resolves, and the brief states that rather than implying the step has one.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
    * those degradations are silent, which is why every facade wires it.
@@ -564,6 +572,7 @@ export class AgentContextBuilder {
         foundationalContextFiles,
         binaryOutputContextFiles,
       ),
+      ...this.binaryGeneratorsFor(agentKind, step),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -1255,11 +1264,29 @@ export class AgentContextBuilder {
    */
   private catalogRunContext?: CatalogRunContext
 
+  /**
+   * The GENERATIVE INTEGRATIONS half of a binary-output step's selection, as a context spread.
+   * Not a context FILE (the injected brief is the agent's copy) but a structured, non-secret
+   * projection the container executor reads to resolve each integration's credential onto the job
+   * body. Resolved off the in-process registry, so unlike its sibling file read it costs no I/O
+   * and joins the context outside the read wave.
+   */
+  private binaryGeneratorsFor(
+    agentKind: string,
+    step: PipelineStep,
+  ): Pick<AgentRunContext, 'binaryGenerators'> {
+    const binaryGenerators = this.catalogContext().binaryGeneratorsFor(agentKind, step)
+    return binaryGenerators.length ? { binaryGenerators } : {}
+  }
+
   private catalogContext(): CatalogRunContext {
     this.catalogRunContext ??= new CatalogRunContext({
       agentKindRegistry: this.deps.agentKindRegistry,
       ...(this.deps.foundationalServiceResolver
         ? { foundationalServiceResolver: this.deps.foundationalServiceResolver }
+        : {}),
+      ...(this.deps.binaryGeneratorRegistry
+        ? { binaryGeneratorRegistry: this.deps.binaryGeneratorRegistry }
         : {}),
       ...(this.deps.logger ? { logger: this.deps.logger } : {}),
     })

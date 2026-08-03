@@ -1,9 +1,11 @@
 # Binary outputs stored through foundational services
 
 **Goal.** Let a deployment run agent kinds whose deliverable is BINARY artifacts — image
-generation is the canonical example — stored through a foundational service the org already runs,
-and scoped by other foundational services that know the domain (an entity inventory that can say
-what exists, what lacks an image, and how each thing is described).
+generation is the canonical example — produced through generative integrations the deployment
+registers in code (an image / music / video API such as Retro Diffusion), stored through a
+foundational service the org already runs, and scoped by other foundational services that know the
+domain (an entity inventory that can say what exists, what lacks an image, and how each thing is
+described).
 
 **Why this shape.** The platform's own binary-artifact store
 (`BinaryArtifactStore`, the `binary-storage` TRAIT) holds run EVIDENCE — the UI Tester's
@@ -20,7 +22,7 @@ catalog, not a second storage subsystem.
 ['binary-output'] })` (`BINARY_OUTPUT_TRAIT`, `@cat-factory/agents`). No built-in kind carries
   it. The trait contributes the workflow guidance (consult scope first, store through the named
   service's contract, never commit binaries to the repo, declare what you stored).
-- **The step selects the services** — `stepOptions.binaryOutput`:
+- **The step selects the services and the INTEGRATIONS** — `stepOptions.binaryOutput`:
   - `storageServiceId` — the catalog service every artifact is stored through. Must carry the
     **`asset-storage` capability tag** (`ASSET_STORAGE_CAPABILITY`, kernel), because pushing
     product assets into the org's audit service is a configuration error, not a judgment call
@@ -34,7 +36,15 @@ catalog, not a second storage subsystem.
     enforced; no tag is, since any service with a readable contract can inform scope. The
     conventional tag `generation-context` (`GENERATION_CONTEXT_CAPABILITY`) exists for pickers,
     not for enforcement.
-- **Two refusal layers**, split exactly like the skill-step precedent:
+  - `generatorIds` — the GENERATIVE INTEGRATIONS the step may call to produce the artifacts,
+    from the deployment's code-registered `BinaryGeneratorRegistry` (see the section below).
+    Absent ⇒ the step generates through whatever its agent already has, and the brief says so.
+  - `modalities` — the CONTENT TYPES the step must deliver. Every one must be covered by a
+    selected integration. It is deliberately not defaulted from the selection: "this step
+    delivers audio" is a statement about the WORK, and deriving it would make removing the audio
+    integration look like a change of requirements rather than a break.
+- **Two refusal layers**, split exactly like the skill-step precedent (the generative half adds a
+  third refusal under its own reason — see below):
   - PRESENCE is structural — `assertValidBinaryOutputSteps` in `validatePipelineShape`, so a
     generator step with no selection is a 422 at pipeline save AND run start.
   - RESOLUTION is admission — `RunAdmission.assertBinaryOutputSelected` re-validates the ids
@@ -92,6 +102,105 @@ downstream kinds inherit. A binary-output step's join is its OWN step options �
 pipeline author) selected the storage and scope services up front, so there is no declaration to
 wait for and admission can validate the whole selection before anything dispatches.
 
+## The generative half: registering the integrations
+
+Storage answers where an artifact GOES. Nothing answered what MAKES it, so a deployment could
+register a generator KIND and a place to put its output while the API that actually renders the
+image stayed a thing the agent had to be told about in prose — with its key nowhere.
+
+`BinaryGeneratorRegistry` (kernel, app-owned exactly like `FoundationalServiceRegistry`) closes
+that. A deployment registers its integrations in CODE:
+
+```ts
+binaryGenerators.register({
+  id: 'retro-diffusion',
+  name: 'Retro Diffusion',
+  summary: 'Pixel-art image generation.',
+  description: 'Sprites, tiles and item art. Not for photorealism or text-heavy images.',
+  modalities: ['image'],
+  mediaTypes: ['image/png'],
+  endpoint: 'https://api.retrodiffusion.ai/v1',
+  guidance: 'Inference is synchronous; the response carries base64 images in `base64_images`.',
+  credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+  contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
+})
+```
+
+**Why its own registry rather than a capability tag on the foundational catalog.** The catalog is
+what a DESIGN is expected to consume — the Architect is shown all of it for exactly that purpose —
+and a metered vendor API that makes pictures is not something to design against; it is an
+instrument a specific step is pointed at. Their lifecycles differ too: the catalog is tiered,
+tenant-editable state with rows behind it, while an integration is deployment code with a
+credential attached. What they DO share is the contract vocabulary (`uploadApiContractSchema`) and
+the renderer, so an agent reads one kind of contract file whatever registry it came from.
+
+### Content types are a closed vocabulary
+
+`BinaryModality` is `image | audio | video | 3d | document`, closed where the catalog's capability
+tags are free-form. Three things depend on it and none tolerates a near-miss: the coverage check
+at admission, the brief's grouping (what keeps a step holding an image generator AND a music
+generator from asking one for the other's output), and the SPA picker. `images` vs `image` would
+be two content types that look identical to a reader and silently never match — the failure
+`reservedCapabilityNearMiss` exists to catch for the tags that must stay free-form.
+
+The members are MODALITIES, not genres: music, speech and sound effects are all `audio`, because
+what differs between them is the prompt while what differs between audio and video is the whole
+integration. A deployment telling a music generator from a speech generator says so in
+`mediaTypes` and the description. `mediaTypes` are validated against the declared modalities at
+BOOT — a recognised media type contradicting them is an error, an unrecognised one is not (the
+classifier is not a registry of every format that exists).
+
+### Refusal, again in two layers, but against two different registries
+
+`binaryGeneratorSelectionIssues` is checked at admission alongside the storage-side one, and
+refuses under its OWN reason, `binary_output_generator_invalid`: `unknown_generator` (an id this
+build does not register) or `modality_uncovered` (a content type the step declares that nothing
+selected produces). Keeping it apart from `binary_output_service_invalid` is not tidiness — a
+storage id is fixed in the workspace catalog by whoever runs the board, an integration id is fixed
+in the deployment's own build, and one reason would send half the readers to the wrong place. It
+also runs with NO catalog seam wired, since the registry needs no I/O.
+
+### The credential: declared by name, delivered per job, never to a prompt
+
+This is the one place the feature's original "credentials reach the agent through the existing
+seams" answer did not hold. A tool server's credential works because the platform configures the
+client; an image API is called by the agent's OWN code, so the value has to be in that job's
+environment or the integration is decorative.
+
+So a definition declares the credential BY NAME and the value takes the same route a tool server's
+does, one channel over:
+
+1. the ENGINE resolves the selection onto `AgentRunContext.binaryGenerators` — ids, content types
+   and the credential's KEY NAME, all non-secret, which is why the agent-context snapshot may
+   record it;
+2. the CONTAINER EXECUTOR resolves the values through the kernel `ToolSecretResolver` port (the
+   facade's, so a deployment needing per-workspace keys implements the port and nothing else
+   changes) and writes them to the job body's `generatorSecrets`;
+3. the HARNESS layers them onto THAT JOB's agent env — never `process.env`, which the shared
+   native host process makes a cross-job leak — and registers each value for redaction.
+
+`ToolSecretResolver`'s input gained a discriminated `subject` (`tool-server` | `binary-generator`)
+because two registries mint these ids and nothing stops them colliding: a deployment with a
+`retro-diffusion` tool server AND a `retro-diffusion` integration would otherwise hand each the
+other's secret from a per-workspace store.
+
+**An unresolvable credential is not a failed dispatch.** The brief states, per integration, that
+an unset variable means the platform could not provide the key and the integration must not be
+called — and the agent can SEE the variable, so a second declaration from the executor could only
+agree with the environment or contradict it. A run that generates what it can and NAMES the gap
+beats one that refuses to start over the most ordinary misconfiguration there is.
+
+### The brief leads with generation
+
+`renderBinaryOutputBrief` is now three sections in the order the work happens: **Generation**
+(each integration's content types, formats, endpoint, notes, credential variable and contract
+file), **Scope**, **Storage**. What makes the artifacts is the decision an agent cannot recover
+from later, and a generator that reads only the top of the file must still get it right. Every gap
+is stated rather than omitted — an id the deployment no longer registers, a content type nothing
+available produces, an integration with no contract — and the read-back records `generator` per
+artifact with `unknownGenerators` kept apart from `unknownServices`, for the same
+different-registry reason the refusals are.
+
 ## Runtime symmetry & mothership
 
 Nothing new is persisted: the selection rides the pipeline/step JSON (`stepOptions`), the report
@@ -99,13 +208,24 @@ rides the step (`binaryOutputs`), and every read goes through the existing
 `FoundationalServiceCatalogService` methods — already conformance-covered and already in the
 `remote` RPC bucket — so both facades and mothership mode are correct by construction.
 
+The generative half is stronger still: the registry is in-process composition data with no
+repository behind it, so there is no method to route, nothing to allow-list, and a mothership-mode
+node reads the SAME definitions its own build carries. (That is also its one limitation: unlike
+the catalog's `builtin` tier, an integration a node's build does not have is simply not there —
+which is correct, since the node is where the agent's job body is assembled.)
+
 ## How credentials reach the agent
 
-They don't, through this feature. The contract tells the agent HOW to call the storage service;
-whether it CAN authenticate is the existing capability seams' job (a tool server with a
-`ToolSecretResolver`-named secret, or test secrets), and a missing credential follows the standing
-rule — stated to the agent, which reports the gap as a named omission instead of silently
+For the STORAGE service, they still don't, through this feature. The contract tells the agent HOW
+to call it; whether it CAN authenticate is the existing capability seams' job (a tool server with
+a `ToolSecretResolver`-named secret, or test secrets), and a missing credential follows the
+standing rule — stated to the agent, which reports the gap as a named omission instead of silently
 dropping artifacts.
+
+For a GENERATIVE INTEGRATION they do, and the section above says why the storage answer could not
+be reused: the platform configures a tool server's client, while a generation API is called by the
+agent's own code. If the storage half ever needs the same, it should ride the same three-step
+channel rather than a second one.
 
 ## The SPA surfaces
 
@@ -183,6 +303,23 @@ outage must not flag every selection for re-pick over something that changed not
 It stays in BOTH interface tiers. The variant picker beside it uses `showOverrideField` because
 picking a variant OVERRIDES what the kind ships; this selection is REQUIRED, and hiding a required
 input in basic mode leaves a step that cannot be saved with no way to find out why.
+
+### What the generative half still owes these surfaces
+
+Both surfaces were written against the storage-only shape and this change widens it, so each has a
+counterpart here rather than a follow-up: the report's `unknownGenerators` and each stored row's
+`generator` are rendered beside their storage twins (an integration id the deployment does not
+register is the generative `unknownDeclaredServices`, and dropping it would re-open exactly the
+silent-loss hole that field exists to close), and the picker offers `generatorIds` + `modalities`
+with `binaryOutputPickIssues` mirroring `binary_output_generator_invalid` inline.
+
+The picker's generative half needed one thing the other two did not: the integrations live in the
+deployment's CODE, so there is no catalog read to filter. They ride the workspace snapshot as
+`binaryGenerators` — the same route `CustomAgentKind.binaryOutput` takes, and for the same reason
+(the snapshot carries the deployment-registered facts the SPA branches on). The projection is
+IDENTITY ONLY — id, name, summary, modalities, mediaTypes — and deliberately omits the credential's
+KEY NAME: the picker has no use for it, and a workspace viewer has no business learning which
+environment variables the deployment sets.
 
 ## Remaining work
 

@@ -23,6 +23,7 @@ import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
 import { customTaskTypeSchema } from './task-types.js'
+import { registeredBinaryGeneratorSchema } from './binary-generators.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
@@ -235,6 +236,17 @@ export const workspaceSnapshotSchema = v.object({
    * on the wire and omitted when no custom task type is registered.
    */
   customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
+  /**
+   * The GENERATIVE BINARY INTEGRATIONS a deployment registered in CODE on its app-owned
+   * `BinaryGeneratorRegistry` — identity and the content types each produces, never a credential
+   * key name. The pipeline builder offers a binary-generating step's `generatorIds` from these,
+   * so the ids it can save are exactly the ids run admission resolves against; without them the
+   * generative half of the selection would be reachable only through the API, and a step saved in
+   * the builder could hit `binary_output_generator_invalid` with nothing in the UI able to fix it.
+   * Static (engine-level registry), workspace-independent; attached by the facade, so optional on
+   * the wire and omitted when the deployment registers none — which is the default.
+   */
+  binaryGenerators: v.optional(v.array(registeredBinaryGeneratorSchema)),
   /**
    * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
    * deployment registered into the app-owned backend registries), each `{ kind, label }`. The
