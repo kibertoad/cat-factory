@@ -52,7 +52,7 @@ pnpm dev:frontend       # run the SPA locally (deploy/frontend)
 
 The cross-package task graph (build/typecheck/test/generate/deploy/dev) is
 orchestrated by [Turborepo](https://turbo.build) (`turbo.json`): each task declares
-`dependsOn: ["^build"]`, so a task never runs ahead of its workspace dependencies,
+`dependsOn: ["^build"]`, so a task never runs ahead of its workspace dependencies:
 e.g. `@cat-factory/contracts` is always compiled before the frontend `nuxt generate`
 resolves it. This replaces the per-package `pre*` build hooks the deploy packages
 used to carry. The scripts above are thin wrappers over `turbo run …`, so unchanged
@@ -91,7 +91,7 @@ image to GHCR.
 
 The `@cat-factory/executor-harness` package is published to npm (its
 zero-dependency `dist/server.js` is the entry `@cat-factory/local-server`
-spawns in local native mode), and it **is** versioned, and that same version
+spawns in local native mode), it **is** versioned, and that same version
 becomes the runner Docker image tag. **Always add a changeset bumping
 `@cat-factory/executor-harness` whenever you change anything that goes into the
 runner image:**

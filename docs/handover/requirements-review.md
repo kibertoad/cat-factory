@@ -134,8 +134,8 @@ the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet
   create schemas (`contracts/requests.ts`) + `BoardService.addTask`.
 - Engine inference: `spec-writer` step records `step.noBusinessSpecs` (new `pipelineStepSchema`
   field); on spec-companion convergence `CompanionController` calls the engine's
-  `inferBlockTechnical`, which uses the pure `inferTechnicalLabel` (`execution/technical.logic.ts`)
- ; a human-set value is NEVER overridden.
+  `inferBlockTechnical`, which uses the pure `inferTechnicalLabel` (`execution/technical.logic.ts`);
+ a human-set value is NEVER overridden.
 - Implementer awareness: `AgentRunContext.block.technical` threaded by `AgentContextBuilder`;
   build SYSTEM prompt gains the rule (**`build` bumped v2→v3**) + a per-task
   `technicalContextSection` in the user prompt (`agents/prompts/standard.ts`).

@@ -73,7 +73,7 @@ and the `provisionFields` captured at provision time.
 
 When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
 frontend's `backendBindings`), the engine passes an extra input, `frontendOrigins`: the
-comma-joined browser origins of those frontends (e.g. `http://localhost:4173`): the reverse of
+comma-joined browser origins of those frontends (e.g. `http://localhost:4173`), the reverse of
 the frontend→service binding. Fold it into the deployed backend's **CORS allow-list** (and any
 OAuth-callback allow-list) so the ephemeral frontend can actually reach the ephemeral backend:
 
@@ -149,7 +149,7 @@ resolves a workspace's stored connection `kind` to the registered backend and bu
 provider. So one seam serves both a **single-tenant** install (register one bespoke backend)
 and a **multi-tenant** deployment (each workspace selects a `kind`). Registering code is
 something only a deployment OWNER can do (you can't let an arbitrary tenant inject a
-provider) which is exactly why it is the self-hosted / single-tenant extension path; a
+provider), which is exactly why it is the self-hosted / single-tenant extension path; a
 multi-tenant SaaS still offers the built-in `manifest` / `kubernetes` kinds per workspace.
 
 A custom kind rides the contract's **generic manifest member**
@@ -166,7 +166,7 @@ up (the `remote-custom` "how"). It does **not** by itself let a service _choose_
 provisioning: a service pins a **`manifestId`** drawn from the **custom-manifest-type catalog**,
 and a `remote-custom` handler declares which id it `acceptsManifestId`. If that catalog is empty,
 the service inspector's provisioning picker shows _"No custom manifest types are defined yet. Add
-one in the Infrastructure window."_ and your backend is unreachable: even though it is registered
+one in the Infrastructure window."_ and your backend is unreachable, even though it is registered
 and declares `engines: ['remote-custom']`.
 
 The catalog (`aggregateCustomManifestTypes`,
@@ -263,7 +263,7 @@ piece, but it uses the **exact same extension pattern**: see [Custom runner back
 The self-hosted runner-pool subsystem is the mirror image of this one, so a custom runner
 backend is registered the same way: `backendRegistries.runnerBackendRegistry.register(provider)`
 on the `RunnerBackendRegistry` (from `@cat-factory/integrations` via `createBackendRegistries()`),
-where `provider` is a `RunnerBackendProvider`; the analogue of
+where `provider` is a `RunnerBackendProvider`, the analogue of
 `EnvironmentBackendProvider`, with `buildTransport(config, ctx) → RunnerTransport` and
 `testConnection` in place of `buildProvider`. It rides the generic
 `runnerBackendConfigSchema` manifest member (no new config variant), is advertised to the SPA
@@ -305,7 +305,7 @@ from `@cat-factory/integrations` (`environmentsLogic.assertSafeEnvironmentUrl`).
 This is the `EnvironmentProvider` (the port) that
 [`buildProvider`](#registering-the-backend) returns: wire it by defining a
 `kargoEnvironmentBackend` value whose `buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy)`
-and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`):
+and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`),
 plus its custom manifest type (`backendRegistries.customManifestTypeRegistry.register({ manifestId: 'kargo', label: 'Kargo PREnv' })`),
 without which no service can pin the `custom` type (see [Also register a custom manifest type](#also-register-a-custom-manifest-type-for-remote-custom-backends)).
 

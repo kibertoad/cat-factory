@@ -9,7 +9,7 @@ instances**. Companion to the execution / bootstrap flow notes in
 Status (2026-06): reaping is **best-effort across four layers** below. Every
 terminal path now reclaims explicitly (success **and** failure, for both flows),
 and **Layer 4 is an instance-level cron reaper** that kills a warm instance from
-the real live-container inventory (independent of its run record) closing the
+the real live-container inventory (independent of its run record), closing the
 two leak modes that previously let an instance stay warm for ~a day. Manual
 cleanup should now be rare (see _Manual deletion_ at the end).
 
@@ -70,7 +70,7 @@ the failure/teardown handling that calls it.
 | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
 | Run **fails** (agent fault, etc) | ✅ `failRun` → `stopRunContainer` (single funnel for every failure kind) | ✅ `pollBootstrapJob` failure path → `stopContainer` |
 | User **stops/cancels** the run   | ✅ `ExecutionService.stopRun`                                            | ✅ `BootstrapService.stop`                           |
-| Pre-flight / dispatch cleanup    |:                                                                        | ✅ pre-flight / dispatch cleanup                     |
+| Pre-flight / dispatch cleanup    | n/a                                                                      | ✅ pre-flight / dispatch cleanup                     |
 | Block-tree **delete / teardown** | ✅ `teardownForBlockTree`                                                | (frame removed with job)                             |
 | Job **succeeds**                 | ✅ `recordStepResult` final step → `stopRunContainer`                    | ✅ `pollBootstrapJob` success path → `stopContainer` |
 
@@ -204,7 +204,7 @@ per-install id** and the reaper/adopter/enumeration filter strictly on it.
 - **Docker family** (`dockerRuntime.ts`): every `run` (per-run **and** pool member)
   stamps `cat-factory.managed=local-docker`, the run-id/`pool=1` label, **and**
   `cat-factory.install=<installId>`. Every daemon-wide enumeration
-(  `reapExited`, `listPoolMembers`, `listRunContainers`, `find`, `removeRun`) adds
+  (`reapExited`, `listPoolMembers`, `listRunContainers`, `find`, `removeRun`) adds
   `--filter label=cat-factory.install=<installId>`, so a container that lacks this
   install's id is never reaped, listed, or re-leased; it is left alone.
 - **Apple `container`** (`appleContainerRuntime.ts`): no reliable label filter (identity

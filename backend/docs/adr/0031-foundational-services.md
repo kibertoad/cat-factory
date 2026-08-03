@@ -180,8 +180,8 @@ account: remediable only board by board, forever, including on boards created la
 Three rules make the pair usable rather than a trap:
 
 - **Suppressing an id the merged catalog does not carry is refused** (404). A tombstone there would
-  shadow NOTHING today and silently swallow whatever a lower tier registers under that id tomorrow
- : a suppression nobody could later explain.
+  shadow NOTHING today and silently swallow whatever a lower tier registers under that id tomorrow:
+ a suppression nobody could later explain.
 - **Suppressing the tier's OWN registration is refused** (409, `foundational_service_not_inherited`).
   It would read as a delete while destroying that tier's authored description and contracts.
 - **Restoring HARD-deletes the tombstone rather than clearing `deletedAt`.** A suppression row

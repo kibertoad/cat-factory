@@ -47,7 +47,7 @@ entry has a stable `id` (persisted on `Block.modelId`) and up to four flavours:
 | **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set and no direct one. |
 | **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.              |
 
-Three shapes of catalog entry fall out of this:
+Several shapes of entry fall out of this:
 
 - **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.

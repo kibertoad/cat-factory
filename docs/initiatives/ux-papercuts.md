@@ -213,8 +213,8 @@ per-file patches:
 - **UX-18: Dirty modals discard input. DONE.** A shared `composables/useUnsavedGuard.ts`
   seam routes a controlled `UModal`'s dismiss paths (Escape, backdrop, Cancel) through a
   dirty check: it snapshots the form's user-owned state each time the modal opens and, on a
-  close request, only prompts (`common.discard.*` confirm) when the current snapshot diverges
- ; an unchanged form, or a submit in flight, closes immediately as before. The modal's
+  close request, only prompts (`common.discard.*` confirm) when the current snapshot diverges;
+ an unchanged form, or a submit in flight, closes immediately as before. The modal's
   `open` setter calls `requestClose()` instead of the store close, and the Cancel button does
   too. Wired into `AddTaskModal.vue`, `RecurringPipelineModal.vue`, and `BootstrapModal.vue`
   (the three that wiped title/description/per-type fields/attached context on an accidental

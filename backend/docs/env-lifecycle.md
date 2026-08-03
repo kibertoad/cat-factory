@@ -178,8 +178,8 @@ backend actually supports agent repair (`describeRepairAgent`), so a stock deplo
 generic manifest provider is unchanged (no `describeRepairAgent` ⇒ the service guard skips the
 fallback). The repairer is built over the first repair-capable provider in the env-backend registry
 (`EnvironmentBackendRegistry.findRepairCapable`), so a custom backend registered (by reference)
-into that registry that implements `describeRepairAgent` is the one the dispatcher repairs through. The repair agent runs on
-the `coder` kind's routing model.
+into that registry that implements `describeRepairAgent` is the one the dispatcher repairs
+through. The repair agent runs on the `coder` kind's routing model.
 
 **Bonus / stretch: true in-container validation:** package `validateRepo` as a runnable the
 harness injects into the container so the agent self-checks _before_ pushing. Requires an

@@ -62,8 +62,8 @@ prompt in layers. Knowing the layers tells you what to leave OUT of your own tex
    reads): the service's selected best-practice standards for `code-aware` / `doc-aware`
    kinds (full or `brief` per the `brief-standards` trait, unless
    `standardsDelivery: 'context-files'`), the web-search guidance when the deployment
-   enables it (steered by your `webResearchHint`), the tool-servers section (below), and
-(   on harnesses without native skill support) the declared skills' instructions.
+   enables it (steered by your `webResearchHint`), the tool-servers section (below), and,
+   on harnesses without native skill support, the declared skills' instructions.
 
 So the text you author should carry ONLY the role: who the agent is, what it must do, and
 what its deliverable looks like. The plumbing statements are all supplied.
@@ -168,7 +168,7 @@ this section is about writing a good `BundledSkillDefinition`
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`           | The registry key (`skills: ['<id>']` refs it) and the id reported on the run. Stable; renaming it orphans every kind that refs it (an unknown id is a boot error).                                   |
 | `name`         | Becomes the native skill DIRECTORY name (`CLAUDE_CONFIG_DIR/skills/<name>/` or `.cat-context/skill/<name>/`) and the `SKILL.md` frontmatter `name`. Keep it filesystem-safe (kebab-case).            |
-| `description`  | The frontmatter `description`: **the trigger**: what claude-code matches against when deciding to load the skill. Write it as "when this applies", not as a title.                                  |
+| `description`  | The frontmatter `description`, i.e. **the trigger**: what claude-code matches against when deciding to load the skill. Write it as "when this applies", not as a title.                             |
 | `instructions` | The `SKILL.md` body: the procedure itself.                                                                                                                                                          |
 | `resources`    | Sibling files materialised alongside the skill (`relPath` + `content`). For reference material the procedure points at (rubrics, templates, checklists) that would bloat the instructions in-line. |
 

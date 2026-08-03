@@ -496,8 +496,8 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
 
 ## 5. Low (summarised)
 
-- **Subscription-token lease is read→choose→mark** (`ProviderSubscriptionService.ts:161-196`)
- : the API-key pool got the atomic fix (`leaseLeastUsed`: `FOR UPDATE SKIP LOCKED` /
+- **Subscription-token lease is read→choose→mark** (`ProviderSubscriptionService.ts:161-196`):
+ the API-key pool got the atomic fix (`leaseLeastUsed`: `FOR UPDATE SKIP LOCKED` /
   one-statement D1 claim, both verified sound); the subscription pool did not
   (acknowledged in-code as benign).
 - **Pool-size caps are check-then-act** (`ApiKeyService.ts:82-92`,
@@ -520,13 +520,13 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
   `stopRealtime()` calls `handleUpgrade` on a closed server. Shutdown-window only.
 - **Cancelled/restarted runs never call `deleteByExecution` on personal-subscription
   activations**: the system-key-only token copy lingers up to the 12 h TTL.
-- **Tracker writeback dedup is caller-side read-then-act** (`RunDispatcher.ts:1123-1135`)
- : a duplicate driver pass double-comments; `TaskLinkService.createTaskFromIssue`'s
+- **Tracker writeback dedup is caller-side read-then-act** (`RunDispatcher.ts:1123-1135`):
+ a duplicate driver pass double-comments; `TaskLinkService.createTaskFromIssue`'s
   duplicate guard is check-then-act (two board tasks, first orphaned).
 - **`BoardScanService.reconcileBlueprint`** / **`applyModuleAssignment`**: two genuinely
   concurrent reconciles/merges both `addModule` the same name → duplicate modules.
-- **Gate helper dispatch persists `jobId` after dispatching** (`RunDispatcher.ts:352-397`)
- : a crash between dispatch and persist re-dispatches on replay (absorbed by the
+- **Gate helper dispatch persists `jobId` after dispatching** (`RunDispatcher.ts:352-397`):
+ a crash between dispatch and persist re-dispatches on replay (absorbed by the
   deterministic job id: the harness re-attaches; only an `attempts` increment is lost).
 - **Double-driver helper dispatch** is deliberately defused by deterministic
   `stepJobId(executionId, agentKind, dispatchEpoch)` ids: verified benign.
@@ -584,8 +584,8 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
    column + `compareAndSwap` on all three review stores, every read-modify-write routed through
    `mutateReview`'s reload-and-re-apply, and the racy `deleteByBlock` + `upsert` pair replaced by
    an atomic `replaceForBlock` (both runtimes + conformance).
-6. **Frontend**: `rev`-guard `execution.hydrate`; **DONE**; generation-check `workspace.refresh`
-  ; **DONE** (4.1–4.3, plus 4.6/4.8/4.9). STILL OPEN: replicate the bootstrap guard onto
+6. **Frontend**: `rev`-guard `execution.hydrate`; **DONE**; generation-check `workspace.refresh`;
+  **DONE** (4.1–4.3, plus 4.6/4.8/4.9). STILL OPEN: replicate the bootstrap guard onto
    env-config-repair (4.5), give `Notification` a wire `updatedAt` or a tombstone set so
    `notifications.hydrate` stops resurrecting resolved cards (4.4), and queue the credential
    prompt (4.10). See the status note in §4.

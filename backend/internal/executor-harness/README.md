@@ -72,8 +72,8 @@ The implementation job (`POST /run`) is the canonical sequence:
    install materialises is excluded from git first, so no later `git add -A` can sweep a
    dependency tree into the pull request (see
    [dependency prepopulation](../../../docs/initiatives/agent-dependency-prepopulation.md)),
-4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`)
-  : `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
+4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`):
+  `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
    GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout (a symlinked template
    is followed only while it resolves INSIDE the checkout: this is the one repo-chosen path the
    harness reads unprompted). Found, it is folded into the agent's prompt (on EVERY pass, as with

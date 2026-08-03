@@ -79,7 +79,7 @@ them apart, and the SPA renders them as two tiles and two bar segments with dist
 colours and a legend.
 
 Anything that is not literally `'subscription'` is priced as metered (matching how the
-row decoders widen the column) so an unexpected value reads as real spend rather than
+row decoders widen the column), so an unexpected value reads as real spend rather than
 being silently discounted to zero.
 
 ### The unattributed bucket is a real slice
@@ -142,7 +142,8 @@ genuinely nothing to attribute it to.
 `since` is `generatedAt - window` floored to a multiple of the trend's bucket width.
 Unsnapped, the first column of the chart holds a fraction of a bucket's data while rendering
 at the same width as its complete neighbours, and nothing distinguishes that short column
-from a genuinely quiet period: the one reading a trend must not get wrong. Snapping makes
+from a genuinely quiet period; that is the one distinction a trend reader must not get
+wrong. Snapping makes
 every bucket complete except the trailing in-progress one, whose partialness is inherent.
 A window therefore covers up to one bucket more than its nominal length; the projection
 reports the real `since`, and the panel prints it, so the view always says what it charted.

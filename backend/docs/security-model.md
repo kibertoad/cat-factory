@@ -160,7 +160,7 @@ about". Until then, the practical mitigation is installation scope itself: see t
 that such a narrowing would not bound an initiator PAT, which the platform does not mint and cannot
 scope; `allowInitiatorPat: false` is what bounds that, by declining to use it at all.
 
-## Layer 4, no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
+## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
 Pushing a malicious commit to a `work` branch is, by design, _allowed_: that is what a PR is for.
 The enforcement here is that nothing an agent **decides** or **returns** can merge it.
@@ -206,7 +206,7 @@ also means the shipped default posture is worth stating plainly:
 > **Default posture ("Balanced" preset):** auto-merge is ON, with ceilings
 > `complexity ≤ 0.5, risk ≤ 0.4, impact ≤ 0.5` and **no per-class floors**. Out of the box, a
 > source- or schema-class change that a (possibly manipulated) merger scores under those ceilings
-> merges without a human: subject to your CI and your branch protection. If that is not acceptable
+> merges without a human, subject to your CI and your branch protection. If that is not acceptable
 > for a repo, pin the `Manual review only` preset or add class floors. This is a one-line
 > configuration, not a code change.
 
@@ -262,7 +262,7 @@ is possible at all:
    **The product now tells you where this is missing**: the GitHub settings panel's
    "Default-branch protection" preflight probes each linked repo's default branch on demand
    (`GET /workspaces/:ws/github/branch-protection`). It reports three states, never two (a repo
-   it could not reach is `unknown`, not "fine") says so when a branch is protected but the rule
+   it could not reach is `unknown`, not "fine"), says so when a branch is protected but the rule
    itself was unreadable (a minimally-scoped App installation cannot read it, and such a rule may
    still permit direct pushes), and states how many repos a probe cap left unchecked. A provider
    that cannot answer at all reports `capability: 'unavailable'` rather than an empty list, which
@@ -281,7 +281,7 @@ is possible at all:
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
    would otherwise silently widen every run they start to their own whole account.
 
-   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first:
+   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first,
    but only if this deployment serves the whole org.** A GitHub org owner can, under
    _Settings → Personal access tokens_, deny classic PATs access to the org outright and require
    owner approval for fine-grained tokens (naming the repositories each may touch); SAML/SSO

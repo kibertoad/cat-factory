@@ -180,8 +180,8 @@ Slice 2a landed the backend of the per-workspace GitLab PAT connect. Read this b
   matches local mode's byte-for-byte), so it round-trips through `connectionId = String(id)`.
 - **`VcsPatConnectionService`** (`@cat-factory/integrations`, provider-neutral) validates a pasted
   PAT via the `VcsIdentityResolver` (a bad token → `ValidationError`), seals it with the
-  deployment `SecretCipher` (`cat-factory:vcs-token` domain), and writes the row (`accountId: null`
- : a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
+  deployment `SecretCipher` (`cat-factory:vcs-token` domain), and writes the row (`accountId: null`:
+ a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
   reads + decrypts it per call; `buildGitLabConnectClient` bridges a `FetchGitLabClient` over it to
   the `GitHubClient` port, so the whole `GitHubSyncService` seed path works unchanged for GitLab.
 - **Provider routing = `ProviderRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub

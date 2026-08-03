@@ -139,7 +139,7 @@ bootstrap, …) flows like this. Steps 2–7 repeat for **every** step of a run.
 4. **Your scheduler places the job** on a runner (queueing if the pool is saturated)
    and `POST`s the job spec to the matching harness route on that runner. The runner
    clones the repo, runs the agent, and (for write kinds) pushes a branch / opens a
-   PR: reaching models **only** through the Worker LLM proxy and GitHub directly.
+   PR, reaching models **only** through the Worker LLM proxy and GitHub directly.
 5. **Poll.** On the durable driver's cadence (default 15s), the executor calls
    `poll`, which interpolates your `poll` template (re-supplying `{{input.jobId}}`),
    reads your scheduler's status response, and projects it onto the canonical **job
@@ -161,10 +161,9 @@ job) or re-polls: there is only a **connection table**, no job registry.
 ### What runs on a pool today
 
 **Every asynchronous agent kind** routes to a registered pool: there is no opt-in
-allow-list, because a pool runs the same harness image as Cloudflare:
-
-Every kind is dispatched to the **same** harness endpoint, `POST /jobs`, with the
-`kind` carried in the job body:
+allow-list, because a pool runs the same harness image as Cloudflare. Every kind is
+dispatched to the **same** harness endpoint, `POST /jobs`, with the `kind` carried
+in the job body:
 
 | `kind`              | What the job does                                 |
 | ------------------- | ------------------------------------------------- |
@@ -436,7 +435,7 @@ manifest.
 
 | `auth.type`                 | fields                                                                          | effect                             |
 | --------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
-| `none`                      |:                                                                               | no auth header                     |
+| `none`                      | (none)                                                                          | no auth header                     |
 | `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`     |
 | `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`   |
 | `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)` |
@@ -447,10 +446,10 @@ manifest.
 
 - **`resultPath` is the field most schedulers want.** Point it at the object that
   holds the harness `result` envelope and cat-factory forwards **every** structured
-  product (blueprint tree, spec doc, merge assessment, test report, bootstrap branch
- ) not just the PR scalars. Known fields are coerced by type; unknown ones ignored.
+  product (blueprint tree, spec doc, merge assessment, test report, bootstrap
+  branch), not just the PR scalars. Known fields are coerced by type; unknown ones ignored.
 - The scalar paths (`prUrlPath`, `branchPath`, `summaryPath`) still apply and
-  **override** `resultPath` when set: for schedulers that surface those outside any
+  **override** `resultPath` when set, for schedulers that surface those outside any
   envelope.
 - `statusMap` matching is case-insensitive (and ignores surrounding whitespace) and always
   wins. A status your manifest does **not** map is matched against a built-in vocabulary of

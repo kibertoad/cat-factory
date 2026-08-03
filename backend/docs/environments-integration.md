@@ -35,7 +35,7 @@ see [Native environment adapters](./native-environment-adapter.md).
 > generic HTTP `manifest` backend, which today serves the **`custom` provision type** via the
 > `remote-custom` engine. The single per-workspace `environment_connections` row has been
 > reshaped into per-provision-type **handlers** (keyed by `(workspace_id, provision_type,
-manifest_id)`), and a service selects its type/source independently of the workspace's
+> manifest_id)`), and a service selects its type/source independently of the workspace's
 > handler. A `kubernetes` service additionally has a native render/deploy path (raw apiserver
 > apply, or kustomize/helm/Gateway via a deploy container). See
 > [per-service-provisioning.md](./per-service-provisioning.md) for the full model, the engines,
@@ -223,7 +223,7 @@ Each references its secret(s) by **logical key**; values are supplied separately
 
 | `auth.type`                 | fields                                                                          | effect                                 |
 | --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
-| `none`                      |:                                                                               | no auth header                         |
+| `none`                      | (none)                                                                          | no auth header                         |
 | `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
 | `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
 | `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |

@@ -45,7 +45,7 @@ always where the quota data lives. Verdicts per vendor:
 | **Claude** (Pro/Max, `sk-ant-oat01-…`) | ✅                            | Undocumented `GET https://api.anthropic.com/api/oauth/usage` with the OAuth token (available in-container); or statusLine stdin `rate_limits` on Claude Code ≥2.1.x; or `anthropic-ratelimit-unified-*` response headers                              | Absolute `resets_at` (epoch/ISO); **5h + 7d** rolling windows | Not in `--output-format stream-json`: needs an out-of-band endpoint call or statusLine capture |
 | **Codex** (ChatGPT Plus/Pro)           | ⚠️ partial                    | `RateLimitSnapshot` (`primary`/`secondary`, `used_percent`, `window_minutes`, `resets_in_seconds`) exists but **`codex exec --json` currently emits `rate_limits: null`** (openai/codex#14728). Must **model** the 5h + weekly windows from first-use | Relative `resets_in_seconds` when present                     | **No**: headless path returns null today                                                       |
 | **GLM** (Z.ai)                         | ✅ (unofficial)               | `GET /api/monitor/usage/quota/limit` (+ `model-usage`/`tool-usage`), token in `Authorization` header (no `Bearer`)                                                                                                                                    | Countdown; **5h + weekly** (+ monthly MCP)                    | Yes (side-channel HTTP call)                                                                    |
-| **Kimi / DeepSeek** (pooled)           | ➖                            | No published subscription quota window; the existing `provider_subscription_tokens` rolling counter (~5h) is a rotation heuristic, not a real quota                                                                                                   |:                                                             | n/a                                                                                             |
+| **Kimi / DeepSeek** (pooled)           | ➖                            | No published subscription quota window; the existing `provider_subscription_tokens` rolling counter (~5h) is a rotation heuristic, not a real quota                                                                                                   | —                                                            | n/a                                                                                             |
 
 **Consequences for Part B:**
 
@@ -130,8 +130,8 @@ The pilot landed the modeled quota model end-to-end; B2/B3 extend it rather than
   registered adapter and degrades to modeled on a null/throwing read: a best-effort vendor read
   never fails a caller.
 - **Table** `subscription_quota_cycles`: one row per `(scope, scope_id, vendor, window_kind)`, a
-  windowed UPSERT (`recordUsage`) that anchors the window at first use and resets it once aged out
- ; the SAME atomic-CASE pattern as `provider_subscription_tokens.recordUsage`. D1 migration `0047`
+  windowed UPSERT (`recordUsage`) that anchors the window at first use and resets it once aged out;
+ the SAME atomic-CASE pattern as `provider_subscription_tokens.recordUsage`. D1 migration `0047`
   ⇄ Drizzle `subscriptionQuotaCycles` + generated migration; the repo is a `CoreRepositories`
   member so both the container and the conformance suite get it.
 - **Retention**: idle cycles are pruned by BOTH facades' retention sweeps (Worker cron

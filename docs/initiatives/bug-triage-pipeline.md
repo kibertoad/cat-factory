@@ -103,8 +103,8 @@ boolean[]` arg), matching every other check in `pipelineShape.ts`: a disabled `b
   letting every future fire silently fail the origin gate.
 - `availability` is a first-class editable/clonable pipeline field: `create`/`update` accept it and
   `clone` preserves it (so cloning the future recurring-only `pl_bug_triage` stays recurring-only).
-- `bug-intake` is referenced as a bare string literal (`BUG_INTAKE_AGENT_KIND` in `pipelineShape.ts`)
- : the kind itself is registered in Phase E; the structural guard only needs the identifier.
+- `bug-intake` is referenced as a bare string literal (`BUG_INTAKE_AGENT_KIND` in `pipelineShape.ts`):
+ the kind itself is registered in Phase E; the structural guard only needs the identifier.
 - SPA filters added `pipelineAllowedForManualStart` / `pipelineAllowedForSchedule` to
   `utils/pipeline.ts` and applied them to ALL manual-start surfaces (add-task modal, board +
   inspector Run menus, task run-settings default) and the recurring modal respectively. No new
@@ -235,14 +235,14 @@ Notes for Phase F/G/H (which build on this step):
   The engine (`RunDispatcher.runBugIntake`) owns the block-reseed + best-effort `onIssuePickedUp`
   writeback + the completion. It is wired into the engine ONLY when task sources are configured
   (a `TasksModule.bugIntakeService`, threaded through `ExecutionService` like `issueWriteback`).
-- **The no-match / no-source path completes the run** via `RunDispatcher.completeRunSkippingRemaining`
- : mark this step's output, mark every remaining step `skipped`, finalize the block `done`. It
+- **The no-match / no-source path completes the run** via `RunDispatcher.completeRunSkippingRemaining`:
+ mark this step's output, mark every remaining step `skipped`, finalize the block `done`. It
   reuses `skipGatedStep`'s terminal machinery; there is deliberately NO new gate/notification.
 - **`BUG_INTAKE_AGENT_KIND`** is now exported from `pipelineShape.ts` (with a
   `pipelineHasEnabledBugIntake` helper) as the single source of truth shared by the launch
   constraint, the schedule intake-config validation, and the engine handler.
-- **Intake dedupe uses `TaskRepository.listByWorkspace`** filtered to `linkedBlockId && source`
- : one batched projection read, not a per-candidate lookup. The reused block's own previous-fire
+- **Intake dedupe uses `TaskRepository.listByWorkspace`** filtered to `linkedBlockId && source`:
+ one batched projection read, not a per-candidate lookup. The reused block's own previous-fire
   link is in the exclusion set (the search runs BEFORE `replaceForBlock` drops it), so a still-open
   prior bug isn't immediately re-picked.
 - **Validation home**: the `issueIntake`-required + connected-source check lives in
@@ -426,8 +426,8 @@ task-estimator → repro-test → coder → reviewer → tester-api → conflict
   its definition (the `bug-investigator` in Phase F, and now `repro-test` in Phase G), so neither
   needed an allow-list edit. `repro-test` rides the EXISTING coding fan-out (`runMultiRepoCoding`)
   since it commits, no new harness path like Phase F's read-only `runMultiRepoExplore`. What Phase
-  G DID add to the harness is structured-output parsing on the coding path (see the Phase G notes)
- : the coding fan-out gained the same `custom` parse as the single-repo coder.
+  G DID add to the harness is structured-output parsing on the coding path (see the Phase G notes):
+ the coding fan-out gained the same `custom` parse as the single-repo coder.
 - **The harness's multi-repo paths are deliberately simpler than the single-repo ones**: the
   coding fan-out (`runMultiRepoCoding`, per PR #752) has no mid-run checkpoints / warm pool /
   follow-up streaming, and the read-only explore fan-out (`runMultiRepoExplore`, Phase F) just

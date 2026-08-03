@@ -51,9 +51,6 @@ simply had no `logger` key; every domain service on the deployed runtime silentl
 `noopLogger`, and nothing anywhere said so. A test or harness that does not care passes
 `noopLogger` explicitly, which costs one line and cannot happen by accident.
 
-Individual services still declare `logger?: Logger` in their own dependency interfaces, so one can
-be constructed standalone in a unit test; `createCore` always passes the real instance.
-
 ## Levels
 
 | Level   | Use it for                                                                      | Rule of thumb                                                                                                                                              |

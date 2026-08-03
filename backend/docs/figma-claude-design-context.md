@@ -39,10 +39,9 @@ can be backend sources at all.
 Both Figma and Zeplin are **`DocumentSourceProvider`s** (`source='figma'`, `source='zeplin'`),
 reusing the entire documents integration: the `document_connections` / `documents` tables, the
 generic `DocumentConnectionService` / `DocumentImportService` / link plumbing, the controller, and
-the `.cat-context/` materialization. The only per-source code is `normalizeConnection` + `parseRef`
-
-- `fetchDocument`, and the fetched data is mapped into a **shared, source-neutral model** before
-  rendering:
+the `.cat-context/` materialization. The only per-source code is `normalizeConnection` +
+`parseRef` + `fetchDocument`, and the fetched data is mapped into a **shared, source-neutral
+model** before rendering:
 
 * `documents/design.logic.ts`: `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
   `references`) + `renderDesignContext`, which emits `## <block>` sections, a global `### Components`,
@@ -111,7 +110,7 @@ store + `credentialScope` plumbing) was removed: it targeted a service-token API
 
 The next provider to add is **Penpot** (open-source, self-hostable, personal access tokens, W3C-DTCG
 design tokens). It's the natural stress-test of the remaining abstraction seam: being self-hosted, it
-needs a **per-site `baseUrl` credential field**; exactly the model the existing **Confluence**
+needs a **per-site `baseUrl` credential field**, exactly the model the existing **Confluence**
 provider already uses. Mapping Penpot's boards/tokens into `DesignContext` is the only new code; the
 table, link plumbing, controller, and renderer are all reused.
 

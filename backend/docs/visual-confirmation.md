@@ -3,7 +3,7 @@
 Status of the work on `claude/visual-confirmation-gate-gsmh1i`. This feature adds a pipeline
 gate where a human reviews **screenshots of new UI functionality** against **reference design
 screenshots** they supply, can dispatch a **Fixer** to make changes, and is fed by a new
-browser-driven **UI tester**: all on top of a new runtime-neutral **binary-artifact storage**
+browser-driven **UI tester**, all on top of a new runtime-neutral **binary-artifact storage**
 abstraction.
 
 It landed in three coherent, independently-verified slices plus the image definition. One
@@ -98,8 +98,8 @@ binary-artifact storage (the substrate both rely on)
   (`/blocks/:id/visual-confirmation/{approve,request-fix,recapture}`). New `pl_visual` pipeline
   (`… tester-ui → visual-confirmation → merger`).
 - SPA: `VisualConfirmationWindow.vue` (actual-vs-reference gallery + approve/request-fix/recapture
-  - reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
-    `visual-confirm` result-view registration, notification reveal + Slack panel entries.
+  + reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
+  `visual-confirm` result-view registration, notification reveal + Slack panel entries.
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 

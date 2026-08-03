@@ -210,8 +210,8 @@ single `<AppOverlayHost>` are the seam:
 
 1. Contribute `{ id: '<ns>:<name>', component }` to the `appOverlays` slot (see
    `acme:security-dashboard-overlay` in the example module).
-2. Open it from anywhere with the auto-imported `useAppOverlays().open('<ns>:<name>', subject?)`
-  : typically a nav item's `run` closure. The optional `subject` is any value your overlay
+2. Open it from anywhere with the auto-imported `useAppOverlays().open('<ns>:<name>', subject?)`:
+  typically a nav item's `run` closure. The optional `subject` is any value your overlay
    renders against (e.g. a block id); it reaches the component as a `subject` prop.
 3. `<AppOverlayHost>` resolves the slot with `resolveComponentRegistry` (the same pick-one
    primitive `resultViews` uses) and mounts the matching component, wiring its `close` emit to

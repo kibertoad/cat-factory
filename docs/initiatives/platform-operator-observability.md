@@ -29,8 +29,8 @@ delivered through the existing `NotificationChannel` seam.
 1. **Aggregates in SQL, on data that already exists.** `agent_runs` (both kinds) +
    `llm_call_metrics` already carry outcome, failure kind, timing, and token/cost fields.
    Add rollup read methods to a new kernel `PlatformMetricsRepository`-shaped port
-   (`runOutcomesSince`, `failureKindBreakdown`, `durationPercentiles`, `activeAndParkedCounts`
-  : each ONE `GROUP BY` query, mirrored D1 ⇄ Drizzle + conformance). Never load rows to
+   (`runOutcomesSince`, `failureKindBreakdown`, `durationPercentiles`, `activeAndParkedCounts`:
+  each ONE `GROUP BY` query, mirrored D1 ⇄ Drizzle + conformance). Never load rows to
    aggregate in JS (the N+1/aggregate rule).
 2. **Retention-aware windows**: telemetry is pruned to `LLM_CALL_METRICS_RETENTION_DAYS`
    (default 3d); `agent_runs` lives longer. Dashboard windows must degrade gracefully where

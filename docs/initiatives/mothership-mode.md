@@ -756,8 +756,8 @@ mothership providing durability, email sending, and notification delivery.
 
 1. **Mothership target: both Node + Cloudflare.** The new `/internal/*` machine API is served from
    the shared `@cat-factory/server`, so both facades work as a mothership (symmetry + conformance).
-   What still behaves DIFFERENTLY when the mothership is a Worker + D1 rather than Node + Postgres
-  : the run-sweeper hijack, D1's 2 MB row cap against the 4 MiB agent-context snapshot, the
+   What still behaves DIFFERENTLY when the mothership is a Worker + D1 rather than Node + Postgres:
+  the run-sweeper hijack, D1's 2 MB row cap against the 4 MiB agent-context snapshot, the
    untested Worker-side registry, the per-isolate mint brake: is investigated in
    [`mothership-cloudflare-host-gaps.md`](./mothership-cloudflare-host-gaps.md). Nothing there is
    fixed yet; read it before picking up a slice that touches run recovery or the telemetry sync.
@@ -1041,8 +1041,8 @@ modes look like success:
   `MothershipWebSocketPropagator` (`@cat-factory/local-server`) POSTs each engine event to the new
   machine-authed `POST /internal/events/publish`, layered over the local hub so every event fans to
   the laptop's own SPA AND the mothership. The mothership injects it into its OWN real-time fan-out
-  via the `MachineEventRelay` seam (`@cat-factory/server`), implemented symmetrically on both facades
- : `LocalMachineEventRelay` (the Node hub / propagator) and `DurableObjectMachineEventRelay` (the
+  via the `MachineEventRelay` seam (`@cat-factory/server`), implemented symmetrically on both facades:
+ `LocalMachineEventRelay` (the Node hub / propagator) and `DurableObjectMachineEventRelay` (the
   per-workspace `WorkspaceEventsHub` Durable Object), so hosted teammates see the local node's
   activity live. Account-scoped + default-deny exactly like the persistence RPC.
   The INBOUND leg landed on exactly the design sketched here and NOT on the per-runtime subscriber

@@ -128,7 +128,7 @@ and `helm` talk to the new cluster immediately. Tear it down with
 Both the Kubernetes suite (`@cat-factory/integrations`) and the deploy-harness suite
 (`@cat-factory/deploy-harness`) read the live cluster connection from `K8S_IT_*` env vars (see
 `backend/internal/deploy-harness/test/cluster.ts`) and **self-skip** when they're absent. Mint a
-ServiceAccount + token and export the vars: the PowerShell equivalent of CI's `test-k8s` job:
+ServiceAccount + token and export the vars (the PowerShell equivalent of CI's `test-k8s` job):
 
 ```powershell
 $env:Path = "$env:USERPROFILE\bin;$env:Path"   # ensure the pinned kubectl for this session
@@ -195,7 +195,6 @@ a token, and opens the Infrastructure form pre-filled for you (the **environment
 > then detects it on the next run. Once k3d is on your PATH the command offers the "create a
 > local k3d cluster" path directly.
 
-The
-RBAC manifest, the runner-callback / `PUBLIC_URL` networking details, the URL-safety knobs, and
-the manual wire-it-yourself steps are documented in
+The RBAC manifest, the runner-callback / `PUBLIC_URL` networking details, the URL-safety
+knobs, and the manual wire-it-yourself steps are documented in
 [`local-k3s-environments.md`](./local-k3s-environments.md).

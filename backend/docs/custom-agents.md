@@ -2,9 +2,8 @@
 
 cat-factory is extensible: a deployment can ship its own agent kinds (a compliance
 auditor, a security scanner, a bespoke reviewer, a custom migrator) **without forking the
-platform and without rebuilding the executor-harness image**. This document is the model
-
-- the seams. The worked reference is `backend/internal/example-custom-agent`.
+platform and without rebuilding the executor-harness image**. This document is the model:
+the seams. The worked reference is `backend/internal/example-custom-agent`.
 
 > For the ergonomics layered on these seams: provider tokens, schema-driven structured
 > output, boot-time registration validation, and the surface-driven prompt/`resultView`
@@ -30,7 +29,7 @@ Every agent decomposes into three stages; the container runs only the middle one
    targeted, known subset of the repo (and may commit) over the checkout-free
    [`RepoFiles`](../packages/kernel/src/ports/repo-files.ts) port: **no checkout**.
 2. **`agent`**: an optional LLM step on one of three surfaces:
-   - `inline`; a one-shot LLM call over the block context; no repo, no container.
+   - `inline`: a one-shot LLM call over the block context; no repo, no container.
    - `container-explore`: a read-only clone; returns prose, or (for
      `output.kind === 'structured'`) a parsed JSON object surfaced as `result.custom`.
    - `container-coding`: clones, edits a working tree, commits + pushes (optionally
@@ -325,7 +324,7 @@ with `registerAgentKind({ traits: ['binary-output'] })`. No built-in kind carrie
 it buys (full design: `docs/initiatives/binary-output-foundational-storage.md`):
 
 - **Storage is a FOUNDATIONAL SERVICE the step selects**, never the platform's own artifact
-  store (that store holds run evidence (screenshots) not product deliverables). The pipeline
+  store (that store holds run evidence such as screenshots, not product deliverables). The pipeline
   step sets `stepOptions.binaryOutput.storageServiceId` to a catalog service carrying the
   `asset-storage` capability tag, plus optional `contextServiceIds`: catalog services the agent
   consults for generation SCOPE (an entity inventory that knows what exists, what lacks an asset,

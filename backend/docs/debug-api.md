@@ -30,8 +30,8 @@ request is made.** Five consequences, each visible in the wire contracts
    LLM-call list, because "did this call come back empty?" is a triage question a size alone
    answers ambiguously.
 3. **Finding is server-side work too.** The LLM-call list takes a `?contains=` body search
-   applied as SQL `LIKE`, so locating a known marker across thousands of calls costs one request
-  : paging every body through the caller's own context to grep it there would be the
+   applied as SQL `LIKE`, so locating a known marker across thousands of calls costs one
+   request: paging every body through the caller's own context to grep it there would be the
    multi-hundred-megabyte dump re-entering through the side door. Matched rows report **where**
    the match sits (`matchOffset`), which feeds the point read's window directly. Every other
    narrowing (`?agentKind=`, `?phase=`, `?outcome=`) is SQL for the same reason: a filter applied
@@ -280,7 +280,7 @@ stored character is reachable; a body larger than one window is read in stitched
 
 Cross-runtime parity is pinned twice: the per-store suites
 (`llm-metrics-suite`, `agent-context-suite`, `agent-search-queries-suite`,
-`provisioning-log-suite`) drive the real SQL on both runtimes; including the search predicate,
+`provisioning-log-suite`) drive the real SQL on both runtimes, including the search predicate,
 the match offsets (in code points, against astral-plane characters) and the offset windows, and
 `suites/integration-public-debug.ts` drives the HTTP surface end to end and asserts every sink
 reads `available: true` on the conformance facades (all of which wire the stores), so a facade

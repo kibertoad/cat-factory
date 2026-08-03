@@ -88,11 +88,10 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      the handler.
 
 Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_ALLOW_HTTP_URLS`
-
-- a loopback/LAN `ENVIRONMENTS_ALLOW_URL_HOSTS` allow-list: `localhost`, `127.0.0.1`,
-  `host.docker.internal`, `.localhost`, `.local`, `.nip.io`, `.sslip.io`) so the `http://localhost`
-  / ingress-host URL the provider returns is accepted. Add more hosts via
-  `ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
+plus a loopback/LAN `ENVIRONMENTS_ALLOW_URL_HOSTS` allow-list: `localhost`, `127.0.0.1`,
+`host.docker.internal`, `.localhost`, `.local`, `.nip.io`, `.sslip.io`) so the `http://localhost`
+/ ingress-host URL the provider returns is accepted. Add more hosts via
+`ENVIRONMENTS_ALLOW_URL_HOSTS`. Hosted facades keep the strict public-https default.
 
 ### Networking from WSL2 (Windows)
 

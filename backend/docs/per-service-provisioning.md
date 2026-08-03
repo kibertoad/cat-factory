@@ -25,7 +25,7 @@ The model separates two ownerships that used to be tangled in a single per-works
 `environment_connections` row plus a per-service `local`/`ephemeral` toggle:
 
 - **The service (repo) owns the "what + where".** A service-frame `Block` carries a
-  `provisioning` field declaring a **`provisionType`** plus the in-repo specifics, where its
+  `provisioning` field declaring a **`provisionType`** plus the in-repo specifics: where its
   Kubernetes manifests live, how to render them, its compose path, or a custom `manifestId`.
 - **The workspace owns the "how".** Per provision type, a **handler** = an **engine** + a
   connection (apiserver URL + token, or an HTTP management API). The same service config runs
@@ -33,8 +33,8 @@ The model separates two ownerships that used to be tangled in a single per-works
 - **In local mode, a user may override the workspace handler** for a type (the "this-machine"
   override), e.g. point the kube handler at the developer's own cluster.
 
-At run time the `deployer` step **merges** the two: the service's source/render inputs with
-the workspace (or per-user) engine config: resolves a provider, and stands the environment
+At run time the `deployer` step **merges** the two (the service's source/render inputs with
+the workspace or per-user engine config), resolves a provider, and stands the environment
 up. The resolved **provision type + engine + provider** are recorded on the environment record
 and surfaced in run details. There is **no** user-facing local-vs-remote toggle any more
 (`defaultTestEnvironment` was removed): local-vs-remote is purely _which handler the workspace
@@ -63,7 +63,7 @@ service nobody got to silently produced no test environment.
 
 So a workspace records a default: `defaultProvisionType` (+ `defaultProvisionManifestId` for
 `custom`) on `workspace_settings`. `BoardService` stamps it onto every newly created service
-frame: both `addFrame` (drag-drop) and `addServiceFromRepo` (import a repo): through
+frame, both `addFrame` (drag-drop) and `addServiceFromRepo` (import a repo), through
 `newServiceFrameDefaults.ts`, alongside the workspace's default fragment selection.
 
 Three properties are load-bearing:
@@ -87,7 +87,7 @@ The setting is edited in the Infrastructure window's **Test environments** tab
 PRODUCE comes before configuring how each type is handled. With nothing recorded, the section
 preselects the first **registered** custom provider when the deployment shipped one (a
 registered provider is evidence of a deliberate platform-level integration, so it is almost
-always the right answer) falling back to a workspace-defined custom type, and otherwise opening
+always the right answer), falling back to a workspace-defined custom type, and otherwise opening
 unset. It deliberately never guesses a built-in: `kubernetes` being in the picker says nothing
 about whether this board's services use it. The suggestion is unsaved until the operator saves,
 and says so on screen. The banner carries a shareable deep link
@@ -108,7 +108,7 @@ engine to its backend with `byEngine()`.
 | `remote-kubernetes` | `kubernetes`                 | `kubernetes`     | an external managed cluster                                    |
 | `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker: `local-docker` is local-only      |
 | `remote-custom`     | `manifest` (or a custom one) | `custom`         | a BYO HTTP management API, or a code-registered native backend |
-| `none`              |:                            | `infraless`      | nothing is provisioned                                         |
+| `none`              | (none)                       | `infraless`      | nothing is provisioned                                         |
 
 The built-in `kubernetes` backend serves `local-k3s` + `remote-kubernetes`; the generic
 `manifest` HTTP backend serves `remote-custom`. A deployment can register a narrower custom
@@ -126,7 +126,7 @@ and `handlerConfigToBackendConfig`
 at provision time:
 
 - **Service-owned** (`serviceProvisioningSchema`, on the block's `provisioning`):
-  - `manifestSource`; `colocated` (a path/dir in the PR repo, read at the PR head) **or**
+  - `manifestSource`: `colocated` (a path/dir in the PR repo, read at the PR head) **or**
     `separate` (a different `owner/repo` + optional `ref` + path), both read **checkout-free**
     over the GitHub Git Data API.
   - `renderer`: `raw` (apiserver-ready manifests) or `kustomize` (a `kustomization.yaml` tree).
@@ -164,11 +164,11 @@ container**.
 
 ### Container-backed deploy-harness (kustomize / helm / Gateway-API)
 
-The in-Worker REST path can only apply pre-rendered manifests. When rendering is needed:
+The in-Worker REST path can only apply pre-rendered manifests. Rendering is needed for
 kustomize (a `secretGenerator` rewrites a content-hashed Secret name into every reference at
 build time, so the real secret must be present at render time), helm (infeasible in-process),
-image overrides, or secret injections: the work moves into a **dedicated deploy container**
-with real `kubectl` / `kustomize` / `helm`: the private
+image overrides, or secret injections; when it is, the work moves into a **dedicated deploy
+container** with real `kubectl` / `kustomize` / `helm`: the private
 [`@cat-factory/deploy-harness`](../internal/deploy-harness/README.md) image, dispatched through
 the shared runner transport as a new **`deploy`** dispatch kind (`image: 'deploy'`).
 
@@ -287,7 +287,7 @@ user always confirms/edits: nothing is applied silently. What it infers, by conf
 
 For a **`custom`** service, detection resolves the in-repo **manifest path** from the selected
 type's `defaultManifestPath` (`detectCustomManifest`, same checkout-free reader). It is
-monorepo-aware: the search is rooted at the service subtree (`directory`) or the repo root, and:
+monorepo-aware: the search is rooted at the service subtree (`directory`) or the repo root. It
 keeps the current `manifestPath` when it already points at an existing file; else checks the exact
 `<root>/<defaultPath>`; else, when the default is a **bare filename**, checks that file one level
 deep in each immediate child dir; else pre-fills the default location (noting it will be created on

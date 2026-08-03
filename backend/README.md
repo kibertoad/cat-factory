@@ -222,9 +222,8 @@ in by installing the privileged App; `GitHubAppRegistry` routes every token mint
 by the installation's owning `appId`, and `GitHubConnection.canCreateRepos`
 drives whether the bootstrap modal creates the repo directly or delegates to
 GitHub's new-repo page. See
-[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID`
-
-- `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
+[ADR 0005](./docs/adr/0005-two-app-repo-provisioning.md) (`GITHUB_PRIVILEGED_APP_ID` +
+`GITHUB_PRIVILEGED_APP_PRIVATE_KEY`).
 
 ## Document & task sources (optional)
 
@@ -234,8 +233,8 @@ Both integrations are **source-agnostic** (one provider port per source kind) an
 **opt-in**, with per-workspace credentials stored **encrypted** in D1 (no source
 secrets in `wrangler.toml`).
 
-- **Document sources** (`documents` module, migration `0012_document_sources.sql`)
- : import a page, **plan** it into `services → modules → tasks` (LLM or a
+- **Document sources** (`documents` module, migration `0012_document_sources.sql`):
+  import a page, **plan** it into `services → modules → tasks` (LLM or a
   deterministic heading parser), **spawn** that structure onto the board, or link
   it to a task. Ships Confluence Cloud + Notion providers. See
   [`docs/document-sources.md`](./docs/document-sources.md).
@@ -311,7 +310,7 @@ The built-in tier ships as code in
 [`@cat-factory/prompt-fragments`](./packages/prompt-fragments/README.md); on top
 of it the `fragmentLibrary` module (migration `0020_prompt_fragments.sql`) adds a
 **tenant-scoped, editable** catalog. A resolved catalog is the merge of three
-tiers (**built-in ∪ account ∪ workspace**) later tiers overriding earlier ones
+tiers (**built-in ∪ account ∪ workspace**), later tiers overriding earlier ones
 by stable `id` (and a tombstone row suppresses one). Fragments can be
 hand-authored or **sourced from a repo** (Markdown + YAML frontmatter), tracked
 with a sync cursor (`source_sha`) so "check for changes" is a cheap comparison.
@@ -692,7 +691,7 @@ needs `ENCRYPTION_KEY`). The overall flavour precedence is **subscription > dire
 ("subscriptions always win"): connecting a dual-mode vendor token upgrades that model for the
 workspace, and subscription-only models (Opus/Sonnet, GPT-5.x) run _only_ this way. Subscription
 runs are flat-rate **quota** and are exempt from the monetary spend gate. One nuance: the
-**individual-use-only** subscriptions; Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT/Codex;
+**individual-use-only** subscriptions, Claude (Pro/Max), GLM (Z.ai Coding Plan) and ChatGPT/Codex,
 are **never pooled on a workspace**; each user connects their own under **Personal
 subscriptions** and only that user's runs use it (organizations use a direct provider API key
 instead). See [`docs/individual-subscription-usage.md`](./docs/individual-subscription-usage.md).
@@ -703,8 +702,8 @@ instead). See [`docs/individual-subscription-usage.md`](./docs/individual-subscr
 
 #### Container implementation (running agents on a real checkout)
 
-The phases that must operate on the repository: `coder` (implementation), `mocker` (WireMock
-mocks) and `playwright` (end-to-end tests): run inside a per-run Cloudflare Container that
+The phases that must operate on the repository, `coder` (implementation), `mocker` (WireMock
+mocks) and `playwright` (end-to-end tests), run inside a per-run Cloudflare Container that
 clones the repo, edits files and opens a PR, instead of as a single inline LLM call. Every other
 phase (architect, reviewer, tester, the `acceptance` scenario writer, …) stays inline. This is
 **always on** (there is no opt-out flag) so its prerequisites are mandatory and the Worker
@@ -722,7 +721,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
 > unblocked. The container image is pinned by the `[[containers]].image` GHCR tag:
 > use a version tag, not `latest`, for reproducible deploys.

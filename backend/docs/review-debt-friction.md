@@ -80,8 +80,8 @@ Deliberately **excluded**:
 - Failure-remediation cards (`ci_failed`, `test_failed`, `release_regression`): those are
   "the machine needs help", not "a human owes a review"; counting them would punish teams
   for flaky CI rather than slow reviewing.
-- Block-less/system cards (`platform_health`, `budget_paused`, `key_drift`, `initiative`)
- , not tied to a reviewable task at all.
+- Block-less/system cards (`platform_health`, `budget_paused`, `key_drift`, `initiative`):
+  not tied to a reviewable task at all.
 
 Rules on top of the raw rows:
 
@@ -307,7 +307,7 @@ INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
   friction on authoring new work; start-gating punishes tasks that already exist and
   interleaves badly with retries/restarts (which deliberately skip start-only gates).
   Cheap to add later as one more `RunAdmission` start-only guard reusing the same verdict.
-- **Derive debt from execution/step state.** Rejected: see the definition section:
+- **Derive debt from execution/step state.** Rejected; see the definition section: it
   conflates non-human waits, misses mid-run parks, and lacks a "waiting since" timestamp
   without new persisted state.
 - **Auto-escalating friction (e.g. growing cooldown timers).** Rejected: opaque, hostile,

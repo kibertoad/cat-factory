@@ -115,10 +115,10 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
 
   | surface             | read-only guardrail | final-answer-in-reply |
   | ------------------- | ------------------- | --------------------- |
-  | `inline`            |:                   | ✓                     |
+  | `inline`            | ✗                   | ✓                     |
   | `container-explore` | ✓                   | ✓                     |
-  | `container-coding`  | (                  |)                     |
-  | no agent step       | (                  |)                     |
+  | `container-coding`  | ✗                   | ✗                     |
+  | no agent step       | ✗                   | ✗                     |
 
   (Built-in read-only kinds keep their `isReadOnlyAgentKind` path; built-ins get final-answer
   from their own track prompts, so it's only added to _registered_ kinds here.)
@@ -139,8 +139,8 @@ The gates package depends only on kernel + contracts, never on orchestration.
 ## Authoring checklist
 
 1. Define a valibot schema → `defineStructuredOutput` for any structured kind.
-2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`
-  : the surface drives the prompt directives and the container requirement; `presentation.resultView`
+2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`:
+   the surface drives the prompt directives and the container requirement; `presentation.resultView`
    (if set) must be a `RESULT_VIEW_IDS` id.
 3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
    The `helperKind` must be a registered container kind (or a built-in helper).
