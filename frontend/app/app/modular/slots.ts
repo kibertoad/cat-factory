@@ -37,8 +37,11 @@ import type { WorkspaceMetadataFieldDefinition } from './workspace-metadata'
  *  - `tutorialTours` — the in-app tutorial catalog ({@link TutorialTour}: data-only
  *    guided tours anchored to `data-testid`s, no components). First-party tours come
  *    from `modular/tutorial-tours.ts`; a consumer contributes its own to the same slot
- *    and they appear in the launch prompt beside the built-ins, gated per tour by its
- *    `when(gates)` predicate in the same reactive `slotFilter` that gates `nav`.
+ *    and they appear in the launch prompt and the tutorial catalogue beside the built-ins.
+ *    The one gated slot `navSlotFilter` does NOT filter: a tour's `requires` is resolved by
+ *    `resolveTourCatalogue` in `useTutorialTours` instead, because the catalogue must list
+ *    the tours this board can't run yet WITH what would unlock them — an annotation a
+ *    slots-to-slots filter cannot carry.
  *  - `externalTools` — the deployment's OWN web applications, listed in their own
  *    "External tools" sidebar section ({@link ExternalToolContribution}). Each entry resolves
  *    its URL from the invocation context (user, workspace, the custom metadata below), so the

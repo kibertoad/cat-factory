@@ -826,7 +826,11 @@ The join is the step's own config, not a design's declaration, so presence is re
 at save + start and resolution re-validates against the catalog at every admission; the injected
 `binary-output/` brief states every gap (an ABSENT brief itself means "do not upload — report"),
 and what the agent declares it stored lands on `PipelineStep.binaryOutputs` with every loss
-bookkept.
+bookkept. **The trait is the ONE trait projected onto the wire** (`CustomAgentKind.binaryOutput`,
+a boolean beside `container`, asked of the REGISTRY so an ASSIGNED trait projects too), because it
+is the one with a UI consequence: the builder's picker must know which steps are refused without a
+selection. The SPA reads the report as a step-resolved SECTION, not a declared result view — see
+the placement rule under Frontend extension seams.
 
 **What MAKES those artifacts is its own registry**, and keeping it out of the foundational catalog
 is the point: the catalog is what a DESIGN is expected to consume, and a metered vendor API that
@@ -1482,7 +1486,16 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
     `resultView` id (`app/utils/catalog.ts`), which `StepResultViewHost.vue` resolves from the
     `resultViews` slot. **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the
     windows** — the shell resolves the step itself rather than via a per-window prop, so a window can't opt
-    out or forget it. **A step-backed window's run details come from `useResultViewRunMeta(viewId, …)`**,
+    out or forget it. **What decides is the RECORD's scope, not how important the record feels**: state the
+    engine writes onto a step under a rule other than "the step's own kind" CANNOT be a declared view,
+    because the declaring kind is by construction absent from part of that rule (`binaryOutputs` is written
+    on the trait-carrying-kind OR carries-a-selection UNION, so a trait-carrying kind dispatched under an
+    OVERRIDING kind records artifacts against a step whose kind declares some other window — and nothing
+    shows them). Such state is a shell SECTION beside effort / pre-PR validation, plus the same component
+    in `AgentStepDetail.vue`, which the shell is not involved in. Three things come free: a deployment
+    registers nothing, a kind keeps its own result view for its OWN output, and the run-meta hazard below
+    cannot arise — a section inherits the step its host window is already about.
+    **A step-backed window's run details come from `useResultViewRunMeta(viewId, …)`**,
     never hand-derived off `useResultView`'s `stepIndex`: a window opened OFF-PATH carries a block id and
     NO step index, so reading `stepIndex` alone blanks the model, the run id and the token telemetry on
     exactly the entry point people use.

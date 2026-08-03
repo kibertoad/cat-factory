@@ -185,9 +185,58 @@ picking what each of them runs on are halves of the same job.
 
 On first launch (once the board is up and no other startup advisory is open) the app asks
 whether the user wants a guided tour. The answer is SAVED per browser (`stores/tutorial.ts`,
-persisted like the interface tier): "no thanks" stops the prompt for good, closing without
-answering defers it to the next launch, and the command palette's "Take a tour" entry is the
-way back either way.
+persisted like the interface tier): "no thanks" stops the prompt for good, and closing without
+answering defers it to the next launch.
+
+**The prompt is the OFFER; the catalogue is the library.** `TutorialCatalogue.vue` — the
+sidebar's Help section, the palette, and a button in the prompt's own footer — lists every tour
+the deployment ships and lets any of them be started, resumed or repeated at any time. The two
+surfaces exist separately because they answer different questions, and the split is what keeps
+the prompt a short answerable one rather than a browsing surface. Start / Resume / Repeat /
+Back-to-the-tour is decided ONCE for both (`useTutorialLaunch` over the pure `tourState` +
+`launchActionFor`), or the same button would mean different things on two screens.
+
+**The catalogue lists the tours it CANNOT start, and says what would unlock each.** That is the
+reason a tour's preconditions are declared (`TutorialRequirement`: an id, a copy key, and the
+gate predicate) rather than being an anonymous `when(gates)`. A predicate can only answer "no",
+and a list that quietly omits four of six walkthroughs is indistinguishable from a deployment
+that ships two — to exactly the user who came looking for the rest. It also forces the two
+unavailable cases apart, because they need different reactions: `blocked` names something the
+reader can go and do ("A service on the board"), while `not-applicable` — requirements met, but
+every step is about a branch this board isn't on — names nothing at all, and telling them to fix
+it would send them hunting for a control that was never missing.
+
+**Tour gating therefore does NOT live in `navSlotFilter`**, unlike every other gated slot. A
+`SlotFilter` maps slots to slots, so it can only drop; `resolveTourCatalogue` (pure,
+gates-nullable, in `utils/tutorial.ts`) returns every tour with its availability and its unmet
+requirements, and `useTutorialTours` runs it once — exposing `tours` (what can start now, which
+is what the prompt and the overlay have always seen) and `catalogue` (everything, annotated). It
+reads the SAME registered `gates` service the nav filter does, through the shared-dependency
+`useOptional('gates')`, so the two can never disagree about what this board offers.
+
+Progress is per tour id and per browser. The catalogue's counter is over the WHOLE catalog, not
+the runnable part — counting only today's runnable tours would move the denominator every time a
+repo was linked, and "2 of 2 completed" on a board with four walkthroughs still waiting reads as
+a finished tutorial. `Reset progress` clears the completions, the resume point AND the saved
+launch answer, because everyone who asks for it (demoing, handing the app to a colleague) wants
+the first-launch experience back; it leaves a RUNNING tour alone, since a click about history
+must not end the walkthrough in progress. **It is therefore offered whenever ANY of those three
+is set, not only when a tour was taken** — someone who answered "No thanks" and stopped there has
+nothing completed and nothing paused, and that saved answer is the whole of what stands between
+them and the offer they came to restore.
+
+**The coach marks stand down while a tutorial-owned window is open** (`ownWindowOpen`). The
+overlay renders at `z-[70]`, above the app's own modals, because a step legitimately points INTO
+one — but no step points into the prompt or the catalogue, so there the same rule would float a
+highlight ring and a tooltip over the window the user just opened. The catalogue reaches that
+state by design: it is openable mid-tour, which is what the `continue` action is for. The overlay
+is SUPPRESSED rather than unmounted, because it holds the running tour's resolved script and a
+remount would re-resolve it against gates that may have flipped since the tour started.
+
+The arc this surface is being built along — what has landed, what each slice learned, and what
+is still open — is tracked in
+[`docs/initiatives/in-app-tutorials.md`](../../docs/initiatives/in-app-tutorials.md). This
+section is the authority on how the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
 control by its `data-testid` (the e2e anchor vocabulary — cover a control that has none by
@@ -202,16 +251,16 @@ in to type. A step whose anchor never appears within its wait is SKIPPED, becaus
 come and go with RBAC, tier, and deployment wiring: a tour is a set of opportunities, not a
 fixed script. Reaching the end having skipped steps is reported on the final card rather than
 congratulating the user on a walkthrough they did not see — and a tour that could only ever
-be abridged should not be offered at all, which is what each tour's `when(gates)` is for (the
-task-creation tour requires board write AND a service frame to add a task to).
+be abridged should not be offered at all, which is what each tour's `requires` is for (the
+task-creation tour needs board write AND a service frame to add a task to).
 
 **A step carries its own `when(gates)` when its BRANCH, not its control, is the thing that
 may not apply.** The two are different facts and only one of them is a defect: a skip means
 the control should be here and isn't, while a `when` means this board is not on that branch
 of the flow (a run parked on a decision has no approval gate, and the reverse). Reporting the
 second as an abridged tour would tell a user who saw exactly the right walkthrough that they
-missed half of it, every time. `resolveTours` (in `utils/tutorial.ts`, applied by
-`navSlotFilter`) drops the rejected steps and then drops a tour left with none, so a tour
+missed half of it, every time. `resolveTourCatalogue` (in `utils/tutorial.ts`) drops the
+rejected steps and marks a tour left with none `not-applicable` rather than ready, so a tour
 whose every step is branch-specific can never open on an empty cursor. With no gates service
 wired at all (a bare install withholds nothing) every branch survives instead, and only one
 of them can anchor — so the abridged notice ignores any skipped step that carries a `when`,
@@ -318,9 +367,12 @@ and it loses the slot soon enough — when this one is broken off past step 0.
 
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through
-`registerAppModule` — they appear in the launch prompt beside the built-ins, gated per tour
-by its `when(gates)` predicate (the same reactive gates service the nav uses, filtered in
-`navSlotFilter`). Completion is persisted per tour id, so renaming an id resets its state.
+`registerAppModule` — they appear in the prompt and the catalogue beside the built-ins, held
+back per tour by its own `requires` (resolved against the same reactive gates service the nav
+uses). A consumer writes its own requirement objects with its own copy keys; the first-party
+ones are shared constants (`TUTORIAL_REQUIREMENTS`), because a second copy of "a service on the
+board" is a second sentence to keep in step with the gate it describes. Completion is persisted
+per tour id, so renaming an id resets its state.
 
 **A built-in tour's anchors are drift-guarded** (`tutorial-tours.spec.ts`), because they are
 the one thing about a tour that nothing else in the build checks: a renamed `data-testid`

@@ -227,51 +227,104 @@ be reused: the platform configures a tool server's client, while a generation AP
 agent's own code. If the storage half ever needs the same, it should ride the same three-step
 channel rather than a second one.
 
+## The SPA surfaces
+
+Both landed together. What each is, and the one design question the downstream proposal that
+prompted them got wrong.
+
+### The read surface is a shared SECTION, not a declared result view
+
+`PipelineStep.binaryOutputs` is rendered by `BinaryOutputReport.vue`, resolved from the ACTIVE
+STEP in two places: `ResultWindowShell`'s trailing sections (beside the effort and pre-PR
+validation sections, so no result window can opt out of it) and `AgentStepDetail`, the generic
+panel a step whose kind declares no result view opens instead — the shell is not involved there,
+so both are needed and neither is a duplicate of the other.
+
+**It is deliberately NOT a `presentation.resultView` a generator kind declares.** That was the
+proposal's shape, and it cannot cover the record's own scope: `stepMayDeclareBinaryOutputs` is the
+UNION (the step's kind carries the trait, OR the step carries a selection), precisely so a
+trait-carrying kind dispatched under an OVERRIDING kind still has its artifacts recorded. A
+kind-declared view is by construction blind to that case — the step's own kind declares some other
+window, and the artifacts exist with nothing showing them. Three further things fall out of
+resolving off the step instead: a deployment registers nothing (no id, no component, no
+`RESULT_VIEW_IDS` entry); a generator stays free to declare a result view for its OWN output
+rather than choosing between its output and its artifacts; and the `useResultViewRunMeta` hazard
+disappears rather than needing discipline, since a section inherits whatever step its host
+window is already about.
+
+The rules the surface itself holds to:
+
+- **Six outcomes, one discriminant** (`binaryOutputView`): `not-started` (briefed, still queued) /
+  `configured` (briefed and dispatched, nothing recorded yet — still running, or dead before
+  settlement) / `undeclared` / `parse-failed` / `declared-none` / `stored`. Five are NOT "an empty
+  list", and copy comes from ONE exhaustive `Record` so a seventh outcome fails the typecheck
+  rather than rendering a missing key.
+- **"Never briefed" is the section's ABSENCE**, and so is a SKIPPED step's. A step with neither a
+  report nor a selection renders nothing at all, exactly as the effort section does — a row saying
+  "no binary output was expected here" would ride every step of every run. A gated-out step takes
+  the same absence: it holds a selection it never ran with, so no state describing a dispatch is
+  true of it. A step not started YET is the neighbouring case and resolves the other way — it has
+  a story ahead of it, and where the artifacts will land is worth stating in advance.
+- **Every counted loss keeps its own line and its own number.** `invalidEntries` and `omitted`
+  state their counts, and `omitted` says the list is a PREFIX.
+- **The join is derived from the step's own record**, never a catalog read: a `stored` row whose
+  service differs from `stepOptions.binaryOutput.storageServiceId` is marked, and the step's own
+  target being unknown (`targetUnknown`) separates "the catalog changed under the run" from "the
+  agent named a service that never existed". A step with NO selection has a null target and marks
+  nothing misdirected — there was nowhere it was supposed to go.
+- **The two unknown-service facts are DISJOINT FIELDS, not one list plus a flag.** The report's own
+  `unknownServices` mixes the lost target with ids the agent invented, so a surface reading it raw
+  either states the target twice or labels every unknown id as the step's own storage service and
+  drops the invented ones. `targetUnknown` owns the first and `unknownDeclaredServices` (the same
+  list, minus the target) owns the second, so naming either cannot mis-state the other — the
+  exclusion belongs in the read model, where it is tested, not in a renderer's filter.
+
+### The picker needed the trait on the wire
+
+`BINARY_OUTPUT_TRAIT` never left the backend, so the builder had no way to know which steps must
+offer a selection. It is projected onto the snapshot's custom-kind entry as
+`CustomAgentKind.binaryOutput` — a BOOLEAN beside `container`, following the precedent that the
+snapshot carries the facts the SPA branches on rather than the backend's trait vocabulary (every
+other trait is prompt-shaping with no UI consequence; the day one gains one it gets its own
+field). It is asked of the REGISTRY, not read off `def.traits`, so a trait ASSIGNED to an existing
+kind projects like a declared one; `agents.ts` conformance pins both, plus the absence of the flag
+on a kind without the trait.
+
+`BinaryOutputStepPicker.vue` then offers the RESOLVED catalog — `asset-storage`-tagged for the
+storage half (a requirement admission enforces), the whole catalog with `generation-context`-tagged
+services ordered FIRST for the context half (that tag is conventional; admission enforces existence
+only, so filtering on it would hide a choice the backend accepts). `binaryOutputPickIssues` mirrors
+the admission refusals inline — its `unknown_service` / `not_storage_capable` members are kernel's
+`BinaryOutputConfigIssue.problem` values verbatim — in translated copy, since the backend's own
+prose is a "show details" detail rather than a description. Two frontend-only conditions sit beside
+them, and keeping them apart is the point: an UNREACHABLE catalog is not an EMPTY one, and an
+outage must not flag every selection for re-pick over something that changed nothing.
+
+It stays in BOTH interface tiers. The variant picker beside it uses `showOverrideField` because
+picking a variant OVERRIDES what the kind ships; this selection is REQUIRED, and hiding a required
+input in basic mode leaves a step that cannot be saved with no way to find out why.
+
+### What the generative half still owes these surfaces
+
+Both surfaces were written against the storage-only shape and this change widens it, so each has a
+counterpart here rather than a follow-up: the report's `unknownGenerators` and each stored row's
+`generator` are rendered beside their storage twins (an integration id the deployment does not
+register is the generative `unknownDeclaredServices`, and dropping it would re-open exactly the
+silent-loss hole that field exists to close), and the picker offers `generatorIds` + `modalities`
+with `binaryOutputPickIssues` mirroring `binary_output_generator_invalid` inline.
+
+The picker's generative half needed one thing the other two did not: the integrations live in the
+deployment's CODE, so there is no catalog read to filter. They ride the workspace snapshot as
+`binaryGenerators` — the same route `CustomAgentKind.binaryOutput` takes, and for the same reason
+(the snapshot carries the deployment-registered facts the SPA branches on). The projection is
+IDENTITY ONLY — id, name, summary, modalities, mediaTypes — and deliberately omits the credential's
+KEY NAME: the picker has no use for it, and a workspace viewer has no business learning which
+environment variables the deployment sets.
+
 ## Remaining work
 
-- [ ] **SPA pipeline-builder picker.** The REST/pipeline API carries `stepOptions.binaryOutput`;
-      there is no Vue picker yet. It now has THREE halves to offer, and the generative one has a
-      shape the other two don't: the integrations come from the deployment's code, so the picker
-      needs a read for them (there is no catalog endpoint that returns them today) and it should
-      offer the step's `modalities` beside the ids, since that is what makes the admission
-      coverage refusal reachable from the builder rather than at start. It belongs beside the variant/skill step options, listing the
-      workspace's resolved catalog filtered to `asset-storage`-tagged services for the storage
-      half (and `generation-context`-tagged first for the context half). No longer blocked: the
-      foundational-services management surface landed with
-      [ADR 0031](../../backend/docs/adr/0031-foundational-services.md), so the resolved catalog
-      the picker needs is already reachable from the SPA.
-- [ ] **Step result view.** `PipelineStep.binaryOutputs` is recorded but no result window renders
-      it; a small panel listing the stored artifacts (and the unknown-service / invalid-entry
-      warnings) belongs in the `resultViews` slot.
 - [ ] **A worked example generator** in `backend/internal/example-custom-agent`, once a real
       image-generation harness path exists to demonstrate against.
 
-### Both SPA items are wanted as contributions, and the result view is the one to take first
-
-Asked by a downstream deployment adopting ADR 0031, whose registered estate now has nothing
-between it and a generator step but these two. The answer is yes to both, as upstream PRs rather
-than a forked layer — they are additive slots by construction (a step-options component beside the
-variant/skill pickers; one `resultViews` entry), which is exactly the shape the modular seams
-exist to take from outside.
-
-Take the **result view first**. The declaration parsing already keeps `unknownServices` /
-`invalidEntries` / `omitted` apart precisely so a partial failure is legible, and today all of it
-degrades loudly into a database column — so the view is not new behaviour, it is the missing half
-of behaviour that already exists. Two rules bind it and are easy to miss:
-
-- **Read the run's details through `useResultViewRunMeta(viewId, …)`**, never off `useResultView`'s
-  `stepIndex`. A window opened OFF-PATH carries a block id and no step index, and that is the entry
-  point people actually use — hand-deriving blanks the model, run id and token telemetry there.
-- **"Absent" and "zero" must not render the same.** A step that stored nothing and a step whose
-  declaration named a service the catalog does not know are different states with different fixes,
-  and the second must name the id rather than showing an empty list.
-
-For the **picker**, the constraint that is not obvious from the API shape: presence is refused
-structurally at save AND at start, and resolution re-validates against the catalog at every
-admission — so the picker filters the workspace's RESOLVED catalog (`asset-storage`-tagged for the
-storage half) and must not offer an id from a stale client-side copy, or a step saves clean and
-fails at admission. It is also a plain step OPTION, not an override of a default, so it stays in
-both interface tiers rather than being hidden in `basic`.
-
-When the committed scope completes, convert this tracker into a numbered ADR under
-`backend/docs/adr/` and `git rm` it in the same PR.
+When that lands, convert this tracker into a numbered ADR under `backend/docs/adr/` and `git rm`
+it in the same PR.

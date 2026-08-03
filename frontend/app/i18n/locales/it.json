@@ -2162,7 +2162,6 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
-        "tutorial": "Fai un tour",
         "foundationalServices": "Servizi fondamentali"
       },
       "keywords": {
@@ -3733,7 +3732,17 @@
       "consensusGroupsActive": "Questo passo esegue il gruppo selezionato. Deseleziona tutti i gruppi per configurare qui i partecipanti.",
       "consensusGroupAlways": "sempre",
       "variantLabel": "Variante del prompt",
-      "variantShipped": "Prompt predefinito"
+      "variantShipped": "Prompt predefinito",
+      "binaryOutputStorage": "Archivia tramite",
+      "binaryOutputContext": "Contesto della generazione",
+      "binaryOutputPlaceholder": "Scegli un servizio di archiviazione",
+      "binaryOutputContextPlaceholder": "Facoltativo: servizi che delimitano la generazione",
+      "binaryOutputNeedsPick": "Un passo che genera output binari non ha un servizio di archiviazione scelto. Scegline uno prima di salvare.",
+      "binaryOutputNoStorage": "Nessun servizio nel catalogo di questa board dichiara la capacità {capability}. Registrane uno, oppure aggiungi la capacità al servizio che intendevi, nei servizi fondamentali.",
+      "binaryOutputMissing": "Questo servizio di archiviazione non è più nel catalogo; scegline un altro.",
+      "binaryOutputNotStorage": "Questo servizio non dichiara più la capacità {capability}, quindi le esecuzioni verranno rifiutate; scegline un altro.",
+      "binaryOutputContextMissing": "Questi servizi di contesto non sono più nel catalogo: {ids}",
+      "binaryOutputUnavailable": "Il catalogo dei servizi fondamentali non è raggiungibile, quindi qui non si può ancora scegliere nulla."
     },
     "progress": {
       "status": {
@@ -4384,6 +4393,47 @@
       "unlinkSourceFailed": "Impossibile scollegare il repository"
     }
   },
+  "binaryOutput": {
+    "heading": "Output binari",
+    "target": "Servizio di archiviazione",
+    "targetNone": "Non registrato per questo passo",
+    "contextServices": "Contesto della generazione",
+    "misdirectedBadge": "Altro servizio",
+    "unknownBadge": "Fuori catalogo",
+    "storedCount": "{outcome}, 1 artefatto | {outcome}, {count} artefatti",
+    "state": {
+      "notStarted": {
+        "summary": "Non ancora avviato",
+        "detail": "Questo passo non è ancora iniziato. Quando verrà eseguito, archivierà i suoi output binari tramite il servizio indicato sotto."
+      },
+      "configured": {
+        "summary": "Ancora nulla di registrato",
+        "detail": "Questo passo è configurato per archiviare output binari, ma non ne ha ancora segnalato alcuno. È ancora in corso, oppure si è concluso prima di segnalarlo."
+      },
+      "undeclared": {
+        "summary": "Nessuna dichiarazione",
+        "detail": "Questo passo si è concluso senza dichiarare che cosa avesse archiviato. Potrebbe aver archiviato qualcosa oppure no; in entrambi i casi non è stato registrato nulla."
+      },
+      "parseFailed": {
+        "summary": "Dichiarazione illeggibile",
+        "detail": "Questo passo si è concluso con una dichiarazione che la piattaforma non ha potuto leggere, quindi non è stato registrato nulla. Ciò che ha archiviato manca nell'elenco qui sotto."
+      },
+      "declaredNone": {
+        "summary": "Nulla archiviato",
+        "detail": "L'agente ha segnalato di non aver archiviato alcun artefatto binario. È un esito valido, non un errore."
+      },
+      "stored": {
+        "summary": "Archiviato"
+      }
+    },
+    "warning": {
+      "unknownServices": "Ha indicato un servizio che il catalogo non contiene: {ids}. La voce viene conservata come dichiarata; verifica l'identificativo nel catalogo della board. | Ha indicato servizi che il catalogo non contiene: {ids}. Le voci vengono conservate come dichiarate; verifica gli identificativi nel catalogo della board.",
+      "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
+      "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
+      "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
+      "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco."
+    }
+  },
   "brainstorm": {
     "title": {
       "architecture": "Brainstorm sull'architettura",
@@ -4823,7 +4873,9 @@
     "accountSettings": "Impostazioni dell'account",
     "operatorDashboard": "Osservabilità della piattaforma",
     "reports": "Report",
-    "foundationalServices": "Servizi fondamentali"
+    "foundationalServices": "Servizi fondamentali",
+    "tutorials": "Tutorial",
+    "help": "Aiuto"
   },
   "errors": {
     "generic": {
@@ -6127,13 +6179,41 @@
     "prompt": {
       "title": "Fare un rapido tour?",
       "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
-      "start": "Inizia",
-      "restart": "Ripeti",
-      "resume": "Riprendi",
-      "completed": "Completato",
       "decline": "No grazie",
       "later": "Forse più tardi",
-      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board."
+      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board.",
+      "browse": "Vedi tutti i tutorial"
+    },
+    "catalogue": {
+      "title": "Tutorial",
+      "intro": "Tour guidati che evidenziano i controlli reali mentre procedi. Puoi avviarne uno quando vuoi e ripeterlo tutte le volte che ti serve.",
+      "progress": "{completed} di {total} completati",
+      "steps": "1 passaggio | {count} passaggi",
+      "blocked": "Disponibile quando avrai:",
+      "notApplicable": "In questo momento non c'è nulla su questa board che questo tour possa mostrare.",
+      "empty": "Questa installazione non include tutorial.",
+      "reset": "Reimposta i progressi",
+      "resetHint": "Dimentica quali tutorial hai completato e ti riproporrà il tour al prossimo accesso."
+    },
+    "action": {
+      "start": "Inizia",
+      "resume": "Riprendi",
+      "restart": "Ripeti",
+      "continue": "Torna al tour"
+    },
+    "status": {
+      "notStarted": "Non iniziato",
+      "inProgress": "In corso",
+      "paused": "In pausa",
+      "completed": "Completato"
+    },
+    "requirements": {
+      "boardWrite": "L'autorizzazione a modificare questa board",
+      "sourceControl": "Un sistema di controllo del codice collegato",
+      "service": "Un servizio sulla board",
+      "task": "Un'attività sulla board",
+      "waitingAnswer": "Un'esecuzione in attesa di una tua risposta",
+      "finishedRun": "Un'esecuzione conclusa con successo"
     },
     "overlay": {
       "next": "Avanti",

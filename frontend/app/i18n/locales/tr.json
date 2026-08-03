@@ -127,7 +127,9 @@
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
     "reports": "Raporlar",
-    "foundationalServices": "Temel hizmetler"
+    "foundationalServices": "Temel hizmetler",
+    "tutorials": "Eğitimler",
+    "help": "Yardım"
   },
   "board": {
     "toast": {
@@ -2084,7 +2086,6 @@
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
         "toggleUiMode": "Arayüz modunu değiştir",
-        "tutorial": "Tura başla",
         "foundationalServices": "Temel hizmetler"
       },
       "keywords": {
@@ -4095,7 +4096,17 @@
       "consensusGroupsActive": "Bu adım seçili grubu çalıştırır. Katılımcıları burada ayarlamak için tüm grupların seçimini kaldır.",
       "consensusGroupAlways": "her zaman",
       "variantLabel": "İstem varyantı",
-      "variantShipped": "Varsayılan istem"
+      "variantShipped": "Varsayılan istem",
+      "binaryOutputStorage": "Şuraya depola",
+      "binaryOutputContext": "Üretim bağlamı",
+      "binaryOutputPlaceholder": "Bir depolama hizmeti seç",
+      "binaryOutputContextPlaceholder": "İsteğe bağlı: üretimin kapsamını belirleyen hizmetler",
+      "binaryOutputNeedsPick": "İkili çıktı üreten bir adımda depolama hizmeti seçilmemiş. Kaydetmeden önce birini seç.",
+      "binaryOutputNoStorage": "Bu panonun katalogundaki hiçbir hizmet {capability} yeteneğini bildirmiyor. Temel hizmetler altında bir hizmet kaydet ya da kastettiğin hizmete bu yeteneği ekle.",
+      "binaryOutputMissing": "Bu depolama hizmeti artık katalogda yok; başka birini seç.",
+      "binaryOutputNotStorage": "Bu hizmet artık {capability} yeteneğini bildirmiyor, bu yüzden çalıştırmalar reddedilecek; başka birini seç.",
+      "binaryOutputContextMissing": "Bu bağlam hizmetleri artık katalogda yok: {ids}",
+      "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor."
     },
     "progress": {
       "status": {
@@ -5357,6 +5368,47 @@
       "unlinkSourceFailed": "Deponun bağlantısı kaldırılamadı"
     }
   },
+  "binaryOutput": {
+    "heading": "İkili çıktılar",
+    "target": "Depolama hizmeti",
+    "targetNone": "Bu adım için kaydedilmedi",
+    "contextServices": "Üretim bağlamı",
+    "misdirectedBadge": "Başka hizmet",
+    "unknownBadge": "Katalogda yok",
+    "storedCount": "{outcome}, 1 ürün | {outcome}, {count} ürün",
+    "state": {
+      "notStarted": {
+        "summary": "Henüz başlamadı",
+        "detail": "Bu adım henüz başlamadı. Çalıştığında ikili çıktılarını aşağıdaki hizmet üzerinden depolayacak."
+      },
+      "configured": {
+        "summary": "Henüz bir şey kaydedilmedi",
+        "detail": "Bu adım ikili çıktıları depolayacak şekilde ayarlandı ama henüz hiçbirini bildirmedi. Ya hâlâ çalışıyor ya da bildirmeden önce sona erdi."
+      },
+      "undeclared": {
+        "summary": "Bildirim yok",
+        "detail": "Bu adım ne depoladığını bildirmeden sona erdi. Bir şey depolamış da olabilir, depolamamış da; her iki durumda da hiçbir şey kaydedilmedi."
+      },
+      "parseFailed": {
+        "summary": "Bildirim okunamadı",
+        "detail": "Bu adım, platformun okuyamadığı bir bildirimle sona erdi, bu yüzden hiçbir şey kaydedilmedi. Depoladığı ne varsa aşağıdaki listede yok."
+      },
+      "declaredNone": {
+        "summary": "Hiçbir şey depolamadı",
+        "detail": "Ajan hiçbir ikili ürün depolamadığını bildirdi. Bu geçerli bir sonuçtur, bir hata değildir."
+      },
+      "stored": {
+        "summary": "Depolandı"
+      }
+    },
+    "warning": {
+      "unknownServices": "Katalogda bulunmayan bir hizmet adı verdi: {ids}. Kayıt bildirildiği gibi saklanır; kimliği pano kataloguyla karşılaştır. | Katalogda bulunmayan hizmet adları verdi: {ids}. Kayıtları bildirildiği gibi saklanır; kimlikleri pano kataloguyla karşılaştır.",
+      "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
+      "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
+      "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
+      "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor."
+    }
+  },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",
     "description": "Prompt sürümlerini ve modelleri notlandırılmış fixture'lara karşı deneyin, bir hakem modeli tarafından puanlanır.",
@@ -6127,13 +6179,41 @@
     "prompt": {
       "title": "Hızlı bir tur ister misiniz?",
       "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
-      "start": "Başla",
-      "restart": "Tekrarla",
-      "resume": "Devam et",
-      "completed": "Tamamlandı",
       "decline": "Hayır, teşekkürler",
       "later": "Belki daha sonra",
-      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok."
+      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok.",
+      "browse": "Tüm eğitimleri gör"
+    },
+    "catalogue": {
+      "title": "Eğitimler",
+      "intro": "İlerledikçe gerçek denetimleri vurgulayan rehberli turlar. İstediğiniz zaman herhangi birini başlatabilir, dilediğiniz kadar tekrar edebilirsiniz.",
+      "progress": "{total} turdan {completed} tanesi tamamlandı",
+      "steps": "1 adım | {count} adım",
+      "blocked": "Şunlar olduğunda kullanılabilir:",
+      "notApplicable": "Şu anda bu panoda bu turun gösterebileceği bir şey yok.",
+      "empty": "Bu kurulumda eğitim bulunmuyor.",
+      "reset": "İlerlemeyi sıfırla",
+      "resetHint": "Hangi eğitimleri tamamladığınızı unutur ve bir sonraki ziyaretinizde turu yeniden önerir."
+    },
+    "action": {
+      "start": "Başla",
+      "resume": "Devam et",
+      "restart": "Tekrarla",
+      "continue": "Tura dön"
+    },
+    "status": {
+      "notStarted": "Başlanmadı",
+      "inProgress": "Sürüyor",
+      "paused": "Duraklatıldı",
+      "completed": "Tamamlandı"
+    },
+    "requirements": {
+      "boardWrite": "Bu panoyu düzenleme izni",
+      "sourceControl": "Bağlı bir kaynak kontrol sağlayıcısı",
+      "service": "Panoda bir servis",
+      "task": "Panoda bir görev",
+      "waitingAnswer": "Yanıtınızı bekleyen bir çalıştırma",
+      "finishedRun": "Başarıyla tamamlanmış bir çalıştırma"
     },
     "overlay": {
       "next": "İleri",
