@@ -1,6 +1,6 @@
 # Initiative: platform operator observability & alerting
 
-**Status:** in progress (read-path dashboard + OpenTelemetry export + threshold alerting landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** COMPLETE (every slice landed; convert to an ADR on the next pass) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -50,17 +50,68 @@ delivered through the existing `NotificationChannel` seam.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                | Status     | PR      |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
-| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done    | #1157   |
-| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done    | #1157   |
-| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done    | #1157   |
-| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done    | #1165   |
-| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts): needs a queryable gate-attempt projection   | ⬜ todo    |         |
-| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ✅ done    | this PR |
-| 6   | Alert threshold config surface (env defaults done; settings UI todo)                                                 | 🟨 partial |         |
-| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo    |         |
-| 8   | Export the aggregates via OpenTelemetry (periodic OTLP gauge push, per account; both runtimes)                       | ✅ done    | this PR |
+| #   | Slice                                                                                                                | Status  | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | #1157   |
+| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | #1157   |
+| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | #1157   |
+| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done | #1165   |
+| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts): needs a queryable gate-attempt projection   | ✅ done | this PR |
+| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ✅ done | landed  |
+| 6   | Alert threshold config surface (env defaults + the per-account settings UI)                                          | ✅ done | this PR |
+| 7   | Daily rollup table for >3d trends (the `30d`/`90d` windows), written by the retention sweep                          | ✅ done | this PR |
+| 8   | Export the aggregates via OpenTelemetry (periodic OTLP gauge push, per account; both runtimes)                       | ✅ done | landed  |
+
+### What slices 4b, 6 and 7 shipped (and the alert deep-link)
+
+**4b, the settled-gate projection.** The blocker was never the rollup; it was that a gate's
+`attempts` / `attemptLog` live INSIDE the run's `detail` JSON blob as `steps[].gate.*`, where no
+`GROUP BY` reaches without dialect-divergent JSON-array expansion over the engine's internal step
+serialization. So the engine now writes ONE flat row per gate that reaches a terminal verdict
+(`gate_outcomes`, kernel `GateOutcomeRepository`, D1 ⇄ Drizzle + conformance), and the statistic is
+an ordinary aggregate over columns.
+
+- **One row per settled GATE, not per attempt.** The per-round history is already durable on the
+  step and is what the run UI reads; what an operator cannot otherwise ask is how a gate ENDED and
+  how much helper work it took, which is one row's worth of facts.
+- **The row id is DERIVED** (`<runId>:<stepIndex>:<outcome>`), not minted, because the durable
+  drivers replay: a minted id would turn one settle into two rows and inflate every number the
+  table exists to report. A step re-run that ends DIFFERENTLY still records its own row.
+- **`cleanPasses` is reported apart from `passed`**: a gate the precheck satisfied with nothing
+  spun up versus one the fixer got green on the third try are the same `passed` and completely
+  different platform health. Same reasoning splits `helperFailures` (the fixer's own job crashed)
+  from the rest of `attempts` (it ran and left the check red): a platform fault versus a product one.
+- It is in the MAIN store beside `agent_runs`, not the telemetry store, so it is account-scoped
+  through the same `workspaces` sub-select as every other platform rollup rather than needing a
+  cross-store join or a workspace-id list threaded through the read.
+
+**7, the daily rollup.** `platform_run_days` (one row per workspace / UTC day / status / failure
+kind) is materialised by the retention sweep on both facades and serves the two NEW windows,
+`30d` and `90d`. It is REWRITTEN in place over a short trailing lookback rather than appended, so
+the still-accruing day is corrected on each pass and a missed pass self-heals. The projection SAYS
+which store answered (`source`) and how far the rollup reaches (`rolledUpThrough`), because an
+un-materialised rollup and an idle quarter produce the same empty series and are opposite facts.
+The dashboard renders "no rollup yet" / "the rollup is behind" / "complete through <date>" rather
+than 90 days of confident zeros. Coordinated with `storage-and-retention.md` §1b.
+
+**6, the settings surface.** The alert ceilings now layer per account:
+`config.platformAlerts` on the existing account-settings row (no migration), merged over the
+env-derived deployment defaults by the pure `resolveAccountAlertConfig`. Two rules make it work:
+ABSENT INHERITS and never means zero (a zero is a live setting here: `minStalledPriorRuns: 0`
+says "page even on an idle window"), which is why the editor keeps blank and `0` apart end to end
+and sends only the fields an admin filled in; and `enabled` is a ONE-WAY switch, because the env
+var decides whether the sweep runs at all and no stored row can start a timer that was never
+started. An unreadable settings row costs the account its OVERRIDES, not its alerting.
+
+**The alert deep-link.** A `platform_health` card now carries the failing runs it aggregated
+(`payload.platformFailingRuns`, capped per workspace by a window function so a noisy workspace
+cannot starve another's card, plus `platformFailedTotal` so the cap states what it dropped). That
+is only safe because the sweep now raises on a STATE CHANGE rather than every pass: it compares the
+open card's stored reason set to the one now firing and skips entirely when they match, so a
+volatile run list on the payload no longer re-toasts the inbox for the length of an incident. The
+links are omitted entirely (not sent empty) for a condition with no failing run behind it, and
+the evidence read is best-effort inside its own catch, because the deep link is an enhancement and
+the ALERT is the thing that matters.
 
 ### What slice 8 (OpenTelemetry export) shipped
 
@@ -124,10 +175,9 @@ release); this watches the platform.
   Independent of the OTel exporter: alerts fan out through the notification channel (in-app +
   Slack; `platform_health` is a routable Slack type). A no-op unless the notifications module AND
   the platform-observability read are both wired, so a mothership local node (no DB) is unaffected.
-- **Slice 6 remainder:** the env-default config surface is done here; the per-deployment settings
-  UI (editing thresholds without a redeploy) is the outstanding half of slice 6.
+- **Slice 6 remainder:** closed. See the per-account settings surface above.
 
-### Why slice 4 was split (4a done, 4b deferred)
+### Why slice 4 was split (4a first, 4b behind its own projection)
 
 The original slice 4 bundled duration percentiles with per-step/gate attempt stats. They
 turned out to be two different modelling problems:
@@ -139,7 +189,7 @@ turned out to be two different modelling problems:
   aggregate) uses the `row_number()/count()` cumulative-fraction order-statistic workaround.
   The conformance suite seeds a known distribution and pins that both dialects return the
   same values.
-- **4b (gate/CI-fixer attempt stats) is NOT cleanly SQL-aggregatable today.** Gate attempts
+- **4b (gate/CI-fixer attempt stats) was NOT cleanly SQL-aggregatable at the time.** Gate attempts
   (`attempts` / `attemptLog`) and CI-fixer/exhaustion state live INSIDE the per-run `detail`
   JSON blob (`steps[].gate.*`), not in queryable columns. Rolling them up in SQL would mean
   dialect-divergent JSON-array expansion (`json_each` vs `jsonb_array_elements`) reaching into
@@ -147,7 +197,7 @@ turned out to be two different modelling problems:
   and the one-GROUP-BY rule. The right shape is a dedicated **queryable gate-attempt
   projection** (a small telemetry-style table written when a gate round settles, mirrored on
   both runtimes) that these rollups then GROUP BY: a self-contained slice that touches the
-  gate machinery, kept separate from the percentiles read.
+  gate machinery, kept separate from the percentiles read. That is what shipped: see slice 4b above.
 
 ## What the read-path PR (slices 1–3) shipped
 

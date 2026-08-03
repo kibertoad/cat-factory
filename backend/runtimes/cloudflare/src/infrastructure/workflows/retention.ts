@@ -4,8 +4,10 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  GateOutcomeRepository,
   NotificationRepository,
   PasswordResetTokenRepository,
+  PlatformMetricsRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   RateLimitRepository,
@@ -13,7 +15,7 @@ import type {
   TokenUsageRepository,
   Logger,
 } from '@cat-factory/kernel'
-import { createRetentionPass } from '@cat-factory/orchestration'
+import { RUN_DAY_ROLLUP_LOOKBACK_MS, createRetentionPass } from '@cat-factory/orchestration'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -48,6 +50,10 @@ interface RetentionPolicy {
   provisioningLogMs: number
   /** Resolved (acted/dismissed) notifications; open cards are never pruned. */
   notificationsMs: number
+  /** Settled-gate projection (`gate_outcomes`) behind the dashboard's attempt statistics. */
+  gateOutcomesMs: number
+  /** Daily run rollup (`platform_run_days`) behind the `30d` / `90d` dashboard windows. */
+  runDaysMs: number
 }
 
 export interface RetentionDeps {
@@ -69,6 +75,13 @@ export interface RetentionDeps {
   passwordResetTokenRepository?: PasswordResetTokenRepository
   /** Resolved notifications past the retention window (open cards are never pruned). */
   notificationRepository: NotificationRepository
+  /** Settled-gate projection: pruned to `gateOutcomesMs`. */
+  gateOutcomeRepository: GateOutcomeRepository
+  /**
+   * The daily run rollup: this pass both MATERIALISES it (a short trailing window, so a missed
+   * pass self-heals) and prunes it to `runDaysMs`.
+   */
+  platformMetricsRepository: PlatformMetricsRepository
   clock: Clock
   policy: RetentionPolicy
   /** Names the table behind each isolated prune failure. Absent ⇒ the failures are silent. */
@@ -88,6 +101,10 @@ export interface RetentionResult {
   provisioningLog: number
   passwordResetTokens: number
   notifications: number
+  gateOutcomes: number
+  runDays: number
+  /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
+  runDaysRolledUp: number
   /**
    * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
    * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
@@ -119,6 +136,8 @@ export async function sweepRetention({
   provisioningLogRepository,
   passwordResetTokenRepository,
   notificationRepository,
+  gateOutcomeRepository,
+  platformMetricsRepository,
   clock,
   policy,
   logger,
@@ -178,6 +197,19 @@ export async function sweepRetention({
     // Resolved (acted/dismissed) notifications past the window; open cards untouched.
     notifications: await pass.prune('notifications', policy.notificationsMs, now, (c) =>
       notificationRepository.deleteResolvedOlderThan(c),
+    ),
+    // Settled gates behind the dashboard's attempt statistics.
+    gateOutcomes: await pass.prune('gate_outcomes', policy.gateOutcomesMs, now, (c) =>
+      gateOutcomeRepository.deleteOlderThan(c),
+    ),
+    // Materialise the daily rollup BEFORE pruning it, so a pass never prunes a window it is
+    // about to rewrite, and recompute a short trailing lookback so a missed pass self-heals
+    // rather than leaving a day permanently half-counted.
+    runDaysRolledUp: await pass.materialize('platform_run_days', () =>
+      platformMetricsRepository.rollupRunDays(now - RUN_DAY_ROLLUP_LOOKBACK_MS, now),
+    ),
+    runDays: await pass.prune('platform_run_days', policy.runDaysMs, now, (c) =>
+      platformMetricsRepository.deleteRunDaysOlderThan(c),
     ),
     failedTables: pass.failed,
   }

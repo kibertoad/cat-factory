@@ -6,6 +6,8 @@ import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repos
 import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D1GateOutcomeRepository'
+import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
@@ -28,6 +30,8 @@ const POLICY = {
   llmCallMetricsMs: 3 * DAY,
   provisioningLogMs: 14 * DAY,
   notificationsMs: 90 * DAY,
+  gateOutcomesMs: 90 * DAY,
+  runDaysMs: 400 * DAY,
 }
 
 function deps() {
@@ -45,6 +49,9 @@ function deps() {
     // Subscription quota-cycle counters live in the main DB (migration 0047).
     subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
     notificationRepository: new D1NotificationRepository({ db }),
+    // Both operator-observability projections live in the main DB beside `agent_runs`.
+    gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -245,6 +252,8 @@ describe('storage retention sweep', () => {
         llmCallMetricsMs: 0,
         provisioningLogMs: 0,
         notificationsMs: 0,
+        gateOutcomesMs: 0,
+        runDaysMs: 0,
       },
     })
 
@@ -262,6 +271,11 @@ describe('storage retention sweep', () => {
       provisioningLog: 0,
       passwordResetTokens: 0,
       notifications: 0,
+      gateOutcomes: 0,
+      runDays: 0,
+      // The rollup is a WRITE with every window disabled around it, so it still runs: a
+      // disabled RETENTION window means "never delete", not "stop materialising".
+      runDaysRolledUp: expect.any(Number),
       // A clean pass names no failed table. This list is what distinguishes a prune that
       // reclaimed nothing from one that could not run — both report 0 rows.
       failedTables: [],

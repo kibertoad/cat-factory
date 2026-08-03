@@ -10,12 +10,12 @@ import type {
   AccountSettingsRepository,
   AgentContextSnapshotRepository,
   AgentPromptRepository,
-  WorkspaceAgentSettingsRepository,
   AgentRunRepository,
   AgentSearchQueryRepository,
   BinaryArtifactMetadataStore,
   BlockRepository,
   BrainstormSessionRepository,
+  CapabilityCredentialRepository,
   ClarityReviewRepository,
   Clock,
   ConsensusGroupRepository,
@@ -23,6 +23,7 @@ import type {
   DocInterviewRepository,
   EmailConnectionRepository,
   ExecutionRepository,
+  GateOutcomeRepository,
   IncidentEnrichmentConnectionRepository,
   InitiativeRepository,
   KaizenGradingRepository,
@@ -37,9 +38,9 @@ import type {
   PipelineRepository,
   PipelineScheduleRepository,
   PlatformMetricsRepository,
-  ReportsRepository,
   ProvisioningLogRepository,
   ReleaseHealthConfigRepository,
+  ReportsRepository,
   RequirementReviewRepository,
   RiskPolicyRepository,
   ServiceFragmentDefaultsRepository,
@@ -47,12 +48,12 @@ import type {
   SharedStackRepository,
   SubscriptionQuotaCycleRepository,
   TestSecretsRepository,
-  CapabilityCredentialRepository,
-  ValidationConfigRepository,
   TokenUsageRepository,
   TrackerSettingsRepository,
   UserRepository,
   UserSettingsRepository,
+  ValidationConfigRepository,
+  WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -73,6 +74,7 @@ import {
 import {
   DrizzleAgentRunRepository,
   DrizzleExecutionRepository,
+  DrizzleGateOutcomeRepository,
   DrizzlePipelineRepository,
   DrizzlePipelineScheduleRepository,
   DrizzlePlatformMetricsRepository,
@@ -160,6 +162,7 @@ export interface CoreRepositories {
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   platformMetricsRepository: PlatformMetricsRepository
+  gateOutcomeRepository: GateOutcomeRepository
   reportsRepository: ReportsRepository
   modelPresetRepository: ModelPresetRepository
   agentPromptRepository: AgentPromptRepository
@@ -216,6 +219,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),
+    gateOutcomeRepository: new DrizzleGateOutcomeRepository(db),
     reportsRepository: new DrizzleReportsRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     agentPromptRepository: new DrizzleAgentPromptRepository(db),

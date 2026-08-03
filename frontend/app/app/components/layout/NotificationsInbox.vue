@@ -8,7 +8,7 @@ import type { ReviewEffort } from '~/types/merge'
 // (merge / confirm / retry) or dismissed. Hydrated from the snapshot and patched
 // live via the `notification` WorkspaceEvent.
 
-const { t, te } = useI18n()
+const { t, te, d } = useI18n()
 
 const notifications = useNotificationsStore()
 const ui = useUiStore()
@@ -327,6 +327,44 @@ function revealVisualConfirm(n: Notification) {
 }
 
 /**
+ * The failing runs a `platform_health` card is aggregating, captured when the alert fired.
+ * Empty for a card raised on a condition with no failing run behind it (a backlog or a stall),
+ * where the payload carries no list at all, which is the point: an empty list would read as
+ * "we looked and found no failures".
+ */
+function failingRuns(n: Notification) {
+  return n.payload?.platformFailingRuns ?? []
+}
+
+/**
+ * How many of the workspace's failures the card is showing. Rendered only when the sample is
+ * SHORT of the total, so the card states what it left out instead of presenting the cap as the
+ * whole story.
+ */
+function failingRunsOmitted(n: Notification): number {
+  return Math.max(0, (n.payload?.platformFailedTotal ?? 0) - failingRuns(n).length)
+}
+
+/**
+ * Whether a linked failing run can actually be opened. A run that has since aged out of the
+ * board's loaded set and carries no block is a link to nowhere, and rendering it as clickable
+ * would be worse than rendering it plainly: the operator would read "nothing happened" from a
+ * click that silently did nothing.
+ */
+function canOpenFailingRun(run: { executionId: string; blockId: string | null }): boolean {
+  return !!execution.getInstance(run.executionId) || !!run.blockId
+}
+
+/**
+ * Open one failing run behind a platform-health alert: its observability drill-down when the
+ * run is loaded (the "why did this fail" surface), otherwise focus its task on the board.
+ */
+function revealFailingRun(run: { executionId: string; blockId: string | null }) {
+  if (execution.getInstance(run.executionId)) ui.openObservability(run.executionId)
+  else if (run.blockId) ui.select(run.blockId)
+}
+
+/**
  * Open the decision surface for a parked iteration-cap run: find the run's step that is
  * waiting on a human and open it through the universal step dispatch — which routes a
  * `requirements-review` step to the review window and a companion step to its detail
@@ -401,6 +439,42 @@ function revealDecision(n: Notification) {
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
               </a>
+              <!--
+                A platform-health card deep-links to the runs it aggregated, so the operator
+                lands on the evidence rather than only on the dashboard.
+              -->
+              <div
+                v-if="failingRuns(n).length"
+                class="mt-1.5 flex flex-col gap-0.5"
+                data-testid="notification-failing-runs"
+              >
+                <component
+                  :is="canOpenFailingRun(run) ? 'button' : 'span'"
+                  v-for="run in failingRuns(n)"
+                  :key="run.executionId"
+                  class="flex items-center gap-1 text-start text-[11px]"
+                  :class="
+                    canOpenFailingRun(run)
+                      ? 'text-sky-400 hover:underline'
+                      : 'cursor-default text-slate-500'
+                  "
+                  :title="
+                    canOpenFailingRun(run) ? undefined : t('layout.notifications.failingRunGone')
+                  "
+                  @click="canOpenFailingRun(run) && revealFailingRun(run)"
+                >
+                  <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                  <span class="truncate">{{
+                    t('layout.notifications.failingRun', {
+                      kind: run.failureKind,
+                      at: d(new Date(run.createdAt), 'short'),
+                    })
+                  }}</span>
+                </component>
+                <span v-if="failingRunsOmitted(n) > 0" class="text-[11px] text-slate-500">
+                  {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
+                </span>
+              </div>
               <MergeEffortChips
                 v-if="collectsEffort(n)"
                 :model-value="effortFor(n)"

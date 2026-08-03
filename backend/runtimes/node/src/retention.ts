@@ -4,10 +4,12 @@ import type {
   ResolveBinaryArtifactStore,
   Clock,
   CommitProjectionRepository,
+  GateOutcomeRepository,
   LlmCallMetricRepository,
   NotificationRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
+  PlatformMetricsRepository,
   ProvisioningLogRepository,
   SubscriptionActivationRepository,
   SubscriptionQuotaCycleRepository,
@@ -16,7 +18,11 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
-import { createRetentionPass, sweepBinaryArtifactRetention } from '@cat-factory/orchestration'
+import {
+  RUN_DAY_ROLLUP_LOOKBACK_MS,
+  createRetentionPass,
+  sweepBinaryArtifactRetention,
+} from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -67,6 +73,13 @@ export interface RetentionRepos {
   // Resolved (acted/dismissed) notifications past the retention window. Open cards (the
   // actionable inbox) are never pruned.
   notificationRepository: Pick<NotificationRepository, 'deleteResolvedOlderThan'>
+  // The settled-gate projection behind the dashboard's gate / CI-fixer attempt statistics.
+  gateOutcomeRepository: Pick<GateOutcomeRepository, 'deleteOlderThan'>
+  // The daily run rollup: this pass both MATERIALISES it and bounds it.
+  platformMetricsRepository: Pick<
+    PlatformMetricsRepository,
+    'rollupRunDays' | 'deleteRunDaysOlderThan'
+  >
 }
 
 /** Rows reclaimed from each table, plus the tables the pass could not prune. */
@@ -82,6 +95,10 @@ export interface RetentionResult {
   passwordResetTokens: number
   commits: number
   notifications: number
+  gateOutcomes: number
+  runDays: number
+  /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
+  runDaysRolledUp: number
   /**
    * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
    * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
@@ -164,6 +181,19 @@ export async function sweepRetention(
     // Resolved (acted/dismissed) notifications past the window; open cards untouched.
     notifications: await pass.prune('notifications', retention.notificationsMs, now, (c) =>
       repos.notificationRepository.deleteResolvedOlderThan(c),
+    ),
+    // Settled gates behind the dashboard's attempt statistics.
+    gateOutcomes: await pass.prune('gate_outcomes', retention.gateOutcomesMs, now, (c) =>
+      repos.gateOutcomeRepository.deleteOlderThan(c),
+    ),
+    // Materialise the daily rollup BEFORE pruning it, so a pass never prunes a window it is
+    // about to rewrite, and recompute a short trailing lookback so a missed pass self-heals
+    // rather than leaving a day permanently half-counted.
+    runDaysRolledUp: await pass.materialize('platform_run_days', () =>
+      repos.platformMetricsRepository.rollupRunDays(now - RUN_DAY_ROLLUP_LOOKBACK_MS, now),
+    ),
+    runDays: await pass.prune('platform_run_days', retention.runDaysMs, now, (c) =>
+      repos.platformMetricsRepository.deleteRunDaysOlderThan(c),
     ),
     failedTables: pass.failed,
   }

@@ -119,13 +119,21 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
 export type {
+  PlatformDailyRunCount,
   PlatformDurationStats,
+  PlatformFailedRunRef,
   PlatformFailureCount,
   PlatformLiveCounts,
   PlatformMetricsRepository,
   PlatformRunOutcome,
   PlatformRunTrendPoint,
 } from './platform-metrics.js'
+export type {
+  GateOutcomeKind,
+  GateOutcomeRecord,
+  GateOutcomeRepository,
+  PlatformGateOutcomeCount,
+} from './gate-outcomes.js'
 export type {
   ReportActivityGroup,
   ReportRange,

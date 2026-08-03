@@ -1,5 +1,6 @@
 import type { PlatformMetricsRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defineRunDayAndFailureCases } from './platform-rollup-suite.js'
 
 // Cross-runtime parity for the deployment-level (platform-operator) rollups over
 // `agent_runs`. Each facade aggregates in its own SQL dialect (D1/SQLite vs
@@ -380,5 +381,7 @@ export function definePlatformMetricsSuite(
       expect(byBucket.get('2000/done')).toBe(2)
       expect(byBucket.get('4000/failed')).toBe(1)
     })
+
+    defineRunDayAndFailureCases(makeRepo, makeSeed, ids)
   })
 }

@@ -25,6 +25,9 @@ const UNHEALTHY: PlatformObservability = {
     other: 0,
     successRate: 0.2,
   },
+  source: 'runs' as const,
+  rolledUpThrough: null,
+  gates: [],
   trend: { bucketMs: 300_000, points: [] },
   failures: [],
   live: { running: 0, blocked: 0, paused: 0, pending: 0 },
@@ -50,7 +53,7 @@ function container(enabled: boolean, raises: string[]): ServerContainer {
       },
     },
     workspaceService: { list: async () => [{ id: 'ws-1', accountId: 'acc-1' } as Workspace] },
-    platformObservability: { summarize: async () => UNHEALTHY },
+    platformObservability: { summarize: async () => UNHEALTHY, failingRuns: async () => [] },
     notifications: {
       service: {
         listOpenByType: async () => new Map(),

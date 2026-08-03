@@ -209,6 +209,26 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     failureKindBreakdown: 'admin',
     activeAndParkedCounts: 'admin',
     durationStatsSince: 'admin',
+    dailyRunTotalsSince: 'admin',
+    dailyRollupWatermark: 'admin',
+    // The failing-run sample feeds the admin-gated alert card, and it is the one read here
+    // that returns per-RUN identifiers rather than counts, all the more reason it stays
+    // behind the same gate rather than becoming a proxied cross-workspace run listing.
+    recentFailedRuns: 'admin',
+    // Materialising and pruning the daily rollup are the retention sweep's own writes, which
+    // the mothership runs against its own Postgres; a node never drives them.
+    rollupRunDays: 'sweeper',
+    deleteRunDaysOlderThan: 'sweeper',
+  },
+  // The settled-gate projection: the ENGINE writes it, so `record` is the one method here a
+  // mothership-mode node would reach for. It is deliberately NOT proxied: the projection is
+  // per-run observability the dashboard reads, and a node that cannot record one loses a
+  // statistic rather than a run (the recorder is best-effort by construction). The read is
+  // admin-gated like every other dashboard rollup, and the prune is the sweep's.
+  gateOutcomeRepository: {
+    record: 'telemetry',
+    statsSince: 'admin',
+    deleteOlderThan: 'sweeper',
   },
   // The Reports rollups are admin-gated reads (`GET /accounts/:id/reports` guards on
   // `requireAdmin`) exactly like the operator-dashboard ones above, so they stay

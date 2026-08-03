@@ -75,6 +75,7 @@ import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextS
 import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
+import { D1GateOutcomeRepository } from './repositories/D1GateOutcomeRepository.js'
 import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
@@ -249,6 +250,38 @@ function selectWorkerDurableJobDeps(args: {
   }
 }
 
+/**
+ * The observability repositories, grouped because they straddle two DATABASES and the split is
+ * the thing worth stating once: the per-call / per-dispatch / per-search SINKS live in the
+ * dedicated `TELEMETRY_DB`, while the deployment-level PROJECTIONS the operator dashboard
+ * aggregates sit in the MAIN db beside `agent_runs`, which is what lets them be account-scoped
+ * through the same `workspaces` sub-select every other platform rollup uses.
+ *
+ * A free function rather than more lines in `buildWorkerCoreDependencies`, which is at its
+ * per-function budget (budgets are split triggers, never numbers to raise).
+ */
+function workerObservabilityRepositories(
+  db: D1Database,
+  telemetryDb: D1Database,
+): Pick<
+  CoreDependencies,
+  | 'llmCallMetricRepository'
+  | 'agentContextSnapshotRepository'
+  | 'agentSearchQueryRepository'
+  | 'platformMetricsRepository'
+  | 'gateOutcomeRepository'
+> {
+  return {
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // The stores behind the agent-context + search-query sinks, handed in alongside them for
+    // the remote debugging reader, a pure reader that wants neither capture gate.
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -331,14 +364,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
-    // Telemetry lives in the dedicated TELEMETRY_DB database.
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
-    // The stores behind the agent-context + search-query sinks below, handed in alongside
-    // them for the remote debugging reader — a pure reader that wants neither capture gate.
-    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
-    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
-    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
-    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    ...workerObservabilityRepositories(db, telemetryDb),
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
     // the Reports view.
     reportsRepository: new D1ReportsRepository({ db }),

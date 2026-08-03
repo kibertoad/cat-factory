@@ -119,7 +119,11 @@ const LEGACY_ALLOWANCES = new Map([
   // The SLACK tables (connection + routing + member map — one integration, referencing nothing
   // else) moved to `db/schema-slack.ts` when `agent_runs` gained its re-drive counter — ratcheted
   // 1716 -> 1700.
-  ['backend/runtimes/node/src/db/schema.ts', 1700],
+  // The OBSERVABILITY group (the `telemetry` Postgres schema and its three append-heavy sinks,
+  // plus the two deployment-level projections the operator dashboard aggregates) moved to
+  // `db/tables/observability.ts` when the gate + daily-rollup projections landed, ratcheted
+  // 1700 -> 1600.
+  ['backend/runtimes/node/src/db/schema.ts', 1600],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan

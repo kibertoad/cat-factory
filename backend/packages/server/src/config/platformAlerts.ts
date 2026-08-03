@@ -1,4 +1,4 @@
-import type { PlatformObservabilityWindow } from '@cat-factory/contracts'
+import type { PlatformAlertWindow } from '@cat-factory/contracts'
 import { DEFAULT_PLATFORM_ALERT_THRESHOLDS } from '@cat-factory/orchestration'
 import type { PlatformAlertConfig } from './types.js'
 import { parseNumericEnv } from './numeric.js'
@@ -14,10 +14,13 @@ const DEFAULT_PLATFORM_ALERT_INTERVAL_MS = 5 * 60_000
 /** Floor the interval so a `0`/tiny override can't turn the sweep into a busy-loop. */
 const MIN_PLATFORM_ALERT_INTERVAL_MS = 10_000
 
-/** Parse the `1h`/`24h`/`7d` window, defaulting to the most operationally useful `1h`. */
-export function parsePlatformObservabilityWindow(
-  raw: string | undefined,
-): PlatformObservabilityWindow {
+/**
+ * Parse the `1h`/`24h`/`7d` alert window, defaulting to the most operationally useful `1h`.
+ * The dashboard's rollup-backed `30d`/`90d` windows are deliberately not accepted here (see
+ * `platformAlertWindowSchema`), so naming one falls back to `1h` rather than quietly
+ * evaluating an alert against a table materialised at best hourly.
+ */
+export function parsePlatformObservabilityWindow(raw: string | undefined): PlatformAlertWindow {
   const v = raw?.trim()
   return v === '24h' || v === '7d' ? v : '1h'
 }

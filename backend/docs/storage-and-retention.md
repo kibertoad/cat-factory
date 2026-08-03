@@ -89,6 +89,33 @@ while letting raw rows be purged far sooner. Skipped for now because no reportin
 consumer reads beyond the current period yet: deletion already bounds the table,
 and the rollup can be added when such reporting exists.
 
+## 1b. The daily run rollup (`platform_run_days`)
+
+The deferred `token_usage_monthly` idea above has a sibling that HAS shipped, for the
+neighbouring reason: the operator dashboard wanted `30d` and `90d` windows over `agent_runs`,
+and a fine-grained scan of a quarter of every run the deployment has ever made, on each
+dashboard load and each alert sweep, is exactly the cost a rollup removes.
+
+`platform_run_days` holds one row per `(workspace, UTC day, status, failure kind)`, written by
+the same retention sweep that bounds everything else on this page. Three properties are worth
+carrying over to any future rollup here:
+
+- **It is REWRITTEN, never appended.** A day's counts are not final until the day is over, so
+  each pass recomputes a short trailing window (`RUN_DAY_ROLLUP_LOOKBACK_MS`) and REPLACES those
+  buckets. That also makes a missed pass self-healing rather than leaving a day permanently
+  half-counted, which is indistinguishable from a quiet day once it is written.
+- **The read reports how far the rollup REACHES** (`dailyRollupWatermark`). An un-materialised
+  rollup and an idle quarter produce the same empty series and are opposite facts, so the
+  dashboard states which one it is showing instead of rendering confident zeros.
+- **Its retention is the LONGEST of any table here** (`PLATFORM_RUN_DAY_RETENTION_DAYS`,
+  default 400). A rolled-up day is a handful of tiny rows, and a short window would take away
+  the very questions the table exists to answer.
+
+The settled-gate projection (`gate_outcomes`, one row per polling gate that reached a terminal
+verdict) rides the same sweep on a 90-day window. It is a projection rather than a rollup (no
+aggregation happens at write time), and it exists because the gate's live state lives inside the
+run's `detail` JSON blob, where no `GROUP BY` can reach it.
+
 ## 2. Bound or expire the `github_rate_limits` telemetry
 
 **Concern.** `github_rate_limits` (migration `0004`) records one append-only row
@@ -147,6 +174,7 @@ and the fast-ack → queue design (ADR 0001) already smooths webhook write burst
 ## Suggested sequencing
 
 1. ~~**`token_usage` retention/rollup**~~: done (deletion-based; rollup deferred).
+   1b. ~~**Daily run rollup + settled-gate projection**~~: done (see above).
 2. ~~**`github_rate_limits` retention**~~: done.
 3. ~~**`github_commits` backfill bounds + retention**~~: done.
 4. **Throughput / read-replica review**: revisit when real multi-tenant load

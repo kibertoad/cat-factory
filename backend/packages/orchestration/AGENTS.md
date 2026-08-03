@@ -80,6 +80,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   (**Reports**; cross-cutting usage analytics: spend by model/agent kind and spend + run activity
   by workspace/service/task type, over the `ReportsRepository` port; see CLAUDE.md → "Reports" and
   `backend/docs/reports.md`). `ReportsService` lives in its own `reports/` dir beside them.
+  `GateOutcomeRecorder` is the one WRITER here: the gate machine hands it each polling gate that
+  reaches a terminal verdict, and it projects the flat row the dashboard's attempt statistics
+  aggregate. Its row id is DERIVED from the run (`<runId>:<stepIndex>:<outcome>`), not minted,
+  because the durable drivers replay. See CLAUDE.md → "Telemetry & agent-context observability".
 - `debug/`: the read service behind the PUBLIC remote **run debugging** surface (`/api/v1/debug/*`):
   `RunDebugService` issues the bounded reads (a keyset-paged run index plus the four telemetry
   sinks, each independently optional; the body search and slice windows ride to the stores in

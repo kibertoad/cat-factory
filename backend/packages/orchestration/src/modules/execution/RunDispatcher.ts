@@ -1,9 +1,4 @@
 import type {
-  JudgeAssessor,
-  JudgeDefinition,
-  JudgeRegistry,
-  JudgeStepState,
-  ResolveJudgeInput,
   AgentExecutor,
   AgentJobHandle,
   AgentRunContext,
@@ -12,33 +7,39 @@ import type {
   BlockRepository,
   BlueprintService,
   BrainstormSession,
+  ChallengePrReviewFindingInput,
+  ChooseForkInput,
   ClarityReview,
   Clock,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   FollowUpsStepState,
-  ForkDecisionStepState,
-  ChooseForkInput,
   ForkChatRequestInput,
-  PrReviewStepState,
-  ResolvePrReviewInput,
-  ChallengePrReviewFindingInput,
+  ForkDecisionStepState,
   GateDefinition,
+  GateOutcomeRepository,
   GateRegistry,
-  StepResolverRegistry,
-  ProviderRegistry,
   IdGenerator,
   IssueWritebackProvider,
+  JudgeAssessor,
+  JudgeDefinition,
+  JudgeRegistry,
+  JudgeStepState,
   Logger,
   PipelineStep,
+  PrReviewStepState,
   ProviderCapabilities,
+  ProviderRegistry,
   RequirementConcernLevel,
-  StepGating,
   RequirementReview,
+  ResolveJudgeInput,
+  ResolvePrReviewInput,
   ResolveRunRepoContext,
   RunInitiatorScope,
   StepCompletionResolver,
+  StepGating,
+  StepResolverRegistry,
   TicketTrackerProvider,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -75,6 +76,8 @@ import { ForkDecisionController } from './ForkDecisionController.js'
 import { JudgeStepController } from './JudgeStepController.js'
 import { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import { GateStepController } from './GateStepController.js'
+import { GateOutcomeRecorder } from '../observability/GateOutcomeRecorder.js'
+import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 import {
   buildGateMap,
   type ExtensionContextDeps,
@@ -174,6 +177,11 @@ export interface RunDispatcherDeps {
    * their drops. Absent ⇒ `noopLogger`, which is what the engine unit tests construct with.
    */
   logger?: Logger
+  /**
+   * Optional settled-gate projection: the gate machine records each terminal verdict into it
+   * for the operator dashboard's attempt statistics. Absent ⇒ nothing is recorded.
+   */
+  gateOutcomeRepository?: GateOutcomeRepository
   spend: SpendService
   stepGraph: StepGraph
   runStateMachine: RunStateMachine
@@ -236,6 +244,26 @@ export interface RunDispatcherDeps {
  * engine's `finalizeMerge`). `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate`
  * delegate here; no behaviour changes in the move.
  */
+/**
+ * The gate machine's `recordGateOutcome` callback, or nothing when no projection is wired.
+ *
+ * A free function rather than an inline branch in the constructor: the gate controller takes
+ * ONE bound callback and must stay independent of the sink's collaborators, and the
+ * constructor is already at its statement budget (budgets are split triggers).
+ */
+function gateOutcomeRecording(
+  deps: Pick<RunDispatcherDeps, 'gateOutcomeRepository' | 'clock'>,
+  logger: Logger,
+): { recordGateOutcome?: (settled: SettledGate) => Promise<void> } {
+  if (!deps.gateOutcomeRepository) return {}
+  const recorder = new GateOutcomeRecorder({
+    gateOutcomeRepository: deps.gateOutcomeRepository,
+    now: () => deps.clock.now(),
+    logger,
+  })
+  return { recordGateOutcome: (settled) => recorder.record(settled) }
+}
+
 export class RunDispatcher {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
@@ -474,6 +502,7 @@ export class RunDispatcher {
         runStateMachine: deps.runStateMachine,
         runInitiatorScope: this.runInitiatorScope,
         resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        ...gateOutcomeRecording(deps, this.log),
         recordStepResult: (ws, instance, step, isFinalStep, result) =>
           this.recordStepResult(ws, instance, step, isFinalStep, result),
       },

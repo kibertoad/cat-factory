@@ -1389,6 +1389,20 @@ Rules that bind new work here:
   store needs its `workspaceSettingsRepository`**, or that gate is OPEN and an opted-out workspace's bodies
   are retained anyway.
 
+**The DEPLOYMENT-level projections are the exception to that store split, deliberately.**
+`gate_outcomes` (one row per polling gate that reaches a terminal verdict) and
+`platform_run_days` (the daily rollup behind the dashboard's `30d`/`90d` windows) live in the
+MAIN store beside `agent_runs`, are account-scoped through the same `workspaces` sub-select every
+other platform rollup uses, and are pruned by the RETENTION sweep rather than the telemetry one. A
+telemetry-store home would have forced a cross-store join or a workspace-id list threaded through
+every read. Three rules bind anything added beside them: a rollup is **REWRITTEN, never appended**
+(the current day's counts are not final, so each pass corrects them and a missed pass self-heals);
+its read **reports how far it REACHES** (`dailyRollupWatermark`), because an un-materialised rollup
+and an idle quarter produce the same empty series and are opposite facts; and a projection whose
+writer REPLAYS derives its row id from the run (`<runId>:<stepIndex>:<outcome>`) rather than
+minting one, or one settle becomes two rows and inflates every number the table exists to report.
+Doc: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+
 **Remote debugging reads** (`/api/v1/debug/*`) expose the same sinks to an external caller (in practice an
 LLM diagnosing a run) under one rule a new endpoint must obey too: **a response's size has to be
 computable BEFORE the request.** So fan-out lists never carry bodies, slicing/filtering/searching happen in

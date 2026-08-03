@@ -133,6 +133,15 @@ else imports its **ports** and domain types from here.
   `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
   the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
   because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
+- `ports/platform-metrics.ts` + `ports/gate-outcomes.ts`: the deployment-level (operator)
+  reads, and the ONE place in the observability family that deliberately lives in the MAIN store
+  rather than the telemetry one. Both are account-scoped through the same `workspaces`
+  sub-select every other platform rollup uses, which is what a telemetry-store home would have
+  cost them (a cross-store join, or a workspace-id list threaded through every read).
+  `platform-metrics.ts` also owns the DAILY ROLLUP the long dashboard windows read: its
+  `dailyRollupWatermark` is a separate method from the rows on purpose, because an
+  un-materialised rollup and an idle quarter return the same empty series and only the watermark
+  can tell them apart.
 - `ports/llm-metrics.ts`: besides the store's own `LlmCallMetric` / `LlmCallMetricRepository`,
   `InlineLlmCallRecorder` is the seam the inline feeder writes through, so all three producers
   (proxy, subscription harness, inline) land in one table. Its `InlineLlmCall` is deliberately

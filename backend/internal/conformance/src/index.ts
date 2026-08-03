@@ -82,6 +82,7 @@ export {
   type PlatformMetricsSeed,
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
+export { defineGateOutcomeSuite, type GateOutcomeSeed } from './gate-outcome-suite.js'
 export {
   defineReportsSuite,
   type ReportsSeed,

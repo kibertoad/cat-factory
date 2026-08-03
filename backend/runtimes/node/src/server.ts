@@ -467,6 +467,9 @@ function startBackgroundSweepers(deps: {
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
       commitRepository: new DrizzleCommitProjectionRepository(db),
       notificationRepository: new DrizzleNotificationRepository(db),
+      // Both operator-observability projections live in the main DB beside `agent_runs`.
+      gateOutcomeRepository: repos.gateOutcomeRepository,
+      platformMetricsRepository: repos.platformMetricsRepository,
     },
     container.config.retention,
     clock,

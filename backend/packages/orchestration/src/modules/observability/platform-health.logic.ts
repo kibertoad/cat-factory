@@ -1,8 +1,9 @@
 import type {
   PlatformAlert,
   PlatformAlertReason,
+  PlatformAlertSettings,
+  PlatformAlertWindow,
   PlatformObservability,
-  PlatformObservabilityWindow,
 } from '@cat-factory/contracts'
 
 // Pure evaluation behind the platform-health ALERT sweep — the push counterpart to the pull
@@ -19,8 +20,9 @@ import type {
 
 /**
  * The operator-configured ceilings a deployment's aggregate health is checked against. Each
- * maps to one {@link PlatformAlertReason}. Deployment-level config (env-driven defaults today;
- * a settings surface is a later slice), NOT per-workspace.
+ * maps to one {@link PlatformAlertReason}. Deployment-level config: the env vars set the
+ * defaults at boot and an account's stored settings may override any of them per field
+ * (see {@link resolveAccountAlertConfig}), NOT per-workspace.
  */
 export interface PlatformAlertThresholds {
   /**
@@ -76,6 +78,72 @@ export const DEFAULT_PLATFORM_ALERT_THRESHOLDS: PlatformAlertThresholds = {
   // where 10 of 10 are, and a single stray `agent` failure should not silence it.
   maxFailureKindShare: 0.8,
   maxSweepFailures: 3,
+}
+
+/**
+ * The alert configuration one account is actually evaluated under: the deployment's
+ * env-derived defaults with that account's stored settings layered on top.
+ */
+export interface ResolvedAccountAlertConfig {
+  /** Whether this account is alerted on at all. */
+  enabled: boolean
+  window: PlatformAlertWindow
+  thresholds: PlatformAlertThresholds
+}
+
+/**
+ * Layer an account's stored alert settings over the deployment defaults, field by field.
+ *
+ * ABSENT INHERITS; it never means zero. That is the whole contract of this function and the
+ * reason it exists rather than a spread: a zero is a live, meaningful value in three of these
+ * thresholds (`minStalledPriorRuns: 0` says "page even on an idle window"), so a merge that
+ * treated a missing key and a stored `0` alike would turn "I did not set this" into the most
+ * aggressive setting available, on every account that ever saved any unrelated field.
+ *
+ * `enabled` is deliberately a ONE-WAY switch: an account may mute itself, but cannot turn
+ * alerting on where the deployment never started the sweep: there would be no timer to
+ * honour it, and a stored `true` that does nothing is worse than an absent one.
+ */
+export function resolveAccountAlertConfig(
+  deployment: {
+    enabled: boolean
+    window: PlatformAlertWindow
+    thresholds: PlatformAlertThresholds
+  },
+  stored: PlatformAlertSettings | undefined,
+): ResolvedAccountAlertConfig {
+  const t = stored?.thresholds
+  return {
+    enabled: deployment.enabled && stored?.enabled !== false,
+    window: stored?.window ?? deployment.window,
+    thresholds: {
+      minRuns: t?.minRuns ?? deployment.thresholds.minRuns,
+      maxFailureRate: t?.maxFailureRate ?? deployment.thresholds.maxFailureRate,
+      maxP99DurationMs: t?.maxP99DurationMs ?? deployment.thresholds.maxP99DurationMs,
+      maxBacklog: t?.maxBacklog ?? deployment.thresholds.maxBacklog,
+      stalledBuckets: t?.stalledBuckets ?? deployment.thresholds.stalledBuckets,
+      minStalledPriorRuns: t?.minStalledPriorRuns ?? deployment.thresholds.minStalledPriorRuns,
+      maxFailureKindShare: t?.maxFailureKindShare ?? deployment.thresholds.maxFailureKindShare,
+      maxSweepFailures: t?.maxSweepFailures ?? deployment.thresholds.maxSweepFailures,
+    },
+  }
+}
+
+/**
+ * The alert reasons whose evidence is a set of FAILED RUNS, so a card firing any of them can
+ * deep-link to the runs it is aggregating. The other conditions are about depth, latency or
+ * the absence of work, and have no failing run to point at. A link that resolved to nothing
+ * would read as "there are no failures", which is the opposite of what a backlog or stall
+ * alert is saying.
+ */
+const RUN_EVIDENCED_REASONS: ReadonlySet<PlatformAlertReason> = new Set<PlatformAlertReason>([
+  'failure_rate_high',
+  'failure_kind_dominant',
+])
+
+/** Whether a fired reason set has failing runs behind it worth linking to. */
+export function alertsHaveRunEvidence(reasons: readonly PlatformAlertReason[]): boolean {
+  return reasons.some((r) => RUN_EVIDENCED_REASONS.has(r))
 }
 
 /**
@@ -233,7 +301,7 @@ const REASON_PHRASE: Record<PlatformAlertReason, string> = {
   sweep_degraded: 'a background maintenance sweep failing repeatedly',
 }
 
-const WINDOW_PHRASE: Record<PlatformObservabilityWindow, string> = {
+const WINDOW_PHRASE: Record<PlatformAlertWindow, string> = {
   '1h': 'the last hour',
   '24h': 'the last 24 hours',
   '7d': 'the last 7 days',
@@ -249,7 +317,7 @@ const WINDOW_PHRASE: Record<PlatformObservabilityWindow, string> = {
  */
 export function platformHealthCardContent(
   reasons: PlatformAlertReason[],
-  window: PlatformObservabilityWindow,
+  window: PlatformAlertWindow,
 ): { title: string; body: string } {
   const phrases = reasons.map((r) => REASON_PHRASE[r])
   const list =

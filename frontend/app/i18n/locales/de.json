@@ -1041,6 +1041,46 @@
       "offHint": "Nicht gesetzt: Jedes Board entscheidet selbst. Bestehende Boards behalten ihre Auswahl.",
       "saved": "Richtlinie für Ausführungs-Anmeldedaten gespeichert",
       "saveFailed": "Richtlinie für Ausführungs-Anmeldedaten konnte nicht gespeichert werden"
+    },
+    "platformAlerts": {
+      "title": "Plattform-Zustandswarnungen",
+      "description": "Obergrenzen, gegen die der Laufzustand dieses Kontos geprüft wird. Leere Felder übernehmen die Vorgaben der Installation.",
+      "muteLabel": "Warnungen für dieses Konto stummschalten",
+      "muteHint": "Warnungen lassen sich hier nur abschalten. Ob die Prüfung überhaupt läuft, ist eine Einstellung der Installation.",
+      "windowLabel": "Auswertungsfenster",
+      "windowHint": "Wie weit jede Bedingung zurückblickt. Ein längeres Fenster reagiert langsamer und bleibt ruhiger.",
+      "thresholdsLabel": "Schwellenwerte",
+      "inheritHint": "Ein leeres Feld übernimmt die Vorgabe der Installation. Eine Null ist ein echter Wert, kein leeres Feld.",
+      "inheritPlaceholder": "Übernommen",
+      "reset": "Überschreibungen löschen",
+      "saved": "Warneinstellungen gespeichert",
+      "saveFailed": "Warneinstellungen konnten nicht gespeichert werden",
+      "window": {
+        "inherit": "Vorgabe der Installation",
+        "oneHour": "Letzte Stunde",
+        "oneDay": "Letzte 24 Stunden",
+        "sevenDays": "Letzte 7 Tage"
+      },
+      "thresholds": {
+        "minRuns": "Mindestanzahl Läufe",
+        "maxFailureRate": "Obergrenze Fehlerquote",
+        "maxP99DurationMs": "Obergrenze p99-Dauer (Minuten)",
+        "maxBacklog": "Obergrenze Rückstau",
+        "stalledBuckets": "Leere Intervalle bis zum Stillstand",
+        "minStalledPriorRuns": "Läufe, bevor Stillstand zählt",
+        "maxFailureKindShare": "Anteil der dominanten Ursache",
+        "maxSweepFailures": "Fehlschläge der Prüfung in Folge"
+      },
+      "hints": {
+        "minRuns": "Abgeschlossene Läufe, die das Fenster braucht, bevor die Fehlerwarnungen auslösen können.",
+        "maxFailureRate": "Anteil der Läufe, die fehlschlagen dürfen, von 0 bis 1.",
+        "maxP99DurationMs": "Wie lange die langsamsten Läufe dauern dürfen.",
+        "maxBacklog": "Unfertige Läufe, die gleichzeitig unterwegs sein dürfen.",
+        "stalledBuckets": "Abschließende leere Intervalle im Verlauf, die als Stillstand gelten.",
+        "minStalledPriorRuns": "Läufe, die der frühere Teil des Fensters getragen haben muss. Null warnt bei jeder Stille.",
+        "maxFailureKindShare": "Anteil der Fehler, den eine einzelne Ursache ausmachen darf, über 0 und bis 1.",
+        "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
+      }
     }
   },
   "inspector": {
@@ -2029,7 +2069,10 @@
         "budget_paused": "Als gelesen markieren",
         "key_drift": "Veraltete Zugangsdaten entfernen",
         "merge_tag_request": "Aufwand erfassen"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} weitere nicht angezeigt",
+      "failingRunGone": "Dieser Lauf ist nicht mehr geladen und hat keine Aufgabe zum Öffnen."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3200,7 +3243,9 @@
     "window": {
       "oneHour": "Letzte Stunde",
       "oneDay": "Letzte 24 Stunden",
-      "sevenDays": "Letzte 7 Tage"
+      "sevenDays": "Letzte 7 Tage",
+      "thirtyDays": "Letzte 30 Tage",
+      "ninetyDays": "Letzte 90 Tage"
     },
     "outcomes": {
       "title": "Lauf-Ergebnisse",
@@ -3250,6 +3295,22 @@
     },
     "live": {
       "title": "Jetzt aktiv"
+    },
+    "rollup": {
+      "none": "Die tägliche Aggregation hat noch nichts erzeugt. Dieses Zeitfenster ist also mangels Daten leer, nicht mangels Läufen.",
+      "stale": "Die tägliche Aggregation reicht nur bis {date}. Alles danach sind fehlende Daten, keine ruhige Zeit.",
+      "current": "Aus der täglichen Aggregation, vollständig bis {date}."
+    },
+    "gates": {
+      "title": "Gate-Versuche",
+      "empty": "In diesem Zeitfenster wurde kein Gate abgeschlossen.",
+      "gate": "Gate",
+      "settled": "Abgeschlossen",
+      "cleanPasses": "Ohne Fixer bestanden",
+      "attempts": "Fixer-Versuche",
+      "helperFailures": "Fixer-Fehlschläge",
+      "exhausted": "An Menschen übergeben",
+      "hint": "Ohne Fixer bestanden heißt: die Vorprüfung war zufrieden und es wurde gar kein Fixer gestartet. Fixer-Fehlschläge sind Versuche, deren eigener Job abgestürzt ist, im Unterschied zu Versuchen, die liefen und die Prüfung rot ließen."
     }
   },
   "reports": {
