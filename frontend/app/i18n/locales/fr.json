@@ -4114,6 +4114,7 @@
       "binaryOutputMediaTypeUnusable": "Non enregistré, car ce ne sont pas des types de média : {entries}. Écrivez chacun sous la forme type/subtype.",
       "binaryOutputGeneratorMissing": "Ce déploiement n'enregistre pas ces intégrations génératives : {ids}. Elles s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
       "binaryOutputModalityUncovered": "Aucune intégration sélectionnée ne produit {modalities}, que cette étape doit livrer.",
+      "binaryOutputModalityRetired": "{modality} (n'est plus proposé — resélectionnez les types de contenu de cette étape)",
       "binaryOutputModality": {
         "image": "Images",
         "audio": "Audio",

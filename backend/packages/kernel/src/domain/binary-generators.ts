@@ -186,7 +186,20 @@ export function binaryGeneratorSelectionIssues(
   return issues
 }
 
-/** The content type in words, for a message a human reads. */
+/**
+ * The content type in words, for a message a human reads.
+ *
+ * The `default` is not dead code, and it is not a widened type either. `BinaryModality` is a
+ * CLOSED vocabulary that is nonetheless PERSISTED on a step, so a member retired from the union
+ * goes on existing in saved pipelines: `3d` did exactly that when it split. Such a value reaches
+ * here through the modality-uncovered refusal it is guaranteed to raise — which is to say the one
+ * message whose whole job is to name what a human must re-pick — so falling off the end of the
+ * switch would render it `undefined` and turn the loud break into a nonsense sentence.
+ *
+ * {@link describeRetiredModality} takes `never`, so this keeps BOTH properties at once: adding a
+ * member without a case still fails the typecheck (the argument is no longer `never`), while a
+ * value the union never had is still described honestly at runtime.
+ */
 export function describeModality(modality: BinaryModality): string {
   switch (modality) {
     case 'image':
@@ -201,7 +214,21 @@ export function describeModality(modality: BinaryModality): string {
       return '3D scenes (several assets composed together)'
     case 'document':
       return 'documents'
+    default:
+      return describeRetiredModality(modality)
   }
+}
+
+/**
+ * A stored content type this build no longer defines, named as the retired value it is.
+ *
+ * Deliberately NOT mapped onto a current member — nothing here knows which one was meant, and
+ * that unknowability is the whole reason a split retires the old name rather than aliasing it.
+ * Saying so is the honest answer and the actionable one: it sends the reader to re-pick the step
+ * rather than to a selection with nothing wrong with it.
+ */
+function describeRetiredModality(modality: never): string {
+  return `'${String(modality)}' (a content type this deployment no longer defines — the step must be re-picked)`
 }
 
 /**

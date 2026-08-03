@@ -4125,6 +4125,7 @@
       "binaryOutputMediaTypeUnusable": "לא נשמר, כי אלה אינם סוגי מדיה: {entries}. כתבו כל אחד בצורה type/subtype.",
       "binaryOutputGeneratorMissing": "ההתקנה הזו אינה רושמת את האינטגרציות הגנרטיביות האלה: {ids}. הן נרשמות בקוד ההתקנה, לא במרחב העבודה הזה.",
       "binaryOutputModalityUncovered": "אף אינטגרציה שנבחרה אינה מייצרת {modalities}, שהשלב הזה אמור לספק.",
+      "binaryOutputModalityRetired": "{modality} (כבר לא נתמך — בחרו מחדש את סוגי התוכן של השלב)",
       "binaryOutputModality": {
         "image": "תמונות",
         "audio": "אודיו",

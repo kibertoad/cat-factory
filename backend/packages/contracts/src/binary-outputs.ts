@@ -66,12 +66,17 @@ export const binaryOutputConfigSchema = v.object({
    * The concrete FORMATS this step must deliver, one notch finer than {@link modalities}, for the
    * deliverables where the container IS the requirement rather than a rendering preference.
    *
-   * `3d` is why this exists. PNG versus WebP is a genre question and belongs in a prompt, but GLB,
-   * USDZ and FBX are all `3d` and none of them substitutes for another: a Godot importer takes the
-   * first, a RealityKit pipeline the second, an art pipeline the third. A step whose mesh must load
-   * in the game can otherwise be admitted against an integration that cannot emit a loadable
-   * container, and the failure arrives at the end of a paid run as an asset nobody can open —
-   * which reads as a bad generation rather than as a selection nothing checked.
+   * 3D is why this exists. PNG versus WebP is a genre question and belongs in a prompt, but GLB,
+   * USDZ and FBX are all one modality and none of them substitutes for another: a Godot importer
+   * takes the first, a RealityKit pipeline the second, an art pipeline the third. A step whose
+   * mesh must load in the game can otherwise be admitted against an integration that cannot emit a
+   * loadable container, and the failure arrives at the end of a paid run as an asset nobody can
+   * open — which reads as a bad generation rather than as a selection nothing checked.
+   *
+   * Note the direction that gives this axis its scope: it is what the modality vocabulary does NOT
+   * have to split for. `3d-model` and `3d-scene` are two members precisely because no format tells
+   * them apart, and `image` stays one because a format tells PNG from JPEG — so a distinction any
+   * container can carry is stated HERE, and only what none can carry earns a modality.
    *
    * EVERY entry must be covered, not any one of them: a step needing a GLB for the engine AND an
    * FBX the artists can open in Blender declares both, and both are checked. "Any of these will

@@ -65,6 +65,25 @@ export const binaryModalitySchema = v.picklist([
 ])
 export type BinaryModality = v.InferOutput<typeof binaryModalitySchema>
 
+/**
+ * Whether a stored value is still a member of the vocabulary — DERIVED from the picklist, so it
+ * cannot drift from it the way a hand-written second list would.
+ *
+ * This vocabulary is closed but PERSISTED (`stepOptions.binaryOutput.modalities`), and those two
+ * facts together are what makes the guard necessary: a member retired from the union goes on
+ * existing in saved pipelines, as `3d` did when it split into `3d-model` and `3d-scene`. A reader
+ * that maps a modality through an exhaustive `Record` or `switch` is therefore total against the
+ * TYPE and partial against the DATA — the gap where a lookup returns `undefined` and a call on it
+ * throws. Narrow with this first, and render the negative case as the retired value it is: nothing
+ * can know which current member was meant, and guessing one would quietly rewrite a requirement
+ * that the split exists to make someone restate.
+ */
+export function isBinaryModality(value: string): value is BinaryModality {
+  return BINARY_MODALITY_SET.has(value)
+}
+
+const BINARY_MODALITY_SET: ReadonlySet<string> = new Set(binaryModalitySchema.options)
+
 /** The 3D containers, which say the content is 3D and DELIBERATELY nothing more. */
 const THREE_D: BinaryModality[] = ['3d-model', '3d-scene']
 

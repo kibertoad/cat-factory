@@ -4126,6 +4126,7 @@
       "binaryOutputMediaTypeUnusable": "メディアタイプではないため保存されませんでした: {entries}。それぞれ type/subtype の形で入力してください。",
       "binaryOutputGeneratorMissing": "このデプロイメントは次の生成統合を登録していません: {ids}。これらはこのワークスペースではなくデプロイメントのコードで登録します。",
       "binaryOutputModalityUncovered": "このステップが提供することになっている {modalities} を、選択されたどの統合も生成できません。",
+      "binaryOutputModalityRetired": "{modality}（現在は提供されていません。このステップのコンテンツ種別を選び直してください）",
       "binaryOutputModality": {
         "image": "画像",
         "audio": "音声",

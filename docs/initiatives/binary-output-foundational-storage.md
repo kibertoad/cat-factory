@@ -183,16 +183,21 @@ artifact's classification declines entirely (`modalityOfMediaType` answers null 
 unambiguous) — a guess about something that already exists is worse than an absence, and the step's
 own declaration is the only thing that ever knew which of the two was being made.
 
-### A step may also require exact FORMATS, and `3d` is why
+### A step may also require exact FORMATS, and 3D is why
 
 `stepOptions.binaryOutput.mediaTypes` sits one notch under `modalities`: the concrete containers a
 step must deliver. It exists because the modality grain is exactly right for `image` and exactly
-wrong for `3d`. PNG versus WebP is a genre question that belongs in a prompt, but GLB, USDZ and FBX
-are all `3d` and none substitutes for another — a Godot importer takes the first, a RealityKit
-pipeline the second, an art pipeline the third — so a step whose mesh must load in the game could
-be admitted against an integration that cannot emit a loadable container, with the failure arriving
-at the end of a paid run as an asset nobody can open. `video` and `document` sit in between;
-`audio` genuinely does not need it.
+wrong for 3D. PNG versus WebP is a genre question that belongs in a prompt, but GLB, USDZ and FBX
+are all one modality and none substitutes for another — a Godot importer takes the first, a
+RealityKit pipeline the second, an art pipeline the third — so a step whose mesh must load in the
+game could be admitted against an integration that cannot emit a loadable container, with the
+failure arriving at the end of a paid run as an asset nobody can open. `video` and `document` sit
+in between; `audio` genuinely does not need it.
+
+This axis is also what BOUNDS the one above it. `3d-model` and `3d-scene` are two modalities
+because no container tells them apart; `image` is one because a container tells PNG from JPEG. So a
+distinction a format can carry is stated here, and only a distinction no format can carry earns a
+modality member.
 
 Four rules, each of which is the reason a plausible alternative was rejected:
 

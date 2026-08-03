@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  binaryModalitySchema,
+  isBinaryModality,
   mediaTypeSchema,
   modalitiesOfMediaType,
   modalityOfMediaType,
@@ -24,6 +26,21 @@ describe('normalizeMediaType', () => {
     // matcher that quietly accepts a near-neighbour — and admitting a GLB where an OBJ was
     // required is the exact failure the requirement exists to prevent.
     expect(normalizeMediaType('application/x-tgif')).not.toBe(normalizeMediaType('model/obj'))
+  })
+})
+
+describe('isBinaryModality', () => {
+  it('accepts every member of the vocabulary it is derived from', () => {
+    for (const modality of binaryModalitySchema.options)
+      expect(isBinaryModality(modality)).toBe(true)
+  })
+
+  it('rejects a RETIRED member, which persisted state goes on carrying', () => {
+    // The reason this guard exists: the vocabulary is closed but `stepOptions.binaryOutput
+    // .modalities` is SAVED, so `3d` outlived the union when it split. A reader mapping a modality
+    // through an exhaustive `Record` is total against the type and partial against the data.
+    expect(isBinaryModality('3d')).toBe(false)
+    expect(isBinaryModality('')).toBe(false)
   })
 })
 

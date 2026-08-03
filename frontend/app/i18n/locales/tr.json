@@ -4126,6 +4126,7 @@
       "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
+      "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {
         "image": "Görseller",
         "audio": "Ses",

@@ -44,6 +44,19 @@ windows, or "legacy" fallbacks to preserve old data or old wire shapes. When a c
 rows, tokens, config, or request/response shapes obsolete, it is fine for them to break: prefer the clean
 shape and let stale state be re-created. Flag the break in the changeset.
 
+**But a break must ARRIVE as one.** Retiring a member of a CLOSED vocabulary that is also PERSISTED
+(`BinaryModality`, a step's stored enum, a reason code on a saved row) does not remove the old value
+from the database, so every exhaustive `switch` and `Record<TheEnum, …>` over it is total against the
+TYPE and partial against the DATA — and the reader that hits the stale value first is, by
+construction, the refusal whose whole job is to name what a human must re-pick. Left bare that is
+`undefined` spliced into the operator's message, or a `TypeError` white-screening the very editor the
+fix is made in. So a retired value is NAMED as retired, never silently dropped and never guessed onto
+a current member (nothing knows which one was meant — that unknowability is usually why it split).
+Keep the compile-time guard while you add the runtime one: route a `switch`'s `default` through a
+helper taking `never` (kernel's `describeModality`), and narrow a lookup with a predicate DERIVED from
+the schema (`isBinaryModality`, built from the picklist's own options) rather than an optional call —
+so adding a member still fails the build, and a member that was removed still renders honestly.
+
 ## PR workflow
 
 **Always finish a task with a PR, unprompted.** When the work is done, branch, commit, push, open a PR.
@@ -931,8 +944,8 @@ the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST
 for every 3D container, which is the true statement — the boot check passes on INTERSECTION, and a
 settled artifact classifies only when the answer is unambiguous (`modalityOfMediaType`), because a
 guess about an existing file is worse than an absence — with **`binaryOutput.mediaTypes` one notch under it**
-for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all `3d` and
-none substitutes for another), each entry required rather than any-of, never inferred from or into
+for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all one modality
+and none substitutes for another), each entry required rather than any-of, never inferred from or into
 a modality, matched EXACTLY through the one `normalizeMediaType`, and carrying a THIRD outcome
 beside covered/uncovered: a generator declaring no formats has said "only my modality is known", so
 the requirement is UNVERIFIABLE, the run is ADMITTED, and the gap is stated in the brief and the

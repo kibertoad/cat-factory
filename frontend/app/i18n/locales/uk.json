@@ -4114,6 +4114,7 @@
       "binaryOutputMediaTypeUnusable": "Не збережено, бо це не типи медіа: {entries}. Запишіть кожен як type/subtype.",
       "binaryOutputGeneratorMissing": "Ця інсталяція не реєструє ці генеративні інтеграції: {ids}. Їх реєструють у коді інсталяції, а не в цьому робочому просторі.",
       "binaryOutputModalityUncovered": "Жодна вибрана інтеграція не створює {modalities}, які має надати цей крок.",
+      "binaryOutputModalityRetired": "{modality} (більше не пропонується — виберіть типи вмісту цього кроку заново)",
       "binaryOutputModality": {
         "image": "Зображення",
         "audio": "Аудіо",

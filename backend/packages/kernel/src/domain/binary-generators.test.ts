@@ -264,6 +264,20 @@ describe('binaryGeneratorSelectionIssues', () => {
     expect(message).toContain('audio')
     expect(message).toContain('BinaryGeneratorRegistry')
   })
+
+  it('names a RETIRED content type rather than rendering it as undefined', () => {
+    // `modalities` is persisted, so a member removed from the union outlives it in saved
+    // pipelines — `3d` did exactly that when it split. Such a value is uncovered by every
+    // registered integration by construction, so it reaches this message, which is the one whose
+    // job is to say what must be re-picked. An exhaustive switch with no runtime arm rendered it
+    // "produces undefined", turning a deliberate break into a nonsense sentence.
+    const message = describeBinaryGeneratorSelectionIssues('image-generator', [
+      { problem: 'modality_uncovered', modality: '3d' as never },
+    ])
+    expect(message).toContain("'3d'")
+    expect(message).toContain('no longer defines')
+    expect(message).not.toContain('undefined')
+  })
 })
 
 describe('renderBinaryGeneratorSection', () => {

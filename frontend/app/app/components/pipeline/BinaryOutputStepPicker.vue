@@ -20,16 +20,15 @@
 // offered here because a step needs both to work, and only this surface can tell a human that the
 // content types it promises to deliver are not covered by anything it selected.
 import { computed, ref, watch } from 'vue'
-import * as v from 'valibot'
 import {
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
-  mediaTypeSchema,
-  normalizeMediaType,
+  isBinaryModality,
   type BinaryModality,
   type BinaryOutputConfig,
 } from '@cat-factory/contracts'
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
+import { parseMediaTypeRequirement, sameFormats } from './BinaryOutputStepPicker.logic'
 
 const props = defineProps<{ index: number }>()
 
@@ -59,8 +58,30 @@ const MODALITY_ORDER: BinaryModality[] = [
   '3d-scene',
   'document',
 ]
+/**
+ * A content type in the reader's language, INCLUDING one this build no longer defines.
+ *
+ * The `Record` above is exhaustive over the union, so the lookup looks total — and is not, because
+ * `modalities` is PERSISTED: a step saved under an earlier vocabulary carries a member that has
+ * since been retired (`3d` did exactly that when it split into `3d-model` and `3d-scene`). Such a
+ * value is by construction uncovered by every registered integration, so it lands in the
+ * `modality_uncovered` warning below — the one line whose job is to tell someone what to re-pick —
+ * and a bare `MODALITY_LABELS[modality]()` there is a `TypeError` that takes the whole builder
+ * down, on exactly the surface the fix has to be made on.
+ *
+ * The guard is `isBinaryModality` (contracts, derived from the picklist itself) rather than an
+ * optional call on the `Record`, so the narrowing says WHY it is needed and a member added to the
+ * vocabulary is known here without anyone remembering to widen anything.
+ *
+ * The retired value is NAMED rather than silently dropped or guessed at a current member: nothing
+ * here knows which one was meant, and a modality quietly missing from the list reads as a step
+ * that never required it. This is the standing "absent is not zero" rule at the one place the
+ * typed-key check cannot reach — the key is static, but the LOOKUP is a runtime value.
+ */
 function modalityLabel(modality: BinaryModality): string {
-  return MODALITY_LABELS[modality]()
+  return isBinaryModality(modality)
+    ? MODALITY_LABELS[modality]()
+    : t('pipeline.builder.binaryOutputModalityRetired', { modality: String(modality) })
 }
 
 const config = computed(() => pipelines.draftBinaryOutput(props.index))
@@ -166,12 +187,6 @@ function setModalities(modalities: BinaryModality[]) {
  * snaps back to what was stored.
  */
 const mediaTypeText = ref((config.value?.mediaTypes ?? []).join(', '))
-watch(
-  () => config.value?.mediaTypes,
-  (mediaTypes) => {
-    mediaTypeText.value = (mediaTypes ?? []).join(', ')
-  },
-)
 
 /**
  * Entries that are not a `type/subtype` at all, named rather than silently dropped — a
@@ -180,28 +195,36 @@ watch(
  */
 const unusableMediaTypes = ref<string[]>([])
 
+/**
+ * What this field last wrote, so the watch below can tell its OWN patch from a config that
+ * changed underneath it.
+ */
+let lastWritten: string[] | undefined = config.value?.mediaTypes
+
+watch(
+  () => config.value?.mediaTypes,
+  (mediaTypes) => {
+    mediaTypeText.value = (mediaTypes ?? []).join(', ')
+    // The rejected entries belong to the TEXT that was typed, so they outlive this field's own
+    // patch — clearing them on every config change would erase the warning in the same tick it
+    // was raised, since accepting `image/png` out of `foo, image/png` is itself a patch. Any
+    // OTHER route to a new value (the picker rebound to another step, the draft reloaded,
+    // storage cleared and the bag dropped) is describing text that no longer exists, and a
+    // warning about entries nobody can see is the same "absent reads as fine" failure pointed
+    // the other way.
+    if (!sameFormats(mediaTypes, lastWritten)) unusableMediaTypes.value = []
+    lastWritten = mediaTypes
+  },
+)
+
 function setMediaTypes(text: string) {
-  const entries = text
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-  const usable: string[] = []
-  const unusable: string[] = []
-  for (const entry of entries) {
-    // Forgiving on the way IN, exact on the way out, and both halves are the backend's own rules
-    // imported rather than re-implemented: `normalizeMediaType` is the same reduction the
-    // comparison uses at both ends (a divergent local lowercasing would store a format that
-    // matches nothing and reads everywhere as one that was simply never emitted), and
-    // `mediaTypeSchema` is what the save boundary will hold this to — so what is refused here is
-    // exactly what would come back as a 422 one round trip later.
-    const normalized = normalizeMediaType(entry)
-    if (normalized && v.safeParse(mediaTypeSchema, normalized).success) usable.push(normalized)
-    else unusable.push(entry)
-  }
+  const { usable, unusable } = parseMediaTypeRequirement(text)
   unusableMediaTypes.value = unusable
-  const deduped = [...new Set(usable)]
-  mediaTypeText.value = deduped.join(', ')
-  patch({ mediaTypes: deduped.length ? deduped : undefined })
+  mediaTypeText.value = usable.join(', ')
+  // Claimed BEFORE the patch, so the watch above reads this write as its own however it is
+  // flushed, and the entries just rejected survive to be rendered.
+  lastWritten = usable.length ? usable : undefined
+  patch({ mediaTypes: lastWritten })
 }
 
 /** What the SELECTED integrations say they emit — the discoverable half of the free-text field. */

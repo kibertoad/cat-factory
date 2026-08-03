@@ -3756,6 +3756,7 @@
       "binaryOutputMediaTypeUnusable": "Nicht gespeichert, denn dies sind keine Medientypen: {entries}. Schreibe jeden als type/subtype.",
       "binaryOutputGeneratorMissing": "Diese Installation registriert diese generativen Integrationen nicht: {ids}. Sie werden im Code der Installation registriert, nicht in diesem Workspace.",
       "binaryOutputModalityUncovered": "Keine ausgewählte Integration erzeugt {modalities}, was dieser Schritt liefern soll.",
+      "binaryOutputModalityRetired": "{modality} (nicht mehr verfügbar — wähle die Inhaltstypen dieses Schritts neu)",
       "binaryOutputModality": {
         "image": "Bilder",
         "audio": "Audio",
