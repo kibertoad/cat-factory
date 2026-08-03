@@ -32,10 +32,12 @@ const back = useIntegrationBack(open)
 const RECOMMENDED_SLUGS = [
   'anthropic/claude-fable-5',
   'anthropic/claude-opus-5',
-  'openai/gpt-5.5',
-  'google/gemini-3-pro',
-  'deepseek/deepseek-chat',
+  'openai/gpt-5.6-sol',
+  'openai/gpt-5.6-terra',
+  'google/gemini-3.1-pro-preview',
+  'deepseek/deepseek-v4-flash',
   'moonshotai/kimi-k2.7-code',
+  'z-ai/glm-5.2',
 ]
 
 // Whether the workspace/user has an OpenRouter key connected at any reachable scope.

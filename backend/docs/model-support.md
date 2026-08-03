@@ -38,27 +38,31 @@ Cloudflare Workers AI.
 
 The curated picker catalog is
 [`MODEL_CATALOG`](../packages/kernel/src/domain/models.ts) (`SelectableModel[]`). Each
-entry has a stable `id` (persisted on `Block.modelId`) and up to three flavours:
+entry has a stable `id` (persisted on `Block.modelId`) and up to four flavours:
 
 | Flavour          | Field on the model              | When it's used                                                                       |
 | ---------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
 | **Cloudflare**   | `cloudflare: ModelRef`          | Always available (the `AI` Workers-AI binding / Cloudflare-over-REST). The fallback. |
 | **Direct**       | `direct: { ref, keyEnv }`       | Transparently replaces Cloudflare **when `keyEnv`'s API key is set**.                |
+| **OpenRouter**   | `openrouter: { ref, keyEnv }`   | The same model through the gateway, when an OpenRouter key is set and no direct one. |
 | **Subscription** | `subscription: { ref, vendor }` | Runs in the Claude Code / Codex harness on a pooled subscription token.              |
 
 Three shapes of catalog entry fall out of this:
 
-- **Cloudflare-only** — e.g. `cloudflare-llama`, `kimi-k2.7`, `deepseek-v4-pro`. One
+- **Cloudflare-only** — e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.
-- **Dual-mode** — `qwen`, `kimi`, `deepseek`, `glm`. A Cloudflare base **plus** a
-  direct and/or subscription flavour. Note the **context window** usually differs:
-  the Cloudflare variant runs a cut context (e.g. GLM-5.2 24K) while the
-  direct/subscription variant gets the full window (GLM-5.2 200K). `contextTokens` on
-  the `ModelRef` surfaces this in the picker.
-- **Subscription-only** — `claude-fable`, `claude-opus`, `claude-sonnet`, `gpt-5.5`,
-  `gpt-5.4`. No
-  Cloudflare/direct base; the subscription harness is the _only_ way to run them, so
-  they require a connected vendor token (§6) and there is **no inline fallback** (§5).
+- **Dual-mode** — `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`. A Cloudflare
+  base **plus** a direct, OpenRouter and/or subscription flavour. Note the **context
+  window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
+  Pro 131K) while the direct/subscription variant gets the full window (1M).
+  `contextTokens` on the `ModelRef` surfaces this in the picker.
+- **Gateway-only** — `gemini`, `kimi-k3`. No Cloudflare/direct base; reached through
+  OpenRouter once a key is connected.
+- **Subscription-only** — `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
+  subscription harness is the _only_ way to run it, so it requires a connected vendor
+  token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-opus` and
+  the GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an OpenRouter
+  pay-as-you-go base, so they are dual-mode rather than subscription-only.
 - **Local (per-user)** — locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in
@@ -294,6 +298,33 @@ resolver, mixed into a facade's registry **only when `BEDROCK_REGION` is set**. 
 enforces a **supported-model allow-list** (`BEDROCK_MODELS`): a model id outside the
 list throws `Unsupported Bedrock model: <model>` rather than forwarding an
 unvetted id.
+
+**Bedrock contributes NOTHING to the picker catalog, by design.** No `MODEL_CATALOG`
+entry carries a `bedrock` flavour and `SelectableModel` has no field for one, so a
+Bedrock model is reachable only as a **routing default** — `AGENT_DEFAULT_PROVIDER` +
+`AGENT_DEFAULT_MODEL`, or a per-kind `AGENT_MODELS` entry. A user cannot pin one to a
+block. That is the right shape for what Bedrock is used for here (a residency-guaranteed
+route an operator selects deployment-wide, and the `trustedProviders` escape hatch on the
+account model policy — §2 of [ADR 0025](./adr/0025-workspace-rbac.md)'s sibling
+`modelPolicy`); making it selectable per block would mean a per-deployment catalog, since
+what Bedrock serves depends on the account's region and model access grants.
+
+Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
+(`us.` / `eu.` / `jp.` / `au.` / `global.`) — several models are reachable ONLY through a
+cross-Region profile in a given Region, so the prefixed form is usually what you want.
+Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
+
+```
+BEDROCK_MODELS=us.anthropic.claude-opus-4-8,global.anthropic.claude-opus-4-8,openai.gpt-5.5
+```
+
+**Bedrock lags the vendors' own APIs** — its newest Anthropic model is Opus 4.8, not the
+Opus 5 / Sonnet 5 the subscription and OpenRouter flavours run, and its OpenAI ids are
+`openai.gpt-5.5` / `openai.gpt-5.4` rather than the GPT-5.6 tiers. Don't copy a catalog
+model id into `BEDROCK_MODELS`. The catalog spans 18 providers and 110+ variants and
+access is granted per account, so confirm each id against
+`aws bedrock list-foundation-models` / `list-inference-profiles` for YOUR region: an id
+that is real but not granted fails at call time, not at boot.
 
 ---
 

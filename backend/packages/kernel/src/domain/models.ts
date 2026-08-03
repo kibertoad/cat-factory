@@ -137,28 +137,55 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'cloudflare-llama',
     family: 'llama',
-    label: 'Llama 3.1',
-    description: "Meta's fast 8B instruct model — Cloudflare Workers AI's default.",
+    label: 'Llama 4 Scout',
+    description:
+      "Meta's 17B-active MoE with a 131K window and tool calling — Cloudflare Workers AI's " +
+      'open-weights default.',
     cloudflare: {
       provider: 'workers-ai',
-      model: '@cf/meta/llama-3.1-8b-instruct',
-      contextTokens: 7_968,
+      model: '@cf/meta/llama-4-scout-17b-16e-instruct',
+      contextTokens: 131_072,
     },
   },
   {
     id: 'qwen',
     family: 'qwen',
-    label: 'Qwen3',
-    description: "Alibaba's Qwen3 — Qwen3-30B on Cloudflare, flagship Qwen3-Max when direct.",
+    label: 'Qwen3.7',
+    description:
+      "Alibaba's Qwen — Qwen3-30B on Cloudflare, flagship Qwen3.7-Max (1M context) when " +
+      'direct or through OpenRouter.',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/qwen/qwen3-30b-a3b-fp8',
       contextTokens: 32_768,
     },
     direct: {
-      ref: { provider: 'qwen', model: 'qwen3-max' },
+      ref: { provider: 'qwen', model: 'qwen3.7-max', contextTokens: 1_000_000 },
       keyEnv: 'QWEN_API_KEY',
       providerLabel: 'DashScope',
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'qwen/qwen3.7-max', contextTokens: 1_000_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'gpt-oss-120b',
+    family: 'openai',
+    label: 'GPT-OSS 120B',
+    description:
+      "OpenAI's open-weights 120B reasoning model with tool calling and a 128K window — the " +
+      'strongest general-purpose model on Cloudflare that carries no vendor subscription.',
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/openai/gpt-oss-120b',
+      contextTokens: 128_000,
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-oss-120b', contextTokens: 131_072 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   {
@@ -209,36 +236,46 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
-    id: 'kimi-k2.5',
+    id: 'kimi-k3',
     family: 'kimi',
-    label: 'Kimi K2.5',
+    label: 'Kimi K3',
     description:
-      "Moonshot AI's prior-generation 1T-param agentic model, 256K context (Cloudflare Workers AI).",
-    cloudflare: {
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.5',
-      contextTokens: 262_144,
+      "Moonshot AI's 2.8T-param flagship — 1M-token context, always-on reasoning — direct via " +
+      'a Moonshot key or pay-as-you-go through OpenRouter. Not served on Workers AI.',
+    direct: {
+      ref: { provider: 'moonshot', model: 'kimi-k3', contextTokens: 1_048_576 },
+      keyEnv: 'MOONSHOT_API_KEY',
+      providerLabel: 'Moonshot',
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'moonshotai/kimi-k3', contextTokens: 1_048_576 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   {
     id: 'deepseek',
     family: 'deepseek',
-    label: 'DeepSeek R1',
+    label: 'DeepSeek V4 Flash',
     description:
-      "DeepSeek's reasoning: the 80K R1 Qwen-32B distill on Cloudflare, or the flagship " +
-      'chat model (64K) when direct or via a DeepSeek coding-plan subscription.',
+      "DeepSeek's cost-efficient 1M-context V4 model when direct, through OpenRouter or on a " +
+      'DeepSeek coding-plan subscription; falls back to the 80K R1 Qwen-32B distill on Cloudflare.',
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
       contextTokens: 80_000,
     },
     direct: {
-      ref: { provider: 'deepseek', model: 'deepseek-chat', contextTokens: 64_000 },
+      ref: { provider: 'deepseek', model: 'deepseek-v4-flash', contextTokens: 1_048_576 },
       keyEnv: 'DEEPSEEK_API_KEY',
       providerLabel: 'DeepSeek',
     },
     openrouter: {
-      ref: { provider: 'openrouter', model: 'deepseek/deepseek-chat', contextTokens: 64_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'deepseek/deepseek-v4-flash',
+        contextTokens: 1_048_576,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -247,9 +284,9 @@ export const MODEL_CATALOG: SelectableModel[] = [
     subscription: {
       ref: {
         provider: 'deepseek',
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         harness: 'claude-code',
-        contextTokens: 64_000,
+        contextTokens: 1_048_576,
       },
       vendor: 'deepseek',
     },
@@ -259,7 +296,8 @@ export const MODEL_CATALOG: SelectableModel[] = [
     family: 'deepseek',
     label: 'DeepSeek V4 Pro',
     description:
-      "DeepSeek's flagship V4 Pro agentic-coding model, served on Cloudflare (131K context).",
+      "DeepSeek's flagship V4 Pro agentic-coding model: 131K context on Cloudflare, or the " +
+      'full 1M window direct via a DeepSeek key or through OpenRouter.',
     // A Cloudflare AI-catalog model: a `<provider>/<model>` slug (not a native `@cf/...`
     // id) Cloudflare serves on its unified-billing run catalog via a partner (Fireworks),
     // reached with the account's own Workers AI binding/token — no AI Gateway, no BYOK.
@@ -268,6 +306,16 @@ export const MODEL_CATALOG: SelectableModel[] = [
       provider: 'workers-ai',
       model: 'deepseek/deepseek-v4-pro',
       contextTokens: 131_072,
+    },
+    direct: {
+      ref: { provider: 'deepseek', model: 'deepseek-v4-pro', contextTokens: 1_048_576 },
+      keyEnv: 'DEEPSEEK_API_KEY',
+      providerLabel: 'DeepSeek',
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'deepseek/deepseek-v4-pro', contextTokens: 1_048_576 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   {
@@ -278,11 +326,34 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "Z.ai's agentic-coding model: 256K context on Cloudflare, or the full 1M-token " +
       'window via a GLM (Z.ai) subscription.',
     cloudflare: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2', contextTokens: 262_144 },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'z-ai/glm-5.2', contextTokens: 1_048_576 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
     // Run via Claude Code against Z.ai's Anthropic-compatible endpoint on a GLM
     // coding-plan subscription (full 1M context, flat-rate quota).
     subscription: {
       ref: { provider: 'zai', model: 'glm-5.2', harness: 'claude-code', contextTokens: 1_000_000 },
       vendor: 'glm',
+    },
+  },
+  {
+    id: 'glm-flash',
+    family: 'glm',
+    label: 'GLM-4.7 Flash',
+    description:
+      "Z.ai's cheap, fast tool-calling model with a 131K window — the low-cost tier for light " +
+      'inline steps (estimation, triage, fragment selection).',
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/zai-org/glm-4.7-flash',
+      contextTokens: 131_072,
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'z-ai/glm-4.7-flash', contextTokens: 202_752 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   // Subscription-only models: run in the Claude Code / Codex harness with a pooled
@@ -335,11 +406,83 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'claude-sonnet',
     family: 'claude',
-    label: 'Claude Sonnet 4.6',
-    description: "Anthropic's balanced speed/intelligence model, run via Claude Code.",
+    label: 'Claude Sonnet 5',
+    description:
+      "Anthropic's balanced speed/intelligence model with a 1M-token context, run via Claude " +
+      'Code. Subscription-only here; the pay-as-you-go route is the dynamic OpenRouter catalog.',
     subscription: {
-      ref: { provider: 'anthropic', model: 'claude-sonnet-4-6', harness: 'claude-code' },
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+      },
       vendor: 'claude',
+    },
+  },
+  // The GPT-5.6 tiers are what Codex actually serves today: `sol` (flagship), `terra`
+  // (balanced everyday) and `luna` (cheapest). The model id IS the Codex `--model` slug —
+  // the `-codex` suffixed family ended at GPT-5.3, so a `gpt-5.5-codex`-shaped id makes the
+  // CLI fail with `Unknown model`. GPT-5.5 stays as the previous-generation frontier tier.
+  {
+    id: 'gpt-5.6-sol',
+    family: 'openai',
+    label: 'GPT-5.6 Sol',
+    description:
+      "OpenAI's flagship for complex coding and research — run via Codex on your ChatGPT " +
+      'subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-sol', contextTokens: 1_050_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: { provider: 'openai', model: 'gpt-5.6-sol', harness: 'codex', contextTokens: 1_050_000 },
+      vendor: 'codex',
+    },
+  },
+  {
+    id: 'gpt-5.6-terra',
+    family: 'openai',
+    label: 'GPT-5.6 Terra',
+    description:
+      "OpenAI's balanced everyday model — GPT-5.5-class capability at a fraction of the cost. " +
+      'The migration target for GPT-5.4, which Codex retires on 31 Aug 2026.',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-terra', contextTokens: 1_050_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-5.6-terra',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+      },
+      vendor: 'codex',
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    family: 'openai',
+    label: 'GPT-5.6 Luna',
+    description:
+      "OpenAI's fastest, cheapest GPT-5.6 tier — for clear, repeatable tasks. The migration " +
+      'target for GPT-5.4 mini.',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-luna', contextTokens: 1_050_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-5.6-luna',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+      },
+      vendor: 'codex',
     },
   },
   {
@@ -347,41 +490,36 @@ export const MODEL_CATALOG: SelectableModel[] = [
     family: 'openai',
     label: 'GPT-5.5',
     description:
-      "OpenAI's flagship — run via Codex on your ChatGPT subscription, or pay-as-you-go " +
-      'through OpenRouter (billed at OpenAI rates).',
+      "OpenAI's previous-generation frontier model, still served by Codex — run on your " +
+      'ChatGPT subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 400_000 },
+      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 1_050_000 },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
     subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' },
+      ref: { provider: 'openai', model: 'gpt-5.5', harness: 'codex', contextTokens: 1_050_000 },
       vendor: 'codex',
     },
   },
-  {
-    id: 'gpt-5.4',
-    family: 'openai',
-    label: 'GPT-5.4',
-    description: "OpenAI's cost-efficient mid-tier, run via Codex on your ChatGPT subscription.",
-    subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.4-codex', harness: 'codex' },
-      vendor: 'codex',
-    },
-  },
-  // Gemini 3 Pro has no Cloudflare/native-direct flavour in this deployment, so it is
-  // reached through the OpenRouter gateway (billed at Google's rates, no markup). It
-  // becomes selectable once an OpenRouter API key is connected for the workspace/user.
+  // Gemini has no Cloudflare/native-direct flavour in this deployment, so it is reached
+  // through the OpenRouter gateway (billed at Google's rates, no markup). It becomes
+  // selectable once an OpenRouter API key is connected for the workspace/user.
   // Other vendors' OpenRouter routes are folded into their native catalog entries (see
   // `openrouter` flavour on deepseek/gpt-5.5/claude-opus); any model not curated here is
   // reachable via the dynamic per-workspace OpenRouter catalog (`openRouterSelectableModels`).
   {
     id: 'gemini',
     family: 'gemini',
-    label: 'Gemini 3 Pro',
-    description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context, billed at Google rates.",
+    label: 'Gemini 3.1 Pro',
+    description:
+      "Google's flagship Gemini Pro via OpenRouter — 1M-token context, billed at Google rates.",
     openrouter: {
-      ref: { provider: 'openrouter', model: 'google/gemini-3-pro', contextTokens: 1_048_576 },
+      ref: {
+        provider: 'openrouter',
+        model: 'google/gemini-3.1-pro-preview',
+        contextTokens: 1_048_576,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -517,7 +655,7 @@ export interface ProviderCapabilities {
   localModels?: Set<string>
   /**
    * The OpenRouter `vendor/model` slugs the workspace has ENABLED in its dynamic
-   * catalog (e.g. `google/gemini-3-pro`). A dynamic OpenRouter model (`openrouter:<slug>`)
+   * catalog (e.g. `google/gemini-3.1-pro-preview`). A dynamic OpenRouter model (`openrouter:<slug>`)
    * is usable only when the workspace has an OpenRouter key (`openrouter ∈ directProviders`)
    * AND the slug is enabled here — so a stale pin to a since-disabled model fails the
    * start guard. Curated catalog entries with an `openrouter` flavour need only the key,
