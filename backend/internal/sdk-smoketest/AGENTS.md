@@ -14,7 +14,7 @@ Boots a real Node backend and drives the SAME scenario through all four SDK clie
 | `src/run.ts`     | the loop: boot → seed per SDK → run → compare → exit code                                            |
 | `src/backend.ts` | spawning `@cat-factory/e2e`'s `testServer.ts` and seeding an account-backed workspace + the two keys |
 | `src/runners.ts` | one entry per language: toolcheck, optional build, and how to invoke its program                     |
-| `src/parity.ts`  | the comparison; `EXPECTED` (absolute claims) and `ENVIRONMENTAL` (may legitimately differ)          |
+| `src/parity.ts`  | the comparison; `EXPECTED` (absolute claims) and `ENVIRONMENTAL` (may legitimately differ)           |
 
 Each SDK's own program lives beside that SDK (`sdk/*/smoketest/`), so it is written in the
 language it exercises and can only use that client's public API.

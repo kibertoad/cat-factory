@@ -45,11 +45,11 @@ configured_.
 `provisionType` (`provisionTypeSchema`, `backend/packages/contracts/src/environments.ts`) is
 one of:
 
-| Type             | Service declares                                                                                  | Meaning                                                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                                                                                                       |
+| Type             | Service declares                                                                                  | Meaning                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                                                                                                      |
 | `docker-compose` | a compose path (+ a `localDevOnly` flag, + an optional `composeBuild` flag)                       | run a local docker-compose stack on the runtime's Docker (pull pre-built images, or **build from source**: clone the PR head and `docker compose build`) |
-| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                                                                                                   |
+| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                                                                                                  |
 | `infraless`      | nothing                                                                                           | no environment: the `deployer` records a no-op, the Tester needs none                                                                                    |
 
 An **undeclared** service (no `provisioning`) falls through to the legacy single-connection
@@ -106,7 +106,7 @@ engine to its backend with `byEngine()`.
 | ------------------- | ---------------------------- | ---------------- | -------------------------------------------------------------- |
 | `local-k3s`         | `kubernetes`                 | `kubernetes`     | a local/in-cluster k3s (local-facade preset)                   |
 | `remote-kubernetes` | `kubernetes`                 | `kubernetes`     | an external managed cluster                                    |
-| `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker: `local-docker` is local-only      |
+| `local-docker`      | (local facade)               | `docker-compose` | the runtime's local Docker: `local-docker` is local-only       |
 | `remote-custom`     | `manifest` (or a custom one) | `custom`         | a BYO HTTP management API, or a code-registered native backend |
 | `none`              | (none)                       | `infraless`      | nothing is provisioned                                         |
 

@@ -208,6 +208,12 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ENVIRONMENTS_ALLOW_URL_HOSTS:
       env.ENVIRONMENTS_ALLOW_URL_HOSTS?.trim() ||
       'localhost,127.0.0.1,host.docker.internal,.localhost,.local,.nip.io,.sslip.io',
+    // Local mode is single-tenant by definition, so a locally-run model on the
+    // developer's own LAN (an LM Studio box, a homelab Ollama host) is the intended
+    // reach: default the runner-host policy's LAN opt-in ON. Hosted facades keep the
+    // strict loopback-only default, where the LAN allow-list would be an
+    // internal-network SSRF grant on a shared deployment (SEC-3).
+    LOCAL_MODELS_ALLOW_LAN: env.LOCAL_MODELS_ALLOW_LAN?.trim() || 'true',
   }
 }
 

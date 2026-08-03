@@ -63,7 +63,10 @@ import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { CryptoIdGenerator } from './runtime'
+import { D1AuthAttemptRepository } from './repositories/D1AuthAttemptRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { D1MachineNodeRepository } from './repositories/D1MachineNodeRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
@@ -642,6 +645,17 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       repoProjectionRepository: new D1RepoProjectionRepository({ db }),
       githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
     } as unknown as PersistenceRegistry,
+    // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
+    // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
+    // via /auth/machine-nodes. Wired symmetrically on the Node facade.
+    machineNodeRepository: new D1MachineNodeRepository({ db }),
+    // The durable cross-replica window behind the password throttle (SEC-4). Wired
+    // symmetrically on the Node facade. No `resolveClientAddress` here: this facade trusts
+    // the edge-injected cf-connecting-ip instead (auth.trustProxyHeaders is hardcoded on).
+    authAttemptRepository: new D1AuthAttemptRepository({
+      db,
+      idGenerator: new CryptoIdGenerator(),
+    }),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

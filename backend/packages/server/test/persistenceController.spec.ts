@@ -27,12 +27,24 @@ const SOURCES: Record<string, { id: string; accountId: string }> = {
   sklsrc_out: { id: 'sklsrc_out', accountId: OTHER_ACCOUNT },
 }
 
-function makeApp(repositories: PersistenceRegistry | undefined) {
+function makeApp(
+  repositories: PersistenceRegistry | undefined,
+  opts: { revokedNodeIds?: string[] } = {},
+) {
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
     c.set('container', {
       repositories,
       config: { auth: { sessionSecret: SECRET } },
+      // The machine-node roster the shared gate consults (SEC-5); wired only when the
+      // test names revoked nodes, mirroring a facade without the store.
+      ...(opts.revokedNodeIds
+        ? {
+            machineNodeRepository: {
+              isRevoked: async (nodeId: string) => opts.revokedNodeIds!.includes(nodeId),
+            },
+          }
+        : {}),
     } as unknown as AppEnv['Variables']['container'])
     await next()
   })
@@ -143,5 +155,30 @@ describe('persistence RPC controller: memo overrides never fake a wired reposito
   it('still 503s when the facade attaches no registry at all', async () => {
     const { status } = await call(makeApp(undefined), 'skillSourceRepository', 'get', ['sklsrc_in'])
     expect(status).toBe(503)
+  })
+})
+
+describe('persistence RPC controller: revoked machine nodes (SEC-5)', () => {
+  it('refuses a REVOKED node with the same 403 as an invalid token', async () => {
+    // The token itself still verifies (valid signature, live exp) — the roster tombstone
+    // alone is what kills it, which is the whole point of the kill switch.
+    const app = makeApp(
+      { skillSourceRepository: { get: async () => null } } as unknown as PersistenceRegistry,
+      { revokedNodeIds: ['node_1'] },
+    )
+    const { status, body } = await call(app, 'skillSourceRepository', 'get', ['sklsrc_in'])
+    expect(status).toBe(403)
+    expect(body).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+  })
+
+  it('serves a live node unchanged when the roster is wired', async () => {
+    const app = makeApp(
+      {
+        skillSourceRepository: { get: async (id: string) => SOURCES[id] ?? null },
+      } as unknown as PersistenceRegistry,
+      { revokedNodeIds: ['node_other'] },
+    )
+    const { status } = await call(app, 'skillSourceRepository', 'get', ['sklsrc_in'])
+    expect(status).toBe(200)
   })
 })

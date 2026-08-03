@@ -453,6 +453,8 @@ function startBackgroundSweepers(deps: {
       subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
+      machineNodeRepository: repos.machineNodeRepository,
+      authAttemptRepository: repos.authAttemptRepository,
       commitRepository: new DrizzleCommitProjectionRepository(db),
       notificationRepository: new DrizzleNotificationRepository(db),
     },
@@ -765,6 +767,8 @@ async function bootServer(
     // publish endpoint scope against.
     machineSubscribe: {
       accountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+      // A revoked node must not keep reading workspace events (SEC-5).
+      isRevoked: (nodeId) => repos.machineNodeRepository.isRevoked(nodeId),
     },
   })
   bootClock.mark('listen')

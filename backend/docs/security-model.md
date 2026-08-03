@@ -323,7 +323,13 @@ is possible at all:
 6. **Self-hosted runner pools execute jobs with these tokens**: the pool host is inside the trust
    boundary. Run pools on infrastructure you'd trust with the installation token itself
    (`runner-pool-integration.md`, ADR 0026 for the warm-pool isolation hazard).
-7. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
+7. **Leave `LOCAL_MODELS_ALLOW_LAN` off on any shared deployment.** A user-registered local model
+   endpoint is fetched server-side, so the runner-host allow-list is what the server may be
+   pointed at. The default permits loopback only; the opt-in widens it to the whole private
+   network (RFC1918 / ULA / mDNS `.local`), which on a multi-tenant box lets any user aim
+   server-side requests at internal LAN services. Turn it on only where every user already owns
+   the network the server runs in (the single-tenant local mode default).
+8. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
    reads.
 
 ## Known gaps (honest list, with candidate fixes)

@@ -43,11 +43,11 @@ the `.cat-context/` materialization. The only per-source code is `normalizeConne
 `parseRef` + `fetchDocument`, and the fetched data is mapped into a **shared, source-neutral
 model** before rendering:
 
-* `documents/design.logic.ts`: `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
+- `documents/design.logic.ts`: `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
   `references`) + `renderDesignContext`, which emits `## <block>` sections, a global `### Components`,
   `### Design tokens`, and optional `### References`. Each provider only maps its own API into this
   shape; the renderer is shared, so the output isn't Figma-shaped.
-* `documents/http.ts`: the shared host-pinned fetch + SSRF guard + capped read every fixed-host
+- `documents/http.ts`: the shared host-pinned fetch + SSRF guard + capped read every fixed-host
   provider reuses (`createHostPinnedFetch` / `assertHostPinned` / `readCappedText`).
 
 One **best-practice prompt fragment** serves all design sources: `design.context`

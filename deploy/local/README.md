@@ -190,7 +190,7 @@ port:
 | LM Studio | `http://localhost:1234/v1`  | enable the local server in the LM Studio UI      |
 | llama.cpp | `http://localhost:8080/v1`  | `llama-server -m model.gguf`                     |
 | vLLM      | `http://localhost:8000/v1`  | `vllm serve <model>`                             |
-| Custom    | (none: supply your own)    | any OpenAI-compatible server (Jan, GPT4All, …)   |
+| Custom    | (none: supply your own)     | any OpenAI-compatible server (Jan, GPT4All, …)   |
 
 Any model the runner serves works, e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
 `deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a _model_ served through a runner,
@@ -211,6 +211,13 @@ Local models need no API key, so no `*_API_KEY` env var: your runner config is s
 with the mandatory `ENCRYPTION_KEY`. Networking: the LLM proxy runs in **this host process**,
 so it reaches the runner at `localhost` directly; you only need a non-default base URL
 if your runner listens elsewhere or you run the orchestrator itself in a container.
+
+A runner on another machine on your LAN (an LM Studio box, a homelab Ollama host) works
+too: local mode defaults `LOCAL_MODELS_ALLOW_LAN=true`, which permits private
+10./172.16-31./192.168. addresses, ULA IPv6 and mDNS `.local` names beside loopback. Set
+`LOCAL_MODELS_ALLOW_LAN=false` to restrict runners to this machine only. Hosted Node
+deployments default the flag OFF because LAN reach from a shared server is an
+internal-network SSRF exposure; see `backend/docs/model-support.md`.
 
 ## Open the UI
 
@@ -481,7 +488,7 @@ ended it: they want opposite reactions:
 
 | Failure says                              | Meaning                                               | Do                                                                                                      |
 | ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `timed out after 300000ms with no output` | The CLI went **silent** that long: presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
+| `timed out after 300000ms with no output` | The CLI went **silent** that long: presumed stuck.    | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
 | `hit its 3600000ms wall-clock ceiling`    | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
 
 The idle budget is measured from the **last byte**, not from the spawn, so a step that keeps

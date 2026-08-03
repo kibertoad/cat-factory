@@ -16,7 +16,7 @@ reads, so it's a reporting problem." Two facts kill that read:
 
 1. **Claude Code's own context gauge counts cache reads.** The "% until auto-compact" indicator is
    computed from the sum of every input bucket
-(   `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`) because cache reads
+   ( `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`) because cache reads
    still physically occupy the context window. cat-factory summing the same buckets is therefore a
    **like-for-like** measure of the same thing, not an inflation relative to how Claude Code
    reports. The cache-read composition explains why the _dollar_ cost stays low; it explains
@@ -110,7 +110,7 @@ settled, and what a Slice 3 rollup must not undo:
   backend got around to reading it. The registry stamps inside `onCallMetric`.
 - **The unphased proxy path stays the canonical route, and the BACKEND decides when it is left.**
   An image that predates the phase segment keeps working and lands in `''`. The reverse pairing
-(  an image NEWER than its backend) would 404 EVERY model call, killing the run rather than
+  ( an image NEWER than its backend) would 404 EVERY model call, killing the run rather than
   degrading its telemetry, so the backend states on the job body that it serves the route
   (`proxyPhasePath`, set in `resolveAuth` / the bootstrapper / the env-config repairer) and the
   harness tags the URL only when told. This is NOT the capability handshake the repo refuses: the
@@ -238,7 +238,7 @@ conformance suite):
 | 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done | #1455 |
 | 3   | Per-run rollup by phase    | `GROUP BY (agent_kind, phase)` aggregate + carry-cost proxy; onto `step.metrics`; panel + debug overview         | ✅ done |       |
 | 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
-| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one: see below                     | ⬜ todo |       |
+| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one: see below                      | ⬜ todo |       |
 
 ### Slice 0: what the instrument was actually reporting (2026-07-28)
 

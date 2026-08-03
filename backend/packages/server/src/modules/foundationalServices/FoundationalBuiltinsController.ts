@@ -1,5 +1,5 @@
 import { type Context, Hono } from 'hono'
-import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 
 /**
@@ -43,13 +43,7 @@ export function foundationalBuiltinsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   /** The machine-token gate, shared by both routes. Returns the payload, or null after replying. */
-  const requireMachine = async (c: Context<AppEnv>) => {
-    const secret = c.get('container').config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    return secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
-  }
+  const requireMachine = (c: Context<AppEnv>) => verifyMachineRequest(c)
   const forbidden = { error: { code: 'forbidden', message: 'invalid machine token' } } as const
 
   // The catalog projection: identity + contract manifests for every registered service, and

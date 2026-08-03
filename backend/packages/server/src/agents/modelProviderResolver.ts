@@ -10,7 +10,7 @@ import {
   openAiCompatibleResolver,
   openAiResolver,
 } from '@cat-factory/agents'
-import { type ApiKeyService, fetchLocalRunner } from '@cat-factory/integrations'
+import type { ApiKeyService } from '@cat-factory/integrations'
 import type {
   InlineLlmCallRecorder,
   LlmTraceSink,
@@ -44,14 +44,23 @@ export interface ScopedModelProviderOptions {
   /** Opt-in registries that need no DB key — the Cloudflare lib + Bedrock. */
   extraRegistries?: ProviderRegistry[]
   /**
-   * Resolve a user's locally-run model endpoints (Ollama / LM Studio / …) so inline LLM
-   * calls reach them like the proxied path. Keyless by design (the endpoint carries an
+   * The initiating user's locally-run model endpoints (Ollama / LM Studio / …) so inline
+   * LLM calls reach them like the proxied path. Keyless by design (the endpoint carries an
    * optional key), so these register into the per-scope registry directly rather than via
-   * the DB API-key pool. Keyed by the scope's user (the run initiator).
+   * the DB API-key pool. ONE grouped option on purpose: the transport is the deployment's
+   * policy-enforcing `LocalModelEndpointService.fetchRunner` (SSRF re-validation on every
+   * redirect hop, under the operator's loopback/LAN policy), and grouping it with the
+   * endpoint read makes it impossible to wire the endpoints while falling back to a fetch
+   * that applies the wrong policy.
    */
-  localEndpointsFor?: (
-    userId: string,
-  ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
+  localRunners?: {
+    /** Resolve the scope user's configured endpoints (the run initiator's). */
+    endpointsFor: (
+      userId: string,
+    ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
+    /** The policy-bound revalidating transport for every call to those endpoints. */
+    fetch: (url: string, init: RequestInit) => Promise<Response>
+  }
 }
 
 /**
@@ -114,17 +123,18 @@ export function createScopedModelProviderResolver(
         }
       }
       // The initiating user's locally-run runners (keyless OpenAI-compatible endpoints).
-      // Route their transport through `fetchLocalRunner` so the inline path re-validates the
-      // SSRF allow-list on EVERY redirect hop — the same guard the proxy path applies. Without
-      // it the AI-SDK default fetch would silently follow a local runner's 302 to the
-      // cloud-metadata endpoint (SEC-2).
-      if (scope.userId && opts.localEndpointsFor) {
-        for (const ep of await opts.localEndpointsFor(scope.userId)) {
+      // Route their transport through the facade's policy-bound runner fetch so the inline
+      // path re-validates the SSRF allow-list on EVERY redirect hop — the same guard the
+      // proxy path applies. Without it the AI-SDK default fetch would silently follow a
+      // local runner's 302 to the cloud-metadata endpoint (SEC-2/SEC-3).
+      const runners = opts.localRunners
+      if (scope.userId && runners) {
+        for (const ep of await runners.endpointsFor(scope.userId)) {
           registry[ep.provider] = openAiCompatibleResolver({
             name: ep.provider,
             apiKey: ep.apiKey || 'local',
             baseURL: ep.baseUrl,
-            fetch: (url, init) => fetchLocalRunner(String(url), init ?? {}),
+            fetch: (url, init) => runners.fetch(String(url), init ?? {}),
           })
         }
       }

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { type MachinePayload, TOKEN_AUDIENCE, signerFor } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { RelayedRealtimeEvent } from '../../events/machineEvents.js'
 import { authorizeMachineSubscribe } from '../../events/machineSubscribe.js'
 import type { AppEnv } from '../../http/env.js'
@@ -44,11 +44,7 @@ export function eventsRelayController(): Hono<AppEnv> {
 
     // Auth first (before the seam probe) — a token-less caller can't tell a mothership from a
     // non-mothership facade.
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json(
         { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },
@@ -145,6 +141,7 @@ export function eventsRelayController(): Hono<AppEnv> {
     // relay on every mothership), exactly like the publish handler above. The registry is
     // reflective (`Record<string, Record<string, fn>>`), so narrow the one method we call.
     const workspaceRepository = container.repositories?.workspaceRepository
+    const machineNodes = container.machineNodeRepository
     const auth = await authorizeMachineSubscribe({
       auth: container.config.auth,
       token: c.req.header('authorization'),
@@ -152,6 +149,7 @@ export function eventsRelayController(): Hono<AppEnv> {
       accountOf: workspaceRepository?.accountOf
         ? (id) => workspaceRepository.accountOf!(id) as Promise<string | null | undefined>
         : undefined,
+      isRevoked: machineNodes ? (nodeId) => machineNodes.isRevoked(nodeId) : undefined,
     })
     if (!auth.ok) {
       return c.json(

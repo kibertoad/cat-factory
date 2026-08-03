@@ -162,6 +162,10 @@ export function buildLocalModelEndpointService(
       info: 'cat-factory:local-model-endpoints',
     }),
     clock,
+    // Loopback-only unless the operator opts into LAN reach (SEC-3). RFC1918 is
+    // unroutable from workerd anyway, so on this facade the flag mostly governs what
+    // the write boundary accepts; kept symmetric with the Node facade regardless.
+    allowPrivateLanHosts: env.LOCAL_MODELS_ALLOW_LAN?.trim() === 'true',
   })
 }
 

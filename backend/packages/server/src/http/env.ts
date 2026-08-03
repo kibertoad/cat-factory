@@ -1,6 +1,9 @@
+import type { Context } from 'hono'
 import type {
   AgentRunRepository,
+  AuthAttemptRepository,
   ExecutionRepository,
+  MachineNodeRepository,
   NotificationChannel,
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
@@ -322,6 +325,30 @@ export interface ServerContainer extends Core {
    * 503s when absent. See docs/initiatives/mothership-mode.md.
    */
   mothershipConnect?: MothershipConnector
+  /**
+   * The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
+   * mint, consulted by the shared machine gate (`verifyMachineRequest`) on every `/internal/*`
+   * machine call so a revoked node is refused everywhere at once, and served to the owner via
+   * `GET /auth/machine-nodes` / `POST /auth/machine-nodes/:nodeId/revoke`. Wired by both hosted
+   * facades from their main DB; absent ⇒ mints go unrecorded and no revocation check runs (a
+   * deployment that never acts as a mothership loses nothing).
+   */
+  machineNodeRepository?: MachineNodeRepository
+  /**
+   * The durable auth-attempt ledger behind the password-endpoint throttle (SEC-4), the
+   * cross-replica window the per-isolate Map cannot be. Wired by both facades from their main
+   * DB; absent (or erroring) the throttle degrades to the in-process backstop rather than
+   * failing open.
+   */
+  authAttemptRepository?: AuthAttemptRepository
+  /**
+   * The transport-level client address of a request (the socket peer on Node), read by the
+   * password throttle when `auth.trustProxyHeaders` is off — a forwarded header is
+   * attacker-controlled unless a trusted proxy overwrites it (SEC-4). Wired by the Node
+   * facade; the Worker leaves it absent because Cloudflare injects `cf-connecting-ip` at the
+   * edge, which that facade trusts instead.
+   */
+  resolveClientAddress?: (c: Context<AppEnv>) => string | undefined
 }
 
 /**

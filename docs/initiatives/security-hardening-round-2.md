@@ -44,15 +44,15 @@ Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 | ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | ------- |
 | SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ✅ done | #1207   |
 | SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ✅ done | #1358   |
-| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —     |
-| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —     |
-| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —     |
+| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ✅ done | P1 PR   |
+| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ✅ done | P1 PR   |
+| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ✅ done | P1 PR   |
 | SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ✅ done | round-1 |
 | SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ✅ done | #1358   |
-| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —     |
+| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —       |
 | SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ✅ done | #1358   |
 | SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ✅ done | #1358   |
-| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —     |
+| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —       |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
 
@@ -96,6 +96,39 @@ also records two items the round-2 review listed as todo that had already shippe
   already scrubs every body (`systemPrompt`/`userPrompt`/`fragments[].body`/`contextFiles[].content`)
   through `redactSecrets` before the size budget, drops secret-shaped files, and deep-scrubs `extras`.
   No further change needed.
+
+### Landed (the P1 PR: SEC-3 / SEC-4 / SEC-5)
+
+- **SEC-3**: the local-runner allow-list is loopback-only by default; private-LAN reach
+  (RFC1918 / ULA / mDNS `.local`) is the `LOCAL_MODELS_ALLOW_LAN=true` operator opt-in, which
+  single-tenant local mode defaults on (`applyLocalDefaults`). The policy lives on
+  `LocalModelEndpointService` and binds the write boundary, the test probe, and EVERY run-time
+  redirect hop through the service's `fetchRunner` transport (the LLM proxy's target and the
+  inline resolver's grouped `localRunners` option both route through it), so a row persisted
+  under a wider policy is refused loudly after the operator narrows it. The refusal message
+  names the opt-in. Documented as an operator-hardening item in `security-model.md`.
+- **SEC-4**: the password throttle is backed by the cross-replica `auth_attempts` ledger
+  (D1 ⇄ Drizzle, kernel `AuthAttemptRepository` port), with a per-`ip:email` burst cap AND a
+  per-IP aggregate that catches one-password-many-emails stuffing; the old in-process Map is
+  demoted to the store-outage backstop (never fail open, never fail the login path). The client
+  IP is the socket peer (`container.resolveClientAddress`, Node) unless `AUTH_TRUST_PROXY=true`
+  says a trusted proxy overwrites the forwarded headers; the Worker hardcodes the trust because
+  Cloudflare injects `cf-connecting-ip` at the edge. The 429 now carries
+  `details.reason: 'auth_attempts'` + `retryAfterSeconds`. Pruned hourly by both retention
+  sweeps; parity via `defineAuthAttemptSuite`. This also delivers the
+  `durable-auth-rate-limiting.md` initiative (its slice 5, config knobs for the limits, was
+  deliberately not taken: the constants hold until someone needs different ones).
+- **SEC-5**: machine tokens are revocable via the `machine_nodes` roster (D1 ⇄ Drizzle, kernel
+  `MachineNodeRepository` port). Every mint is RECORDED (the roster is what makes "revoke MY
+  node" checkable — without ownership any user could kill any tenant's satellite), the shared
+  `verifyMachineRequest` gate consults the tombstone on all eight `/internal/*` machine
+  surfaces plus the WS subscribe handshake, and the owner drives
+  `GET /auth/machine-nodes` / `POST /auth/machine-nodes/:nodeId/revoke`. A revoked node id can
+  never be re-minted and a foreign node id cannot be taken over. Rows prune once past their
+  latest signed `exp`. Parity via `defineMachineNodeSuite`; the roster is classified
+  mothership-internal in the RPC drift guard (a node must never reach its own revocation
+  state). `DEFAULT_MACHINE_TOKEN_TTL_MS` stays 30 days: with a kill switch landed, shortening
+  it would only add reconnect friction.
 
 ---
 

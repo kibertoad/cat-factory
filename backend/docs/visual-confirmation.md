@@ -98,8 +98,8 @@ binary-artifact storage (the substrate both rely on)
   (`/blocks/:id/visual-confirmation/{approve,request-fix,recapture}`). New `pl_visual` pipeline
   (`… tester-ui → visual-confirmation → merger`).
 - SPA: `VisualConfirmationWindow.vue` (actual-vs-reference gallery + approve/request-fix/recapture
-  + reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
-  `visual-confirm` result-view registration, notification reveal + Slack panel entries.
+  - reference upload), `stores/visualConfirm.ts`, `composables/api/visualConfirm.ts`, the
+    `visual-confirm` result-view registration, notification reveal + Slack panel entries.
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 

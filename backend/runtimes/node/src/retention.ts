@@ -6,6 +6,8 @@ import type {
   CommitProjectionRepository,
   LlmCallMetricRepository,
   NotificationRepository,
+  AuthAttemptRepository,
+  MachineNodeRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
@@ -22,6 +24,10 @@ import { startSweeper } from './sweeper.js'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+// Auth attempts are junk once the 15-minute throttle window closes; a 1-hour retention
+// leaves ample slack for clock skew while keeping the hot (key, at) index tiny.
+const AUTH_ATTEMPT_RETENTION_MS = 60 * 60 * 1000
 
 /**
  * Idle subscription quota-cycle rows are pruned after 30 days. A fixed window (not the
@@ -59,6 +65,11 @@ export interface RetentionRepos {
   provisioningLogRepository: Pick<ProvisioningLogRepository, 'deleteOlderThan'>
   // Password-reset tokens past their own TTL (single-use + 1h expiry, so tiny).
   passwordResetTokenRepository: Pick<PasswordResetTokenRepository, 'deleteExpired'>
+  // Machine-node roster rows past their latest signed exp (no token for the node can
+  // outlive it, so a revocation tombstone past it protects nothing).
+  machineNodeRepository: Pick<MachineNodeRepository, 'deleteExpired'>
+  // Password-throttle attempts (SEC-4), junk minutes after the window closes.
+  authAttemptRepository: Pick<AuthAttemptRepository, 'deleteOlderThan'>
   // The GitHub commit projection (`github_commits`), pruned to `retention.commitMs`
   // like the Worker's daily prune. Fed only when the GitHub App is configured, but the
   // prune is wired unconditionally — on an unwired deployment the table is empty and
@@ -80,6 +91,8 @@ export interface RetentionResult {
   subscriptionQuotaCycles: number
   provisioningLog: number
   passwordResetTokens: number
+  machineNodes: number
+  authAttempts: number
   commits: number
   notifications: number
   /**
@@ -157,6 +170,14 @@ export async function sweepRetention(
     // Reset tokens past their own expiry — `now`, not a window (like activations).
     passwordResetTokens: await pass.expire('password_reset_tokens', () =>
       repos.passwordResetTokenRepository.deleteExpired(now),
+    ),
+    // Machine-node roster rows past their latest signed exp — `now`, not a window.
+    machineNodes: await pass.expire('machine_nodes', () =>
+      repos.machineNodeRepository.deleteExpired(now),
+    ),
+    // Password-throttle attempts on a fixed aggressive window (SEC-4).
+    authAttempts: await pass.prune('auth_attempts', AUTH_ATTEMPT_RETENTION_MS, now, (c) =>
+      repos.authAttemptRepository.deleteOlderThan(c),
     ),
     commits: await pass.prune('github_commits', retention.commitMs, now, (c) =>
       repos.commitRepository.deleteOlderThan(c),

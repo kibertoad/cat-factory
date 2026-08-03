@@ -22,7 +22,7 @@ that genuinely differ.
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **UI**           | one `ClarificationItem` component: prompt + answer textarea + Not-relevant + Recommend + suggestion display + dismissed/reopen state | the window shell, header, and lifecycle rail (incorporate/re-review vs continue/proceed)                                                                                                                  |
 | **Vocabulary**   | the item-status vocabulary `open` / `answered` / `dismissed` / `recommend_requested`                                                 | requirements' `resolved`, `severity`, `category`; the initiative's `interview` round state                                                                                                                |
-| **Gate/backend** | —                                                                                                                                  | `ReviewGateController` (incorporate-doc → re-review → cap) vs `InterviewGateController` (ask → continue/proceed → synthesize brief); the entities (`requirement_reviews` table vs `initiatives` JSON row) |
+| **Gate/backend** | —                                                                                                                                    | `ReviewGateController` (incorporate-doc → re-review → cap) vs `InterviewGateController` (ask → continue/proceed → synthesize brief); the entities (`requirement_reviews` table vs `initiatives` JSON row) |
 
 The two gates **compose** the shared item concept; they are not merged (their lifecycles and
 outputs differ, so merging would break one). This mirrors how `useReviewStage` already unifies the
@@ -95,7 +95,7 @@ board-surfacing of requirements-review + clarity-review without merging the serv
   the run to `failed` instead of spinning forever. `converged` outranks `failed` deliberately: a
   failure after the interview settled belongs to the step that failed, not to the interview.
 - **A running run is not automatically a running INTERVIEW.** Neither gate leads its pipeline
-(  initiative planning explores the codebase first, document authoring researches and outlines
+  ( initiative planning explores the codebase first, document authoring researches and outlines
   first) so `running` covers minutes of container work before the human is asked anything.
   Reported as `working` the window claims a pass is chewing on answers that were never given, on
   exactly the long lead-ins worth explaining. `interviewGatePhase` therefore splits it with

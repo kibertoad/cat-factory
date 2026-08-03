@@ -479,6 +479,12 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
     // Open (un-gated) signup is a local-mode convenience; hosted defaults stay
     // invite/email-domain-gated. `applyLocalDefaults` flips it on for local mode.
     openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
+    // The password throttle reads the client IP from the socket peer unless the operator
+    // says a trusted proxy overwrites the forwarded headers (SEC-4): x-forwarded-for is
+    // attacker-controlled on a bare deployment, and a spoofable IP is unlimited fresh
+    // throttle buckets. The Worker facade hardcodes this on (Cloudflare injects
+    // cf-connecting-ip at the edge).
+    trustProxyHeaders: env.AUTH_TRUST_PROXY?.trim() === 'true',
     ...(googleEnabled
       ? {
           google: {

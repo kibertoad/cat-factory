@@ -1,13 +1,42 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fetchLocalRunner, localRunnerUrlError } from './localModelUrl.js'
 
+const LAN = { allowPrivateLan: true }
+
 describe('localRunnerUrlError (SSRF allow-list)', () => {
-  it('accepts loopback and private-LAN runner URLs', () => {
+  it('accepts loopback runner URLs under the default (loopback-only) policy', () => {
     for (const url of [
       'http://localhost:11434/v1',
       'http://localhost:1234/v1',
+      'http://my-box.localhost:11434/v1',
       'http://127.0.0.1:8080/v1',
       'http://127.5.6.7/v1',
+      'http://[::1]:8080/v1',
+    ]) {
+      expect(localRunnerUrlError(url), url).toBeNull()
+    }
+  })
+
+  it('rejects private-LAN runner URLs under the default policy, naming the opt-in', () => {
+    // SEC-3: on a shared deployment the LAN allow-list is an internal-network SSRF
+    // grant, so RFC1918/ULA/mDNS hosts need the operator opt-in.
+    for (const url of [
+      'http://10.0.0.5:8000/v1',
+      'http://172.16.0.1/v1',
+      'http://172.31.255.255/v1',
+      'http://192.168.1.50:11434/v1',
+      'http://my-box.local:11434/v1',
+      'http://[fd00::1]:8080/v1',
+      'http://[fc00::1]/v1',
+    ]) {
+      expect(localRunnerUrlError(url), url).toMatch(/disabled on this deployment/)
+    }
+  })
+
+  it('accepts loopback and private-LAN runner URLs when LAN access is enabled', () => {
+    for (const url of [
+      'http://localhost:11434/v1',
+      'http://127.0.0.1:8080/v1',
       'http://10.0.0.5:8000/v1',
       'http://172.16.0.1/v1',
       'http://172.31.255.255/v1',
@@ -15,42 +44,42 @@ describe('localRunnerUrlError (SSRF allow-list)', () => {
       'http://my-box.local:11434/v1',
       'http://[::1]:8080/v1',
       'http://[fd00::1]:8080/v1',
+      'http://[fc00::1]/v1',
+      'http://[fd12:3456::1]:8080/v1',
     ]) {
-      expect(localRunnerUrlError(url), url).toBeNull()
+      expect(localRunnerUrlError(url, LAN), url).toBeNull()
     }
   })
 
-  it('rejects public hosts, the metadata endpoint, and other link-local addresses', () => {
-    for (const url of [
-      'http://evil.example.com/v1', // public hostname
-      'http://8.8.8.8/v1', // public IP
-      'http://169.254.169.254/latest/meta-data', // cloud metadata (link-local)
-      'http://172.32.0.1/v1', // just outside the 172.16/12 private range
-      'http://[fe80::1]/v1', // IPv6 link-local
-      'http://[::]/v1', // unspecified
-      'http://0.0.0.0/v1', // unspecified v4
-    ]) {
-      expect(localRunnerUrlError(url), url).toBeTruthy()
+  it('rejects public hosts, the metadata endpoint, and other link-local addresses under both policies', () => {
+    for (const policy of [undefined, LAN]) {
+      for (const url of [
+        'http://evil.example.com/v1', // public hostname
+        'http://8.8.8.8/v1', // public IP
+        'http://169.254.169.254/latest/meta-data', // cloud metadata (link-local)
+        'http://172.32.0.1/v1', // just outside the 172.16/12 private range
+        'http://[fe80::1]/v1', // IPv6 link-local
+        'http://[::]/v1', // unspecified
+        'http://0.0.0.0/v1', // unspecified v4
+      ]) {
+        expect(localRunnerUrlError(url, policy), `${url} (lan: ${!!policy})`).toBeTruthy()
+      }
     }
   })
 
   it('rejects public DNS hostnames that merely start with an IPv6 ULA prefix', () => {
     // Regression: the ULA fc00::/7 test must be gated behind an "is IPv6 literal" check,
     // else any registrable domain starting with `fc`/`fd`/`fe80` is treated as private
-    // and forwarded server-side (an SSRF pivot under attacker-controlled DNS).
+    // and forwarded server-side (an SSRF pivot under attacker-controlled DNS). The LAN
+    // policy is where the ULA branch is live, so assert under it.
     for (const url of [
       'http://fc2.com/v1',
       'http://fd-internal.attacker.com/v1',
       'http://fdanything.evil.com/v1',
       'http://fe80spoof.com/v1',
     ]) {
+      expect(localRunnerUrlError(url, LAN), url).toBeTruthy()
       expect(localRunnerUrlError(url), url).toBeTruthy()
-    }
-  })
-
-  it('still accepts genuine IPv6 ULA and loopback literals', () => {
-    for (const url of ['http://[fc00::1]/v1', 'http://[fd12:3456::1]:8080/v1', 'http://[::1]/v1']) {
-      expect(localRunnerUrlError(url), url).toBeNull()
     }
   })
 
@@ -65,25 +94,33 @@ describe('localRunnerUrlError (SSRF allow-list)', () => {
     expect(localRunnerUrlError('http://user@127.0.0.1:8080/v1')).toBeTruthy()
   })
 
-  it('rejects obfuscated encodings of dangerous targets', () => {
+  it('rejects obfuscated encodings of dangerous targets under both policies', () => {
     // The WHATWG URL parser canonicalises integer/octal/hex IPv4 before the allow-list
     // sees it, so an obfuscated metadata/public address normalises to dotted form and is
     // then denied — there is no encoding bypass.
-    for (const url of [
-      'http://2852039166/v1', // bare-integer 169.254.169.254 (metadata)
-      'http://0xa9.0xfe.0xa9.0xfe/v1', // hex octets → 169.254.169.254
-      'http://134744072/v1', // bare-integer 8.8.8.8 (public)
-      'http://[::ffff:169.254.169.254]/v1', // IPv4-mapped metadata endpoint
-    ]) {
-      expect(localRunnerUrlError(url), url).toBeTruthy()
+    for (const policy of [undefined, LAN]) {
+      for (const url of [
+        'http://2852039166/v1', // bare-integer 169.254.169.254 (metadata)
+        'http://0xa9.0xfe.0xa9.0xfe/v1', // hex octets → 169.254.169.254
+        'http://134744072/v1', // bare-integer 8.8.8.8 (public)
+        'http://[::ffff:169.254.169.254]/v1', // IPv4-mapped metadata endpoint
+      ]) {
+        expect(localRunnerUrlError(url, policy), `${url} (lan: ${!!policy})`).toBeTruthy()
+      }
     }
   })
 
   it('canonicalises obfuscated encodings of loopback and allows them', () => {
-    // Same canonicalisation, benign target: these all normalise to 127.0.0.1.
+    // Same canonicalisation, benign target: these all normalise to 127.0.0.1, which is
+    // loopback and so allowed even under the default policy.
     for (const url of ['http://2130706433/v1', 'http://0177.0.0.1/v1', 'http://0x7f.0.0.1/v1']) {
       expect(localRunnerUrlError(url), url).toBeNull()
     }
+  })
+
+  it('rejects an IPv4-mapped private-LAN literal under the default policy only', () => {
+    expect(localRunnerUrlError('http://[::ffff:10.0.0.1]/v1')).toBeTruthy()
+    expect(localRunnerUrlError('http://[::ffff:10.0.0.1]/v1', LAN)).toBeNull()
   })
 })
 
@@ -120,6 +157,26 @@ describe('fetchLocalRunner (redirect re-validation)', () => {
     )
     // The denied target is never fetched.
     expect(doFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a redirect to a LAN host under the default policy', async () => {
+    // A loopback runner must not become a pivot onto the deployment's internal network
+    // when the operator has not opted into LAN reach (SEC-3).
+    const doFetch = vi.fn().mockResolvedValueOnce(redirectTo('http://192.168.1.50:8080/models'))
+    await expect(fetchLocalRunner('http://localhost:11434/models', {}, doFetch)).rejects.toThrow(
+      /Blocked local-runner request/,
+    )
+    expect(doFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows a redirect to a LAN host when LAN access is enabled', async () => {
+    const doFetch = vi
+      .fn()
+      .mockResolvedValueOnce(redirectTo('http://192.168.1.50:8080/models'))
+      .mockResolvedValueOnce(ok())
+    const res = await fetchLocalRunner('http://localhost:11434/models', {}, doFetch, LAN)
+    expect(res.status).toBe(200)
+    expect(doFetch).toHaveBeenCalledTimes(2)
   })
 
   it('gives up on a redirect loop', async () => {

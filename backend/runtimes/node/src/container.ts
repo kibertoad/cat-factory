@@ -3,6 +3,7 @@
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
+import { getConnInfo } from '@hono/node-server/conninfo'
 import { type NotificationWebhookService } from '@cat-factory/integrations'
 import {
   type GitHubInstallationRepository,
@@ -461,6 +462,24 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       repoProjectionRepository,
       githubInstallationRepository,
     } as unknown as PersistenceRegistry,
+    // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
+    // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
+    // via /auth/machine-nodes. Wired symmetrically on the Cloudflare facade.
+    machineNodeRepository: repos.machineNodeRepository,
+    // The durable cross-replica window behind the password throttle (SEC-4). Wired
+    // symmetrically on the Cloudflare facade.
+    authAttemptRepository: repos.authAttemptRepository,
+    // The socket peer address, read by the password throttle when AUTH_TRUST_PROXY is off:
+    // a forwarded header is attacker-controlled unless a trusted proxy overwrites it (SEC-4).
+    resolveClientAddress: (c) => {
+      try {
+        return getConnInfo(c).remote.address
+      } catch {
+        // A request with no live socket (an in-process test `app.request`) has no peer
+        // address; `undefined` is the true answer, not an error to surface.
+        return undefined
+      }
+    },
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

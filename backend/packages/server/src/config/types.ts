@@ -136,6 +136,15 @@ export interface AuthConfig {
    * invite. Empty ⇒ new-user creation is invite-only (the default, fail-closed).
    */
   allowedEmailDomains: string[]
+  /**
+   * Whether the password throttle may take the client IP from forwarded headers
+   * (`cf-connecting-ip` / the first `x-forwarded-for` hop). OFF by default on Node: a
+   * forwarded header is attacker-controlled unless a trusted proxy in front overwrites
+   * it, and a spoofable IP hands the attacker unlimited fresh throttle buckets (SEC-4).
+   * Node deployments behind such a proxy opt in with `AUTH_TRUST_PROXY=true`; the Worker
+   * facade hardcodes it on because Cloudflare injects `cf-connecting-ip` at the edge.
+   */
+  trustProxyHeaders: boolean
 }
 
 export interface EmailConfig {

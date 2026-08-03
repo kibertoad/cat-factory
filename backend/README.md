@@ -87,11 +87,11 @@ matching controller per module in `worker/src/modules/*`.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `workspaces`                         | Board (workspace) lifecycle; assembles the full snapshot (blocks, pipelines, executions, spend) the SPA hydrates from.                     |
 | `accounts`                           | Tenancy: personal/org accounts, GitHub-membership-based visibility, the account ↔ workspace ownership graph.                               |
-| `board`                              | Block mutations: frames/modules/tasks CRUD, reparenting, dependency edges.                                                                |
+| `board`                              | Block mutations: frames/modules/tasks CRUD, reparenting, dependency edges.                                                                 |
 | `pipelines`                          | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
 | `agents`                             | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
 | `execution`                          | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
-| `spend`                              | Token metering + tiered monthly budget enforcement (workspace / account / user).                                                                                      |
+| `spend`                              | Token metering + tiered monthly budget enforcement (workspace / account / user).                                                           |
 | `bootstrap`                          | Reference architectures + the async repo-bootstrap task.                                                                                   |
 | `blueprints` _(pipeline agent step)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                  |
 | `requirements`                       | Stateless reviewer agent over a block's collected requirements.                                                                            |
@@ -609,12 +609,12 @@ mistake:
   master keys. Locally these go in `.dev.vars` (gitignored; see
   `deploy/backend/.dev.vars.example`).
 
-| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                                |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                              |
+| `[vars]` (in `wrangler.toml`)                                                                                                           | Secrets (`wrangler secret put …`)                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_OAUTH_CLIENT_ID`, `AUTH_ALLOWED_LOGINS`/`AUTH_ALLOWED_ORGS`, `AUTH_SUCCESS_REDIRECT_URL`, `ENVIRONMENT`, `CORS_ALLOWED_ORIGINS` | `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`                                                                                                             |
 | `WORKER_PUBLIC_URL`, `RUNNERS_ENABLED`                                                                                                  | (container/runner path holds no key of its own: see below)                                                                                                      |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                           |
-| `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT` (the spend budget is per-workspace in the UI, not env)                             | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                    |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_SETUP_REDIRECT_URL`, `GITHUB_PRIVILEGED_APP_ID`                                             | `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PRIVILEGED_APP_PRIVATE_KEY`                                                                          |
+| `AGENT_DEFAULT_*`/`AGENT_MODELS`, `DECISION_TIMEOUT` (the spend budget is per-workspace in the UI, not env)                             | `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                   |
 | `DOCUMENT_SOURCES`/`DOCUMENT_PLANNER`, `TASK_SOURCES`, `PROMPT_LIBRARY_ENABLED`/`PROMPT_LIBRARY_SELECTOR`                               | `ENCRYPTION_KEY` (shared master for every integration's credentials, **required**: the always-on document/task/environment sources fail config load without it) |
 
 > `WORKER_PUBLIC_URL` is a **`[var]`, not a secret**, despite older notes that
@@ -723,7 +723,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
 > unblocked. The container image is pinned by the `[[containers]].image` GHCR tag:
 > use a version tag, not `latest`, for reproducible deploys.
@@ -802,14 +802,14 @@ any prerequisite is missing the endpoint returns:
 To enable the run path, all of the following must be present (see `selectRepoBootstrapper` in
 `src/infrastructure/container.ts`):
 
-| Prerequisite             | Kind     | How to set it                                                                                                                                       |
-| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prerequisite             | Kind     | How to set it                                                                                                                                      |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `EXEC_CONTAINER` binding | binding  | declared in `wrangler.toml`: the per-run container _factory_, not a shared instance (see below)                                                    |
-| `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                           |
-| `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                           |
-| `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                         |
+| `GITHUB_APP_ID`          | `[vars]` | App id in `wrangler.toml [vars]` (with `GITHUB_APP_SLUG`)                                                                                          |
+| `GITHUB_APP_PRIVATE_KEY` | secret   | `wrangler secret put GITHUB_APP_PRIVATE_KEY` (PKCS#8 PEM)                                                                                          |
+| `GITHUB_WEBHOOK_SECRET`  | secret   | `wrangler secret put GITHUB_WEBHOOK_SECRET`                                                                                                        |
 | `WORKER_PUBLIC_URL`      | `[vars]` | a `wrangler.toml [vars]` entry, e.g. `WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"`: it's a public origin, not a secret |
-| `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                               |
+| `AUTH_SESSION_SECRET`    | secret   | `wrangler secret put AUTH_SESSION_SECRET` (already required for auth)                                                                              |
 
 `EXEC_CONTAINER` is the Durable Object **namespace** binding, not a single long-lived container.
 Each run derives its own instance (`container.get(container.idFromName(jobId))`) so containers

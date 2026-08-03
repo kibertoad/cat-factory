@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Notification } from '@cat-factory/kernel'
-import { type MachinePayload, TOKEN_AUDIENCE, signerFor } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import type { DelegatedNotificationRequest } from '../../notifications/machineNotifications.js'
 import { logger } from '../../observability/logger.js'
@@ -42,11 +42,7 @@ export function notificationRelayController(): Hono<AppEnv> {
 
     // Auth first (before the seam probe) — a token-less caller can't tell a mothership with
     // external channels from one without.
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json(
         { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },

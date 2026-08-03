@@ -2,7 +2,6 @@ import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { promptCacheParams, readInputTokenClasses } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
-import { fetchLocalRunner } from '@cat-factory/integrations'
 import {
   type ApiKeyProvider,
   contextWindowFor,
@@ -150,7 +149,14 @@ interface UpstreamTarget {
   baseURL: string
   apiKey: string
   leasedApiKeyId: string | null
-  localRunner: boolean
+  /**
+   * Present only for a locally-run model: the endpoint service's policy-bound transport
+   * (`LocalModelEndpointService.fetchRunner`), which re-validates the SSRF allow-list on
+   * every redirect hop under the deployment's loopback/LAN policy. Bound where the
+   * endpoint was resolved, because that is the one place the service is known to exist.
+   * Cloud providers use a trusted, hardcoded base URL and keep plain `fetch`.
+   */
+  fetchRunner: ((url: string, init: RequestInit) => Promise<Response>) | null
 }
 
 /**
@@ -236,11 +242,10 @@ async function resolveUpstreamTarget(
   const { session, gateways, apiKeys, localModelEndpoints, log, observe } = ctx
   const localRunner = isLocalRunner(session.provider)
   if (localRunner) {
+    const endpoints = localModelEndpoints
     const resolved =
-      session.userId && localModelEndpoints
-        ? await localModelEndpoints.resolve(session.userId, session.provider)
-        : null
-    if (!resolved) {
+      session.userId && endpoints ? await endpoints.resolve(session.userId, session.provider) : null
+    if (!resolved || !endpoints) {
       log.error('llm proxy: no local runner endpoint configured for the run initiator')
       observe({
         usage: null,
@@ -268,7 +273,7 @@ async function resolveUpstreamTarget(
       baseURL: resolved.baseUrl.replace(/\/+$/, ''),
       apiKey: resolved.apiKey || 'local',
       leasedApiKeyId: null,
-      localRunner,
+      fetchRunner: (url, init) => endpoints.fetchRunner(url, init),
     }
   }
   const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
@@ -326,7 +331,7 @@ async function resolveUpstreamTarget(
       baseURL: upstream.baseURL,
       apiKey: leased.secret,
       leasedApiKeyId: leased.keyId,
-      localRunner,
+      fetchRunner: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -357,10 +362,11 @@ async function resolveUpstreamTarget(
 /**
  * Forward the hardened request to the resolved upstream and meter the response. The local-runner
  * base URL is user-supplied and forwarded server-side, so follow redirects manually and re-validate
- * every hop against the SSRF allow-list (`fetchLocalRunner`); cloud providers use a trusted,
- * hardcoded base URL, so they keep plain `fetch`. Non-2xx is passed straight back (nothing to
- * meter); a streamed body is teed through {@link observationStream} so spend + the observation are
- * recorded off the response path; a buffered body is metered then relayed verbatim.
+ * every hop against the SSRF allow-list under the deployment's loopback/LAN policy (the target's
+ * `fetchRunner`); cloud providers use a trusted, hardcoded base URL, so they keep plain `fetch`.
+ * Non-2xx is passed straight back (nothing to meter); a streamed body is teed through
+ * {@link observationStream} so spend + the observation are recorded off the response path; a
+ * buffered body is metered then relayed verbatim.
  */
 async function relayUpstream(
   c: Context<AppEnv>,
@@ -368,7 +374,7 @@ async function relayUpstream(
   target: UpstreamTarget,
 ): Promise<Response> {
   const { payload, streaming, log, observe, record, waitUntil } = ctx
-  const { baseURL, apiKey, localRunner } = target
+  const { baseURL, apiKey, fetchRunner } = target
   if (streaming) {
     payload.stream_options = { include_usage: true }
   }
@@ -386,9 +392,9 @@ async function relayUpstream(
     body: JSON.stringify(payload),
   }
   let upstreamRes: Response
-  if (localRunner) {
+  if (fetchRunner) {
     try {
-      upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
+      upstreamRes = await fetchRunner(upstreamUrl, upstreamInit)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log.error('llm proxy: local runner request blocked', { err: message })

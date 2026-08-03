@@ -1,6 +1,7 @@
 # Initiative: durable cross-replica auth rate limiting
 
-**Status:** planned (tracker only; no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** complete (delivered by the security-hardening round-2 P1 PR as SEC-4; slice 5
+deliberately not taken) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -49,13 +50,27 @@ need Redis.)
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                | Status  | PR  |
-| --- | ------------------------------------------------------------------------------------ | ------- | --- |
-| 1   | Kernel port + `auth_attempts` D1 ⇄ Drizzle impls + migrations                        | ⬜ todo |     |
-| 2   | Conformance assertions: over-limit 429 behaviour on both runtimes; window expiry     | ⬜ todo |     |
-| 3   | `AuthController` switch to the durable check (Map demoted to store-failure backstop) | ⬜ todo |     |
-| 4   | Retention sweep wiring (both runtimes)                                               | ⬜ todo |     |
-| 5   | Config: window/limit env knobs with today's constants as defaults                    | ⬜ todo |     |
+| #   | Slice                                                                                | Status     | PR         |
+| --- | ------------------------------------------------------------------------------------ | ---------- | ---------- |
+| 1   | Kernel port + `auth_attempts` D1 ⇄ Drizzle impls + migrations                        | ✅ done    | round-2 P1 |
+| 2   | Conformance assertions: over-limit 429 behaviour on both runtimes; window expiry     | ✅ done    | round-2 P1 |
+| 3   | `AuthController` switch to the durable check (Map demoted to store-failure backstop) | ✅ done    | round-2 P1 |
+| 4   | Retention sweep wiring (both runtimes)                                               | ✅ done    | round-2 P1 |
+| 5   | Config: window/limit env knobs with today's constants as defaults                    | ⬜ dropped |            |
+
+Delivery notes (round-2 P1 PR): the port grew a third read beyond the sketch —
+`countByIpSince`, the per-IP aggregate that catches one-password-many-emails stuffing, which
+SEC-4 surfaced after this tracker was written — and the attempt row carries `ip` beside `key`
+for it. Slice 2 landed as the `defineAuthAttemptSuite` repository-parity suite (both stores)
+plus controller-level 429/backstop/proxy-trust coverage in
+`packages/server/test/authThrottle.spec.ts`, rather than an HTTP-level conformance case: the
+conformance harnesses run with password auth disabled, and enabling it there just to re-test
+the same seam was not worth the coupling. Slice 5 was deliberately dropped — the constants
+(15 min window, 10/key, 50/IP, 1 h retention) hold until someone demonstrates a need; adding
+knobs now would be configuration for its own sake. The client-IP half of SEC-4 also landed
+here: `AUTH_TRUST_PROXY` gates the forwarded headers on Node (socket peer otherwise, via
+`container.resolveClientAddress`), and the Worker trusts the edge-injected
+`cf-connecting-ip` unconditionally.
 
 ## Conventions & gotchas
 

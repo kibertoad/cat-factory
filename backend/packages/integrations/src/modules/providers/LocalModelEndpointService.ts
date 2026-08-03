@@ -13,7 +13,11 @@ import type {
   UpsertLocalModelEndpointInput,
 } from '@cat-factory/contracts'
 import { LOCAL_RUNNER_LABELS } from '@cat-factory/contracts'
-import { fetchLocalRunner, localRunnerUrlError } from './localModelUrl.js'
+import {
+  fetchLocalRunner,
+  type LocalRunnerUrlPolicy,
+  localRunnerUrlError,
+} from './localModelUrl.js'
 
 // LocalModelEndpointService: owns each USER's locally-run model endpoints (Ollama / LM
 // Studio / llama.cpp / vLLM / a custom OpenAI-compatible server) — the per-user analogue
@@ -33,6 +37,13 @@ export interface LocalModelEndpointServiceDependencies {
   clock: Clock
   /** Injected for tests; defaults to the global fetch. */
   fetch?: typeof fetch
+  /**
+   * Permit private-LAN runner hosts (RFC1918 / ULA / mDNS `.local`) in addition to
+   * loopback. OFF by default: on a shared multi-tenant deployment the LAN allow-list is
+   * an internal-network SSRF grant, so it is an operator opt-in
+   * (`LOCAL_MODELS_ALLOW_LAN=true`; single-tenant local mode defaults it on).
+   */
+  allowPrivateLanHosts?: boolean
 }
 
 /** A resolved endpoint for the run-time path: base URL + the decrypted optional key. */
@@ -43,7 +54,12 @@ export interface ResolvedLocalEndpoint {
 }
 
 export class LocalModelEndpointService {
-  constructor(private readonly deps: LocalModelEndpointServiceDependencies) {}
+  /** The deployment's runner-host policy, normalised once from the deps flag. */
+  private readonly urlPolicy: LocalRunnerUrlPolicy
+
+  constructor(private readonly deps: LocalModelEndpointServiceDependencies) {
+    this.urlPolicy = { allowPrivateLan: deps.allowPrivateLanHosts ?? false }
+  }
 
   /** Every endpoint the user has configured (key-free wire shape). */
   async list(userId: string): Promise<LocalModelEndpoint[]> {
@@ -54,9 +70,10 @@ export class LocalModelEndpointService {
   /** Create or replace the user's endpoint for a runner. */
   async upsert(userId: string, input: UpsertLocalModelEndpointInput): Promise<LocalModelEndpoint> {
     // SSRF guard: the stored base URL is later forwarded to server-side (the LLM proxy +
-    // inline provider resolve it by the run initiator), so reject a non-local host here at
-    // the write boundary — the run-time paths then trust the persisted URL.
-    const urlError = localRunnerUrlError(input.baseUrl)
+    // inline provider resolve it by the run initiator), so reject a host the deployment's
+    // policy denies here at the write boundary. The run-time paths re-validate too (via
+    // `fetchRunner`), because a row can pre-date a policy narrowing.
+    const urlError = localRunnerUrlError(input.baseUrl, this.urlPolicy)
     if (urlError) throw new ValidationError(urlError)
     const now = this.deps.clock.now()
     const existing = await this.deps.localModelEndpointRepository.getByUserProvider(
@@ -135,27 +152,32 @@ export class LocalModelEndpointService {
   }
 
   /**
+   * Fetch a runner URL under this deployment's host policy, re-validating the allow-list
+   * on every redirect hop. The ONE transport every run-time forward uses (the LLM proxy,
+   * the inline model provider, the probe below), so a row persisted under a wider policy
+   * is refused loudly at fetch time after an operator narrows it, never silently honoured.
+   */
+  fetchRunner(rawUrl: string, init: RequestInit): Promise<Response> {
+    return fetchLocalRunner(rawUrl, init, this.deps.fetch ?? fetch, this.urlPolicy)
+  }
+
+  /**
    * Probe a runner's OpenAI-compatible `/models` endpoint server-side, returning
    * reachability + the model ids it serves. Never throws — failures are reported as
    * `{ reachable: false, error }` so the UI can surface them.
    */
   async testConnection(input: TestLocalModelEndpointInput): Promise<LocalModelEndpointTestResult> {
     // SSRF guard: this probe forwards to a user-supplied URL server-side, so refuse a
-    // non-local host before issuing the fetch (same allow-list as `upsert`).
-    const urlError = localRunnerUrlError(input.baseUrl)
+    // host the policy denies before issuing the fetch (same allow-list as `upsert`).
+    const urlError = localRunnerUrlError(input.baseUrl, this.urlPolicy)
     if (urlError) return { reachable: false, models: [], error: urlError }
-    const doFetch = this.deps.fetch ?? fetch
     const url = `${input.baseUrl.replace(/\/+$/, '')}/models`
     try {
       const headers: Record<string, string> = {}
       if (input.apiKey) headers.authorization = `Bearer ${input.apiKey}`
       // Re-validate on every redirect hop: a reachable runner that 302s to a denied
       // host (e.g. the cloud-metadata endpoint) must not be followed.
-      const res = await fetchLocalRunner(
-        url,
-        { headers, signal: AbortSignal.timeout(8000) },
-        doFetch,
-      )
+      const res = await this.fetchRunner(url, { headers, signal: AbortSignal.timeout(8000) })
       if (!res.ok) {
         return { reachable: false, models: [], error: `Runner returned HTTP ${res.status}` }
       }

@@ -52,11 +52,11 @@ pipelines entirely through the UI, at feature parity with GitHub.
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
 | 1   | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker)                                                     | ✅ done | #1138   |
 | 1b  | **Provider pre-slice (gates all visual work):** add + populate a `provider: VcsProvider` discriminator on the repo/connection wire types + projections, symmetric across both runtimes, with a conformance assertion | ✅ done | this PR |
-| 2a  | Per-workspace GitLab PAT connect flow; **backend** (persistence + connect service/controller + provider-routing client, both runtimes + conformance)                                                                | ✅ done | this PR |
-| 2b  | Per-workspace GitLab PAT connect flow; **connect UI** mirroring `GitHubConnect.vue` (provider-aware labels/icons, gitlab connection probe, i18n)                                                                    | ✅ done | this PR |
+| 2a  | Per-workspace GitLab PAT connect flow; **backend** (persistence + connect service/controller + provider-routing client, both runtimes + conformance)                                                                 | ✅ done | this PR |
+| 2b  | Per-workspace GitLab PAT connect flow; **connect UI** mirroring `GitHubConnect.vue` (provider-aware labels/icons, gitlab connection probe, i18n)                                                                     | ✅ done | this PR |
 | 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                                                                           | ⬜ todo |         |
 | 4   | Webhook setup surface (register the GitLab webhook + secret for a connected project)                                                                                                                                 | ⬜ todo |         |
-| 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons; i18n'd, all locales                                                                                                                         | ⬜ todo |         |
+| 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons; i18n'd, all locales                                                                                                                          | ⬜ todo |         |
 | 6   | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding                                                                                                                    | ⬜ todo |         |
 | 7   | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item)                                                                                                                                                 | ⬜ todo |         |
 | 8   | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary)                                                                                                        | ⬜ todo |         |
@@ -181,7 +181,7 @@ Slice 2a landed the backend of the per-workspace GitLab PAT connect. Read this b
 - **`VcsPatConnectionService`** (`@cat-factory/integrations`, provider-neutral) validates a pasted
   PAT via the `VcsIdentityResolver` (a bad token → `ValidationError`), seals it with the
   deployment `SecretCipher` (`cat-factory:vcs-token` domain), and writes the row (`accountId: null`:
- a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
+  a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
   reads + decrypts it per call; `buildGitLabConnectClient` bridges a `FetchGitLabClient` over it to
   the `GitHubClient` port, so the whole `GitHubSyncService` seed path works unchanged for GitLab.
 - **Provider routing = `ProviderRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub

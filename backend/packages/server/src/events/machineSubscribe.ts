@@ -74,6 +74,13 @@ export async function authorizeMachineSubscribe(opts: {
   workspaceId: string
   /** The mothership's workspace → account resolver; absent ⇒ this facade is not a mothership. */
   accountOf: AccountOfWorkspace | undefined
+  /**
+   * The machine-node roster's revocation read (SEC-5), threaded from the facade's
+   * `machineNodeRepository`; absent ⇒ no roster is wired and no revocation check runs.
+   * This handshake cannot go through the shared HTTP gate (it rides a WS upgrade, not a
+   * Hono context), so it takes the same check as an input instead.
+   */
+  isRevoked?: (nodeId: string) => Promise<boolean>
 }): Promise<MachineSubscribeAuth> {
   const secret = opts.auth.sessionSecret
   const payload = secret
@@ -82,6 +89,11 @@ export async function authorizeMachineSubscribe(opts: {
       })
     : null
   if (!payload) return { ok: false, status: 403, message: 'invalid machine token' }
+  // Same 403 as an invalid token: the caller holds the token, so there is no oracle to
+  // protect, and reconnecting (which mints a fresh node) is the remedy for both.
+  if (opts.isRevoked && (await opts.isRevoked(payload.nodeId))) {
+    return { ok: false, status: 403, message: 'invalid machine token' }
+  }
 
   if (!opts.accountOf) {
     return { ok: false, status: 503, message: 'event subscription is not enabled' }

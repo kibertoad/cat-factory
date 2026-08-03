@@ -58,7 +58,7 @@ Add a `docker-compose` handler on the **`local-docker`** engine, with this `prov
 | Field                 | Value                                       | Why                                                                                 |
 | --------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `composePath`         | `deploy/preview/compose/docker-compose.yml` | read from the PR head                                                               |
-| `service`             | `web`                                       | the service whose port becomes the environment URL (Caddy: SPA **and** API)        |
+| `service`             | `web`                                       | the service whose port becomes the environment URL (Caddy: SPA **and** API)         |
 | `port`                | `8080`                                      | its container port                                                                  |
 | `build`               | `true`                                      | **load-bearing**: the stack builds cat-factory from the PR head rather than pulling |
 | `buildTimeoutMinutes` | `45`                                        | the default 15 is not enough to install and build this workspace from cold          |
@@ -80,9 +80,9 @@ Infrastructure → Test environments, fill in its section:
 
 | Field                 | Value                                                                                  |
 | --------------------- | -------------------------------------------------------------------------------------- |
-| workers.dev subdomain | your account's subdomain label: the preview URL derives from it                       |
+| workers.dev subdomain | your account's subdomain label: the preview URL derives from it                        |
 | VCS API token         | a fine-grained token on this repo with **Deployments: read & write**, and nothing else |
-| Workflow repository   | leave blank; each service frame's own repo is used                                    |
+| Workflow repository   | leave blank; each service frame's own repo is used                                     |
 | Advanced              | leave blank unless you renamed things in the workflow                                  |
 
 The two name templates under **Advanced** are the contract with

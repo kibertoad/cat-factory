@@ -107,13 +107,13 @@ Duplicating that on the coder would mean:
 
 So the declaration seam stays exactly one. What `repro-test` gains is the field it is missing:
 
-| Field                     | Status  | Purpose                                                           |
-| ------------------------- | ------- | ----------------------------------------------------------------- |
-| `outcome`                 | exists  | `reproduced` / `partial` / `not_reproducible`                     |
-| `testPaths`               | exists  | the declared test files                                           |
-| `notes`                   | exists  | what was reproduced, or WHY not                                   |
+| Field                     | Status  | Purpose                                                          |
+| ------------------------- | ------- | ---------------------------------------------------------------- |
+| `outcome`                 | exists  | `reproduced` / `partial` / `not_reproducible`                    |
+| `testPaths`               | exists  | the declared test files                                          |
+| `notes`                   | exists  | what was reproduced, or WHY not                                  |
 | `command`                 | **new** | the command that runs exactly those tests: what the harness runs |
-| `alternativeVerification` | **new** | for `not_reproducible`: what the agent verified INSTEAD           |
+| `alternativeVerification` | **new** | for `not_reproducible`: what the agent verified INSTEAD          |
 
 `not_reproducible` + `notes` + `alternativeVerification` **is** the brief's "explicit
 machine-readable declaration with the agent's stated alternative verification". The infeasibility
@@ -302,7 +302,7 @@ Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image
 | Item                                                                                      | Status | PR  |
 | ----------------------------------------------------------------------------------------- | ------ | --- |
 | `executor-harness/src/reproduction-proof.ts`: symmetric worktrees, red/green, teardown    | done   |     |
-| Declared-test application onto the base worktree (unconditional overlay; see below, D4)  | done   |     |
+| Declared-test application onto the base worktree (unconditional overlay; see below, D4)   | done   |     |
 | Echo `omittedTestPaths` from the job body onto the report; stamp a fresh `at` per publish | done   |     |
 | Heartbeat + per-job args; live publish on `RunnerJobView`, terminal on the result         | done   |     |
 | Repair feedback on a failed verification, inside the existing budget (D6)                 | done   |     |
@@ -378,12 +378,12 @@ Notes for Phase C (which renders all of this):
 
 ### Phase D: SPA surfacing
 
-| Item                                                                                     | Status | PR  |
-| ---------------------------------------------------------------------------------------- | ------ | --- |
-| Step result surfacing for `step.reproduction` (shared shell trailing section or panel)   | todo   |     |
+| Item                                                                                    | Status | PR  |
+| --------------------------------------------------------------------------------------- | ------ | --- |
+| Step result surfacing for `step.reproduction` (shared shell trailing section or panel)  | todo   |     |
 | `coder.reproductionProof` descriptor in `configs.ts` (deferred from Phase A: see above) | todo   |     |
 | Task-config control for the tri-state (descriptor renders automatically: verify)        | todo   |     |
-| i18n keys in ALL locales (the locale-parity gate) + `data-testid`s                       | todo   |     |
+| i18n keys in ALL locales (the locale-parity gate) + `data-testid`s                      | todo   |     |
 
 ### Phase E: `pl_bugfix` gains a `repro-test` step
 

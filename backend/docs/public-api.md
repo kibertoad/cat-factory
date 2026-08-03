@@ -58,12 +58,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).  |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                         |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start an initiative on a pipeline that can park at all.   |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                  |
+| Scope    | Adds                                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md). |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                        |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start an initiative on a pipeline that can park at all.  |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                 |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -243,17 +243,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope   | Behaviour                                                                                                                                         |
-| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                    |
-| `POST /api/v1/services/:serviceId/tasks` | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).              |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                 |
-| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                   |
-| `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                          |
-| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.  |
-| `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                     |
-| `POST /api/v1/tasks/:taskId/retry`       | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                  |
-| `DELETE /api/v1/tasks/:taskId`           | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                      |
+| Method / path                            | Scope   | Behaviour                                                                                                                                        |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/services`                   | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
+| `POST /api/v1/services/:serviceId/tasks` | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
+| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                  |
+| `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
+| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
+| `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
+| `POST /api/v1/tasks/:taskId/retry`       | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                 |
+| `DELETE /api/v1/tasks/:taskId`           | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                     |
 
 Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `blocked` / `pr_ready` /
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
@@ -314,17 +314,17 @@ Every action returns the run's **whole decision list**, re-read after the action
 run is waiting on a park type this surface cannot answer yet
 ([tracker](../../docs/initiatives/public-api-additions.md)); your options are the SPA or cancel.
 
-| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                     |
-| ----------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                          |
-| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                       |
-| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                 |
-| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.  |
-| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                        |
-| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                            |
-| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                   |
-| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                  |
-| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                  |
+| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                    |
+| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                         |
+| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                      |
+| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round. |
+| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                       |
+| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                           |
+| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                  |
+| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                 |
+| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                 |
 
 Three decision kinds appear in `decisions[]`, discriminated by `kind`:
 

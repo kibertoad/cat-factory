@@ -214,7 +214,7 @@ per-file patches:
   seam routes a controlled `UModal`'s dismiss paths (Escape, backdrop, Cancel) through a
   dirty check: it snapshots the form's user-owned state each time the modal opens and, on a
   close request, only prompts (`common.discard.*` confirm) when the current snapshot diverges;
- an unchanged form, or a submit in flight, closes immediately as before. The modal's
+  an unchanged form, or a submit in flight, closes immediately as before. The modal's
   `open` setter calls `requestClose()` instead of the store close, and the Cancel button does
   too. Wired into `AddTaskModal.vue`, `RecurringPipelineModal.vue`, and `BootstrapModal.vue`
   (the three that wiped title/description/per-type fields/attached context on an accidental
@@ -292,9 +292,9 @@ per-file patches:
 
 | ID    | Sev | Status  | Finding                                                                                                          |
 | ----- | --- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg`: gate unadvanceable                            |
+| UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg`: gate unadvanceable                             |
 | UX-33 | P1  | done    | Typed review answers lost when window closes without blur/save                                                   |
-| UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer": opposite models                          |
+| UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer": opposite models                           |
 | UX-35 | P2  | done    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
 | UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
 | UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
@@ -395,7 +395,7 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 | ----- | --- | ------ | -------------------------------------------------------------------------------------------------- |
 | UX-45 | P1  | todo   | Direct provider API keys saved without any validation probe                                        |
 | UX-46 | P2  | todo   | Connected keys show no last-4 / created-date identity hint                                         |
-| UX-47 | P2  | todo   | Key-removal confirm is generic: doesn't name the key                                              |
+| UX-47 | P2  | todo   | Key-removal confirm is generic: doesn't name the key                                               |
 | UX-48 | P2  | todo   | Datadog/incident connections: no Test button, no key-page links, no scopes stated                  |
 | UX-49 | P2  | todo   | 428 password modal never explains the 40h client-side password caching                             |
 | UX-50 | P2  | todo   | Model pickers are unsearchable dropdowns (catalog can be 300+ models)                              |
@@ -403,7 +403,7 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 | UX-52 | P2  | todo   | High-blast-radius disconnects (GitHub App) are one accidental Enter away                           |
 | UX-53 | P2  | todo   | No unsaved-changes protection in settings panels (tab switch / Escape discards)                    |
 | UX-54 | P3  | todo   | Manual GitHub installation-id field gives no hint where the id comes from                          |
-| UX-55 | P3  | todo   | Vendor credential steps are plain text, no "create token" link                                    |
+| UX-55 | P3  | todo   | Vendor credential steps are plain text, no "create token" link                                     |
 | UX-56 | P3  | todo   | Mixed save granularity inside WorkspaceSettingsPanel (one Save for 5 sections; Budget separate)    |
 | UX-57 | P3  | todo   | Raw backend error text piped verbatim into toasts/status across settings                           |
 | UX-58 | P3  | todo   | Local runner endpoints savable without a (re)successful test after URL edits                       |
@@ -466,7 +466,7 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 | ID    | Sev | Status | Finding                                                                                 |
 | ----- | --- | ------ | --------------------------------------------------------------------------------------- |
-| UX-70 | P1  | done   | Board whose WebSocket never connects is silently non-live, no indicator                |
+| UX-70 | P1  | done   | Board whose WebSocket never connects is silently non-live, no indicator                 |
 | UX-71 | P2  | done   | Debounced board refresh swallows failures → silently stale board                        |
 | UX-72 | P2  | done   | Reconnect declares "connected" even when the resync refresh failed                      |
 | UX-73 | P2  | done   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
@@ -519,12 +519,12 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 | ----- | --- | ----------- | ---------------------------------------------------------------------------------------- |
 | UX-62 | P1  | done (#841) | Icon-only close/action buttons with no accessible name (widespread)                      |
 | UX-63 | P2  | done (#841) | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
-| UX-64 | P2  | done (#841) | Clickable non-interactive `<div>` steps on board cards, not keyboard-operable           |
+| UX-64 | P2  | done (#841) | Clickable non-interactive `<div>` steps on board cards, not keyboard-operable            |
 | UX-65 | P2  | done (#841) | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
 | UX-66 | P2  | done (#841) | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
 | UX-67 | P2  | todo        | No light mode / system color-scheme support; palette hardcoded                           |
 | UX-68 | P3  | todo        | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
-| UX-69 | P3  | todo        | Board nodes not in the tab order, no keyboard path to a specific card                   |
+| UX-69 | P3  | todo        | Board nodes not in the tab order, no keyboard path to a specific card                    |
 
 - **UX-62: Unlabeled icon buttons. DONE.** Every icon-only dismiss button that had
   neither `aria-label` nor `title` now routes through the new shared `common/IconButton.vue`
@@ -541,7 +541,7 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   passing every other UButton prop/listener through via `$attrs`. An icon-only button
   with no accessible name is now unrepresentable through the primitive. (No `UTooltip`
   exists in the app; `title`+`aria-label` is the established named-icon pattern
-(  `StepContainerStatus.vue`) so IconButton codifies exactly that.)
+  ( `StepContainerStatus.vue`) so IconButton codifies exactly that.)
 - **UX-64: Keyboard-dead click target. DONE.** `board/nodes/TaskPipelineMini.vue`'s
   clickable `<div>` mini-step is now a real `<button type="button">` (keyboard-focusable
   - operable), with `focus-visible:ring-2` and `text-start w-full` to preserve layout.

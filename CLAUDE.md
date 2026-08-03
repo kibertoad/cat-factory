@@ -564,7 +564,10 @@ Node, and each facade supplies only its differentiators behind the shared kernel
   aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. **Locally-run
   models** (Ollama / LM Studio / llama.cpp / vLLM / custom OpenAI-compatible) are per-user endpoints
   appended to `GET /models` with NO API key; the base URL is forwarded server-side, so it is constrained to
-  a loopback/LAN allow-list (`localRunnerUrlError`) at the write boundary and the test probe.
+  a loopback-only allow-list (`localRunnerUrlError`) at the write boundary, the test probe and every
+  run-time redirect hop. Private-LAN hosts are the `LOCAL_MODELS_ALLOW_LAN=true` operator opt-in
+  (single-tenant local mode defaults it on); on a shared deployment the LAN grant is an internal-network
+  SSRF surface.
 - **`deploy/preview`** carries the per-PR TEST environments for THIS repo (board wiring:
   [`docs/dogfooding.md`](./docs/dogfooding.md)). Three constraints bite when editing: the compose file must
   stay free of `include:` / cross-file `extends` / `privileged` and of bind mounts / `env_file` (so it

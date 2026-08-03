@@ -87,7 +87,7 @@ gets one **generated once and reused**, **regenerated whenever the standard's bo
 
 | Layer         | What landed                                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| kernel domain | `domain/fragment-brief.ts`: threshold, body fingerprint, `isUsableBrief`'s ratio rule, `resolveFragmentBrief`'s five outcomes                    |
+| kernel domain | `domain/fragment-brief.ts`: threshold, body fingerprint, `isUsableBrief`'s ratio rule, `resolveFragmentBrief`'s five outcomes                     |
 | kernel ports  | `PromptFragmentRecord.brief`, `ResolvedCatalogEntry.briefScope`, `FragmentBriefRepository`, `FragmentBriefGenerator`                              |
 | contracts     | `create`/`updatePromptFragmentSchema` accept `brief` (`''` unlinks); `PromptFragment.brief` doc corrected                                         |
 | agents        | `FragmentBriefService` (resolve + generate + persist, incl. the not-condensable marker), `LlmFragmentBriefGenerator`, `prompts/fragment-brief.ts` |

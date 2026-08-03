@@ -333,6 +333,8 @@ const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
  */
 export interface MachineSubscribeDeps {
   accountOf: AccountOfWorkspace
+  /** The machine-node roster's revocation read (SEC-5); a revoked node's subscribe is refused. */
+  isRevoked?: (nodeId: string) => Promise<boolean>
 }
 
 /**
@@ -399,6 +401,7 @@ export function attachRealtime(
         token: request.headers.authorization,
         workspaceId,
         accountOf: machineSubscribe.accountOf,
+        isRevoked: machineSubscribe.isRevoked,
       }).then((verdict) => {
         if (!verdict.ok) {
           reject(socket, verdict.status, MACHINE_REJECT_REASON[verdict.status])

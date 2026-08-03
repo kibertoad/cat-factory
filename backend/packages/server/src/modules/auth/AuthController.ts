@@ -6,10 +6,12 @@ import {
   githubLoginContract,
   googleCallbackContract,
   googleLoginContract,
+  listMachineNodesContract,
   logoutContract,
   meContract,
   mintMachineTokenContract,
   passwordLoginContract,
+  revokeMachineNodeContract,
   patLoginContract,
   peekInvitationContract,
   resetPasswordContract,
@@ -23,6 +25,7 @@ import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
 import { GoogleOAuth } from '../../auth/GoogleOAuth.js'
 import { verifySession } from '../../auth/middleware.js'
 import { mintMachineToken } from '../../auth/machineToken.js'
+import { passwordAttemptLimited, tooManyAttempts } from './authThrottle.js'
 import {
   HmacSigner,
   type SessionPayload,
@@ -38,7 +41,6 @@ import {
   ValidationError,
   UnavailableError,
   UnauthorizedError,
-  RateLimitedError,
 } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
 
@@ -257,45 +259,6 @@ async function isPatIdentityAllowed(
   return { allowed: false, orgLookupFailed }
 }
 
-// Best-effort in-process throttle for the password endpoints. It bounds naive online
-// brute-force / credential-stuffing bursts without any new infrastructure, but is
-// deliberately modest: the window is per-isolate (each Workers isolate / Node process
-// keeps its own), so it is a speed bump, not an authoritative limiter — a durable,
-// cross-runtime limiter (D1/Postgres-backed, exercised by the conformance suite) is the
-// proper follow-up. Keyed by client IP + email so one attacker can't lock out an
-// unrelated victim, and PBKDF2's per-attempt cost remains the primary defence.
-const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
-const MAX_ATTEMPTS = 10
-const attempts = new Map<string, number[]>()
-
-function clientIp<E extends AppEnv>(c: Context<E>): string {
-  return (
-    c.req.header('cf-connecting-ip') ||
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  )
-}
-
-/** Record a password attempt for `c`+`email`; true once it is over the burst limit. */
-function passwordAttemptLimited<E extends AppEnv>(c: Context<E>, email: string): boolean {
-  const now = Date.now()
-  const key = `${clientIp(c)}:${email.toLowerCase().trim()}`
-  const recent = (attempts.get(key) ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS)
-  recent.push(now)
-  attempts.set(key, recent)
-  // Opportunistically evict fully-stale keys so the map can't grow unbounded.
-  if (attempts.size > 10_000) {
-    for (const [k, ts] of attempts) {
-      if (ts.every((t) => now - t >= ATTEMPT_WINDOW_MS)) attempts.delete(k)
-    }
-  }
-  return recent.length > MAX_ATTEMPTS
-}
-
-const tooManyAttempts = (): never => {
-  throw new RateLimitedError('Too many attempts. Please try again later.')
-}
-
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   // Route registrations grouped into cohesive registrars (OAuth, credential login, account
@@ -303,6 +266,7 @@ export function authController(): Hono<AppEnv> {
   // onto the shared `app` and depends only on the module-level helpers above.
   registerOAuthRoutes(app)
   registerCredentialRoutes(app)
+  registerMachineNodeRoutes(app)
   registerAccountRecoveryRoutes(app)
   registerSessionRoutes(app)
   return app
@@ -493,7 +457,7 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts()
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     const container = c.get('container')
 
     // New-user creation is gated: an invite addressed to this email OR an allowlisted
@@ -536,7 +500,7 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts()
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     const user = await c.get('container').userService.verifyPassword(body)
     if (!user) {
       throw new UnauthorizedError('Invalid email or password')
@@ -622,7 +586,13 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     const { token: sessionToken } = await mintSession(cfg, session)
     return c.json({ token: sessionToken, user: session }, 200)
   })
+}
 
+// The machine-token surface (mothership mode): the mint that turns a session into an
+// account-scoped machine credential, plus the roster endpoints that make its nodes
+// visible and revocable (SEC-5). Its own registrar so no single registrar outgrows the
+// function budget.
+function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
   // ---- Machine-token minting (mothership mode) ----------------------------
 
   // Exchange the caller's mothership SESSION for a `machine`-audience token scoped to the
@@ -668,6 +638,20 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
         403,
       )
     }
+    // The machine-node roster (SEC-5): a REVOKED node id can never be re-minted (revocation is
+    // permanent per node id; reconnecting mints a fresh one), and a node id another user's node
+    // holds cannot be taken over (that would swap the roster's owner, letting the taker revoke
+    // it). One 403 for both, so a node id is not an existence oracle.
+    const machineNodes = container.machineNodeRepository
+    if (body.nodeId && machineNodes) {
+      const existing = await machineNodes.get(body.nodeId)
+      if (existing && (existing.revokedAt !== null || existing.userId !== session.id)) {
+        return c.json(
+          { error: { code: 'forbidden', message: 'This node id is not available' } },
+          403,
+        )
+      }
+    }
     // The mint helper computes and signs the authoritative `exp`/`nodeId`, then hands them back
     // so the response echoes EXACTLY what was signed (no second clock read that could drift).
     const { token, exp, nodeId } = await mintMachineToken(cfg.sessionSecret, {
@@ -676,6 +660,17 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
       nodeId: body.nodeId,
       ttlMs: cfg.machineTokenTtlMs,
     })
+    // Fold the mint into the roster BEFORE handing out the token: the roster is what makes the
+    // node revocable, so a token the roster never saw must not leave the building.
+    if (machineNodes) {
+      await machineNodes.recordMint({
+        nodeId,
+        userId: session.id,
+        accountIds,
+        mintedAt: Date.now(),
+        expiresAt: exp,
+      })
+    }
     return c.json(
       {
         token,
@@ -696,6 +691,55 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
       200,
     )
   })
+
+  // ---- Machine-node roster: list + revoke (SEC-5) --------------------------
+
+  // The mint above records every node against its user; these two are how that user sees
+  // and kills their nodes. Revocation writes a tombstone every `/internal/*` machine gate
+  // consults (`verifyMachineRequest`), so a leaked machine token stops working everywhere
+  // at once instead of staying valid for its full TTL.
+  buildHonoRoute(app, listMachineNodesContract, async (c) => {
+    const nodes = requireCapability(
+      c.get('container').machineNodeRepository,
+      'Machine nodes are not recorded on this deployment',
+    )
+    const session = await verifySession(c)
+    if (!session) {
+      return c.json({ error: { code: 'forbidden', message: 'A valid session is required' } }, 403)
+    }
+    const rows = await nodes.listByUser(session.id)
+    return c.json(
+      {
+        nodes: rows.map((row) => ({
+          nodeId: row.nodeId,
+          accountIds: row.accountIds,
+          createdAt: row.createdAt,
+          lastMintedAt: row.lastMintedAt,
+          exp: row.expiresAt,
+          revokedAt: row.revokedAt,
+        })),
+      },
+      200,
+    )
+  })
+
+  buildHonoRoute(app, revokeMachineNodeContract, async (c) => {
+    const nodes = requireCapability(
+      c.get('container').machineNodeRepository,
+      'Machine nodes are not recorded on this deployment',
+    )
+    const session = await verifySession(c)
+    if (!session) {
+      return c.json({ error: { code: 'forbidden', message: 'A valid session is required' } }, 403)
+    }
+    const { nodeId } = c.req.valid('param')
+    const row = await nodes.get(nodeId)
+    // Owner-scoped, with the auth gate's existence-non-leak policy: an unknown node and
+    // another user's node are the same 404.
+    if (!row || row.userId !== session.id) throw new NotFoundError('Machine node', nodeId)
+    await nodes.revoke(nodeId, Date.now(), session.id)
+    return c.body(null, 204)
+  })
 }
 
 function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
@@ -708,7 +752,7 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
     const cfg = authConfig(c)
     if (!cfg.passwordEnabled) return unavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts()
+    if (await passwordAttemptLimited(c, body.email)) return tooManyAttempts()
     try {
       await c.get('container').passwordReset?.request(body.email)
     } catch {
@@ -720,7 +764,8 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   })
 
   // Redeem a reset token + set a new password. A missing / used / expired token maps to
-  // a generic 400 (never distinguishing the cases). Throttled by the token value.
+  // a generic 400 (never distinguishing the cases). Throttled per client IP under a
+  // fixed shared bucket (see the comment at the call site below).
   buildHonoRoute(app, resetPasswordContract, async (c) => {
     const cfg = authConfig(c)
     const passwordReset = c.get('container').passwordReset
@@ -730,7 +775,7 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
     // each guess, so keying on the token value would hand every guess its own bucket and
     // limit nothing. (Per-IP can't lock out a "victim" here — redeem is token-, not
     // email-, addressed.)
-    if (passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts()
+    if (await passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts()
     try {
       await passwordReset.reset(body.token, body.password)
       return c.body(null, 204)

@@ -85,8 +85,13 @@ export function buildModelProviderResolver(env: Env, db: D1Database): ModelProvi
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
     baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
     extraRegistries,
-    localEndpointsFor: localModelEndpoints
-      ? (userId) => localModelEndpoints.listResolved(userId)
+    localRunners: localModelEndpoints
+      ? {
+          endpointsFor: (userId) => localModelEndpoints.listResolved(userId),
+          // The service's transport carries the deployment's loopback/LAN policy and
+          // re-validates every redirect hop (SEC-2/SEC-3).
+          fetch: (url, init) => localModelEndpoints.fetchRunner(url, init),
+        }
       : undefined,
   })
   // Observe inline calls, then cap concurrency, through the ONE composer that owns their order
