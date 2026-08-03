@@ -1,5 +1,42 @@
 # @cat-factory/conformance
 
+## 0.20.7
+
+### Patch Changes
+
+- f31c644: Serve the foundational-service catalog's `builtin` tier over the mothership machine API. A
+  mothership deployment is two processes, so a code-registered estate had to be registered on both
+  entry points and the copies matched only while both ran the same build — with a local node one
+  build behind being the normal case, and the skew silent (a run's catalog simply omits a service,
+  which reads like an Architect judging it irrelevant).
+
+  The tier is now read through the kernel `FoundationalBuiltinSource` port: the in-process registry by
+  default, `GET /internal/foundational-services` (+ the batched
+  `POST /internal/foundational-services/contracts`) on a mothership-mode node, which no longer consults
+  its own registry and warns at boot naming any ids it ignores. The remote read throws rather than
+  answering with an empty tier — on the 404 from a mothership older than the node, and on a 200 whose
+  payload it cannot read — and the injected context files STATE that outage rather than being omitted
+  (`FoundationalCatalogRead` / `FoundationalIndexRead` gain an `unavailable` variant), so a best-effort
+  dispatch cannot turn the throw back into "no shared services are registered".
+
+  Compatibility break (pre-1.0, no shim): `FoundationalServiceCatalogService` takes `builtins`
+  (a `FoundationalBuiltinSource`) in place of `registry`; wrap a registry with
+  `registryBuiltinSource(registry)`. `CoreDependencies.foundationalServiceRegistry` and the facade
+  options are unchanged.
+
+- Updated dependencies [f31c644]
+- Updated dependencies [4ac6960]
+- Updated dependencies [4ac6960]
+- Updated dependencies [874d684]
+  - @cat-factory/kernel@0.212.0
+  - @cat-factory/agents@0.104.0
+  - @cat-factory/orchestration@0.184.0
+  - @cat-factory/server@0.192.0
+  - @cat-factory/integrations@0.116.1
+  - @cat-factory/contracts@0.210.1
+  - @cat-factory/gates@0.8.42
+  - @cat-factory/prompt-fragments@0.15.35
+
 ## 0.20.6
 
 ### Patch Changes
