@@ -221,6 +221,31 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 
+## Operational EVENTS are counted, not just logged
+
+A log line answers "what happened to THIS run"; only a counter answers "is this happening more
+than it was". The seam is the kernel `OperationalMetrics` port (`ports/operational-metrics.ts`),
+required on `CoreDependencies` and exposed as `container.operationalMetrics`; the process-wide
+(Node) / per-isolate (Worker) collector is `@cat-factory/server`'s `operationalMetrics`, the
+sibling of `logger`.
+
+- **The counter and gauge unions are CLOSED**, and the OTel mapping names each member through an
+  exhaustive `Record` — so adding a signal fails to compile until it has a metric name and a unit.
+- **Counters export as DELTAS.** A collector is per process on Node and per ISOLATE on the Worker,
+  and each flushes independently; only a delta sums correctly across the flushers. That is also
+  why the Worker flushes at the end of every invocation rather than on its cron, which runs in an
+  isolate that saw none of the request path's events.
+- **Dimensions must be BOUNDED** — a queue name, a cache name, an eviction kind. Every distinct
+  value is its own time series, so a run/workspace/job id is a cardinality explosion. The ids stay
+  on the log line, which is why every increment site also logs.
+- **An un-wired counter reads as a ZERO**, which is why `CoreDependencies.operationalMetrics` and
+  `SweeperOptions.metrics` are both required rather than optional. A caller with nothing to export
+  passes `noopOperationalMetrics`, which says so in code.
+- **An empty flush sends nothing.** An unflushed zero and a genuine zero are different facts, and
+  only the ABSENCE of a data point states the first one honestly. Same rule as "absent ≠ zero"
+  above: where a runtime genuinely cannot read a gauge (Cloudflare Queues expose no backlog to
+  their consumer), it emits no series rather than a 0.
+
 ## A controller REFUSES by throwing a `DomainError`, never by building an envelope
 
 `handleError` (`@cat-factory/server`'s `http/errorHandler.ts`) is mounted as `app.onError` on every

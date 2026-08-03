@@ -37,6 +37,8 @@ import {
   sweepFoundationalSources,
   sweepInfraReachability,
   sweepPlatformHealth,
+  operationalMetrics,
+  sweepHealth,
 } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
@@ -58,6 +60,7 @@ import {
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
+import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
 import {
   type CoreDependencies,
   defaultJudgeRegistry,
@@ -315,8 +318,19 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         : {}),
       clock,
       policy: loadConfig(env).retention,
+      logger,
     })
-      .then((result) => logger.info('retention sweep complete', { cron: 'retention', ...result }))
+      .then(({ failedTables, ...reclaimed }) => {
+        logger.info('retention sweep complete', { cron: 'retention', ...reclaimed })
+        // Each failure was already warned at its table; this names the SET, so a table that
+        // has been failing every night is one greppable line rather than a pattern to notice.
+        if (failedTables.length > 0) {
+          logger.warn('retention sweep could not prune every table', {
+            cron: 'retention',
+            failedTables,
+          })
+        }
+      })
       .catch((error) =>
         logger.error('retention sweep failed', { cron: 'retention', ...describeError(error) }),
       ),
@@ -446,17 +460,22 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
         leaseMs: SWEEP_LEASE_MS,
         hardStallMs: SWEEP_HARD_STALL_MS,
         orphanedSince: runSweepOrphanedSince,
+        metrics: operationalMetrics,
+        logger,
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
         // Only log when it actually acted.
         .then(({ redriven, finalized, stalled }) => {
+          sweepHealth.recordSuccess('stale-run')
           if (redriven > 0 || finalized > 0 || stalled > 0) {
             logger.warn('swept stuck runs', { cron: 'run-sweeper', redriven, finalized, stalled })
           }
         })
-        .catch((error) =>
-          logger.error('run sweep failed', { cron: 'run-sweeper', ...describeError(error) }),
-        ),
+        .catch((error) => {
+          logger.error('run sweep failed', { cron: 'run-sweeper', ...describeError(error) })
+          operationalMetrics.increment('sweep.failed', { sweep: 'stale-run' })
+          sweepHealth.recordFailure('stale-run')
+        }),
     )
   }
 }
@@ -782,6 +801,7 @@ async function handleScheduled(
   // Daily pass: prune the unbounded ledgers/projections to their retention windows.
   if (controller.cron === RETENTION_CRON) {
     runDailyRetentionSweeps(env, ctx, clock)
+    flushOperationalMetricsAfter(Promise.resolve(), env, ctx, clock)
     return
   }
 
@@ -791,14 +811,52 @@ async function handleScheduled(
   reclaimExpiredActivations(env, ctx, clock)
   reapStaleContainers(env, ctx, clock)
   runPeriodicBackstops(env, ctx, clock, controller.scheduledTime)
+  // This tick's own counters (every sweep above increments through the shared collector).
+  // The waitUntils above are in flight, so this deliberately does NOT wait for them: whatever
+  // they record after this drain rides the NEXT tick's flush, which is exactly what delta
+  // export makes safe. Waiting instead would put the flush behind the slowest backstop.
+  flushOperationalMetricsAfter(Promise.resolve(), env, ctx, clock)
+}
+
+/**
+ * Flush THIS ISOLATE's operational counters once `work` settles, as a post-response
+ * `waitUntil`. Every entry point calls it, because a Worker's collector is per-isolate and an
+ * isolate is discarded without warning — see `observability/operationalFlush.ts` for why that
+ * makes per-invocation flushing the correct shape rather than a wasteful one.
+ *
+ * `allSettled` rather than a catch: a FAILED invocation is exactly the one whose counters
+ * matter, and its rejection is the caller's to propagate, not this bookkeeping's to observe.
+ */
+function flushOperationalMetricsAfter(
+  work: Promise<unknown>,
+  env: Env,
+  ctx: ExecutionContext,
+  clock: SystemClock,
+): void {
+  ctx.waitUntil(
+    Promise.allSettled([work]).then(
+      () => flushOperationalMetricsForIsolate(loadConfig(env).otel, clock.now()) ?? undefined,
+    ),
+  )
 }
 
 /** The queue consumer multiplexing the three queues. Module-level, like {@link handleScheduled}. */
 async function handleQueue(
   batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
   env: Env,
+  ctx: ExecutionContext,
 ): Promise<void> {
   setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  const work = routeQueueBatch(batch, env)
+  flushOperationalMetricsAfter(work, env, ctx, new SystemClock())
+  await work
+}
+
+/** The routing half of {@link handleQueue}, split out so the flush can bracket the whole batch. */
+async function routeQueueBatch(
+  batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
+  env: Env,
+): Promise<void> {
   // Route by source queue — the single handler serves all three queues.
   if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
     await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
@@ -888,7 +946,10 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         foundationalServiceRegistry: registries.foundationalServiceRegistry,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
-      return app.fetch(request, env, ctx)
+      const response = Promise.resolve(app.fetch(request, env, ctx))
+      // Flush whatever THIS isolate counted while serving the request, after the response.
+      flushOperationalMetricsAfter(response, env, ctx, new SystemClock())
+      return response
     },
     scheduled: handleScheduled,
     queue: handleQueue,

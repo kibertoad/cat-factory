@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
 import { type Logger, type ServerContainer, sweepPlatformHealth } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -20,6 +20,8 @@ export function startPlatformHealthSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => void {
   const cfg = container.config.platformAlerts
   if (!cfg.enabled) return () => {}
@@ -27,6 +29,7 @@ export function startPlatformHealthSweeper(
     name: 'platform-health',
     intervalMs: cfg.intervalMs,
     log,
+    metrics,
     failureMessage: 'platform health sweep failed',
     tick: async () => {
       const { raised, cleared } = await sweepPlatformHealth(container, log)

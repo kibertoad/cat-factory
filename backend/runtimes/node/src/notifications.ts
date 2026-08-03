@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
 import { escalateStaleNotifications, type Logger, type ServerContainer } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -20,12 +20,15 @@ export function startNotificationEscalationSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => void {
   if (!container.notifications) return () => {}
   return startSweeper({
     name: 'notification-escalation',
     intervalMs: NOTIFICATION_ESCALATION_INTERVAL_MS,
     log,
+    metrics,
     failureMessage: 'notification escalation failed',
     tick: async () => {
       const escalated = await escalateStaleNotifications(container, clock.now())

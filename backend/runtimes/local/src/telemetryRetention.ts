@@ -1,4 +1,4 @@
-import type { Clock, Logger } from '@cat-factory/kernel'
+import type { Clock, Logger, OperationalMetrics } from '@cat-factory/kernel'
 import { startSweeper } from '@cat-factory/node-server'
 import type { RetentionConfig } from '@cat-factory/server'
 import type { LocalTelemetryStore } from './sqlite/telemetryStore.js'
@@ -104,6 +104,8 @@ export function startLocalTelemetryRetention(
   retention: RetentionConfig,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => Promise<void> {
   let stopped = false
   let inFlight: Promise<unknown> | undefined
@@ -111,6 +113,7 @@ export function startLocalTelemetryRetention(
     name: 'local-telemetry-retention',
     intervalMs: LOCAL_TELEMETRY_SWEEP_INTERVAL_MS,
     log,
+    metrics,
     failureMessage: 'local telemetry retention sweep failed',
     tick: async () => {
       if (stopped) return

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRecordingLogger } from '@cat-factory/kernel'
+import { createRecordingLogger, noopOperationalMetrics } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import type { Clock, Workspace } from '@cat-factory/kernel'
 import type { ServerContainer } from '@cat-factory/server'
@@ -71,13 +71,17 @@ afterEach(() => {
 describe('Node facade: platform-health sweep wiring', () => {
   it('raises a card for an unhealthy account when enabled', async () => {
     const raises: string[] = []
-    stops.push(startPlatformHealthSweeper(container(true, raises), clock, log))
+    stops.push(
+      startPlatformHealthSweeper(container(true, raises), clock, log, noopOperationalMetrics),
+    )
     await vi.waitFor(() => expect(raises).toContain('ws-1'))
   })
 
   it('is a no-op (no timer, no sweep) when PLATFORM_ALERTS is off', async () => {
     const raises: string[] = []
-    stops.push(startPlatformHealthSweeper(container(false, raises), clock, log))
+    stops.push(
+      startPlatformHealthSweeper(container(false, raises), clock, log, noopOperationalMetrics),
+    )
     await new Promise((r) => setTimeout(r, 50))
     expect(raises).toEqual([])
   })

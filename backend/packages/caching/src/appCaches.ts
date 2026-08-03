@@ -14,7 +14,9 @@ import type {
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
   ResolvedFoundationalService,
+  OperationalMetrics,
 } from '@cat-factory/kernel'
+import { noopOperationalMetrics } from '@cat-factory/kernel'
 // `layered-loader/core` is the package's Redis-free entrypoint: nothing reachable from it
 // imports `ioredis`, which must never load outside the Node facade's REDIS_URL-gated
 // notification wiring — the Worker imports this package too. The package root re-exports
@@ -299,6 +301,12 @@ export interface CreateAppCachesOptions {
   notificationPairFactory?: GroupNotificationPairFactory
   /** Error sink for background cache/notification failures. */
   logger?: Logger
+  /**
+   * Where each read's hit/miss is counted. Hit RATE is the only way to tell a cache that is
+   * doing its job from one whose invalidation is firing so often it never serves anything —
+   * two states with identical latency graphs and opposite fixes. Absent ⇒ uncounted.
+   */
+  operationalMetrics?: OperationalMetrics
 }
 
 /**
@@ -315,10 +323,11 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
   private readonly loader: GroupLoader<T, GroupLoadParams<T>>
 
   constructor(
-    name: string,
+    private readonly name: string,
     profile: GroupCacheProfile,
     notifications: GroupCacheNotifications<T> | undefined,
     logger: Logger | undefined,
+    private readonly metrics: OperationalMetrics = noopOperationalMetrics,
   ) {
     this.loader = new GroupLoader<T, GroupLoadParams<T>>({
       inMemoryCache: profile.enabled
@@ -376,10 +385,23 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     load: () => Promise<T>,
     isStillCurrent?: (cached: T) => Promise<boolean>,
   ): Promise<T> {
+    // What is measured, precisely: a MISS is a read whose loader ran, a HIT is a read served
+    // without it. That is the distinction an operator acts on, and it is observable from here
+    // without reaching inside layered-loader. One caveat, stated rather than hidden: a read
+    // that lands inside a probe-refresh window can trigger a BACKGROUND reload, and if that
+    // reload's load closure runs before this await resolves it is attributed to this read. So
+    // the hit rate on a probe-refreshed cache is a floor, never an overstatement.
+    let loaderRan = false
+    const countedLoad = () => {
+      loaderRan = true
+      return load()
+    }
     // The data source always resolves to the load's result, and load errors
     // propagate (throwIfLoadError defaults on) — so a non-value here is impossible
     // unless T itself includes null.
-    return (await this.loader.get({ key, load, isStillCurrent }, group)) as T
+    const value = (await this.loader.get({ key, load: countedLoad, isStillCurrent }, group)) as T
+    this.metrics.increment(loaderRan ? 'cache.miss' : 'cache.hit', { cache: this.name })
+    return value
   }
 
   invalidate(key: string, group: string): Promise<void> {
@@ -519,5 +541,11 @@ function buildGroupCache<T>(
   options: CreateAppCachesOptions,
 ): LayeredGroupCacheHandle<T> {
   const notifications = profile.enabled ? options.notificationPairFactory?.<T>(name) : undefined
-  return new LayeredGroupCacheHandle<T>(name, profile, notifications, options.logger)
+  return new LayeredGroupCacheHandle<T>(
+    name,
+    profile,
+    notifications,
+    options.logger,
+    options.operationalMetrics,
+  )
 }

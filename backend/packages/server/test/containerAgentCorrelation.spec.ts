@@ -6,6 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
+import { createOperationalMetricsCollector } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   ContainerAgentExecutor,
@@ -28,6 +29,7 @@ interface Harness {
   executor: ContainerAgentExecutor
   bodies: Record<string, unknown>[]
   logger: ReturnType<typeof createRecordingLogger>
+  metrics: ReturnType<typeof createOperationalMetricsCollector>
 }
 
 function makeExecutor(
@@ -45,6 +47,7 @@ function makeExecutor(
       return opts.view ?? { state: 'running' }
     },
   }
+  const metrics = createOperationalMetricsCollector()
   const deps: ContainerAgentExecutorDependencies = {
     resolveTransport: async () => transport,
     agentRouting: routing,
@@ -65,8 +68,9 @@ function makeExecutor(
     proxyBaseUrl: 'https://proxy.test/v1',
     githubApiBase: 'https://api.github.com',
     logger,
+    operationalMetrics: metrics,
   }
-  return { executor: new ContainerAgentExecutor(deps), bodies, logger }
+  return { executor: new ContainerAgentExecutor(deps), bodies, logger, metrics }
 }
 
 function context(): AgentRunContext {
@@ -155,5 +159,31 @@ describe('container seam correlation', () => {
     const line = failed.logger.lines.find((l) => l.msg === 'container job failed')
     expect(line?.level).toBe('warn')
     expect(line?.fields).toMatchObject({ jobId: 'job_1', failureCause: 'inactivity-timeout' })
+  })
+
+  it('COUNTS a dispatch failure, so a rising rate is visible without grepping', async () => {
+    // The log line answers "why did THIS run stop"; the counter answers "is dispatch failing
+    // more than it was", which no amount of reading per-run lines can.
+    const { executor, metrics } = makeExecutor({ dispatchError: new Error('no runner available') })
+    await expect(executor.startJob(context())).rejects.toThrow()
+    const dropped = metrics.drain().find((s) => s.counter === 'container.dispatch_failed')
+    expect(dropped?.value).toBe(1)
+  })
+
+  it('counts an EVICTED settle, and does not count an ordinary failed one', async () => {
+    // Only a container dying under the run is an operational fault. A job that ran to
+    // completion and failed (no usable output, a red validation) is the platform working, and
+    // counting it here would drown the signal this counter exists for.
+    const evicted = makeExecutor({
+      view: { state: 'failed', evicted: 'crash', error: 'container vanished' },
+    })
+    await evicted.executor.pollJob(handle)
+    expect(evicted.metrics.drain()).toEqual([
+      { counter: 'container.evicted', dimensions: { kind: 'crash' }, value: 1 },
+    ])
+
+    const cleanFailure = makeExecutor({ view: { state: 'failed', error: 'no file changes' } })
+    await cleanFailure.executor.pollJob(handle)
+    expect(cleanFailure.metrics.drain()).toEqual([])
   })
 })

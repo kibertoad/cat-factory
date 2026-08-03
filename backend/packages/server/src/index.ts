@@ -13,6 +13,13 @@ export {
   type LogLevel,
   type Logger,
 } from './observability/logger.js'
+export { operationalMetrics } from './observability/operationalMetrics.js'
+export {
+  createSweepHealthTracker,
+  sweepHealth,
+  type SweepFailureStreak,
+  type SweepHealthTracker,
+} from './observability/sweepHealth.js'
 export {
   type AppEnv,
   type GitHubTokenDelegation,

@@ -1,0 +1,156 @@
+// The operational-metrics port: the counters and gauges that describe how the DEPLOYMENT is
+// behaving, as opposed to how a run went.
+//
+// `PlatformMetricsRepository` already answers "how are the RUNS doing" by aggregating
+// `agent_runs` per account. It structurally cannot answer the questions an operator asks
+// during an incident — how often a container dispatch is failing, how many stale runs the
+// sweeper is re-driving, whether the queue is draining, whether telemetry batches are being
+// dropped — because none of those are rows in a table. They are EVENTS that happen and are
+// gone. This port is where they are counted.
+//
+// Two shapes, because the two facts have different lifetimes:
+//   - a COUNTER is a delta accumulated since the last flush (evictions, re-drives, cache
+//     misses). Exported with delta temporality, so a partial flush from one process/isolate
+//     still sums correctly with every other one.
+//   - a GAUGE is read at export time from something that already knows the answer (queue
+//     depth). It is never accumulated here; the sweep probes for it.
+//
+// The whole surface is fire-and-forget and MUST NOT throw, for the same reason `Logger` must
+// not: instrumentation that can fail turns observability into a new failure class.
+
+/**
+ * The closed set of operational counters. A closed union rather than a free string, so
+ * adding a signal is a typecheck-visible decision (with a metric name and a documented
+ * meaning) instead of a name typo that reports zero forever.
+ */
+export type OperationalCounter =
+  /** A stale run whose durable instance was lost and was re-created by a sweeper. */
+  | 'sweep.run_redriven'
+  /** A stale run whose durable instance was terminal, so the sweeper settled it instead. */
+  | 'sweep.run_finalized'
+  /** A run failed `stalled`: re-driving never resurrected it past the hard deadline. */
+  | 'sweep.run_stalled'
+  /** A sweeper pass threw. Dimensioned by `sweep`, so one sick sweeper is identifiable. */
+  | 'sweep.failed'
+  /** A container job dispatch threw — the job never existed, so no poll can report it. */
+  | 'container.dispatch_failed'
+  /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */
+  | 'container.evicted'
+  /** An observability export was dropped (a trace sink, a metrics POST). */
+  | 'telemetry.export_dropped'
+  /** An outbound notification delivery failed after its retries. */
+  | 'notification.delivery_failed'
+  /** An app-cache read served from memory. Dimensioned by cache name. */
+  | 'cache.hit'
+  /** An app-cache read that had to run its loader. Dimensioned by cache name. */
+  | 'cache.miss'
+  /** A durable job exhausted its retries and landed in a dead-letter queue. */
+  | 'queue.job_dead_lettered'
+
+/** The closed set of operational gauges — point-in-time readings, never accumulated. */
+export type OperationalGauge =
+  /** Jobs waiting in a durable queue right now. Dimensioned by `queue`. */
+  'queue.depth'
+
+/**
+ * The split dimensions of one sample. Values MUST be bounded — a queue name, a cache name,
+ * an eviction kind — never a run/workspace/job id: every distinct value is its own metric
+ * time series in the operator's backend, so an unbounded dimension is a cardinality
+ * explosion that costs money and eventually gets the series dropped. The correlation ids
+ * belong on the LOG line (which is why every increment site also logs), not here.
+ */
+export type OperationalDimensions = Readonly<Record<string, string>>
+
+/** One accumulated counter delta, ready to export. */
+export interface OperationalCounterSample {
+  counter: OperationalCounter
+  dimensions: OperationalDimensions
+  /** The delta accumulated since the previous drain (always > 0 — empty keys aren't emitted). */
+  value: number
+}
+
+/** One point-in-time gauge reading. */
+export interface OperationalGaugeSample {
+  gauge: OperationalGauge
+  dimensions: OperationalDimensions
+  value: number
+}
+
+/**
+ * Where operational events are counted. Injected the same way `Logger` is, so a domain
+ * service can count an event without knowing whether the deployment exports metrics at all.
+ */
+export interface OperationalMetrics {
+  /**
+   * Add `value` (default 1) to `counter` under `dimensions`. Never throws, never awaits —
+   * a call site on a hot path (a cache read) pays a Map lookup and an add.
+   */
+  increment(counter: OperationalCounter, dimensions?: OperationalDimensions, value?: number): void
+}
+
+/**
+ * An {@link OperationalMetrics} that accumulates in memory until drained. The accumulate/drain
+ * split is what makes delta export correct: whoever drains owns a set of deltas nobody else
+ * will report, so two processes (or two Worker isolates) can flush independently and the
+ * backend's sum is still right.
+ */
+export interface OperationalMetricsCollector extends OperationalMetrics {
+  /**
+   * Take everything accumulated since the last call and RESET. Returns `[]` when nothing
+   * happened, which a caller should treat as "nothing to flush" — never as a reason to
+   * publish zeroes (an unflushed zero and a genuine zero are different facts, and only the
+   * absence of a data point states the first one honestly).
+   */
+  drain(): OperationalCounterSample[]
+}
+
+/** The disposition for a deployment that exports nothing: count into the void, cheaply. */
+export const noopOperationalMetrics: OperationalMetrics = { increment: () => {} }
+
+/**
+ * A dimension map's stable identity, so `{a:'1',b:'2'}` and `{b:'2',a:'1'}` accumulate onto
+ * the same counter rather than two. Keys are sorted; the separators are control characters
+ * that cannot appear in a metric dimension value.
+ */
+function dimensionKey(dimensions: OperationalDimensions): string {
+  const keys = Object.keys(dimensions).sort()
+  return keys.map((k) => `${k}${dimensions[k]}`).join('')
+}
+
+/**
+ * Build an in-memory {@link OperationalMetricsCollector}. One per process (Node/local, drained
+ * by the platform-metrics sweep) or one per isolate (the Worker, drained at the end of each
+ * invocation — an isolate can be discarded at any moment, so anything it holds unflushed is
+ * simply lost).
+ */
+export function createOperationalMetricsCollector(): OperationalMetricsCollector {
+  // Keyed by `counter` then by the dimension identity, so a drain can rebuild both halves
+  // without parsing the composite key back apart.
+  const counters = new Map<
+    OperationalCounter,
+    Map<string, { dims: OperationalDimensions; value: number }>
+  >()
+  return {
+    increment(counter, dimensions = {}, value = 1) {
+      let byDimensions = counters.get(counter)
+      if (!byDimensions) {
+        byDimensions = new Map()
+        counters.set(counter, byDimensions)
+      }
+      const key = dimensionKey(dimensions)
+      const existing = byDimensions.get(key)
+      if (existing) existing.value += value
+      else byDimensions.set(key, { dims: dimensions, value })
+    },
+    drain() {
+      const samples: OperationalCounterSample[] = []
+      for (const [counter, byDimensions] of counters) {
+        for (const { dims, value } of byDimensions.values()) {
+          samples.push({ counter, dimensions: dims, value })
+        }
+      }
+      counters.clear()
+      return samples
+    },
+  }
+}

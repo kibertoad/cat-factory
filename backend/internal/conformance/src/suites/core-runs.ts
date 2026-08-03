@@ -375,6 +375,41 @@ function registerLiveRunInvariantTests(harness: ConformanceHarness): void {
     // (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local orphaned-container
     // reap; `listPausedExecutions` → the Node/local budget-freed auto-resume). Assert they behave
     // identically on D1 and Postgres so a facade can't silently drift the recovery path.
+    it('tracks a per-run re-drive count that survives the process that did the re-driving', async () => {
+      // The sweeper's in-memory orphan map dies with the process on Node and with the isolate on
+      // Cloudflare, and the Worker's sweep logs only aggregates with no run ids — so "was this
+      // run re-driven three times?" had no answer anywhere before this column.
+      const app = harness.makeApp()
+      const runs = app.agentRunRepository()
+      const { workspace } = await app.createWorkspace()
+      await app.executionRepository().upsert(workspace.id, {
+        id: 'exec_redrive',
+        blockId: 'blk_redrive',
+        pipelineId: 'pl',
+        pipelineName: 'Pipeline',
+        steps: [],
+        currentStep: 0,
+        status: 'running',
+        initiatedBy: null,
+      })
+
+      // A run nobody has re-driven reads 0, not null/undefined: the sweeper compares it, and a
+      // nullish value would silently disable the comparison on whichever facade produced it.
+      const before = await runs.listStale(Date.now() + 60_000)
+      expect(before.find((r) => r.id === 'exec_redrive')?.redriveCount).toBe(0)
+
+      // `recordRedrive` increments and returns the NEW total in one statement, so nothing races
+      // between a read and a write.
+      expect(await runs.recordRedrive(workspace.id, 'exec_redrive')).toBe(1)
+      expect(await runs.recordRedrive(workspace.id, 'exec_redrive')).toBe(2)
+      const after = await runs.listStale(Date.now() + 60_000)
+      expect(after.find((r) => r.id === 'exec_redrive')?.redriveCount).toBe(2)
+
+      // A run that has since vanished answers 0 rather than throwing: this is bookkeeping ABOUT
+      // a recovery and must never be able to fail one.
+      expect(await runs.recordRedrive(workspace.id, 'exec_redrive_missing')).toBe(0)
+    })
+
     it('listStale carries updatedAt (running only) and liveRunIds filters terminal runs', async () => {
       const app = harness.makeApp()
       const runs = app.agentRunRepository()

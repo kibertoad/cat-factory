@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
 import {
   GITHUB_RECONCILE_STALE_MS,
   type GitHubReconcileDeps,
@@ -27,11 +27,14 @@ export function startGitHubReconcileSweeper(
   deps: GitHubReconcileDeps,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => void {
   return startSweeper({
     name: 'github-reconcile',
     intervalMs: GITHUB_RECONCILE_INTERVAL_MS,
     log,
+    metrics,
     failureMessage: 'github reconcile sweep failed',
     tick: async () => {
       const synced = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, log)

@@ -1,4 +1,5 @@
 import type { EnvConfigRepairRunner } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
@@ -89,7 +90,7 @@ export async function startEnvConfigRepairWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
+  await createQueueWithDeadLetter(boss, QUEUE, { policy: QUEUE_POLICY })
   await boss.work<EnvConfigRepairJob>(
     QUEUE,
     { localConcurrency: concurrency },

@@ -1,4 +1,5 @@
 import type { RetentionConfig } from '@cat-factory/server'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { type RetentionRepos, sweepRetention } from '../src/retention.js'
 
@@ -139,6 +140,7 @@ describe('sweepRetention', () => {
       passwordResetTokens: 1,
       commits: 4,
       notifications: 9,
+      failedTables: [],
     })
   })
 
@@ -162,6 +164,7 @@ describe('sweepRetention', () => {
       passwordResetTokens: 1,
       commits: 4,
       notifications: 9,
+      failedTables: [],
     })
   })
 
@@ -171,5 +174,29 @@ describe('sweepRetention', () => {
 
     expect(cutoffs.commits).toBeNull()
     expect(result.commits).toBe(0)
+  })
+
+  it('isolates a failing table: the rest of the pass still prunes, and the failure is named', async () => {
+    // The regression this exists for: the passes used to be a chain of bare `await`s, so the
+    // FIRST failing prune aborted every later one — and did so on every pass thereafter, which
+    // silently stopped all telemetry pruning behind one generic "sweep failed" line.
+    const { repos, cutoffs } = fakeRepos()
+    repos.llmCallMetricRepository.deleteOlderThan = async () => {
+      throw new Error('relation is locked')
+    }
+    const logger = createRecordingLogger()
+
+    const result = await sweepRetention(repos, policy(), now, logger)
+
+    // The tables AFTER the failing one still ran — that is the whole fix.
+    expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY)
+    expect(cutoffs.notifications).toBe(now - 90 * DAY)
+    expect(result.notifications).toBe(9)
+    // …and the failure is REPORTED rather than reading as an empty table: 0 reclaimed is what a
+    // clean prune of an empty table also returns, so only `failedTables` tells them apart.
+    expect(result.llmCallMetrics).toBe(0)
+    expect(result.failedTables).toEqual(['llm_call_metrics'])
+    const warned = logger.lines.find((line) => line.msg.includes('pruning one table failed'))
+    expect(warned?.fields?.table).toBe('llm_call_metrics')
   })
 })

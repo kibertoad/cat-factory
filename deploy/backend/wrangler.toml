@@ -205,6 +205,19 @@ renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer"
 tag = "v4"
 new_sqlite_classes = ["DeployContainer"]
 
+# Dead-letter queues (docs/initiatives/observability-logging-gaps.md, B5). Every consumer
+# below names one, so a delivery that exhausts `max_retries` is COPIED there instead of
+# vanishing. A DLQ needs no consumer of its own — it is a holding queue an operator inspects
+# (`wrangler queues consumer ...` / the dashboard) and replays deliberately. Do NOT wire an
+# automatic replay: a message that failed every retry will fail again, which turns a bounded
+# loss into an unbounded loop.
+#
+# The Node facade gets the same policy in code (`runtimes/node/src/execution/deadLetter.ts`,
+# which appends `.dlq` to every pg-boss queue) and reports what lands there on an hourly sweep.
+# There is no equivalent sweep here: a Worker cannot read a Cloudflare Queue it does not
+# consume, so the DLQ depth is visible in the dashboard rather than in our own metrics — which
+# is also why this facade emits no `queue.depth` gauge at all rather than a zero.
+
 # GitHub sync queue: the webhook endpoint verifies + acks fast, enqueuing each
 # delivery here for async projection. The consumer also handles targeted repo
 # resyncs from the cron reconciler and the on-demand resync endpoint. When the

@@ -9,7 +9,6 @@ import {
   type IdGenerator,
   type NotificationChannel,
   NoopWorkRunner,
-  type ResolveBinaryArtifactStore,
   type ResolvedAccountSettings,
   type TaskSourceProvider,
   type VcsIdentityRegistry,
@@ -87,8 +86,6 @@ import {
   ContainerEnvConfigRepairer,
   makeResolveDeployCloneTarget,
   RunnerJobClient,
-  makeResolveBinaryArtifactStore,
-  type BuildBlobBackend,
   FanOutEventPublisher,
   InAppNotificationChannel,
   PatPreferringAppRegistry,
@@ -98,6 +95,7 @@ import {
   resolveUrlSafetyPolicy,
   type JobPackageRegistrySpec,
   type ServerContainer,
+  operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
@@ -131,8 +129,6 @@ import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentC
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
-import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
-import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
@@ -538,45 +534,13 @@ export function buildAccountSettings(
  * the Node/local facade. Shared by the container wiring and the retention cron so both build
  * the same backend.
  */
-export function cloudflareContentStorage(env: Env): {
-  capability: ContentStorageCapability
-  buildBlobBackend: BuildBlobBackend
-} {
-  const capability: ContentStorageCapability = {
-    supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2'] : ['off'],
-    defaultBackend: env.ARTIFACT_BUCKET ? 'r2' : 'off',
-  }
-  const buildBlobBackend: BuildBlobBackend = (kind) => {
-    // R2 is the only blob backend the Worker serves; anything else ⇒ storage unavailable.
-    return kind === 'r2' && env.ARTIFACT_BUCKET
-      ? new R2BinaryBlobBackend({ bucket: env.ARTIFACT_BUCKET })
-      : null
-  }
-  return { capability, buildBlobBackend }
-}
-
-/**
- * Build the per-account binary-artifact store resolver outside the full container (the
- * retention cron runs in its own context). Mirrors the container wiring, with its own
- * account-settings instance (a separate short-TTL cache is fine for a periodic sweep).
- */
-export function buildCloudflareArtifactStoreResolver(
-  env: Env,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-): ResolveBinaryArtifactStore {
-  const { capability, buildBlobBackend } = cloudflareContentStorage(env)
-  return makeResolveBinaryArtifactStore({
-    accountSettings: buildAccountSettings(env, db, clock, capability),
-    accountOf: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
-    metadata: new D1BinaryArtifactMetadataStore({ db }),
-    idGenerator,
-    clock,
-    buildBlobBackend,
-    defaultBackend: capability.defaultBackend,
-  })
-}
+// The binary-artifact/content-storage wiring lives in its own module (this file is at its size
+// ratchet); re-exported here so every existing import site is unchanged.
+export {
+  buildCloudflareArtifactStoreResolver,
+  cloudflareContentStorage,
+} from './container-artifact-storage'
+import { cloudflareContentStorage } from './container-artifact-storage'
 
 /**
  * Construct the Slack repositories + bot-token cipher once, when the integration is
@@ -1366,7 +1330,7 @@ export function buildContainer(
   // probe is chiefly the Node (process-lived cache) path. Built once here and SHARED: threaded
   // into the GitHub repo-files resolver (slice 4), the account-settings service, AND the
   // account-policy read the capability resolver runs, AND handed to `createCore`.
-  const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
+  const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE, operationalMetrics })
 
   // The app-owned backend registries (env + runner kind → provider, agent-kind, gate,
   // step-resolver, initiative-preset, VCS, gate-provider): the injected instance via `overrides`

@@ -55,5 +55,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // its neighbours there is nothing to fall back to — it is re-listed here purely so every
     // service is threaded the SAME instance out of one resolution point.
     logger: dependencies.logger,
+    // Required for the same reason and re-listed here for the same reason as `logger` above:
+    // an operational counter nobody increments is indistinguishable from an event that never
+    // happened, which is precisely the confusion this seam exists to remove.
+    operationalMetrics: dependencies.operationalMetrics,
   }
 }

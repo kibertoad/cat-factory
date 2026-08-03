@@ -1,4 +1,12 @@
-import type { LlmGenerationEvent, LlmToolSpan, LlmToolSpanContext } from '@cat-factory/kernel'
+import type {
+  LlmGenerationEvent,
+  LlmToolSpan,
+  LlmToolSpanContext,
+  OperationalCounter,
+  OperationalCounterSample,
+  OperationalGauge,
+  OperationalGaugeSample,
+} from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 
 // The SINGLE source of truth for how a cat-factory observability event becomes
@@ -274,6 +282,8 @@ export const PLATFORM_ATTR = {
 /** Metric units: a dimensionless run count, a dimensionless ratio, and seconds. */
 export const RUN_UNIT = '{run}'
 export const RATIO_UNIT = '1'
+/** The unit shared by the operational queue signals (depth + dead-lettered jobs). */
+export const JOB_UNIT = '{job}'
 
 /** One gauge data point: its dimensions, value, and whether to encode as int or double. */
 export interface MappedGaugePoint {
@@ -401,4 +411,124 @@ export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): Map
     attributes,
     events: [],
   }
+}
+
+// ---------------------------------------------------------------------------
+// Operational metrics: the deployment's own behaviour (sweeper activity, container dispatch
+// failures + evictions, queue depth, dropped telemetry, cache hit/miss), as opposed to the
+// run aggregates above. These come from the kernel `OperationalMetrics` seam rather than from
+// a projection over a table, because they describe EVENTS rather than rows.
+//
+// The temporality split is the load-bearing part. Counters are accumulated per process
+// (Node/local) or per isolate (the Worker) and flushed by whoever holds them, so they are
+// exported as DELTA sums: two flushers each reporting their own delta sum correctly in the
+// backend, where two flushers each reporting a cumulative total would not. `queue.depth` is a
+// genuine gauge — probed at export time from something that already knows the answer.
+// ---------------------------------------------------------------------------
+
+/**
+ * Metric name per operational counter. An exhaustive `Record` over the kernel union, so
+ * adding a counter there fails to compile until it is named here — the same guard the
+ * `STATUS_BY_CODE` error map gives the wire vocabulary.
+ */
+export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
+  'sweep.run_redriven': 'cat_factory.platform.sweep_runs_redriven',
+  'sweep.run_finalized': 'cat_factory.platform.sweep_runs_finalized',
+  'sweep.run_stalled': 'cat_factory.platform.sweep_runs_stalled',
+  'sweep.failed': 'cat_factory.platform.sweep_failures',
+  'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
+  'container.evicted': 'cat_factory.platform.container_evictions',
+  'telemetry.export_dropped': 'cat_factory.platform.telemetry_exports_dropped',
+  'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
+  'cache.hit': 'cat_factory.platform.cache_hits',
+  'cache.miss': 'cat_factory.platform.cache_misses',
+  'queue.job_dead_lettered': 'cat_factory.platform.queue_jobs_dead_lettered',
+}
+
+/** Metric name per operational gauge. Exhaustive, for the same reason. */
+export const OPERATIONAL_GAUGE_METRIC: Record<OperationalGauge, string> = {
+  'queue.depth': 'cat_factory.platform.queue_depth',
+}
+
+/**
+ * Unit per operational counter — a decision at the point a signal is added rather than a
+ * default, because `{run}` and `{read}` trend very differently and an operator reading a
+ * dashboard has only the unit to tell them apart.
+ */
+const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
+  'sweep.run_redriven': RUN_UNIT,
+  'sweep.run_finalized': RUN_UNIT,
+  'sweep.run_stalled': RUN_UNIT,
+  'sweep.failed': '{failure}',
+  'container.dispatch_failed': '{failure}',
+  'container.evicted': '{eviction}',
+  'telemetry.export_dropped': '{export}',
+  'notification.delivery_failed': '{failure}',
+  'cache.hit': '{read}',
+  'cache.miss': '{read}',
+  'queue.job_dead_lettered': JOB_UNIT,
+}
+
+/**
+ * Namespace a sample's dimension keys onto the `cat_factory.` attribute prefix every other
+ * emitted attribute uses, so an operational point sits beside the platform gauges in the same
+ * backend without a second naming convention.
+ */
+function operationalAttributes(dimensions: Readonly<Record<string, string>>): AttributeMap {
+  const attributes: AttributeMap = {}
+  for (const [key, value] of Object.entries(dimensions)) attributes[`cat_factory.${key}`] = value
+  return attributes
+}
+
+/** One counter metric ready to encode as an OTLP delta sum. */
+export interface MappedCounter {
+  name: string
+  unit: string
+  points: MappedGaugePoint[]
+}
+
+/**
+ * Map drained counter deltas onto OTLP delta sums, one metric per counter with a data point
+ * per dimension set. Samples for the same counter are grouped, because OTLP wants one metric
+ * carrying many points rather than the same metric repeated.
+ *
+ * Deliberately NOT account-scoped: an eviction or a cache miss belongs to the deployment, not
+ * to a tenant, and stamping a synthetic account on it would invent an attribution the event
+ * does not have.
+ */
+export function mapOperationalCounters(samples: OperationalCounterSample[]): MappedCounter[] {
+  const byMetric = new Map<OperationalCounter, MappedGaugePoint[]>()
+  for (const sample of samples) {
+    const points = byMetric.get(sample.counter) ?? []
+    points.push({
+      attributes: operationalAttributes(sample.dimensions),
+      value: sample.value,
+      isInt: true,
+    })
+    byMetric.set(sample.counter, points)
+  }
+  return [...byMetric].map(([counter, points]) => ({
+    name: OPERATIONAL_METRIC[counter],
+    unit: OPERATIONAL_UNIT[counter],
+    points,
+  }))
+}
+
+/** Map probed gauge readings onto OTLP gauges, one metric per gauge. */
+export function mapOperationalGauges(samples: OperationalGaugeSample[]): MappedGauge[] {
+  const byMetric = new Map<OperationalGauge, MappedGaugePoint[]>()
+  for (const sample of samples) {
+    const points = byMetric.get(sample.gauge) ?? []
+    points.push({
+      attributes: operationalAttributes(sample.dimensions),
+      value: sample.value,
+      isInt: true,
+    })
+    byMetric.set(sample.gauge, points)
+  }
+  return [...byMetric].map(([gauge, points]) => ({
+    name: OPERATIONAL_GAUGE_METRIC[gauge],
+    unit: JOB_UNIT,
+    points,
+  }))
 }

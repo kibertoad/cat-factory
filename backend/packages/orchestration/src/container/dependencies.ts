@@ -100,6 +100,7 @@ import type {
   MergeTrackRecordRepository,
   ModelPresetRepository,
   ModelProvider,
+  OperationalMetrics,
   ModelProviderResolver,
   ModelRef,
   NotificationChannel,
@@ -229,6 +230,18 @@ export interface CoreDependencies {
    * signature gives the call sites.
    */
   logger: Logger
+  /**
+   * Where operational EVENTS are counted (kernel `ports/operational-metrics.ts`) — container
+   * dispatch failures, evictions, cache hit/miss, dropped telemetry. The dual of `logger`: a
+   * log line answers "what happened to THIS run", a counter answers "how often is this
+   * happening at all", and only the second one can tell an operator that a rate has changed.
+   *
+   * REQUIRED for exactly the reason `logger` is. An un-wired counter reads as a zero, and a
+   * zero here is the most dangerous value in the whole initiative: it says "no evictions" on a
+   * runtime where every container is dying. A facade with nothing to export passes
+   * `noopOperationalMetrics` explicitly, which says that in code.
+   */
+  operationalMetrics: OperationalMetrics
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository

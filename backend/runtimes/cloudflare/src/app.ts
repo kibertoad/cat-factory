@@ -124,6 +124,39 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
+  // Readiness (slice 4.3). The Worker has no long-lived process to drain and no rotation to be
+  // taken out of — Cloudflare routes every request to a fresh isolate and there is nothing an
+  // operator could do with a red answer — so `/ready` here is deliberately NOT the Node
+  // facade's drain signal. What it IS: a bindings probe, answering the one question an operator
+  // actually asks of a fresh deployment ("is D1 reachable, is TELEMETRY_DB bound"), which on
+  // this runtime is a genuinely separate database rather than a schema in the same one.
+  //
+  // Reported per binding rather than as one boolean, and a failure is 503 so a smoke test can
+  // assert on the status alone. Public, before the auth gate, like `/health`.
+  app.get('/ready', async (c) => {
+    const env = c.env
+    const probe = async (run: () => Promise<unknown>): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        await run()
+        return { ok: true }
+      } catch (err) {
+        // Kept to a short diagnostic: this endpoint is unauthenticated, so it must never carry
+        // a connection string or a binding's internals — the same rule as the Node twin's.
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+    const checks: Record<string, { ok: boolean; error?: string }> = {
+      database: await probe(() => c.env.DB.prepare('SELECT 1').first()),
+    }
+    // TELEMETRY_DB is REQUIRED (the build fails without it), so an absent binding is a real
+    // failure to report rather than a capability to skip.
+    checks.telemetry = env.TELEMETRY_DB
+      ? await probe(() => env.TELEMETRY_DB!.prepare('SELECT 1').first())
+      : { ok: false, error: 'TELEMETRY_DB is not bound' }
+    const ready = Object.values(checks).every((check) => check.ok)
+    return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503)
+  })
+
   // Default-deny session gate + per-workspace authz, shared verbatim with the Node
   // service (one implementation in @cat-factory/server so the runtimes can't drift).
   mountAuthGate(app)

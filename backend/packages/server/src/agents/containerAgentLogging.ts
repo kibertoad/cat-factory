@@ -1,4 +1,11 @@
-import { type LogFields, type Logger, describeError, noopLogger } from '@cat-factory/kernel'
+import {
+  type LogFields,
+  type Logger,
+  type OperationalMetrics,
+  describeError,
+  noopLogger,
+  noopOperationalMetrics,
+} from '@cat-factory/kernel'
 
 // The workflow↔container seam's log vocabulary, extracted from `ContainerAgentExecutor` so the
 // messages and their rationale live together (and so the executor stays inside its size budget).
@@ -47,10 +54,30 @@ export interface ContainerJobLog {
 }
 
 /**
- * Bind a container job's correlation ids onto `base`. Accepts an absent logger (a facade that
- * wired none, a unit test) and degrades to `noopLogger`, so no call site has to branch.
+ * The counters this seam feeds, beside its log lines. A log line answers "why did THIS run
+ * stop"; these answer "is dispatch failing more than it was", which no amount of grepping a
+ * per-run line can. The eviction kind and the backend kind are bounded values, so they are
+ * safe as dimensions — the ids that are not stay on the log line only.
  */
-export function containerJobLog(base: Logger | undefined, ids: ContainerJobIds): ContainerJobLog {
+function countFailure(
+  metrics: OperationalMetrics,
+  fields: LogFields | undefined,
+  counter: 'container.dispatch_failed' | 'container.evicted',
+): void {
+  const kind = fields?.kind ?? fields?.evicted
+  metrics.increment(counter, typeof kind === 'string' ? { kind } : {})
+}
+
+/**
+ * Bind a container job's correlation ids onto `base`. Accepts an absent logger (a facade that
+ * wired none, a unit test) and degrades to `noopLogger`, so no call site has to branch; the
+ * metrics sink degrades the same way.
+ */
+export function containerJobLog(
+  base: Logger | undefined,
+  ids: ContainerJobIds,
+  metrics: OperationalMetrics = noopOperationalMetrics,
+): ContainerJobLog {
   const logger = (base ?? noopLogger).child({
     ...(ids.workspaceId ? { workspaceId: ids.workspaceId } : {}),
     ...(ids.executionId ? { executionId: ids.executionId } : {}),
@@ -61,14 +88,21 @@ export function containerJobLog(base: Logger | undefined, ids: ContainerJobIds):
   return {
     logger,
     dispatched: (fields) => logger.info('container job dispatched', fields),
-    dispatchFailed: (error, fields) =>
-      logger.warn('container job dispatch failed', { ...fields, ...describeError(error) }),
+    dispatchFailed: (error, fields) => {
+      logger.warn('container job dispatch failed', { ...fields, ...describeError(error) })
+      countFailure(metrics, fields, 'container.dispatch_failed')
+    },
     pollFailed: (error, fields) =>
       logger.warn('container job poll failed', { ...fields, ...describeError(error) }),
     progress: (fields) => logger.debug('container job running', fields),
     settled: (outcome, fields) => {
-      if (outcome === 'done') logger.info('container job completed', fields)
-      else logger.warn('container job failed', fields)
+      if (outcome === 'done') return logger.info('container job completed', fields)
+      logger.warn('container job failed', fields)
+      // Only an EVICTED failure is counted here. A failed job that ran to completion (no usable
+      // output, a red validation) is the platform working — it already shows up as a failed run
+      // in the platform aggregates, and counting it as an operational fault would drown the
+      // signal this counter exists for: containers dying under the run.
+      if (fields?.evicted) countFailure(metrics, fields, 'container.evicted')
     },
   }
 }

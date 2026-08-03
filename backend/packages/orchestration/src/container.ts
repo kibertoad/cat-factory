@@ -1,5 +1,5 @@
 import type {} from '@cat-factory/kernel'
-import type { AppCaches, Logger } from '@cat-factory/kernel'
+import type { AppCaches, Logger, OperationalMetrics } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
   createSlackModule,
@@ -352,6 +352,14 @@ export interface CoreSpine {
    * module-level singleton and diverging on bound fields. Always present.
    */
   logger: Logger
+  /**
+   * The resolved operational-metrics collector (kernel `ports/operational-metrics.ts`).
+   * Exposed for the same reason `logger` is: the facade's sweepers and its metric flush must
+   * count into the SAME instance the domain services do, and reaching it off the container is
+   * what guarantees that rather than hoping two composition roots built one object. Always
+   * present (`CoreDependencies.operationalMetrics` is required).
+   */
+  operationalMetrics: OperationalMetrics
 }
 
 /**
@@ -531,6 +539,7 @@ export function createCore(injected: CoreDependencies): Core {
     executionEventPublisher,
     caches,
     logger,
+    operationalMetrics,
   } = runtime
   // `logger` is required on `CoreDependencies`, so `injected` already carries it; aliasing the
   // bag here keeps the rest of this function reading against one name and makes it explicit that
@@ -698,6 +707,10 @@ export function createCore(injected: CoreDependencies): Core {
   return {
     caches,
     logger,
+    // Re-exposed on `Core` like `caches` and `logger`: the facade's sweepers and its
+    // per-invocation flush need the SAME collector the services count into, and reaching it
+    // off the container is what guarantees it is the same one.
+    operationalMetrics,
     workspaceService,
     accountService,
     userService,

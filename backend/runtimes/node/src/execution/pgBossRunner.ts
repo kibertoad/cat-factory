@@ -1,4 +1,6 @@
-import type { WorkRunner } from '@cat-factory/kernel'
+import type { OperationalMetrics, WorkRunner } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
+import { runBestEffort } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, JobInsert, PgBoss, SendOptions } from 'pg-boss'
 import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
@@ -188,7 +190,7 @@ export async function startExecutionWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = options.concurrency ?? 10
-  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
+  await createQueueWithDeadLetter(boss, QUEUE, { policy: QUEUE_POLICY })
   await boss.work<AdvanceJob>(
     QUEUE,
     { localConcurrency: Math.max(1, concurrency) },
@@ -285,8 +287,12 @@ export function startStaleRunSweeper(
   container: ServerContainer,
   cfg: SweeperConfig,
   queueOptions: AdvanceQueueOptions,
-  log: Logger,
+  // The logger and the counter travel together: every disposition below is BOTH a line naming
+  // the run and a count under its kind, and a signature that could carry one without the other
+  // is how a new disposition ends up logged and uncounted.
+  observability: { log: Logger; metrics: OperationalMetrics },
 ): () => void {
+  const { log, metrics } = observability
   // A live drive heartbeats its active job every `heartbeatSeconds`; treat a heartbeat older
   // than a generous multiple of that (but at least the lease) as a dead worker.
   const staleHeartbeatMs = Math.max(cfg.leaseMs, queueOptions.heartbeatSeconds * 1000 * 3)
@@ -295,6 +301,17 @@ export function startStaleRunSweeper(
   // inflates `updated_at`) can't fail an otherwise-recoverable run before recovery is even
   // attempted. Entries are dropped once a run recovers or leaves the stale set.
   const orphanedSince = new Map<string, number>()
+  // Count a re-drive, in memory and on the run itself. The persisted half is best-effort and
+  // runs AFTER the re-enqueue: it is bookkeeping about the recovery and must never be able to
+  // fail one, and a counter claiming a re-drive that did not happen is worse than a missed one.
+  // The in-memory map above answers "still orphaned this tick"; only the column survives a
+  // restart, which is what makes "how many times has THIS run been re-driven" answerable.
+  const countRedrive = async (ref: { workspaceId: string; id: string; kind: string }) => {
+    metrics.increment('sweep.run_redriven', { kind: ref.kind })
+    await runBestEffort(log, 'sweep.recordRedrive', () =>
+      container.agentRunRepository.recordRedrive(ref.workspaceId, ref.id),
+    )
+  }
   // Process one tick's stale runs: recover an orphaned advance job, apply the hard-stall backstop,
   // and re-drive (per kind). Records into `stillOrphaned` which runs are still orphaned this tick
   // (so the caller can forget the ones that recovered) and pushes execution re-drives into
@@ -358,12 +375,16 @@ export function startStaleRunSweeper(
         )
         orphanedSince.delete(ref.id)
         stillOrphaned.delete(ref.id)
+        // The run KIND is a bounded enum and the split that matters: bootstrap runs and
+        // execution runs are lost for different reasons and fixed in different places.
+        metrics.increment('sweep.run_stalled', { kind: ref.kind })
         continue
       }
 
       if (ref.kind === 'bootstrap') {
         log.warn('re-driving stale bootstrap', { workspaceId: ref.workspaceId, jobId: ref.id })
         await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+        await countRedrive(ref)
         continue
       }
       if (ref.kind === 'env-config-repair') {
@@ -372,12 +393,14 @@ export function startStaleRunSweeper(
           jobId: ref.id,
         })
         await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
+        await countRedrive(ref)
         continue
       }
       log.warn('re-driving stale run', { workspaceId: ref.workspaceId, executionId: ref.id })
       advanceReenqueues.push(
         advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
       )
+      await countRedrive(ref)
     }
   }
 
@@ -445,6 +468,10 @@ export function startStaleRunSweeper(
       log.error('stale-run sweep failed', {
         err: error instanceof Error ? error.message : String(error),
       })
+      // This sweeper predates `startSweeper` (it is a hand-rolled interval, because a boot
+      // reconcile has to run before the first tick), so it counts its own failed pass under
+      // the same counter and the same `sweep` dimension the shared helper uses.
+      metrics.increment('sweep.failed', { sweep: 'stale-run' })
     }
   }
   // Boot reconcile: recover runs a crashed previous process orphaned right away, not after

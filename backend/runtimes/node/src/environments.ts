@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -19,6 +19,8 @@ export function startEnvironmentSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => void {
   const environments = container.environments
   if (!environments) return () => {}
@@ -26,6 +28,7 @@ export function startEnvironmentSweeper(
     name: 'environment-ttl',
     intervalMs: ENVIRONMENT_SWEEP_INTERVAL_MS,
     log,
+    metrics,
     failureMessage: 'environment TTL sweep failed',
     tick: async () => {
       const torn = await environments.teardownService.sweepExpired(clock.now())

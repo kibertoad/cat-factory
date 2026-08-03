@@ -281,3 +281,50 @@ bound and call-site fields. The Worker bundles pino's browser build (workerd has
 threads), whose per-level `write` hands the already-serialised object to the matching `console`
 method — so a Worker line and a Node line parse identically and only the console routing differs.
 Cloudflare captures it via `wrangler tail` / Logpush; a Node process writes it to stdout.
+
+## Logging is half of it: count the event too
+
+A log line answers "what happened to THIS run". It cannot answer "is this happening more than it
+was" — and that second question is the one an operator asks during an incident. A deployment where
+every container is being evicted produces a steady trickle of individual `warn` lines and no signal
+at all that a rate changed.
+
+So the operational events go through kernel's `OperationalMetrics` port
+(`ports/operational-metrics.ts`) as well as through the logger. The two are siblings by design:
+
+```ts
+// The seam is injected like the logger, and required for the same reason.
+this.metrics.increment('container.evicted', { kind: view.evicted })
+this.log.warn('container job failed', { workspaceId, executionId, jobId, evicted: view.evicted })
+```
+
+Three rules bind a new increment site, and they are the reason the two are not one call:
+
+- **The counter's dimensions must be BOUNDED**; the log line's fields need not be. Every distinct
+  dimension value is its own metric time series in the operator's backend, so `{ kind: 'crash' }`
+  belongs on the counter and `{ executionId, jobId }` belongs on the line. Putting a run id on a
+  counter is a cardinality explosion that costs money and eventually gets the series dropped.
+- **Counters are DELTAS, flushed by whoever holds them.** The collector is per process on Node and
+  per ISOLATE on the Worker; each flush reports only what it saw, which is exactly why it sums
+  correctly across however many flushers there are.
+- **An un-wired counter is indistinguishable from an event that never happened.** That is why
+  `CoreDependencies.operationalMetrics` and `SweeperOptions.metrics` are REQUIRED rather than
+  optional — the same call, for the same reason, as `CoreDependencies.logger`. A caller with
+  nothing to export passes `noopOperationalMetrics` explicitly.
+
+Adding a signal means adding a member to the closed `OperationalCounter` / `OperationalGauge`
+union in kernel; the OTel mapping names every member through an exhaustive `Record`, so it fails
+to compile until the new one has a metric name and a unit.
+
+`createOperationalMetricsCollector()` is the assertable fake, the way `createRecordingLogger()` is
+for lines:
+
+```ts
+const metrics = createOperationalMetricsCollector()
+await service.doThing()
+expect(metrics.drain()).toContainEqual({
+  counter: 'container.evicted',
+  dimensions: { kind: 'crash' },
+  value: 1,
+})
+```

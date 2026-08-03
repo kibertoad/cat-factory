@@ -1,14 +1,17 @@
 import type { PlatformObservability } from '@cat-factory/contracts'
 import {
+  type MappedCounter,
   type MappedGauge,
   ATTR,
   DEFAULT_SERVICE_NAME,
   SCOPE_NAME,
+  mapOperationalCounters,
+  mapOperationalGauges,
   mapPlatformMetrics,
   toUnixNano,
 } from './mapping.js'
 import { type KeyValue, keyValues, postOtlp } from './otlp.js'
-import type { Logger } from '@cat-factory/kernel'
+import type { Logger, OperationalCounterSample, OperationalGaugeSample } from '@cat-factory/kernel'
 
 // A fetch-based OpenTelemetry exporter for the DEPLOYMENT-LEVEL (platform-operator)
 // observability aggregates — the dual of the per-run LLM exporter in `./index`. A periodic
@@ -51,6 +54,36 @@ function encodeGauge(gauge: MappedGauge, timeUnixNano: string): Record<string, u
         attributes: keyValues(point.attributes),
         timeUnixNano,
         ...(point.isInt ? { asInt: String(Math.round(point.value)) } : { asDouble: point.value }),
+      })),
+    },
+  }
+}
+
+/**
+ * OTLP `aggregationTemporality` for DELTA. Operational counters are accumulated per process /
+ * per isolate and flushed by whoever holds them, so each flush reports only what it saw —
+ * which sums correctly in the backend exactly because it is a delta. Same value the per-call
+ * LLM metrics use, for the same reason.
+ */
+const TEMPORALITY_DELTA = 1
+
+/** Encode one {@link MappedCounter} as an OTLP metric with a monotonic delta `sum`. */
+function encodeCounter(counter: MappedCounter, timeUnixNano: string): Record<string, unknown> {
+  return {
+    name: counter.name,
+    unit: counter.unit,
+    sum: {
+      aggregationTemporality: TEMPORALITY_DELTA,
+      isMonotonic: true,
+      dataPoints: counter.points.map((point) => ({
+        attributes: keyValues(point.attributes),
+        // A delta point's window is [start, time]. The exporter does not track when the
+        // previous flush happened, so both are stamped at the flush: the backend reads the
+        // delta VALUE, which is the fact being reported, and never infers a rate from a
+        // window this exporter would have to fabricate.
+        startTimeUnixNano: timeUnixNano,
+        timeUnixNano,
+        asInt: String(Math.round(point.value)),
       })),
     },
   }
@@ -101,6 +134,42 @@ export class PlatformMetricsOtelExporter {
         },
       ],
     }
+    await this.post(payload)
+  }
+
+  /**
+   * Export the deployment's OPERATIONAL signals: drained counter deltas plus point-in-time
+   * gauge readings. Deployment-scoped, NOT per account — an eviction or a dropped telemetry
+   * batch belongs to the deployment, and stamping a tenant on it would invent an attribution
+   * the event does not have.
+   *
+   * `at` is the flush clock (the caller's, so this stays free of a wall-clock read like
+   * `export` above). Sends nothing when both lists are empty: an unflushed zero and a genuine
+   * zero are different facts, and only the ABSENCE of a point states the first one honestly.
+   * Best-effort — see the file header.
+   */
+  async exportOperational(
+    counters: OperationalCounterSample[],
+    gauges: OperationalGaugeSample[],
+    at: number,
+  ): Promise<void> {
+    if (counters.length === 0 && gauges.length === 0) return
+    const timeUnixNano = toUnixNano(at)
+    const metrics = [
+      ...mapOperationalCounters(counters).map((c) => encodeCounter(c, timeUnixNano)),
+      ...mapOperationalGauges(gauges).map((g) => encodeGauge(g, timeUnixNano)),
+    ]
+    await this.post({
+      resourceMetrics: [
+        {
+          resource: { attributes: this.resourceAttributes() },
+          scopeMetrics: [{ scope: { name: SCOPE_NAME }, metrics }],
+        },
+      ],
+    })
+  }
+
+  private async post(payload: Record<string, unknown>): Promise<void> {
     await postOtlp({
       fetchImpl: this.fetchImpl,
       endpoint: this.metricsEndpoint,

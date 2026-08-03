@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -23,6 +23,8 @@ export function startKaizenSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
+  metrics: OperationalMetrics,
 ): () => void {
   const kaizen = container.kaizen
   if (!kaizen) return () => {}
@@ -30,6 +32,7 @@ export function startKaizenSweeper(
     name: 'kaizen',
     intervalMs: KAIZEN_SWEEP_INTERVAL_MS,
     log,
+    metrics,
     failureMessage: 'kaizen sweep failed',
     tick: async () => {
       const processed = await kaizen.service.runPending(
