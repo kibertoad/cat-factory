@@ -455,7 +455,10 @@ async function clone(p: Pipeline) {
            columns filling the full height. -->
       <div class="grid grid-cols-1 gap-4 lg:h-full lg:grid-cols-3">
         <!-- agent palette -->
-        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
+        <div
+          class="flex flex-col lg:min-h-0 lg:overflow-hidden"
+          data-testid="pipeline-builder-palette"
+        >
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
               {{ t('pipeline.builder.agentPalette') }}
@@ -476,7 +479,10 @@ async function clone(p: Pipeline) {
         </div>
 
         <!-- draft chain -->
-        <div class="flex flex-col lg:min-h-0 lg:overflow-hidden">
+        <div
+          class="flex flex-col lg:min-h-0 lg:overflow-hidden"
+          data-testid="pipeline-builder-draft"
+        >
           <div class="mb-2 flex items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
               {{ t('pipeline.builder.pipeline') }}
@@ -1294,6 +1300,7 @@ async function clone(p: Pipeline) {
           icon="i-lucide-save"
           size="sm"
           :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
+          data-testid="pipeline-builder-save"
           @click="save"
         >
           {{ pipelines.editingId ? t('pipeline.builder.update') : t('pipeline.builder.save') }}

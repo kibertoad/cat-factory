@@ -114,16 +114,16 @@ wrangler secret put AUTH_SESSION_SECRET     # any high-entropy random string
 
 Optional vars:
 
-| Var                         | Purpose                                                                                                             | Default                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)                                                       | request-provided          |
-| `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin                                                     | `<origin>/auth/callback`  |
-| `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                                                                           | `168` (7 days)            |
-| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in                                                                  | none (see access control) |
-| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in                                                               | none (see access control) |
-| `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                                                                              | `https://github.com`      |
-| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured                                                        | unset (prod fails closed) |
-| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` (open API + the SPA renders anonymously, no login gate). Used by the e2e suite  | unset (prod refuses it)   |
+| Var                         | Purpose                                                                                                            | Default                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)                                                      | request-provided          |
+| `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin                                                    | `<origin>/auth/callback`  |
+| `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                                                                          | `168` (7 days)            |
+| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in                                                                 | none (see access control) |
+| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in                                                              | none (see access control) |
+| `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                                                                             | `https://github.com`      |
+| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured                                                       | unset (prod fails closed) |
+| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` (open API + the SPA renders anonymously, no login gate). Used by the e2e suite | unset (prod refuses it)   |
 
 > **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
 > it the post-login landing comes from the request's `redirect` query (dev

@@ -42,33 +42,33 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
 
 ### PR 1: Primitives + destructive safety + empty states
 
-| Unit                                                                                                                                                    | Status | PR   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
-| Tracker document                                                                                                                                        | done   | PR 1 |
-| `useConfirm.ts` + `ConfirmDialog.vue` + mount in `index.vue`                                                                                            | done   | PR 1 |
-| `useBlockDeletion.ts`                                                                                                                                   | done   | PR 1 |
-| Confirm: delete task/module/service/recurring (`InspectorPanel`)                                                                                        | done   | PR 1 |
-| Confirm: delete pipeline (`PipelineBuilder`)                                                                                                            | done   | PR 1 |
-| Confirm: delete merge preset (`MergeThresholdsPanel`)                                                                                                   | done   | PR 1 |
-| Confirm: delete model preset (`ModelConfigurationPanel`)                                                                                                | done   | PR 1 |
-| Confirm: remove dependency edge (`TaskDependencies`)                                                                                                    | done   | PR 1 |
-| `EmptyState.vue`                                                                                                                                        | done   | PR 1 |
+| Unit                                                                                                                                                   | Status | PR   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ---- |
+| Tracker document                                                                                                                                       | done   | PR 1 |
+| `useConfirm.ts` + `ConfirmDialog.vue` + mount in `index.vue`                                                                                           | done   | PR 1 |
+| `useBlockDeletion.ts`                                                                                                                                  | done   | PR 1 |
+| Confirm: delete task/module/service/recurring (`InspectorPanel`)                                                                                       | done   | PR 1 |
+| Confirm: delete pipeline (`PipelineBuilder`)                                                                                                           | done   | PR 1 |
+| Confirm: delete merge preset (`MergeThresholdsPanel`)                                                                                                  | done   | PR 1 |
+| Confirm: delete model preset (`ModelConfigurationPanel`)                                                                                               | done   | PR 1 |
+| Confirm: remove dependency edge (`TaskDependencies`)                                                                                                   | done   | PR 1 |
+| `EmptyState.vue`                                                                                                                                       | done   | PR 1 |
 | EmptyState: context pickers, dependencies, execution history (preset panels skipped; a default preset always exists, so the empty case is unreachable) | done   | PR 1 |
-| `data-testid`s for e2e (confirm-dialog/accept/cancel, empty-state, inspector-delete)                                                                    | done   | PR 1 |
-| i18n keys (8 locales) + patch changeset                                                                                                                 | done   | PR 1 |
+| `data-testid`s for e2e (confirm-dialog/accept/cancel, empty-state, inspector-delete)                                                                   | done   | PR 1 |
+| i18n keys (8 locales) + patch changeset                                                                                                                | done   | PR 1 |
 
 ### PR 2: Feedback toasts + keyboard shortcuts + help
 
-| Unit                                                                                                                                             | Status | PR   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ---- |
-| Toast: run started (`TaskCard`)                                                                                                                  | done   | PR 2 |
-| Toast: notification acted/dismissed (`NotificationsInbox`)                                                                                       | done   | PR 2 |
+| Unit                                                                                                                                            | Status | PR   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Toast: run started (`TaskCard`)                                                                                                                 | done   | PR 2 |
+| Toast: notification acted/dismissed (`NotificationsInbox`)                                                                                      | done   | PR 2 |
 | Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped; inline auto-save, a toast per field-change is noise) | done   | PR 2 |
-| Copyable container id/url + toast (`StepContainerStatus`)                                                                                        | done   | PR 2 |
-| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                                                                                                  | done   | PR 2 |
-| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                                                                                             | done   | PR 2 |
-| Command-bar "Keyboard shortcuts" entry                                                                                                           | done   | PR 2 |
-| i18n keys (8 locales) + patch changeset                                                                                                          | done   | PR 2 |
+| Copyable container id/url + toast (`StepContainerStatus`)                                                                                       | done   | PR 2 |
+| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                                                                                                 | done   | PR 2 |
+| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                                                                                            | done   | PR 2 |
+| Command-bar "Keyboard shortcuts" entry                                                                                                          | done   | PR 2 |
+| i18n keys (8 locales) + patch changeset                                                                                                         | done   | PR 2 |
 
 ### Review follow-up: complete the destructive-confirm coverage + hardening
 
@@ -76,20 +76,20 @@ Review found the confirm gate covered board blocks/presets/pipelines/dependency 
 **not** several equally-destructive actions, plus a few sharp edges. Addressed on this same
 branch (same two changesets):
 
-| Unit                                                                           | Status |
-| ------------------------------------------------------------------------------ | ------ |
-| Confirm: revoke vendor credential (`VendorCredentialsModal`)                   | done   |
-| Confirm: disconnect personal subscription (`PersonalSubscriptionSection`)      | done   |
-| Confirm: remove user secret (`UserSecretsSection`)                             | done   |
-| Confirm: remove local model runner (`LocalModelEndpointsPanel`)                | done   |
-| Confirm: delete prompt fragment (`FragmentLibraryManager`)                     | done   |
-| Confirm: delete board (`BoardSwitcher`)                                        | done   |
-| Confirm: disconnect Slack (`SlackPanel`) / GitHub (`GitHubPanel`)              | done   |
-| Copy toast only on real success; error toast on failed/unsupported clipboard   | done   |
+| Unit                                                                          | Status |
+| ----------------------------------------------------------------------------- | ------ |
+| Confirm: revoke vendor credential (`VendorCredentialsModal`)                  | done   |
+| Confirm: disconnect personal subscription (`PersonalSubscriptionSection`)     | done   |
+| Confirm: remove user secret (`UserSecretsSection`)                            | done   |
+| Confirm: remove local model runner (`LocalModelEndpointsPanel`)               | done   |
+| Confirm: delete prompt fragment (`FragmentLibraryManager`)                    | done   |
+| Confirm: delete board (`BoardSwitcher`)                                       | done   |
+| Confirm: disconnect Slack (`SlackPanel`) / GitHub (`GitHubPanel`)             | done   |
+| Copy toast only on real success; error toast on failed/unsupported clipboard  | done   |
 | Drop `Backspace` from the delete shortcut (`Delete`-only); back-nav collision | done   |
-| `?` toggles the cheatsheet closed (was trapped open by the modal guard)        | done   |
-| Confirm dialog: primary button `autofocus` so Enter confirms                   | done   |
-| `KeyboardShortcutsHelp`: drop deprecated `navigator.platform`                  | done   |
+| `?` toggles the cheatsheet closed (was trapped open by the modal guard)       | done   |
+| Confirm dialog: primary button `autofocus` so Enter confirms                  | done   |
+| `KeyboardShortcutsHelp`: drop deprecated `navigator.platform`                 | done   |
 
 ### Follow-up iteration 2: destructive-confirm coverage for settings/connection surfaces
 
@@ -110,21 +110,21 @@ cancel/dismiss), `toastDone(shape, name)` toasts on success. `shape` ∈
 translated once per locale. `name` is a short noun: a brand (`Slack`), a data value (the
 invite email, the arch/type name), or a feature noun key (`humanTest.envNoun`).
 
-| Unit                                                                                        | Status |
-| ------------------------------------------------------------------------------------------- | ------ |
-| `useConfirmAction.ts` + generic `common.confirm.*` / `common.toast.*` copy                  | done   |
-| Confirm + toast: revoke API key (`ApiKeysSection`)                                          | done   |
-| Confirm + toast: revoke team invite / disconnect email (`AccountTeamSettings`)              | done   |
-| Confirm + toast: disconnect observability / incident (`ObservabilityConnectionPanel`)       | done   |
-| Confirm + toast: clear release-health config (`ServiceReleaseHealthConfig`)                 | done   |
-| Confirm + toast: destroy human-test env (`HumanTestWindow`)                                 | done   |
-| Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                   | done   |
-| Confirm + toast: remove reference architecture (`BootstrapModal`)                           | done   |
+| Unit                                                                                       | Status |
+| ------------------------------------------------------------------------------------------ | ------ |
+| `useConfirmAction.ts` + generic `common.confirm.*` / `common.toast.*` copy                 | done   |
+| Confirm + toast: revoke API key (`ApiKeysSection`)                                         | done   |
+| Confirm + toast: revoke team invite / disconnect email (`AccountTeamSettings`)             | done   |
+| Confirm + toast: disconnect observability / incident (`ObservabilityConnectionPanel`)      | done   |
+| Confirm + toast: clear release-health config (`ServiceReleaseHealthConfig`)                | done   |
+| Confirm + toast: destroy human-test env (`HumanTestWindow`)                                | done   |
+| Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                  | done   |
+| Confirm + toast: remove reference architecture (`BootstrapModal`)                          | done   |
 | Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal`; toast kept)   | done   |
 | Confirm: remove provider connection (`ProviderConnectionTab`; toast kept)                  | done   |
 | Confirm: remove kube handler / override / custom (`InfraHandlersConfigurator`; toast kept) | done   |
 | Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings`; toast kept)       | done   |
-| i18n keys (8 locales) + patch changeset                                                     | done   |
+| i18n keys (8 locales) + patch changeset                                                    | done   |
 
 Empty-state (category C) surfaced no genuine new gaps this sweep: the remaining empty
 renders are compact inline placeholders or full-page states with CTAs, both intentional.

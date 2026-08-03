@@ -74,17 +74,17 @@ run) and Playwright traces for the SPA cold-open waterfall.
 
 | #   | Pri | Area          | Finding (short)                                                                                 | Status     | PR      |
 | --- | --- | ------------- | ----------------------------------------------------------------------------------------------- | ---------- | ------- |
-| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA); add phase timers + "ready in N ms"             | ✅ done    | #1097   |
+| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA); add phase timers + "ready in N ms"              | ✅ done    | #1097   |
 | 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                   | ✅ done    | this PR |
 | 3   | P1  | frontend      | Full workspace snapshot fetched TWICE per cold board open (init + on-connect resync)            | ⬜ todo    |         |
 | 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ✅ done    | #1108   |
-| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially, up to ~3.5s stall when Redis is set but down        | ✅ done    | this PR |
+| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially, up to ~3.5s stall when Redis is set but down         | ✅ done    | this PR |
 | 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)             | ✅ done    | this PR |
 | 7   | P2  | frontend      | GitHub probe blocks first board paint; availability could ride the snapshot                     | ⬜ todo    |         |
 | 8   | P2  | frontend      | 3-deep critical-path waterfall: auth → listWorkspaces → snapshot                                | 🟡 partial | #1097   |
 | 9   | P2  | worker        | `buildContainer` + `createAppCaches` + registries rebuilt on EVERY request                      | ⬜ todo    |         |
 | 10  | P3  | node boot     | `migrate()` spends ~5-6 serialized round trips per boot even when the DB is current             | ⬜ todo    |         |
-| 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision; documented invariant says before)        | ⬜ todo    |         |
+| 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision; documented invariant says before)         | ⬜ todo    |         |
 | 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                    | 🟡 partial | #1097   |
 | 13  | P3  | frontend      | Non-`en` users pay an awaited locale-catalog fetch in the boot plugin                           | ⬜ todo    |         |
 | 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first) | ⬜ todo    |         |

@@ -65,7 +65,7 @@ Current published versions (all installable):
 | `@modular-frontend/core`              | `0.2.0`         | Neutral engine: modules, slots, navigation, DI, remote manifests, `resolveComponentRegistry`/`pairById` (slice-2 pairing). |
 | `@modular-vue/core` `/vue` `/runtime` | `1.2.0`/`1.3.0` | Vue bindings for modules, slots (`useReactiveSlots`), navigation, DI, the pairing re-exports.                              |
 | `@modular-vue/journeys`               | `1.1.0`+        | Vue journeys binding (slice 3): host/outlet/provider/sync + Pinia persistence.                                             |
-| `@modular-vue/nuxt`                   | `0.3.0`         | Nuxt install: `installModularApp` (modules + slots + nav + DI + journeys extension).                                      |
+| `@modular-vue/nuxt`                   | `0.3.0`         | Nuxt install: `installModularApp` (modules + slots + nav + DI + journeys extension).                                       |
 | **`@modular-vue/zones`**              | **— (404)**     | **Does not exist.** (`@modular-vue/vue` exposes no state-keyed zone surface.)                                              |
 
 The three primitives that _look_ adjacent each stop short in a specific, load-bearing way:

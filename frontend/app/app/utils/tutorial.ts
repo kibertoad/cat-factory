@@ -128,6 +128,24 @@ export interface TutorialTour {
   /** Sort key in the tour list; ties break on `id` so the order is deterministic. */
   order: number
   /**
+   * Whether the LAUNCH PROMPT offers this tour. Absent = offered, so a consumer deployment's
+   * own tour appears beside the built-ins with nothing to declare.
+   *
+   * The prompt is one question a new user is trying to answer in a glance; the catalogue is the
+   * library. That split only holds while the prompt stays short, and the catalog does not: the
+   * built-ins now cover the platform (the engine, the pipeline builder, the standards library,
+   * the integrations) alongside the delivery loop, and every platform tour is startable on a
+   * brand-new board, because all it needs is a permission. Offered unfiltered they would put
+   * six walkthroughs in front of someone whose board has neither a repository nor a task,
+   * burying the two they can act on under four they have no reason to care about yet.
+   *
+   * This thins an OFFER, never the library — the distinction {@link resolveTourCatalogue} exists
+   * to keep. An un-offered tour is listed, startable, counted in the progress line and reachable
+   * from the prompt's own "See all tutorials" footer button, so nothing here can make a
+   * walkthrough disappear; only `requires` can hold one back, and that is always reported.
+   */
+  offeredAtLaunch?: boolean
+  /**
    * What this board/user must have before the tour can run, over the same reactive
    * {@link NavGates} the nav catalog uses — so a tour about a surface the caller can't reach
    * (no board write, no source control) is never started, and the catalogue can say which of
@@ -246,7 +264,7 @@ export function resolveTourCatalogue(
   })
 }
 
-/** The tours that can be started right now, resolved — the launch prompt's offer list. */
+/** The tours that can be started right now, resolved — what the overlay may run. */
 export function resolveTours(
   tours: readonly TutorialTour[],
   gates: NavGates | null,
@@ -254,6 +272,18 @@ export function resolveTours(
   return resolveTourCatalogue(tours, gates)
     .filter((entry) => entry.availability === 'ready')
     .map((entry) => entry.tour)
+}
+
+/**
+ * Does the launch prompt offer this tour? See {@link TutorialTour.offeredAtLaunch} for why the
+ * prompt shows a subset while the catalogue shows everything.
+ *
+ * One function rather than an inline `!== false` at each site, because the DEFAULT is the whole
+ * subtlety: a tour that declares nothing is offered, so a reader spelling the check out
+ * themselves has to get the polarity of an absent field right.
+ */
+export function isLaunchOffer(tour: TutorialTour): boolean {
+  return tour.offeredAtLaunch !== false
 }
 
 /**

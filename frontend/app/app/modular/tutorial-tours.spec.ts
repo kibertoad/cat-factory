@@ -7,9 +7,11 @@ import {
   TUTORIAL_TOURS,
   tutorialToursModule,
 } from '~/modular/tutorial-tours'
-import { resolveTourCatalogue, resolveTours } from '~/utils/tutorial'
+import { isLaunchOffer, resolveTourCatalogue, resolveTours } from '~/utils/tutorial'
 import { isSafeTargetId } from '~/components/tutorial/TutorialOverlay.logic'
-import type { NavGates } from '~/modular/nav-contributions'
+import { NAV_CONTRIBUTIONS, navItemVisible } from '~/modular/nav-contributions'
+import type { NavContribution, NavGates } from '~/modular/nav-contributions'
+import type { TutorialStep, TutorialTour } from '~/utils/tutorial'
 
 const ALL_GATES: NavGates = {
   canWriteBoard: true,
@@ -98,6 +100,90 @@ function declaredAnchors(): { label: string; id: string }[] {
     }
   }
   return out
+}
+
+/**
+ * Every step whose anchor IS a nav entry, paired with the contribution it points at.
+ *
+ * Those steps are the ones a tour's `requires` has to agree with, because the anchor only
+ * exists while the sidebar/palette renders that entry. An anchor that is NOT a nav entry (a
+ * control inside the modal the click opens) has no contribution to pair with and is left to
+ * the anchor guard above; `altTargets` are included, since a fallback anchor is reached on
+ * exactly the same terms as the primary one.
+ */
+function navAnchoredSteps(): {
+  tour: TutorialTour
+  step: TutorialStep
+  item: NavContribution
+  label: string
+}[] {
+  const byTestId = new Map(
+    NAV_CONTRIBUTIONS.flatMap((item) => (item.testId ? [[item.testId, item] as const] : [])),
+  )
+  return TUTORIAL_TOURS.flatMap((tour) =>
+    tour.steps.flatMap((step) =>
+      [step.target, ...(step.altTargets ?? [])].flatMap((target) => {
+        const item = target === undefined ? undefined : byTestId.get(target)
+        return item ? [{ tour, step, item, label: `${tour.id}/${step.id} -> ${item.id}` }] : []
+      }),
+    ),
+  )
+}
+
+/**
+ * Every combination of the {@link NavGates} booleans, yielded lazily so the 2^N gate sets are
+ * never all live at once.
+ *
+ * Enumerating rather than reasoning is deliberate. The pairing below is an IMPLICATION over
+ * gate sets — anything that satisfies a tour must also render its entry — between two
+ * predicates written independently in two files, and nothing about their shape is guaranteed
+ * (either may be a conjunction, a disjunction, or read a field the other doesn't). At fifteen
+ * fields the whole matrix costs milliseconds, which is a fair price for a guard that needs no
+ * assumption about how either side is spelled.
+ */
+function* everyGateSet(): Generator<NavGates> {
+  const keys = Object.keys(ALL_GATES) as (keyof NavGates)[]
+  for (let mask = 0; mask < 2 ** keys.length; mask++) {
+    const gates = {} as Record<keyof NavGates, boolean>
+    for (const [bit, key] of keys.entries()) gates[key] = (mask & (1 << bit)) !== 0
+    yield gates as NavGates
+  }
+}
+
+/** The gate fields a witness has turned OFF — the interesting half of a failure message. */
+function absentGates(gates: NavGates): readonly string[] {
+  return Object.entries(gates)
+    .filter(([, value]) => value === false)
+    .map(([key]) => key)
+}
+
+/**
+ * A gate set that OFFERS this tour while the entry its step clicks is NOT rendered, or
+ * `undefined` when no such set exists (what the guard wants). A step the gate set DROPS
+ * (`when`) needs no anchor, so it cannot be a counterexample.
+ *
+ * Of the many counterexamples one break produces, the one reported is the SMALLEST: the gate
+ * set closest to fully-permitted, so its absent fields are exactly the ones that matter. The
+ * first witness the matrix happens to reach names most of `NavGates` and reads as noise, which
+ * is the difference between a failure that says "declare `advancedMode`" and one that says
+ * "something about fourteen gates".
+ */
+function navRequirementDrift(
+  pair: ReturnType<typeof navAnchoredSteps>[number],
+): NavGates | undefined {
+  let smallest: NavGates | undefined
+  let fewestAbsent = Number.POSITIVE_INFINITY
+  for (const gates of everyGateSet()) {
+    if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) continue
+    if (pair.step.when && !pair.step.when(gates)) continue
+    if (navItemVisible(pair.item, gates)) continue
+    const absent = absentGates(gates).length
+    if (absent < fewestAbsent) {
+      fewestAbsent = absent
+      smallest = gates
+    }
+  }
+  return smallest
 }
 
 /** Every static test id this layer actually renders. */
@@ -190,14 +276,52 @@ describe('the built-in tutorial tour catalog', () => {
     expect(missing).toEqual([])
   })
 
+  it('requires, of every step that clicks a nav entry, whatever renders that entry', () => {
+    // The other drift guard, and the one the availability cases below CANNOT stand in for.
+    // Those assert this pairing by restating the permission in a hand-built gate set, which
+    // says nothing about the nav catalog: both edits that really break the pairing happen in
+    // `nav-contributions.ts` and touch no tour.
+    //
+    //  - an entry's `gate` gains a clause the tour doesn't require;
+    //  - an entry is marked `advanced: true`, which removes it from BASIC mode — and basic is
+    //    the SHIPPED DEFAULT, so the tour would then be offered to nearly every user and find
+    //    nothing.
+    //
+    // Both land on the same production failure: the tour is offered, hunts for an anchor that
+    // this user's sidebar never renders, skips the step (no `when`, so the miss COUNTS) and
+    // leaves them on a permanent "you missed N steps" notice about a walkthrough that could
+    // not have gone any other way. So the requirement is derived from the entry's OWN
+    // visibility rule (`navItemVisible`, the function `navSlotFilter` itself filters with)
+    // rather than spelled out a second time here.
+    const pairs = navAnchoredSteps()
+    // Guard the guard, twice over. A pairing that matched nothing would pass vacuously, and
+    // there is one per tour that opens a sidebar surface: `add-service` plus the four platform
+    // tours. And a gate field that is not a boolean would silently never vary across the
+    // matrix, leaving whatever it gates unexercised.
+    expect(pairs.length).toBeGreaterThanOrEqual(5)
+    expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
+
+    const drifted = pairs.flatMap((pair) => {
+      const witness = navRequirementDrift(pair)
+      if (witness === undefined) return []
+      return [`${pair.label} is offered without ${absentGates(witness).join(' / ')}`]
+    })
+    expect(drifted).toEqual([])
+  })
+
   it('is contributed to the tutorialTours slot by the module', () => {
     expect(tutorialToursModule.slots?.tutorialTours).toEqual([...TUTORIAL_TOURS])
   })
 })
 
 describe('tour availability across the catalog', () => {
-  /** The ids a board can START right now — what the launch prompt offers. */
+  /** The ids a board can START right now — every startable tour, whatever offers it. */
   const ready = (gates: NavGates) => resolveTours(TUTORIAL_TOURS, gates).map((t) => t.id)
+  /** The narrower set the LAUNCH PROMPT asks about (`useTutorialTours().offered`). */
+  const offered = (gates: NavGates) =>
+    resolveTours(TUTORIAL_TOURS, gates)
+      .filter(isLaunchOffer)
+      .map((t) => t.id)
   /** The catalogue's own view: every tour, with what is holding each one back. */
   const entry = (gates: NavGates, tourId: string) =>
     resolveTourCatalogue(TUTORIAL_TOURS, gates).find((e) => e.tour.id === tourId)
@@ -207,14 +331,19 @@ describe('tour availability across the catalog', () => {
   })
 
   it('lists the whole catalog whatever the gates say, holding back rather than hiding', () => {
-    // The catalogue surface's contract. A fresh board can run two of the six walkthroughs;
-    // dropping the other four (all a slot filter could do) would misrepresent the product as
-    // shipping two, to exactly the user who came looking for the rest.
+    // The catalogue surface's contract. A fresh board can run the two delivery-loop tours that
+    // need no board state plus the whole platform half; dropping the rest (all a slot filter
+    // could do) would misrepresent the product as shipping fewer walkthroughs than it does, to
+    // exactly the user who came looking for them.
     const catalogue = resolveTourCatalogue(TUTORIAL_TOURS, FRESH_BOARD)
     expect(catalogue.map((e) => e.tour.id)).toEqual(TUTORIAL_TOURS.map((t) => t.id))
     expect(catalogue.filter((e) => e.availability === 'ready').map((e) => e.tour.id)).toEqual([
       'board-basics',
       'add-service',
+      'wire-models',
+      'design-pipeline',
+      'agent-standards',
+      'connect-systems',
     ])
   })
 
@@ -234,16 +363,66 @@ describe('tour availability across the catalog', () => {
   })
 
   it('offers a brand-new board the orientation tour AND the way out of being empty', () => {
-    // The state the launch prompt actually auto-opens in. Orientation alone would leave a
-    // new workspace with a tour of an empty canvas and no route to a first service, which
-    // is what `add-service` exists to fix — so it must survive exactly this gate set.
-    expect(ready(FRESH_BOARD)).toEqual(['board-basics', 'add-service'])
+    // The state the launch prompt actually auto-opens in, asserted on what it ASKS ABOUT.
+    // Orientation alone would leave a new workspace with a tour of an empty canvas and no route
+    // to a first service, which is what `add-service` exists to fix — so it must survive exactly
+    // this gate set. And nothing else may join it here: this is a modal with one question, and
+    // the platform tours are all startable on a fresh board (they need only a permission), so
+    // without the offer/library split they would bury both of these four-to-two.
+    expect(offered(FRESH_BOARD)).toEqual(['board-basics', 'add-service'])
+  })
+
+  it('keeps the platform tours in the catalogue rather than in the launch offer', () => {
+    // The split, stated as a table so promoting a tour into the first-launch question has to be
+    // written down here. The delivery loop is the arc a first-time user is answering about; the
+    // platform half is reference material they go and get from the catalogue, where it is listed,
+    // counted and startable exactly like the rest.
+    const LAUNCH_ARC = [
+      'board-basics',
+      'add-service',
+      'first-task',
+      'run-task',
+      'answer-park',
+      'review-merge',
+    ]
+    const CATALOGUE_ONLY = ['wire-models', 'design-pipeline', 'agent-standards', 'connect-systems']
+    expect(TUTORIAL_TOURS.filter(isLaunchOffer).map((t) => t.id)).toEqual(LAUNCH_ARC)
+    expect(TUTORIAL_TOURS.filter((t) => !isLaunchOffer(t)).map((t) => t.id)).toEqual(CATALOGUE_ONLY)
+    // Un-offered is not un-runnable: it thins the offer, never the library.
+    expect(ready(ALL_GATES)).toEqual(expect.arrayContaining(CATALOGUE_ONLY))
   })
 
   it('names the missing connection when no source control can list repositories', () => {
     const noSource: NavGates = { ...FRESH_BOARD, githubAvailable: false }
-    expect(ready(noSource)).toEqual(['board-basics'])
+    expect(offered(noSource)).toEqual(['board-basics'])
     expect(entry(noSource, 'add-service')?.unmet.map((r) => r.id)).toEqual(['source-control'])
+  })
+
+  it('holds each platform tour back on the permission its own sidebar entry needs', () => {
+    // Every one of these tours clicks a sidebar entry as its second step, so its requirement has
+    // to be the SAME fact that renders the entry. A weaker one offers the tour to a user with no
+    // such control: it would hunt for the anchor, skip the rest and report itself abridged.
+    const member: NavGates = {
+      ...ALL_GATES,
+      canManageIntegrations: false,
+      canManageSettings: false,
+    }
+    expect(ready(member)).not.toContain('wire-models')
+    expect(ready(member)).not.toContain('connect-systems')
+    expect(ready(member)).not.toContain('agent-standards')
+    expect(entry(member, 'wire-models')?.unmet.map((r) => r.id)).toEqual(['integrations-manage'])
+    expect(entry(member, 'connect-systems')?.unmet.map((r) => r.id)).toEqual([
+      'integrations-manage',
+    ])
+    expect(entry(member, 'agent-standards')?.unmet.map((r) => r.id)).toEqual(['settings-manage'])
+    // A viewer keeps the builder tour out too: it opens a board-write surface.
+    expect(ready({ ...ALL_GATES, canWriteBoard: false })).not.toContain('design-pipeline')
+  })
+
+  it('names the disabled library when the deployment ships no fragment surface', () => {
+    const noLibrary: NavGates = { ...ALL_GATES, libraryAvailable: false }
+    expect(ready(noLibrary)).not.toContain('agent-standards')
+    expect(entry(noLibrary, 'agent-standards')?.unmet.map((r) => r.id)).toEqual(['library'])
   })
 
   it('offers the run tour once a task exists, and the review tour once a run finished', () => {

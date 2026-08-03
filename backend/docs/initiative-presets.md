@@ -83,9 +83,9 @@ initiativePresetRegistry.register({
 
 | Field              | Where                                                  | Purpose                                                                                                                                                                                          |
 | ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `descriptor`       | `@cat-factory/contracts` `initiative-preset.ts`        | The serialisable, SPA-facing definition (form + planning binding + defaults + plan shape). Pure data; it rides the workspace snapshot to the SPA.                                               |
+| `descriptor`       | `@cat-factory/contracts` `initiative-preset.ts`        | The serialisable, SPA-facing definition (form + planning binding + defaults + plan shape). Pure data; it rides the workspace snapshot to the SPA.                                                |
 | `detect?`          | `(repo: RepoFiles) => Promise<InitiativePresetInputs>` | A bounded, never-throwing prefill probe. Returns non-binding FORM DEFAULTS; the user's edits always win. Absent ⇒ the descriptor's `probe` flag is `false`.                                      |
-| `seedPlan?`        | `(draft, inputs) => InitiativePlanDraft`               | A pure post-processor of the planner's draft at ingest. **Per-item spawn DECORATION only**; never touches phases (that is `phaseTemplate`'s job).                                               |
+| `seedPlan?`        | `(draft, inputs) => InitiativePlanDraft`               | A pure post-processor of the planner's draft at ingest. **Per-item spawn DECORATION only**; never touches phases (that is `phaseTemplate`'s job).                                                |
 | `promptAdditions?` | `Partial<Record<AgentKind, string>>`                   | Per-agent-kind planning-prompt steering text (the METHODOLOGY). Folded into the planning steps' prompts; the form values reach the prompt via the interview digest, so these never restate them. |
 
 `descriptor.probe` is **derived** server-side (`!!detect`), never author-supplied.

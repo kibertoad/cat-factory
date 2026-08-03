@@ -189,8 +189,8 @@ exactly like the rest of the report. A judge step that did not run records
 | 9   | Conformance: evaluate / park / bounce / unwired pass-through on both runtimes                                                                          | done   | this PR |
 | 10  | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent`                                                                         | done   | this PR |
 | 11  | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
-| 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —     |
-| 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —     |
+| 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
+| 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
 
 ## Deliberately NOT pursued
 

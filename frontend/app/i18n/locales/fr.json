@@ -6202,7 +6202,7 @@
       "intro": "Les visites guidées vous montrent l'application directement à l'écran : elles mettent en évidence les vrais contrôles et vous indiquent où cliquer.",
       "decline": "Non merci",
       "later": "Peut-être plus tard",
-      "empty": "Aucune visite n'est encore disponible pour votre rôle sur ce tableau.",
+      "empty": "Aucune visite de premiers pas n'est encore disponible pour votre rôle sur ce tableau, mais le catalogue complet peut tout de même en contenir une accessible.",
       "browse": "Voir tous les tutoriels"
     },
     "catalogue": {
@@ -6234,7 +6234,10 @@
       "service": "Un service sur le tableau",
       "task": "Une tâche sur le tableau",
       "waitingAnswer": "Une exécution en attente de votre réponse",
-      "finishedRun": "Une exécution terminée avec succès"
+      "finishedRun": "Une exécution terminée avec succès",
+      "integrationsManage": "L'autorisation de gérer les intégrations",
+      "settingsManage": "L'autorisation de gérer les paramètres de l'espace de travail",
+      "library": "La bibliothèque de fragments de contexte activée sur ce déploiement"
     },
     "overlay": {
       "next": "Suivant",
@@ -6426,6 +6429,102 @@
           "finish": {
             "title": "Livré",
             "body": "Le travail fusionné marque la tâche comme faite sur le tableau. Voilà la boucle entière : planifier, exécuter, répondre, relire, fusionner."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Connecter un fournisseur de modèles",
+        "description": "Indiquez à l'espace de travail les moteurs qui font tourner vos agents.",
+        "steps": {
+          "intro": {
+            "title": "Les agents ont besoin d'un moteur",
+            "body": "Chaque étape de chaque pipeline est un appel de modèle : rien ne tourne tant que cet espace de travail n'atteint pas un fournisseur. Cette visite montre où se trouve cette connexion."
+          },
+          "open": {
+            "title": "Fournisseurs de modèles",
+            "body": "Ceci ouvre le hub des fournisseurs : tous les moteurs que ce déploiement peut connecter, ceux déjà en place étant marqués comme connectés."
+          },
+          "hub": {
+            "title": "Choisissez votre mode de connexion",
+            "body": "Une clé de passerelle débloque d'un coup un large catalogue. Une clé d'éditeur, un abonnement personnel ou un exécuteur de modèles sur votre propre machine font tout aussi bien l'affaire, et vous pouvez en avoir plusieurs à la fois."
+          },
+          "finish": {
+            "title": "Puis choisissez par agent",
+            "body": "La configuration du modèle, dans la même section de la barre latérale, définit quel modèle utilise chaque type d'agent. Les étapes simples peuvent tourner sur des modèles économiques et les difficiles sur votre meilleur, sans modifier un seul pipeline."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Concevoir un pipeline",
+        "description": "Assemblez les agents qui livrent une tâche, et enregistrez-le pour n'importe quelle tâche.",
+        "steps": {
+          "intro": {
+            "title": "La séquence vous appartient",
+            "body": "Un pipeline est la suite ordonnée d'agents qui transforme une tâche en pull request fusionnée. Ceux fournis couvrent l'essentiel du travail, et cette visite ouvre le constructeur où vous pouvez façonner le vôtre."
+          },
+          "open": {
+            "title": "Créer un pipeline",
+            "body": "Le constructeur s'ouvre à côté du tableau, pour garder le travail sous les yeux pendant que vous façonnez le flux."
+          },
+          "palette": {
+            "title": "La palette d'agents",
+            "body": "Tous les types d'agent fournis par ce déploiement sont listés ici, de ceux qui planifient le travail à ceux qui le relisent, le testent et le fusionnent. Cliquez sur l'un d'eux pour l'ajouter comme étape."
+          },
+          "chain": {
+            "title": "La chaîne que vous construisez",
+            "body": "Les étapes s'exécutent de haut en bas, et chaque ligne a ses propres interrupteurs : attacher le relecteur qui renvoie une étape lorsqu'elle est trop mal notée, exiger votre approbation avant le démarrage de la suivante, ou faire tourner une étape comme un panel de plusieurs modèles."
+          },
+          "save": {
+            "title": "Enregistrer votre pipeline",
+            "body": "Enregistrer devient actif dès que le brouillon contient au moins une étape. Un pipeline enregistré rejoint la bibliothèque de cette fenêtre et est proposé partout où une tâche en choisit un ; nommez-le d'après le travail qu'il fait plutôt que d'après les agents qu'il contient, car ce nom est tout ce que vous verrez au moment de choisir."
+          },
+          "finish": {
+            "title": "Prêt à tourner",
+            "body": "Cloner un pipeline fourni est le départ le plus rapide : copiez le plus proche, changez une étape, enregistrez-le sous votre propre nom. Rien de ce que vous enregistrez ne prend effet avant qu'une tâche soit réellement lancée avec."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Définir les standards que suivent les agents",
+        "description": "Entretenez les règles que chaque agent lit avant de toucher à votre code.",
+        "steps": {
+          "intro": {
+            "title": "Des standards, pas des consignes",
+            "body": "Les fragments de contexte sont les règles de la maison : conventions, critères de relecture et bonnes pratiques insérés dans le prompt d'un agent à chaque exécution. Les entretenir ici, c'est piloter le résultat au lieu de répéter les mêmes règles dans chaque tâche."
+          },
+          "open": {
+            "title": "Fragments de contexte",
+            "body": "Ceci ouvre la bibliothèque de ce tableau."
+          },
+          "library": {
+            "title": "Un catalogue fusionné",
+            "body": "Le catalogue fourni, les fragments de votre compte et ceux de ce tableau sont fusionnés en une seule liste, le niveau le plus proche l'emportant. Vous pouvez en écrire un ici, importer un document, ou relier un dossier de dépôt pour que les fichiers que vous maintenez déjà restent la source de vérité."
+          },
+          "finish": {
+            "title": "Où ils s'appliquent",
+            "body": "Un service ou une tâche peut restreindre les fragments que reçoivent ses agents, et les valeurs par défaut du tableau sont dans les paramètres de l'espace de travail. Les agents qui écrivent du code reçoivent un résumé condensé de chaque fragment, pour qu'un long standard n'éclipse pas la tâche elle-même."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Connecter les systèmes que vous utilisez déjà",
+        "description": "Outils de suivi, documents, messagerie et supervision, et ce que chacun apporte à une exécution.",
+        "steps": {
+          "intro": {
+            "title": "Les exécutions peuvent aller plus loin",
+            "body": "Les tickets peuvent venir de votre outil de suivi, les exigences de vos documents, les notifications dans la messagerie de votre équipe, et la santé d'une mise en production de votre supervision. Chaque connexion est optionnelle, et chacune change ce qu'une exécution peut voir ou dire."
+          },
+          "open": {
+            "title": "Le hub d'intégrations",
+            "body": "Une liste de tous les systèmes externes que cet espace de travail peut relier, avec ce qui est déjà connecté signalé."
+          },
+          "hub": {
+            "title": "Connectez ce dont vous avez besoin",
+            "body": "Le gestionnaire de code d'abord, car les pipelines ont besoin de code sur lequel travailler. Le reste peut attendre que la question se pose : un outil de suivi d'où importer des tickets, une source de documents pour le contexte des exigences, la messagerie pour les notifications, la supervision pour surveiller une mise en production."
+          },
+          "finish": {
+            "title": "À vous ou à l'espace de travail",
+            "body": "Certaines entrées vous appartiennent plutôt qu'au tableau, comme un jeton d'accès personnel ou un abonnement, et ne servent qu'aux exécutions que vous lancez. Le hub indique lesquelles, et Ma configuration rassemble les vôtres."
           }
         }
       }

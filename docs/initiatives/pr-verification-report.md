@@ -37,12 +37,12 @@ retry.
 Chosen: the PR/MR **description**, delimited by HTML-comment markers
 (`<!-- cat-factory:verification-report:start -->` … `:end`), spliced in place.
 
-|                  | PR body (chosen)                                                                                                                                                                   | Maintained comment                                                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Idempotency      | **Structural**: the markers ARE the identity. No persisted state, so a lost/replaced run row, a retry, or a second deployment writing the same PR still updates in place.         | Needs the comment id persisted on the run (or a list-and-match scan), and a lost id silently duplicates: exactly the failure mode the acceptance criteria forbid. |
+|                  | PR body (chosen)                                                                                                                                                                   | Maintained comment                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idempotency      | **Structural**: the markers ARE the identity. No persisted state, so a lost/replaced run row, a retry, or a second deployment writing the same PR still updates in place.          | Needs the comment id persisted on the run (or a list-and-match scan), and a lost id silently duplicates: exactly the failure mode the acceptance criteria forbid. |
 | Port surface     | One new READ (`getPullRequestBody`); the WRITE (`updatePullRequest`) already exists on the kernel `GitHubClient` / `VcsClient` ports and is implemented for GitHub **and** GitLab. | Needs a NEW `updateComment` write (absent from both ports) plus author identity to find "our" comment, which differs per provider.                                |
-| Reviewer surface | First thing shown, above the diff; GitLab MR descriptions behave identically.                                                                                                      | Buried in a conversation that grows with every fixer round.                                                                                                        |
-| Failure mode     | A provider that can't read the body ⇒ no report (loud pass-through), never a corrupted body: the splice is a pure function over the read body.                                    | Duplicate reports on every retry.                                                                                                                                  |
+| Reviewer surface | First thing shown, above the diff; GitLab MR descriptions behave identically.                                                                                                      | Buried in a conversation that grows with every fixer round.                                                                                                       |
+| Failure mode     | A provider that can't read the body ⇒ no report (loud pass-through), never a corrupted body: the splice is a pure function over the read body.                                     | Duplicate reports on every retry.                                                                                                                                 |
 
 The splice is a pure function (`spliceManagedSection`) in kernel: absent markers ⇒ append the
 section after the existing prose; present ⇒ replace exactly the marked region. The agent's own
@@ -156,22 +156,22 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                                                                            | Status         | PR   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---- |
-| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                  | 🟩 done        | this |
-| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                              | 🟩 done        | this |
-| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                               | 🟩 done        | this |
-| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                        | 🟩 done        | this |
-| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                             | 🟩 done        | this |
-| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                       | 🟩 done        | this |
-| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                           | 🟩 done        | this |
-| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                           | 🟩 done        | this |
-| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                        | 🟩 done        | this |
-| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                  | 🟩 done        | this |
-| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                    | ⬜ todo        |      |
+| #   | Slice                                                                                                                                                                          | Status         | PR   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- | ---- |
+| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                | 🟩 done        | this |
+| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                            | 🟩 done        | this |
+| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                             | 🟩 done        | this |
+| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                      | 🟩 done        | this |
+| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                           | 🟩 done        | this |
+| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                     | 🟩 done        | this |
+| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                         | 🟩 done        | this |
+| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                         | 🟩 done        | this |
+| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                      | 🟩 done        | this |
+| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                | 🟩 done        | this |
+| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                   | ⬜ todo        |      |
 | 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) | 🟨 in-progress |      |
-| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                             | ⬜ todo        |      |
-| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                      | ⬜ todo        |      |
+| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                            | ⬜ todo        |      |
+| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                     | ⬜ todo        |      |
 
 ### Phase-2 notes (read before starting slice 9)
 
