@@ -1,5 +1,83 @@
 # @cat-factory/worker
 
+## 0.139.0
+
+### Minor Changes
+
+- 96ad850: Per-workspace capability credentials: the secrets a tool server or generative binary integration
+  declares are now stored per TENANT, sealed at rest, instead of only being read off the deployment's
+  environment.
+
+  An environment variable is a single-tenant answer: one process serves many workspaces, so one
+  variable served them all: every tenant's runs authenticated as whoever set it, no tenant could bring
+  its own vendor account, and rotating one tenant's key was a redeploy that rotated everyone's. Every
+  other credential in the platform is already a per-tenant sealed row; capabilities were the subsystem
+  that had not caught up.
+
+  New: `capability_credentials` (D1 + Postgres), `CapabilityCredentialsService`,
+  `createWorkspaceToolSecretResolver` / `composeToolSecretResolvers`, and a `secrets.manage`-gated
+  `/workspaces/:workspaceId/capability-credentials` surface that lists which credentials the
+  deployment's registered capabilities DECLARE alongside which this workspace has stored. Deleting a
+  board reclaims its stored credentials with the rest of its workspace-scoped rows.
+
+  No behaviour change for an existing deployment: the environment resolver is composed BEHIND the
+  store per key, so a workspace that has stored nothing resolves exactly as before. The SPA panel is
+  the next slice; the API is usable now.
+
+- 96ad850: Close the tool-secret boundary, and give `ToolSecretResolver` a facade seam.
+
+  **Behaviour break (deliberate).** A capability credential (a tool server's `secretKeys`, a
+  generative binary integration's `credential.key`) may no longer be LOOKED UP BY an environment
+  variable the platform itself reads. Such a definition names both the key it wants and the endpoint
+  that key is sent to, so `{ key: 'ENCRYPTION_KEY', usage: 'Authorization: Bearer <value>' }` was a
+  registration that booted clean and injected the deployment's master sealing key into a
+  prompt-injectable agent process. It is now refused at declaration (a schema issue for a generative
+  integration, a `reserved_credential_key` boot error for a tool server) and again at dispatch, where
+  the capability is reported to the agent as unavailable: a tool server under its own
+  `reserved_secret` reason, kept apart from `missing_secret` because the two need opposite fixes.
+
+  **New `envName`.** The floor binds the LOOKUP key alone. A declaration that needs a specific
+  variable in the process it configures sets `envName` beside its `key`
+  (`{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }`), and that name is held
+  only to the narrower toolchain rule, since it reads nothing. Without the split the reserved
+  families would make the commonest MCP servers unusable with no workaround open to a deployment,
+  because `GITHUB_`, `SLACK_` and `AWS_` cover names the platform does not read and a vendor's own
+  SDK does. A deployment that named a platform variable as its lookup key now fails at boot rather
+  than silently; a deployment that needs the vendor's name in the process keeps it via `envName`.
+
+  **New seam.** `startLocal`, `start` and `createWorker` each take a `createToolSecretResolver`
+  factory, defaulting to the platform's own chain (the per-workspace credential store in front of
+  `createEnvToolSecretResolver(env)`). Reaching the port used to mean abandoning the facade and
+  reassembling the boot sequence, so the per-workspace credential store the port was designed for,
+  and the `allowKeys` bound its own documentation recommended, were both unreachable. On the Worker
+  the option registers the resolver process-wide (`registerToolSecretResolverFactory`), because a
+  Worker builds a container per entry point and container agents are dispatched by the durable
+  driver, which sees no option held on the app.
+
+  Also: the Node executor's default env resolver now reads the injected `env` rather than
+  `process.env` directly, so an embedded boot or a test that supplies one is no longer bypassed.
+
+### Patch Changes
+
+- Updated dependencies [96ad850]
+- Updated dependencies [96ad850]
+  - @cat-factory/contracts@0.215.0
+  - @cat-factory/kernel@0.218.0
+  - @cat-factory/integrations@0.118.0
+  - @cat-factory/server@0.198.0
+  - @cat-factory/agents@0.106.2
+  - @cat-factory/orchestration@0.188.1
+  - @cat-factory/consensus@0.13.29
+  - @cat-factory/eks@0.1.203
+  - @cat-factory/gates@0.8.49
+  - @cat-factory/gitlab@0.15.8
+  - @cat-factory/observability-otel@0.5.3
+  - @cat-factory/prompt-fragments@0.15.40
+  - @cat-factory/spend@0.13.5
+  - @cat-factory/caching@0.13.3
+  - @cat-factory/observability-langfuse@0.9.46
+  - @cat-factory/provider-cloudflare@0.7.355
+
 ## 0.138.2
 
 ### Patch Changes

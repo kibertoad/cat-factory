@@ -1,5 +1,20 @@
 # @cat-factory/conformance
 
+## 0.20.14
+
+### Patch Changes
+
+- Updated dependencies [96ad850]
+- Updated dependencies [96ad850]
+  - @cat-factory/contracts@0.215.0
+  - @cat-factory/kernel@0.218.0
+  - @cat-factory/integrations@0.118.0
+  - @cat-factory/server@0.198.0
+  - @cat-factory/agents@0.106.2
+  - @cat-factory/orchestration@0.188.1
+  - @cat-factory/gates@0.8.49
+  - @cat-factory/prompt-fragments@0.15.40
+
 ## 0.20.13
 
 ### Patch Changes
