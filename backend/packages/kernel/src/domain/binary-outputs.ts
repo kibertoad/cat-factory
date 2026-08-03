@@ -9,6 +9,11 @@ import {
   GENERATION_CONTEXT_CAPABILITY,
   modalityOfMediaType,
 } from '@cat-factory/contracts'
+import {
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_CONTEXT_DIR,
+  binaryContextFileFor,
+} from './binary-output-paths.js'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 import type { FoundationalCatalogView } from './foundational-services.js'
 import {
@@ -48,17 +53,11 @@ import {
  */
 export { ASSET_STORAGE_CAPABILITY, GENERATION_CONTEXT_CAPABILITY }
 
-/** The `.cat-context/` directory the binary-output brief and contract documents live under. */
-export const BINARY_OUTPUT_CONTEXT_DIR = 'binary-output'
-
-/**
- * The brief a binary-generating kind starts from: which service to store through, which to
- * consult for scope, and what could NOT be resolved. The trait guidance names this one stable
- * path, and also names its ABSENCE as meaningful (the platform could not provide storage —
- * do not attempt uploads; report instead), so a resolution failure degrades loudly rather
- * than into a prompt pointing at a file that does not exist.
- */
-export const BINARY_OUTPUT_BRIEF_FILE = `${BINARY_OUTPUT_CONTEXT_DIR}/brief.md`
+// The `.cat-context/` path vocabulary lives in the LEAF `binary-output-paths.ts`, which this file
+// and `binary-generators.ts` both import — they import each OTHER, so a constant derived across
+// that cycle throws at module init in the assembled backend while every unit test passes.
+// Re-exported so every consumer keeps importing these names from where they always did.
+export { BINARY_OUTPUT_BRIEF_FILE, BINARY_OUTPUT_CONTEXT_DIR, binaryContextFileFor }
 
 /**
  * The fenced block a binary-generating kind ends its reply with, declaring what it stored.
@@ -80,11 +79,6 @@ const MAX_IDENTITY_CHARS = 512
 
 /** Longest optional display field retained per entry; the excess is elided with a marker. */
 const MAX_DISPLAY_CHARS = 500
-
-/** The `.cat-context/` path one selected service's contract documents are injected at. */
-export function binaryContextFileFor(serviceId: string): string {
-  return `${BINARY_OUTPUT_CONTEXT_DIR}/${serviceId}.md`
-}
 
 // --- selection validation ---------------------------------------------------
 

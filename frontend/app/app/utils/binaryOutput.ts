@@ -393,6 +393,10 @@ export function binaryOutputPickIssues(
   config: BinaryOutputConfig | undefined,
   catalog: readonly Pick<ResolvedFoundationalService, 'id' | 'capabilities'>[],
   available: boolean | null,
+  // Defaulted to EMPTY, the same reading `RunAdmission` gives an unwired registry: a deployment
+  // that registers no integrations cannot satisfy a step that selects one. So a call site that
+  // omits this FLAGS a selection rather than passing it — the loud direction — and the default
+  // stays a legitimate value rather than a hole.
   generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[] = [],
 ): BinaryOutputPickState {
   const resolved = available === true

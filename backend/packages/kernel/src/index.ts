@@ -238,16 +238,23 @@ export {
 // artifacts and stores them through a selected foundational service, scoped by further
 // selected context services. See `domain/binary-outputs.ts` and
 // docs/initiatives/binary-output-foundational-storage.md.
+// The `.cat-context/` PATH vocabulary is exported from the leaf that owns it, not through either
+// half: the two halves import each other, so a value read across that cycle at module-init time
+// is a boot crash the typecheck cannot see (see `domain/binary-output-paths.ts`).
+export {
+  BINARY_GENERATOR_CONTEXT_DIR,
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_CONTEXT_DIR,
+  binaryContextFileFor,
+  binaryGeneratorContextFileFor,
+} from './domain/binary-output-paths.js'
 export {
   type BinaryOutputBriefInput,
   type BinaryOutputConfigIssue,
-  BINARY_OUTPUT_BRIEF_FILE,
-  BINARY_OUTPUT_CONTEXT_DIR,
   BINARY_OUTPUT_DECLARATION_TAG,
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
   MAX_BINARY_OUTPUT_ENTRIES,
-  binaryContextFileFor,
   binaryOutputConfigIssues,
   describeBinaryOutputConfigIssues,
   parseBinaryOutputDeclaration,
@@ -267,7 +274,6 @@ export {
 export {
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
-  binaryGeneratorContextFileFor,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,

@@ -1,6 +1,9 @@
 import type { BinaryModality, BinaryOutputConfig } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
-import { BINARY_OUTPUT_CONTEXT_DIR } from './binary-outputs.js'
+import {
+  BINARY_GENERATOR_CONTEXT_DIR,
+  binaryGeneratorContextFileFor,
+} from './binary-output-paths.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for the GENERATIVE half of a binary-output step: resolving a step's selected
@@ -18,21 +21,11 @@ import { BINARY_OUTPUT_CONTEXT_DIR } from './binary-outputs.js'
 // identical behaviour by construction.
 // ---------------------------------------------------------------------------
 
-/**
- * The `.cat-context/` sub-directory a selected integration's contract documents are injected
- * under. Its OWN directory rather than a `generator-` filename prefix, because the two halves of
- * a step's selection are named from different registries with the identical slug grammar: a
- * catalog service legitimately called `generator-sprites` would land on exactly the path a
- * generative integration called `sprites` writes, and one would silently overwrite the other. A
- * slug cannot contain `/`, so a directory makes the collision structurally impossible rather than
- * merely unlikely.
- */
-export const BINARY_GENERATOR_CONTEXT_DIR = `${BINARY_OUTPUT_CONTEXT_DIR}/generators`
-
-/** The `.cat-context/` path one selected integration's contract documents are injected at. */
-export function binaryGeneratorContextFileFor(generatorId: string): string {
-  return `${BINARY_GENERATOR_CONTEXT_DIR}/${generatorId}.md`
-}
+// The `.cat-context/` path vocabulary lives in a LEAF module (`binary-output-paths.ts`) that this
+// file and its `binary-outputs.ts` sibling both import: the two import each other, so a constant
+// derived across that cycle is a module-init TDZ crash in the assembled backend. Re-exported here
+// so every consumer keeps importing the name from where it always did.
+export { BINARY_GENERATOR_CONTEXT_DIR, binaryGeneratorContextFileFor }
 
 /**
  * One selected integration as a DISPATCH sees it — the projection the engine puts on
