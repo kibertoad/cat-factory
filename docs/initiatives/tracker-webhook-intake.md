@@ -182,12 +182,12 @@ assumes the union is closed except the (already existing) per-kind switches.
 
 ## Slices
 
-| #   | Slice                                                                       | Status  | PR      |
-| --- | --------------------------------------------------------------------------- | ------- | ------- |
+| #   | Slice                                                                      | Status  | PR      |
+| --- | -------------------------------------------------------------------------- | ------- | ------- |
 | 1   | Tracker event ingestion (provider webhook capability, receiver, queue seam | 🟡 this | this PR |
 | 2   | Event-driven intake) qualifying issue events fire the matching schedule    | 🟡 this | this PR |
 | 3   | Issue-comment answers to a parked review: grammar, ingest claim, follow-up | 🟡 this | this PR |
-| 4   | Deployment-registered tracker kinds (`taskSourceKindSchema` widening)       | ⬜ todo |         |
+| 4   | Deployment-registered tracker kinds (`taskSourceKindSchema` widening)      | ⬜ todo |         |
 
 ### Slice 1 checklist
 
@@ -211,7 +211,7 @@ assumes the union is closed except the (already existing) per-kind switches.
 
 | #   | Item                                                                            | Status  |
 | --- | ------------------------------------------------------------------------------- | ------- |
-| 3.1 | `parseReviewReplyCommands`: the D4 grammar, pure + unit-tested                 | ✅ done |
+| 3.1 | `parseReviewReplyCommands`: the D4 grammar, pure + unit-tested                  | ✅ done |
 | 3.2 | `tracker_comment_ingests` claim, D1 ⇄ Drizzle + parity conformance              | ✅ done |
 | 3.3 | `TrackerWebhookService` reply path, through the SPA's service methods only      | ✅ done |
 | 3.4 | `postReviewReplyAck` follow-up comment (outstanding / rejected / moved-on)      | ✅ done |
@@ -224,7 +224,7 @@ assumes the union is closed except the (already existing) per-kind switches.
   `integrations.manage`),
   exactly as slice 1 of the clarification-loop initiative left the notification webhook. Setting it
   up is a one-time operator action that ALSO requires pasting into the vendor's own webhook form
-(  a surface the SPA cannot cover) so a panel saves half a round trip. Worth adding when a
+  ( a surface the SPA cannot cover) so a panel saves half a round trip. Worth adding when a
   human-facing deployment asks; the read route already returns everything a panel would render
   (`supported` / `configured` / `deliveryPath` / `replyAllow`).
 - **`taskSourceKindSchema` stays closed**: see D7. Widening it for deployment-registered trackers

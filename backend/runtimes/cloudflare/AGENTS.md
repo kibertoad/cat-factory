@@ -47,7 +47,7 @@ it only reaches the logger the Worker writes through while both imports resolve 
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
-  + per-run-container machinery.
+  - per-run-container machinery.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` hold the D1 schema, the twin of the Node

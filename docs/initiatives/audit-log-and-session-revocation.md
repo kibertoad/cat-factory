@@ -30,7 +30,7 @@ revocation via a per-user session-generation check.
 
 1. **One writer seam, not scattered calls**: an `AuditService` (orchestration/integrations)
    with a single `record(event)`: `{ accountId, workspaceId?, actor (userId | apiKeyRef |
-   'system'), action, targetType, targetId, summary, at }`. Services call it at the point
+'system'), action, targetType, targetId, summary, at }`. Services call it at the point
    the mutation **commits** (not in controllers; the service layer is where actor +
    outcome are both known). Best-effort: an audit write failure logs, never fails the
    action.
@@ -62,7 +62,7 @@ revocation via a per-user session-generation check.
 | 3   | Instrument run lifecycle (start/stop/retry, notification `act`) + credential/API-key metadata events                 | ⬜ todo |     |
 | 4   | Paginated `GET /accounts/:id/audit-events` + admin viewer UI (i18n all locales; action labels via exhaustive Record) | ⬜ todo |     |
 | 5   | `sessionGeneration` claim + middleware check + "sign out all devices" (self-serve)                                   | ⬜ todo |     |
-| 6   | Admin-forced revocation on member removal / role downgrade (auto-increment); audited, naturally                     | ⬜ todo |     |
+| 6   | Admin-forced revocation on member removal / role downgrade (auto-increment); audited, naturally                      | ⬜ todo |     |
 | 7   | Retention sweep + env knob (both runtimes)                                                                           | ⬜ todo |     |
 
 ## Conventions & gotchas

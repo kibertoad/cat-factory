@@ -47,7 +47,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   and the non-editable `directives` tail, so an override replaces the role while the tail is
   re-appended: the bespoke path's equivalent of `applySurfaceDirectives`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`:
- those are the runtime **wiring**; the ones here are the shared **abstraction** (see
+  those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
 - `auth/`: HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
 - `http/errorHandler.ts`: the ONE `app.onError` both facades mount. A controller signals a

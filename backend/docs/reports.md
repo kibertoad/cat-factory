@@ -39,13 +39,13 @@ What existed was scattered and none of it composed:
 
 Every number comes from tables that already exist in the MAIN store on both runtimes:
 
-| Source        | Supplies                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------- |
-| `token_usage` | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp  |
-| `agent_runs`  | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                 |
-| `blocks`      | a task's `task_type`, and a service frame's `title` (its display name)                         |
-| `services`    | the service → frame-block link                                                                 |
-| `workspaces`  | the board's name, and the `account_id` scope sub-select                                        |
+| Source        | Supplies                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `token_usage` | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp |
+| `agent_runs`  | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                |
+| `blocks`      | a task's `task_type`, and a service frame's `title` (its display name)                        |
+| `services`    | the service → frame-block link                                                                |
+| `workspaces`  | the board's name, and the `account_id` scope sub-select                                       |
 
 `token_usage` carries no service or task type (a metered call records the RUN, not the
 board shape), so those two spend dimensions join through `execution_id → agent_runs` and

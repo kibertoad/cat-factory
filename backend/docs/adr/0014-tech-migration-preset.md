@@ -37,7 +37,7 @@ goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's
   ever branched on in the engine; `preset_generic` declares no template and stays
   byte-for-byte unchanged.
 - `preset_tech_migration` uses that capability to mandate 5 required phases
-(  blast-zone, coverage, transition-design, delivery, verify-decommission) each with a
+  ( blast-zone, coverage, transition-design, delivery, verify-decommission) each with a
   committed Markdown artifact under a preset-configured `migrationDocsDir`.
 - The coverage-to-delivery control point is an **LLM-authored, human-revised confidence
   case**: a gated document item sweeps the codebase and produces a per-touchpoint

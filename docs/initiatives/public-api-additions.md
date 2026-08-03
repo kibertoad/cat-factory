@@ -24,14 +24,14 @@ surface discovered later belongs in this table rather than in a revised number:
 | `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*` |
 | implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`    |
 | judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`  |
-| approval gate             | `step.approval`      | ❌ none (slice **A1**                     |
-| agent-raised decision     | `step.decision`      | ❌ none) slice **A2**                     |
-| `clarity-review`          | clarity module       | ❌ none (slice **A3**                     |
-| `requirements-brainstorm` | brainstorm module    | ❌ none) slice **A4**                     |
-| `architecture-brainstorm` | brainstorm module    | ❌ none (slice **A4**                     |
-| PR deep-review selection  | `step.prReview`      | ❌ none) slice **A5**                     |
-| human-test window         | `step.humanTest`     | ❌ none (slice **A6**                     |
-| visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                     |
+| approval gate             | `step.approval`      | ❌ none (slice **A1**                      |
+| agent-raised decision     | `step.decision`      | ❌ none) slice **A2**                      |
+| `clarity-review`          | clarity module       | ❌ none (slice **A3**                      |
+| `requirements-brainstorm` | brainstorm module    | ❌ none) slice **A4**                      |
+| `architecture-brainstorm` | brainstorm module    | ❌ none (slice **A4**                      |
+| PR deep-review selection  | `step.prReview`      | ❌ none) slice **A5**                      |
+| human-test window         | `step.humanTest`     | ❌ none (slice **A6**                      |
+| visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
 
 Which start path can reach which differs, and that difference matters when ranking:
 `POST /api/v1/initiatives` is inline-only, so it reaches the review, brainstorm, approval-gate,

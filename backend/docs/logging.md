@@ -43,7 +43,7 @@ wrong layer.
 | A domain service (orchestration / integrations / agents)     | A `logger?: Logger` dependency, normalised once in the constructor: `this.log = deps.logger ?? noopLogger`. `createCore` always injects the facade's real instance, so `noopLogger` only ever applies to a test or a harness. |
 | A shared controller / runtime helper (`@cat-factory/server`) | `import { logger } from '../observability/logger.js'`                                                                                                                                                                         |
 | A facade (`runtimes/*`)                                      | `import { logger } from '@cat-factory/server'`, or `container.logger` when you want the same instance the domain services got.                                                                                                |
-| A test                                                       | `createRecordingLogger()` from kernel: a `Logger` that records `{ level, msg, fields }` into `.lines` instead of emitting.                                                                                                   |
+| A test                                                       | `createRecordingLogger()` from kernel: a `Logger` that records `{ level, msg, fields }` into `.lines` instead of emitting.                                                                                                    |
 
 **`CoreDependencies.logger` is REQUIRED**, so a facade that forgets to wire it fails to typecheck.
 That is not incidental strictness: it was optional first, and the Worker's dependency literal

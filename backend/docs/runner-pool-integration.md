@@ -341,7 +341,7 @@ references resolve to empty: a manifest can never reach arbitrary host state):
 | Variable                  | Value                                                                                                                                   |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `{{input.jobId}}`         | The job id the pool is keyed on (sticky-routing target).                                                                                |
-| `{{input.job}}`           | The **full** harness job spec as a JSON string: embed raw to forward verbatim.                                                         |
+| `{{input.job}}`           | The **full** harness job spec as a JSON string: embed raw to forward verbatim.                                                          |
 | `{{input.kind}}`          | The agent kind the job runs (`run`, `merge`, …). The harness reads this from the job body; use it to route/size on your scheduler side. |
 | `{{input.instanceType}}`  | Concrete instance-type id, when the service pins a size (else empty).                                                                   |
 | `{{input.cloudProvider}}` | The cloud the service selected, when pinned (else empty).                                                                               |

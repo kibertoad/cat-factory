@@ -271,22 +271,22 @@ pins). Follow-up (not done): don't re-dispatch a block whose PR already merged.
 Fixes are grouped by cohesion; each group is one PR-sized slice. Update the table at the end
 of each PR.
 
-| #   | Finding                                             | Area                   | Fix group                | Status     | PR      |
-| --- | --------------------------------------------------- | ---------------------- | ------------------------ | ---------- | ------- |
+| #   | Finding                                             | Area                   | Fix group               | Status     | PR      |
+| --- | --------------------------------------------------- | ---------------------- | ----------------------- | ---------- | ------- |
 | F1  | CF sweeper hard-stall on raw lease age              | CF sweeper             | A: recovery correctness | ✅ done    | this PR |
-| F2  | BootstrapWorkflow terminal-return vs sweeper        | CF workflow/sweeper    | A                        | ✅ done    | this PR |
-| F5  | `blocked` + dead instance discards decision         | CF workflow/sweeper    | A                        | 🟨 partial | this PR |
+| F2  | BootstrapWorkflow terminal-return vs sweeper        | CF workflow/sweeper    | A                       | ✅ done    | this PR |
+| F5  | `blocked` + dead instance discards decision         | CF workflow/sweeper    | A                       | 🟨 partial | this PR |
 | F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B; invisible parks      | ✅ done    | this PR |
-| F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ✅ done    | this PR |
-| F10 | Recurring fire clobbers `blocked` run               | orchestration          | B                        | ✅ done    | this PR |
+| F7  | `ensureWaitingNotification` suppression             | engine                 | B                       | ✅ done    | this PR |
+| F10 | Recurring fire clobbers `blocked` run               | orchestration          | B                       | ✅ done    | this PR |
 | F4  | Pool transport: no eviction mapping / no-op release | integrations           | C; transport bounds     | ✅ done    | this PR |
-| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ✅ done    | this PR |
-| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)        | ⬜ todo    |         |
+| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                       | ✅ done    | this PR |
+| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)       | ⬜ todo    |         |
 | F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D; hang ceilings        | ⬜ todo    |         |
-| F9  | Node advance has no timeout                         | node driver            | D                        | ⬜ todo    |         |
-| F12 | Sleep-eviction burns the single recovery            | CF container           | D                        | ⬜ todo    |         |
-| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                        | ⬜ todo    |         |
-| F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)           | ✅ done    | this PR |
+| F9  | Node advance has no timeout                         | node driver            | D                       | ⬜ todo    |         |
+| F12 | Sleep-eviction burns the single recovery            | CF container           | D                       | ⬜ todo    |         |
+| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                       | ⬜ todo    |         |
+| F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)          | ✅ done    | this PR |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
 no signal), then C, then D (most invasive; D is deferrable). C landed its two non-harness

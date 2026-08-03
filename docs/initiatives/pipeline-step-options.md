@@ -51,16 +51,16 @@ Each row: move the capability from its own array/column to a field on `StepOptio
 old array + column (backwards compatibility is a non-goal, no dual-read), and add a
 cross-runtime conformance assertion. Do them one at a time, parity-gated.
 
-| Legacy array                                               | New `StepOptions` field       | Status | PR      |
-| ---------------------------------------------------------- | ----------------------------- | ------ | ------- |
+| Legacy array                                              | New `StepOptions` field       | Status | PR      |
+| --------------------------------------------------------- | ----------------------------- | ------ | ------- |
 | `stepOptions.autoRecommend` (pilot: new, not a migration) | `autoRecommend`               | done   | this PR |
-| `gates`                                                    | `gate` (boolean)              | todo   | —     |
-| `enabled`                                                  | `enabled` (boolean)           | todo   | —     |
-| `thresholds`                                               | `companionThreshold` (number) | todo   | —     |
-| `consensus`                                                | `consensus` (object)          | todo   | —     |
-| `gating`                                                   | `gating` (object)             | todo   | —     |
-| `followUps`                                                | `followUp` (boolean)          | todo   | —     |
-| `testerQuality`                                            | `testerQuality` (object)      | todo   | —     |
+| `gates`                                                   | `gate` (boolean)              | todo   | —       |
+| `enabled`                                                 | `enabled` (boolean)           | todo   | —       |
+| `thresholds`                                              | `companionThreshold` (number) | todo   | —       |
+| `consensus`                                               | `consensus` (object)          | todo   | —       |
+| `gating`                                                  | `gating` (object)             | todo   | —       |
+| `followUps`                                               | `followUp` (boolean)          | todo   | —       |
+| `testerQuality`                                           | `testerQuality` (object)      | todo   | —       |
 
 ## Conventions & gotchas carried between iterations
 

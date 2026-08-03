@@ -41,14 +41,14 @@ native custom runner backend all render from the descriptor.
 
 | Surface                                                                              | Status | Notes / PR                                                                                                                                                       |
 | ------------------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runner axis: `kubernetes` descriptor-driven                                          | `done` | pilot; this PR                                                                                                                                                  |
+| Runner axis: `kubernetes` descriptor-driven                                          | `done` | pilot; this PR                                                                                                                                                   |
 | Runner axis: `eks` descriptor-driven (reachable, no hardcoding)                      | `done` | this PR                                                                                                                                                          |
 | Runner axis: retire `KubernetesRunnerForm.vue`                                       | `done` | this PR                                                                                                                                                          |
 | Field types `number`/`checkbox`/`textarea` in the generic form                       | `done` | this PR                                                                                                                                                          |
 | Env axis: `KubernetesEnvironmentForm.vue` → descriptor-driven                        | `todo` | needs nested/union fields (manifest source + URL derivation) the flat `ProviderConfigField` can't yet express                                                    |
 | Env axis: `KubernetesEngineForm.vue` (per-service infra handler) → descriptor-driven | `todo` | same union-field gap; engine-discriminated per-service path                                                                                                      |
 | Env axis: surface `eks` as its own `InfraEngine('eks')`                              | `todo` | thread through the contract engine union + `handlerConfigToBackendConfig` + the per-provision-type SPA selector (called out in `backend/packages/eks/README.md`) |
-| Retire the freeform JSON manifest editor (`ProviderManifestEditor.vue`)              | `todo` | needs a schema-derived structured form for arbitrary HTTP request-template manifests (nested objects + `statusMap` arrays); a generic recursive field renderer  |
+| Retire the freeform JSON manifest editor (`ProviderManifestEditor.vue`)              | `todo` | needs a schema-derived structured form for arbitrary HTTP request-template manifests (nested objects + `statusMap` arrays); a generic recursive field renderer   |
 
 ## Conventions & gotchas carried between iterations
 

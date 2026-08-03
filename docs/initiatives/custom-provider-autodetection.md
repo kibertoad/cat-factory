@@ -40,17 +40,17 @@ call, no engine, no harness change.
 
 ## Per-item status
 
-| Item                                                                                                                      | Status | PR        |
-| ------------------------------------------------------------------------------------------------------------------------- | ------ | --------- |
-| Kernel manifest-probe primitives + detect types + `yaml` dep                                                              | done   | (this PR) |
-| Contracts: `customConfigSeed` / `secondaryManifestPaths` / `detectedManifestTypeCandidates`                               | done   | (this PR) |
-| `detect` hook on `RegisteredCustomManifestType`                                                                           | done   | (this PR) |
-| Detector: hook-aware `detectCustomManifest` + `detectCustomProviderAcrossTypes`                                           | done   | (this PR) |
-| Service: single-type + arbitration + last-resort wiring                                                                   | done   | (this PR) |
-| Worked example (stack-deploy provider) + unit tests                                                                       | done   | (this PR) |
-| Cross-runtime conformance assertion (detect endpoint)                                                                     | done   | (this PR) |
-| Docs (per-service-provisioning, kernel AGENTS)                                                                            | done   | (this PR) |
-| **Slice 2; SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —       |
+| Item                                                                                                                     | Status | PR        |
+| ------------------------------------------------------------------------------------------------------------------------ | ------ | --------- |
+| Kernel manifest-probe primitives + detect types + `yaml` dep                                                             | done   | (this PR) |
+| Contracts: `customConfigSeed` / `secondaryManifestPaths` / `detectedManifestTypeCandidates`                              | done   | (this PR) |
+| `detect` hook on `RegisteredCustomManifestType`                                                                          | done   | (this PR) |
+| Detector: hook-aware `detectCustomManifest` + `detectCustomProviderAcrossTypes`                                          | done   | (this PR) |
+| Service: single-type + arbitration + last-resort wiring                                                                  | done   | (this PR) |
+| Worked example (stack-deploy provider) + unit tests                                                                      | done   | (this PR) |
+| Cross-runtime conformance assertion (detect endpoint)                                                                    | done   | (this PR) |
+| Docs (per-service-provisioning, kernel AGENTS)                                                                           | done   | (this PR) |
+| **Slice 2; SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —         |
 
 ## Conventions & gotchas
 

@@ -43,7 +43,7 @@ transport, and Node model provisioning.
   notification channel + consensus wrap), and `container-content-library-deps.ts`.
 - `execution/`: pg-boss durable execution (`pgBossRunner`, `drive`).
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts`: Node gateway
-  + model + transport wiring and the retention sweep.
+  - model + transport wiring and the retention sweep.
 
 **See also:** `CLAUDE.md` → "Multi-runtime facades", "Resolving conflicting Drizzle migrations
 (post-merge)".
