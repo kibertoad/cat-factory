@@ -130,13 +130,28 @@ export type { ResolvedRunRiskPolicy } from './policy-types.js'
  */
 /**
  * Assemble the PR verification-report controller from the engine's already-resolved deps. A
- * one-line seam extracted out of the constructor purely so that (large) composition stays inside
- * its per-function line budget — the budget is a split trigger, never a number to raise.
+ * seam extracted out of the constructor purely so that (large) composition stays inside its
+ * per-function line budget: the budget is a split trigger, never a number to raise.
  */
 function buildPrReportController(
-  deps: ConstructorParameters<typeof PrVerificationReportController>[0],
+  deps: ExecutionServiceDependencies,
 ): PrVerificationReportController {
-  return new PrVerificationReportController(deps)
+  return new PrVerificationReportController({
+    blockRepository: deps.blockRepository,
+    clock: deps.clock,
+    publisher: deps.prVerificationReportPublisher,
+    taskRepository: deps.taskRepository,
+    workspaceSettingsRepository: deps.workspaceSettingsRepository,
+    // Same seam the repo-ops controller uses, so the report reads the run's `spec/` through the
+    // repo access the engine has already resolved. Unwired ⇒ the requirement section reports
+    // `absent` with a note.
+    resolveRunRepoContext: deps.resolveRunRepoContext,
+    // Dates the environment lifecycle (up → torn down). Unwired ⇒ the section says so rather
+    // than reporting an environment nobody reclaimed as one nobody recorded.
+    provisioningLogRepository: deps.provisioningLogRepository,
+    appBaseUrl: deps.appBaseUrl,
+    logger: deps.logger,
+  })
 }
 
 export class ExecutionService {
@@ -243,6 +258,8 @@ export class ExecutionService {
   private readonly runDispatcher: RunDispatcher
   /** The human decision surface on a parked run (approve / reject / merge / …). */
   private readonly stepDecisions: StepDecisionController
+  /** Maintains the run's verification report on its PR (a hook on step settlement). */
+  private readonly prVerificationReport: PrVerificationReportController
 
   constructor(dependencies: ExecutionServiceDependencies) {
     // Bind the whole deps object, then destructure what this constructor itself reads. The
@@ -426,6 +443,12 @@ export class ExecutionService {
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
     // controllers' `runAgent`/`previewStepModel`/`deployInputs`/`deployContext` closures resolve
     // through `this.runDispatcher` lazily, so this assignment trailing their construction is safe.
+    // Keeps the run's verification report on its PR as each step settles (a hook, not a pipeline
+    // step; see docs/initiatives/pr-verification-report.md). A no-op when no publisher is wired,
+    // so no-VCS deployments and the engine tests are untouched. Assigned as a FIELD rather than
+    // inline in the dispatcher literal because the environment lifecycle it reports finishes
+    // AFTER the run does: {@link refreshVerificationReport} re-publishes from the teardown path.
+    this.prVerificationReport = buildPrReportController(dependencies)
     this.runDispatcher = this.buildRunDispatcher(dependencies, runInitiatorScopeFn)
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
@@ -451,6 +474,25 @@ export class ExecutionService {
         this.failRun(ws, id, message, kind, detail, reason),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
+  }
+
+  /**
+   * Re-compose and re-publish a run's verification report OUT OF BAND, after the run itself has
+   * settled.
+   *
+   * The step-settlement hook cannot close the environment-lifecycle proof on its own: the
+   * teardown that completes it is performed by the TTL sweep (or a human destroying the env from
+   * the human-test gate), routinely minutes or hours after the last step settled. Without this
+   * entry point the report would say "still live" forever about an environment the platform
+   * reclaimed on schedule, which inverts the leg's whole point into a standing false alarm.
+   *
+   * Wired to `EnvironmentTeardownService`'s torn-down hook in the composition root. Best-effort
+   * throughout: an unknown run is a silent no-op, and the publish swallows its own failures.
+   */
+  async refreshVerificationReport(workspaceId: string, executionId: string): Promise<void> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return
+    await this.prVerificationReport.publishForRun(workspaceId, instance)
   }
 
   /**
@@ -493,22 +535,7 @@ export class ExecutionService {
         this.initiativeInterviewController,
         this.docInterviewController,
       ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
-      // Keeps the run's verification report on its PR as each step settles (a hook, not a
-      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
-      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
-      prVerificationReport: buildPrReportController({
-        blockRepository: deps.blockRepository,
-        clock: deps.clock,
-        publisher: deps.prVerificationReportPublisher,
-        taskRepository: deps.taskRepository,
-        workspaceSettingsRepository: deps.workspaceSettingsRepository,
-        // Same seam the repo-ops controller uses, so the report reads the run's `spec/`
-        // through the repo access the engine has already resolved. Unwired ⇒ the requirement
-        // section reports `absent` with a note.
-        resolveRunRepoContext: deps.resolveRunRepoContext,
-        appBaseUrl: deps.appBaseUrl,
-        logger: deps.logger,
-      }),
+      prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),

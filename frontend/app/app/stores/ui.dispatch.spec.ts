@@ -96,4 +96,42 @@ describe('dispatchStepView routing', () => {
     expect(ui.resultView).toBeNull()
     expect(ui.stepDetail).toEqual({ instanceId: 'e1', stepIndex: 0 })
   })
+
+  // The `test-evidence` deep link the engine puts in every PR verification report knows only the
+  // RUN, so the opener has to resolve which tester step the reviewer was pointed at.
+  describe('openTestEvidence', () => {
+    it('opens the tester step that actually reported, not the first one', () => {
+      execution.hydrate(
+        [
+          instance('e1', 'b1', [
+            { agentKind: 'coder' },
+            { agentKind: 'tester-api' },
+            { agentKind: 'tester-ui', test: { lastReport: { greenlight: true } } },
+          ]),
+        ],
+        'ws1',
+      )
+
+      ui.openTestEvidence('e1')
+
+      expect(ui.resultView).toMatchObject({ view: 'tester', instanceId: 'e1', stepIndex: 2 })
+    })
+
+    it('still opens a tester step that has not reported, rather than going nowhere', () => {
+      execution.hydrate([instance('e1', 'b1', [{ agentKind: 'tester-api' }])], 'ws1')
+
+      ui.openTestEvidence('e1')
+
+      expect(ui.resultView).toMatchObject({ view: 'tester', stepIndex: 0 })
+    })
+
+    it('does nothing when the run carries no tester step at all', () => {
+      execution.hydrate([instance('e1', 'b1', [{ agentKind: 'coder' }])], 'ws1')
+
+      ui.openTestEvidence('e1')
+
+      expect(ui.resultView).toBeNull()
+      expect(ui.stepDetail).toBeNull()
+    })
+  })
 })

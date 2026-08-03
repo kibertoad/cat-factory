@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema } from './judge.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
-import { requirementVerdictStatusSchema } from './testing.js'
+import { requirementVerdictStatusSchema, testEnvironmentSchema } from './testing.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
  * a bump means "re-read the schema", not "a compatibility shim exists".
  */
-export const PR_VERIFICATION_REPORT_VERSION = 3
+export const PR_VERIFICATION_REPORT_VERSION = 4
 
 /**
  * Whether a section has evidence to show.
@@ -167,17 +167,130 @@ export const prReportEnvironmentSchema = v.object({
 export type PrReportEnvironment = v.InferOutput<typeof prReportEnvironmentSchema>
 
 /**
- * The ephemeral-environment lifecycle: which environments came up, and whether they were
- * torn down again. `teardown` reads the run's live environment projection:
+ * The DATED half of the environment lifecycle, read off the run's rows in the provisioning
+ * event log, the only store that records WHEN a throwaway environment came up and when it
+ * went away. The step state can say an environment is gone; only the log can say it was torn
+ * down at a time, by an attempt that succeeded.
+ *
+ * `evidenced` is the honest-absence flag and it is NOT a formality: a deployment that retains
+ * no provisioning log, and one whose environments were never torn down, produce the same empty
+ * timeline and opposite facts. Only the first may render as "not evidenced"; reporting either
+ * as `tornDownAt: null` alone would let a reader conclude the environment is still running.
+ */
+export const prReportEnvironmentTimelineSchema = v.object({
+  /**
+   * Whether the provisioning event log could be read at all. `false` ⇒ every field below is a
+   * zero because nothing was READ, not because nothing happened. `note` says which.
+   */
+  evidenced: v.boolean(),
+  /** Says why the timeline is empty when `evidenced` is false. */
+  note: v.optional(v.nullable(v.string())),
+  /** Epoch ms of the run's FIRST successful environment provision, when one is on record. */
+  provisionedAt: v.nullable(v.number()),
+  /** Epoch ms of the run's LAST successful environment teardown, when one is on record. */
+  tornDownAt: v.nullable(v.number()),
+  /** How many provision attempts the log records as failures (0 on a clean bring-up). */
+  provisionFailures: v.number(),
+  /**
+   * How many teardown attempts FAILED. A non-zero count is the state the live-projection
+   * tri-state below cannot express: the platform tried to reclaim the environment and the
+   * provider refused, which is an operator's problem rather than a run's.
+   */
+  teardownFailures: v.number(),
+})
+export type PrReportEnvironmentTimeline = v.InferOutput<typeof prReportEnvironmentTimelineSchema>
+
+/** One artifact the UI tester captured while exercising the live environment. */
+export const prReportEvidenceArtifactSchema = v.object({
+  /** The logical view the screenshot was taken of. */
+  view: v.string(),
+  /** The stored artifact id, in the deployment's binary-artifact store. */
+  artifactId: v.string(),
+  /** Whether a reference design image was paired with it for visual confirmation. */
+  hasReference: v.boolean(),
+})
+export type PrReportEvidenceArtifact = v.InferOutput<typeof prReportEvidenceArtifactSchema>
+
+/**
+ * The MIDDLE leg of the lifecycle proof: what was actually observed against the environment
+ * while it was live. An environment that came up and was torn down again proves only that the
+ * platform can spin infrastructure; it becomes evidence for the CHANGE when something was
+ * exercised against it in between.
+ *
+ * The four statuses are kept apart because they call for different reactions:
+ *  - `captured`:   a tester ran against the ephemeral environment and its observations are below.
+ *  - `local`:      a tester ran, but against locally stood-up dependencies, so nothing was
+ *                   observed against the environment this section is about.
+ *  - `undeclared`: a tester reported without saying where it ran, so its observations cannot be
+ *                   ATTRIBUTED to this environment. Distinct from `local`, which is a positive
+ *                   statement that it ran somewhere else; guessing either way would turn an
+ *                   unknown into a claim, in the one section whose whole job is provenance.
+ *  - `absent`:     no tester report at all (no tester step, or it never settled).
+ *
+ * The artifacts and counts are reported WHATEVER the status: they exist, and a reviewer should
+ * be able to reach them. What the status governs is whether they may be read as evidence about
+ * this environment, which is why the attribution rides the section rather than the rows.
+ */
+export const prReportEnvironmentEvidenceSchema = v.object({
+  status: v.picklist(['captured', 'local', 'undeclared', 'absent']),
+  /** Says why the observations below are not evidence about this environment. */
+  note: v.optional(v.nullable(v.string())),
+  /** Where the tester stood the system under test up, when a report says. */
+  ranAgainst: v.nullable(testEnvironmentSchema),
+  /** Epoch ms the tester step settled: the observation's place on the timeline above. */
+  capturedAt: v.nullable(v.number()),
+  /** How many areas the tester reported an outcome for. */
+  outcomes: v.number(),
+  /** How many spec requirements it returned a verdict on. */
+  requirementVerdicts: v.number(),
+  /** The screenshots it captured (capped like every other list; see `truncations`). */
+  screenshots: v.array(prReportEvidenceArtifactSchema),
+  /**
+   * Deep link into the run's captured evidence in the app. Null when the deployment configured
+   * no public app URL, so the report never emits a link to nowhere. The rows above still name
+   * each artifact, which is what an operator greps the store for.
+   */
+  url: v.nullable(v.string()),
+})
+export type PrReportEnvironmentEvidence = v.InferOutput<typeof prReportEnvironmentEvidenceSchema>
+
+/**
+ * The ephemeral-environment lifecycle, as the three-leg proof a reviewer needs: the
+ * environment came UP, evidence was CAPTURED from it while it was live, and it was TORN DOWN
+ * again. Each leg is a captured fact from a different producer, and `proof` is COMPUTED from
+ * the three in code, never read off any agent's claim that it tested against a preview.
+ *
+ * `teardown` reads the run's live environment projection:
  *  - `confirmed`      — every environment reached a torn-down/expired state.
  *  - `pending`        — at least one is still live (the run may still be using it).
+ *  - `failed`:         a teardown attempt is on record as having FAILED, so the environment is
+ *                       still standing for a reason someone has to act on.
  *  - `not_applicable` — nothing was ever provisioned.
  */
 export const prReportEnvironmentsSchema = v.object({
   status: prReportSectionStatusSchema,
   note: v.optional(v.nullable(v.string())),
   entries: v.array(prReportEnvironmentSchema),
-  teardown: v.picklist(['confirmed', 'pending', 'not_applicable']),
+  teardown: v.picklist(['confirmed', 'pending', 'failed', 'not_applicable']),
+  timeline: prReportEnvironmentTimelineSchema,
+  evidence: prReportEnvironmentEvidenceSchema,
+  /**
+   * The composed verdict over the three legs:
+   *  - `complete`:       up, observed, and reclaimed.
+   *  - `incomplete`:     at least one leg is missing; {@link gaps} names which.
+   *  - `not_applicable`: no environment was ever meant to stand up (no deployer step, or every
+   *                       frame is infraless), so there is nothing to prove.
+   *
+   * COMPUTED from the legs, never asserted: this is the platform's judgement about its own
+   * evidence, and a reviewer must be able to re-derive it from the rows above.
+   */
+  proof: v.picklist(['complete', 'incomplete', 'not_applicable']),
+  /**
+   * One human-readable line per missing or contradictory leg, so an `incomplete` proof always
+   * says WHAT is missing rather than leaving a reader to diff the sections. Empty when
+   * `proof` is `complete`.
+   */
+  gaps: v.array(v.string()),
 })
 export type PrReportEnvironments = v.InferOutput<typeof prReportEnvironmentsSchema>
 

@@ -102,6 +102,15 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   // `Core.envConfigRepair` key. Registered here (not in the `environments` build above) so it emits
   // through the same registry rather than a bespoke return spread.
   modules.build('envConfigRepair', () => environments?.envConfigRepair)
+  // Close the PR verification report's environment-lifecycle proof. The teardown that completes
+  // it happens on the TTL sweep, long after the run's last step settled and therefore long after
+  // the settlement hook stopped firing, so the report is re-published from the teardown itself.
+  // Late-bound here for the ordering reason this whole module exists: the teardown service is
+  // built with the environments module, before the engine that owns the report.
+  environments?.teardownService.setTornDownHook(async (record) => {
+    if (!record.executionId) return
+    await executionService.refreshVerificationReport(record.workspaceId, record.executionId)
+  })
   // Observability + per-account settings that a facade builds and passes through on the deps bag.
   modules.build('agentContextObservability', () => dependencies.agentContextObservability)
   modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)

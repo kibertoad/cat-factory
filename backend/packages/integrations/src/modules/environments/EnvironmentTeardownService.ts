@@ -1,8 +1,8 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentHandle } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import { assertFound, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import { recordToHandle } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
@@ -12,6 +12,18 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 // the local record is always tombstoned so an unreachable provider can't leave
 // the registry wedged; the provider call surfaces errors to the caller.
 
+/**
+ * Notified after an environment has been torn down and tombstoned. Its one consumer today is
+ * the run's PR verification report, whose environment-lifecycle proof cannot be closed by the
+ * run itself: the TTL sweep that reclaims the environment fires long after the last step
+ * settled, so without this edge the PR says "still live" about an environment the platform
+ * destroyed on schedule.
+ *
+ * Strictly best-effort and swallowed by the service: reclaiming infrastructure must never
+ * depend on a downstream bookkeeping write.
+ */
+export type EnvironmentTornDownHook = (record: EnvironmentRecord) => Promise<void>
+
 export interface EnvironmentTeardownServiceDependencies {
   connectionService: EnvironmentConnectionService
   environmentRegistryRepository: EnvironmentRegistryRepository
@@ -19,10 +31,27 @@ export interface EnvironmentTeardownServiceDependencies {
   clock: Clock
   /** Best-effort provisioning-event log; absent ⇒ teardown is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
+  /** Structured logger for the best-effort hook below; absent ⇒ its failures are unreported. */
+  logger?: Logger
 }
 
 export class EnvironmentTeardownService {
-  constructor(private readonly deps: EnvironmentTeardownServiceDependencies) {}
+  private readonly log: Logger
+  /**
+   * Late-bound because the engine that consumes it is constructed AFTER this service (it is
+   * injected into the provisioning service, which the engine takes). Same shape as
+   * `setInitiativeLoop` in the composition root, and for the same reason.
+   */
+  private tornDownHook: EnvironmentTornDownHook | undefined
+
+  constructor(private readonly deps: EnvironmentTeardownServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
+
+  /** Late-bind the torn-down notification. Unset ⇒ nothing is notified. */
+  setTornDownHook(hook: EnvironmentTornDownHook | undefined): void {
+    this.tornDownHook = hook
+  }
 
   /** Tear down a single environment and tombstone its record. */
   async teardown(workspaceId: string, id: string): Promise<EnvironmentHandle> {
@@ -86,6 +115,15 @@ export class EnvironmentTeardownService {
       this.deps.clock.now(),
     )
     await this.logTeardown(record, 'success', null)
+    // AFTER the log row lands, so a consumer reading the provisioning log (the PR verification
+    // report's lifecycle timeline does exactly that) sees the teardown it is being told about.
+    const hook = this.tornDownHook
+    if (!hook) return
+    await runBestEffort(this.log, 'environment.tornDownHook', () => hook(record), {
+      workspaceId: record.workspaceId,
+      environmentId: record.id,
+      executionId: record.executionId,
+    })
   }
 
   private async logTeardown(

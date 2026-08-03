@@ -5,6 +5,7 @@ import type {
   Logger,
   PrReportIssue,
   PrVerificationReportPublisher,
+  ProvisioningLogRepository,
   ResolveRunRepoContext,
   SpecDoc,
   TaskRepository,
@@ -12,8 +13,20 @@ import type {
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { readServiceSpec } from '@cat-factory/agents'
+import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
+import type { ProvisioningLifecycleEvent } from './prReport.environments.js'
 import { isTesterKind } from './ci.logic.js'
+
+/**
+ * How many of the run's environment provisioning rows the lifecycle timeline reads. A run
+ * stands up one environment per involved service frame and retries a failing provision, so the
+ * realistic count is single digits; the bound exists so a pathological retry loop cannot make
+ * the report's own read unbounded. The timeline folds first/last/counts, so a capped read can
+ * only ever UNDERSTATE the failure counts, which is why the cap is set far above any real run
+ * rather than being surfaced as a truncation the reader would have to reason about.
+ */
+const PROVISIONING_EVENT_LIMIT = 200
 
 /**
  * The engine collaborator that keeps a run's **verification report** on its pull request.
@@ -60,8 +73,15 @@ export interface PrVerificationReportControllerDeps {
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
   /**
-   * Optional: the deployment's public SPA base URL, used to build the observability deep
-   * link. Absent ⇒ the report's `observability.runUrl` is null and no link is rendered
+   * Optional: the provisioning event log, which DATES the environment lifecycle: the only
+   * store that records when a throwaway environment came up and when it was reclaimed. Absent
+   * (a deployment that retains no log) ⇒ the section says the lifecycle could not be dated
+   * rather than reporting "never torn down", which is the same value and the opposite fact.
+   */
+  provisioningLogRepository?: Pick<ProvisioningLogRepository, 'list'>
+  /**
+   * Optional: the deployment's public SPA base URL, used to build the observability and
+   * captured-evidence deep links. Absent ⇒ those fields are null and no link is rendered
    * (better than emitting a link to nowhere).
    */
   appBaseUrl?: string
@@ -128,8 +148,12 @@ export class PrVerificationReportController {
           issues: await this.linkedIssues(workspaceId, instance.blockId),
           repo: target.repo,
           provider: target.provider,
-          runUrl: this.runUrl(workspaceId, instance),
+          runUrl: this.deepLink(workspaceId, instance, 'observability'),
           spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
+          environments: {
+            provisioningEvents: await this.provisioningEvents(workspaceId, instance),
+            evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
+          },
           now: this.deps.clock.now(),
         }),
       )
@@ -255,12 +279,55 @@ export class PrVerificationReportController {
   }
 
   /**
-   * The deep link into the run's observability panel (Model activity / Provided context).
-   * The SPA is a single canvas, so the target is the board with the run's view params — see
-   * `useRunDeepLink` in `@cat-factory/app`, and slice 4 of the global-search initiative,
-   * which will generalise the parser.
+   * The run's rows in the provisioning event log, which DATE the environment lifecycle. Null
+   * whenever they could not be read, which the section reports as "not evidenced" rather than
+   * as an empty history (absent is not zero: an unwired log and an environment nobody reclaimed
+   * produce the same empty list and opposite facts).
+   *
+   * GATED on the run actually having a deployer step, for the same reason the `spec/` read is
+   * gated on a tester report: with no deployer the section's answer is already determined, so
+   * the ~15 settlements of an ordinary build-and-merge run make no query at all. Deliberately
+   * NOT memoised, unlike the spec: the teardown row is appended at the very END of the
+   * lifecycle (often after the run itself has settled), so a memo taken on the deploying step
+   * would pin the section to "still live" forever, which is the exact hole this section exists
+   * to close.
    */
-  private runUrl(workspaceId: string, instance: ExecutionInstance): string | null {
+  private async provisioningEvents(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<ProvisioningLifecycleEvent[] | null> {
+    const repo = this.deps.provisioningLogRepository
+    if (!repo) return null
+    if (!instance.steps.some((s) => s.agentKind === DEPLOYER_AGENT_KIND)) return null
+    try {
+      return await repo.list(workspaceId, {
+        subsystem: 'environment',
+        executionId: instance.id,
+        limit: PROVISIONING_EVENT_LIMIT,
+      })
+    } catch {
+      // Best-effort like every other read here. A transport blip reports the timeline as
+      // un-evidenced on this publish and is re-attempted on the next settlement, never a
+      // fabricated "torn down".
+      return null
+    }
+  }
+
+  /**
+   * A deep link into one of the run's panels. The SPA is a single canvas, so the target is the
+   * board with the run's view params (see `useRunDeepLink` in `@cat-factory/app`, and slice 4
+   * of the global-search initiative, which will generalise the parser.
+   *
+   * `observability` opens Model activity / Provided context; `test-evidence` opens the tester
+   * step's result window, where the screenshots the lifecycle section lists are rendered. Both
+   * are values that narrow parser knows: adding a third means teaching it the view first, or
+   * the link silently degrades to "the right board, no panel".
+   */
+  private deepLink(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    view: 'observability' | 'test-evidence',
+  ): string | null {
     const base = this.deps.appBaseUrl?.trim()
     if (!base) return null
     // Built by hand rather than with `URLSearchParams`: orchestration is runtime-neutral and
@@ -269,7 +336,7 @@ export class PrVerificationReportController {
       ws: workspaceId,
       block: instance.blockId,
       run: instance.id,
-      view: 'observability',
+      view,
     })
       .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
       .join('&')

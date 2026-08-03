@@ -150,6 +150,24 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 - **Wire the logger.** This is the one engine path designed to swallow its failures, so an
   unwired logger means a revoked token or a rejected body leaves no trace anywhere and the report
   just stops appearing.
+- **The environment lifecycle's LAST leg happens after the run does.** An environment is reclaimed
+  by the TTL sweep (or by a human on the human-test gate), routinely long after the final step
+  settled, so the settlement hook structurally cannot observe it: before slice 13 the report said
+  "still live" forever about environments the platform had destroyed on schedule. The teardown
+  service therefore carries a best-effort torn-down hook, late-bound in the composition root to
+  `ExecutionService.refreshVerificationReport`. Any future leg that completes outside a run needs
+  the same treatment; a memo on the compose path would defeat it.
+- **The step's environment PROJECTION is not a teardown signal.** It is written by the run's own
+  polls and never refreshed once the run settles, so it keeps a stale `ready` forever. The
+  provisioning event log is what dates the lifecycle, and `confirmed` requires POSITIVE evidence
+  from the log or from projections that all show gone: "nothing looks live" is also true of a run
+  that projected nothing at all.
+- **Attribution is a separate axis from capture.** A tester's screenshots are reported whatever it
+  ran against, because they exist and a reviewer should reach them; whether they are EVIDENCE about
+  the ephemeral environment rides the section's status, which keeps `local` (it ran somewhere else)
+  apart from `undeclared` (it did not say). Guessing either way turns an unknown into a claim in
+  the one section whose whole job is provenance.
+
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).
@@ -172,6 +190,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) | 🟨 in-progress |      |
 | 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                            | ⬜ todo        |      |
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                     | ⬜ todo        |      |
+| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish     | 🟩 done        | this |
 
 ### Phase-2 notes (read before starting slice 9)
 
