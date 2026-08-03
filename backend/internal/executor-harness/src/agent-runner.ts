@@ -59,7 +59,7 @@ export type SubscriptionHarness = 'claude-code' | 'codex'
 export interface SubscriptionRunOptions {
   /** Prepared working directory (cloned/scaffolded by the caller). */
   cwd: string
-  /** Real vendor model id, e.g. `claude-opus-4-8` / `gpt-5.5-codex`. */
+  /** The vendor's own model id (what the agent CLI is invoked with), never a catalog id. */
   model: string
   /** Composed role + best-practice fragments, supplied as the system prompt. */
   systemPrompt: string
