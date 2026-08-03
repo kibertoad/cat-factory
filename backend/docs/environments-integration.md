@@ -57,7 +57,8 @@ see [Native environment adapters](./native-environment-adapter.md).
    (The tester job's `test.environmentUrl` is wired straight from this handle.)
 4. When the handle's TTL elapses (from `expiresAtPath`, or `defaultTtlMs`), the cron
    sweep (every 2 min) calls your `teardown` template and tombstones the record.
-   Teardown is best-effort and retried on the next pass.
+   Teardown is best-effort and retried on the next pass rather than wedging the
+   registry.
 
 ## Enabling it
 
@@ -368,15 +369,9 @@ curl -X POST $API/workspaces/$WS/environments/connection \
 ## Provisioning & discovery
 
 The intended flow is a pipeline on an `environment` block with agent kinds
-`["deployer", "tester"]`:
-
-1. The **`deployer`** step runs deterministically (no LLM, no token spend): the
-   engine calls the provider, persists the environment, and writes a summary to the
-   step output.
-2. The **`tester`** step (and any later step) receives the live environment in its
-   prompt context (the URL and how to authenticate) so it tests the real build.
-
-You can also drive it directly:
+`["deployer", "tester"]`, following the sequence in
+[How it works](#how-it-works-the-sequence-of-actions) above. You can also drive it
+directly over REST:
 
 - `POST /workspaces/:ws/environments/provision` `{ blockId?, inputs? }` → handle
 - `GET  /workspaces/:ws/environments` → handles (no credentials)
@@ -384,13 +379,6 @@ You can also drive it directly:
 - `GET  /workspaces/:ws/environments/:id/access` → the **decrypted** access creds
   (the only endpoint that returns them; over TLS)
 - `POST /workspaces/:ws/environments/:id/teardown` → tear down now
-
-## TTL & teardown
-
-If a provisioned environment has an expiry (from `expiresAtPath`, or `defaultTtlMs`),
-the cron sweep (every 2 min) calls the manifest's `teardown` and tombstones the
-record once it elapses. Teardown is best-effort: a transient provider failure is
-retried on the next pass rather than wedging the registry.
 
 ## Security notes
 

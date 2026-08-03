@@ -1,8 +1,9 @@
 # Concurrency control & the Redis question
 
-This note records how the backend handles concurrent writers and **why Redis is
-deliberately not part of the stack today**, so the trade-off is captured rather than
-re-litigated. It accompanies the three race-condition fixes that introduced
+This note records how the backend handles concurrent writers and **why the concurrency
+fixes are database-native rather than Redis-based**, so the trade-off is captured rather
+than re-litigated. (Redis does appear in the stack, but only as the opt-in multi-node
+delivery bus; see "Where Redis fits" below.) It accompanies the three race-condition fixes that introduced
 optimistic concurrency on execution runs, atomic API-key leasing, and notification
 open-card dedup.
 
@@ -67,20 +68,24 @@ degraded to a pool/API-key provider before resolve, so the cap bites mainly in l
 (the prewarmed-container inline subscription backend keeps the ref); elsewhere it is a
 wired pass-through. Cross-replica/global rate-limiting stays out of scope, per below.
 
-## Where Redis _would_ genuinely fit (future, out of scope)
+## Where Redis fits
 
 Two scaling concerns are the legitimate Redis use-cases, both **Node-only** (Cloudflare
-keeps Durable Objects):
+keeps Durable Objects). The first has since landed; the second stays out of scope:
 
-1. **Multi-replica real-time fan-out.** The Node real-time hub is single-process today
-   (`runtimes/node/src/realtime.ts`: "a multi-replica deployment would front the hub
-   with Postgres LISTEN/NOTIFY"). Redis **pub/sub** is the canonical alternative to
-   LISTEN/NOTIFY for cross-replica WebSocket broadcast. A horizontally-scaled Node
-   deployment is also what makes the lost-update races _more_ frequent; the CAS fix
-   above already covers correctness there, and Redis would only be about delivery fan-out.
-2. **Global API-key rate-limiting.** A Redis token-bucket would coordinate rate limits
-   across replicas, beyond the per-database atomicity the lease fix provides.
+1. **Multi-replica real-time fan-out (landed).** The in-process `NodeRealtimeHub`
+   (`runtimes/node/src/realtime.ts`) is now fronted by the `LayeredEventPropagator`
+   (`propagator.ts`) behind the narrow `LocalEventSink` seam, with Redis **pub/sub** as
+   the shipped adapter (`redisPropagator.ts`, enabled by `REDIS_URL`; channel set by
+   `REDIS_REALTIME_CHANNEL`). With no bus configured the layer is exactly the bare hub,
+   so single-node and local deployments are unaffected. Horizontal scale is also what
+   makes the lost-update races _more_ frequent; the CAS fix above covers correctness,
+   and the propagator is only about delivery fan-out. The app-cache invalidation bus
+   rides the same `REDIS_URL` (`cacheNotifications.ts`, see `@cat-factory/caching`).
+2. **Global API-key rate-limiting (still future).** A Redis token-bucket would
+   coordinate rate limits across replicas, beyond the per-database atomicity the lease
+   fix provides.
 
-Neither is needed for correctness today, and neither changes the database-native
-decisions above. Revisit only when a multi-replica Node deployment is actually on the
-table.
+The rate-limiting half is not needed for correctness today and does not change the
+database-native decisions above; revisit it when a multi-replica Node deployment
+actually needs coordinated limits.

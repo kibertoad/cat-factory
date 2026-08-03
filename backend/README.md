@@ -91,7 +91,7 @@ matching controller per module in `worker/src/modules/*`.
 | `pipelines`                          | Saved, reusable agent-kind sequences (the pipeline palette).                                                                               |
 | `agents`                             | Agent-kind catalog, role/phase prompts, and the inline `AiAgentExecutor`.                                                                  |
 | `execution`                          | The run state machine: `advanceInstance` moves a run one step, handles decisions, failures/retries, context injection, and the spend gate. |
-| `spend`                              | Token metering + org-wide monthly budget enforcement.                                                                                      |
+| `spend`                              | Token metering + tiered monthly budget enforcement (workspace / account / user).                                                                                      |
 | `bootstrap`                          | Reference architectures + the async repo-bootstrap task.                                                                                   |
 | `blueprints` _(pipeline agent step)_ | The Blueprinter step that writes the in-repo `blueprints/` map and reconciles it onto the board (via `BoardScanService`).                  |
 | `requirements`                       | Stateless reviewer agent over a block's collected requirements.                                                                            |
@@ -151,18 +151,20 @@ the `WORKSPACE_EVENTS` binding is absent the engine simply pushes nothing.
 
 Every LLM call's token usage (input + output) is metered into a `token_usage` ledger (D1) by
 the `SpendService`. Each call is priced into a single currency via a configurable price table
-and summed over the current calendar month: the budget is **org-wide**, across all workspaces.
-Before each agent step the engine checks `SpendService.isOverBudget()`; when the month's spend
-reaches the limit it **pauses** the run (execution status `paused`) instead of incurring more
-cost. The current status (`tokens`, `costSpent`, `costLimit`, `exceeded`) is attached to every
+and summed over the current calendar month. The budget is **tiered**
+([ADR 0020](./docs/adr/0020-tiered-spend-budgets.md)): before each agent step the engine checks
+`SpendService.isOverBudget()`, which always gates the workspace's own usage against the
+workspace's monthly limit and, when an account-wide or per-user limit is set, gates those tiers
+against their own usage totals too. When any applicable tier reaches its limit the run
+**pauses** (execution status `paused`) instead of incurring more cost. The current status (`tokens`, `costSpent`, `costLimit`, `exceeded`) is attached to every
 workspace snapshot, and the frontend shows a large warning and a "Resume anyway" action
 (`POST /workspaces/:ws/spend/resume`) when the budget is exceeded. Paused runs also resume
 automatically once the period rolls over.
 
-Configured **per workspace in the UI** (Workspace settings → Budget; the `workspace_settings`
-row): a monthly limit (default ~100) and currency (default `EUR`). The built-in per-model
-price table is fixed (not operator-overridable). The budget is **per-workspace**: `SpendService` resolves each workspace's
-effective pricing and gates on its OWN usage. A limit of `0` is the deliberate "no PAID spend"
+The workspace tier is configured **per workspace in the UI** (Workspace settings → Budget; the
+`workspace_settings` row): a monthly limit (default ~100) and currency (default `EUR`).
+`SpendService` resolves each workspace's effective pricing from that row; the built-in
+per-model price table is fixed (not operator-overridable). A limit of `0` is the deliberate "no PAID spend"
 setting: metered runs are refused (a clear error up front, not a silent pause), but local-runner
 models and connected subscriptions, which incur no metered cost, keep running. The container
 executor reports no usage directly (its LLM proxy meters tokens itself, to avoid double-counting),
