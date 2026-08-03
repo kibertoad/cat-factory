@@ -1,0 +1,11 @@
+{
+  // The cross-SDK smoketest program is a Node script, not part of the published SDK: it reads
+  // env vars and writes its report to a file. It is typechecked SEPARATELY so that `@types/node`
+  // is in scope for it and NOT for `src/`, which has to compile against web platform types alone
+  // (the SDK runs in browsers and worker isolates too).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["smoketest/**/*.ts", "src/**/*.ts"]
+}

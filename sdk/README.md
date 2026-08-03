@@ -160,6 +160,20 @@ DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --onl
 CI runs it whenever either side of the contract moves — the SDKs and their generator, or the
 `/api/v1` contracts and controllers they talk to.
 
+### Per-SDK unit tests
+
+Each SDK also has its own tests for the **hand-written** half — above all the four independent SSE
+readers, whose framing bugs (a read boundary landing mid-record, a terminal frame arriving as the
+socket closes) show up in production as a run that silently appears to stall, and which the
+smoketest structurally cannot provoke:
+
+```sh
+pnpm --filter @cat-factory/sdk run test:run    # TypeScript
+cd sdk/go     && go test ./...
+cd sdk/java   && mvn -B test
+cd sdk/python && python -m pytest tests -q
+```
+
 ## Releasing
 
 The TypeScript SDK is an ordinary workspace package: **changesets** versions and publishes it with

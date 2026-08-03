@@ -1270,6 +1270,28 @@ jobs:
       - name: Check SDK clients are up to date
         run: pnpm check:sdk
 
+      # Each SDK's own unit tests, before the smoketest that needs a database. They cover the
+      # HAND-WRITTEN half — above all the four independent SSE readers, whose framing bugs (a read
+      # boundary mid-record, a terminal frame arriving as the socket closes) surface in production
+      # as a run that silently appears to stall and which the smoketest structurally cannot
+      # provoke. The TypeScript ones run in the ordinary `test-units` lane.
+      - name: Test the Go SDK
+        working-directory: sdk/go
+        run: |
+          gofmt -l . | tee /dev/stderr | (! read)
+          go vet ./...
+          go test ./...
+
+      - name: Test the Java SDK
+        working-directory: sdk/java
+        run: mvn -B test
+
+      - name: Test the Python SDK
+        working-directory: sdk/python
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest tests -q
+
       - name: Wait for Postgres
         run: .github/scripts/wait-postgres.sh
 

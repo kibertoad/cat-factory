@@ -1238,6 +1238,9 @@ importers:
 
   sdk/typescript:
     devDependencies:
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
       typescript:
         specifier: 7.0.2
         version: 7.0.2

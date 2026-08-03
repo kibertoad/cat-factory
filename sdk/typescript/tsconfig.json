@@ -1,8 +1,6 @@
 {
   "extends": "../../backend/tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
     // The SDK is consumed by ordinary Node/bundler projects rather than by this repo's own
     // build graph, so it resolves and emits like a published library: `NodeNext` so the emitted
     // `.js` specifiers work under Node's ESM resolver without a bundler in the way.
@@ -14,7 +12,16 @@
     // `erasableSyntaxOnly` build — and it is a real constraint on the generator, which emitted a
     // parameter property until this flag caught it.
     "erasableSyntaxOnly": true,
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    // NO ambient `@types/*`. The SDK runs on Node, in a browser, and in a worker isolate, so it
+    // must compile against web platform types alone — with `@types/node` in scope, a `process` or
+    // `Buffer` reference would typecheck here and fail for half the consumers. The smoketest
+    // program IS a Node script and gets its own config (tsconfig.smoketest.json) for that reason.
+    "types": []
   },
+  // Typechecking covers the tests too — they are what exercises the hand-written SSE reader, so
+  // leaving them out would skip the half of the SDK least likely to be right. `rootDir`/`outDir`
+  // therefore live in the BUILD config, which is the one that emits and which includes `src`
+  // alone.
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
