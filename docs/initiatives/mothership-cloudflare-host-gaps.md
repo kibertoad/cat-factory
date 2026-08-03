@@ -16,13 +16,13 @@
 
 ## Summary
 
-| #                                                              | Gap                                                                  | Severity | Cloudflare-specific?                       |
-| -------------------------------------------------------------- | -------------------------------------------------------------------- | -------- | ------------------------------------------ |
+| #                                                              | Gap                                                                  | Severity | Cloudflare-specific?                      |
+| -------------------------------------------------------------- | -------------------------------------------------------------------- | -------- | ----------------------------------------- |
 | [1](#1-the-mothership-cron-sweeper-hijacks-a-satellites-run)   | The mothership's cron sweeper re-drives a run a satellite is driving | High     | No, but Cloudflare makes it unconditional |
-| [2](#2-the-satellites-own-stale-run-recovery-is-dead)          | The satellite cannot recover its own dropped runs                    | High     | No                                         |
-| [3](#3-d1s-2-mb-row-limit-permanently-stalls-telemetry-ingest) | D1's 2 MB row cap permanently stalls a run's telemetry sync          | High     | **Yes**                                    |
-| [4](#4-nothing-tests-a-cloudflare-mothership)                  | No test anywhere exercises a Cloudflare mothership                   | Medium   | **Yes**                                    |
-| [5](#5-the-github-delegation-rate-limit-is-per-isolate)        | The mint rate limit is per-isolate, i.e. barely a limit on Workers   | Medium   | **Yes**                                    |
+| [2](#2-the-satellites-own-stale-run-recovery-is-dead)          | The satellite cannot recover its own dropped runs                    | High     | No                                        |
+| [3](#3-d1s-2-mb-row-limit-permanently-stalls-telemetry-ingest) | D1's 2 MB row cap permanently stalls a run's telemetry sync          | High     | **Yes**                                   |
+| [4](#4-nothing-tests-a-cloudflare-mothership)                  | No test anywhere exercises a Cloudflare mothership                   | Medium   | **Yes**                                   |
+| [5](#5-the-github-delegation-rate-limit-is-per-isolate)        | The mint rate limit is per-isolate, i.e. barely a limit on Workers   | Medium   | **Yes**                                   |
 
 Plus [what was checked and is genuinely fine](#checked-and-fine) and
 [Cloudflare ceilings worth knowing](#cloudflare-ceilings-the-machine-api-now-sits-near).

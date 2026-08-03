@@ -239,7 +239,7 @@ So a native adapter's connection is **not** a dummy. Map the manifest fields lik
 | `auth` + `resolveSecret`                              | the per-workspace machine token                                  |
 | `providerConfig`                                      | per-workspace native settings (project, link key, status map, …) |
 | `provision`/`status`/`teardown` request **templates** | **the only** fields a native adapter legitimately ignores        |
-| `response`, `defaultTtlMs`                            | optional: the adapter may honour or ignore them                 |
+| `response`, `defaultTtlMs`                            | optional: the adapter may honour or ignore them                  |
 
 > We considered letting a registered backend declare "I need no manifest/connection" so the
 > module could assemble from deployment env alone (a zero-connection single-tenant default).

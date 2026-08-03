@@ -44,8 +44,8 @@ burnRatePerDay, thresholdCrossed }`. Deterministic and unit-tested: no LLM, no n
    re-arms next period). The three budget tiers (workspace/account/user) reuse their
    existing scope identities.
 4. **Surface**: extend the spend status contract with the projection fields; the Usage tab
-   + `SpendWarningBanner` render burn-rate and projected overrun ("on pace to reach the
-   budget on ~July 24"); thresholds configurable beside the budget limits.
+   - `SpendWarningBanner` render burn-rate and projected overrun ("on pace to reach the
+     budget on ~July 24"); thresholds configurable beside the budget limits.
 
 ## Prioritized checklist
 

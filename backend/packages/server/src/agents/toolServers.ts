@@ -10,7 +10,11 @@ import type {
   UnavailableToolServer,
 } from '@cat-factory/kernel'
 import { mcpServerSupportsHarness, noopLogger, runBestEffort } from '@cat-factory/kernel'
-import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/contracts'
+import {
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
+  reservedEnvKeyMessage,
+} from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
@@ -267,7 +271,16 @@ function secretKeyNames(credentials: Record<string, string>): { secretKeys?: str
   return keys.length ? { secretKeys: keys } : {}
 }
 
-/** Secrets destined for the server process's environment (every key that named no header). */
+/**
+ * Secrets destined for the server process's environment (every key that named no header).
+ *
+ * Keyed by the INJECTION name, which is `envName` when the declaration split it from the lookup
+ * key. The resolver was asked for, and answered under, the lookup key; from here on only the
+ * server process's own variable name matters. A declaration whose `envName` is a toolchain
+ * variable is dropped rather than injected, because the value would reconfigure the process
+ * instead of authenticating a call. Registration already refuses one, so this is the mothership
+ * case: a definition authored elsewhere, boot-validated by nobody this process ran.
+ */
 function envSecrets(
   keys: McpSecretRef[] | undefined,
   resolved: Record<string, string>,
@@ -275,7 +288,10 @@ function envSecrets(
   const out: Record<string, string> = {}
   for (const key of keys ?? []) {
     const value = resolved[key.key]
-    if (value && !key.header) out[key.key] = value
+    if (!value || key.header) continue
+    const name = key.envName ?? key.key
+    if (isToolchainEnvName(name)) continue
+    out[name] = value
   }
   return out
 }

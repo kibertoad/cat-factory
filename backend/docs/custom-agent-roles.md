@@ -164,12 +164,12 @@ dispatch-failure semantics of catalog refs are covered in
 this section is about writing a good `BundledSkillDefinition`
 (`packages/agents/src/agents/kinds/capabilities.ts`).
 
-| Field          | What it actually does                                                                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | The registry key (`skills: ['<id>']` refs it) and the id reported on the run. Stable; renaming it orphans every kind that refs it (an unknown id is a boot error).                                   |
-| `name`         | Becomes the native skill DIRECTORY name (`CLAUDE_CONFIG_DIR/skills/<name>/` or `.cat-context/skill/<name>/`) and the `SKILL.md` frontmatter `name`. Keep it filesystem-safe (kebab-case).            |
-| `description`  | The frontmatter `description`, i.e. **the trigger**: what claude-code matches against when deciding to load the skill. Write it as "when this applies", not as a title.                             |
-| `instructions` | The `SKILL.md` body: the procedure itself.                                                                                                                                                          |
+| Field          | What it actually does                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | The registry key (`skills: ['<id>']` refs it) and the id reported on the run. Stable; renaming it orphans every kind that refs it (an unknown id is a boot error).                                 |
+| `name`         | Becomes the native skill DIRECTORY name (`CLAUDE_CONFIG_DIR/skills/<name>/` or `.cat-context/skill/<name>/`) and the `SKILL.md` frontmatter `name`. Keep it filesystem-safe (kebab-case).          |
+| `description`  | The frontmatter `description`, i.e. **the trigger**: what claude-code matches against when deciding to load the skill. Write it as "when this applies", not as a title.                            |
+| `instructions` | The `SKILL.md` body: the procedure itself.                                                                                                                                                         |
 | `resources`    | Sibling files materialised alongside the skill (`relPath` + `content`). For reference material the procedure points at (rubrics, templates, checklists) that would bloat the instructions in-line. |
 
 Authoring guidance, distilled from the `org-security-review` example:
@@ -210,12 +210,12 @@ This section is the field-by-field authoring reference for `McpServerDefinition`
 
 | Field          | What it actually does                                                                                                                                                                                                                                               |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | The MCP server NAME the CLI exposes tools under (`mcp__<id>__<tool>`) and, for Codex, a TOML table key, so it must match `MCP_SERVER_ID_PATTERN` (lowercase alphanumerics, `-`, `_`, ≤64 chars). A malformed id is a boot error, not a mid-run mystery.            |
+| `id`           | The MCP server NAME the CLI exposes tools under (`mcp__<id>__<tool>`) and, for Codex, a TOML table key, so it must match `MCP_SERVER_ID_PATTERN` (lowercase alphanumerics, `-`, `_`, ≤64 chars). A malformed id is a boot error, not a mid-run mystery.             |
 | `label`        | Human name for the prompt section and run diagnostics. Defaults to the id.                                                                                                                                                                                          |
 | `guidance`     | One or two sentences telling the agent WHAT the server is for and WHEN to reach for it. **Load-bearing, not decoration**: an agent handed a tool it wasn't told the purpose of tends not to use it. Phrase it as a decision rule ("look up X here before doing Y"). |
 | `transport`    | `{ kind: 'stdio', command, args?, env? }` (a child process in the run container) or `{ kind: 'http', url, headers? }`. `env` and `headers` here are NON-secret config; anything secret rides `secretKeys`.                                                          |
-| `allowedTools` | Bare tool names the agent may call. Omit ⇒ every tool. Scoping, never a security boundary: see the rules doc.                                                                                                                                                      |
-| `harnesses`    | NARROWS which MCP-capable harnesses may serve it (it can never widen: Pi has no MCP client regardless). Declare `['claude-code']` on an `http` server so the Codex drop is stated rather than invisible.                                                           |
+| `allowedTools` | Bare tool names the agent may call. Omit ⇒ every tool. Scoping, never a security boundary: see the rules doc.                                                                                                                                                       |
+| `harnesses`    | NARROWS which MCP-capable harnesses may serve it (it can never widen: Pi has no MCP client regardless). Declare `['claude-code']` on an `http` server so the Codex drop is stated rather than invisible.                                                            |
 | `secretKeys`   | Credentials by NAME (below).                                                                                                                                                                                                                                        |
 
 ### `secretKeys` anatomy (`McpSecretRef`)

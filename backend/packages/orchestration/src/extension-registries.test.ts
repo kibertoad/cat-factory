@@ -440,6 +440,73 @@ describe('validateRegistrations', () => {
     expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(true)
   })
 
+  it('accepts an injection name inside a reserved platform FAMILY', () => {
+    // The escape the reserved floor needs, and the reason the floor can stay as broad as it is:
+    // the GitHub MCP server's own client reads `GITHUB_PERSONAL_ACCESS_TOKEN`, which the platform
+    // does not read and cannot rename for it.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'github',
+          transport: { kind: 'stdio', command: 'github-mcp' },
+          secretKeys: [{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(false)
+    expect(problems.some((p) => p.code === 'toolchain_credential_env_name')).toBe(false)
+  })
+
+  it('rejects a TOOLCHAIN injection name, which reconfigures the server process', () => {
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'stdio', command: 'docs-mcp' },
+          secretKeys: [{ key: 'DOCS_TOKEN', envName: 'LD_PRELOAD' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'toolchain_credential_env_name')).toBe(true)
+  })
+
+  it('warns when an injection name is declared on a key that names a HEADER', () => {
+    // An http server sends its value as that header, so the injection name is read by nothing. A
+    // warning rather than an error: the declaration works, it just says something inert.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'https://mcp.example.com/sse' },
+          secretKeys: [{ key: 'DOCS_TOKEN', header: 'Authorization', envName: 'DOCS_ENV' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    const warning = problems.find((p) => p.code === 'unused_credential_env_name')
+    expect(warning?.severity).toBe('warn')
+  })
+
   it('accepts an https endpoint, and a plain-http one on loopback', () => {
     // A server running beside the agent in its own container has no certificate to present.
     registry.register({

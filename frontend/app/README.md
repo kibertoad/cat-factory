@@ -48,7 +48,7 @@ over the WebSocket. How that sync works is written up in
 | Path              | Contents                                                                                                                                              |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                          |
+| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
 | `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
 | `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
 | `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |

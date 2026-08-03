@@ -1,7 +1,12 @@
 import * as v from 'valibot'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 import { uploadApiContractSchema } from './foundational-services.js'
-import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from './reserved-env-keys.js'
+import {
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
+  reservedEnvKeyMessage,
+  toolchainEnvNameMessage,
+} from './reserved-env-keys.js'
 
 // ---------------------------------------------------------------------------
 // Wire vocabulary for GENERATIVE BINARY INTEGRATIONS — the third-party (or in-house) APIs a
@@ -42,17 +47,18 @@ const slug = v.pipe(
  */
 export const binaryGeneratorCredentialSchema = v.object({
   /**
-   * The credential's key. It is both what the secret resolver is asked for and the ENVIRONMENT
-   * VARIABLE the agent reads it from, so it must be a valid POSIX variable name — a generator
-   * declaring `x-rd-token` would resolve fine and then be dropped by the harness's env
+   * The credential's LOOKUP key: what the secret resolver is asked for, and what a workspace
+   * stores its own value under. Also the ENVIRONMENT VARIABLE the agent reads it from unless
+   * {@link envName} says otherwise, so it must be a valid POSIX variable name either way: a
+   * generator declaring `x-rd-token` would resolve fine and then be dropped by the harness's env
    * validation, which is a silent "the integration just 401s" at run time.
    *
    * It may NOT name a variable the platform's own configuration owns
    * ({@link isReservedPlatformEnvKey}). The resolver reads the key off the deployment's
    * environment and the value is injected into an agent process, so an integration declaring
    * `ENCRYPTION_KEY` would hand a prompt-injectable agent the deployment's master sealing key.
-   * Refused here so a deployment learns at boot, and again at dispatch — a mothership-mode node
-   * boot-validates none of the definitions it resolves.
+   * Refused here so a deployment learns at boot, and again at dispatch, since a mothership-mode
+   * node boot-validates none of the definitions it resolves.
    */
   key: v.pipe(
     v.string(),
@@ -63,6 +69,29 @@ export const binaryGeneratorCredentialSchema = v.object({
     v.check(
       (key) => !isReservedPlatformEnvKey(key),
       (issue) => reservedEnvKeyMessage(String(issue.input)),
+    ),
+  ),
+  /**
+   * The environment variable the value is injected as, when that differs from {@link key}. This
+   * is the name the agent is told to read, and it is what a vendor SDK that auto-reads its own
+   * documented variable needs.
+   *
+   * Held to the toolchain rule rather than the reserved-platform one, because it reads nothing:
+   * the floor above is about what may be READ off the deployment's environment, and an injection
+   * name only decides what a variable is called inside this job's agent process. That is what lets
+   * an integration keep a vendor's documented name even when a platform prefix family covers it.
+   */
+  envName: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.minLength(1),
+      v.maxLength(128),
+      v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
+      v.check(
+        (name) => !isToolchainEnvName(name),
+        (issue) => toolchainEnvNameMessage(String(issue.input)),
+      ),
     ),
   ),
   /**

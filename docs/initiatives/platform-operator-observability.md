@@ -30,7 +30,7 @@ delivered through the existing `NotificationChannel` seam.
    `llm_call_metrics` already carry outcome, failure kind, timing, and token/cost fields.
    Add rollup read methods to a new kernel `PlatformMetricsRepository`-shaped port
    (`runOutcomesSince`, `failureKindBreakdown`, `durationPercentiles`, `activeAndParkedCounts`:
-  each ONE `GROUP BY` query, mirrored D1 ⇄ Drizzle + conformance). Never load rows to
+   each ONE `GROUP BY` query, mirrored D1 ⇄ Drizzle + conformance). Never load rows to
    aggregate in JS (the N+1/aggregate rule).
 2. **Retention-aware windows**: telemetry is pruned to `LLM_CALL_METRICS_RETENTION_DAYS`
    (default 3d); `agent_runs` lives longer. Dashboard windows must degrade gracefully where
@@ -56,7 +56,7 @@ delivered through the existing `NotificationChannel` seam.
 | 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done    | #1157   |
 | 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done    | #1157   |
 | 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done    | #1165   |
-| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts): needs a queryable gate-attempt projection  | ⬜ todo    |         |
+| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts): needs a queryable gate-attempt projection   | ⬜ todo    |         |
 | 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ✅ done    | this PR |
 | 6   | Alert threshold config surface (env defaults done; settings UI todo)                                                 | 🟨 partial |         |
 | 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo    |         |

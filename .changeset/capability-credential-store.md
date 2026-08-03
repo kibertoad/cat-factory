@@ -12,7 +12,7 @@ Per-workspace capability credentials: the secrets a tool server or generative bi
 declares are now stored per TENANT, sealed at rest, instead of only being read off the deployment's
 environment.
 
-An environment variable is a single-tenant answer — one process serves many workspaces, so one
+An environment variable is a single-tenant answer: one process serves many workspaces, so one
 variable served them all: every tenant's runs authenticated as whoever set it, no tenant could bring
 its own vendor account, and rotating one tenant's key was a redeploy that rotated everyone's. Every
 other credential in the platform is already a per-tenant sealed row; capabilities were the subsystem

@@ -97,12 +97,12 @@ it: the schema/parser stays in the agents registration layer.
 aggregated error on any unambiguous misconfig; a facade calls `validateRegistrationsOnce()` after
 all `register*` imports + provider wiring, before serving.
 
-| Check                                                                                                  | Severity             |
-| ------------------------------------------------------------------------------------------------------ | -------------------- |
-| gate `helperKind` resolves to a registered container kind or a built-in helper                         | error                |
-| `presentation.resultView` is a known `RESULT_VIEW_IDS` id                                              | error                |
+| Check                                                                                                 | Severity             |
+| ----------------------------------------------------------------------------------------------------- | -------------------- |
+| gate `helperKind` resolves to a registered container kind or a built-in helper                        | error                |
+| `presentation.resultView` is a known `RESULT_VIEW_IDS` id                                             | error                |
 | pipeline `agentKinds` are known (only when `knownAgentKinds` is supplied, no built-in catalog exists) | error                |
-| `postOps` declared without structured output                                                           | warn (`onWarn` sink) |
+| `postOps` declared without structured output                                                          | warn (`onWarn` sink) |
 
 Wired symmetrically: the Worker validates on its first `fetch` (the once-guard keeps it off the
 hot path), the Node facade in `start()` after building the container. Orchestration is

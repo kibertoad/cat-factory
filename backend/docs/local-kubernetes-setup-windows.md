@@ -32,7 +32,7 @@ an existing cluster and ships **no** k3d). So local runs reproduce CI/container 
 
 | Tool      | Version   | Source of truth   | Notes                                                                        |
 | --------- | --------- | ----------------- | ---------------------------------------------------------------------------- |
-| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own (older) kubectl: see PATH note.                |
+| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own (older) kubectl: see PATH note.                 |
 | kustomize | `v5.8.1`  | deploy-harness    | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
 | helm      | `v4.2.3`  | deploy-harness    |                                                                              |
 | k3d       | `v5.7.5`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |

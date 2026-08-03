@@ -295,7 +295,7 @@ driver's replays cannot double-post.
 | 1.7  | `notification_webhooks` persistence, D1 ⇄ Drizzle + a repository-parity suite            | ✅ done |
 | 1.8  | `WebhookNotificationChannel` + HMAC signing + bounded retry, wired in both facades       | ✅ done |
 | 1.9  | Conformance: list → answer a park over `/api/v1`, scoping + scope refusal, both runtimes | ✅ done |
-| 1.10 | Individual-usage runs across a park; see the note below                                 | ✅ done |
+| 1.10 | Individual-usage runs across a park; see the note below                                  | ✅ done |
 | 1.11 | Docs sweep (OpenAPI, CLAUDE.md, AGENTS.md) + changeset                                   | ✅ done |
 
 **On 1.10 (individual-usage models).** The brief asked to verify the resume path needs nothing

@@ -72,7 +72,7 @@ symmetric" (CLAUDE.md).
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
-| 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                     | ⬜ todo |                                                           |
+| 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                           |
 
 ## Detailed findings
 

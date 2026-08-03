@@ -3,6 +3,7 @@ import {
   PLATFORM_RESERVED_ENV_KEYS,
   PLATFORM_RESERVED_ENV_PREFIXES,
   isReservedPlatformEnvKey,
+  isToolchainEnvName,
   reservedEnvKeyMessage,
 } from './reserved-env-keys.js'
 import { binaryGeneratorDefinitionIssues } from './binary-generators.js'
@@ -67,6 +68,32 @@ describe('isReservedPlatformEnvKey', () => {
   })
 })
 
+describe('isToolchainEnvName', () => {
+  // The rule for the OTHER name a credential has. It binds the INJECTION name, which reads
+  // nothing, so it is narrower than the reserved floor on purpose: a value set as `PATH`
+  // reconfigures the process, while one set as `GITHUB_PERSONAL_ACCESS_TOKEN` is exactly what the
+  // GitHub MCP server needs.
+  it('names the variables that reconfigure a process rather than authenticate a call', () => {
+    expect(isToolchainEnvName('PATH')).toBe(true)
+    expect(isToolchainEnvName('LD_PRELOAD')).toBe(true)
+    expect(isToolchainEnvName('npm_config_registry')).toBe(true)
+    expect(isToolchainEnvName('GIT_SSH_COMMAND')).toBe(true)
+  })
+
+  it('leaves a vendor variable inside a reserved platform FAMILY alone', () => {
+    // The whole point of the split: `GITHUB_` is reserved as a lookup key because the platform
+    // reads `GITHUB_APP_ID` and friends, but nothing reads this one, and the GitHub MCP server's
+    // client requires exactly this name.
+    expect(isToolchainEnvName('GITHUB_PERSONAL_ACCESS_TOKEN')).toBe(false)
+    expect(isToolchainEnvName('SLACK_BOT_TOKEN')).toBe(false)
+    expect(isToolchainEnvName('AWS_ACCESS_KEY_ID')).toBe(false)
+    // …and each of those IS still refused as a lookup key, which is the half that protects the
+    // deployment's environment.
+    expect(isReservedPlatformEnvKey('GITHUB_PERSONAL_ACCESS_TOKEN')).toBe(true)
+    expect(isReservedPlatformEnvKey('SLACK_BOT_TOKEN')).toBe(true)
+  })
+})
+
 describe('the generative-integration credential schema', () => {
   const definition = (key: string) => ({
     id: 'acme-images',
@@ -87,5 +114,23 @@ describe('the generative-integration credential schema', () => {
 
   it('accepts an integration’s own variable', () => {
     expect(binaryGeneratorDefinitionIssues(definition('ACME_IMAGE_API_KEY'))).toEqual([])
+  })
+
+  it('accepts an injection name inside a reserved FAMILY, which is the escape the floor needs', () => {
+    expect(
+      binaryGeneratorDefinitionIssues({
+        ...definition('ACME_IMAGE_API_KEY'),
+        credential: { key: 'ACME_IMAGE_API_KEY', envName: 'GITHUB_MODELS_TOKEN' },
+      }),
+    ).toEqual([])
+  })
+
+  it('refuses a TOOLCHAIN injection name, which would reconfigure the agent’s process', () => {
+    const issues = binaryGeneratorDefinitionIssues({
+      ...definition('ACME_IMAGE_API_KEY'),
+      credential: { key: 'ACME_IMAGE_API_KEY', envName: 'PATH' },
+    })
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain('toolchain environment variable')
   })
 })

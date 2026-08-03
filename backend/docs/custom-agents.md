@@ -91,15 +91,15 @@ pipelineRegistry.register({
 
 ### `AgentKindDefinition` (in `@cat-factory/agents`)
 
-| Field                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                                                                                                                                                                                                                                                                                      |
-| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                                                                                                                                                                                                                                                                                 |
-| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                                                                                                                                                                                                                                                                                     |
-| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM.                                                                                                                                                                                                                                                            |
+| Field                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                                                                                                                                                                                                                                                                                     |
+| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                                                                                                                                                                                                                                                                                |
+| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                                                                                                                                                                                                                                                                                    |
+| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM.                                                                                                                                                                                                                                                           |
 | `preOps?` / `postOps?`                                | `RepoOp[]`: deterministic backend hooks over `RepoFiles`.                                                                                                                                                                                                                                                                                                                  |
-| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`tier`/`resultView`.                                                                                                                                                                                                                                                                                                             |
-| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                     |
+| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`tier`/`resultView`.                                                                                                                                                                                                                                                                                                            |
+| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                    |
 | `skills?` / `toolServers?`                            | The procedural playbooks the kind applies and the MCP tool servers it may call: see "Capabilities: skills and tools" below.                                                                                                                                                                                                                                                |
 | `standardsDelivery?`                                  | `'prompt'` (default) folds a `code-aware`/`doc-aware` kind's resolved standards into its system prompt; `'context-files'` skips that fold: the kind's own preOp MUST write them as `.cat-context/standard-<id>.md` files (see `pr-reviewer`). Right for a kind that DELEGATES review to subagents, so the delegating agent isn't charged for every standard on every turn. |
 
@@ -303,19 +303,31 @@ Rules worth knowing before declaring one:
   additionally passed to claude-code's `--allowedTools`, but whether that CLI list gates depends
   on the run's permission mode, and Codex cannot express a per-tool restriction at all. If an agent
   kind must never reach a server's other tools, do not wire that server for that kind.
-- **A credential may NOT name a platform configuration variable.** A definition names both the key
-  it wants and the endpoint that key is sent to, so `{ key: 'ENCRYPTION_KEY', header:
-'Authorization' }` would boot clean and ship the deployment's master sealing key to a third
-  party. Every variable in `docs/environment-variables.md` is reserved (`isReservedPlatformEnvKey`,
-  case-insensitively — `process.env` lookup is case-insensitive on Windows); the declaration is
-  refused at boot (`reserved_credential_key`), and refused again at dispatch, where the server is
-  reported unavailable under its own `reserved_secret` reason rather than `missing_secret` — the
-  two need opposite fixes, and setting the variable is precisely what must not help. Give the
-  integration a variable of its own. This floor needs no configuration and cannot be widened.
+- **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
+  both the key it wants and the endpoint that key is sent to, so
+  `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
+  master sealing key to a third party. Every variable in `docs/environment-variables.md` is
+  reserved (`isReservedPlatformEnvKey`, case-insensitively, because `process.env` lookup is
+  case-insensitive on Windows). The declaration is refused at boot (`reserved_credential_key`), and
+  refused again at dispatch, where the server is reported unavailable under its own
+  `reserved_secret` reason rather than `missing_secret`: the two need opposite fixes, and setting
+  the variable is precisely what must not help. This floor needs no configuration and cannot be
+  widened.
+- **Use `envName` when the server's own client requires a specific variable.** The floor binds the
+  LOOKUP key, not the variable the value is injected under in the server's process, which reads
+  nothing. That distinction is what keeps the floor affordable: the GitHub MCP server reads
+  `GITHUB_PERSONAL_ACCESS_TOKEN`, the Slack one `SLACK_BOT_TOKEN`, and the platform reads neither
+  while owning both families. Declare
+  `{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }` and the value is looked
+  up under a name of your own and injected under the one the SDK wants. `envName` has its own,
+  narrower rule (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or anything else
+  that would reconfigure the process instead of authenticating a call. It applies to `stdio`
+  servers; an `http` server's value goes to its `header`, so an `envName` there is warned about as
+  inert.
 
 - **A workspace's OWN value wins over the deployment's.** Every facade composes the per-workspace
   capability-credential store (sealed, `secrets.manage`-gated, edited over
-  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY — so a
+  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY, so a
   tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
   as it did before the store existed. The surface is a CHECKLIST, not a blank form: it projects
   the credentials this deployment's registered capabilities declare, so an operator never has to
@@ -326,7 +338,7 @@ Rules worth knowing before declaring one:
   configuration is a developer's own tooling, and only the deployment knows which of it an
   integration may see. If a deployment installs agent packages it did not author, wire
   `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` and
-  keep the credentials behind a dedicated prefix — note that a deployment resolver REPLACES the
+  keep the credentials behind a dedicated prefix. Note that a deployment resolver REPLACES the
   chain above rather than being wrapped by it. See ADR 0029 → Consequences.
 
   **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary

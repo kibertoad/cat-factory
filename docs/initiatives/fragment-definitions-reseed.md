@@ -52,7 +52,7 @@ This is deliberately separate from the **selection** behaviour (shipped alongsid
 | Layer             | Pipeline reference                                                                             | Fragment analogue                                                                                                                  |
 | ----------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | catalog + version | `seedPipelines()` per-item `version` (kernel `domain/seed.ts`)                                 | `universalFragments()` per-item `version` string (`@cat-factory/prompt-fragments`)                                                 |
-| persist           | `WorkspaceService.create` seed loop                                                            | `FragmentLibraryService.ensureSeeded(ws)`: lazy, on catalog load, seeds only MISSING built-in ids (respects tombstones)           |
+| persist           | `WorkspaceService.create` seed loop                                                            | `FragmentLibraryService.ensureSeeded(ws)`: lazy, on catalog load, seeds only MISSING built-in ids (respects tombstones)            |
 | drift channel     | snapshot `pipelineCatalogVersions`                                                             | resolved-fragments response `catalogVersions` (`{id → version}`)                                                                   |
 | reseed service    | `PipelineService.reseed` (resolve seed, reject custom/absent, preserve labels/archive, upsert) | `FragmentLibraryService.reseedBuiltin(ws, id)` (resolve code def, reject non-built-in, preserve `createdAt`, upsert workspace row) |
 | reseed route      | `POST /pipelines/:id/reseed`                                                                   | `POST /fragments/:id/reseed` (no body, 200 → resolved fragment)                                                                    |
@@ -64,7 +64,7 @@ This is deliberately separate from the **selection** behaviour (shipped alongsid
 
 | Item                                                                                                | Status | Notes                                                                         |
 | --------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
-| `builtin` marker: `PromptFragmentRecord` + `prompt_fragments` column (D1 ⇄ Drizzle) + mappers/repos | todo   | **prerequisite**; without it, persistence conflates tiers                    |
+| `builtin` marker: `PromptFragmentRecord` + `prompt_fragments` column (D1 ⇄ Drizzle) + mappers/repos | todo   | **prerequisite**; without it, persistence conflates tiers                     |
 | `mergeCatalog` reports `tier: 'builtin'` when `record.builtin`                                      | todo   | keeps tier badges/`builtinCount` correct                                      |
 | `FragmentLibraryService.ensureSeeded` (lazy persist, `builtin: true`)                               | todo   | seed only missing built-in ids; skip tombstoned                               |
 | `FragmentLibraryService.reseedBuiltin` + `catalogVersions()`                                        | todo   | resolve from `universalFragments()`; preserve `createdAt`                     |

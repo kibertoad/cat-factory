@@ -20,6 +20,7 @@ import {
   resolveCorsOrigin,
 } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
+import { registerToolSecretResolverFactory } from './infrastructure/toolSecretResolver'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 
@@ -31,10 +32,10 @@ export interface CreateAppOptions {
   /** Explicit gate providers wired on every per-request build — used by tests. */
   gateProviders?: GateProviderOverrides
   /**
-   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
-   * server's (MCP) and a generative binary integration's alike. Called on every per-request
-   * container build with that request's `env`, and defaulting to
-   * `createEnvToolSecretResolver(env)`.
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch: a tool
+   * server's (MCP) and a generative binary integration's alike. Called with the `env` of whichever
+   * entry point is building a container. Absent, the platform composes its own per-workspace
+   * credential store in front of `createEnvToolSecretResolver(env)`.
    *
    * A FACTORY because the Worker has no ambient environment: a deployment reading its own sealed
    * per-workspace store, or the Cloudflare Secrets Store, reaches it through a BINDING on `env`.
@@ -42,7 +43,12 @@ export interface CreateAppOptions {
    *
    *     createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })
    *
-   * This is what `ToolSecretResolver` is a port FOR. `overrides` cannot serve it — its nearest
+   * Setting it here REGISTERS it process-wide (`registerToolSecretResolverFactory`) rather than
+   * closing over this app, because container agents are dispatched by the durable driver, which
+   * builds its own container from a bare `buildContainer(env)` and would never see an option held
+   * on the app. Same reason, same mechanism as `registerModelRegistry`.
+   *
+   * This is what `ToolSecretResolver` is a port FOR. `overrides` cannot serve it: its nearest
    * `CoreDependencies` field is the whole `agentExecutor`.
    */
   createToolSecretResolver?: (env: Env) => ToolSecretResolver
@@ -81,6 +87,15 @@ function logMisconfiguredOnce(problems: ConfigProblem[]): void {
 export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  // Process-wide rather than closed over this app, so the resolver also serves the container the
+  // DURABLE DRIVER builds. See `infrastructure/toolSecretResolver.ts`: container agents (the only
+  // dispatches that resolve a capability credential) are advanced by `ExecutionWorkflow`, which
+  // never sees these options. Done here rather than in `createWorker` so a deployment assembling
+  // its own app from `createApp` gets the same reach.
+  if (options.createToolSecretResolver) {
+    registerToolSecretResolverFactory(options.createToolSecretResolver)
+  }
+
   // Correlation FIRST — before CORS and before the container build — so a CORS denial and the
   // misconfiguration fallback below are logged and carry an id like any other response. Shared
   // verbatim with the Node service.
@@ -116,7 +131,6 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
         buildContainer(c.env, options.overrides, {
           cloudflareModelsEnabled: options.cloudflareModelsEnabled,
           gateProviders: options.gateProviders,
-          createToolSecretResolver: options.createToolSecretResolver,
         }),
       )
     } catch (err) {

@@ -218,4 +218,53 @@ describe('resolveBinaryGeneratorSecrets', () => {
     ).toEqual([])
     expect(subjects).toEqual([])
   })
+
+  // A credential has two names, and only the lookup one is a boundary. See
+  // `contracts/src/reserved-env-keys.ts` for why keeping them apart is what makes both rules
+  // affordable.
+  it('looks the value up under `credentialKey` and injects it under `credentialEnvName`', async () => {
+    const { resolver } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'GITHUB_MODELS_KEY' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([{ key: 'GITHUB_MODELS_KEY', value: 'tok' }])
+  })
+
+  it('dedupes on the INJECTION name, since that is what the job body is keyed by', async () => {
+    // Two integrations resolving different keys into one variable would otherwise both emit it and
+    // the last would silently win, handing the agent one vendor's key under the other's name.
+    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, id: 'one', credentialKey: 'FIRST_KEY', credentialEnvName: 'VENDOR_KEY' },
+          { ...retro, id: 'two', credentialKey: 'SECOND_KEY', credentialEnvName: 'VENDOR_KEY' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([{ key: 'VENDOR_KEY', value: 'a' }])
+  })
+
+  it('refuses a TOOLCHAIN injection name, which would reconfigure the run instead of authenticating', async () => {
+    const { resolver, subjects } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'NODE_OPTIONS' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
+  })
 })

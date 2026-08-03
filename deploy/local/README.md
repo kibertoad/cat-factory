@@ -190,7 +190,7 @@ port:
 | LM Studio | `http://localhost:1234/v1`  | enable the local server in the LM Studio UI      |
 | llama.cpp | `http://localhost:8080/v1`  | `llama-server -m model.gguf`                     |
 | vLLM      | `http://localhost:8000/v1`  | `vllm serve <model>`                             |
-| Custom    | (none: supply your own)    | any OpenAI-compatible server (Jan, GPT4All, …)   |
+| Custom    | (none: supply your own)     | any OpenAI-compatible server (Jan, GPT4All, …)   |
 
 Any model the runner serves works, e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
 `deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a _model_ served through a runner,
@@ -481,7 +481,7 @@ ended it: they want opposite reactions:
 
 | Failure says                              | Meaning                                               | Do                                                                                                      |
 | ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `timed out after 300000ms with no output` | The CLI went **silent** that long: presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
+| `timed out after 300000ms with no output` | The CLI went **silent** that long: presumed stuck.    | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
 | `hit its 3600000ms wall-clock ceiling`    | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
 
 The idle budget is measured from the **last byte**, not from the spawn, so a step that keeps

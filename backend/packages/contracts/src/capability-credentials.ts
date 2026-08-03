@@ -1,5 +1,10 @@
 import * as v from 'valibot'
-import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from './reserved-env-keys.js'
+import {
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
+  reservedEnvKeyMessage,
+  toolchainEnvNameMessage,
+} from './reserved-env-keys.js'
 
 // ---------------------------------------------------------------------------
 // PER-WORKSPACE capability credentials (SEALED) — the tenant-scoped home for the secrets a
@@ -27,52 +32,23 @@ import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from './reserved-env-
 // ---------------------------------------------------------------------------
 
 /**
- * Toolchain-critical names that must never be injected into an agent's environment, because
- * doing so reconfigures the process rather than authenticating a call: the loader/search paths,
- * the shell's own hooks, npm's and git's config families.
+ * The key a stored credential answers for: the LOOKUP name the capability's definition declares,
+ * which is what a resolver is asked for.
  *
- * Kept in step with `test-secrets.ts`'s identical list — and deliberately NOT shared with it,
- * for the reason stated there: the harness carries its own copy (`RESERVED_ENV_NAMES` in
- * `job.ts`) and can depend on no workspace package, so this is already a pinned-by-convention
- * duplicate rather than a seam. A third copy in one more module is the same cost; a shared
- * export that the harness still could not import would look like one source of truth and be two.
- */
-const TOOLCHAIN_ENV_NAMES = new Set([
-  'PATH',
-  'HOME',
-  'NODE_OPTIONS',
-  'NODE_PATH',
-  'NODE_EXTRA_CA_CERTS',
-  'LD_PRELOAD',
-  'LD_LIBRARY_PATH',
-  'BASH_ENV',
-  'ENV',
-  'SHELL',
-  'IFS',
-])
-const TOOLCHAIN_ENV_PREFIXES = ['npm_config_', 'git_']
-
-function isToolchainEnvName(key: string): boolean {
-  if (TOOLCHAIN_ENV_NAMES.has(key)) return true
-  const lower = key.toLowerCase()
-  return TOOLCHAIN_ENV_PREFIXES.some((prefix) => lower.startsWith(prefix))
-}
-
-/**
- * The key a stored credential answers for: the same name the capability's definition declares,
- * and the environment variable the agent reads the value from.
+ * It is not necessarily the variable the agent reads the value from. A definition that needs a
+ * specific variable name in the process it configures declares `envName` beside its `key`, and
+ * the store never sees that name: it stores what the resolver is ASKED for, and the injection
+ * name is applied afterwards, at dispatch.
  *
- * Held to BOTH reserved lists, which protect different things and neither implies the other:
+ * Held to BOTH lists, which protect different things and neither implies the other:
  *
- *   - {@link isReservedPlatformEnvKey} — the platform's own configuration. Storing a value under
- *     `ENCRYPTION_KEY` would not read the deployment's key (this store answers first), but it
- *     would inject something under that name into an agent process, and the declaration it
- *     satisfies is refused at boot anyway — so accepting it here would let an operator fill in a
- *     credential that can never be asked for.
- *   - {@link isToolchainEnvName} — the harness's own process. A value under `PATH` or
- *     `npm_config_registry` reconfigures the run instead of authenticating a call. The harness
- *     drops these defensively at parse; refusing at the WRITE boundary means the operator gets an
- *     error while typing rather than a credential that is silently never injected.
+ *   - {@link isReservedPlatformEnvKey}, the platform's own configuration. Storing a value under
+ *     `ENCRYPTION_KEY` would not read the deployment's key (this store answers first), but the
+ *     declaration it would satisfy is refused at boot, so accepting it here lets an operator fill
+ *     in a credential that can never be asked for.
+ *   - {@link isToolchainEnvName}, the harness's own process. This one is belt-and-braces at this
+ *     boundary rather than the real guard (the real guard is on `envName` at declaration), because
+ *     a stored key with no `envName` beside it IS the injected name.
  */
 export const capabilityCredentialKeySchema = v.pipe(
   v.string(),
@@ -89,7 +65,7 @@ export const capabilityCredentialKeySchema = v.pipe(
   ),
   v.check(
     (key) => !isToolchainEnvName(key),
-    'must not be a toolchain environment variable name (e.g. PATH, HOME, NODE_OPTIONS, npm_config_*, GIT_*)',
+    (issue) => toolchainEnvNameMessage(String(issue.input)),
   ),
 )
 
