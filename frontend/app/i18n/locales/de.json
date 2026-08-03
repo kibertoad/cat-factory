@@ -568,6 +568,40 @@
         "removeFailed": "Der Registry-Eintrag konnte nicht entfernt werden"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Zugangsdaten für Fähigkeiten",
+      "intro": "Die Secrets, die die Tool-Server und generativen Integrationen dieser Installation namentlich anfordern. Werte gelten nur für dieses Board, werden verschlüsselt gespeichert und direkt an den Prozess des Agenten übergeben: Sie erscheinen weder in einem Prompt noch in einem Log. Werte lassen sich nur schreiben, nie auslesen, ein gespeicherter Wert wird also durch Eingabe eines neuen ersetzt.",
+      "credentialNoun": "Zugangsdaten {key}",
+      "required": "Erforderlich",
+      "optional": "Optional",
+      "stored": "Gespeichert",
+      "storedAt": "Zuletzt gesetzt am {date}",
+      "notStoredWithFallback": "Für dieses Board ist nichts gespeichert. Diese Installation liest den Schlüssel auch aus ihrer eigenen Umgebung, die Fähigkeit funktioniert also möglicherweise trotzdem.",
+      "notStored": "Für dieses Board ist nichts gespeichert, und diese Installation hat keinen Rückfallwert aus der Umgebung. Die Fähigkeit kann sich daher nicht authentifizieren.",
+      "setValue": "Wert",
+      "replaceValue": "Gespeicherten Wert ersetzen",
+      "save": "Speichern",
+      "remove": "Zugangsdaten entfernen",
+      "noneDeclared": "Keine der registrierten Fähigkeiten dieser Installation fordert Zugangsdaten an.",
+      "subject": {
+        "toolServer": "Tool-Server",
+        "binaryGenerator": "Generative Integration"
+      },
+      "incomplete": {
+        "title": "Diese Liste ist möglicherweise unvollständig",
+        "body": "Die generativen Integrationen konnten nicht gelesen werden, daher fehlen unten womöglich Zugangsdaten, die eine von ihnen anfordert. Gespeicherte Schlüssel, die niemand anfordert, bleiben ausgeblendet, bis die Liste wieder gelesen werden kann."
+      },
+      "orphaned": {
+        "heading": "Gespeichert, aber nicht angefordert",
+        "body": "Nichts, was diese Installation registriert hat, fordert diese Schlüssel an. Genau das hinterlässt eine abgeschaltete Integration oder eine umbenannte Variable. Sie bleiben verschlüsselt gespeichert, bis du sie entfernst."
+      },
+      "toast": {
+        "loadFailed": "Zugangsdaten für Fähigkeiten konnten nicht geladen werden",
+        "saved": "{key} gespeichert",
+        "saveFailed": "{key} konnte nicht gespeichert werden",
+        "removeFailed": "{key} konnte nicht entfernt werden"
+      }
+    },
     "apiTokens": {
       "title": "API-Zugriffstokens",
       "intro": "Erstelle Tokens, die externe Systeme der cat-factory-API vorlegen. Jedes Token authentifiziert sich als dieser Arbeitsbereich an den /api/v1-Endpunkten. Das Geheimnis wird nur einmal bei der Erstellung angezeigt und kann nicht wiederhergestellt werden. Speichere es daher sofort.",

@@ -1,6 +1,7 @@
 # Per-workspace capability credentials
 
-Status: **slice 1 landed (backend end-to-end); slice 2 (SPA) open.**
+Status: **slices 1 and 2 landed (backend end-to-end, plus the SPA surface); slice 3 (conformance)
+open.**
 
 ## Goal
 
@@ -100,12 +101,11 @@ which reconfigure the run instead of authenticating a call.
       allow-list entry with its round-trip and cross-account-refusal cases + both facades wiring the
       composed chain by default. ([PR #1620](https://github.com/kibertoad/cat-factory/pull/1620),
       landed with the facade seam it depends on.)
-- [ ] **2. The SPA surface.** A settings panel rendering the checklist: declared keys with who
-      wants each and whether it is required, the three states above, write-only value inputs, and a
-      per-key delete for an orphan. Needs `en.json` plus the nine other locales (the parity gate is
-      change-coupling, and a verbatim English copy is a bug, not a placeholder). The panel belongs
-      beside `PackageRegistriesPanel.vue` in the infrastructure window, and it is `secrets.manage`
-      only, so it is hidden rather than disabled for a member.
+- [x] **2. The SPA surface.** `CapabilityCredentialsPanel.vue` in the Infrastructure window,
+      beside the package registries: the checklist, who wants each key and whether it is required,
+      the three states above, write-only inputs and a per-key delete. Hidden rather than disabled
+      without `secrets.manage`, and hidden when there is nothing to show. Slice 1 shipped no write
+      the panel could use, so it brought a per-key one with it; see the two decisions below.
 - [ ] **3. Conformance.** A cross-runtime assertion that a stored credential reaches a dispatch's
       job body and an unstored one falls through to the environment. Deliberately deferred: the
       conformance harness replaces `ContainerAgentExecutor` with a fake, which is the same reason
@@ -116,6 +116,23 @@ which reconfigure the run instead of authenticating a call.
       letting a deployment declare `createToolSecretResolver` as store-ONLY and having the view
       report `environmentFallback: false`, which the SPA already reads. The open question is whether
       a hosted deployment should default that way, which is a product call rather than a code one.
+
+### Two decisions the SPA slice forced
+
+6. **A per-KEY write, because the checklist could not use the set-replacing one.** Slice 1 shipped
+   `PUT /capability-credentials` (whole set) and a per-key DELETE, and the asymmetry was a hole:
+   the client never receives the values, so re-sending the set means re-typing every secret, and
+   sending only the edited key REPLACES the set, meaning a workspace that fills in its second
+   credential silently deletes its first. `PUT /capability-credentials/:key` is the twin of the
+   delete, read-modify-write like it, last-writer-wins like it, and it carries the ceiling the
+   whole-set schema carries or it is simply a way around it. The whole-set PUT stays: it is the
+   right operation for an API caller declaring a set at once, and the only way to clear one.
+7. **The tab gates on CONTENT, not just availability.** Every other Infrastructure tab appears
+   once its module answers. This panel is a checklist projected from the deployment's CODE, so a
+   build registering no tool server and no generative integration has no credential to type and
+   the tab would be a dead end. It is hidden when the declared list, the orphan list and
+   `declarationsIncomplete` are all empty/false, and `declarationsIncomplete` is what keeps it
+   when the emptiness is an OUTAGE rather than an answer.
 
 ## Gotchas the pilot surfaced
 

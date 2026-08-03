@@ -4,12 +4,14 @@ import type {
   Clock,
   SecretCipher,
 } from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
 import type {
   CapabilityCredentialEntry,
   CapabilityCredentialRef,
   UpsertCapabilityCredentialsInput,
 } from '@cat-factory/contracts'
 import {
+  MAX_CAPABILITY_CREDENTIALS,
   capabilityCredentialsSummary,
   parseCapabilityCredentialEntries,
 } from '@cat-factory/contracts'
@@ -79,6 +81,32 @@ export class CapabilityCredentialsService {
       return []
     }
     return this.write(workspaceId, input.entries)
+  }
+
+  /**
+   * Set ONE credential's value, leaving the rest sealed as they are. Replaces the value when the
+   * key is already stored, appends it otherwise.
+   *
+   * The narrow twin of {@link remove}, and the write a checklist UI actually performs: the client
+   * holds no values, so it can neither re-send the set nor express "leave the others alone"
+   * through {@link set}. Same read-modify-write trade, and the same accepted consequence — two
+   * operators saving different keys at the same moment costs one retyped secret, where the
+   * alternative row-per-key shape costs every dispatch an N-row read.
+   */
+  async put(workspaceId: string, key: string, value: string): Promise<CapabilityCredentialRef[]> {
+    const entries = await this.resolveValues(workspaceId)
+    const existing = entries.findIndex((entry) => entry.key === key)
+    if (existing === -1 && entries.length >= MAX_CAPABILITY_CREDENTIALS) {
+      throw new ValidationError(
+        `at most ${MAX_CAPABILITY_CREDENTIALS} capability credentials per workspace`,
+        { reason: 'capability_credential_limit' },
+      )
+    }
+    const next = [...entries]
+    // Replace IN PLACE for a known key, so re-typing a value does not reorder the stored set.
+    if (existing === -1) next.push({ key, value })
+    else next[existing] = { key, value }
+    return this.write(workspaceId, next)
   }
 
   /**
