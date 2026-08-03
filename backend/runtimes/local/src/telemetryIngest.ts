@@ -6,7 +6,7 @@ import {
   TELEMETRY_INGEST_LIMITS,
   type MachineTelemetryClient,
   type TelemetryIngestRequest,
-  operationalMetrics,
+  sweepHealth,
 } from '@cat-factory/server'
 import type { IngestCursor, LocalTelemetryIngestReader } from './sqlite/telemetryIngestReader.js'
 
@@ -274,7 +274,7 @@ export function startTelemetryIngest(deps: TelemetryIngestDeps): () => Promise<v
     name: 'mothership-telemetry-ingest',
     intervalMs: INGEST_SWEEP_INTERVAL_MS,
     log: deps.log,
-    metrics: operationalMetrics,
+    health: sweepHealth,
     failureMessage: 'mothership telemetry ingest sweep failed',
     tick: async () => {
       if (stopped) return

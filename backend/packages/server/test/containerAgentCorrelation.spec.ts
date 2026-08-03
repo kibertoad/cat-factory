@@ -12,6 +12,7 @@ import {
   ContainerAgentExecutor,
   type ContainerAgentExecutorDependencies,
 } from '../src/agents/ContainerAgentExecutor.js'
+import { containerJobLog } from '../src/agents/containerAgentLogging.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The workflow↔container seam. The durable driver knows a run as `executionId`; the harness knew
@@ -185,5 +186,29 @@ describe('container seam correlation', () => {
     const cleanFailure = makeExecutor({ view: { state: 'failed', error: 'no file changes' } })
     await cleanFailure.executor.pollJob(handle)
     expect(cleanFailure.metrics.drain()).toEqual([])
+  })
+
+  it('dimensions an eviction by its CAUSE even when the line also carries a `kind`', () => {
+    // Driven through `containerJobLog` directly, because the point is what the SEAM does with
+    // its log fields. The dimension used to be picked out of them as `kind ?? evicted`, which
+    // was right only by accident: the settle site happened not to log a `kind`. Adding one —
+    // the runner backend is an obvious thing to log beside a dead container — would have
+    // silently re-pointed `container.evicted` at the backend and split the series with nothing
+    // failing anywhere.
+    const metrics = createOperationalMetricsCollector()
+    const jobLog = containerJobLog(createRecordingLogger(), { jobId: 'job_1' }, metrics)
+    jobLog.settled('failed', { evicted: 'transient', kind: 'container' })
+    expect(metrics.drain()).toEqual([
+      { counter: 'container.evicted', dimensions: { kind: 'transient' }, value: 1 },
+    ])
+  })
+
+  it('dimensions a dispatch failure by the DISPATCH kind, never by a stray `evicted`', () => {
+    const metrics = createOperationalMetricsCollector()
+    const jobLog = containerJobLog(createRecordingLogger(), { jobId: 'job_1' }, metrics)
+    jobLog.dispatchFailed(new Error('no runner'), { kind: 'container', model: 'm' })
+    expect(metrics.drain()).toEqual([
+      { counter: 'container.dispatch_failed', dimensions: { kind: 'container' }, value: 1 },
+    ])
   })
 })

@@ -1,4 +1,4 @@
-import type { OperationalGaugeSample, OperationalMetrics } from '@cat-factory/kernel'
+import type { OperationalGaugeSample } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { DEAD_LETTER_SUFFIX, isDeadLetterQueue } from './execution/deadLetter.js'
 
@@ -13,11 +13,21 @@ import { DEAD_LETTER_SUFFIX, isDeadLetterQueue } from './execution/deadLetter.js
 // per-tick aggregate rather than the banned per-queue point-read loop.
 
 /**
- * The depth reading per queue. `ready` is the true backlog — pg-boss's `queuedCount` includes
- * future-dated deferred jobs that are not yet runnable, and counting those as backlog would
- * make a healthy scheduled workload look like a wedged one.
+ * The `state` dimension of a `queue.depth` sample. `ready` is the true backlog — pg-boss's
+ * `queuedCount` includes future-dated deferred jobs that are not yet runnable, and counting
+ * those as backlog would make a healthy scheduled workload look like a wedged one.
+ * `dead_letter` is deliberately its own state rather than folded into the live counts: a job
+ * in a DLQ is not backlog waiting to drain, it is work that was GIVEN UP ON.
+ *
+ * Named as a type so the emit sites below cannot invent a fourth spelling — every distinct
+ * value is its own time series, and a typo would silently start a parallel one.
  */
-export type QueueDepthState = 'ready' | 'active' | 'failed'
+type QueueDepthState = 'ready' | 'active' | 'failed' | 'dead_letter'
+
+/** One `queue.depth` sample, with the `state` dimension pinned to {@link QueueDepthState}. */
+function depthSample(queue: string, state: QueueDepthState, value: number): OperationalGaugeSample {
+  return { gauge: 'queue.depth', dimensions: { queue, state }, value }
+}
 
 /**
  * Read every pg-boss queue's depth as gauge samples. The QUEUE NAME is a bounded dimension
@@ -34,30 +44,16 @@ export async function probePgBossQueueDepth(boss: PgBoss): Promise<OperationalGa
   const samples: OperationalGaugeSample[] = []
   for (const queue of queues) {
     if (isDeadLetterQueue(queue.name)) {
-      // A DLQ's whole contents are the signal — every job in it exhausted its retries.
-      samples.push({
-        gauge: 'queue.depth',
-        dimensions: { queue: queue.name, state: 'dead_letter' },
-        value: queue.totalCount,
-      })
+      // A DLQ's whole contents are the signal — every job in it exhausted its retries. This is
+      // also the ONLY series that reports dead-lettering: it is a level, and a level belongs on
+      // a gauge (see the note on `OperationalCounter` for why the counter it replaced lied).
+      samples.push(depthSample(queue.name, 'dead_letter', queue.totalCount))
       continue
     }
     samples.push(
-      {
-        gauge: 'queue.depth',
-        dimensions: { queue: queue.name, state: 'ready' },
-        value: queue.readyCount,
-      },
-      {
-        gauge: 'queue.depth',
-        dimensions: { queue: queue.name, state: 'active' },
-        value: queue.activeCount,
-      },
-      {
-        gauge: 'queue.depth',
-        dimensions: { queue: queue.name, state: 'failed' },
-        value: queue.failedCount,
-      },
+      depthSample(queue.name, 'ready', queue.readyCount),
+      depthSample(queue.name, 'active', queue.activeCount),
+      depthSample(queue.name, 'failed', queue.failedCount),
     )
   }
   return samples
@@ -73,16 +69,20 @@ export const DEAD_LETTER_SWEEP_INTERVAL_MS = 60 * 60 * 1000
  * in whichever log line happened to catch it.
  *
  * Deliberately a REPORT, not a re-drive: a job that failed every retry will fail again, and an
- * automatic replay would turn a bounded loss into an unbounded loop. What it produces is a
- * count an operator can alert on and a log line naming the queue, so the decision to replay
- * stays a human one.
+ * automatic replay would turn a bounded loss into an unbounded loop. What it produces is a log
+ * line naming the queue, so the decision to replay stays a human one.
+ *
+ * It deliberately emits NO metric of its own. The depth is already carried by
+ * `queue.depth{state=dead_letter}` above, and that is the honest shape: `totalCount` is a
+ * standing level, so feeding it to a delta counter here re-reported the same jobs on every
+ * hourly pass. This sweep exists for the LOG LINE — the metric says how many, the line says
+ * which source queue to go and look at.
  *
  * Returns the total across all DLQs (0 when there are none), so a caller can log only when
  * there is something to say.
  */
 export async function sweepDeadLetterQueues(
   boss: PgBoss,
-  metrics: OperationalMetrics,
   log: { warn(msg: string, fields?: Record<string, unknown>): void },
 ): Promise<number> {
   const queues = await boss.getQueues()
@@ -90,7 +90,6 @@ export async function sweepDeadLetterQueues(
   for (const queue of queues) {
     if (!isDeadLetterQueue(queue.name) || queue.totalCount === 0) continue
     total += queue.totalCount
-    metrics.increment('queue.job_dead_lettered', { queue: queue.name }, queue.totalCount)
     log.warn('jobs are sitting in a dead-letter queue', {
       scope: 'dead-letter',
       queue: queue.name,

@@ -28,10 +28,14 @@ condition divides by runs and goes silent at zero, so a deployment that stopped 
 read identically to a quiet healthy one. Alongside it, a dominant-failure-kind condition (100%
 `evicted` and 100% `agent` produce the same failure rate and need opposite fixes) and one that
 alerts on the sweepers themselves, since a wedged sweeper makes every other signal stale without
-making any of them fire.
+making any of them fire. A sweep pass reports its rate and its failure streak through ONE call
+(`SweepHealthTracker.recordFailure`), and the Worker drives its crons through a `SweepTick` that
+is the facade-symmetric twin of Node's `startSweeper` — so both runtimes cover the same set of
+sweepers, and the tick's counters are flushed after its passes have settled rather than before.
 
 Also: retention pruning is now isolated per table (one sick table used to abort the whole pass,
 indefinitely, and report zeroes indistinguishable from an empty table); `/ready` round-trips
 pg-boss's own connection instead of trusting a process-local boolean, and the Worker gained a
-bindings-probing `/ready`; and every pg-boss queue is created with a dead-letter sibling that an
-hourly sweep reports on.
+bindings-probing `/ready`; and every pg-boss queue is created with a dead-letter sibling whose
+depth rides the `queue.depth` gauge under `state: dead_letter`, with an hourly sweep logging the
+source queue to go and look at.

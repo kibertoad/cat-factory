@@ -85,12 +85,19 @@ export function resolvePlatformAlertConfig(env: PlatformAlertEnvInput): Platform
         env.minStalledPriorRuns,
         d.minStalledPriorRuns,
       ),
+      // Clamped into (0, 1]. The upper clamp keeps "100% of failures" reachable; the lower one
+      // matters for the same reason `stalledBuckets` is floored — a share of 0 is satisfied by
+      // ANY failure distribution, so it would fire `failure_kind_dominant` on every window that
+      // cleared `minRuns` and had a single failure, which is not a threshold anyone means to set.
       maxFailureKindShare: Math.min(
         1,
-        nonNeg(
-          'PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE',
-          env.maxFailureKindShare,
-          d.maxFailureKindShare,
+        Math.max(
+          Number.EPSILON,
+          nonNeg(
+            'PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE',
+            env.maxFailureKindShare,
+            d.maxFailureKindShare,
+          ),
         ),
       ),
       maxSweepFailures: Math.max(

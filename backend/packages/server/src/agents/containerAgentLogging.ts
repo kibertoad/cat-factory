@@ -56,15 +56,20 @@ export interface ContainerJobLog {
 /**
  * The counters this seam feeds, beside its log lines. A log line answers "why did THIS run
  * stop"; these answer "is dispatch failing more than it was", which no amount of grepping a
- * per-run line can. The eviction kind and the backend kind are bounded values, so they are
- * safe as dimensions — the ids that are not stay on the log line only.
+ * per-run line can.
+ *
+ * The caller names WHICH field carries the dimension rather than this picking one out of the
+ * log fields. Reading `fields.kind ?? fields.evicted` happened to be right only because the
+ * dispatch site passes no `evicted` and the settle site passes no `kind` — add `kind` to a
+ * settle site's fields (the backend kind is an obvious thing to log there) and `container.evicted`
+ * would silently re-dimension from the eviction cause to the runner backend, splitting the series
+ * with nothing failing. Both values are bounded enums; the ids that are not stay on the log line.
  */
 function countFailure(
   metrics: OperationalMetrics,
-  fields: LogFields | undefined,
   counter: 'container.dispatch_failed' | 'container.evicted',
+  kind: unknown,
 ): void {
-  const kind = fields?.kind ?? fields?.evicted
   metrics.increment(counter, typeof kind === 'string' ? { kind } : {})
 }
 
@@ -90,7 +95,8 @@ export function containerJobLog(
     dispatched: (fields) => logger.info('container job dispatched', fields),
     dispatchFailed: (error, fields) => {
       logger.warn('container job dispatch failed', { ...fields, ...describeError(error) })
-      countFailure(metrics, fields, 'container.dispatch_failed')
+      // The DISPATCH kind (the runner backend asked to serve the job) — a bounded enum.
+      countFailure(metrics, 'container.dispatch_failed', fields?.kind)
     },
     pollFailed: (error, fields) =>
       logger.warn('container job poll failed', { ...fields, ...describeError(error) }),
@@ -101,8 +107,9 @@ export function containerJobLog(
       // Only an EVICTED failure is counted here. A failed job that ran to completion (no usable
       // output, a red validation) is the platform working — it already shows up as a failed run
       // in the platform aggregates, and counting it as an operational fault would drown the
-      // signal this counter exists for: containers dying under the run.
-      if (fields?.evicted) countFailure(metrics, fields, 'container.evicted')
+      // signal this counter exists for: containers dying under the run. The dimension is the
+      // EVICTION cause, named explicitly so a later `kind` field on this line cannot displace it.
+      if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
     },
   }
 }

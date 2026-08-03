@@ -1,5 +1,5 @@
-import { describeError, type Logger, type OperationalMetrics } from '@cat-factory/kernel'
-import { sweepHealth } from '@cat-factory/server'
+import { describeError, type Logger } from '@cat-factory/kernel'
+import type { SweepHealthTracker } from '@cat-factory/server'
 import { AsyncTask, SimpleIntervalJob, ToadScheduler } from 'toad-scheduler'
 
 // The Node facade has no cron, so every periodic task the Worker runs on a schedule is an
@@ -25,13 +25,14 @@ export interface SweeperOptions {
   /** Logger for the best-effort failure line. */
   log: Logger
   /**
-   * Where a failed pass is COUNTED, dimensioned by {@link name}. REQUIRED rather than
-   * optional: a sweeper that has been throwing every tick for a week logs one line per tick
-   * and nothing that says the RATE changed, and an optional counter here would be forgotten
-   * by exactly the sweeper nobody is watching. A caller with nothing to export passes
-   * `noopOperationalMetrics`, which says so in code.
+   * Where each pass's OUTCOME is recorded, under {@link name} — the `sweep.failed` rate and
+   * the consecutive-failure streak `sweep_degraded` reads, which the tracker emits together.
+   * REQUIRED rather than optional: a sweeper that has been throwing every tick for a week logs
+   * one line per tick and nothing that says the rate changed, and an optional sink here would
+   * be forgotten by exactly the sweeper nobody is watching. A caller with nothing to export
+   * passes `createSweepHealthTracker()`, which says so in code.
    */
-  metrics: OperationalMetrics
+  health: SweepHealthTracker
   /** The message logged (with the error) when a pass throws. */
   failureMessage: string
   /** One sweep pass. Any success logging lives inside it; throws are caught + logged. */
@@ -47,7 +48,7 @@ export interface SweeperOptions {
  * shutdown so a long pass in flight can't outlive the rest of the teardown.
  */
 export function startSweeper(options: SweeperOptions): () => void {
-  const { name, intervalMs, log, metrics, failureMessage, tick } = options
+  const { name, intervalMs, log, health, failureMessage, tick } = options
   const scheduler = new ToadScheduler()
   // The success side is recorded too, and it is what makes the streak mean something: without
   // it `sweep_degraded` would fire on the third failure a sweeper ever had, however far apart.
@@ -55,12 +56,11 @@ export function startSweeper(options: SweeperOptions): () => void {
     name,
     async () => {
       await tick()
-      sweepHealth.recordSuccess(name)
+      health.recordSuccess(name)
     },
     (error) => {
       log.error(failureMessage, describeError(error))
-      metrics.increment('sweep.failed', { sweep: name })
-      sweepHealth.recordFailure(name)
+      health.recordFailure(name)
     },
   )
   const job = new SimpleIntervalJob({ milliseconds: intervalMs, runImmediately: true }, task, {

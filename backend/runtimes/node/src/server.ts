@@ -18,6 +18,7 @@ import {
   setLogLevel,
   registerCoreControllers,
   resolveCorsOrigin,
+  sweepHealth,
   sweepKeyDriftAndRaise,
   WebCryptoSecretCipher,
 } from '@cat-factory/server'
@@ -414,6 +415,7 @@ function startBackgroundSweepers(deps: {
   const stopSweeper = startStaleRunSweeper(boss, pool, container, runtime.sweeper, runtime.queue, {
     log: logger,
     metrics: operationalMetrics,
+    health: sweepHealth,
   })
   // Env-test self-tests live in their own table (not agent_runs), so the stale-run
   // sweeper above never sees them — this sibling re-enqueues a drive for any stale run;
@@ -426,6 +428,7 @@ function startBackgroundSweepers(deps: {
     { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
     logger,
     operationalMetrics,
+    sweepHealth,
   )
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
@@ -447,7 +450,7 @@ function startBackgroundSweepers(deps: {
     container.config.retention,
     clock,
     logger,
-    operationalMetrics,
+    sweepHealth,
   )
   // Per-workspace binary-artifact (screenshot) retention; only when content storage is wired
   // (the resolver is present once an encryption key is configured). The sweep resolves each
@@ -459,11 +462,11 @@ function startBackgroundSweepers(deps: {
         repos.workspaceSettingsRepository,
         clock,
         logger,
-        operationalMetrics,
+        sweepHealth,
       )
     : () => {}
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
-  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger, operationalMetrics)
+  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger, sweepHealth)
   // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
   // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
   // is the backstop cadence; no-op unless the initiatives module is wired. Resolve the interval
@@ -473,28 +476,23 @@ function startBackgroundSweepers(deps: {
     container,
     clock,
     logger,
-    operationalMetrics,
+    sweepHealth,
     resolveSweepInterval(env),
   )
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
   // environments integration is wired.
-  const stopEnvironmentSweeper = startEnvironmentSweeper(
-    container,
-    clock,
-    logger,
-    operationalMetrics,
-  )
+  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger, sweepHealth)
   // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
   // overdue-human signal now that runs never time out waiting for input.
   const stopNotificationEscalation = startNotificationEscalationSweeper(
     container,
     clock,
     logger,
-    operationalMetrics,
+    sweepHealth,
   )
   // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
   // unless the Kaizen feature is wired.
-  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger, operationalMetrics)
+  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger, sweepHealth)
   // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
   // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
   const stopGitHubReconcile = container.github
@@ -507,7 +505,7 @@ function startBackgroundSweepers(deps: {
         },
         clock,
         logger,
-        operationalMetrics,
+        sweepHealth,
       )
     : () => {}
   // Push deployment-level (platform-operator) observability aggregates to the OTLP endpoint
@@ -527,33 +525,20 @@ function startBackgroundSweepers(deps: {
         clock,
         logger,
         operationalMetrics,
+        sweepHealth,
       )
     : () => {}
   // Raise/clear `platform_health` notifications when the deployment's own run health crosses a
   // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
   // notifications + platform-observability reads are wired.
-  const stopPlatformHealth = startPlatformHealthSweeper(
-    container,
-    clock,
-    logger,
-    operationalMetrics,
-  )
+  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger, sweepHealth)
   // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
   // `unreachable` (the Worker uses cron). No-op unless `INFRA_REACHABILITY_WATCH` is opted in.
-  const stopInfraReachability = startInfraReachabilitySweeper(
-    container,
-    clock,
-    logger,
-    operationalMetrics,
-  )
+  const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger, sweepHealth)
   // Refresh repo-linked foundational-service sources so a merged contract change reaches the
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
-  const stopFoundationalSources = startFoundationalSourceSweeper(
-    container,
-    logger,
-    operationalMetrics,
-  )
+  const stopFoundationalSources = startFoundationalSourceSweeper(container, logger, sweepHealth)
   // Report what has landed in the dead-letter queues (slice 4.5). Reporting only, never a
   // replay: a job that failed every retry will fail again, so the decision to re-drive one
   // stays a human's. Before this, a job that exhausted `retryLimit` simply stopped existing.
@@ -561,10 +546,10 @@ function startBackgroundSweepers(deps: {
     name: 'dead-letter',
     intervalMs: DEAD_LETTER_SWEEP_INTERVAL_MS,
     log: logger,
-    metrics: operationalMetrics,
+    health: sweepHealth,
     failureMessage: 'dead-letter sweep failed',
     tick: async () => {
-      await sweepDeadLetterQueues(boss, operationalMetrics, logger)
+      await sweepDeadLetterQueues(boss, logger)
     },
   })
   return {

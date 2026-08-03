@@ -282,7 +282,7 @@ export const PLATFORM_ATTR = {
 /** Metric units: a dimensionless run count, a dimensionless ratio, and seconds. */
 export const RUN_UNIT = '{run}'
 export const RATIO_UNIT = '1'
-/** The unit shared by the operational queue signals (depth + dead-lettered jobs). */
+/** The unit of the operational queue-depth gauge (live, dead-lettered, or otherwise). */
 export const JOB_UNIT = '{job}'
 
 /** One gauge data point: its dimensions, value, and whether to encode as int or double. */
@@ -442,7 +442,6 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
   'cache.hit': 'cat_factory.platform.cache_hits',
   'cache.miss': 'cat_factory.platform.cache_misses',
-  'queue.job_dead_lettered': 'cat_factory.platform.queue_jobs_dead_lettered',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -466,7 +465,6 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'notification.delivery_failed': '{failure}',
   'cache.hit': '{read}',
   'cache.miss': '{read}',
-  'queue.job_dead_lettered': JOB_UNIT,
 }
 
 /**

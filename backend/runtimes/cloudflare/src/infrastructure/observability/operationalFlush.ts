@@ -16,11 +16,20 @@ import { type Logger, type OtelConfig, logger, operationalMetrics } from '@cat-f
 // So every entry point flushes what its own isolate accumulated, as a `waitUntil` after the
 // response. That is only correct because the counters export as DELTAS: N isolates each
 // reporting their own slice sum correctly in the backend, where N isolates each reporting a
-// cumulative total would not.
+// cumulative total would not. The CRON path flushes through `SweepTick.settled()` rather than
+// immediately — its passes run on `waitUntil` and record after the handler returns, so a flush
+// that did not wait for them drained an empty collector and orphaned their counters in an
+// isolate no later tick was guaranteed to reach.
 //
-// Cost: at most one extra OTLP POST per invocation, and ONLY for a deployment that has opted
-// into platform metrics (`OTEL_PLATFORM_METRICS` on top of a configured exporter — off by
-// default). An invocation that recorded nothing sends nothing, so the cheap paths stay free.
+// Cost, stated plainly rather than optimistically: this is one extra OTLP POST per invocation
+// that recorded ANYTHING, and since `cache.hit`/`cache.miss` fire on every app-cache read, that
+// is in practice most requests — not the rare invocation the "only when there is something to
+// say" guard might suggest. It is accepted rather than coalesced: the alternatives (a sample
+// threshold, a time window) buy request volume by dropping whatever an evicted isolate still
+// held, and under-reporting is the exact failure this initiative exists to remove. It costs
+// nothing unless a deployment opted into platform metrics (`OTEL_PLATFORM_METRICS` on top of a
+// configured exporter — off by default), and an invocation that recorded nothing still sends
+// nothing, so an idle isolate and the unconfigured default both stay free.
 //
 // Not covered, and stated rather than papered over: Cloudflare Queues expose no backlog depth
 // to the Worker consuming them, so this facade emits NO `queue.depth` gauge where Node emits

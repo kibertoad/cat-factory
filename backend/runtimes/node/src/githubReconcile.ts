@@ -1,8 +1,9 @@
-import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
+import type { Clock } from '@cat-factory/kernel'
 import {
   GITHUB_RECONCILE_STALE_MS,
   type GitHubReconcileDeps,
   type Logger,
+  type SweepHealthTracker,
   reconcileStaleRepos,
 } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
@@ -27,14 +28,14 @@ export function startGitHubReconcileSweeper(
   deps: GitHubReconcileDeps,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   return startSweeper({
     name: 'github-reconcile',
     intervalMs: GITHUB_RECONCILE_INTERVAL_MS,
     log,
-    metrics,
+    health,
     failureMessage: 'github reconcile sweep failed',
     tick: async () => {
       const synced = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, log)

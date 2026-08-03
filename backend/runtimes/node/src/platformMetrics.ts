@@ -11,7 +11,7 @@ import {
   sweepPlatformMetrics,
 } from '@cat-factory/orchestration'
 import { createPlatformMetricsOtelExporter } from '@cat-factory/observability-otel'
-import type { Logger, OtelConfig } from '@cat-factory/server'
+import type { Logger, OtelConfig, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Node analogue of the Worker's platform-metrics cron branch: a periodic sweep that pushes
@@ -45,11 +45,13 @@ export function startPlatformMetricsSweeper(
   clock: Clock,
   log: Logger,
   /**
-   * The process-wide collector — drained by this sweep, and counted into on a failed pass
-   * (see {@link startSweeper}). Node holds ONE for the life of the process, so draining on
-   * this interval loses nothing; the Worker cannot do the same and flushes per invocation.
+   * The process-wide collector, DRAINED by this sweep. Node holds ONE for the life of the
+   * process, so draining on this interval loses nothing; the Worker cannot do the same and
+   * flushes per invocation.
    */
   metrics: OperationalMetricsCollector,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const { otel, platformObservability, workspaceRepository, probeQueueDepth } = deps
   if (!otel.platformMetrics.enabled || !otel.endpoint) return () => {}
@@ -65,7 +67,7 @@ export function startPlatformMetricsSweeper(
     name: 'platform-metrics',
     intervalMs: otel.platformMetrics.intervalMs,
     log,
-    metrics,
+    health,
     failureMessage: 'platform metrics sweep failed',
     tick: async () => {
       const exported = await sweepPlatformMetrics({

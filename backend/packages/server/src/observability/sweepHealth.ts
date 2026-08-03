@@ -1,3 +1,6 @@
+import { type OperationalMetrics, noopOperationalMetrics } from '@cat-factory/kernel'
+import { operationalMetrics } from './operationalMetrics.js'
+
 // Consecutive-failure tracking for the background sweepers, feeding the `sweep_degraded`
 // platform-health condition (docs/initiatives/observability-logging-gaps.md, C5 / slice 4.2).
 //
@@ -24,9 +27,21 @@ export interface SweepFailureStreak {
   consecutive: number
 }
 
-/** Records each sweep pass's outcome and answers which sweeper is doing worst. */
+/**
+ * Records each sweep pass's outcome and answers which sweeper is doing worst.
+ *
+ * The two signals a failed pass produces — the `sweep.failed` COUNTER (a rate) and the STREAK
+ * (this) — are emitted by ONE call on purpose. They shipped as two calls at each site, and the
+ * two facades promptly drifted into tracking disjoint sets: on Node every `startSweeper` sweep
+ * recorded a streak but the two hand-rolled intervals recorded only the counter, while on the
+ * Worker exactly one sweep recorded a streak and nothing else recorded either. A site that can
+ * do half the job is a site that eventually does.
+ */
 export interface SweepHealthTracker {
-  /** A pass of `sweep` threw. Increments its streak. */
+  /**
+   * A pass of `sweep` threw: increment its streak AND count it under `sweep.failed`. There is
+   * deliberately no way to do one without the other.
+   */
   recordFailure(sweep: string): void
   /** A pass of `sweep` completed. Resets its streak to 0 — the sweeper is working again. */
   recordSuccess(sweep: string): void
@@ -38,11 +53,20 @@ export interface SweepHealthTracker {
   worst(): SweepFailureStreak | undefined
 }
 
-export function createSweepHealthTracker(): SweepHealthTracker {
+/**
+ * Build a tracker that reports every failed pass to `metrics` as well as accumulating its
+ * streak. A unit test with nothing to export passes `noopOperationalMetrics`.
+ */
+export function createSweepHealthTracker(
+  metrics: OperationalMetrics = noopOperationalMetrics,
+): SweepHealthTracker {
   const streaks = new Map<string, number>()
   return {
     recordFailure(sweep) {
       streaks.set(sweep, (streaks.get(sweep) ?? 0) + 1)
+      // Dimensioned by sweep name — a bounded set fixed at boot — so one sick sweeper is
+      // identifiable among the fourteen rather than lost in a deployment-wide total.
+      metrics.increment('sweep.failed', { sweep })
     },
     recordSuccess(sweep) {
       streaks.delete(sweep)
@@ -60,6 +84,7 @@ export function createSweepHealthTracker(): SweepHealthTracker {
 /**
  * The process-wide (Node) / per-isolate (Worker) tracker, exported like `logger` and
  * `operationalMetrics` for the same reason: every sweeper must record into the ONE instance
- * the health sweep reads.
+ * the health sweep reads. Bound to the sibling `operationalMetrics` collector here, so the
+ * counter and the streak can never be wired to different places.
  */
-export const sweepHealth: SweepHealthTracker = createSweepHealthTracker()
+export const sweepHealth: SweepHealthTracker = createSweepHealthTracker(operationalMetrics)

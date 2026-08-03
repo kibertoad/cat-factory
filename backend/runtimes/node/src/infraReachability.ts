@@ -1,5 +1,10 @@
-import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
-import { type Logger, type ServerContainer, sweepInfraReachability } from '@cat-factory/server'
+import type { Clock } from '@cat-factory/kernel'
+import {
+  type Logger,
+  type ServerContainer,
+  type SweepHealthTracker,
+  sweepInfraReachability,
+} from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic infrastructure-REACHABILITY watcher for the Node facade — the analogue of the Worker's
@@ -21,8 +26,8 @@ export function startInfraReachabilitySweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const cfg = container.config.infraReachability
   if (!cfg.enabled) return () => {}
@@ -30,7 +35,7 @@ export function startInfraReachabilitySweeper(
     name: 'infra-reachability',
     intervalMs: cfg.intervalMs,
     log,
-    metrics,
+    health,
     failureMessage: 'infra reachability sweep failed',
     tick: async () => {
       const { raised, cleared } = await sweepInfraReachability(container, log)

@@ -235,16 +235,31 @@ sibling of `logger`.
   and each flushes independently; only a delta sums correctly across the flushers. That is also
   why the Worker flushes at the end of every invocation rather than on its cron, which runs in an
   isolate that saw none of the request path's events.
-- **Dimensions must be BOUNDED** — a queue name, a cache name, an eviction kind. Every distinct
-  value is its own time series, so a run/workspace/job id is a cardinality explosion. The ids stay
-  on the log line, which is why every increment site also logs.
-- **An un-wired counter reads as a ZERO**, which is why `CoreDependencies.operationalMetrics` and
-  `SweeperOptions.metrics` are both required rather than optional. A caller with nothing to export
-  passes `noopOperationalMetrics`, which says so in code.
+- **Dimensions must be BOUNDED, and named at the CALL SITE** — a queue name, a cache name, an
+  eviction kind. Every distinct value is its own time series, so a run/workspace/job id is a
+  cardinality explosion. The ids stay on the log line, which is why every increment site also
+  logs. Never pick the dimension back out of the log fields (`fields.kind ?? fields.evicted`): it
+  reads as correct until someone logs one more field and the series silently re-points.
+- **A COUNTER counts EVENTS; a standing level is a GAUGE.** The test is whether the producer can
+  see what arrived since the last look. A periodic `SELECT` returning a total cannot — feeding
+  that to a delta counter re-reports the same rows every pass (an hourly sweep turned five
+  dead-lettered jobs into ~120/day), and diffing it in memory tells the same lie after a restart.
+- **An un-wired counter reads as a ZERO**, which is why `CoreDependencies.operationalMetrics` is
+  required rather than optional. A caller with nothing to export passes `noopOperationalMetrics`,
+  which says so in code.
 - **An empty flush sends nothing.** An unflushed zero and a genuine zero are different facts, and
   only the ABSENCE of a data point states the first one honestly. Same rule as "absent ≠ zero"
   above: where a runtime genuinely cannot read a gauge (Cloudflare Queues expose no backlog to
   their consumer), it emits no series rather than a 0.
+
+**A background sweep reports its pass through ONE call**, on both facades: Node's `startSweeper`
+takes `SweeperOptions.health`, the Worker's crons go through `SweepTick.run`, and both land on
+`SweepHealthTracker.recordFailure`, which emits the `sweep.failed` RATE and the `sweep_degraded`
+STREAK together. They were two calls at each site once and the facades promptly drifted into
+tracking disjoint sets of sweepers. A new sweep on either runtime goes through its facade's
+helper — never a bare `metrics.increment('sweep.failed', …)`, which is half a report. On the
+Worker, `SweepTick` also orders the tick's metrics flush AFTER its passes settle, because the
+collector is per isolate and a cron's counters are otherwise exported by nobody.
 
 ## A controller REFUSES by throwing a `DomainError`, never by building an envelope
 

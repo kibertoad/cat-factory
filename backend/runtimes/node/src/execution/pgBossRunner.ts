@@ -1,7 +1,7 @@
 import type { OperationalMetrics, WorkRunner } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import { runBestEffort } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import type { Job, JobInsert, PgBoss, SendOptions } from 'pg-boss'
 import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
 import { ENV_CONFIG_REPAIR_QUEUE, reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
@@ -287,12 +287,14 @@ export function startStaleRunSweeper(
   container: ServerContainer,
   cfg: SweeperConfig,
   queueOptions: AdvanceQueueOptions,
-  // The logger and the counter travel together: every disposition below is BOTH a line naming
-  // the run and a count under its kind, and a signature that could carry one without the other
-  // is how a new disposition ends up logged and uncounted.
-  observability: { log: Logger; metrics: OperationalMetrics },
+  // The logger, the counter and the sweep-health tracker travel together: every disposition
+  // below is BOTH a line naming the run and a count under its kind, and a signature that could
+  // carry one without the other is how a new disposition ends up logged and uncounted. `health`
+  // is here for the same reason one rung up — this is a hand-rolled interval, so it reports its
+  // own pass, and reporting only the counter left it out of the `sweep_degraded` streak.
+  observability: { log: Logger; metrics: OperationalMetrics; health: SweepHealthTracker },
 ): () => void {
-  const { log, metrics } = observability
+  const { log, metrics, health } = observability
   // A live drive heartbeats its active job every `heartbeatSeconds`; treat a heartbeat older
   // than a generous multiple of that (but at least the lease) as a dead worker.
   const staleHeartbeatMs = Math.max(cfg.leaseMs, queueOptions.heartbeatSeconds * 1000 * 3)
@@ -464,14 +466,15 @@ export function startStaleRunSweeper(
       // One batch insert for every execution.advance re-drive gathered this tick (stale
       // re-drives + spend-paused resumes), replacing N per-run `send` round-trips.
       if (advanceReenqueues.length > 0) await boss.insert(QUEUE, advanceReenqueues)
+      health.recordSuccess('stale-run')
     } catch (error) {
       log.error('stale-run sweep failed', {
         err: error instanceof Error ? error.message : String(error),
       })
       // This sweeper predates `startSweeper` (it is a hand-rolled interval, because a boot
-      // reconcile has to run before the first tick), so it counts its own failed pass under
-      // the same counter and the same `sweep` dimension the shared helper uses.
-      metrics.increment('sweep.failed', { sweep: 'stale-run' })
+      // reconcile has to run before the first tick), so it reports its own pass under the same
+      // `sweep` dimension the shared helper uses.
+      health.recordFailure('stale-run')
     }
   }
   // Boot reconcile: recover runs a crashed previous process orphaned right away, not after

@@ -1,5 +1,5 @@
-import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Clock } from '@cat-factory/kernel'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic recurring-pipeline sweep for the Node facade — the analogue of the
@@ -20,8 +20,8 @@ export function startScheduleSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const recurring = container.recurring
   if (!recurring) return () => {}
@@ -29,7 +29,7 @@ export function startScheduleSweeper(
     name: 'recurring-pipelines',
     intervalMs: SCHEDULE_SWEEP_INTERVAL_MS,
     log,
-    metrics,
+    health,
     failureMessage: 'recurring-pipeline sweep failed',
     tick: async () => {
       const { fired, skipped } = await recurring.service.runDue(clock.now())

@@ -1,8 +1,4 @@
-import {
-  createOperationalMetricsCollector,
-  noopLogger,
-  noopOperationalMetrics,
-} from '@cat-factory/kernel'
+import { createOperationalMetricsCollector, noopLogger } from '@cat-factory/kernel'
 import { createSweepHealthTracker } from '@cat-factory/server'
 import { describe, expect, it, vi } from 'vitest'
 import { startSweeper } from '../src/sweeper.js'
@@ -22,7 +18,7 @@ describe('startSweeper', () => {
       name: 'test-sweep',
       intervalMs: 10_000, // long enough that only the immediate run can fire
       log: noopLog,
-      metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
       failureMessage: 'x',
       tick: async () => {
         calls += 1
@@ -38,7 +34,7 @@ describe('startSweeper', () => {
       name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
-      metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
       failureMessage: 'x',
       tick: async () => {
         calls += 1
@@ -60,7 +56,7 @@ describe('startSweeper', () => {
       name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
-      metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
       failureMessage: 'x',
       tick: async () => {
         runs += 1
@@ -79,16 +75,17 @@ describe('startSweeper', () => {
     stop()
   })
 
-  it('logs a failing pass (best-effort), counts it, and keeps sweeping', async () => {
+  it('logs a failing pass (best-effort), counts it, streaks it, and keeps sweeping', async () => {
     const error = vi.fn()
     const log = { ...noopLogger, error }
     const metrics = createOperationalMetricsCollector()
+    const health = createSweepHealthTracker(metrics)
     let runs = 0
     const stop = startSweeper({
       name: 'test-sweep',
       intervalMs: 20,
       log,
-      metrics,
+      health,
       failureMessage: 'kaizen sweep failed',
       tick: async () => {
         runs += 1
@@ -110,6 +107,10 @@ describe('startSweeper', () => {
     expect(failures).toHaveLength(1)
     expect(failures[0]!.dimensions).toEqual({ sweep: 'test-sweep' })
     expect(failures[0]!.value).toBeGreaterThanOrEqual(2)
+    // BOTH signals from the one `recordFailure`. They were two calls at each site once, and the
+    // facades promptly drifted into emitting different halves — this pins that a sweep site
+    // cannot report the rate without also arming the streak.
+    expect(health.worst()).toEqual({ sweep: 'test-sweep', consecutive: failures[0]!.value })
   })
 
   it("resets a sweeper's failure streak once a pass succeeds again", async () => {
@@ -129,7 +130,7 @@ describe('startSweeper', () => {
       name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
-      metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
       failureMessage: 'x',
       tick: async () => {
         runs += 1

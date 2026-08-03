@@ -5,11 +5,9 @@ import {
   type EmailSender,
   type ExecutionEventPublisher,
   type GitHubClient,
-  type GroupCacheHandle,
   type IdGenerator,
   type NotificationChannel,
   NoopWorkRunner,
-  type ResolvedAccountSettings,
   type TaskSourceProvider,
   type VcsIdentityRegistry,
   type WorkRunner,
@@ -42,8 +40,6 @@ import {
   defaultObservabilityRegistry,
   WorkspaceIncidentEnrichmentProvider,
   INCIDENT_ENRICHMENT_CIPHER_INFO,
-  AccountSettingsService,
-  ACCOUNT_SETTINGS_CIPHER_INFO,
   createEmailSender,
 } from '@cat-factory/integrations'
 // Opt-in AWS EKS backends (runner + environment), registered by reference on BOTH facades so
@@ -129,7 +125,6 @@ import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentC
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
-import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
@@ -155,7 +150,6 @@ import { D1ObservabilityConnectionRepository } from './repositories/D1Observabil
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
-import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1AgentPromptRepository } from './repositories/D1AgentPromptRepository'
 import { D1WorkspaceAgentSettingsRepository } from './repositories/D1WorkspaceAgentSettingsRepository'
@@ -499,32 +493,11 @@ export function selectIncidentEnrichmentDeps(
   }
 }
 
-/**
- * Build the per-account deployment-settings service (Slack OAuth + web-search keys,
- * sealed) when the shared encryption key is present. A single instance is shared so its
- * short-TTL cache spans requests; the facade also derives the Slack OAuth resolver +
- * web-search proxy resolution from it.
- */
-export function buildAccountSettings(
-  env: Env,
-  db: D1Database,
-  clock: Clock,
-  contentStorageCapability?: ContentStorageCapability,
-  settingsCache?: GroupCacheHandle<ResolvedAccountSettings>,
-): AccountSettingsService | undefined {
-  const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  if (!encryptionKey) return undefined
-  return new AccountSettingsService({
-    accountSettingsRepository: new D1AccountSettingsRepository({ db }),
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: encryptionKey,
-      info: ACCOUNT_SETTINGS_CIPHER_INFO,
-    }),
-    clock,
-    ...(contentStorageCapability ? { contentStorageCapability } : {}),
-    ...(settingsCache ? { settingsCache } : {}),
-  })
-}
+// The per-account deployment-settings builder lives in its own LEAF module: this file imports
+// both `container-shared-services` and `container-artifact-storage`, and both needed it — an
+// import cycle that only a hoisted function declaration was papering over. Re-exported here so
+// every existing import site is unchanged.
+export { buildAccountSettings } from './container-account-settings'
 
 /**
  * The Worker's content-storage capability + blob-backend factory: on Cloudflare the bytes

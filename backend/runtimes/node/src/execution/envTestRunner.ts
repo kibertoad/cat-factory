@@ -3,7 +3,7 @@ import type {
   EnvironmentTestRunRepository,
   OperationalMetrics,
 } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
@@ -103,6 +103,13 @@ export function startEnvTestSweeper(
   cfg: { leaseMs: number; intervalMs: number },
   log: Logger,
   metrics: OperationalMetrics,
+  /**
+   * Records this sweep's outcome. A hand-rolled interval (it predates `startSweeper`), so it
+   * has to report the pass ITSELF — and reporting only the counter, as it first did, left this
+   * sweeper counted but absent from the `sweep_degraded` streak that `startSweeper`'s sweeps
+   * were in.
+   */
+  health: SweepHealthTracker,
 ): () => void {
   const tick = async () => {
     try {
@@ -119,13 +126,12 @@ export function startEnvTestSweeper(
         // recovery shows up in the same series as one whose executions do.
         metrics.increment('sweep.run_redriven', { kind: 'env-test' })
       }
+      health.recordSuccess('env-test')
     } catch (error) {
       log.error('env-test sweep failed', {
         err: error instanceof Error ? error.message : String(error),
       })
-      // A hand-rolled interval like the stale-run sweeper's, so it counts its own failed pass
-      // under the same counter and dimension `startSweeper` uses for the shared ones.
-      metrics.increment('sweep.failed', { sweep: 'env-test' })
+      health.recordFailure('env-test')
     }
   }
   const timer = setInterval(() => void tick(), cfg.intervalMs)

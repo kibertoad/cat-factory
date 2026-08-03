@@ -14,11 +14,10 @@ import type {
   TokenUsageRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
-  OperationalMetrics,
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { createRetentionPass, sweepBinaryArtifactRetention } from '@cat-factory/orchestration'
-import type { Logger, RetentionConfig } from '@cat-factory/server'
+import type { Logger, RetentionConfig, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
@@ -181,14 +180,14 @@ export function startRetentionSweeper(
   retention: RetentionConfig,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   return startSweeper({
     name: 'retention',
     intervalMs: RETENTION_SWEEP_INTERVAL_MS,
     log,
-    metrics,
+    health,
     failureMessage: 'retention sweep failed',
     tick: async () => {
       const { failedTables, ...reclaimed } = await sweepRetention(
@@ -223,14 +222,14 @@ export function startArtifactRetentionSweeper(
   settingsRepository: Pick<WorkspaceSettingsRepository, 'get'>,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   return startSweeper({
     name: 'artifact-retention',
     intervalMs: RETENTION_SWEEP_INTERVAL_MS,
     log,
-    metrics,
+    health,
     failureMessage: 'artifact retention sweep failed',
     tick: async () => {
       const removed = await sweepBinaryArtifactRetention({

@@ -742,10 +742,28 @@ where they became countable.
   discarded without warning and a cron tick runs in a different isolate that saw none of it.
   Draining only on cron there would have zeroed everything the request and queue paths did.
 - **Wired at every increment site named in C3/D4**: both stale-run sweepers (re-driven /
-  finalized / stalled, dimensioned by run kind), every `startSweeper` pass (`sweep.failed`,
-  dimensioned by sweep — REQUIRED on `SweeperOptions`, so a new sweeper cannot skip it), the
-  container seam's dispatch failures and evictions, `CompositeTraceSink`'s dropped exports, the
-  notification webhook's spent deliveries, and every app-cache read's hit/miss.
+  finalized / stalled, dimensioned by run kind), EVERY sweep pass on both facades (`sweep.failed`,
+  dimensioned by sweep), the container seam's dispatch failures and evictions,
+  `CompositeTraceSink`'s dropped exports, the notification webhook's spent deliveries, and every
+  app-cache read's hit/miss.
+- **A sweep's rate and its STREAK are one call, and that is what keeps the facades together.**
+  They shipped as two calls at each site and the runtimes immediately diverged: Node recorded a
+  streak for every `startSweeper` sweep but only a counter for its two hand-rolled intervals,
+  while the Worker recorded a streak for exactly one sweep and neither signal for the other
+  fourteen — so `sweep_degraded` described a DISJOINT set of sweepers on each facade and a wedged
+  retention cron on Cloudflare raised nothing. `SweepHealthTracker.recordFailure` now emits both,
+  `SweeperOptions.health` replaces the raw metrics sink (a sweep site has no business holding
+  one), and the Worker's `SweepTick` is the facade-symmetric twin of `startSweeper`: named pass,
+  fixed failure message, outcome reported, no way to do half of it.
+- **`SweepTick` also owns the cron tick's FLUSH ORDERING.** The Worker's collector is per isolate,
+  so a counter a cron pass records can only be exported by a flush that runs after it; draining
+  while the passes were still in flight left every cron-recorded counter waiting for a next tick
+  in the same isolate — for the daily retention cron, a tick that never comes.
+- **Dead-lettered jobs are a GAUGE, not a counter.** `queue.depth{state=dead_letter}` carries them.
+  The counter this replaced was fed pg-boss's standing `totalCount` on an hourly sweep, so five
+  dead-lettered jobs re-reported as ~120/day; deriving a delta from a level in memory would tell
+  the same lie after every restart. The hourly sweep remains, for the log line naming the SOURCE
+  queue — the metric says how many, the line says where to look.
 - **`agent_runs.redrive_count`** (D1 0076 ⇄ Drizzle, with a conformance assertion). The sweeper's
   `orphanedSince` map holds a timestamp and dies with the process/isolate, and the Worker's sweep
   logs only aggregates with no run ids — so "was this run re-driven three times?" had no answer

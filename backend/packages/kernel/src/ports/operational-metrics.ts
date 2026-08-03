@@ -44,8 +44,14 @@ export type OperationalCounter =
   | 'cache.hit'
   /** An app-cache read that had to run its loader. Dimensioned by cache name. */
   | 'cache.miss'
-  /** A durable job exhausted its retries and landed in a dead-letter queue. */
-  | 'queue.job_dead_lettered'
+
+// Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
+// the only thing that can read it is a periodic `SELECT` over the queue tables — which returns
+// the standing total, not what arrived since the last look. Incrementing a delta counter by
+// that total re-reports the same jobs on every sweep (an hourly sweep turns five dead-lettered
+// jobs into ~120/day), and deriving a delta from it in memory reproduces the same lie after
+// every restart, since the previous total is gone. It rides `queue.depth` under
+// `state: 'dead_letter'` instead, where a level is exactly what a gauge means.
 
 /** The closed set of operational gauges — point-in-time readings, never accumulated. */
 export type OperationalGauge =

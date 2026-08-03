@@ -60,7 +60,7 @@ describe('createOperationalMetricsCollector', () => {
 
   it('counts into the void through the noop, without throwing', () => {
     expect(() =>
-      noopOperationalMetrics.increment('queue.job_dead_lettered', { queue: 'q' }),
+      noopOperationalMetrics.increment('telemetry.export_dropped', { operation: 'x' }),
     ).not.toThrow()
   })
 })

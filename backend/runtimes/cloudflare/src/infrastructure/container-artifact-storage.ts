@@ -5,7 +5,7 @@ import { type BuildBlobBackend, makeResolveBinaryArtifactStore } from '@cat-fact
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
-import { buildAccountSettings } from './container'
+import { buildAccountSettings } from './container-account-settings'
 import type { Env } from './env'
 
 // The Worker's binary-artifact (UI screenshot / reference-design) storage wiring, split out of

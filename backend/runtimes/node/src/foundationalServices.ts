@@ -1,9 +1,9 @@
-import type { OperationalMetrics } from '@cat-factory/kernel'
 import {
   FOUNDATIONAL_SOURCE_STALE_MS,
   sweepFoundationalSources,
   type Logger,
   type ServerContainer,
+  type SweepHealthTracker,
 } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
@@ -28,15 +28,15 @@ const FOUNDATIONAL_SWEEP_INTERVAL_MS = FOUNDATIONAL_SOURCE_STALE_MS
 export function startFoundationalSourceSweeper(
   container: ServerContainer,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   if (!container.foundationalServices?.sourceService) return () => {}
   return startSweeper({
     name: 'foundational-sources',
     intervalMs: FOUNDATIONAL_SWEEP_INTERVAL_MS,
     log,
-    metrics,
+    health,
     failureMessage: 'foundational-source sweep failed',
     tick: async () => {
       await sweepFoundationalSources(container.foundationalServices, log)

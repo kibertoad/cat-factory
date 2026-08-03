@@ -1,4 +1,5 @@
 import { noopOperationalMetrics } from '@cat-factory/kernel'
+import { createSweepHealthTracker } from '@cat-factory/server'
 import type { AgentRunRef, StaleAgentRun } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { JobInsert, PgBoss } from 'pg-boss'
@@ -79,6 +80,7 @@ async function runOneTick(
   const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, {
     log: noopLog,
     metrics: noopOperationalMetrics,
+    health: createSweepHealthTracker(),
   })
   await vi.waitFor(() => expect(seen()).toBe(true))
   stop()
@@ -160,6 +162,7 @@ describe('stale-run sweeper batches execution.advance re-drives', () => {
     const stop = startStaleRunSweeper(boss, jobs, container, cfg, queueOptions, {
       log: noopLog,
       metrics: noopOperationalMetrics,
+      health: createSweepHealthTracker(),
     })
     await new Promise((resolve) => setTimeout(resolve, 30))
     stop()

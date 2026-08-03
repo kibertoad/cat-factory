@@ -1,5 +1,5 @@
-import type { Clock, OperationalMetrics } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { Clock } from '@cat-factory/kernel'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic initiative-execution-loop sweep for the Node facade — the analogue of the Worker's
@@ -40,8 +40,8 @@ export function startInitiativeLoopSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
-  /** Counts a failed pass under this sweep's name (see {@link startSweeper}). */
-  metrics: OperationalMetrics,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
   intervalMs: number = resolveSweepInterval(),
 ): () => void {
   const initiatives = container.initiatives
@@ -50,7 +50,7 @@ export function startInitiativeLoopSweeper(
     name: 'initiative-loop',
     intervalMs,
     log,
-    metrics,
+    health,
     failureMessage: 'initiative-loop sweep failed',
     tick: async () => {
       const { spawned, completed } = await initiatives.loop.runDue(clock.now())

@@ -182,6 +182,11 @@ export function evaluatePlatformHealth(
  * wedged one passes both, because the work it was doing is exactly what stopped. A window with
  * too few buckets to hold both halves cannot answer the question and returns null rather than
  * guessing — the honest answer for "not enough history".
+ *
+ * The number returned is the MEASURED run of empty buckets, not the threshold that qualified
+ * it. Every other condition reports what it observed next to what it allows, and returning the
+ * threshold here made a stall that had lasted all night indistinguishable on the card from one
+ * that had just crossed the line — the platform is supposed to COMPUTE the magnitude.
  */
 function trailingStall(
   snapshot: PlatformObservability,
@@ -200,7 +205,12 @@ function trailingStall(
   if (tailPoints.some((point) => runsIn(point) > 0)) return null
   const prior = points.slice(0, -tail).reduce((sum, point) => sum + runsIn(point), 0)
   if (prior < thresholds.minStalledPriorRuns) return null
-  return tail
+  // Qualified. Now measure how far back the silence ACTUALLY reaches, so the alert reports the
+  // observed magnitude rather than the bar it cleared. Walk on past the tail while buckets stay
+  // empty; `prior > 0` guarantees this terminates before consuming the whole series.
+  let empty = tail
+  while (empty < points.length && runsIn(points[points.length - 1 - empty]!) === 0) empty++
+  return empty
 }
 
 /**

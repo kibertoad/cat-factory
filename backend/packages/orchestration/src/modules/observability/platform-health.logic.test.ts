@@ -170,6 +170,15 @@ describe('evaluatePlatformHealth: throughput_stalled', () => {
     const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(0, 3) }), T)
     expect(platformAlertReasons(alerts)).not.toContain('throughput_stalled')
   })
+
+  it('reports how far the silence ACTUALLY reaches, not the threshold it cleared', () => {
+    // The platform COMPUTES the magnitude. Reporting `stalledBuckets` back made a stall that
+    // had lasted all night read identically on the card to one that had just crossed the bar.
+    const alerts = evaluatePlatformHealth(snapshot({ trendPoints: trend(2, 7) }), T)
+    const stalled = alerts.find((a) => a.reason === 'throughput_stalled')
+    expect(stalled).toEqual({ reason: 'throughput_stalled', value: 7, threshold: T.stalledBuckets })
+    expect(stalled!.value).toBeGreaterThan(stalled!.threshold)
+  })
 })
 
 describe('evaluatePlatformHealth: failure_kind_dominant', () => {
