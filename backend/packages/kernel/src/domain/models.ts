@@ -517,6 +517,13 @@ export const MODEL_CATALOG: SelectableModel[] = [
       'Still the newest Pro: 3.5 Pro has slipped repeatedly and the 3.x Pro line stops here.',
     openrouter: {
       ref: {
+        // The `-preview` suffix is NOT staleness: 3.1 Pro is GA and Google kept the suffix
+        // in the API id, so this IS the generally-available flagship. Do not "fix" it to
+        // `google/gemini-3.1-pro` — that slug does not exist, and pinning it would recreate
+        // the dead-id failure this catalog was just swept for. (2.5 Pro is the misleading
+        // precedent: it has both a GA and a `-preview` slug, 3.1 Pro only the latter.)
+        // `google/gemini-pro-latest` is likewise deliberately unused — a floating alias
+        // would swap the model under a pinned block with no version change to review.
         provider: 'openrouter',
         model: 'google/gemini-3.1-pro-preview',
         contextTokens: 1_048_576,
