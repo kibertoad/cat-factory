@@ -244,7 +244,10 @@ export interface Env {
   // The Worker does not bundle `@cat-factory/provider-bedrock` (a deployment mixes it in via
   // the `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`), but the
   // per-model ENABLEMENT is read here so a deployment that did register it also gets the
-  // `bedrock` picker flavour — the same capability the Node facade derives from these two vars.
+  // `bedrock` picker flavour the Node facade derives from these two vars. The vars alone do
+  // NOT grant it: `bedrockModelsCapability` also requires a registered registry serving
+  // `bedrock`, and warns when the vars are set without one, so the picker can never offer a
+  // route the deployment's own composite cannot dispatch.
   /** AWS Region, e.g. `eu-central-1`. Unset ⇒ no `bedrock` flavour is offered. */
   BEDROCK_REGION?: string
   /**

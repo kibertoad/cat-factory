@@ -26,8 +26,9 @@ export interface CapabilityServices {
   cloudflareModelsEnabled?: boolean
   /**
    * The deployment's Bedrock allow-list (`BEDROCK_MODELS`), VERBATIM and in declared order,
-   * and ONLY when the `bedrock` resolver is actually registered — a list with no
-   * `BEDROCK_REGION` behind it would offer routes that throw at dispatch. This is a
+   * and ONLY when the `bedrock` resolver is actually registered: a list with no
+   * `BEDROCK_REGION` behind it (or, on the Worker, no registered registry serving the
+   * provider) would offer routes that throw at dispatch. This is a
    * deployment-level capability, not a per-workspace one: Bedrock is reached with the
    * deployment's own AWS credentials, so there is no key to lease per scope.
    */

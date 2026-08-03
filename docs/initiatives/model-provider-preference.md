@@ -19,7 +19,7 @@ behind it, so the order was inverted. What the reorder actually touches:
   `hasPersonalSubscription`. A workspace holding no token would dispatch a subscription run.
 - **~10 inline call sites degrade to the wrong thing.** Each is
   `inlineModelRef(ref, fallback ?? ref, { runsInline })`, and `inlineModelRef` sees only a
-  ref, not a model id — so a dual-mode pin would degrade to the ROUTING DEFAULT instead of
+  ref, not a model id, so a dual-mode pin would degrade to the ROUTING DEFAULT instead of
   the model's own non-subscription base. A GLM-pinned reviewer would silently run Qwen.
 
 So the reorder needs the per-workspace and inline-eligibility facts to reach resolution
@@ -75,7 +75,7 @@ is flat-rate quota already paid for, so spending tokens beside it is waste), and
 **first-party route wins over an aggregator** (`direct`/`bedrock` before `openrouter`, which
 resells them). Cloudflare stays last as the always-available floor.
 
-> **This is a behaviour change and the riskiest part of the work — it is slice 3, NOT the
+> **This is a behaviour change and the riskiest part of the work: it is slice 3, NOT the
 > first step.** Slice 1 shipped `direct > bedrock > openrouter > cloudflare > subscription`
 > (the historical order with `bedrock` inserted), because the "subscriptions win" rule is
 > applied _on top_, separately, by `ModelRouter.resolveEffectiveRef` and each inline call
@@ -149,7 +149,9 @@ string once and never rebuilt from an unordered source.
 - [x] Capability wiring, both runtimes: `BEDROCK_MODELS` → `caps.bedrockModels`, through the
       ONE `bedrockAllowListFromEnv` parser that also constrains the resolver's own allow-list,
       so the picker cannot offer an id the resolver throws on. Derived from `env` at each
-      container literal (like `baseUrlFor`) rather than threaded through the model deps.
+      container literal (like `baseUrlFor`) rather than threaded through the model deps; the
+      Worker reads it through `bedrockModelsCapability`, which also requires a registered
+      registry serving `bedrock` (see the gotcha below).
 - [x] Docs: `model-support.md` §2 (flavour table + the two walks), §4 (why the subscription
       layer stays separate), §8 (replaces the "contributes nothing to the picker" paragraph);
       `environment-variables.md`.
@@ -167,6 +169,12 @@ Gotchas this slice surfaced, for whoever takes the next two:
   resolver runs unconstrained but the platform has nothing to enumerate, and Bedrock grants are
   per account and Region, so offering the catalog's Bedrock entries would surface models AWS
   rejects at call time.
+- **On the Worker, the env vars alone must not grant the capability.** Node's `BEDROCK_REGION`
+  both registers the resolver and enables the flavour, so env implies dispatchability; the
+  Worker's provider arrives through `registerModelRegistry`, so `bedrockModelsCapability`
+  additionally checks that a registered registry serves `bedrock` and warns when the vars are
+  set without one. Review finding on this slice; any future env-enabled flavour whose provider
+  is a code mix-in owes the same gate.
 - **No prompt-caching claim.** `providerCachePolicy('bedrock')` stays `none`, so the picker
   reports `cachesPrompts: false`. Bedrock does support Anthropic-style cache breakpoints, but
   the hint is model-specific and we do not send it; claiming caching we don't implement would
@@ -177,7 +185,7 @@ Gotchas this slice surfaced, for whoever takes the next two:
   frontier tier this catalog can select there), because `defaultPrice` would have metered an
   Opus-on-Bedrock run at roughly a thirtieth of its cost and a budget safeguard must not
   undercount. **Follow-up worth taking:** teach `priceFor` the same prefix-tolerant match
-  `contextWindowFor` now uses, then price the Bedrock models individually — which also stops a
+  `contextWindowFor` now uses, then price the Bedrock models individually, which also stops a
   cheap model (`openai.gpt-oss-120b`) being metered at the frontier rate.
 
 ### Slice 2: per-preset provider preference

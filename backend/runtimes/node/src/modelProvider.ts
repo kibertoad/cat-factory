@@ -13,6 +13,7 @@ import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
 import {
   type InlineInstrumentation,
   bedrockAllowListFromEnv,
+  bedrockRegionFromEnv,
   createScopedModelProviderResolver,
 } from '@cat-factory/server'
 
@@ -113,14 +114,16 @@ export function createNodeModelProviderResolver(
     )
   }
 
-  // Opt-in Bedrock: registered only when a region is configured. The allow-list comes from the
-  // SAME parser the model catalog's `bedrock` capability reads, so a model the picker offers is
-  // never one this resolver throws on (and vice versa).
-  if (env.BEDROCK_REGION) {
+  // Opt-in Bedrock: registered only when a region is configured, through the SAME two readers
+  // the model catalog's `bedrock` capability uses, so a model the picker offers is never one
+  // this resolver throws on (and a whitespace-only region registers nothing rather than a
+  // resolver the capability side treats as absent).
+  const bedrockRegion = bedrockRegionFromEnv(env)
+  if (bedrockRegion) {
     const supportedModels = bedrockAllowListFromEnv(env)
     extraRegistries.push(
       bedrockRegistry({
-        region: env.BEDROCK_REGION,
+        region: bedrockRegion,
         accessKeyId: env.AWS_ACCESS_KEY_ID,
         secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
         sessionToken: env.AWS_SESSION_TOKEN,

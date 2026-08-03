@@ -160,7 +160,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
   // model it routes to, which we can't know here. Default to the generic fallback rate.
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
-  // AWS Bedrock — deliberately a BARE provider entry with no per-model keys, because a
+  // AWS Bedrock: deliberately a BARE provider entry with no per-model keys, because a
   // Bedrock ref carries the operator's geo/global inference prefix (`eu.anthropic.…`), which
   // differs per Region, and `priceFor` matches `provider:model` EXACTLY: a per-model key
   // would silently never match and fall through anyway. The rate errs HIGH, at the frontier

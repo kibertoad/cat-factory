@@ -38,7 +38,7 @@ export const MODEL_FLAVORS = [
  * by `ModelRouter.resolveEffectiveRef` (which alone knows whether THIS workspace/user
  * holds a token) and by each inline call site's `inlineModelRef` degradation (which alone
  * knows whether the caller can drive a harness at all). Moving it here means re-plumbing
- * both, so the flip is its own slice — see
+ * both, so the flip is its own slice; see
  * `docs/initiatives/model-provider-preference.md`. Until then this tuple keeps the
  * historical order so a Bedrock route changes nothing else about how a model resolves.
  */
@@ -174,7 +174,7 @@ export interface SelectableModel {
    * Optional AWS Bedrock variant, used when the deployment's `BEDROCK_MODELS` allow-list
    * carries this model (see {@link BedrockVariant}). Bedrock LAGS the vendors' own APIs, so
    * a bedrock flavour is only ever declared on an entry whose model Bedrock actually
-   * serves — never assumed equal to the direct/subscription flavour's model, which is
+   * serves, never assumed equal to the direct/subscription flavour's model, which is
    * routinely a generation ahead.
    */
   bedrock?: BedrockVariant
@@ -487,7 +487,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
     label: 'Claude Opus 4.8 (Bedrock)',
     description:
       "Anthropic's previous-generation flagship, on AWS Bedrock in your own account and " +
-      'Region — the residency-guaranteed route for Claude work. Bedrock lags Anthropic: ' +
+      'Region: the residency-guaranteed route for Claude work. Bedrock lags Anthropic; ' +
       'Opus 5 is subscription/OpenRouter only.',
     // Bedrock-ONLY on purpose. This is a different MODEL from `claude-opus`, not another
     // route to it, so it is its own entry: folding a `bedrock` flavour onto `claude-opus`
@@ -715,7 +715,7 @@ function matchesBedrockBase(candidate: string, baseModelId: string): boolean {
 /**
  * The Bedrock model id THIS deployment should call for a catalog base id, or undefined when
  * the account's allow-list (`BEDROCK_MODELS` → {@link ProviderCapabilities.bedrockModels})
- * doesn't carry the model — which is exactly the statement "this account cannot call it", so
+ * doesn't carry the model, which is exactly the statement "this account cannot call it", so
  * the flavour is unusable rather than the id being guessed at.
  *
  * The matching entry is returned VERBATIM, so the operator's own Region-correct id is what
@@ -796,7 +796,7 @@ export interface ProviderCapabilities {
    * `BEDROCK_MODELS` (so each carries whatever geo/global inference prefix their Region
    * needs). Absent/empty ⇒ no bedrock flavour is usable, which covers both "Bedrock isn't
    * configured" and "configured but this model isn't granted": the allow-list IS the
-   * per-model enablement. ITERATION ORDER MATTERS — it is the operator's declared order,
+   * per-model enablement. ITERATION ORDER MATTERS: it is the operator's declared order,
    * which {@link resolveBedrockModelId} uses to pick between two profiles for one model.
    */
   bedrockModels?: Set<string>

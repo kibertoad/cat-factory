@@ -59,7 +59,7 @@ const openRouterOnlyModels = MODEL_CATALOG.filter(
 )
 // Bedrock-ONLY models (Claude Opus 4.8): reachable only in an AWS account whose allow-list
 // carries them. `caps` above sets no `bedrockModels`, so they are never usable here and always
-// take the best-effort branch — which must still yield a ref, or the resolver would throw for
+// take the best-effort branch, which must still yield a ref, or the resolver would throw for
 // every deployment that hasn't configured Bedrock.
 const bedrockOnlyModels = MODEL_CATALOG.filter(
   (m) => m.bedrock && !m.cloudflare && !m.direct && !m.openrouter && !m.subscription,

@@ -53,7 +53,7 @@ reached on. The vocabulary is `MODEL_FLAVORS`, listed here in the order
 Two rules set that order: a **first-party route wins over an aggregator that resells it**
 (`direct`/`bedrock` before `openrouter`), and Cloudflare is the always-available floor
 below every route a key or account grant unlocks. `subscription` sits last **only because
-the "subscriptions always win" rule is applied separately, one layer up** — see §4, which
+the "subscriptions always win" rule is applied separately, one layer up**; see §4, which
 also explains why moving it is its own piece of work.
 
 `effectiveVariant` walks that order twice: first over what the capabilities make USABLE,
@@ -144,7 +144,7 @@ subscription  >  direct  >  cloudflare
 ```
 
 - **Base flavour** (`effectiveVariant`, kernel `models.ts`): the first route in
-  `DEFAULT_PROVIDER_PREFERENCE` the capabilities make usable — `direct` when a key for its
+  `DEFAULT_PROVIDER_PREFERENCE` the capabilities make usable: `direct` when a key for its
   provider is in the pool, else `bedrock` when the allow-list carries the model, else
   `openrouter`, else `cloudflare` (§2). This is what `GET /models` shows as the model's
   active flavour.
@@ -339,7 +339,7 @@ what makes the account policy's `trustedProviders: ['bedrock']` reachable per ta
 can pin one block to a residency-guaranteed route instead of repointing the whole
 deployment's routing default. The list is parsed ONCE, by
 `bedrockAllowListFromEnv` (`@cat-factory/server`), and that one value feeds both the
-resolver's allow-list and the capability set — parsed twice, the picker could offer an id
+resolver's allow-list and the capability set. Parsed twice, the picker could offer an id
 the resolver throws on.
 
 Two consequences worth knowing:
@@ -351,9 +351,12 @@ Two consequences worth knowing:
   stays reachable as a routing default (`AGENT_DEFAULT_PROVIDER` + `AGENT_DEFAULT_MODEL`, or
   a per-kind `AGENT_MODELS` entry); naming a model here is how you opt it into the picker.
 - **The Worker does not bundle the Bedrock package** (a deployment mixes it in via the
-  `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`), but it reads
-  the same two env vars, so a deployment that registered the resolver gets the same picker
-  flavour on both runtimes.
+  `registerModelRegistry` extension point in `infrastructure/ai/registries.ts`). It reads the
+  same two env vars, but grants the capability only when a registered registry can actually
+  serve `bedrock` (`bedrockModelsCapability`): on Node the env that enables the flavour also
+  registers the resolver, whereas here the vars alone don't prove the mix-in happened, and
+  offering the flavour on them would put rows in the picker whose dispatch fails on an
+  unregistered provider. Set-but-unregistered logs a warning naming the missing call.
 
 Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
 (`us.` / `eu.` / `jp.` / `au.` / `global.`): several models are reachable ONLY through a

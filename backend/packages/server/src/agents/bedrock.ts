@@ -11,9 +11,20 @@ export interface BedrockEnv {
 }
 
 /**
+ * The AWS Region Bedrock is configured for, trimmed, or `undefined` when unset or blank.
+ * "Is Bedrock configured" is asked twice (the Node facade registers the resolver off it; the
+ * allow-list below gates on it), so the answer is defined once: a whitespace-only value must
+ * not register a resolver the allow-list side treats as absent.
+ */
+export function bedrockRegionFromEnv(env: BedrockEnv): string | undefined {
+  const region = env.BEDROCK_REGION?.trim()
+  return region ? region : undefined
+}
+
+/**
  * The Bedrock model ids this deployment may call, verbatim and in the operator's declared
  * order (which is how they choose between a regional and a global inference profile for one
- * model — see kernel's `resolveBedrockModelId`). `undefined` when Bedrock contributes no
+ * model: see kernel's `resolveBedrockModelId`). `undefined` when Bedrock contributes no
  * per-model capability, for either of two reasons:
  *
  *  - **No `BEDROCK_REGION`**: the `bedrock` resolver isn't registered at all, so every such
@@ -25,7 +36,7 @@ export interface BedrockEnv {
  *    operator opts a model into the picker by naming it here.
  */
 export function bedrockAllowListFromEnv(env: BedrockEnv): Set<string> | undefined {
-  if (!env.BEDROCK_REGION?.trim()) return undefined
+  if (!bedrockRegionFromEnv(env)) return undefined
   const models = (env.BEDROCK_MODELS ?? '')
     .split(',')
     .map((m) => m.trim())

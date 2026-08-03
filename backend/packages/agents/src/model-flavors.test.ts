@@ -89,7 +89,7 @@ describe('resolveBedrockModelId', () => {
     expect(resolveBedrockModelId('anthropic.claude-opus-4-8', c)).toBeUndefined()
   })
 
-  it('is undefined when the account listed nothing — the allow-list IS the enablement', () => {
+  it('is undefined when the account listed nothing: the allow-list IS the enablement', () => {
     expect(resolveBedrockModelId('anthropic.claude-opus-4-8', caps())).toBeUndefined()
     expect(
       resolveBedrockModelId('anthropic.claude-opus-4-8', caps({ bedrockModels: new Set() })),
@@ -112,24 +112,30 @@ describe('bedrock as a resolvable flavour', () => {
     expect(ref).toMatchObject({ provider: 'bedrock', model: listed })
   })
 
-  it('loses to a configured direct key, and beats the gateway and the Cloudflare floor', () => {
+  it('beats the gateway and the Cloudflare floor', () => {
     const model = MODEL_CATALOG.find((m) => m.bedrock && m.cloudflare)
-    if (!model) return
-    const bedrockModels = new Set([model.bedrock!.baseModelId])
+    expect(model, 'a bedrock flavour on a cloudflare-backed entry pins this').toBeDefined()
     // Cloudflare is on AND an OpenRouter key is present, yet Bedrock still wins: it is a
     // first-party route, and the gateway resells what it serves.
     const overBoth = caps({
-      bedrockModels,
+      bedrockModels: new Set([model!.bedrock!.baseModelId]),
       cloudflareEnabled: true,
       directProviders: new Set(['openrouter']),
     })
-    expect(resolveModelRef(model.id, overBoth)?.provider).toBe('bedrock')
-    if (model.direct) {
+    expect(resolveModelRef(model!.id, overBoth)?.provider).toBe('bedrock')
+  })
+
+  it('loses to a configured direct key on any entry carrying both routes', () => {
+    // The catalog holds no bedrock+direct entry today (Bedrock lags every vendor the platform
+    // has a direct key for), so this loop is currently EMPTY, deliberately rather than
+    // silently: the tuple-order test above pins direct > bedrock regardless, and this becomes
+    // the behavioural proof the moment such an entry lands.
+    for (const model of MODEL_CATALOG.filter((m) => m.bedrock && m.direct)) {
       const withDirect = caps({
-        bedrockModels,
-        directProviders: new Set([model.direct.ref.provider]),
+        bedrockModels: new Set([model.bedrock!.baseModelId]),
+        directProviders: new Set([model.direct!.ref.provider]),
       })
-      expect(resolveModelRef(model.id, withDirect)?.provider).toBe(model.direct.ref.provider)
+      expect(resolveModelRef(model.id, withDirect)?.provider).toBe(model.direct!.ref.provider)
     }
   })
 
