@@ -107,6 +107,22 @@ export const customAgentKindSchema = v.object({
   presentation: agentPresentationSchema,
   /** Whether the kind runs in a container (vs an inline LLM call). */
   container: v.boolean(),
+  /**
+   * Whether the kind carries the `binary-output` trait: its deliverable is binary artifacts
+   * stored through a foundational service, so a step of this kind REQUIRES a
+   * `stepOptions.binaryOutput` selection and is refused at pipeline save AND run start without
+   * one (`assertValidBinaryOutputSteps`). The pipeline builder reads it to decide which steps
+   * must offer the storage/context picker — the SPA has no other way to know, and guessing
+   * either shows the picker on every step or lets a generator step save into a refusal.
+   *
+   * A BOOLEAN PROJECTION rather than a `traits: string[]` dump, following {@link container}:
+   * the snapshot carries the facts the SPA branches on, not the backend's trait vocabulary.
+   * Every other trait is prompt-shaping with no UI consequence; the day one gains one it gets
+   * its own field, and the reason is visible in that diff instead of being inferred from a
+   * string the client had to know to look for. Absent ⇒ false (the stock product, where no
+   * built-in kind carries the trait).
+   */
+  binaryOutput: v.optional(v.boolean()),
 })
 export type CustomAgentKind = v.InferOutput<typeof customAgentKindSchema>
 

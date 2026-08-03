@@ -1,39 +1,33 @@
 <script setup lang="ts">
-// The tutorial launch prompt: asks once on first launch whether the user wants a guided
-// tour, and doubles as the tour picker for later visits (command palette: "Take a tour").
-// Lists whatever the merged `tutorialTours` slot offers this user (first-party + consumer
-// tours, RBAC-gated per tour), so it grows with the catalog rather than hard-coding tours.
+// The tutorial launch prompt: asks once on first launch whether the user wants a guided tour,
+// listing the tours this board can actually run right now (first-party + consumer, resolved
+// against the same gates the nav uses), so it grows with the catalog rather than hard-coding
+// tours.
+//
+// It is the OFFER, not the library: the full list — including the walkthroughs this board
+// can't run yet and what would unlock them — is `TutorialCatalogue.vue`, one button away in
+// the footer and permanently reachable from the sidebar's Help section. That split is why
+// this stays a short, answerable question instead of growing into a browsing surface.
 //
 // The decision semantics live in the store: starting a tour or "No thanks" is SAVED (the
 // prompt never auto-opens again), while closing without answering defers to next launch.
+import { TUTORIAL_ACTION_KEYS } from '~/utils/tutorial'
+
 const { t } = useI18n()
 const tutorial = useTutorialStore()
 const { tours } = useTutorialTours()
+// Start / Resume / Repeat is decided in one place for both surfaces — see `useTutorialLaunch`.
+const { actionFor, launch } = useTutorialLaunch()
 
 const open = computed({
   get: () => tutorial.promptOpen,
   set: (v: boolean) => (v ? tutorial.openPrompt() : tutorial.closePrompt()),
 })
 
-// Only an unanswered prompt offers the persistent "No thanks"; once a decision exists this
-// is just a picker, and the only dismissal left is a plain close.
+// Only an unanswered prompt offers the persistent "No thanks": there is a decision to save.
+// Once one exists — this window can still be opened by the store — the only dismissal left is
+// a plain close, since declining something already answered would write nothing new.
 const undecided = computed(() => tutorial.decision === null)
-
-// A tour broken off mid-way (Esc, or Skip to get the overlay out of the way) offers to RESUME
-// where it stopped rather than only to start over. Session-scoped, so this is only ever offered
-// while the board is still in the state the tour left it in — see the store.
-const isResumable = (tourId: string) => tutorial.interruptedAt(tourId) !== null
-
-function launch(tourId: string) {
-  if (isResumable(tourId)) tutorial.resumeTour(tourId)
-  else tutorial.startTour(tourId)
-}
-
-/** Resume beats Completed: a tour taken again and broken off is offered where it stopped. */
-function launchLabel(tourId: string): string {
-  if (isResumable(tourId)) return t('tutorial.prompt.resume')
-  return tutorial.isCompleted(tourId) ? t('tutorial.prompt.restart') : t('tutorial.prompt.start')
-}
 </script>
 
 <template>
@@ -65,7 +59,7 @@ function launchLabel(tourId: string): string {
                   size="sm"
                   data-testid="tutorial-tour-completed"
                 >
-                  {{ t('tutorial.prompt.completed') }}
+                  {{ t('tutorial.status.completed') }}
                 </UBadge>
               </div>
               <p class="text-xs text-slate-400">{{ t(tour.descriptionKey) }}</p>
@@ -73,11 +67,11 @@ function launchLabel(tourId: string): string {
             <UButton
               size="sm"
               color="primary"
-              :variant="tutorial.isCompleted(tour.id) && !isResumable(tour.id) ? 'soft' : 'solid'"
+              :variant="actionFor(tour.id) === 'restart' ? 'soft' : 'solid'"
               :data-testid="`tutorial-start-${tour.id}`"
               @click="launch(tour.id)"
             >
-              {{ launchLabel(tour.id) }}
+              {{ t(TUTORIAL_ACTION_KEYS[actionFor(tour.id)]) }}
             </UButton>
           </li>
         </ul>
@@ -100,14 +94,27 @@ function launchLabel(tourId: string): string {
           {{ t('tutorial.prompt.decline') }}
         </UButton>
         <span v-else />
-        <UButton
-          color="neutral"
-          variant="soft"
-          data-testid="tutorial-close"
-          @click="tutorial.closePrompt()"
-        >
-          {{ undecided ? t('tutorial.prompt.later') : t('common.close') }}
-        </UButton>
+        <div class="flex items-center gap-2">
+          <!-- The way to the tours this board can't run yet, and to the ones already taken.
+               Browsing answers nothing, so it neither declines the offer nor accepts it. -->
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-graduation-cap"
+            data-testid="tutorial-browse"
+            @click="tutorial.openCatalogue()"
+          >
+            {{ t('tutorial.prompt.browse') }}
+          </UButton>
+          <UButton
+            color="neutral"
+            variant="soft"
+            data-testid="tutorial-close"
+            @click="tutorial.closePrompt()"
+          >
+            {{ undecided ? t('tutorial.prompt.later') : t('common.close') }}
+          </UButton>
+        </div>
       </div>
     </template>
   </UModal>

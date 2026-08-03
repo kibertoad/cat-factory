@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import en from '../../i18n/locales/en.json'
 import {
   computeCoachMarkLayout,
+  launchActionFor,
   needsReveal,
+  resolveTourCatalogue,
   resolveTours,
   sortTours,
+  tourState,
+  TUTORIAL_ACTION_KEYS,
+  TUTORIAL_STATUS_KEYS,
   visibleArea,
 } from '~/utils/tutorial'
-import type { TutorialStep, TutorialTour } from '~/utils/tutorial'
+import type { TutorialRequirement, TutorialStep, TutorialTour } from '~/utils/tutorial'
 import type { NavGates } from '~/modular/nav-contributions'
 
 const tour = (id: string, order: number): TutorialTour => ({
@@ -39,15 +45,22 @@ const step = (id: string, when?: TutorialStep['when']): TutorialStep => ({
   when,
 })
 
-const withSteps = (id: string, steps: TutorialStep[], when?: TutorialTour['when']): TutorialTour =>
-  ({ ...tour(id, 10), steps, when }) as TutorialTour
+/** A requirement over the one gate field these cases vary. */
+const needsAdvanced: TutorialRequirement = {
+  id: 'advanced',
+  labelKey: 'tutorial.requirements.boardWrite',
+  met: (g) => g.advancedMode,
+}
+
+const withSteps = (
+  id: string,
+  steps: TutorialStep[],
+  requires?: readonly TutorialRequirement[],
+): TutorialTour => ({ ...tour(id, 10), steps, requires })
 
 describe('resolveTours', () => {
-  it('drops a tour its own `when` rejects', () => {
-    const tours = [
-      withSteps('a', [step('one')], (g) => g.advancedMode),
-      withSteps('b', [step('one')]),
-    ]
+  it('drops a tour whose requirements are unmet', () => {
+    const tours = [withSteps('a', [step('one')], [needsAdvanced]), withSteps('b', [step('one')])]
     expect(resolveTours(tours, gates(false)).map((t) => t.id)).toEqual(['b'])
   })
 
@@ -69,6 +82,105 @@ describe('resolveTours', () => {
     // every gate read would re-render the list on flips that changed nothing about it.
     const t = withSteps('a', [step('one')])
     expect(resolveTours([t], gates(true))[0]).toBe(t)
+  })
+
+  it('withholds nothing when no gates service is wired', () => {
+    // Dev-open parity, and the case a bare install runs in: with nothing to gate against,
+    // a required tour is still offered and its branch steps are not silently thinned.
+    const t = withSteps('a', [step('one'), step('two', (g) => g.advancedMode)], [needsAdvanced])
+    expect(resolveTours([t], null)[0]?.steps.map((s) => s.id)).toEqual(['one', 'two'])
+  })
+})
+
+describe('resolveTourCatalogue', () => {
+  it('keeps an unavailable tour, saying which requirements are unmet', () => {
+    // The whole reason the catalogue resolves rather than filters: a tour dropped from the
+    // list is indistinguishable from one this deployment never shipped.
+    const t = withSteps('a', [step('one')], [needsAdvanced])
+    const [entry] = resolveTourCatalogue([t], gates(false))
+    expect(entry?.availability).toBe('blocked')
+    expect(entry?.unmet.map((r) => r.id)).toEqual(['advanced'])
+  })
+
+  it('reports only the requirements that are actually unmet', () => {
+    const met: TutorialRequirement = { id: 'met', labelKey: 'x', met: () => true }
+    const t = withSteps('a', [step('one')], [met, needsAdvanced])
+    expect(resolveTourCatalogue([t], gates(false))[0]?.unmet.map((r) => r.id)).toEqual(['advanced'])
+  })
+
+  it('separates "requirements unmet" from "no step applies here"', () => {
+    // Two different facts needing two different reactions: one names something the reader can
+    // go and do, the other names nothing at all — telling them to fix it would send them
+    // looking for a control that was never missing.
+    const t = withSteps('a', [step('advancedOnly', (g) => g.advancedMode)])
+    const [entry] = resolveTourCatalogue([t], gates(false))
+    expect(entry?.availability).toBe('not-applicable')
+    expect(entry?.unmet).toEqual([])
+  })
+
+  it('reports a tour that is both blocked and stepless as blocked', () => {
+    // Precedence, pinned. A step's `when` reads the same gates the requirements do, so with the
+    // requirements unmet the step filter is answering a hypothetical — what would apply on a
+    // board this one is by construction not. Calling that `not-applicable` would tell the reader
+    // nothing can be done about a tour they can in fact unlock.
+    const t = withSteps('a', [step('advancedOnly', (g) => g.advancedMode)], [needsAdvanced])
+    const [entry] = resolveTourCatalogue([t], gates(false))
+    expect(entry?.availability).toBe('blocked')
+    expect(entry?.unmet.map((r) => r.id)).toEqual(['advanced'])
+  })
+
+  it('is sorted, and agrees with resolveTours about what is ready', () => {
+    const tours = [
+      withSteps('c', [step('one')], [needsAdvanced]),
+      { ...withSteps('a', [step('one')]), order: 20 },
+      { ...withSteps('b', [step('one')]), order: 5 },
+    ]
+    const catalogue = resolveTourCatalogue(tours, gates(false))
+    expect(catalogue.map((e) => e.tour.id)).toEqual(['b', 'c', 'a'])
+    expect(resolveTours(tours, gates(false)).map((t) => t.id)).toEqual(
+      catalogue.filter((e) => e.availability === 'ready').map((e) => e.tour.id),
+    )
+  })
+})
+
+describe('tourState / launchActionFor', () => {
+  const state = (over: Partial<Parameters<typeof tourState>[0]>) =>
+    tourState({ active: false, resumable: false, completed: false, ...over })
+
+  it('reports a running tour as in progress, whatever else is true of it', () => {
+    expect(state({ active: true, resumable: true, completed: true })).toBe('inProgress')
+    expect(launchActionFor('inProgress')).toBe('continue')
+  })
+
+  it('prefers a broken-off position over a past completion', () => {
+    // Resume beats Completed: a tour taken again and broken off is offered where it stopped,
+    // rather than described by the badge it earned last time.
+    expect(state({ resumable: true, completed: true })).toBe('paused')
+    expect(launchActionFor('paused')).toBe('resume')
+  })
+
+  it('falls back to completion, then to untouched', () => {
+    expect(state({ completed: true })).toBe('completed')
+    expect(launchActionFor('completed')).toBe('restart')
+    expect(state({})).toBe('notStarted')
+    expect(launchActionFor('notStarted')).toBe('start')
+  })
+})
+
+describe('the status / action copy tables', () => {
+  it('resolves every key against the en catalog', () => {
+    // These are the lookups the typed-message-key check cannot see (a key assembled from a
+    // state), so a rename would otherwise reach the user as a raw path on a button.
+    const lookup = (key: string) =>
+      key
+        .split('.')
+        .reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en)
+    for (const key of [
+      ...Object.values(TUTORIAL_STATUS_KEYS),
+      ...Object.values(TUTORIAL_ACTION_KEYS),
+    ]) {
+      expect(typeof lookup(key), key).toBe('string')
+    }
   })
 })
 

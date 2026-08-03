@@ -127,7 +127,9 @@
     "operatorDashboard": "Obserwowalność platformy",
     "reports": "Raporty",
     "infrastructure": "Infrastruktura",
-    "foundationalServices": "Usługi fundamentalne"
+    "foundationalServices": "Usługi fundamentalne",
+    "tutorials": "Samouczki",
+    "help": "Pomoc"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,6 @@
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
         "toggleUiMode": "Zmień tryb interfejsu",
-        "tutorial": "Rozpocznij przewodnik",
         "foundationalServices": "Usługi fundamentalne"
       },
       "keywords": {
@@ -4081,7 +4082,17 @@
       "consensusGroupsActive": "Ten krok uruchamia wybraną grupę. Odznacz wszystkie grupy, aby skonfigurować uczestników tutaj.",
       "consensusGroupAlways": "zawsze",
       "variantLabel": "Wariant promptu",
-      "variantShipped": "Prompt wbudowany"
+      "variantShipped": "Prompt wbudowany",
+      "binaryOutputStorage": "Zapisuj przez",
+      "binaryOutputContext": "Kontekst generowania",
+      "binaryOutputPlaceholder": "Wybierz usługę przechowywania",
+      "binaryOutputContextPlaceholder": "Opcjonalnie: usługi wyznaczające zakres generowania",
+      "binaryOutputNeedsPick": "Krok generujący wyjścia binarne nie ma wybranej usługi przechowywania. Wybierz ją przed zapisaniem.",
+      "binaryOutputNoStorage": "Żadna usługa w katalogu tej tablicy nie deklaruje możliwości {capability}. Zarejestruj taką usługę albo dodaj tę możliwość właściwej usłudze w usługach podstawowych.",
+      "binaryOutputMissing": "Tej usługi przechowywania nie ma już w katalogu; wybierz inną.",
+      "binaryOutputNotStorage": "Ta usługa nie deklaruje już możliwości {capability}, więc uruchomienia będą odrzucane; wybierz inną.",
+      "binaryOutputContextMissing": "Tych usług kontekstu nie ma już w katalogu: {ids}",
+      "binaryOutputUnavailable": "Katalog usług podstawowych jest nieosiągalny, więc nic nie da się tu jeszcze wybrać."
     },
     "progress": {
       "status": {
@@ -5343,6 +5354,47 @@
       "unlinkSourceFailed": "Nie udało się odłączyć repozytorium"
     }
   },
+  "binaryOutput": {
+    "heading": "Wyjścia binarne",
+    "target": "Usługa przechowywania",
+    "targetNone": "Nie zapisano dla tego kroku",
+    "contextServices": "Kontekst generowania",
+    "misdirectedBadge": "Inna usługa",
+    "unknownBadge": "Spoza katalogu",
+    "storedCount": "{outcome}, 1 artefakt | {outcome}, {count} artefakty | {outcome}, {count} artefaktów",
+    "state": {
+      "notStarted": {
+        "summary": "Jeszcze nie rozpoczęto",
+        "detail": "Ten krok jeszcze się nie rozpoczął. Gdy zostanie uruchomiony, zapisze swoje wyjścia binarne przez usługę wskazaną poniżej."
+      },
+      "configured": {
+        "summary": "Nic jeszcze nie zapisano",
+        "detail": "Ten krok jest skonfigurowany do przechowywania wyjść binarnych, ale jeszcze żadnego nie zgłosił. Nadal trwa albo zakończył się, zanim zdążył zgłosić."
+      },
+      "undeclared": {
+        "summary": "Brak deklaracji",
+        "detail": "Ten krok zakończył się bez zadeklarowania, co zapisał. Mógł coś zapisać albo nie; tak czy inaczej nic nie zostało odnotowane."
+      },
+      "parseFailed": {
+        "summary": "Deklaracja nieczytelna",
+        "detail": "Ten krok zakończył się deklaracją, której platforma nie potrafiła odczytać, więc nic nie zostało odnotowane. Tego, co zapisał, brakuje na liście poniżej."
+      },
+      "declaredNone": {
+        "summary": "Nic nie zapisano",
+        "detail": "Agent zgłosił, że nie zapisał żadnych artefaktów binarnych. To prawidłowy wynik, nie błąd."
+      },
+      "stored": {
+        "summary": "Zapisano"
+      }
+    },
+    "warning": {
+      "unknownServices": "Wskazał usługę, której nie ma w katalogu: {ids}. Wpis zachowano w zadeklarowanej postaci; sprawdź identyfikator w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy.",
+      "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({id}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
+      "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
+      "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
+      "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście."
+    }
+  },
   "sandbox": {
     "title": "Piaskownica: testowanie promptów i modeli",
     "description": "Testuj wersje promptów i modele na ocenianych fixture'ach, oceniane przez model sędziujący.",
@@ -6113,13 +6165,41 @@
     "prompt": {
       "title": "Chcesz krótki przewodnik?",
       "intro": "Interaktywne przewodniki pokazują aplikację bezpośrednio na tym ekranie: podświetlają prawdziwe elementy interfejsu i mówią, co kliknąć.",
-      "start": "Rozpocznij",
-      "restart": "Powtórz",
-      "resume": "Wznów",
-      "completed": "Ukończono",
       "decline": "Nie, dziękuję",
       "later": "Może później",
-      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników."
+      "empty": "Dla twojej roli na tej tablicy nie ma jeszcze dostępnych przewodników.",
+      "browse": "Zobacz wszystkie samouczki"
+    },
+    "catalogue": {
+      "title": "Samouczki",
+      "intro": "Interaktywne przewodniki, które po kolei podświetlają prawdziwe elementy interfejsu. Każdy możesz uruchomić w dowolnej chwili i powtórzyć tyle razy, ile chcesz.",
+      "progress": "Ukończono {completed} z {total}",
+      "steps": "1 krok | {count} kroki | {count} kroków",
+      "blocked": "Będzie dostępny, gdy pojawi się:",
+      "notApplicable": "Na tej tablicy nie ma teraz niczego, co ten przewodnik mógłby pokazać.",
+      "empty": "Ta instalacja nie zawiera samouczków.",
+      "reset": "Zresetuj postęp",
+      "resetHint": "Usuwa informacje o ukończonych samouczkach i przy następnej wizycie ponownie zaproponuje przewodnik."
+    },
+    "action": {
+      "start": "Rozpocznij",
+      "resume": "Wznów",
+      "restart": "Powtórz",
+      "continue": "Wróć do przewodnika"
+    },
+    "status": {
+      "notStarted": "Nierozpoczęty",
+      "inProgress": "W trakcie",
+      "paused": "Wstrzymany",
+      "completed": "Ukończono"
+    },
+    "requirements": {
+      "boardWrite": "Uprawnienie do edycji tej tablicy",
+      "sourceControl": "Podłączony system kontroli wersji",
+      "service": "Usługa na tablicy",
+      "task": "Zadanie na tablicy",
+      "waitingAnswer": "Uruchomienie czekające na twoją odpowiedź",
+      "finishedRun": "Uruchomienie zakończone powodzeniem"
     },
     "overlay": {
       "next": "Dalej",

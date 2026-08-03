@@ -428,7 +428,9 @@ onUnmounted(() => {
 
 <template>
   <!-- Teleported so board/panel stacking contexts can't clip the marks; z-[70] sits above
-       the app's modals (z-50s), since steps legitimately point INTO an open modal. -->
+       the app's modals (z-50s), since steps legitimately point INTO an open modal — with the
+       one exception of the tutorial's OWN windows (`ownWindowOpen`), which no step points into
+       and over which the same z-index would float a ring and a tooltip the user cannot use. -->
   <Teleport to="body">
     <!-- The step-change announcement. Visually hidden, and outside BOTH the dialog and the
          `v-if` below, so the live region is a stable node whose TEXT changes for the whole
@@ -438,7 +440,12 @@ onUnmounted(() => {
     <div class="sr-only" role="status" aria-live="polite" data-testid="tutorial-announcement">
       {{ announcement }}
     </div>
-    <div v-if="step" data-testid="tutorial-overlay">
+    <!-- SUPPRESSED, not unmounted, while a tutorial-owned window is open: this component holds
+         the running tour's resolved script (see `tour` above), and a remount would re-resolve it
+         against gates that may have flipped since the tour started — which is the very failure
+         that holding it fixed. The cursor, the tracking and the script all survive; only the
+         marks go, and they come back the moment the window closes. -->
+    <div v-if="step && !tutorial.ownWindowOpen" data-testid="tutorial-overlay">
       <!-- `motion-safe:` on the ring's transition: it slides between controls on every step,
            which is exactly the involuntary movement `prefers-reduced-motion` is about. -->
       <div

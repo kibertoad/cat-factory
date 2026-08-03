@@ -1,5 +1,123 @@
 # @cat-factory/worker
 
+## 0.137.1
+
+### Patch Changes
+
+- 3435bd1: Refresh the model catalog against what the providers actually serve (Aug 2026). Several
+  curated entries pointed at ids their provider has since retired, so the model was
+  un-runnable rather than merely dated:
+
+  - **Cloudflare Workers AI**: `@cf/meta/llama-3.1-8b-instruct` and `@cf/moonshotai/kimi-k2.5`
+    were deprecated on 30 May 2026. `cloudflare-llama` now serves `llama-4-scout` (131K,
+    tool calling) and the `kimi-k2.5` entry is removed. The `conflict-resolver` routing
+    default on BOTH runtimes pointed at the deprecated K2.5 and moves to K2.6. Adds
+    `gpt-oss-120b` and `glm-flash` (GLM-4.7 Flash) as the missing open-weights and
+    cheap-tier options.
+  - **ChatGPT / Codex**: `gpt-5.5-codex` and `gpt-5.4-codex` were never valid Codex
+    `--model` slugs (the `-codex` family ended at GPT-5.3), so both entries failed with
+    `Unknown model`. The catalog now carries the GPT-5.6 tiers Codex actually serves —
+    `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` — plus plain `gpt-5.5`. **The `gpt-5.4`
+    entry is removed** (Codex retires it for ChatGPT sign-ins on 31 Aug 2026); a block
+    pinned to it falls through to the workspace/deployment default.
+  - **DeepSeek**: the `deepseek-chat` alias was retired on 24 Jul 2026 in favour of the V4
+    pair. The `deepseek` entry moves to `deepseek-v4-flash` (1M context) across its direct,
+    OpenRouter and subscription flavours, and `deepseek-v4-pro` gains direct + OpenRouter
+    flavours beside its Cloudflare one.
+  - **OpenRouter**: `google/gemini-3-pro` no longer exists on the gateway — the `gemini`
+    entry moves to `google/gemini-3.1-pro-preview`. Adds gateway routes for GLM-5.2 and
+    Qwen, and a `kimi-k3` entry.
+  - Claude Sonnet moves from 4.6 to 5; Qwen's direct flavour from `qwen3-max` to
+    `qwen3.7-max`.
+
+  Spend pricing gains per-model entries for every Workers AI model that is billed per
+  token rather than by neuron. **GLM-5.2 — the architect/reviewer routing default — and the
+  DeepSeek R1 distill had none, so they were metering at the near-free neuron rate and
+  escaping the budget gate.**
+
+- Updated dependencies [3435bd1]
+  - @cat-factory/kernel@0.214.0
+  - @cat-factory/spend@0.13.0
+  - @cat-factory/agents@0.104.2
+  - @cat-factory/caching@0.12.11
+  - @cat-factory/consensus@0.13.24
+  - @cat-factory/eks@0.1.198
+  - @cat-factory/gates@0.8.44
+  - @cat-factory/gitlab@0.15.3
+  - @cat-factory/integrations@0.116.3
+  - @cat-factory/observability-langfuse@0.9.41
+  - @cat-factory/observability-otel@0.4.41
+  - @cat-factory/orchestration@0.185.1
+  - @cat-factory/provider-cloudflare@0.7.350
+  - @cat-factory/server@0.193.1
+
+## 0.137.0
+
+### Minor Changes
+
+- 70b4339: Serve a mothership-mode node's run telemetry back down from the mothership when its own store holds
+  none. Telemetry is local-first, captured on the laptop and pruned there on a short window, with a
+  finished run's rows carried up by the ingest sweep — both halves of which are about the WRITE
+  direction. What that left was a node rendering two kinds of run blank: one whose local rows had been
+  pruned, and (the larger case the plan under-stated) one that was never local at all. A mothership-mode
+  SPA shows the whole org's board, so most runs a developer opens were driven by a hosted teammate or
+  another laptop, and every one of them showed an empty observability panel, a zero token rollup and no
+  web-search log — with nothing anywhere reporting a problem, because that is exactly what a run which
+  spent nothing looks like.
+
+  `POST /internal/telemetry/read` is the ingest's dual: a machine-authed, account-scoped endpoint
+  serving a CLOSED table of per-method-bounded, run-scoped reads. It is its own endpoint rather than
+  allow-listed persistence-RPC methods for ADR 0009's reason plus a sharper one — the persistence
+  registry resolves a repository WHOLE, so admitting a telemetry repo's reads there would route its
+  hot-path writes over the network, which is the entire thing the local-first bucket exists to prevent.
+  `listByExecution` is deliberately absent from the table on all three sinks (no cursor, so it is the
+  un-resumable bulk read the bucket forbids); the node drains the paged reads instead, which is what
+  the two new kernel port methods are for. An over-cap limit is refused, never clamped, and the
+  scope-bound workspace is stamped as the call's first argument rather than trusted from the caller.
+
+  On the laptop the rule is local-wins where local is WHOLE — not merely where it is non-empty. The
+  distinction is a third blank-run case: the prune deletes by capture time, so a run straddling the
+  cutoff keeps its newer rows and loses its older ones, and the store then answers, with nothing
+  looking missing, with a strict subset. A short list is bad and the rollup is worse, because a token
+  total that is simply too low carries no hint that it is short. A subset is undetectable after the
+  fact, so the prune records it as it happens and that record is what makes a local answer
+  authoritative: lists stitch across the two stores on the shared keyset, while counts and the rollup
+  come wholly from the mothership, since a partial local aggregate and a complete remote one cannot be
+  merged. Capture is not decorated at all. A failed fallback throws rather than degrading back into the
+  empty answer it was called to replace — the one hot-path caller already treats a metrics read as
+  best-effort, so an outage costs a board counter and never a run, and the aggregate reads carry a
+  short round-trip budget precisely because that caller awaits them on the emit path.
+
+  A page inside its row cap can still serialize past the response backstop, so that is treated as
+  routine rather than as a fault: the mothership still refuses rather than shortening (a truncated page
+  is one the node would treat as complete), but under its own code, and the drain re-asks smaller on
+  the same cursor, losing nothing. It terminates because the backstop is derived from the two capture
+  ceilings rather than picked — a one-row page can never be refused for size.
+
+  Compatibility break: `LlmCallMetricRepository` and `AgentContextSnapshotRepository` each gain a
+  required `listRunPage` method, so an out-of-tree implementation of either port must add it. The local
+  telemetry store gains a `telemetry_pruned_runs` table, created on open; an existing store simply
+  starts recording from its next prune, and until then reports itself complete, which is the same
+  answer it gave before.
+
+### Patch Changes
+
+- Updated dependencies [70b4339]
+  - @cat-factory/kernel@0.213.0
+  - @cat-factory/orchestration@0.185.0
+  - @cat-factory/server@0.193.0
+  - @cat-factory/agents@0.104.1
+  - @cat-factory/caching@0.12.10
+  - @cat-factory/consensus@0.13.23
+  - @cat-factory/eks@0.1.197
+  - @cat-factory/gates@0.8.43
+  - @cat-factory/gitlab@0.15.2
+  - @cat-factory/integrations@0.116.2
+  - @cat-factory/observability-langfuse@0.9.40
+  - @cat-factory/observability-otel@0.4.40
+  - @cat-factory/provider-cloudflare@0.7.349
+  - @cat-factory/spend@0.12.144
+
 ## 0.136.0
 
 ### Minor Changes

@@ -26,7 +26,7 @@ describe('familyForModelId', () => {
     expect(familyForModelId('openrouter:moonshotai/kimi-k2.7-code')).toBe('kimi')
     expect(familyForModelId('openrouter:anthropic/claude-opus-4.8')).toBe('claude')
     expect(familyForModelId('openrouter:openai/gpt-5.5')).toBe('openai')
-    expect(familyForModelId('openrouter:google/gemini-3-pro')).toBe('gemini')
+    expect(familyForModelId('openrouter:google/gemini-3.1-pro-preview')).toBe('gemini')
     expect(familyForModelId('openrouter:z-ai/glm-5.2')).toBe('glm')
     expect(familyForModelId('openrouter:meta-llama/llama-4')).toBe('llama')
   })
