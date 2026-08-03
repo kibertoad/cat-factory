@@ -32,6 +32,7 @@ import {
   WebCryptoPasswordHasher,
   WebCryptoSecretCipher,
   logger,
+  operationalMetrics,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
@@ -166,6 +167,9 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     // buried in one of the builders) because its Worker twin sits in the same position — the
     // pair is a facade-parity obligation, not an optional integration.
     logger,
+    // The counter half of the same obligation, wired in the same position for the same reason:
+    // an un-wired collector reads as "none of this ever happened".
+    operationalMetrics,
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
   }

@@ -1,5 +1,10 @@
 import type { Clock } from '@cat-factory/kernel'
-import { escalateStaleNotifications, type Logger, type ServerContainer } from '@cat-factory/server'
+import {
+  escalateStaleNotifications,
+  type Logger,
+  type ServerContainer,
+  type SweepHealthTracker,
+} from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic notification-escalation sweep for the Node facade — the analogue of the
@@ -20,12 +25,15 @@ export function startNotificationEscalationSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   if (!container.notifications) return () => {}
   return startSweeper({
     name: 'notification-escalation',
     intervalMs: NOTIFICATION_ESCALATION_INTERVAL_MS,
     log,
+    health,
     failureMessage: 'notification escalation failed',
     tick: async () => {
       const escalated = await escalateStaleNotifications(container, clock.now())

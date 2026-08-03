@@ -96,7 +96,10 @@ const LEGACY_ALLOWANCES = new Map([
   // The `max-lines-per-function` 300 -> 250 step then took the deployment-wide credential /
   // telemetry / account-settings stores out to `container-shared-services.ts`, so `buildContainer`
   // is the ordering of its four phases and nothing else — ratcheted 1650 -> 1500.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1500],
+  // The binary-artifact storage pair (`cloudflareContentStorage` + its resolver — already
+  // standalone, because the retention cron needs them outside the container) then moved to
+  // `container-artifact-storage.ts` — ratcheted 1500 -> 1470.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1470],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -113,7 +116,10 @@ const LEGACY_ALLOWANCES = new Map([
   // The PROMPT-FRAGMENT LIBRARY rows (the tenant-scoped best-practice catalog, its generated
   // condensed briefs, its repo sources and the per-workspace inherited selection) then moved to
   // `db/tables/prompt-fragments.ts` the same way — ratcheted 1820 -> 1716.
-  ['backend/runtimes/node/src/db/schema.ts', 1716],
+  // The SLACK tables (connection + routing + member map — one integration, referencing nothing
+  // else) moved to `db/schema-slack.ts` when `agent_runs` gained its re-drive counter — ratcheted
+  // 1716 -> 1700.
+  ['backend/runtimes/node/src/db/schema.ts', 1700],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan

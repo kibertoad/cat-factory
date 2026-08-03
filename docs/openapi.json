@@ -317,7 +317,10 @@
                       "enum": [
                         "failure_rate_high",
                         "duration_p99_high",
-                        "backlog_high"
+                        "backlog_high",
+                        "throughput_stalled",
+                        "failure_kind_dominant",
+                        "sweep_degraded"
                       ],
                       "type": "string"
                     },

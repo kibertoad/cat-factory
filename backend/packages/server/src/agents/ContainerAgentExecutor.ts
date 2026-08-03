@@ -10,6 +10,7 @@ import {
   type LlmTraceSink,
   type Logger,
   type ModelRef,
+  type OperationalMetrics,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
@@ -342,6 +343,11 @@ export interface ContainerAgentExecutorDependencies {
    */
   logger?: Logger
   /**
+   * Where this seam counts its operational faults (dispatch failures, container evictions).
+   * Absent ⇒ the counts go nowhere, which is why every facade wires the app's collector.
+   */
+  operationalMetrics?: OperationalMetrics
+  /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
    * sink the LLM proxy fans generations out to, so the trace tree is complete.
@@ -467,12 +473,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
     const jobId = body.jobId as string
     const ref: RunnerJobRef = { runId: executionId, jobId }
-    const jobLog = containerJobLog(this.deps.logger, {
-      workspaceId,
-      executionId,
-      jobId,
-      agentKind: context.agentKind,
-    })
+    const jobLog = containerJobLog(
+      this.deps.logger,
+      { workspaceId, executionId, jobId, agentKind: context.agentKind },
+      this.deps.operationalMetrics,
+    )
     try {
       await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
     } catch (error) {
@@ -519,12 +524,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const jobLog = containerJobLog(this.deps.logger, {
-      workspaceId: handle.workspaceId,
-      executionId: handle.runId,
-      jobId: handle.jobId,
-      agentKind: handle.agentKind,
-    })
+    const jobLog = containerJobLog(
+      this.deps.logger,
+      {
+        workspaceId: handle.workspaceId,
+        executionId: handle.runId,
+        jobId: handle.jobId,
+        agentKind: handle.agentKind,
+      },
+      this.deps.operationalMetrics,
+    )
     // A poll that THROWS is as opaque as a dispatch that throws — the durable driver retries or
     // fails the step with a transport error and nothing records which job/backend it was against.
     // Logged and re-thrown; the lifecycle is unchanged.

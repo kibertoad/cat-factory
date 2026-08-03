@@ -39,16 +39,23 @@ export class D1AgentRunRepository implements AgentRunRepository {
   async listStale(olderThanEpochMs: number): Promise<StaleAgentRun[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT workspace_id, id, kind, updated_at FROM agent_runs
+        `SELECT workspace_id, id, kind, updated_at, redrive_count FROM agent_runs
          WHERE status = 'running' AND updated_at < ?
          ORDER BY updated_at`,
       )
       .bind(olderThanEpochMs)
-      .all<{ workspace_id: string; id: string; kind: string; updated_at: number }>()
+      .all<{
+        workspace_id: string
+        id: string
+        kind: string
+        updated_at: number
+        redrive_count: number | null
+      }>()
     return (results ?? []).map((r) => ({
       workspaceId: r.workspace_id,
       id: r.id,
       updatedAt: r.updated_at,
+      redriveCount: r.redrive_count ?? 0,
       kind: decodeEnum(agentRunKindSchema, r.kind, {
         table: 'agent_runs',
         column: 'kind',
@@ -88,5 +95,20 @@ export class D1AgentRunRepository implements AgentRunRepository {
       for (const r of results ?? []) live.push(r.id)
     }
     return live
+  }
+
+  async recordRedrive(workspaceId: string, id: string): Promise<number> {
+    // One statement: increment and read back the new total, so nothing races between a read
+    // and a write. `RETURNING` is supported by D1's SQLite; the row is absent (0 returned)
+    // only for a run that has since been deleted.
+    const row = await this.db
+      .prepare(
+        `UPDATE agent_runs SET redrive_count = redrive_count + 1
+         WHERE workspace_id = ? AND id = ?
+         RETURNING redrive_count`,
+      )
+      .bind(workspaceId, id)
+      .first<{ redrive_count: number }>()
+    return row?.redrive_count ?? 0
   }
 }

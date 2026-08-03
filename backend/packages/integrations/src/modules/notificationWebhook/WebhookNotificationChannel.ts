@@ -9,6 +9,7 @@ import type {
   NotificationType,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
+  OperationalMetrics,
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
@@ -58,6 +59,13 @@ export interface WebhookNotificationChannelDependencies {
     error: unknown,
     context: { workspaceId: string; notificationId: string; type: string },
   ) => void
+  /**
+   * Where a spent delivery is COUNTED, beside the per-failure report `onError` makes. The
+   * hook answers "why did this one card not arrive"; the counter answers "are deliveries
+   * failing at a rate nobody has noticed" — an endpoint that has been rejecting every card
+   * for a week produces a steady trickle of individual warnings and no signal at all.
+   */
+  operationalMetrics?: OperationalMetrics
 }
 
 export class WebhookNotificationChannel implements NotificationChannel {
@@ -73,6 +81,13 @@ export class WebhookNotificationChannel implements NotificationChannel {
       this.deps.onError?.(error, {
         workspaceId,
         notificationId: notification.id,
+        type: notification.type,
+      })
+      // The notification TYPE is a bounded enum, so it is safe as a dimension and is the one
+      // split worth having: an endpoint that only fails on a particular card is a receiver
+      // bug, where a flat failure across types is an outage.
+      this.deps.operationalMetrics?.increment('notification.delivery_failed', {
+        channel: 'webhook',
         type: notification.type,
       })
     }

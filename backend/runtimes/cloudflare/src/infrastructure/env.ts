@@ -586,6 +586,10 @@ export interface Env {
   PLATFORM_ALERTS_MAX_P99_MINUTES?: string
   /** Live running/blocked/paused/pending depth at or above which the backlog alert fires (default 50). */
   PLATFORM_ALERTS_MAX_BACKLOG?: string
+  PLATFORM_ALERTS_STALLED_BUCKETS?: string
+  PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS?: string
+  PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE?: string
+  PLATFORM_ALERTS_MAX_SWEEP_FAILURES?: string
 
   // ---- Infrastructure-reachability watcher (see docs/environment-variables.md) --
   /**

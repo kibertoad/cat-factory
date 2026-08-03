@@ -37,6 +37,7 @@ import {
   sweepFoundationalSources,
   sweepInfraReachability,
   sweepPlatformHealth,
+  operationalMetrics,
 } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
@@ -58,6 +59,8 @@ import {
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
+import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
+import { SweepTick } from './infrastructure/observability/cronSweep'
 import {
   type CoreDependencies,
   defaultJudgeRegistry,
@@ -252,33 +255,28 @@ const FREQUENT_CRON_PERIOD_MS = 2 * 60_000
  * windows. The tables exist regardless of whether GitHub/agents are
  * configured, so this runs unconditionally; an unused table reclaims nothing.
  */
-function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock): void {
   // ADR 0026 D6.1: the Worker has no boot moment, so the O(1) ENCRYPTION_KEY drift check
   // rides the daily cron. It seeds the fingerprint on first run and logs a definitive
   // drift signal on a key change. Independent of (and cheaper than) the retention work.
   if (env.ENCRYPTION_KEY) {
     const encryptionKey = env.ENCRYPTION_KEY
-    ctx.waitUntil(
+    tick.run(
+      { name: 'key-fingerprint', failureMessage: 'key fingerprint check failed' },
       checkKeyFingerprint({
         store: new D1KeyFingerprintStore({ db: env.DB }),
         masterKeyBase64: encryptionKey,
         logger: keyFingerprintLogger,
-      }).catch((error) =>
-        logger.error('key fingerprint check failed', {
-          cron: 'key-fingerprint',
-          ...describeError(error),
-        }),
-      ),
+      }),
     )
     // ADR 0026 D6.2: the drift sweep — decrypt every sealed credential and raise/clear ONE
     // `key_drift` card per affected workspace. Rides the same daily cron as the fingerprint.
-    ctx.waitUntil(
+    tick.run(
+      { name: 'key-drift', failureMessage: 'key drift sweep failed' },
       sweepKeyDriftAndRaise(
         buildContainer(env),
         (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
         keyFingerprintLogger,
-      ).catch((error) =>
-        logger.error('key drift sweep failed', { cron: 'key-drift', ...describeError(error) }),
       ),
     )
   }
@@ -286,7 +284,8 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
   // sweep), so do the same fail-fast the build does: a clear error beats an opaque
   // NPE deep in a telemetry repo when the binding is unbound.
   const telemetryDb = requireTelemetryDb(env)
-  ctx.waitUntil(
+  tick.run(
+    { name: 'retention', failureMessage: 'retention sweep failed' },
     sweepRetention({
       tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
       rateLimitRepository: new D1RateLimitRepository({
@@ -315,11 +314,18 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         : {}),
       clock,
       policy: loadConfig(env).retention,
-    })
-      .then((result) => logger.info('retention sweep complete', { cron: 'retention', ...result }))
-      .catch((error) =>
-        logger.error('retention sweep failed', { cron: 'retention', ...describeError(error) }),
-      ),
+      logger,
+    }).then(({ failedTables, ...reclaimed }) => {
+      logger.info('retention sweep complete', { cron: 'retention', ...reclaimed })
+      // Each failure was already warned at its table; this names the SET, so a table that
+      // has been failing every night is one greppable line rather than a pattern to notice.
+      if (failedTables.length > 0) {
+        logger.warn('retention sweep could not prune every table', {
+          cron: 'retention',
+          failedTables,
+        })
+      }
+    }),
   )
   // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
   // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
@@ -327,7 +333,8 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
   // S3 backend (which needs the encryption key to unseal its credentials).
   if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
     const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
-    ctx.waitUntil(
+    tick.run(
+      { name: 'artifact-retention', failureMessage: 'artifact retention sweep failed' },
       sweepBinaryArtifactRetention({
         resolveStore: buildCloudflareArtifactStoreResolver(
           env,
@@ -346,19 +353,12 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
               (s) => s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
             ),
         now: clock.now(),
-      })
-        .then((removed) =>
-          logger.info('artifact retention sweep complete', {
-            cron: 'retention',
-            binaryArtifacts: removed,
-          }),
-        )
-        .catch((error) =>
-          logger.error('artifact retention sweep failed', {
-            cron: 'retention',
-            ...describeError(error),
-          }),
-        ),
+      }).then((removed) =>
+        logger.info('artifact retention sweep complete', {
+          cron: 'retention',
+          binaryArtifacts: removed,
+        }),
+      ),
     )
   }
 }
@@ -367,7 +367,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
  * Re-drive any agent run — execution OR bootstrap — whose Workflows instance
  * died. One sweep over the unified agent_runs table dispatches by kind.
  */
-function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
     const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
     const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
@@ -383,7 +383,8 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
     const repairRunner = env.ENV_CONFIG_REPAIR_WORKFLOW
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : null
-    ctx.waitUntil(
+    tick.run(
+      { name: 'stale-run', failureMessage: 'run sweep failed' },
       sweepStuckRuns({
         agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
         instanceState: (ref) => {
@@ -446,17 +447,16 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
         leaseMs: SWEEP_LEASE_MS,
         hardStallMs: SWEEP_HARD_STALL_MS,
         orphanedSince: runSweepOrphanedSince,
+        metrics: operationalMetrics,
+        logger,
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
         // Only log when it actually acted.
         .then(({ redriven, finalized, stalled }) => {
           if (redriven > 0 || finalized > 0 || stalled > 0) {
-            logger.warn('swept stuck runs', { cron: 'run-sweeper', redriven, finalized, stalled })
+            logger.warn('swept stuck runs', { cron: 'stale-run', redriven, finalized, stalled })
           }
-        })
-        .catch((error) =>
-          logger.error('run sweep failed', { cron: 'run-sweeper', ...describeError(error) }),
-        ),
+        }),
     )
   }
 }
@@ -466,11 +466,12 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
  * sweep never sees them — this sibling sweep re-drives a run whose Workflows instance
  * was lost and finalizes (cleanup + failed) one whose instance is terminal.
  */
-function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function redriveStuckEnvTests(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.ENV_TEST_WORKFLOW) {
     const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
     const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
-    ctx.waitUntil(
+    tick.run(
+      { name: 'env-test-sweeper', failureMessage: 'env-test sweep failed' },
       sweepStuckEnvTests({
         repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
         instanceState: (runId) => envTestLookup.instanceState(runId),
@@ -485,22 +486,15 @@ function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemCloc
         },
         clock,
         leaseMs: SWEEP_LEASE_MS,
-      })
-        .then(({ redriven, finalized }) => {
-          if (redriven > 0 || finalized > 0) {
-            logger.warn('swept stuck env-test runs', {
-              cron: 'env-test-sweeper',
-              redriven,
-              finalized,
-            })
-          }
-        })
-        .catch((error) =>
-          logger.error('env-test sweep failed', {
+      }).then(({ redriven, finalized }) => {
+        if (redriven > 0 || finalized > 0) {
+          logger.warn('swept stuck env-test runs', {
             cron: 'env-test-sweeper',
-            ...describeError(error),
-          }),
-        ),
+            redriven,
+            finalized,
+          })
+        }
+      }),
     )
   }
 }
@@ -511,21 +505,14 @@ function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemCloc
  * bounds standing exposure and a finished run's rows are deleted at completion, but
  * this backstop also clears any that outlived their TTL. The table always exists.
  */
-function reclaimExpiredActivations(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function reclaimExpiredActivations(env: Env, tick: SweepTick, clock: SystemClock): void {
   const activations = new D1SubscriptionActivationRepository({ db: env.DB })
-  ctx.waitUntil(
-    activations
-      .deleteExpired(clock.now())
-      .then((reclaimed) => {
-        if (reclaimed > 0)
-          logger.info('reclaimed activations', { cron: 'activation-sweeper', reclaimed })
-      })
-      .catch((error) =>
-        logger.error('activation sweep failed', {
-          cron: 'activation-sweeper',
-          ...describeError(error),
-        }),
-      ),
+  tick.run(
+    { name: 'activation-sweeper', failureMessage: 'activation sweep failed' },
+    activations.deleteExpired(clock.now()).then((reclaimed) => {
+      if (reclaimed > 0)
+        logger.info('reclaimed activations', { cron: 'activation-sweeper', reclaimed })
+    }),
   )
 }
 
@@ -538,7 +525,7 @@ function reclaimExpiredActivations(env: Env, ctx: ExecutionContext, clock: Syste
  * EXEC_CONTAINER binding (no Cloudflare API token). With normal runs now self-
  * reclaiming, a reaped container is a genuine leak — the registry logs each loudly.
  */
-function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+function reapStaleContainers(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.EXEC_CONTAINER) {
     const reaper = new ContainerInstanceRegistry(
       env.EXEC_CONTAINER,
@@ -546,19 +533,12 @@ function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock
       clock,
     )
     const maxAgeMs = loadConfig(env).execution.containerMaxAgeMs
-    ctx.waitUntil(
-      reaper
-        .reapStaleBefore(clock.now() - maxAgeMs)
-        .then(({ reaped }) => {
-          if (reaped > 0)
-            logger.warn('reaped leaked containers', { cron: 'container-reaper', reaped })
-        })
-        .catch((error) =>
-          logger.error('container reap failed', {
-            cron: 'container-reaper',
-            ...describeError(error),
-          }),
-        ),
+    tick.run(
+      { name: 'container-reaper', failureMessage: 'container reap failed' },
+      reaper.reapStaleBefore(clock.now() - maxAgeMs).then(({ reaped }) => {
+        if (reaped > 0)
+          logger.warn('reaped leaked containers', { cron: 'container-reaper', reaped })
+      }),
     )
   }
 }
@@ -570,61 +550,43 @@ function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock
  */
 function runPeriodicBackstops(
   env: Env,
-  ctx: ExecutionContext,
+  tick: SweepTick,
   clock: SystemClock,
   scheduledTime: number,
 ): void {
   // Escalate long-waiting notifications yellow → red (every 2 min). Runs no longer
   // time out waiting for a human, so the escalating notification — past each
   // workspace's `waitingEscalationMinutes` threshold — is the overdue-human signal.
-  ctx.waitUntil(
-    escalateStaleNotifications(buildContainer(env), clock.now())
-      .then((escalated) => {
-        if (escalated > 0)
-          logger.info('escalated notifications', { cron: 'notification-escalation', escalated })
-      })
-      .catch((error) =>
-        logger.error('notification escalation failed', {
-          cron: 'notification-escalation',
-          ...describeError(error),
-        }),
-      ),
+  tick.run(
+    { name: 'notification-escalation', failureMessage: 'notification escalation failed' },
+    escalateStaleNotifications(buildContainer(env), clock.now()).then((escalated) => {
+      if (escalated > 0)
+        logger.info('escalated notifications', { cron: 'notification-escalation', escalated })
+    }),
   )
 
   // Fire any due recurring pipelines (every 2 min; the actual cadence is hours).
   // Each due schedule starts its pipeline against its reused block, skipping any
   // whose block already has an active run. No-op when the feature isn't wired.
-  ctx.waitUntil(
-    Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now()))
-      .then((result) => {
-        if (result && (result.fired > 0 || result.skipped > 0)) {
-          logger.info('fired recurring pipelines', { cron: 'recurring-pipelines', ...result })
-        }
-      })
-      .catch((error) =>
-        logger.error('recurring-pipeline sweep failed', {
-          cron: 'recurring-pipelines',
-          ...describeError(error),
-        }),
-      ),
+  tick.run(
+    { name: 'recurring-pipelines', failureMessage: 'recurring-pipeline sweep failed' },
+    Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now())).then((result) => {
+      if (result && (result.fired > 0 || result.skipped > 0)) {
+        logger.info('fired recurring pipelines', { cron: 'recurring-pipelines', ...result })
+      }
+    }),
   )
 
   // Tick the initiative execution loop (every 2 min): reconcile each executing initiative's
   // spawned tasks and spawn the next wave up to its concurrency cap. Terminal child runs poke
   // the loop directly, so this is the backstop cadence. No-op when initiatives aren't wired.
-  ctx.waitUntil(
-    Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now()))
-      .then((result) => {
-        if (result && (result.spawned > 0 || result.completed > 0)) {
-          logger.info('ticked initiative loop', { cron: 'initiative-loop', ...result })
-        }
-      })
-      .catch((error) =>
-        logger.error('initiative-loop sweep failed', {
-          cron: 'initiative-loop',
-          ...describeError(error),
-        }),
-      ),
+  tick.run(
+    { name: 'initiative-loop', failureMessage: 'initiative-loop sweep failed' },
+    Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now())).then((result) => {
+      if (result && (result.spawned > 0 || result.completed > 0)) {
+        logger.info('ticked initiative loop', { cron: 'initiative-loop', ...result })
+      }
+    }),
   )
 
   // Run any pending Kaizen gradings (every 2 min): the engine only inserts `scheduled`
@@ -634,7 +596,8 @@ function runPeriodicBackstops(
   // model is resolved per-workspace (Model Configuration), so this is workspace-wide.
   if (!kaizenSweeping) {
     kaizenSweeping = true
-    ctx.waitUntil(
+    tick.run(
+      { name: 'kaizen-sweeper', failureMessage: 'kaizen sweep failed' },
       Promise.resolve(
         buildContainer(env).kaizen?.service.runPending(
           clock.now() - KAIZEN_STALE_MS,
@@ -645,9 +608,9 @@ function runPeriodicBackstops(
           if (processed && processed > 0)
             logger.info('ran pending kaizen gradings', { cron: 'kaizen-sweeper', processed })
         })
-        .catch((error) =>
-          logger.error('kaizen sweep failed', { cron: 'kaizen-sweeper', ...describeError(error) }),
-        )
+        // Released on BOTH paths, and it has to stay inside the promise handed to `tick.run`:
+        // the in-flight latch is what stops a second tick piling onto a slow grading pass, so a
+        // failed pass that never cleared it would wedge Kaizen until the isolate was recycled.
         .finally(() => {
           kaizenSweeping = false
         }),
@@ -656,20 +619,14 @@ function runPeriodicBackstops(
 
   // Reconcile GitHub projections that may have missed a webhook (no-op unless
   // the integration is configured).
-  ctx.waitUntil(
-    reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS)
-      .then((scheduled) => {
-        if (scheduled > 0)
-          // `sweep:` (not `cron:`) so the summary shares a field with the pass's
-          // per-repo lines, which the shared reconcile core emits on both facades.
-          logger.info('scheduled repo resyncs', { sweep: 'github-reconcile', scheduled })
-      })
-      .catch((error) =>
-        logger.error('github reconcile failed', {
-          sweep: 'github-reconcile',
-          ...describeError(error),
-        }),
-      ),
+  tick.run(
+    { name: 'github-reconcile', failureMessage: 'github reconcile failed' },
+    reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS).then((scheduled) => {
+      if (scheduled > 0)
+        // `sweep:` (not `cron:`) so the summary shares a field with the pass's
+        // per-repo lines, which the shared reconcile core emits on both facades.
+        logger.info('scheduled repo resyncs', { sweep: 'github-reconcile', scheduled })
+    }),
   )
 
   // Refresh repo-linked FOUNDATIONAL-SERVICE sources whose last sync has aged out, so a merged
@@ -681,22 +638,17 @@ function runPeriodicBackstops(
   if (
     shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, FOUNDATIONAL_SOURCE_STALE_MS)
   ) {
-    ctx.waitUntil(
-      sweepFoundationalSources(buildContainer(env).foundationalServices, logger).catch((error) =>
-        logger.error('foundational-source sweep failed', {
-          sweep: 'foundational-sources',
-          ...describeError(error),
-        }),
-      ),
+    tick.run(
+      { name: 'foundational-sources', failureMessage: 'foundational-source sweep failed' },
+      sweepFoundationalSources(buildContainer(env).foundationalServices, logger),
     )
   }
 
   // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
   // environment integration is configured).
-  ctx.waitUntil(
-    sweepExpiredEnvironments(env, clock).catch((error) =>
-      logger.error('environment sweep failed', { cron: 'env-sweeper', ...describeError(error) }),
-    ),
+  tick.run(
+    { name: 'env-sweeper', failureMessage: 'environment sweep failed' },
+    sweepExpiredEnvironments(env, clock),
   )
 
   // Push deployment-level (platform-operator) observability aggregates to the OTLP
@@ -714,7 +666,8 @@ function runPeriodicBackstops(
       workspaceRepository: new D1WorkspaceRepository({ db: env.DB }),
       logger,
     })
-    if (sweep) ctx.waitUntil(sweep)
+    if (sweep)
+      tick.run({ name: 'platform-metrics', failureMessage: 'platform metrics sweep failed' }, sweep)
   }
 
   // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
@@ -730,22 +683,12 @@ function runPeriodicBackstops(
     reachability.enabled &&
     shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, reachability.intervalMs)
   ) {
-    ctx.waitUntil(
-      sweepInfraReachability(buildContainer(env), logger)
-        .then(({ raised, cleared }) => {
-          if (raised > 0 || cleared > 0)
-            logger.info('infra reachability sweep', {
-              cron: 'infra-reachability',
-              raised,
-              cleared,
-            })
-        })
-        .catch((error) =>
-          logger.error('infra reachability sweep failed', {
-            cron: 'infra-reachability',
-            ...describeError(error),
-          }),
-        ),
+    tick.run(
+      { name: 'infra-reachability', failureMessage: 'infra reachability sweep failed' },
+      sweepInfraReachability(buildContainer(env), logger).then(({ raised, cleared }) => {
+        if (raised > 0 || cleared > 0)
+          logger.info('infra reachability sweep', { cron: 'infra-reachability', raised, cleared })
+      }),
     )
   }
 
@@ -754,18 +697,12 @@ function runPeriodicBackstops(
   // Opt-in (`PLATFORM_ALERTS`); the container (hence the platform-observability read) is built
   // only when opted in so a deployment that hasn't opted in pays nothing.
   if (loadConfig(env).platformAlerts.enabled) {
-    ctx.waitUntil(
-      sweepPlatformHealth(buildContainer(env), logger)
-        .then(({ raised, cleared }) => {
-          if (raised > 0 || cleared > 0)
-            logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
-        })
-        .catch((error) =>
-          logger.error('platform health sweep failed', {
-            cron: 'platform-health',
-            ...describeError(error),
-          }),
-        ),
+    tick.run(
+      { name: 'platform-health', failureMessage: 'platform health sweep failed' },
+      sweepPlatformHealth(buildContainer(env), logger).then(({ raised, cleared }) => {
+        if (raised > 0 || cleared > 0)
+          logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
+      }),
     )
   }
 }
@@ -778,27 +715,66 @@ async function handleScheduled(
 ): Promise<void> {
   setLogLevel(parseLogLevel(env.LOG_LEVEL))
   const clock = new SystemClock()
+  const tick = new SweepTick(ctx)
 
   // Daily pass: prune the unbounded ledgers/projections to their retention windows.
   if (controller.cron === RETENTION_CRON) {
-    runDailyRetentionSweeps(env, ctx, clock)
-    return
+    runDailyRetentionSweeps(env, tick, clock)
+  } else {
+    // Frequent pass (every 2 min): time-sensitive backstops.
+    redriveStuckAgentRuns(env, tick, clock)
+    redriveStuckEnvTests(env, tick, clock)
+    reclaimExpiredActivations(env, tick, clock)
+    reapStaleContainers(env, tick, clock)
+    runPeriodicBackstops(env, tick, clock, controller.scheduledTime)
   }
+  // This tick's own counters, flushed once its passes have SETTLED. The ordering is the whole
+  // point: the collector is per ISOLATE, so a counter a cron pass records can only be exported
+  // by a flush that runs after it. Draining while the passes were still in flight meant a cron
+  // tick drained an empty collector and left its own counters waiting for a next tick in the
+  // same isolate — which for the daily retention cron is a tick that never comes.
+  flushOperationalMetricsAfter(tick.settled(), env, ctx, clock)
+}
 
-  // Frequent pass (every 2 min): time-sensitive backstops.
-  redriveStuckAgentRuns(env, ctx, clock)
-  redriveStuckEnvTests(env, ctx, clock)
-  reclaimExpiredActivations(env, ctx, clock)
-  reapStaleContainers(env, ctx, clock)
-  runPeriodicBackstops(env, ctx, clock, controller.scheduledTime)
+/**
+ * Flush THIS ISOLATE's operational counters once `work` settles, as a post-response
+ * `waitUntil`. Every entry point calls it, because a Worker's collector is per-isolate and an
+ * isolate is discarded without warning — see `observability/operationalFlush.ts` for why that
+ * makes per-invocation flushing the correct shape rather than a wasteful one.
+ *
+ * `allSettled` rather than a catch: a FAILED invocation is exactly the one whose counters
+ * matter, and its rejection is the caller's to propagate, not this bookkeeping's to observe.
+ */
+function flushOperationalMetricsAfter(
+  work: Promise<unknown>,
+  env: Env,
+  ctx: ExecutionContext,
+  clock: SystemClock,
+): void {
+  ctx.waitUntil(
+    Promise.allSettled([work]).then(
+      () => flushOperationalMetricsForIsolate(loadConfig(env).otel, clock.now()) ?? undefined,
+    ),
+  )
 }
 
 /** The queue consumer multiplexing the three queues. Module-level, like {@link handleScheduled}. */
 async function handleQueue(
   batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
   env: Env,
+  ctx: ExecutionContext,
 ): Promise<void> {
   setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  const work = routeQueueBatch(batch, env)
+  flushOperationalMetricsAfter(work, env, ctx, new SystemClock())
+  await work
+}
+
+/** The routing half of {@link handleQueue}, split out so the flush can bracket the whole batch. */
+async function routeQueueBatch(
+  batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
+  env: Env,
+): Promise<void> {
   // Route by source queue — the single handler serves all three queues.
   if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
     await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
@@ -888,7 +864,10 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         foundationalServiceRegistry: registries.foundationalServiceRegistry,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
-      return app.fetch(request, env, ctx)
+      const response = Promise.resolve(app.fetch(request, env, ctx))
+      // Flush whatever THIS isolate counted while serving the request, after the response.
+      flushOperationalMetricsAfter(response, env, ctx, new SystemClock())
+      return response
     },
     scheduled: handleScheduled,
     queue: handleQueue,

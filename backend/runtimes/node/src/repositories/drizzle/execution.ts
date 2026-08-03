@@ -575,6 +575,7 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
         id: agentRuns.id,
         kind: agentRuns.kind,
         updatedAt: agentRuns.updated_at,
+        redriveCount: agentRuns.redrive_count,
       })
       .from(agentRuns)
       .where(and(eq(agentRuns.status, 'running'), lt(agentRuns.updated_at, olderThanEpochMs)))
@@ -583,6 +584,7 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
       workspaceId: r.workspaceId,
       id: r.id,
       updatedAt: r.updatedAt,
+      redriveCount: r.redriveCount ?? 0,
       kind: decodeEnum(agentRunKindSchema, r.kind, {
         table: 'agent_runs',
         column: 'kind',
@@ -617,6 +619,17 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
       for (const r of rows) live.push(r.id)
     }
     return live
+  }
+
+  async recordRedrive(workspaceId: string, id: string): Promise<number> {
+    // One statement: increment and read back the new total, so nothing races between a read
+    // and a write. The row is absent (0 returned) only for a run that has since been deleted.
+    const rows = await this.db
+      .update(agentRuns)
+      .set({ redrive_count: sql`${agentRuns.redrive_count} + 1` })
+      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id)))
+      .returning({ redriveCount: agentRuns.redrive_count })
+    return rows[0]?.redriveCount ?? 0
   }
 }
 

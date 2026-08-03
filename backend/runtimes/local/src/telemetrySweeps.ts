@@ -1,3 +1,4 @@
+import { sweepHealth } from '@cat-factory/server'
 import type { Clock, Logger } from '@cat-factory/kernel'
 import type { MachineTelemetryClient, RetentionConfig } from '@cat-factory/server'
 import type { LocalTelemetryStore } from './sqlite/telemetryStore.js'
@@ -43,6 +44,7 @@ export function startMothershipTelemetrySweeps(
     deps.retention,
     deps.clock,
     deps.log,
+    sweepHealth,
   )
   const stopIngest = startTelemetryIngest({
     reader: deps.store.ingestReader,

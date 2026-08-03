@@ -1,11 +1,17 @@
-import type { Clock, WorkspaceRepository } from '@cat-factory/kernel'
+import type {
+  Clock,
+  OperationalGaugeSample,
+  OperationalMetricsCollector,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
 import {
   type PlatformObservabilityService,
   distinctAccountIds,
+  flushOperationalMetrics,
   sweepPlatformMetrics,
 } from '@cat-factory/orchestration'
 import { createPlatformMetricsOtelExporter } from '@cat-factory/observability-otel'
-import type { Logger, OtelConfig } from '@cat-factory/server'
+import type { Logger, OtelConfig, SweepHealthTracker } from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Node analogue of the Worker's platform-metrics cron branch: a periodic sweep that pushes
@@ -19,6 +25,12 @@ export interface PlatformMetricsSweeperDeps {
   otel: OtelConfig
   platformObservability: PlatformObservabilityService
   workspaceRepository: Pick<WorkspaceRepository, 'listVisible'>
+  /**
+   * Reads every pg-boss queue's depth in ONE call. Omitted ⇒ no queue gauge is emitted at
+   * all, which is the honest answer for a deployment with no durable substrate (mothership
+   * mode) — a zero there would claim an empty queue where there is no queue.
+   */
+  probeQueueDepth?: () => Promise<OperationalGaugeSample[]>
 }
 
 /**
@@ -32,8 +44,16 @@ export function startPlatformMetricsSweeper(
   deps: PlatformMetricsSweeperDeps,
   clock: Clock,
   log: Logger,
+  /**
+   * The process-wide collector, DRAINED by this sweep. Node holds ONE for the life of the
+   * process, so draining on this interval loses nothing; the Worker cannot do the same and
+   * flushes per invocation.
+   */
+  metrics: OperationalMetricsCollector,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
-  const { otel, platformObservability, workspaceRepository } = deps
+  const { otel, platformObservability, workspaceRepository, probeQueueDepth } = deps
   if (!otel.platformMetrics.enabled || !otel.endpoint) return () => {}
 
   const exporter = createPlatformMetricsOtelExporter({
@@ -47,6 +67,7 @@ export function startPlatformMetricsSweeper(
     name: 'platform-metrics',
     intervalMs: otel.platformMetrics.intervalMs,
     log,
+    health,
     failureMessage: 'platform metrics sweep failed',
     tick: async () => {
       const exported = await sweepPlatformMetrics({
@@ -57,6 +78,16 @@ export function startPlatformMetricsSweeper(
         logger: log,
       })
       if (exported > 0) log.info('exported platform metrics', { exported })
+      // The OPERATIONAL half, on the same tick and through the same exporter: the counters
+      // this process accumulated since the last flush, plus a live queue-depth reading.
+      const flushed = await flushOperationalMetrics({
+        collector: metrics,
+        sink: exporter,
+        ...(probeQueueDepth ? { probeGauges: probeQueueDepth } : {}),
+        now: clock.now(),
+        logger: log,
+      })
+      if (flushed > 0) log.debug('exported operational metrics', { samples: flushed })
     },
   })
 }

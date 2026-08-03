@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRecordingLogger } from '@cat-factory/kernel'
+import { createRecordingLogger, createOperationalMetricsCollector } from '@cat-factory/kernel'
+import { createSweepHealthTracker } from '@cat-factory/server'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import type { Clock, Workspace } from '@cat-factory/kernel'
 import type { PlatformObservabilityService } from '@cat-factory/orchestration'
@@ -84,6 +85,8 @@ describe('Node facade: platform-metrics OTLP sweep wiring', () => {
         { otel: otelConfig(), platformObservability: observability, workspaceRepository },
         clock,
         log,
+        createOperationalMetricsCollector(),
+        createSweepHealthTracker(),
       ),
     )
     // `startSweeper` runs the first tick immediately (runImmediately) but asynchronously.
@@ -101,6 +104,8 @@ describe('Node facade: platform-metrics OTLP sweep wiring', () => {
         },
         clock,
         log,
+        createOperationalMetricsCollector(),
+        createSweepHealthTracker(),
       ),
     )
     await new Promise((r) => setTimeout(r, 50))
@@ -122,6 +127,8 @@ describe('Node facade: platform-metrics OTLP sweep wiring', () => {
         },
         clock,
         log,
+        createOperationalMetricsCollector(),
+        createSweepHealthTracker(),
       ),
     )
     await new Promise((r) => setTimeout(r, 50))

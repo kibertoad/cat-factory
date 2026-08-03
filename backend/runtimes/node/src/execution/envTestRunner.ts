@@ -1,5 +1,10 @@
-import type { EnvironmentTestRunner, EnvironmentTestRunRepository } from '@cat-factory/kernel'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type {
+  EnvironmentTestRunner,
+  EnvironmentTestRunRepository,
+  OperationalMetrics,
+} from '@cat-factory/kernel'
+import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
@@ -97,6 +102,14 @@ export function startEnvTestSweeper(
   repository: Pick<EnvironmentTestRunRepository, 'listStale'>,
   cfg: { leaseMs: number; intervalMs: number },
   log: Logger,
+  metrics: OperationalMetrics,
+  /**
+   * Records this sweep's outcome. A hand-rolled interval (it predates `startSweeper`), so it
+   * has to report the pass ITSELF — and reporting only the counter, as it first did, left this
+   * sweeper counted but absent from the `sweep_degraded` streak that `startSweeper`'s sweeps
+   * were in.
+   */
+  health: SweepHealthTracker,
 ): () => void {
   const tick = async () => {
     try {
@@ -108,11 +121,17 @@ export function startEnvTestSweeper(
           stage: run.stage,
         })
         await runner.startRun(run.workspaceId, run.id)
+        // Env-test runs live in their own table, but a re-drive is a re-drive: it rides the
+        // same counter with its own `kind`, so a deployment whose self-tests keep needing
+        // recovery shows up in the same series as one whose executions do.
+        metrics.increment('sweep.run_redriven', { kind: 'env-test' })
       }
+      health.recordSuccess('env-test')
     } catch (error) {
       log.error('env-test sweep failed', {
         err: error instanceof Error ? error.message : String(error),
       })
+      health.recordFailure('env-test')
     }
   }
   const timer = setInterval(() => void tick(), cfg.intervalMs)
@@ -129,7 +148,7 @@ export async function startEnvTestWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(QUEUE, { policy: QUEUE_POLICY })
+  await createQueueWithDeadLetter(boss, QUEUE, { policy: QUEUE_POLICY })
   await boss.work<EnvTestJob>(
     QUEUE,
     { localConcurrency: concurrency },

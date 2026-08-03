@@ -1,3 +1,7 @@
+import { type Logger, noopLogger } from './logging.js'
+import { type OperationalMetrics, noopOperationalMetrics } from './operational-metrics.js'
+import { describeError } from '../shared/best-effort.js'
+
 // Optional, opt-in sink for streaming LLM activity to an external observability
 // platform (e.g. Langfuse). It is the SINGLE code path that both LLM feeders reach:
 //
@@ -113,70 +117,104 @@ export interface LlmTraceSink {
  * network round trip failing) can never affect the others or the LLM path.
  */
 export class CompositeTraceSink implements LlmTraceSink {
-  constructor(private readonly sinks: LlmTraceSink[]) {}
+  private readonly log: Logger
+  private readonly metrics: OperationalMetrics
+
+  constructor(
+    private readonly sinks: LlmTraceSink[],
+    observability: TraceSinkObservability = {},
+  ) {
+    this.log = observability.logger ?? noopLogger
+    this.metrics = observability.operationalMetrics ?? noopOperationalMetrics
+  }
+
+  /**
+   * Run one sink's emit, isolating it. Still best-effort — a sink failing must never block
+   * the others or the caller — but no longer SILENT: telemetry completeness was the one
+   * property nothing anywhere measured, so a deployment whose collector had been rejecting
+   * every batch for a week looked exactly like one with nothing to report.
+   */
+  private async isolate(sink: LlmTraceSink, op: string, run: () => Promise<void>): Promise<void> {
+    try {
+      await run()
+    } catch (error) {
+      this.metrics.increment('telemetry.export_dropped', { operation: op })
+      this.log.warn('trace sink export dropped', {
+        scope: 'trace-sink',
+        operation: op,
+        sink: sink.constructor?.name ?? 'unknown',
+        ...describeError(error),
+      })
+    }
+  }
 
   async recordGeneration(event: LlmGenerationEvent): Promise<void> {
     await Promise.all(
-      this.sinks.map(async (sink) => {
-        try {
+      this.sinks.map((sink) =>
+        this.isolate(sink, 'recordGeneration', async () => {
           await sink.recordGeneration(event)
-        } catch {
-          // Best-effort: one sink failing must not block the others or the caller.
-        }
-      }),
+        }),
+      ),
     )
   }
 
   async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
     await Promise.all(
-      this.sinks.map(async (sink) => {
-        try {
+      this.sinks.map((sink) =>
+        this.isolate(sink, 'recordToolSpans', async () => {
           await sink.recordToolSpans?.(context, spans)
-        } catch {
-          // Best-effort, as above.
-        }
-      }),
+        }),
+      ),
     )
   }
 
   async forceFlush(): Promise<void> {
     await Promise.all(
-      this.sinks.map(async (sink) => {
-        try {
+      this.sinks.map((sink) =>
+        this.isolate(sink, 'forceFlush', async () => {
           await sink.forceFlush?.()
-        } catch {
-          // Best-effort, as above.
-        }
-      }),
+        }),
+      ),
     )
   }
 
   async shutdown(): Promise<void> {
     await Promise.all(
-      this.sinks.map(async (sink) => {
-        try {
+      this.sinks.map((sink) =>
+        this.isolate(sink, 'shutdown', async () => {
           await sink.shutdown?.()
-        } catch {
-          // Best-effort, as above.
-        }
-      }),
+        }),
+      ),
     )
   }
 }
 
+/** How a composed sink reports the batches it drops. Both optional; both degrade to silence. */
+export interface TraceSinkObservability {
+  logger?: Logger
+  operationalMetrics?: OperationalMetrics
+}
+
 /**
  * Compose zero or more optional sinks into a single one: none ⇒ `undefined` (nothing
- * wired, no external emission), exactly one ⇒ that sink verbatim (no wrapper overhead),
- * more than one ⇒ a {@link CompositeTraceSink} fanning out to all. The one helper every
- * facade uses so the "0/1/many" collapse is identical across runtimes.
+ * wired, no external emission), otherwise a {@link CompositeTraceSink} fanning out to all.
+ * The one helper every facade uses so the "0/1/many" collapse is identical across runtimes.
+ *
+ * A SINGLE sink used to be returned verbatim, to skip the wrapper's overhead. That collapse
+ * is kept only when there is nothing to report through: once `observability` is supplied, one
+ * sink is wrapped like any other, because a single external destination is the COMMON
+ * deployment shape and unwrapping it there would leave drop counting absent from exactly the
+ * deployments that have telemetry to drop — an absence that reads as "no drops".
  */
 export function composeTraceSinks(
   sinks: readonly (LlmTraceSink | undefined)[],
+  observability?: TraceSinkObservability,
 ): LlmTraceSink | undefined {
   const active = sinks.filter((sink): sink is LlmTraceSink => sink != null)
   if (active.length === 0) return undefined
-  if (active.length === 1) return active[0]
-  return new CompositeTraceSink(active)
+  const reports = observability?.logger || observability?.operationalMetrics
+  if (active.length === 1 && !reports) return active[0]
+  return new CompositeTraceSink(active, observability ?? {})
 }
 
 // ----------------------------------------------------------------------------

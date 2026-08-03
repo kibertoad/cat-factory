@@ -11,7 +11,9 @@ import type {
   RateLimitRepository,
   SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
+  Logger,
 } from '@cat-factory/kernel'
+import { createRetentionPass } from '@cat-factory/orchestration'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -69,9 +71,11 @@ export interface RetentionDeps {
   notificationRepository: NotificationRepository
   clock: Clock
   policy: RetentionPolicy
+  /** Names the table behind each isolated prune failure. Absent ⇒ the failures are silent. */
+  logger?: Logger
 }
 
-/** Rows reclaimed from each table, for logging. */
+/** Rows reclaimed from each table, plus the tables the pass could not prune. */
 export interface RetentionResult {
   tokenUsage: number
   rateLimits: number
@@ -84,22 +88,24 @@ export interface RetentionResult {
   provisioningLog: number
   passwordResetTokens: number
   notifications: number
-}
-
-/** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
-async function prune(
-  windowMs: number,
-  now: number,
-  del: (cutoff: number) => Promise<number>,
-): Promise<number> {
-  if (windowMs <= 0) return 0
-  return del(now - windowMs)
+  /**
+   * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
+   * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
+   * them means the table is still growing.
+   */
+  failedTables: string[]
 }
 
 /**
  * Prune each unbounded table to its retention window. The deletes are
  * range-scans on indexed columns and usually reclaim nothing, so this is cheap
- * to run on the every-2-min cron. Returns the counts removed per table.
+ * to run on the every-2-min cron. Returns the counts removed per table plus the tables that
+ * failed.
+ *
+ * Every table is pruned in ISOLATION (slice 4.4): the passes used to be a chain of bare
+ * `await`s, so the first failing `deleteOlderThan` aborted every later one — indefinitely,
+ * since the same table failed on every subsequent pass too. Shared with the Node twin via
+ * `createRetentionPass`, so the two facades cannot drift on it.
  */
 export async function sweepRetention({
   tokenUsageRepository,
@@ -115,46 +121,64 @@ export async function sweepRetention({
   notificationRepository,
   clock,
   policy,
+  logger,
 }: RetentionDeps): Promise<RetentionResult> {
   const now = clock.now()
+  const pass = createRetentionPass(logger)
   return {
-    tokenUsage: await prune(policy.tokenUsageMs, now, (c) =>
+    tokenUsage: await pass.prune('token_usage', policy.tokenUsageMs, now, (c) =>
       tokenUsageRepository.deleteOlderThan(c),
     ),
-    rateLimits: await prune(policy.rateLimitMs, now, (c) => rateLimitRepository.deleteOlderThan(c)),
-    commits: await prune(policy.commitMs, now, (c) => commitRepository.deleteOlderThan(c)),
-    llmCallMetrics: await prune(policy.llmCallMetricsMs, now, (c) =>
+    rateLimits: await pass.prune('github_rate_limits', policy.rateLimitMs, now, (c) =>
+      rateLimitRepository.deleteOlderThan(c),
+    ),
+    commits: await pass.prune('github_commits', policy.commitMs, now, (c) =>
+      commitRepository.deleteOlderThan(c),
+    ),
+    llmCallMetrics: await pass.prune('llm_call_metrics', policy.llmCallMetricsMs, now, (c) =>
       llmCallMetricRepository.deleteOlderThan(c),
     ),
     // Same window as the LLM call telemetry (heavy prompt + injected-file bodies).
-    agentContextSnapshots: await prune(policy.llmCallMetricsMs, now, (c) =>
-      agentContextSnapshotRepository.deleteOlderThan(c),
+    agentContextSnapshots: await pass.prune(
+      'agent_context_snapshots',
+      policy.llmCallMetricsMs,
+      now,
+      (c) => agentContextSnapshotRepository.deleteOlderThan(c),
     ),
     // Same window as the LLM call telemetry (performed web-search queries).
-    agentSearchQueries: await prune(policy.llmCallMetricsMs, now, (c) =>
-      agentSearchQueryRepository.deleteOlderThan(c),
+    agentSearchQueries: await pass.prune(
+      'agent_search_queries',
+      policy.llmCallMetricsMs,
+      now,
+      (c) => agentSearchQueryRepository.deleteOlderThan(c),
     ),
     // Idle quota cycles past the fixed 30-day window (well beyond the weekly one).
-    subscriptionQuotaCycles: await prune(SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS, now, (c) =>
-      subscriptionQuotaCycleRepository.deleteOlderThan(c),
+    subscriptionQuotaCycles: await pass.prune(
+      'subscription_quota_cycles',
+      SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS,
+      now,
+      (c) => subscriptionQuotaCycleRepository.deleteOlderThan(c),
     ),
     scheduleRuns: pipelineScheduleRepository
-      ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
+      ? await pass.prune('pipeline_schedule_runs', SCHEDULE_RUN_RETENTION_MS, now, (c) =>
           pipelineScheduleRepository.pruneRunsBefore(c),
         )
       : 0,
     provisioningLog: provisioningLogRepository
-      ? await prune(policy.provisioningLogMs, now, (c) =>
+      ? await pass.prune('provisioning_log', policy.provisioningLogMs, now, (c) =>
           provisioningLogRepository.deleteOlderThan(c),
         )
       : 0,
     // Reset tokens past their own expiry — `now`, not a window.
     passwordResetTokens: passwordResetTokenRepository
-      ? await passwordResetTokenRepository.deleteExpired(now)
+      ? await pass.expire('password_reset_tokens', () =>
+          passwordResetTokenRepository.deleteExpired(now),
+        )
       : 0,
     // Resolved (acted/dismissed) notifications past the window; open cards untouched.
-    notifications: await prune(policy.notificationsMs, now, (c) =>
+    notifications: await pass.prune('notifications', policy.notificationsMs, now, (c) =>
       notificationRepository.deleteResolvedOlderThan(c),
     ),
+    failedTables: pass.failed,
   }
 }

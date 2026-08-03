@@ -25,6 +25,10 @@ describe('resolvePlatformAlertConfig', () => {
       maxFailureRate: 0.5,
       maxP99DurationMs: 60 * 60_000,
       maxBacklog: 50,
+      stalledBuckets: 3,
+      minStalledPriorRuns: 5,
+      maxFailureKindShare: 0.8,
+      maxSweepFailures: 3,
     })
   })
 
@@ -45,6 +49,11 @@ describe('resolvePlatformAlertConfig', () => {
       maxFailureRate: 0.25,
       maxP99DurationMs: 30 * 60_000,
       maxBacklog: 100,
+      // Unset in this override bag, so each falls back to its built-in default.
+      stalledBuckets: 3,
+      minStalledPriorRuns: 5,
+      maxFailureKindShare: 0.8,
+      maxSweepFailures: 3,
     })
   })
 
