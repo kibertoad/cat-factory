@@ -97,7 +97,12 @@ export function registryBinaryGeneratorSource(
  * a per-id memo would have to model partial selections for no caller that has one.
  */
 export function memoizeBinaryGeneratorViews(source: BinaryGeneratorSource): BinaryGeneratorSource {
-  let read: Promise<{ ok: true; views: BinaryGeneratorView[] } | { ok: false; error: unknown }>
+  // Typed as optional because it genuinely is until the first read — a closure disables TS's
+  // definite-assignment analysis, so a non-optional annotation here would compile while being
+  // false for the whole first call.
+  let read:
+    | Promise<{ ok: true; views: BinaryGeneratorView[] } | { ok: false; error: unknown }>
+    | undefined
   return {
     views: async () => {
       read ??= source.views().then(
