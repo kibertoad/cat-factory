@@ -806,13 +806,16 @@ var NotificationPayloadOnCallAssessmentRecommendationValues = []NotificationPayl
 type NotificationPayloadPlatformAlert string
 
 const (
-	NotificationPayloadPlatformAlertFailureRateHigh NotificationPayloadPlatformAlert = "failure_rate_high"
-	NotificationPayloadPlatformAlertDurationP99High NotificationPayloadPlatformAlert = "duration_p99_high"
-	NotificationPayloadPlatformAlertBacklogHigh     NotificationPayloadPlatformAlert = "backlog_high"
+	NotificationPayloadPlatformAlertFailureRateHigh     NotificationPayloadPlatformAlert = "failure_rate_high"
+	NotificationPayloadPlatformAlertDurationP99High     NotificationPayloadPlatformAlert = "duration_p99_high"
+	NotificationPayloadPlatformAlertBacklogHigh         NotificationPayloadPlatformAlert = "backlog_high"
+	NotificationPayloadPlatformAlertThroughputStalled   NotificationPayloadPlatformAlert = "throughput_stalled"
+	NotificationPayloadPlatformAlertFailureKindDominant NotificationPayloadPlatformAlert = "failure_kind_dominant"
+	NotificationPayloadPlatformAlertSweepDegraded       NotificationPayloadPlatformAlert = "sweep_degraded"
 )
 
 // NotificationPayloadPlatformAlertValues lists every NotificationPayloadPlatformAlert this SDK release knows.
-var NotificationPayloadPlatformAlertValues = []NotificationPayloadPlatformAlert{NotificationPayloadPlatformAlertFailureRateHigh, NotificationPayloadPlatformAlertDurationP99High, NotificationPayloadPlatformAlertBacklogHigh}
+var NotificationPayloadPlatformAlertValues = []NotificationPayloadPlatformAlert{NotificationPayloadPlatformAlertFailureRateHigh, NotificationPayloadPlatformAlertDurationP99High, NotificationPayloadPlatformAlertBacklogHigh, NotificationPayloadPlatformAlertThroughputStalled, NotificationPayloadPlatformAlertFailureKindDominant, NotificationPayloadPlatformAlertSweepDegraded}
 
 // NotificationPayloadPlatformWindow is the `NotificationPayloadPlatformWindow` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must

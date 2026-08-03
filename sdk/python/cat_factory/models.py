@@ -2348,6 +2348,9 @@ class NotificationPayloadPlatformAlert(StrEnum):
     FAILURE_RATE_HIGH = "failure_rate_high"
     DURATION_P99_HIGH = "duration_p99_high"
     BACKLOG_HIGH = "backlog_high"
+    THROUGHPUT_STALLED = "throughput_stalled"
+    FAILURE_KIND_DOMINANT = "failure_kind_dominant"
+    SWEEP_DEGRADED = "sweep_degraded"
 
 
 class NotificationPayloadPlatformWindow(StrEnum):
