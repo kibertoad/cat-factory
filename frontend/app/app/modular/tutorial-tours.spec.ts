@@ -76,11 +76,16 @@ const ID_PATTERNS = [
   /\btestId\s*:\s*(?:'([^']*)'|"([^"]*)")/g,
 ]
 
+/**
+ * Every `.vue`/`.ts` file the layer SHIPS. Test sources are excluded in both spellings: an id
+ * that exists only in a spec or a fixture is not rendered by anything, so counting one would
+ * let the guard pass on a tour anchored to a control that no longer exists.
+ */
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) return walk(path)
-    return /\.(vue|ts)$/.test(entry.name) && !entry.name.endsWith('.spec.ts') ? [path] : []
+    return /\.(vue|ts)$/.test(entry.name) && !/\.(spec|test)\.ts$/.test(entry.name) ? [path] : []
   })
 }
 

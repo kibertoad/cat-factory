@@ -278,18 +278,31 @@ mechanisms are animations longer than a tracking tick.
 anchor polls fast, and it is bounded by the step's wait budget. Movement arrives from scroll
 (capture phase, so every scroll container counts), window resize, a `ResizeObserver` on the
 anchor, and the board camera — with a slow backstop tick that also RE-RESOLVES the selector,
-which is what lets a step re-anchor when its control is replaced underneath it.
+which is what lets a step re-anchor when its control is replaced underneath it. Every one of
+those re-measures is coalesced into one per animation frame, because `measure()` reads layout
+and then writes it, and capture-phase scroll fires for every container many times a frame.
 
 **Accessibility.** The card is a non-modal `dialog` and deliberately not a focus trap: half
 the catalog asks the user to operate the real control behind it. Focus moves onto the card
 when the tour starts and on every Next/Back — without that a keyboard user has to tab the
 whole page, since the overlay is teleported to the end of `body` — but never on a
 `target-click` advance, where the app is opening a modal that rightly autofocuses its own
-first field. Step changes are announced through a separate `role="status"` region rather than
-`aria-live` on the card, because the card's entire contents are replaced per step and a
-wholesale subtree swap inside a dialog is not reliably announced. Motion is honoured on both
-sides: `motion-safe:` on the ring transition and the searching spinner, and an instant scroll
-and camera move under `prefers-reduced-motion`.
+first field and the NEXT step is usually the one telling the user to type in it. That is a
+decision, so it is `shouldFocusCard` in the logic module with a test on it, not an `if` at
+the call site — it was an inline one, and a call site that forgot it is exactly how the card
+came to steal focus from the modal it had just opened.
+
+Step changes are announced through a separate `role="status"` region rather than `aria-live`
+on the card, because the card's entire contents are replaced per step and a wholesale subtree
+swap inside a dialog is not reliably announced. Two things about that region are load-bearing
+and easy to undo by accident: it lives OUTSIDE the overlay's `v-if` and its text lands a tick
+after the node does, because assistive tech announces a CHANGE to a live region and routinely
+says nothing about one that was inserted already populated — which would silently cost the
+first step of every tour. And it is the SOLE announcement: the card carries no
+`aria-describedby`, or the body would be read a second time on every focus move.
+
+Motion is honoured on both sides: `motion-safe:` on the ring transition and the searching
+spinner, and an instant scroll and camera move under `prefers-reduced-motion`.
 
 **Breaking off a tour leaves a resume point.** Esc and Skip are both easy to reach — one by
 accident, one to get the overlay out of the way for a moment — and what they discarded was
@@ -299,7 +312,9 @@ still in the state the tour left it in, which is exactly what a DOM-anchored pos
 The store validates no index (it knows nothing about which tours exist), so the overlay
 clamps a resume that lands past the end of a script the gates have thinned since — and the
 runtime's own bail-out on an unresolvable tour passes `resumable: false`, or resuming would
-put the user straight back into the same dead overlay.
+put the user straight back into the same dead overlay. There is ONE slot, and starting a tour
+clears only that tour's own entry: another tour's position is not this action's to discard,
+and it loses the slot soon enough — when this one is broken off past step 0.
 
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through

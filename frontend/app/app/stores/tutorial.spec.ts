@@ -181,6 +181,27 @@ describe('useTutorialStore resuming a broken-off tour', () => {
     expect(tutorial.interruptedAt('board-basics')).toBeNull()
   })
 
+  it('keeps another tour’s resume point when a different tour is started from the top', () => {
+    // Starting a tour discards ITS own stale position, not somebody else's. Glancing at
+    // another tour and pressing Esc at step 0 must not cost the position you were coming
+    // back to — that one loses the single slot only when this tour is broken off past step 0.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.setStepIndex(3)
+    tutorial.stopTour()
+
+    tutorial.startTour('run-task')
+    tutorial.stopTour()
+    expect(tutorial.interruptedAt('board-basics')).toBe(3)
+
+    // ...and it does lose it the moment the other tour is broken off past its first step.
+    tutorial.startTour('run-task')
+    tutorial.setStepIndex(1)
+    tutorial.stopTour()
+    expect(tutorial.interruptedAt('board-basics')).toBeNull()
+    expect(tutorial.interruptedAt('run-task')).toBe(1)
+  })
+
   it('leaves no resume point behind a completed tour', () => {
     // It would sit beside that tour's own Completed badge, offering to resume what just finished.
     const tutorial = useTutorialStore()

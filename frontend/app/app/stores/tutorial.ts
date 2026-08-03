@@ -107,10 +107,15 @@ export const useTutorialStore = defineStore(
       promptOpen.value = false
       activeTourId.value = tourId
       stepIndex.value = 0
-      // Starting from the top is an explicit choice to discard the old position; leaving the
-      // record in place would offer Resume again the moment this attempt is broken off at
-      // step 0, pointing at a position the user already walked away from.
-      interrupted.value = null
+      // Starting from the top is an explicit choice to discard THIS tour's old position;
+      // leaving the record in place would offer Resume again the moment this attempt is
+      // broken off at step 0, pointing at a position the user already walked away from.
+      //
+      // A DIFFERENT tour's position is not this action's to discard. It is still exactly what
+      // its own Resume offer needs, and it will lose the single slot soon enough — the moment
+      // this tour is broken off past step 0. Clearing it here instead means glancing at
+      // another tour and pressing Esc silently costs the position you were coming back to.
+      if (interrupted.value?.tourId === tourId) interrupted.value = null
     }
 
     /**
