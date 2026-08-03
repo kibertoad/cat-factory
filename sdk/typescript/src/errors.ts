@@ -48,6 +48,23 @@ export class CatFactoryConnectionError extends CatFactoryError {}
 export class CatFactoryTimeoutError extends CatFactoryError {}
 
 /**
+ * An auto-pager was answered with the SAME `nextCursor` it had just sent.
+ *
+ * That is a server fault, and the pagers stop rather than follow it — the walk would otherwise
+ * never terminate, re-fetching one page forever against the caller's rate limit. It throws rather
+ * than returning quietly because a silent stop is indistinguishable from a completed walk, and a
+ * caller acting on "these are all the tasks" when they have seen one page is the worse failure.
+ */
+export class CatFactoryPaginationError extends CatFactoryError {}
+
+/** Build the pagination fault above. Called from the generated pagers. */
+export function repeatedCursorError(): CatFactoryPaginationError {
+  return new CatFactoryPaginationError(
+    'cat-factory SDK: the server repeated a pagination cursor; stopping rather than looping forever.',
+  )
+}
+
+/**
  * A 2xx response whose body was not the JSON the contract promises — in practice a proxy or
  * gateway answering in the deployment's place. Carries the raw text, because "invalid JSON" on
  * its own does not tell you that something in front of the backend returned an HTML error page.

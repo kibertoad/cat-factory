@@ -76,6 +76,26 @@ export function readEventStream(body: ReadableStream<Uint8Array>): EventStream {
   let buffer = ''
   let closed = false
 
+  /**
+   * Release the socket. Idempotent, and the ONLY place that does so.
+   *
+   * `close()` deliberately does not rely on `iterator.return()` for this: an async generator that
+   * has never been advanced has not entered its `try`, so `return()` resolves without running the
+   * `finally` below — the reader stays locked and the body is never cancelled. That is precisely
+   * the path a caller takes when they open a stream and abandon it before reading (an early
+   * `return`, a failed guard, a `finally` on a path that threw first), which is the case `close()`
+   * exists for. So both the iterator's `finally` and `close()` funnel here instead.
+   */
+  const release = async (): Promise<void> => {
+    if (closed) return
+    closed = true
+    reader.releaseLock()
+    // silent-catch-ok: cancelling an already-cancelled body is the state we were trying to
+    // reach, and this SDK has no logger to report through — it depends on nothing, because a
+    // client library's dependencies become every consumer's.
+    await body.cancel().catch(() => {})
+  }
+
   async function* iterate(): AsyncGenerator<StreamEvent> {
     try {
       for (;;) {
@@ -100,11 +120,7 @@ export function readEventStream(body: ReadableStream<Uint8Array>): EventStream {
       const trailing = decodeEvent(buffer.replace(/\r/g, '').trim())
       if (trailing) yield trailing
     } finally {
-      closed = true
-      reader.releaseLock()
-      await body.cancel().catch(() => {
-        // The body is already gone — that is the state we were trying to reach.
-      })
+      await release()
     }
   }
 
@@ -112,11 +128,13 @@ export function readEventStream(body: ReadableStream<Uint8Array>): EventStream {
   return {
     [Symbol.asyncIterator]: () => iterator,
     async close() {
-      if (closed) return
-      closed = true
-      await iterator.return(undefined as never).catch(() => {
-        // Closing a stream that already faulted is not itself a failure.
-      })
+      // Ask the generator to unwind first so an in-flight `read()` is not left dangling; then
+      // release unconditionally, which is what covers the never-started case.
+      // silent-catch-ok: the generator rejects here only if it had already faulted, which the
+      // caller saw at the point it faulted; re-raising from close() would replace their real
+      // failure with a second report of it.
+      await iterator.return(undefined as never).catch(() => {})
+      await release()
     },
   }
 }

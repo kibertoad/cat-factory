@@ -155,6 +155,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+          # Name the cache key's input rather than letting setup-java glob `**/pom.xml` from the
+          # repository root (see the same pin in ci.yml, where that walk cost the job its whole
+          # timeout budget).
+          cache-dependency-path: sdk/java/pom.xml
           # Writes a settings.xml wiring these to the `central` server id.
           server-id: central
           server-username: MAVEN_CENTRAL_USERNAME

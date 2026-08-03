@@ -9,6 +9,8 @@ with none. A caller who wants connection pooling or HTTP/2 supplies their own op
 
 from __future__ import annotations
 
+import datetime
+import email.utils
 import json
 import random
 import time
@@ -89,8 +91,8 @@ class Transport:
         timeout: float | None = None,
     ) -> Any:
         """Perform a request and return the decoded JSON body."""
-        response, _ = self._send(method, path, body, query, timeout, "application/json")
-        text = response.decode("utf-8")
+        raw = self._send(method, path, body, query, timeout, "application/json")
+        text = raw.decode("utf-8")
         if not text:
             return None
         try:
@@ -136,6 +138,7 @@ class Transport:
             raise self._from_http_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise self._from_transport_error(exc, method, path) from exc
+        _release_read_deadline(raw)
         return EventStream(raw)
 
     # -- internals -----------------------------------------------------------------------------
@@ -172,7 +175,7 @@ class Transport:
         query: Mapping[str, Any] | None,
         timeout: float | None,
         accept: str,
-    ) -> tuple[bytes, dict[str, str]]:
+    ) -> bytes:
         budget = self._max_retries
         deadline = timeout if timeout is not None else self._timeout
 
@@ -180,7 +183,7 @@ class Transport:
             request = self._build(method, path, body, query, accept)
             try:
                 with self._opener.open(request, timeout=deadline) as response:
-                    return response.read(), dict(response.headers)
+                    return response.read()
             except urllib.error.HTTPError as exc:
                 retriable = method in _IDEMPOTENT and exc.code in _RETRIABLE_STATUS
                 if attempt < budget and retriable:
@@ -217,6 +220,34 @@ class Transport:
         )
 
 
+def _release_read_deadline(raw: Any) -> None:
+    """Stop the client deadline once a STREAM's response headers are in.
+
+    ``urlopen(timeout=...)`` sets a SOCKET timeout, which keeps applying to every subsequent read
+    --- so on a stream it silently becomes an inactivity limit rather than a request deadline. The
+    deployment writes an SSE frame only when the run's projection CHANGES and sends no heartbeat,
+    and a parked run waits for a human indefinitely by design, so a quiet stream is the normal
+    state of a healthy one: left in place, the deadline aborts exactly the runs a caller most
+    wants to watch.
+
+    So the deadline covers the wait for HEADERS and nothing after it, which is what the other
+    three SDKs already mean by it (TypeScript clears its abort timer once fetch resolves, Go stops
+    the stream's timer at the same point, and the JDK's ``HttpRequest.timeout`` is defined that
+    way). A stream is instead bounded by the caller closing it --- and, above it, by the
+    deployment's own connection cap.
+
+    urllib exposes no public way to do this, so the socket is reached through the attribute chain
+    CPython actually builds (``HTTPResponse.fp`` -> ``BufferedReader.raw`` -> ``SocketIO._sock``).
+    A response that does not have that shape --- a caller-supplied opener, a future CPython ---
+    keeps its socket timeout: batching or an inactivity bound is a far smaller harm than reaching
+    into an object we did not recognise.
+    """
+    socket = getattr(getattr(getattr(raw, "fp", None), "raw", None), "_sock", None)
+    settimeout = getattr(socket, "settimeout", None)
+    if settimeout is not None:
+        settimeout(None)
+
+
 def _wire(value: Any) -> str:
     """Render a query value the way the server reads it (``true``, not Python's ``True``)."""
     if isinstance(value, bool):
@@ -225,14 +256,28 @@ def _wire(value: Any) -> str:
 
 
 def _retry_after(exc: urllib.error.HTTPError) -> float | None:
-    """``Retry-After`` in seconds, capped, or None when absent or unparsable."""
+    """``Retry-After`` in seconds, capped, or None when absent or unparsable.
+
+    Both wire forms, because RFC 9110 allows either and a deployment behind a proxy or CDN
+    routinely gets the HTTP-date one written for it. Reading only the numeric form silently
+    discarded the deployment's own knowledge of when the limit clears and fell back to a blind
+    backoff curve --- which still works, just worse, so nothing would ever have surfaced it.
+    """
     header = exc.headers.get("retry-after")
     if not header:
         return None
     try:
-        return min(float(header), 60.0)
+        return max(0.0, min(float(header), 60.0))
     except ValueError:
+        pass
+    parsed = email.utils.parsedate_to_datetime(header.strip())
+    if parsed is None:
         return None
+    if parsed.tzinfo is None:
+        # An HTTP-date is GMT by definition; a naive one has simply lost the marker.
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    delta = (parsed - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+    return max(0.0, min(delta, 60.0))
 
 
 #: The type of a caller-supplied opener factory, for a consumer that wants their own HTTP stack.

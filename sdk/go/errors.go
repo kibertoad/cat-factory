@@ -16,10 +16,12 @@
 package catfactory
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // ConnectionError means the request never produced an HTTP response: DNS, TCP, TLS, or a dropped
@@ -35,6 +37,47 @@ func (e *ConnectionError) Error() string {
 }
 
 func (e *ConnectionError) Unwrap() error { return e.Err }
+
+// TimeoutError means the request exceeded the client-side deadline (Options.Timeout), so no
+// verdict was reached.
+//
+// Kept apart from ConnectionError because the two need DIFFERENT reactions — a longer budget can
+// fix a timeout and cannot fix a refused connection — and because collapsing them is what makes
+// "the deployment is unreachable" indistinguishable from "this call is slow". The other three
+// SDKs draw the same line (CatFactoryTimeoutError / CatFactoryTimeoutException).
+//
+// On a STREAM the deadline covers only the wait for response headers; once the stream is open it
+// runs for as long as the caller's context allows.
+type TimeoutError struct {
+	Method  string
+	Path    string
+	Timeout time.Duration
+}
+
+func (e *TimeoutError) Error() string {
+	return fmt.Sprintf("cat-factory: %s %s exceeded its %s deadline", e.Method, e.Path, e.Timeout)
+}
+
+// Unwrap reports context.DeadlineExceeded, so errors.Is(err, context.DeadlineExceeded) holds for
+// callers who reach for the standard-library idiom rather than IsTimeout.
+func (e *TimeoutError) Unwrap() error { return context.DeadlineExceeded }
+
+// IsTimeout reports whether err is the client-side deadline being exceeded.
+func IsTimeout(err error) bool {
+	var timeoutErr *TimeoutError
+	return errors.As(err, &timeoutErr)
+}
+
+// ErrRepeatedCursor is yielded by an auto-pager when the server answers a page with the SAME
+// nextCursor it was just given.
+//
+// That is a server fault, and the pagers stop rather than follow it — the walk would otherwise
+// never terminate, re-fetching one page forever against a caller's rate limit. It is reported
+// rather than swallowed because a silent stop is indistinguishable from a completed walk, and a
+// caller acting on "these are all the tasks" when they have seen one page is the worse failure.
+var ErrRepeatedCursor = errors.New(
+	"cat-factory: the server repeated a pagination cursor; stopping rather than looping forever",
+)
 
 // DecodeError means a 2xx response whose body was not the JSON the contract promises — in practice
 // a proxy or gateway answering in the deployment's place.

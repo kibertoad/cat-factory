@@ -7,7 +7,7 @@
 
 import { spawn } from 'node:child_process'
 import { readFile, mkdir } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { delimiter as classpathSeparator, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { SdkReport } from './parity.ts'
 
@@ -87,7 +87,7 @@ export const RUNNERS: SdkRunner[] = [
         'javac',
         [
           '-cp',
-          [resolve(javaRoot, 'target/classes'), classpath].join(':'),
+          [resolve(javaRoot, 'target/classes'), classpath].join(classpathSeparator),
           '-d',
           resolve(javaRoot, 'target/smoketest-classes'),
           resolve(javaRoot, 'smoketest/java/ai/catfactory/sdk/smoketest/Smoketest.java'),
@@ -101,7 +101,11 @@ export const RUNNERS: SdkRunner[] = [
         cmd: 'java',
         args: [
           '-cp',
-          `${javaRoot}/target/classes:${javaRoot}/target/smoketest-classes:@CLASSPATH@`,
+          [
+            resolve(javaRoot, 'target/classes'),
+            resolve(javaRoot, 'target/smoketest-classes'),
+            '@CLASSPATH@',
+          ].join(classpathSeparator),
           'ai.catfactory.sdk.smoketest.Smoketest',
         ],
         cwd: javaRoot,

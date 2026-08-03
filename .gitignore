@@ -156,7 +156,11 @@ vite.config.ts.timestamp-*
 # --- SDK build artifacts (sdk/*) -------------------------------------------------------------
 # Maven output for the Java/Kotlin SDK (and the smoketest classes the cross-SDK harness compiles
 # into it). `dist` above already covers the TypeScript SDK; Go builds nothing into the tree.
-target/
+#
+# ANCHORED to the one directory that produces it: a bare `target/` matches any directory of that
+# name anywhere in the repository, which would silently swallow a source folder someone later
+# names `target/` in a package that has nothing to do with Maven.
+/sdk/java/target/
 
 # Python packaging + tooling output for the Python SDK.
 __pycache__/

@@ -507,6 +507,8 @@ function emitPager(operation) {
     `            yield from page.${attr(itemField)}\n` +
     '            if not page.next_cursor:\n' +
     '                return\n' +
+    '            if page.next_cursor == page_cursor:\n' +
+    '                raise _repeated_cursor()\n' +
     '            page_cursor = page.next_cursor\n'
   )
 }
@@ -549,6 +551,7 @@ from urllib.parse import quote
 
 from ._http import Transport
 from ._sse import EventStream
+from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,

@@ -242,6 +242,7 @@ function emitPager(operation) {
     `      const page = await this.${operation.method}(${callArgs.join(', ')})\n` +
     `      for (const item of page.${operation.paginates}) yield item\n` +
     '      if (!page.nextCursor) return\n' +
+    '      if (page.nextCursor === cursor) throw repeatedCursorError()\n' +
     '      cursor = page.nextCursor\n' +
     '    }\n' +
     '  }\n'
@@ -286,6 +287,7 @@ function emitOperations(ir, placed) {
 import type { EventStream } from './sse.ts'
 import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
+import { repeatedCursorError } from './errors.ts'
 import type {
 ${referenced.map((n) => `  ${n},`).join('\n')}
 } from './models.generated.ts'

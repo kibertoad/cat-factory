@@ -559,10 +559,10 @@ export type NotificationPayloadOnCallAssessmentRecommendation = 'revert' | 'hold
 /** Every `NotificationPayloadOnCallAssessmentRecommendation` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_PAYLOAD_ON_CALL_ASSESSMENT_RECOMMENDATION_VALUES = ['revert', 'hold', 'monitor'] as const
 
-export type NotificationPayloadPlatformAlert = 'failure_rate_high' | 'duration_p99_high' | 'backlog_high'
+export type NotificationPayloadPlatformAlert = 'failure_rate_high' | 'duration_p99_high' | 'backlog_high' | 'throughput_stalled' | 'failure_kind_dominant' | 'sweep_degraded'
 
 /** Every `NotificationPayloadPlatformAlert` value, for exhaustive handling and runtime validation. */
-export const NOTIFICATION_PAYLOAD_PLATFORM_ALERT_VALUES = ['failure_rate_high', 'duration_p99_high', 'backlog_high'] as const
+export const NOTIFICATION_PAYLOAD_PLATFORM_ALERT_VALUES = ['failure_rate_high', 'duration_p99_high', 'backlog_high', 'throughput_stalled', 'failure_kind_dominant', 'sweep_degraded'] as const
 
 export type NotificationPayloadPlatformWindow = '1h' | '24h' | '7d'
 

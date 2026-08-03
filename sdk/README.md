@@ -80,8 +80,17 @@ being HONEST with the caller rather than convenient:
   transport failure with no response says nothing about whether the server acted.
 - **Streams are never auto-reconnected.** A reconnect replays the SSE stream from its start, and
   only the caller knows which events it has already acted on.
+- **The client deadline bounds the RESPONSE, never a stream.** On an ordinary request it covers
+  the whole exchange, body included. On an SSE stream it stops once the response headers arrive,
+  because there the body IS the stream: the deployment writes a frame only when a run's projection
+  changes and sends no heartbeat, and a run parked on a human decision waits indefinitely by
+  design — so a quiet stream is the normal state of a healthy one, and a deadline running over it
+  aborts exactly the runs a caller most wants to watch. A stream is bounded by the caller closing
+  it (or their own context/signal), and above that by the deployment's connection cap.
 - **Pagination ends on the CURSOR, not on an empty page.** A keyset page may legitimately arrive
-  empty with a cursor still set.
+  empty with a cursor still set. A server that answers with the cursor it was just given is a
+  server fault: every SDK raises rather than following it, because looping forever and stopping
+  silently are both worse than saying so.
 - **No dependencies we do not need.** Python has none at all (`urllib`), Go none (`net/http`),
   TypeScript none (`fetch`), Java exactly one (Jackson) plus compile-time annotations. A client
   library's dependencies become every consumer's dependencies.

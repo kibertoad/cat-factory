@@ -23,7 +23,8 @@
     "dev:node": "turbo run dev --filter=@cat-factory/deploy-node",
     "dev:frontend": "turbo run dev --filter=@cat-factory/deploy-frontend",
     "changeset": "changeset",
-    "version": "changeset version && node scripts/sync-runner-image-tags.mjs",
+    "version": "changeset version && node scripts/sync-runner-image-tags.mjs && node scripts/sync-sdk-versions.mjs",
+    "sync:sdk-versions": "node scripts/sync-sdk-versions.mjs",
     "sync:image-tags": "node scripts/sync-runner-image-tags.mjs",
     "ci:publish": "pnpm build && changeset publish"
   },

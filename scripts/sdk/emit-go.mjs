@@ -84,9 +84,28 @@ const GO_KEYWORDS = new Set([
   'err',
 ])
 function goParam(wireName) {
-  const exported = goName(wireName)
-  const lowered = exported.charAt(0).toLowerCase() + exported.slice(1)
+  const lowered = unexport(goName(wireName))
   return GO_KEYWORDS.has(lowered) ? `${lowered}Param` : lowered
+}
+
+/**
+ * Unexport a Go identifier, lowercasing a LEADING INITIALISM whole rather than only its first
+ * letter.
+ *
+ * `goName('id')` is `ID` — correct, and the reason a naive `charAt(0).toLowerCase()` produced
+ * `iD`, which is what ten published Go method signatures said (`Cancel(ctx, iD string)`). It
+ * compiles and it reads as a typo in godoc, which is a published surface.
+ *
+ * The rule is gofmt/golint's: the leading run of capitals is one word, so lowercase all of it —
+ * unless a lowercase word follows, in which case the run's LAST capital starts that word and stays
+ * (`APIKey` -> `apiKey`, not `apikey`). A run of one is the ordinary case (`TaskID` -> `taskID`).
+ */
+function unexport(exported) {
+  const run = /^[A-Z]+/.exec(exported)?.[0].length ?? 0
+  if (run === 0) return exported
+  // `ID` -> `id`; `TaskID` -> `taskID`; `APIKey` -> `apiKey`.
+  const lowercase = run === 1 || run === exported.length ? run : run - 1
+  return exported.slice(0, lowercase).toLowerCase() + exported.slice(lowercase)
 }
 
 /** A Go string literal. */
@@ -497,7 +516,14 @@ function emitPager(operation) {
     '\t\t\t\tif !yield(item, nil) {\n\t\t\t\t\treturn\n\t\t\t\t}\n' +
     '\t\t\t}\n' +
     '\t\t\tif result.NextCursor == nil || *result.NextCursor == "" {\n\t\t\t\treturn\n\t\t\t}\n' +
-    (query ? '\t\t\tpage.Cursor = result.NextCursor\n' : '') +
+    (query
+      ? '\t\t\tif page.Cursor != nil && *page.Cursor == *result.NextCursor {\n' +
+        `\t\t\t\tvar zero ${listType}Item\n` +
+        '\t\t\t\tyield(zero, ErrRepeatedCursor)\n' +
+        '\t\t\t\treturn\n' +
+        '\t\t\t}\n' +
+        '\t\t\tpage.Cursor = result.NextCursor\n'
+      : '') +
     '\t\t}\n' +
     '\t}\n' +
     '}\n'

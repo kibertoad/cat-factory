@@ -22,6 +22,7 @@ public sealed class CatFactoryException extends RuntimeException
         permits CatFactoryConnectionException,
                 CatFactoryTimeoutException,
                 CatFactoryDecodeException,
+                CatFactoryPaginationException,
                 CatFactoryApiException {
 
     CatFactoryException(String message, @Nullable Throwable cause) {

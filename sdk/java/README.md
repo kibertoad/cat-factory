@@ -144,6 +144,13 @@ try {
 `requestId()` to quote when reporting a fault. The hierarchy is sealed and every member is
 unchecked.
 
+`CatFactoryApiException` is itself a case, not just a base: a status with no subclass of its own
+— a 402, a 413, or one this surface gains later — arrives as the base class rather than being
+folded into `CatFactoryServerException`. The surface is additive forever, and reporting a refusal
+the caller caused as a deployment fault would send them to look at the wrong system. So a Kotlin
+`when` over the hierarchy needs a branch for the base type (or an `else`), and that branch is the
+right place to read `status()` directly.
+
 ## Options
 
 ```java

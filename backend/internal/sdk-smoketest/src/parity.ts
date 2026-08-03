@@ -44,6 +44,12 @@ const ENVIRONMENTAL = new Set([
   'startedStatus',
   'stoppedStatus',
   'fetchedStatus',
+  // Whether the run had materialised its steps YET. This one reads like it should agree, and it
+  // is here for the same reason as the statuses above rather than because "booleans move around":
+  // each SDK reads its OWN run at its own moment, and a run that has been accepted but whose
+  // steps are not yet persisted is a real, correct state to observe. What must agree is that the
+  // status was a known one (`runStatusIsKnown`), and what must never differ — the SHAPE of a step
+  // once there is one to decode — is covered by the field-by-field comparison of everything else.
   'runHasSteps',
 ])
 

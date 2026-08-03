@@ -101,4 +101,43 @@ describe('readEventStream', () => {
     await stream.close()
     expect(cancelled).toBe(true)
   })
+
+  it('releases the body when closed WITHOUT having been iterated', async () => {
+    // The case the test above cannot see, because it iterates once first. Abandoning a stream
+    // before reading it is an ordinary path — an early `return`, a guard that failed, a `finally`
+    // reached from a throw — and it was the one that leaked: `close()` routed through
+    // `iterator.return()`, and an async generator that has never been advanced has not entered
+    // its `try`, so the `finally` holding the cleanup never ran. The socket stayed open against
+    // the deployment's per-connection cap, which is exactly what `close()` promises to prevent.
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('event: progress\ndata: {}\n\n'))
+        // Never closed: a live run's open stream.
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const stream = readEventStream(body)
+    await stream.close()
+    expect(cancelled).toBe(true)
+  })
+
+  it('tolerates close() being called more than once', async () => {
+    // Documented as safe, and a caller pairing `close()` with a `finally` will do it.
+    let cancels = 0
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('event: progress\ndata: {}\n\n'))
+      },
+      cancel() {
+        cancels += 1
+      },
+    })
+    const stream = readEventStream(body)
+    await stream.close()
+    await stream.close()
+    expect(cancels).toBe(1)
+  })
 })

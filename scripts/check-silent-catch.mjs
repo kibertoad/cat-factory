@@ -30,6 +30,11 @@
 //   - `frontend/**` is EXCLUDED: the SPA has no logger to report through. Client-side error
 //     reporting is its own slice (6.5 / finding C8); the idiom becomes bannable there once a
 //     sink exists.
+//   - `sdk/typescript/src` IS scanned, non-test only, even though it cannot reach the kernel
+//     `Logger` (a published client's dependencies become every consumer's, so it depends on
+//     nothing). It has no mechanical fix, only the escape hatch — which is the point: a client
+//     library swallowing a rejection is exactly where a drop goes unseen forever, since there is
+//     no operator watching its logs. Each one states its reason instead.
 //   - A BARE `catch {}` is not checked here. There are ~110 in scope, most of them documented
 //     deliberate swallows, and draining them is its own slice (1.2d) rather than a drive-by.
 //
@@ -59,7 +64,7 @@ import { findSilentCatches } from './silent-catch.mjs'
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Roots scanned. See the SCOPE note above for what is deliberately absent. */
-const SCAN_ROOTS = ['backend/packages', 'backend/runtimes']
+const SCAN_ROOTS = ['backend/packages', 'backend/runtimes', 'sdk/typescript/src']
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', 'drizzle', 'migrations'])
 

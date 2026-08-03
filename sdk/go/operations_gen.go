@@ -320,10 +320,10 @@ type InitiativesService struct {
 // job is returned as-is. Use this to abandon a run parked on a decision you do not intend to
 // answer.
 // POST /api/v1/jobs/{id}/cancel (operation cancelPublicJob).
-func (s *InitiativesService) Cancel(ctx context.Context, iD string) (*PublicJob, error) {
+func (s *InitiativesService) Cancel(ctx context.Context, id string) (*PublicJob, error) {
 	req := requestSpec{
 		Method: "POST",
-		Path:   fmt.Sprintf("/api/v1/jobs/%s/cancel", pathEscape(iD)),
+		Path:   fmt.Sprintf("/api/v1/jobs/%s/cancel", pathEscape(id)),
 	}
 	var out PublicJob
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -352,10 +352,10 @@ func (s *InitiativesService) Create(ctx context.Context, body CreateInitiativeJo
 // Get get an initiative job
 // Poll a headless initiative run started by this key: its status and, once finished, its result.
 // GET /api/v1/jobs/{id} (operation getPublicJob).
-func (s *InitiativesService) Get(ctx context.Context, iD string) (*PublicJob, error) {
+func (s *InitiativesService) Get(ctx context.Context, id string) (*PublicJob, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   fmt.Sprintf("/api/v1/jobs/%s", pathEscape(iD)),
+		Path:   fmt.Sprintf("/api/v1/jobs/%s", pathEscape(id)),
 	}
 	var out PublicJob
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -407,6 +407,11 @@ func (s *InitiativesService) ListAll(ctx context.Context, query *InitiativesList
 			if result.NextCursor == nil || *result.NextCursor == "" {
 				return
 			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListPublicJobsResponseItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
 			page.Cursor = result.NextCursor
 		}
 	}
@@ -416,10 +421,10 @@ func (s *InitiativesService) ListAll(ctx context.Context, query *InitiativesList
 // Server-sent events for a headless initiative run: `progress` frames until a terminal
 // `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
 // GET /api/v1/jobs/{id}/events (operation streamPublicJobEvents).
-func (s *InitiativesService) Stream(ctx context.Context, iD string) (*EventStream, error) {
+func (s *InitiativesService) Stream(ctx context.Context, id string) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   fmt.Sprintf("/api/v1/jobs/%s/events", pathEscape(iD)),
+		Path:   fmt.Sprintf("/api/v1/jobs/%s/events", pathEscape(id)),
 	}
 	return s.client.stream(ctx, req)
 }
@@ -553,6 +558,11 @@ func (s *TasksService) ListByServiceAll(ctx context.Context, serviceID string, q
 			if result.NextCursor == nil || *result.NextCursor == "" {
 				return
 			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero PublicTaskListItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
 			page.Cursor = result.NextCursor
 		}
 	}
@@ -671,10 +681,10 @@ type NotificationsService struct {
 // headlessly (dismiss it instead). A card that would retry a run on an individual-usage model
 // likewise cannot be acted on through the API.
 // POST /api/v1/notifications/{id}/act (operation actPublicNotification).
-func (s *NotificationsService) Act(ctx context.Context, iD string) (*Notification, error) {
+func (s *NotificationsService) Act(ctx context.Context, id string) (*Notification, error) {
 	req := requestSpec{
 		Method: "POST",
-		Path:   fmt.Sprintf("/api/v1/notifications/%s/act", pathEscape(iD)),
+		Path:   fmt.Sprintf("/api/v1/notifications/%s/act", pathEscape(id)),
 	}
 	var out Notification
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -686,10 +696,10 @@ func (s *NotificationsService) Act(ctx context.Context, iD string) (*Notificatio
 // Dismiss dismiss a notification
 // Dismiss a notification without acting on it.
 // POST /api/v1/notifications/{id}/dismiss (operation dismissPublicNotification).
-func (s *NotificationsService) Dismiss(ctx context.Context, iD string) (*Notification, error) {
+func (s *NotificationsService) Dismiss(ctx context.Context, id string) (*Notification, error) {
 	req := requestSpec{
 		Method: "POST",
-		Path:   fmt.Sprintf("/api/v1/notifications/%s/dismiss", pathEscape(iD)),
+		Path:   fmt.Sprintf("/api/v1/notifications/%s/dismiss", pathEscape(id)),
 	}
 	var out Notification
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -1001,6 +1011,11 @@ func (s *DebugService) ListAgentContextAll(ctx context.Context, runID string, qu
 			if result.NextCursor == nil || *result.NextCursor == "" {
 				return
 			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugAgentContextResponseItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
 			page.Cursor = result.NextCursor
 		}
 	}
@@ -1046,6 +1061,11 @@ func (s *DebugService) ListLlmCallsAll(ctx context.Context, runID string, query 
 				}
 			}
 			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugLlmCallsResponseItem
+				yield(zero, ErrRepeatedCursor)
 				return
 			}
 			page.Cursor = result.NextCursor
@@ -1095,6 +1115,11 @@ func (s *DebugService) ListLogsAll(ctx context.Context, runID string, query *Deb
 			if result.NextCursor == nil || *result.NextCursor == "" {
 				return
 			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugLogsResponseItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
 			page.Cursor = result.NextCursor
 		}
 	}
@@ -1142,6 +1167,11 @@ func (s *DebugService) ListRunsAll(ctx context.Context, query *DebugListRunsQuer
 			if result.NextCursor == nil || *result.NextCursor == "" {
 				return
 			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugRunsResponseItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
 			page.Cursor = result.NextCursor
 		}
 	}
@@ -1187,6 +1217,11 @@ func (s *DebugService) ListSearchQueriesAll(ctx context.Context, runID string, q
 				}
 			}
 			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugSearchQueriesResponseItem
+				yield(zero, ErrRepeatedCursor)
 				return
 			}
 			page.Cursor = result.NextCursor

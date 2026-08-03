@@ -43,11 +43,21 @@ public abstract class PageIterator<T> implements Iterator<T> {
     @Override
     public boolean hasNext() {
         while (!current.hasNext() && !exhausted) {
+            String requested = cursor;
             Page<T> page = fetch(cursor);
             current = page.items().iterator();
             cursor = page.nextCursor();
             if (cursor == null || cursor.isEmpty()) {
                 exhausted = true;
+            } else if (cursor.equals(requested)) {
+                // The server answered a page with the SAME cursor it was given. That is a server
+                // fault, and following it would never terminate — one page re-fetched forever
+                // against the caller's rate limit. Thrown rather than treated as the end of the
+                // walk, because a silent stop is indistinguishable from a completed one, and a
+                // caller acting on "these are all the tasks" having seen one page is worse.
+                throw new CatFactoryPaginationException(
+                        "cat-factory SDK: the server repeated a pagination cursor; stopping rather"
+                                + " than looping forever.");
             }
         }
         return current.hasNext();

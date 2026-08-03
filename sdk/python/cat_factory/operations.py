@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 from ._http import Transport
 from ._sse import EventStream
+from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
@@ -144,6 +145,8 @@ class InitiativesResource:
             yield from page.jobs
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def stream(self, id: str, timeout: float | None = None) -> EventStream:
@@ -270,6 +273,8 @@ class TasksResource:
             yield from page.tasks
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def retry(self, task_id: str, timeout: float | None = None) -> PublicTask:
@@ -677,6 +682,8 @@ class DebugResource:
             yield from page.snapshots
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def list_llm_calls(self, run_id: str, *, agent_kind: str | None = None, phase: str | None = None, outcome: LlmCallOutcome | None = None, contains: str | None = None, order: ListDebugLlmCallsOrder | None = None, limit: int | None = None, cursor: str | None = None, body_chars: int | None = None, timeout: float | None = None) -> ListDebugLlmCallsResponse:
@@ -707,6 +714,8 @@ class DebugResource:
             yield from page.calls
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def list_logs(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> ListDebugLogsResponse:
@@ -736,6 +745,8 @@ class DebugResource:
             yield from page.entries
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def list_runs(self, *, status: RunStatus | None = None, since: int | None = None, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> ListDebugRunsResponse:
@@ -765,6 +776,8 @@ class DebugResource:
             yield from page.runs
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
     def list_search_queries(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> ListDebugSearchQueriesResponse:
@@ -795,6 +808,8 @@ class DebugResource:
             yield from page.queries
             if not page.next_cursor:
                 return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
             page_cursor = page.next_cursor
 
 

@@ -20,53 +20,14 @@ import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildSdkFiles, findStaleGeneratedFiles } from './generate-sdks.mjs'
+// The manifest/constant table is shared with `scripts/sync-sdk-versions.mjs`, which WRITES the
+// invariant this file VERIFIES. A second copy here would be a second thing to keep in step.
+import { readDeclaredVersion, VERSION_SOURCES } from './sdk/versions.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/**
- * Where each SDK declares its version, twice: once for its package manager and once as the
- * constant the transport stamps into `User-Agent`.
- */
-const VERSION_SOURCES = [
-  {
-    sdk: 'typescript',
-    manifest: { path: 'sdk/typescript/package.json', pattern: /"version":\s*"([^"]+)"/ },
-    constant: { path: 'sdk/typescript/src/http.ts', pattern: /SDK_VERSION\s*=\s*'([^']+)'/ },
-  },
-  {
-    sdk: 'python',
-    manifest: { path: 'sdk/python/pyproject.toml', pattern: /^version\s*=\s*"([^"]+)"/m },
-    constant: { path: 'sdk/python/cat_factory/_http.py', pattern: /SDK_VERSION\s*=\s*"([^"]+)"/ },
-  },
-  {
-    sdk: 'go',
-    // Go modules carry no version in the source — the tag IS the version — so the constant is
-    // compared against the TypeScript SDK's manifest instead, which is what keeps the family
-    // moving together rather than letting Go drift on its own.
-    manifest: { path: 'sdk/typescript/package.json', pattern: /"version":\s*"([^"]+)"/ },
-    constant: { path: 'sdk/go/client.go', pattern: /Version\s*=\s*"([^"]+)"/ },
-  },
-  {
-    sdk: 'java',
-    manifest: {
-      path: 'sdk/java/pom.xml',
-      // The FIRST <version> under the project itself, not a dependency's.
-      pattern: /<artifactId>cat-factory-sdk<\/artifactId>\s*<version>([^<]+)<\/version>/,
-    },
-    constant: {
-      path: 'sdk/java/src/main/java/ai/catfactory/sdk/Transport.java',
-      pattern: /SDK_VERSION\s*=\s*"([^"]+)"/,
-    },
-  },
-]
-
 async function readVersion(source) {
-  const text = await readFile(resolve(repoRoot, source.path), 'utf8')
-  const match = text.match(source.pattern)
-  if (!match) {
-    throw new Error(`check-sdks: could not find a version in ${source.path}`)
-  }
-  return match[1]
+  return readDeclaredVersion(await readFile(resolve(repoRoot, source.path), 'utf8'), source)
 }
 
 async function checkVersions() {
@@ -75,7 +36,8 @@ async function checkVersions() {
     const [declared, stamped] = await Promise.all([readVersion(manifest), readVersion(constant)])
     if (declared !== stamped) {
       problems.push(
-        `${sdk}: ${constant.path} stamps ${stamped} but ${manifest.path} declares ${declared}`,
+        `${sdk}: ${constant.path} stamps ${stamped} but ${manifest.path} declares ${declared} ` +
+          '— run `node scripts/sync-sdk-versions.mjs`',
       )
     }
   }

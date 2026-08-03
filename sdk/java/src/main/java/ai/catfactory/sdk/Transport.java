@@ -222,20 +222,20 @@ public final class Transport {
             Map<String, String> query,
             String accept) {
         HttpRequest.Builder builder =
-                HttpRequest.newBuilder(URI.create(baseUrl + path + renderQuery(query)))
-                        .timeout(timeout)
-                        .header("authorization", "Bearer " + apiKey)
-                        .header("accept", accept);
-        headers.forEach(
-                (key, value) -> {
-                    if (!key.equalsIgnoreCase("accept")) {
-                        builder.header(key, value);
-                    }
-                });
+                HttpRequest.newBuilder(URI.create(baseUrl + path + renderQuery(query))).timeout(timeout);
+        // `setHeader`, never `header`: the latter APPENDS, so a caller who put `authorization` in
+        // their own headers got two of them on the wire and a deployment refusing the request for
+        // a reason nothing in their code names. Caller headers are applied FIRST and the SDK's own
+        // three overwrite them, because those three are what makes the request THIS SDK's: an
+        // Authorization the transport did not build, or an Accept that disagrees with how the
+        // response will be read, are not customisations — they are the client not working.
+        headers.forEach(builder::setHeader);
+        builder.setHeader("authorization", "Bearer " + apiKey);
+        builder.setHeader("accept", accept);
         if (body == null) {
             builder.method(method, HttpRequest.BodyPublishers.noBody());
         } else {
-            builder.header("content-type", "application/json");
+            builder.setHeader("content-type", "application/json");
             builder.method(method, HttpRequest.BodyPublishers.ofString(writeJson(body)));
         }
         return builder.build();
@@ -317,8 +317,17 @@ public final class Transport {
                     status, code, message, details, issues, requestId, rawBody);
             case 429 -> new CatFactoryRateLimitedException(
                     status, code, message, details, issues, requestId, rawBody);
-            default -> new CatFactoryServerException(
-                    status, code, message, details, issues, requestId, rawBody);
+            // A 5xx is the deployment faulting. Anything else unmapped — a 402, a 413, a 415, or
+            // a status this surface gains later — stays the BASE class rather than being folded
+            // into the server one: the surface is additive forever, and presenting a refusal the
+            // caller caused as a deployment fault sends them to look at the wrong system. The
+            // status and `code` are on the exception either way, so nothing is lost by declining
+            // to guess at the class.
+            default -> status >= 500
+                    ? new CatFactoryServerException(
+                            status, code, message, details, issues, requestId, rawBody)
+                    : new CatFactoryApiException(
+                            status, code, message, details, issues, requestId, rawBody);
         };
     }
 
@@ -339,20 +348,43 @@ public final class Transport {
         }
     }
 
+    /**
+     * {@code Retry-After} in milliseconds, capped at a minute, or empty when absent/unparsable.
+     *
+     * <p>Both wire forms RFC 9110 allows: delta-seconds, and an HTTP-date, which a proxy or CDN in
+     * front of the deployment routinely writes instead. Reading only the numeric form silently
+     * discarded the deployment's own knowledge of when the limit clears and fell back to a blind
+     * backoff curve — which still works, just worse, so nothing would ever have surfaced it.
+     */
     private java.util.OptionalLong retryAfterMillis(HttpResponse<?> response) {
         return response
                 .headers()
                 .firstValue("retry-after")
-                .map(
-                        header -> {
-                            try {
-                                return java.util.OptionalLong.of(
-                                        Math.min(Long.parseLong(header.trim()) * 1000L, 60_000L));
-                            } catch (NumberFormatException exc) {
-                                return java.util.OptionalLong.empty();
-                            }
-                        })
+                .map(header -> parseRetryAfter(header.trim()))
                 .orElseGet(java.util.OptionalLong::empty);
+    }
+
+    private static java.util.OptionalLong parseRetryAfter(String header) {
+        try {
+            return java.util.OptionalLong.of(clampRetryAfter(Long.parseLong(header) * 1000L));
+        } catch (NumberFormatException notSeconds) {
+            // Not delta-seconds, so try the date form below.
+        }
+        try {
+            java.time.ZonedDateTime at =
+                    java.time.ZonedDateTime.parse(
+                            header, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME);
+            return java.util.OptionalLong.of(
+                    clampRetryAfter(
+                            java.time.Duration.between(java.time.ZonedDateTime.now(at.getZone()), at)
+                                    .toMillis()));
+        } catch (java.time.format.DateTimeParseException notADate) {
+            return java.util.OptionalLong.empty();
+        }
+    }
+
+    private static long clampRetryAfter(long millis) {
+        return Math.max(0L, Math.min(millis, 60_000L));
     }
 
     /** Full jitter on an exponential base, so a fleet of clients does not retry in lockstep. */

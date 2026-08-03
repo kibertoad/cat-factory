@@ -222,20 +222,97 @@ func (c *Client) buildRequest(ctx context.Context, spec requestSpec, accept stri
 	return request, nil
 }
 
+// responseKind is the shape of response an operation expects.
+//
+// It carries BOTH the Accept header and what the client Timeout bounds, because those two are one
+// decision and splitting them is how they drift apart: an operation that asks for
+// text/event-stream while the transport bounds the whole exchange gets a healthy run watch
+// severed mid-flight, and nothing about either half looks wrong on its own.
+type responseKind int
+
+const (
+	// unaryResponse is a single JSON body. Timeout bounds the WHOLE exchange, body included:
+	// the body is bounded work, and a read that stalls forever is exactly what a deadline is for.
+	unaryResponse responseKind = iota
+	// streamResponse is a server-sent event stream. Timeout bounds only the wait for response
+	// HEADERS — never the body, because here the body IS the stream, and a run being watched
+	// legitimately outlives any per-request deadline by minutes. Bounding it cut every stream at
+	// Timeout (30s by default) with `context deadline exceeded`, on a run that was fine.
+	streamResponse
+)
+
+func (k responseKind) accept() string {
+	if k == streamResponse {
+		return "text/event-stream"
+	}
+	return "application/json"
+}
+
+// attemptDeadline applies the client Timeout at the scope the responseKind calls for.
+//
+// The streaming case cannot be a context.WithTimeout: that deadline keeps running over the body,
+// which is the bug it exists to avoid. So it is a cancellable context plus a timer that is
+// STOPPED the moment headers arrive — the same shape as the TypeScript SDK clearing its abort
+// timer once fetch resolves, and as the JDK's own HttpRequest.timeout, so all four SDKs mean the
+// same thing by "timeout" on a stream.
+type attemptDeadline struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	timer  *time.Timer
+	// Whether arriving headers release the deadline (a stream) or it keeps running over the
+	// body (a unary response).
+	stopOnHeaders bool
+}
+
+func (c *Client) startAttempt(ctx context.Context, kind responseKind) *attemptDeadline {
+	attemptCtx, cancel := context.WithCancelCause(ctx)
+	deadline := &attemptDeadline{ctx: attemptCtx, cancel: cancel}
+	// Cancel with DeadlineExceeded as the CAUSE, so an expiry stays distinguishable from a
+	// caller's cancellation after the fact — which is what lets the error below be classified as
+	// a timeout rather than collapsing into a generic connection failure.
+	deadline.timer = time.AfterFunc(c.timeout, func() { cancel(context.DeadlineExceeded) })
+	if kind == unaryResponse {
+		return deadline
+	}
+	deadline.stopOnHeaders = true
+	return deadline
+}
+
+// headersReceived releases a stream's deadline. A no-op for a unary attempt, whose deadline is
+// meant to keep running over the body.
+func (d *attemptDeadline) headersReceived() {
+	if d.stopOnHeaders {
+		d.timer.Stop()
+	}
+}
+
+// release ends the attempt, stopping the timer so it cannot fire against a reused connection.
+func (d *attemptDeadline) release() {
+	d.timer.Stop()
+	d.cancel(context.Canceled)
+}
+
+// expired reports whether OUR deadline is what ended the attempt, as opposed to the caller's own
+// cancellation or a genuine transport fault. They need different reactions — a longer budget can
+// fix the first and cannot fix the third — so they must not collapse into one error.
+func (d *attemptDeadline) expired() bool {
+	return errors.Is(context.Cause(d.ctx), context.DeadlineExceeded)
+}
+
 // do performs the request with the retry policy, returning the raw response for the caller to
 // consume. The caller owns closing the body.
-func (c *Client) do(ctx context.Context, spec requestSpec, accept string, retries int) (*http.Response, error) {
+func (c *Client) do(ctx context.Context, spec requestSpec, kind responseKind, retries int) (*http.Response, error) {
 	for attempt := 0; ; attempt++ {
-		// A per-attempt deadline, composed with the caller's context so cancelling ctx still wins.
-		attemptCtx, cancel := context.WithTimeout(ctx, c.timeout)
-		request, err := c.buildRequest(attemptCtx, spec, accept)
+		deadline := c.startAttempt(ctx, kind)
+		request, err := c.buildRequest(deadline.ctx, spec, kind.accept())
 		if err != nil {
-			cancel()
+			deadline.release()
 			return nil, err
 		}
 		response, err := c.httpClient.Do(request)
 		if err != nil {
-			cancel()
+			timedOut := deadline.expired()
+			deadline.release()
 			// The CALLER's cancellation is not a transport fault and must not be retried or
 			// re-wrapped as one — it is the outcome they asked for.
 			if ctx.Err() != nil {
@@ -247,20 +324,25 @@ func (c *Client) do(ctx context.Context, spec requestSpec, accept string, retrie
 				}
 				continue
 			}
+			if timedOut {
+				return nil, &TimeoutError{Method: spec.Method, Path: spec.Path, Timeout: c.timeout}
+			}
 			return nil, &ConnectionError{Method: spec.Method, Path: spec.Path, Err: err}
 		}
 		if response.StatusCode < 400 {
+			// Headers are in, so a stream's deadline is done: what follows is the stream itself.
+			deadline.headersReceived()
 			// The response body outlives this function, so the per-attempt context must NOT be
 			// cancelled here — doing so kills the stream the caller is about to read. Tie the
 			// cancel to the body instead, so it fires exactly when the caller closes it.
-			response.Body = &cancellingBody{ReadCloser: response.Body, cancel: cancel}
+			response.Body = &cancellingBody{ReadCloser: response.Body, release: deadline.release}
 			return response, nil
 		}
 
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 		retryAfter, hasRetryAfter := parseRetryAfter(response.Header.Get("Retry-After"))
 		_ = response.Body.Close()
-		cancel()
+		deadline.release()
 
 		if attempt < retries && idempotent(spec.Method) && retriableStatus(response.StatusCode) {
 			wait := backoff(attempt)
@@ -277,24 +359,23 @@ func (c *Client) do(ctx context.Context, spec requestSpec, accept string, retrie
 	}
 }
 
-// cancellingBody ties a response body's lifetime to its per-attempt context cancel func, so the
-// context is released exactly when the caller closes the body rather than being leaked or, worse,
-// cancelled while the body is still being read (which is what would kill an SSE stream the moment
-// it was handed over).
+// cancellingBody ties a response body's lifetime to its attempt, so the attempt is released
+// exactly when the caller closes the body rather than being leaked or, worse, cancelled while the
+// body is still being read (which is what would kill an SSE stream the moment it was handed over).
 type cancellingBody struct {
 	io.ReadCloser
-	cancel context.CancelFunc
+	release func()
 }
 
 func (b *cancellingBody) Close() error {
 	err := b.ReadCloser.Close()
-	b.cancel()
+	b.release()
 	return err
 }
 
 // request performs a request and decodes its JSON body into out.
 func (c *Client) request(ctx context.Context, spec requestSpec, out any) error {
-	response, err := c.do(ctx, spec, "application/json", c.maxRetries)
+	response, err := c.do(ctx, spec, unaryResponse, c.maxRetries)
 	if err != nil {
 		return err
 	}
@@ -315,7 +396,7 @@ func (c *Client) request(ctx context.Context, spec requestSpec, out any) error {
 
 // requestNoContent performs a request whose success carries no body (a 204).
 func (c *Client) requestNoContent(ctx context.Context, spec requestSpec) error {
-	response, err := c.do(ctx, spec, "application/json", c.maxRetries)
+	response, err := c.do(ctx, spec, unaryResponse, c.maxRetries)
 	if err != nil {
 		return err
 	}
@@ -331,7 +412,7 @@ func (c *Client) requestNoContent(ctx context.Context, spec requestSpec) error {
 // who knows which events it has already acted on — is the only party that can decide whether that
 // is safe.
 func (c *Client) stream(ctx context.Context, spec requestSpec) (*EventStream, error) {
-	response, err := c.do(ctx, spec, "text/event-stream", 0)
+	response, err := c.do(ctx, spec, streamResponse, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -351,18 +432,26 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// parseRetryAfter reads a Retry-After header in seconds, capped at a minute.
+// parseRetryAfter reads a Retry-After header, capped at a minute.
+//
+// Both wire forms RFC 9110 allows: delta-seconds, and an HTTP-date, which a proxy or CDN in front
+// of the deployment routinely writes instead. Reading only the numeric form silently discarded the
+// deployment's own knowledge of when the limit clears and fell back to a blind backoff curve —
+// which still works, just worse, so nothing would ever have surfaced it.
 func parseRetryAfter(header string) (time.Duration, bool) {
+	header = strings.TrimSpace(header)
 	if header == "" {
 		return 0, false
 	}
-	seconds, err := strconv.Atoi(strings.TrimSpace(header))
-	if err != nil || seconds < 0 {
+	if seconds, err := strconv.Atoi(header); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		return min(time.Duration(seconds)*time.Second, time.Minute), true
+	}
+	at, err := http.ParseTime(header)
+	if err != nil {
 		return 0, false
 	}
-	wait := time.Duration(seconds) * time.Second
-	if wait > time.Minute {
-		wait = time.Minute
-	}
-	return wait, true
+	return max(0, min(time.Until(at), time.Minute)), true
 }

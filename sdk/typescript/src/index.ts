@@ -18,6 +18,7 @@ export {
   CatFactoryError,
   CatFactoryForbiddenError,
   CatFactoryNotFoundError,
+  CatFactoryPaginationError,
   CatFactoryRateLimitedError,
   CatFactoryServerError,
   CatFactoryTimeoutError,

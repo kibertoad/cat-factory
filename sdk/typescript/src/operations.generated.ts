@@ -8,6 +8,7 @@
 import type { EventStream } from './sse.ts'
 import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
+import { repeatedCursorError } from './errors.ts'
 import type {
   CreateInitiativeJob,
   CreatePublicTask,
@@ -187,6 +188,7 @@ export class InitiativesResource {
       const page = await this.list({ ...query, cursor }, options)
       for (const item of page.jobs) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -313,6 +315,7 @@ export class TasksResource {
       const page = await this.listByService(serviceId, { ...query, cursor }, options)
       for (const item of page.tasks) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -683,6 +686,7 @@ export class DebugResource {
       const page = await this.listAgentContext(runId, { ...query, cursor }, options)
       for (const item of page.snapshots) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -712,6 +716,7 @@ export class DebugResource {
       const page = await this.listLlmCalls(runId, { ...query, cursor }, options)
       for (const item of page.calls) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -741,6 +746,7 @@ export class DebugResource {
       const page = await this.listLogs(runId, { ...query, cursor }, options)
       for (const item of page.entries) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -770,6 +776,7 @@ export class DebugResource {
       const page = await this.listRuns({ ...query, cursor }, options)
       for (const item of page.runs) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }
@@ -799,6 +806,7 @@ export class DebugResource {
       const page = await this.listSearchQueries(runId, { ...query, cursor }, options)
       for (const item of page.queries) yield item
       if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
   }

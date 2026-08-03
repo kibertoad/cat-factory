@@ -1164,7 +1164,7 @@ jobs:
   # now (see their job comments above), so their result does not gate this required status.
   test-gate:
     name: Test
-    needs: [changes, test-worker, test-units, test-db, test-k8s]
+    needs: [changes, test-worker, test-units, test-db, test-k8s, sdk-smoketest]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1184,13 +1184,18 @@ jobs:
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
           K8S: ${{ needs.test-k8s.result }}
+          # The cross-SDK smoketest. It is the ONLY check that can see the four clients
+          # disagree, so it gates like any other lane rather than being advisory — a client
+          # that decodes a field differently or maps a refusal to the wrong class must not be
+          # mergeable. Skipped (no `sdk` changes) counts as a pass exactly like the rest.
+          SDK: ${{ needs.sdk-smoketest.result }}
         run: |
-          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S | sdk: $SDK"
           if [ "$CHANGES" != 'success' ]; then
             echo "::error::change detection did not succeed; refusing to pass the test gate"
             exit 1
           fi
-          for lane in "$WORKER" "$UNITS" "$DB" "$K8S"; do
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S" "$SDK"; do
             case "$lane" in
               success | skipped) ;;
               *)
@@ -1256,6 +1261,13 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+          # Pin the cache key's input, exactly as the Go step above pins `go.mod`. Left unset,
+          # setup-java globs `**/pom.xml` from the repository root to build the key — and this
+          # step runs AFTER the pnpm install above, so that walk descends the whole installed
+          # `node_modules` tree. It took over fourteen minutes on the first run of this job and
+          # then hit the 25-minute job timeout without ever reaching a test. There is exactly one
+          # pom in this repository; naming it makes the key computable in one stat.
+          cache-dependency-path: sdk/java/pom.xml
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

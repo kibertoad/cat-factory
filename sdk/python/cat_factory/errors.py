@@ -32,6 +32,25 @@ class CatFactoryTimeoutError(CatFactoryError):
     """The request exceeded the client-side deadline, so no verdict was reached."""
 
 
+class CatFactoryPaginationError(CatFactoryError):
+    """An auto-pager was answered with the SAME ``next_cursor`` it had just sent.
+
+    That is a server fault, and the pagers stop rather than following it --- the walk would
+    otherwise never terminate, re-fetching one page forever against the caller's rate limit. It
+    raises rather than returning quietly because a silent stop is indistinguishable from a
+    completed walk, and a caller acting on "these are all the tasks" when they have seen one page
+    is the worse failure.
+    """
+
+
+def _repeated_cursor() -> CatFactoryPaginationError:
+    """Build the pagination fault above. Called from the generated pagers."""
+    return CatFactoryPaginationError(
+        "cat-factory SDK: the server repeated a pagination cursor; stopping rather than "
+        "looping forever."
+    )
+
+
 class CatFactoryDecodeError(CatFactoryError):
     """A 2xx response whose body was not the JSON the contract promises.
 

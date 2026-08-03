@@ -178,11 +178,15 @@ export class Transport {
         const response = await this.doFetch(url, {
           method: spec.method,
           headers: {
+            // Client headers, then per-call ones, then the three the SDK owns — which therefore
+            // win. An `authorization` the transport did not build, or an `accept` that disagrees
+            // with how the response is about to be read, are not customisations; they are the
+            // client not working. All four SDKs apply this same precedence.
             ...this.headers,
+            ...spec.options.headers,
             accept,
             authorization: `Bearer ${this.apiKey}`,
             ...(spec.body === undefined ? {} : { 'content-type': 'application/json' }),
-            ...spec.options.headers,
           },
           body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
           signal: controller.signal,
@@ -198,10 +202,18 @@ export class Transport {
         }
         throw toApiError(response.status, await readBodySafely(response), requestId)
       } catch (error) {
+        // The CALLER's cancellation is checked FIRST, and on the signal rather than on the shape
+        // of the error: `abort(reason)` rejects the fetch with that reason verbatim, so a caller
+        // who aborts with a plain `new Error('user navigated away')` produces something whose
+        // `name` is not `AbortError`. Gating on the name alone let exactly that case fall through
+        // to the retry branch below — a cancelled GET was replayed to the budget and then
+        // reported as a connection failure, which is neither what happened nor what was asked
+        // for. A cancellation is the outcome the caller chose; it is never retried, and never
+        // re-wrapped.
+        if (spec.options.signal?.aborted) throw spec.options.signal.reason ?? error
         if (error instanceof Error && error.name === 'AbortError') {
-          // Distinguish OUR deadline from the caller's own abort: one is a timeout the caller
-          // may want to retry with a longer budget, the other is a cancellation they asked for.
-          if (spec.options.signal?.aborted) throw spec.options.signal.reason ?? error
+          // Ours, then: the deadline. Distinct from the above because a timeout is something the
+          // caller may want to retry with a longer budget.
           throw new CatFactoryTimeoutError(
             `cat-factory SDK: ${spec.method} ${spec.path} exceeded ${timeoutMs}ms.`,
             { cause: error },

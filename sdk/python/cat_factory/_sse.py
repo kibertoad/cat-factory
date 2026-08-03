@@ -39,6 +39,27 @@ class StreamEvent:
             return None
 
 
+def _read_available(raw: IO[bytes], size: int) -> bytes:
+    """Read whatever has ARRIVED, up to ``size`` bytes, rather than waiting for ``size`` of them.
+
+    ``read(n)`` on the standard library's ``HTTPResponse`` blocks until it has n bytes or the
+    socket closes --- it is not a "give me what you have" read. A 1 KiB ``read`` therefore holds
+    every frame of a slow run until the stream ENDS and then hands them over in one lump: the
+    caller sees nothing live, which is precisely the "a run that silently appears to stall"
+    failure this module exists to prevent. It is also invisible to the cross-SDK smoketest, whose
+    scenario finishes fast enough that the frames all arrive either way --- only their TIMING was
+    wrong, and a report of what was observed cannot see that.
+
+    ``read1`` is the buffered-IO spelling of "one underlying read", which every response urllib
+    produces supports. A caller-supplied opener returning something more exotic falls back to
+    ``read``: correct, merely batched, and better than refusing to stream at all.
+    """
+    read1 = getattr(raw, "read1", None)
+    if read1 is None:
+        return raw.read(size)
+    return read1(size)
+
+
 def _decode(raw: str) -> StreamEvent | None:
     event = "message"
     identifier: str | None = None
@@ -86,7 +107,7 @@ class EventStream:
     def __iter__(self):
         buffer = ""
         try:
-            for chunk in iter(lambda: self._raw.read(1024), b""):
+            for chunk in iter(lambda: _read_available(self._raw, 1024), b""):
                 buffer += chunk.decode("utf-8", errors="replace")
                 # `\r\n\r\n` as well as `\n\n`: the spec allows either terminator, and a server
                 # behind a proxy that normalizes line endings would otherwise never appear to

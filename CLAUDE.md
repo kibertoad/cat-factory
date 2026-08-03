@@ -448,8 +448,10 @@ the constant its transport stamps into `User-Agent`. Design + the Java/Kotlin tr
   upgraded; the error CLASS comes from the HTTP status while `code` is passed through verbatim
   (it carries surface-specific values, so no SDK narrows it to an enum or keeps a second copy of
   the vocabulary); only idempotent requests are retried, because a duplicated `start` costs real
-  LLM work; and a stream is never auto-reconnected, since only the caller knows what it already
-  acted on.
+  LLM work; a stream is never auto-reconnected, since only the caller knows what it already
+  acted on; and **the client deadline bounds the RESPONSE, never a stream** — the deployment sends
+  no SSE heartbeat and a parked run waits for a human indefinitely, so a deadline left running over
+  the body cuts off exactly the healthy runs a caller wanted to watch.
 - **`backend/internal/sdk-smoketest` is the only check that can see the four clients DISAGREE.**
   It boots the real Node backend and drives ONE scenario through all four, comparing their
   observation reports — so each per-SDK program OBSERVES AND RECORDS rather than asserting, and a
