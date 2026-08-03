@@ -127,6 +127,20 @@ export function buildAgentContextRecord(
             })),
           }
         : {}),
+      // The generative binary integrations this dispatch ran with — ids and content types only.
+      // Worth recording for the same reason `toolServers` is: when a generation step's output is
+      // wrong or missing, "which integration was it even pointed at" is the first question, and
+      // the step's own selection can be edited after the run. The credential KEY name is
+      // deliberately not copied: it identifies nothing about the run and this is a body a human
+      // reads for debugging.
+      ...(context.binaryGenerators?.length
+        ? {
+            binaryGenerators: context.binaryGenerators.map((generator) => ({
+              id: generator.id,
+              modalities: generator.modalities,
+            })),
+          }
+        : {}),
       ...(context.revision
         ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
         : {}),

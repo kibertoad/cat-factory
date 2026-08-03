@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runClaudeCode } from '../src/agent-runner.js'
 import type { McpServerSpec } from '../src/agent-capabilities.js'
-import { testSecretEnv } from '../src/agent.js'
+import { secretEnv, testSecretEnv } from '../src/agent.js'
 import { installsSkillNatively } from '../src/pi-workspace.js'
 import { stubTempHome } from './helpers.js'
 
@@ -40,6 +40,23 @@ describe('testSecretEnv', () => {
     const b = testSecretEnv([{ key: 'TEST_TOKEN', value: 'from_job_b' }])
     expect(a.TEST_TOKEN).toBe('from_job_a')
     expect(b.TEST_TOKEN).toBe('from_job_b')
+  })
+})
+
+describe('generative integration credentials (generatorSecrets)', () => {
+  it("keeps two concurrent jobs' generator credentials in separate envs", () => {
+    // The same rule the tester's secrets follow, and it matters more here: a generation API key
+    // is per-DEPLOYMENT config resolved per dispatch, so on the shared native host process two
+    // jobs against different workspaces would otherwise read whichever landed last.
+    const a = secretEnv([{ key: 'RD_TOKEN', value: 'from_job_a' }])
+    const b = secretEnv([{ key: 'RD_TOKEN', value: 'from_job_b' }])
+    expect(a.RD_TOKEN).toBe('from_job_a')
+    expect(b.RD_TOKEN).toBe('from_job_b')
+    expect(process.env.RD_TOKEN).toBeUndefined()
+  })
+
+  it('is empty for a job that carries none, so a non-generating run is unchanged', () => {
+    expect(secretEnv(undefined)).toEqual({})
   })
 })
 

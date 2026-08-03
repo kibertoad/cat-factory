@@ -547,6 +547,7 @@
         "pipeline_schedule_intake_unconfigured": "Zamanlamada sorun alımı yok",
         "foundational_service_exists": "Temel hizmet zaten var",
         "binary_output_service_invalid": "İkili çıktı hizmeti çözümlenemiyor",
+        "binary_output_generator_invalid": "İkili çıktı üreticisi çözümlenemiyor",
         "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti"
       },
       "description": {
@@ -578,6 +579,7 @@
         "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın.",
         "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
         "binary_output_service_invalid": "İkili çıktılar üreten bir adım, bu çalışma alanının kataloğunda çözümlenemeyen bir temel hizmet seçiyor: kimlik bilinmiyor ya da seçilen depolama hizmeti asset-storage yeteneğini taşımıyor. Adımın seçimini düzeltin veya hizmeti kaydedin, sonra yeniden başlatın.",
+        "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu dağıtımın kaydetmediği bir üretken entegrasyon seçiyor ya da seçilen entegrasyonların hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor. Üretken entegrasyonlar bu çalışma alanında değil, dağıtımın kodunda kaydedilir: entegrasyonu kaydedin veya adımın seçimini düzeltin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin."
       },
       "action": {

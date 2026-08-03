@@ -680,6 +680,7 @@ async function bootServer(
     pipelineRegistry: container.pipelineRegistry,
     taskTypeRegistry: container.taskTypeRegistry,
     foundationalServiceRegistry: container.foundationalServiceRegistry,
+    binaryGeneratorRegistry: container.binaryGeneratorRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 

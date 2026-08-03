@@ -1,4 +1,5 @@
 import type {
+  BinaryGeneratorRegistry,
   Block,
   BlockRepository,
   ExecutionRepository,
@@ -31,7 +32,12 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { binaryOutputConfigIssues, describeBinaryOutputConfigIssues } from '@cat-factory/kernel'
+import {
+  binaryGeneratorSelectionIssues,
+  binaryOutputConfigIssues,
+  describeBinaryGeneratorSelectionIssues,
+  describeBinaryOutputConfigIssues,
+} from '@cat-factory/kernel'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
@@ -74,6 +80,13 @@ export interface RunAdmissionDeps {
    * gap remains to the agent — matching the other optional start guards.
    */
   foundationalServiceResolver?: FoundationalServiceResolver
+  /**
+   * The deployment's GENERATIVE BINARY INTEGRATIONS, for validating a binary-generating step's
+   * `generatorIds` + declared content types. Unlike the catalog seam above this needs no I/O and
+   * cannot be "unconfigured" in the same sense — a facade always news one — but it stays optional
+   * so a test constructing this class by hand keeps the guard as a pass-through.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -107,6 +120,7 @@ export class RunAdmission {
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly foundationalServiceResolver?: FoundationalServiceResolver
+  private readonly binaryGeneratorRegistry?: BinaryGeneratorRegistry
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -130,6 +144,7 @@ export class RunAdmission {
     this.workspaceSettingsService = deps.workspaceSettingsService
     this.resolveBinaryArtifactStore = deps.resolveBinaryArtifactStore
     this.foundationalServiceResolver = deps.foundationalServiceResolver
+    this.binaryGeneratorRegistry = deps.binaryGeneratorRegistry
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.inlineHarnessRef = deps.inlineHarnessRef
     this.resolveWorkspaceModelDefault = deps.resolveWorkspaceModelDefault
@@ -206,10 +221,11 @@ export class RunAdmission {
     await this.assertBinaryStorageConfigured(workspaceId, shape.agentKinds)
 
     // A chain carrying a BINARY-GENERATING step (the `binary-output` trait — a deployment's
-    // image generator) needs each such step's foundational-service selection to resolve
-    // against the workspace catalog, or the generator dispatches with nowhere to deliver its
-    // output. (The selection's PRESENCE is a structural fault validatePipelineShape refused
-    // above.)
+    // image generator) needs each such step's selection to resolve: its foundational-service
+    // half against the workspace catalog, or the generator dispatches with nowhere to deliver
+    // its output; its GENERATIVE half against the deployment's integration registry, or it
+    // dispatches with nothing to make the output WITH. (The selection's PRESENCE is a structural
+    // fault validatePipelineShape refused above.)
     await this.assertBinaryOutputSelected(
       workspaceId,
       shape.agentKinds,
@@ -694,17 +710,22 @@ export class RunAdmission {
     stepOptions: readonly (StepOptions | null)[] | undefined,
     enabled: readonly boolean[] | undefined,
   ): Promise<void> {
-    const resolver = this.foundationalServiceResolver
-    if (!resolver) return
-    const generators = agentKinds.flatMap((kind, i) => {
+    const steps = agentKinds.flatMap((kind, i) => {
       const config = stepOptions?.[i]?.binaryOutput
       if (!config || enabled?.[i] === false) return []
       if (!hasTrait(kind, BINARY_OUTPUT_TRAIT, this.agentKindRegistry)) return []
       return [{ kind, config }]
     })
-    if (generators.length === 0) return
+    if (steps.length === 0) return
+    // The GENERATIVE half first, and without any I/O: it resolves against deployment code, so a
+    // step selecting an integration nobody registered is refused even on a deployment with no
+    // catalog seam wired — and refusing it BEFORE the catalog read means the operator hears about
+    // the fault they can fix in their own build rather than about the workspace's catalog.
+    this.assertBinaryGeneratorsSelected(steps)
+    const resolver = this.foundationalServiceResolver
+    if (!resolver) return
     const catalog = await resolver.catalogFor(workspaceId)
-    for (const { kind, config } of generators) {
+    for (const { kind, config } of steps) {
       const issues = binaryOutputConfigIssues(config, catalog)
       const first = issues[0]
       if (!first) continue
@@ -717,6 +738,46 @@ export class RunAdmission {
           problem: first.problem,
           role: first.role,
           issues: issues.map(({ role, serviceId, problem }) => ({ role, serviceId, problem })),
+        },
+      )
+    }
+  }
+
+  /**
+   * The GENERATIVE half of {@link assertBinaryOutputSelected}: every integration a binary-
+   * generating step selects (`stepOptions.binaryOutput.generatorIds`) must be one this
+   * deployment REGISTERS, and every content type the step declares it delivers
+   * (`binaryOutput.modalities`) must be produced by at least one of them — refused with
+   * `binary_output_generator_invalid`.
+   *
+   * A SEPARATE refusal from the storage-side one on purpose. The two resolve against different
+   * registries and need different people: an unresolved storage id is workspace state somebody
+   * can fix in the app, while an unknown integration id means nobody registered it in this
+   * BUILD — the same reason kept apart in the message, the reason code and the SPA's remedy copy.
+   *
+   * Synchronous and unconditional (no seam to be unwired): the registry is in-process
+   * composition data, so this check costs nothing and holds even on a facade with no catalog.
+   * An absent registry is treated as an EMPTY one, which is the honest reading — a deployment
+   * that registers no integrations cannot satisfy a step that selects one.
+   */
+  private assertBinaryGeneratorsSelected(
+    steps: readonly { kind: string; config: NonNullable<StepOptions['binaryOutput']> }[],
+  ): void {
+    const generators = this.binaryGeneratorRegistry?.views() ?? []
+    for (const { kind, config } of steps) {
+      const issues = binaryGeneratorSelectionIssues(config, generators)
+      const first = issues[0]
+      if (!first) continue
+      throw new ConflictError(
+        describeBinaryGeneratorSelectionIssues(kind, issues),
+        'binary_output_generator_invalid',
+        {
+          agentKind: kind,
+          problem: first.problem,
+          ...(first.problem === 'unknown_generator'
+            ? { generatorId: first.generatorId }
+            : { modality: first.modality }),
+          issues,
         },
       )
     }

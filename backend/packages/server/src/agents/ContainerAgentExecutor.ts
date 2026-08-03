@@ -44,6 +44,7 @@ import {
 import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
+import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
 import { containerJobLog } from './containerAgentLogging.js'
@@ -1029,26 +1030,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // (native) claude-code takes the checkout path too — it has no isolated config home to install
     // into — so the prompt must carry the instructions rather than point at an install.
     const skillRender = renderSkillsForHarness(context.skills, harness, auth.ambientAuth === true)
-    // Tool servers (MCP) the running kind declared: filtered to what THIS harness can serve and
-    // whose credentials resolve, split into the prompt-facing projection (folded onto the prompt
-    // context below, so it reaches the prompt AND the agent-context snapshot) and the job-body
-    // `mcpServers` field carrying the transports + their secrets. Never throws — an unwirable
-    // server is reported to the agent as unavailable, not turned into a failed dispatch.
     const tools = await this.resolveToolServersFor(context, {
       harness,
       ambientAuth: auth.ambientAuth === true,
       workspaceId,
       blockId,
     })
+    const { testSecretEnv, generatorSecrets } = await this.resolveJobSecretEnv(context, {
+      workspaceId,
+      blockId,
+      resolvedTestSecrets,
+    })
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
     const tuning = agentTuningFor(context.agentKind, this.agentKindRegistry)
-    // Sensitive test credentials (resolved above) as `{ key, value }` env pairs on a dedicated
-    // top-level body field (like `packageRegistries`), which the agent-context snapshot
-    // allow-list omits. The harness injects each as an env var; the prompt only advertises the
-    // keys+descriptions (from `context.testSecrets`). Values NEVER reach a prompt or telemetry.
-    const testSecretEnv = resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value }))
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
@@ -1064,6 +1060,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         contextFiles,
         skillsBody: skillRender.body,
         mcpServers: tools.mcpServers,
+        generatorSecrets,
         // Extend the no-edit exploration allowance by the task-estimator's complexity when a
         // prior estimator step produced one (absent ⇒ the kind's tuning / harness default
         // stands — only absolute spiralling is caught). Loosen-only; see `withComplexityAllowance`.
@@ -1156,10 +1153,52 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
-   * Resolve this dispatch's tool servers (MCP) — narrowing the running kind's declarations to what
-   * this harness/auth mode can serve and whose credentials resolve. A thin binding of the executor's
-   * injected deps onto the pure {@link resolveToolServers}; separated so `buildJobBody` stays under
-   * its complexity ceiling.
+   * The two SECRET env channels a dispatch carries, resolved together because they are one
+   * concern: `{ key, value }` pairs the harness turns into environment variables of this one
+   * job's agent process, on dedicated top-level body fields the agent-context snapshot's
+   * allow-list omits. Values NEVER reach a prompt or telemetry — the prompt sees only names.
+   *
+   * - `testSecretEnv`: the tester's sensitive credentials (already resolved by the caller); the
+   *   prompt advertises their keys + descriptions through `context.testSecrets`.
+   * - `generatorSecrets`: the credentials of this step's GENERATIVE BINARY INTEGRATIONS. The
+   *   engine resolved WHICH ones onto the context; only their values are resolved here, where the
+   *   facade's secret resolver lives. A key that does not resolve is simply absent — the agent's
+   *   brief already tells it what an unset variable means, and refusing the dispatch would trade a
+   *   named gap for a silent one.
+   */
+  private async resolveJobSecretEnv(
+    context: AgentRunContext,
+    args: {
+      workspaceId: string
+      blockId: string
+      resolvedTestSecrets: { key: string; value: string }[]
+    },
+  ): Promise<{
+    testSecretEnv: { key: string; value: string }[]
+    generatorSecrets: { key: string; value: string }[]
+  }> {
+    const generatorSecrets = await resolveBinaryGeneratorSecrets({
+      context,
+      workspaceId: args.workspaceId,
+      blockId: args.blockId,
+      ...(this.deps.resolveToolSecrets ? { resolveToolSecrets: this.deps.resolveToolSecrets } : {}),
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    })
+    return {
+      testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
+      generatorSecrets,
+    }
+  }
+
+  /**
+   * Tool servers (MCP) the running kind declared: narrowed to what THIS harness/auth mode can
+   * serve and whose credentials resolve, split into the prompt-facing projection (folded onto the
+   * prompt context by the caller, so it reaches the prompt AND the agent-context snapshot) and the
+   * job-body `mcpServers` field carrying the transports + their secrets. Never throws — an
+   * unwirable server is reported to the agent as unavailable, not turned into a failed dispatch.
+   *
+   * A thin binding of the executor's injected deps onto the pure {@link resolveToolServers};
+   * separated so `buildJobBody` stays under its complexity ceiling.
    */
   private resolveToolServersFor(
     context: AgentRunContext,

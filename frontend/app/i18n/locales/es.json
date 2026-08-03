@@ -547,6 +547,7 @@
         "pipeline_schedule_intake_unconfigured": "La programación no tiene entrada de incidencias",
         "foundational_service_exists": "El servicio fundacional ya existe",
         "binary_output_service_invalid": "No se puede resolver el servicio de salidas binarias",
+        "binary_output_generator_invalid": "No se puede resolver el generador de salidas binarias",
         "foundational_service_not_inherited": "Este tablero registró ese servicio"
       },
       "description": {
@@ -578,6 +579,7 @@
         "pipeline_schedule_intake_unconfigured": "Un paso de entrada de errores toma su trabajo de la entrada de incidencias de la programación, y la programación vinculada no la tiene. Configure la entrada de incidencias en la programación primero.",
         "foundational_service_exists": "Ya hay un servicio fundacional con este identificador registrado en este ámbito. Abre la entrada existente y edítala: dos servicios no pueden compartir un identificador, porque es el nombre que un arquitecto usa en su diseño.",
         "binary_output_service_invalid": "Un paso que genera salidas binarias selecciona un servicio fundacional que el catálogo de este espacio de trabajo no puede resolver: el identificador es desconocido, o el servicio de almacenamiento elegido no tiene la capacidad asset-storage. Corrige la selección del paso o registra el servicio y vuelve a iniciarlo.",
+        "binary_output_generator_invalid": "Un paso que genera salidas binarias selecciona una integración generativa que esta instalación no registra, o ninguna de las integraciones seleccionadas produce un tipo de contenido que el paso debe entregar. Las integraciones generativas se registran en el código de la instalación, no en este espacio de trabajo: regístrala o corrige la selección del paso y vuelve a iniciar.",
         "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero."
       },
       "action": {

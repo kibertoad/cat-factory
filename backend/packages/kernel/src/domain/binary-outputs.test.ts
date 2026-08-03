@@ -76,7 +76,7 @@ describe('binaryOutputConfigIssues', () => {
 })
 
 describe('parseBinaryOutputDeclaration', () => {
-  const known = ['asset-store']
+  const known = { services: ['asset-store'], generators: ['retro-diffusion'] }
 
   it('reads a JSON array of entries, keeping optional fields and lowercasing the service id', () => {
     const report = parseBinaryOutputDeclaration(
@@ -101,9 +101,13 @@ describe('parseBinaryOutputDeclaration', () => {
           entity: 'product:kettle',
           contentType: 'image/png',
           description: 'Hero image',
+          // Derived in code from the declared media type — the model reports, the platform
+          // classifies.
+          modality: 'image',
         },
       ],
       unknownServices: [],
+      unknownGenerators: [],
       invalidEntries: 0,
       omitted: 0,
     })
@@ -121,6 +125,7 @@ describe('parseBinaryOutputDeclaration', () => {
     expect(parseBinaryOutputDeclaration('all done, nothing to add', known)).toEqual({
       stored: [],
       unknownServices: [],
+      unknownGenerators: [],
       invalidEntries: 0,
       omitted: 0,
       undeclared: true,
@@ -128,12 +133,14 @@ describe('parseBinaryOutputDeclaration', () => {
     expect(parseBinaryOutputDeclaration(declaration('none'), known)).toEqual({
       stored: [],
       unknownServices: [],
+      unknownGenerators: [],
       invalidEntries: 0,
       omitted: 0,
     })
     expect(parseBinaryOutputDeclaration(declaration('not json at all'), known)).toEqual({
       stored: [],
       unknownServices: [],
+      unknownGenerators: [],
       invalidEntries: 0,
       omitted: 0,
       parseFailed: true,
@@ -193,6 +200,46 @@ describe('parseBinaryOutputDeclaration', () => {
     )
     expect(report.stored[0]?.description).toHaveLength(501)
     expect(report.stored[0]?.description?.endsWith('…')).toBe(true)
+  })
+
+  it('records the generating integration, derives the content type, and names an unknown one', () => {
+    // The `generator` claim resolves against the DEPLOYMENT registry, not the workspace catalog,
+    // so an id nobody registers is reported apart from an unknown storage id — different
+    // registries, different fixes. The entry is still kept: the platform records the claim.
+    const report = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([
+          {
+            service: 'asset-store',
+            location: 'a.png',
+            generator: 'Retro-Diffusion',
+            contentType: 'image/png',
+          },
+          { service: 'asset-store', location: 'b.mp3', generator: 'ghost-synth' },
+        ]),
+      ),
+      known,
+    )
+    expect(report.stored[0]).toMatchObject({ generator: 'retro-diffusion', modality: 'image' })
+    expect(report.stored[1]).toMatchObject({ generator: 'ghost-synth' })
+    expect(report.unknownServices).toEqual([])
+    expect(report.unknownGenerators).toEqual(['ghost-synth'])
+  })
+
+  it('leaves the modality ABSENT for a media type it cannot classify, rather than guessing', () => {
+    // "We cannot tell what this is" must not read as "this is not an image": the classifier is
+    // not a registry of every format, and a wrong modality would be a fact nobody stated.
+    const report = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([
+          { service: 'asset-store', location: 'a.bin', contentType: 'application/octet-stream' },
+          { service: 'asset-store', location: 'b.png' },
+        ]),
+      ),
+      known,
+    )
+    expect(report.stored[0]?.modality).toBeUndefined()
+    expect(report.stored[1]?.modality).toBeUndefined()
   })
 
   it('reads the LAST block, so an illustrated example does not beat the real declaration', () => {

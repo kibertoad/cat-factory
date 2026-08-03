@@ -181,7 +181,7 @@ async function resolveSecrets(
           resolver.resolve({
             workspaceId: input.workspaceId,
             ...(input.blockId ? { blockId: input.blockId } : {}),
-            serverId: definition.id,
+            subject: { kind: 'tool-server', id: definition.id },
             keys,
           }),
         { toolServerId: definition.id },

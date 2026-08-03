@@ -71,6 +71,7 @@ import type {
   FragmentBriefRepository,
   FragmentSelector,
   ApiContractRepository,
+  BinaryGeneratorRegistry,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   FoundationalServiceRepository,
@@ -909,6 +910,18 @@ export interface CoreDependencies {
    * reads it back so a malformed definition fails the deployment rather than a design dispatch.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * The app-owned registry of GENERATIVE BINARY INTEGRATIONS a DEPLOYMENT ships in CODE — the
+   * image / music / video generation APIs a binary-generating step may call
+   * (`stepOptions.binaryOutput.generatorIds`). Optional + defaulted to
+   * `defaultBinaryGeneratorRegistry()` (EMPTY — the platform ships none, and every one of them is
+   * a metered vendor), so existing construction sites behave exactly as before; a facade injects
+   * the SAME instance it registers its integrations on, and boot validation reads it back so a
+   * malformed definition or an unusable credential name fails the deployment rather than a
+   * dispatch. Deliberately NOT the foundational-service registry: that catalog is what a design
+   * is expected to build ON, while an integration is an instrument a specific step is pointed at.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
    * Where the `builtin` tier is READ from, when that is not this process's own registry.
    * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)` — i.e. exactly the

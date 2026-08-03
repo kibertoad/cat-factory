@@ -356,6 +356,7 @@ async function startLocalMothership(
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
     foundationalServiceRegistry: container.foundationalServiceRegistry,
+    binaryGeneratorRegistry: container.binaryGeneratorRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 

@@ -3,6 +3,7 @@ import type {
   AgentExecutor,
   AgentPromptRepository,
   WorkspaceAgentSettingsRepository,
+  BinaryGeneratorRegistry,
   BlockRepository,
   BlueprintService,
   BrainstormSessionRepository,
@@ -275,6 +276,15 @@ export interface ExecutionServiceDependencies {
    * design declared, both as injected `.cat-context/` files. Absent ⇒ neither is injected.
    */
   foundationalServiceResolver?: FoundationalServiceResolver
+  /**
+   * Optional: the deployment's GENERATIVE BINARY INTEGRATIONS (`BinaryGeneratorRegistry`), which a
+   * binary-generating step selects from to PRODUCE its artifacts — the twin of the catalog seam
+   * above, which is where those artifacts GO. Read at admission (a selected integration must be
+   * registered, and must cover every content type the step declares) and at dispatch (the brief,
+   * plus the non-secret projection the container executor resolves credentials from). Absent ⇒
+   * no integration resolves, and both the refusal and the brief state that.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal

@@ -1,11 +1,20 @@
 import type {
+  BinaryModality,
   BinaryOutputArtifact,
   BinaryOutputConfig,
   BinaryOutputReport,
 } from '@cat-factory/contracts'
-import { ASSET_STORAGE_CAPABILITY, GENERATION_CONTEXT_CAPABILITY } from '@cat-factory/contracts'
+import {
+  ASSET_STORAGE_CAPABILITY,
+  GENERATION_CONTEXT_CAPABILITY,
+  modalityOfMediaType,
+} from '@cat-factory/contracts'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 import type { FoundationalCatalogView } from './foundational-services.js'
+import {
+  type ResolvedBinaryGeneratorSelection,
+  renderBinaryGeneratorSection,
+} from './binary-generators.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for BINARY-OUTPUT agent steps
@@ -172,11 +181,17 @@ export function describeBinaryOutputConfigIssues(
  */
 export function parseBinaryOutputDeclaration(
   output: string | undefined,
-  known: Iterable<string>,
+  known: {
+    /** Ids in the workspace's resolved foundational catalog (the storage/context half). */
+    services: Iterable<string>
+    /** Ids the deployment registers on its `BinaryGeneratorRegistry` (the generative half). */
+    generators?: Iterable<string>
+  },
 ): BinaryOutputReport {
   const empty: BinaryOutputReport = {
     stored: [],
     unknownServices: [],
+    unknownGenerators: [],
     invalidEntries: 0,
     omitted: 0,
   }
@@ -194,9 +209,11 @@ export function parseBinaryOutputDeclaration(
   }
   const entries = Array.isArray(parsed) ? parsed : [parsed]
 
-  const knownIds = new Set(known)
+  const knownServices = new Set(known.services)
+  const knownGenerators = new Set(known.generators ?? [])
   const stored: BinaryOutputArtifact[] = []
   const unknownServices: string[] = []
+  const unknownGenerators: string[] = []
   let invalidEntries = 0
   let omitted = 0
   for (const entry of entries) {
@@ -210,11 +227,15 @@ export function parseBinaryOutputDeclaration(
       continue
     }
     stored.push(artifact)
-    if (!knownIds.has(artifact.service) && !unknownServices.includes(artifact.service)) {
+    if (!knownServices.has(artifact.service) && !unknownServices.includes(artifact.service)) {
       unknownServices.push(artifact.service)
     }
+    const generator = artifact.generator
+    if (generator && !knownGenerators.has(generator) && !unknownGenerators.includes(generator)) {
+      unknownGenerators.push(generator)
+    }
   }
-  return { stored, unknownServices, invalidEntries, omitted }
+  return { stored, unknownServices, unknownGenerators, invalidEntries, omitted }
 }
 
 function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
@@ -227,9 +248,17 @@ function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
   const entity = displayField(record.entity)
   const contentType = displayField(record.contentType)
   const description = displayField(record.description)
+  // Lowercased like `service`, and for the same reason: registry ids are lower-kebab slugs, so a
+  // model that capitalises one means the registered integration and must not be reported unknown.
+  const generator = identityField(record.generator)?.toLowerCase()
   if (entity) artifact.entity = entity
   if (contentType) artifact.contentType = contentType
   if (description) artifact.description = description
+  if (generator) artifact.generator = generator
+  // The platform CLASSIFIES; the model only reports. An unrecognised media type leaves `modality`
+  // ABSENT rather than guessing one — "we cannot tell what this is" is not "this is not an image".
+  const modality: BinaryModality | null = contentType ? modalityOfMediaType(contentType) : null
+  if (modality) artifact.modality = modality
   return artifact
 }
 
@@ -267,15 +296,25 @@ export interface BinaryOutputBriefInput {
   contextServices: FoundationalCatalogView[]
   /** Selected context ids the catalog could not resolve. */
   unresolvedContextIds: string[]
+  /**
+   * The step's GENERATIVE integrations, resolved against the deployment registry. Absent ⇒ the
+   * renderer treats it as an empty selection, which is rendered as its own stated case ("no
+   * generative integration is configured") rather than as silence.
+   */
+  generators?: ResolvedBinaryGeneratorSelection
 }
 
 /**
  * Render `.cat-context/binary-output/brief.md` — the ONE file a binary-generating agent starts
- * from. It names the storage target and the scope services concretely (the trait guidance owns
- * the generic workflow and the declaration shape), and it STATES every gap instead of omitting
- * it: an unresolved storage id, a service with no registered contract, a context id the catalog
- * does not know. A generator told nothing would guess, and a guessed storage endpoint is how an
- * asset lands somewhere nobody can find it.
+ * from. Three sections in the order the work happens: what MAKES the artifacts (the step's
+ * generative integrations, their content types and credentials), what to make (the scope
+ * services), and where it GOES (the storage service). The trait guidance owns the generic
+ * workflow and the declaration shape; this file is the concrete half.
+ *
+ * It STATES every gap instead of omitting it: an unresolved storage id, a service or integration
+ * with no registered contract, a context id the catalog does not know, a content type the step
+ * must deliver that nothing selected can produce. A generator told nothing would guess, and a
+ * guessed endpoint is how an asset lands somewhere nobody can find it — or is never made at all.
  */
 export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
   const lines: string[] = ['# Binary outputs for this step', '']
@@ -285,49 +324,71 @@ export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
     )
     return lines.join('\n').trimEnd()
   }
-  if (!input.storage) {
-    lines.push(
-      `This step is configured to store its binary outputs through the foundational service \`${input.config.storageServiceId}\`, but the workspace catalog does not contain it. Do NOT store the outputs anywhere else and do not guess at its API — state in your report that the storage service could not be resolved.`,
-      '',
-    )
-  } else {
-    lines.push(
-      `Store EVERY binary you generate through \`${input.storage.id}\` — ${input.storage.name}: ${input.storage.summary}`,
-      '',
-    )
-    if (!input.storage.capabilities.includes(ASSET_STORAGE_CAPABILITY)) {
-      lines.push(
-        `Note: \`${input.storage.id}\` does not advertise the \`${ASSET_STORAGE_CAPABILITY}\` capability. It was still selected for this step; if its API offers no way to store binary content, say so in your report rather than improvising.`,
-        '',
-      )
-    }
-    lines.push(...contractPointer(input.storage), '')
-  }
-  if (input.contextServices.length > 0 || input.unresolvedContextIds.length > 0) {
-    lines.push(
-      'Consult these services to decide the SCOPE of the generation — what exists, what already has an asset, what each thing is — before generating anything:',
-      '',
-    )
-    for (const service of input.contextServices) {
-      lines.push(`- \`${service.id}\` — ${service.name}: ${service.summary}`)
-      lines.push(`  ${contractPointer(service).join(' ')}`)
-    }
-    if (input.unresolvedContextIds.length > 0) {
-      lines.push(
-        `- The selection also named ${input.unresolvedContextIds.map((id) => `\`${id}\``).join(', ')}, which the catalog does not contain — no contract is available. Do not guess at ${input.unresolvedContextIds.length === 1 ? 'its' : 'their'} API; note the gap in your report.`,
-      )
-    }
-    lines.push('')
-  } else {
-    lines.push(
-      'No context service is selected: the task description and the other provided context are the whole scope of the generation.',
-      '',
-    )
-  }
+  // Generation first, then scope, then storage: the order of the work. A generator that reads
+  // only the top of this file must still learn WHAT MAKES the artifacts before anything else,
+  // because that is the decision it cannot recover from later.
   lines.push(
-    `Declare what you stored in the fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block your guidance describes, naming each artifact's service id and its location exactly as the storage service reported it.`,
+    ...renderBinaryGeneratorSection({
+      selection: input.generators ?? { selected: [], unresolvedIds: [] },
+      requestedModalities: input.config.modalities ?? [],
+    }),
+  )
+  lines.push(...renderScopeSection(input), ...renderStorageSection(input))
+  lines.push(
+    `Declare what you stored in the fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block your guidance describes, naming each artifact's service id, the integration that generated it, and its location exactly as the storage service reported it.`,
   )
   return lines.join('\n').trimEnd()
+}
+
+/** The SCOPE half: which catalog services say what to generate, and which could not be resolved. */
+function renderScopeSection(input: BinaryOutputBriefInput): string[] {
+  const lines: string[] = ['## Scope', '']
+  if (input.contextServices.length === 0 && input.unresolvedContextIds.length === 0) {
+    return [
+      ...lines,
+      'No context service is selected: the task description and the other provided context are the whole scope of the generation.',
+      '',
+    ]
+  }
+  lines.push(
+    'Consult these services to decide the SCOPE of the generation — what exists, what already has an asset, what each thing is — before generating anything:',
+    '',
+  )
+  for (const service of input.contextServices) {
+    lines.push(`- \`${service.id}\` — ${service.name}: ${service.summary}`)
+    lines.push(`  ${contractPointer(service).join(' ')}`)
+  }
+  if (input.unresolvedContextIds.length > 0) {
+    lines.push(
+      `- The selection also named ${input.unresolvedContextIds.map((id) => `\`${id}\``).join(', ')}, which the catalog does not contain — no contract is available. Do not guess at ${input.unresolvedContextIds.length === 1 ? 'its' : 'their'} API; note the gap in your report.`,
+    )
+  }
+  lines.push('')
+  return lines
+}
+
+/** The STORAGE half: the one service every artifact goes through, or why there is none. */
+function renderStorageSection(input: BinaryOutputBriefInput): string[] {
+  const lines: string[] = ['## Storage', '']
+  if (!input.storage) {
+    lines.push(
+      `This step is configured to store its binary outputs through the foundational service \`${input.config?.storageServiceId}\`, but the workspace catalog does not contain it. Do NOT store the outputs anywhere else and do not guess at its API — state in your report that the storage service could not be resolved.`,
+      '',
+    )
+    return lines
+  }
+  lines.push(
+    `Store EVERY binary you generate through \`${input.storage.id}\` — ${input.storage.name}: ${input.storage.summary}`,
+    '',
+  )
+  if (!input.storage.capabilities.includes(ASSET_STORAGE_CAPABILITY)) {
+    lines.push(
+      `Note: \`${input.storage.id}\` does not advertise the \`${ASSET_STORAGE_CAPABILITY}\` capability. It was still selected for this step; if its API offers no way to store binary content, say so in your report rather than improvising.`,
+      '',
+    )
+  }
+  lines.push(...contractPointer(input.storage), '')
+  return lines
 }
 
 /** Where a service's API contract was injected, or the explicit statement that none exists. */

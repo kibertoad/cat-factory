@@ -21,7 +21,11 @@ else imports its **ports** and domain types from here.
   `pipeline-registry.ts`, `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
   `foundational-service-registry.ts` (the shared capabilities a DEPLOYMENT declares in code — the
   `builtin` tier of the foundational-services catalog, projected through `summarizeContract` and
-  validated at boot; ADR 0031), `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
+  validated at boot; ADR 0031), `binary-generator-registry.ts` + `binary-generators.ts` (the
+  GENERATIVE binary integrations a deployment declares in code — an image / music / video API a
+  `binary-output` step selects to PRODUCE its artifacts, with the pure selection validation and
+  agent-facing rendering beside it; deliberately NOT the foundational catalog, which is what a
+  DESIGN consumes), `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are

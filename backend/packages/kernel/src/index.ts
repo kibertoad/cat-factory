@@ -254,6 +254,26 @@ export {
   renderBinaryOutputBrief,
 } from './domain/binary-outputs.js'
 
+// The GENERATIVE half of a binary-output step: the app-owned registry a DEPLOYMENT registers its
+// image / music / video generation integrations on, and the pure logic that resolves a step's
+// selection against it, refuses one that cannot deliver the step's content types, and renders
+// what the agent is told about each. See `domain/binary-generators.ts`.
+export {
+  type BinaryGeneratorDefinition,
+  type BinaryGeneratorView,
+  BinaryGeneratorRegistry,
+  defaultBinaryGeneratorRegistry,
+} from './domain/binary-generator-registry.js'
+export {
+  type ResolvedBinaryGenerator,
+  type ResolvedBinaryGeneratorSelection,
+  binaryGeneratorContextFileFor,
+  binaryGeneratorSelectionIssues,
+  describeBinaryGeneratorSelectionIssues,
+  dispatchBinaryGenerators,
+  resolveBinaryGeneratorSelection,
+} from './domain/binary-generators.js'
+
 // The shared reader for an agent's machine-read ` ```<tag> ` declaration block — the LAST one
 // wins, because every contract using it asks the agent to END its reply with it.
 export { extractFencedDeclaration } from './domain/fenced-declaration.js'

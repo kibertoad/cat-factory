@@ -1,13 +1,20 @@
 import type { BinaryOutputConfig, FoundationalServiceSelection } from '@cat-factory/contracts'
-import type { FoundationalCatalogView, InjectedContextFile } from '@cat-factory/kernel'
+import type {
+  BinaryGeneratorRegistry,
+  FoundationalCatalogView,
+  InjectedContextFile,
+  ResolvedBinaryGeneratorSelection,
+} from '@cat-factory/kernel'
 import {
   BINARY_OUTPUT_BRIEF_FILE,
   FOUNDATIONAL_INDEX_FILE,
   binaryContextFileFor,
+  binaryGeneratorContextFileFor,
   contextFileFor,
   renderBinaryOutputBrief,
   renderContractDocument,
   renderFoundationalIndex,
+  resolveBinaryGeneratorSelection,
 } from '@cat-factory/kernel'
 import type { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
 
@@ -121,6 +128,7 @@ export class FoundationalServiceRunResolver {
   async binaryOutputContextFilesFor(
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
+    generatorRegistry?: BinaryGeneratorRegistry,
   ): Promise<InjectedContextFile[]> {
     if (!config) {
       return [
@@ -135,6 +143,11 @@ export class FoundationalServiceRunResolver {
         },
       ]
     }
+    // The GENERATIVE half comes from the deployment's code registry rather than the workspace
+    // catalog, so it is resolved here in the same pass: one brief has to describe both, and a
+    // step whose integrations resolved but whose storage did not (or the reverse) is exactly the
+    // partial state the file must state rather than omit.
+    const generators = resolveBinaryGeneratorSelection(config, generatorRegistry?.views() ?? [])
     const catalog = await this.catalogFor(workspaceId)
     const byId = new Map(catalog.map((service) => [service.id, service]))
     const storage = byId.get(config.storageServiceId) ?? null
@@ -157,8 +170,10 @@ export class FoundationalServiceRunResolver {
           storage,
           contextServices,
           unresolvedContextIds,
+          generators,
         }),
       },
+      ...generatorContractFiles(generators, generatorRegistry),
     ]
     for (const service of involved) {
       const contracts = (documents.get(service.id) ?? []).map((doc) => ({
@@ -187,4 +202,41 @@ export class FoundationalServiceRunResolver {
   private async hasCatalog(workspaceId: string): Promise<boolean> {
     return (await this.catalog.resolve(workspaceId)).length > 0
   }
+}
+
+/**
+ * One `.cat-context/binary-output/generator-<id>.md` per SELECTED integration that registers a
+ * contract, rendered through the same `renderContractDocument` the catalog services use — an
+ * agent reads one kind of contract file whatever registry it came from.
+ *
+ * An integration with no registered contract gets no file: the brief already states that case
+ * (endpoint + notes are the whole interface), and an empty document would read as an API that
+ * declares no operations.
+ */
+function generatorContractFiles(
+  generators: ResolvedBinaryGeneratorSelection,
+  registry: BinaryGeneratorRegistry | undefined,
+): InjectedContextFile[] {
+  if (!registry) return []
+  const files: InjectedContextFile[] = []
+  for (const generator of generators.selected) {
+    const contracts = registry.documentsFor(generator.id).map((doc) => ({
+      contractId: doc.contractId,
+      format: doc.format,
+      title: doc.title,
+      body: doc.body,
+    }))
+    if (contracts.length === 0) continue
+    files.push({
+      path: binaryGeneratorContextFileFor(generator.id),
+      content: renderContractDocument({
+        id: generator.id,
+        name: generator.name,
+        summary: generator.summary,
+        description: generator.description,
+        contracts,
+      }),
+    })
+  }
+  return files
 }
