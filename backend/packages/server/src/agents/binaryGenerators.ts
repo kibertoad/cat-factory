@@ -5,6 +5,12 @@ import type {
   ToolSecretResolver,
 } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
+  reservedEnvKeyMessage,
+  toolchainEnvNameMessage,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // GENERATIVE BINARY INTEGRATIONS for one container dispatch: take the integrations the ENGINE
@@ -27,7 +33,13 @@ import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 // contradict it.
 // ---------------------------------------------------------------------------
 
-/** One `{ key, value }` env pair the harness injects into THIS JOB's agent process. */
+/**
+ * One `{ key, value }` env pair the harness injects into THIS JOB's agent process.
+ *
+ * `key` is the INJECTION name (`credentialEnvName`, else the lookup key), not necessarily what the
+ * resolver was asked for. It has to be, because this is the variable the agent reads, and it is
+ * the same name the brief tells it to read.
+ */
 export interface GeneratorSecretJobSpec {
   key: string
   value: string
@@ -66,17 +78,24 @@ export async function resolveBinaryGeneratorSecrets(
   const generators = input.context.binaryGenerators ?? []
   const resolver = input.resolveToolSecrets
   if (!resolver || generators.length === 0) return []
+  // Deduplicated on the INJECTION name rather than the lookup key, because that name is what the
+  // job body is keyed by: two integrations that resolve different keys into one variable would
+  // otherwise both emit it and the last would silently win. Deduping here also covers the ordinary
+  // shared-account case (one vendor behind an image and a music endpoint), since a shared lookup
+  // key with no `envName` shares its injection name too.
   const seen = new Set<string>()
   const wanted = generators.flatMap((generator) => {
     const key = generator.credentialKey
-    if (!key || seen.has(key)) return []
-    seen.add(key)
-    return [{ generator, key }]
+    if (!key) return []
+    const envName = generator.credentialEnvName ?? key
+    if (seen.has(envName)) return []
+    seen.add(envName)
+    return [{ generator, key, envName }]
   })
   const resolved = await Promise.all(
-    wanted.map(async ({ generator, key }) => {
-      const value = await resolveOne(input, resolver, generator, key)
-      return value === undefined ? null : { key, value }
+    wanted.map(async ({ generator, key, envName }) => {
+      const value = await resolveOne(input, resolver, generator, key, envName)
+      return value === undefined ? null : { key: envName, value }
     }),
   )
   return resolved.filter((entry): entry is GeneratorSecretJobSpec => entry !== null)
@@ -87,7 +106,40 @@ async function resolveOne(
   resolver: ToolSecretResolver,
   generator: ResolvedBinaryGenerator,
   key: string,
+  envName: string,
 ): Promise<string | undefined> {
+  // The platform's own configuration variables are never resolvable as an integration credential,
+  // and the check is HERE rather than inside the env-backed default resolver so it holds whatever
+  // a facade wired. Boot validation refuses such a declaration through the credential schema, but
+  // a MOTHERSHIP-MODE node boot-validates none of the definitions it resolves: they arrive per
+  // dispatch over `/internal/binary-generators`, chosen by a process that is not this one, and
+  // the environment they would be read from is a developer's own laptop.
+  //
+  // Only the LOOKUP key is held to it. The injection name reads nothing, so it gets the toolchain
+  // rule below instead, which is what lets an integration keep a vendor's documented variable name
+  // even when a platform prefix family covers it.
+  if (isReservedPlatformEnvKey(key)) {
+    // Reported at WARN, not at the `debug` an optional missing key gets: this is never a
+    // deployment's stated normal, and its fix is a declaration rather than a variable to set.
+    input.logger?.warn(
+      'binary-generator declares a reserved credential key; the agent is told the integration is unavailable',
+      { binaryGeneratorId: generator.id, credentialKey: key, detail: reservedEnvKeyMessage(key) },
+    )
+    return undefined
+  }
+  // A value injected under a toolchain name reconfigures the agent's process instead of
+  // authenticating a call. Registration refuses one; this is the mothership case again.
+  if (isToolchainEnvName(envName)) {
+    input.logger?.warn(
+      'binary-generator declares a toolchain injection name; the agent is told the integration is unavailable',
+      {
+        binaryGeneratorId: generator.id,
+        credentialEnvName: envName,
+        detail: toolchainEnvNameMessage(envName),
+      },
+    )
+    return undefined
+  }
   const resolved = await runBestEffort(
     input.logger ?? noopLogger,
     'resolve binary-generator credential',

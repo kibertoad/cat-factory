@@ -48,6 +48,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'agent_runs',
   'blocks',
   'brainstorm_sessions',
+  'capability_credentials',
   'clarity_reviews',
   'consensus_groups',
   'consensus_sessions',

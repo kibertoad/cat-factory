@@ -89,11 +89,40 @@ export type McpTransport = McpStdioTransport | McpHttpTransport
  */
 export interface McpSecretRef {
   /**
-   * The secret's key. For a `stdio` server it becomes an environment variable of the server
-   * process; for an `http` server the resolved value is sent as the {@link McpSecretRef.header}
-   * request header (shaped by {@link McpSecretRef.headerTemplate}).
+   * The secret's LOOKUP key: the name the facade-wired resolver is asked for, and the name a
+   * workspace stores its own value under.
+   *
+   * It may NOT name a variable the platform's own configuration owns (`isReservedPlatformEnvKey`
+   * in `@cat-factory/contracts`). The default resolver reads the key straight off the deployment's
+   * environment, and a definition names both the key it wants AND the endpoint that key is sent
+   * to. Boot validation refuses one, and dispatch refuses it again for the mothership case, where
+   * the definition was authored by a process that is not this one.
+   *
+   * For a `stdio` server this is also the environment variable of the server process, unless
+   * {@link McpSecretRef.envName} says otherwise. For an `http` server the resolved value is sent
+   * as the {@link McpSecretRef.header} request header (shaped by
+   * {@link McpSecretRef.headerTemplate}), so the lookup name is already separate from where the
+   * value goes.
    */
   key: string
+  /**
+   * `stdio` only: the environment variable the value is set as in the SERVER's process, when that
+   * differs from {@link McpSecretRef.key}. Omitted, the key is used.
+   *
+   * This exists because a server's own client usually reads a documented variable name that the
+   * platform cannot rename, and some of those names fall inside a platform prefix family: the
+   * GitHub MCP server reads `GITHUB_PERSONAL_ACCESS_TOKEN`, which `GITHUB_` reserves even though
+   * the platform reads no such variable. Splitting the two names resolves that without weakening
+   * the floor, because the floor is about what may be READ off the deployment's environment and
+   * this name reads nothing:
+   *
+   *     { key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }
+   *
+   * Held to its own, narrower rule instead (`isToolchainEnvName`): a value injected as `PATH` or
+   * `npm_config_registry` reconfigures the process rather than authenticating a call. Refused at
+   * registration, and dropped at dispatch.
+   */
+  envName?: string
   /**
    * `http` only: the request header the value is sent as (e.g. `Authorization`). The value is
    * substituted into {@link headerTemplate}. Omitted ⇒ the secret is passed as an env var, which
@@ -179,7 +208,13 @@ export interface ResolvedToolServer {
 export interface UnavailableToolServer {
   id: string
   label: string
-  reason: 'harness_unsupported' | 'missing_secret'
+  /**
+   * `reserved_secret` is kept apart from `missing_secret` because the two need OPPOSITE fixes and
+   * a single value would send an operator to the wrong one: a missing secret is a variable to set,
+   * while a reserved one is a DECLARATION to change — the server named a variable the platform's
+   * own configuration owns, and setting it is exactly what must not help.
+   */
+  reason: 'harness_unsupported' | 'missing_secret' | 'reserved_secret'
 }
 
 /** The harnesses whose CLI speaks MCP. Pi has no MCP client, so it is deliberately absent. */

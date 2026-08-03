@@ -211,6 +211,168 @@ describe('resolveToolServers', () => {
   })
 })
 
+// The platform's own configuration variables are not resolvable as a capability credential. A
+// definition names BOTH the key it wants and the endpoint it ships it to, so without this a
+// registered server could hand a third party the deployment's master sealing key — and in
+// mothership mode that definition is authored by the mothership while the environment read is a
+// developer's laptop.
+describe('reserved platform credential keys', () => {
+  const reservedServer = (key: string, required?: boolean): McpServerDefinition => ({
+    id: 'issues',
+    transport: { kind: 'stdio', command: 'issue-mcp' },
+    secretKeys: [{ key, ...(required === undefined ? {} : { required }) }],
+  })
+
+  it('refuses a reserved key under its OWN reason, never `missing_secret`', async () => {
+    // The two need opposite fixes: a missing secret is a variable to SET, a reserved one is a
+    // declaration to CHANGE — and setting it is precisely what must not help.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(reservedServer('ENCRYPTION_KEY')),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ENCRYPTION_KEY: 'master-key' }),
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers[0]?.reason).toBe('reserved_secret')
+  })
+
+  it('never even ASKS the resolver for a reserved key', async () => {
+    // The floor lives at the call site rather than inside the env-backed default, so it holds for
+    // a deployment's own per-workspace resolver too — which is the one that could genuinely have
+    // a value under that name.
+    const asked: string[] = []
+    await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(reservedServer('HARNESS_SHARED_SECRET')),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: {
+        resolve: async ({ keys }) => {
+          asked.push(...keys.map((k) => k.key))
+          return {}
+        },
+      },
+    })
+    expect(asked).toEqual([])
+  })
+
+  it('matches case-insensitively, because `process.env` does on Windows', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(reservedServer('encryption_key')),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ encryption_key: 'master-key' }),
+    })
+    expect(result.unavailableToolServers[0]?.reason).toBe('reserved_secret')
+  })
+
+  it('covers a whole platform PREFIX family, not just the names spelled out', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(reservedServer('GITHUB_APP_PRIVATE_KEY')),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ GITHUB_APP_PRIVATE_KEY: 'pem' }),
+    })
+    expect(result.unavailableToolServers[0]?.reason).toBe('reserved_secret')
+  })
+
+  it('costs an OPTIONAL reserved key only that key, exactly as a missing one does', async () => {
+    // The disposition follows the DECLARATION, so this rule adds no second way for a server to
+    // disappear — only a new reason for the way that already existed.
+    const definition: McpServerDefinition = {
+      ...reservedServer('LOG_LEVEL', false),
+      secretKeys: [{ key: 'LOG_LEVEL', required: false }, { key: 'ISSUE_TOKEN' }],
+    }
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(definition),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ LOG_LEVEL: 'debug', ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.mcpServers).toHaveLength(1)
+    expect(result.mcpServers[0]?.env).toEqual({ ISSUE_TOKEN: 'tok' })
+  })
+})
+
+// A credential has two names, and only the LOOKUP one is a boundary. Splitting them is what lets
+// a server keep the variable name its own client reads even when a platform prefix family covers
+// it, without widening what may be read off the deployment's environment.
+describe('the injection name (`envName`)', () => {
+  const gitHubMcp = (secret: { key: string; envName?: string }): McpServerDefinition => ({
+    id: 'github',
+    transport: { kind: 'stdio', command: 'github-mcp' },
+    secretKeys: [secret],
+  })
+
+  it('injects under `envName` while looking the value up under `key`', async () => {
+    // The case this exists for: the GitHub MCP server's client reads
+    // `GITHUB_PERSONAL_ACCESS_TOKEN`, which the `GITHUB_` family reserves even though the platform
+    // reads no such variable. Renaming it is not open to the deployment, because the server's own
+    // SDK reads its documented name.
+    const asked: string[] = []
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(
+        gitHubMcp({ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }),
+      ),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: {
+        resolve: async ({ keys }) => {
+          asked.push(...keys.map((k) => k.key))
+          return { ACME_GITHUB_TOKEN: 'ghp_x' }
+        },
+      },
+    })
+    expect(asked).toEqual(['ACME_GITHUB_TOKEN'])
+    expect(result.mcpServers[0]?.env).toEqual({ GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_x' })
+    // The redaction list follows what was actually folded in, so it names the injected variable.
+    expect(result.mcpServers[0]?.secretKeys).toEqual(['GITHUB_PERSONAL_ACCESS_TOKEN'])
+  })
+
+  it('still refuses a reserved LOOKUP key, whatever it would be injected as', async () => {
+    // The escape hatch must not become a way around the floor: the floor is about what may be READ
+    // off the deployment's environment, which is the lookup key alone.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(gitHubMcp({ key: 'ENCRYPTION_KEY', envName: 'ACME_TOKEN' })),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ENCRYPTION_KEY: 'master-key' }),
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers[0]?.reason).toBe('reserved_secret')
+  })
+
+  it('drops a TOOLCHAIN injection name rather than reconfiguring the server’s process', async () => {
+    // Registration refuses this; reaching dispatch means a definition this process never
+    // boot-validated, which is the mothership case.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(gitHubMcp({ key: 'ACME_TOKEN', envName: 'PATH' })),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ACME_TOKEN: 'tok' }),
+    })
+    expect(result.mcpServers[0]?.env).toBeUndefined()
+  })
+
+  it('falls back to the key when no injection name is declared', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(gitHubMcp({ key: 'ACME_TOKEN' })),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ACME_TOKEN: 'tok' }),
+    })
+    expect(result.mcpServers[0]?.env).toEqual({ ACME_TOKEN: 'tok' })
+  })
+})
+
 describe('createEnvToolSecretResolver', () => {
   it('reads declared keys off the deployment environment and ignores anything else', async () => {
     const resolve = createEnvToolSecretResolver({ ISSUE_TOKEN: 'tok', OTHER: 'x', EMPTY: '' })

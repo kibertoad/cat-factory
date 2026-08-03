@@ -47,6 +47,7 @@ import type {
   SharedStackRepository,
   SubscriptionQuotaCycleRepository,
   TestSecretsRepository,
+  CapabilityCredentialRepository,
   ValidationConfigRepository,
   TokenUsageRepository,
   TrackerSettingsRepository,
@@ -137,6 +138,7 @@ import {
   DrizzleValidationConfigRepository,
   DrizzleSubscriptionQuotaCycleRepository,
   DrizzleTestSecretsRepository,
+  DrizzleCapabilityCredentialRepository,
 } from './drizzle/connections.js'
 
 export interface CoreRepositories {
@@ -188,6 +190,7 @@ export interface CoreRepositories {
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
+  capabilityCredentialRepository: CapabilityCredentialRepository
   validationConfigRepository: ValidationConfigRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
@@ -244,6 +247,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     validationConfigRepository: new DrizzleValidationConfigRepository(db),
     subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
+    capabilityCredentialRepository: new DrizzleCapabilityCredentialRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }

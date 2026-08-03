@@ -413,6 +413,88 @@ be reused: the platform configures a tool server's client, while a generation AP
 agent's own code. If the storage half ever needs the same, it should ride the same three-step
 channel rather than a second one.
 
+### …but never the platform's OWN
+
+That channel is the second path between the deployment's environment and an agent's process. The
+first (a native-mode child inheriting `process.env`) has stated its invariant since it shipped
+(`runtimes/local/src/childEnv.ts`: an allow-list projection, because a prompt-injectable subprocess
+with shell access must not be handed `DATABASE_URL`, `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`). This
+one had no equivalent, and it is the more exposed of the two, because the key name is chosen by a
+DEFINITION rather than by the platform: `{ key: 'ENCRYPTION_KEY', usage: 'Authorization: Bearer
+<value>' }` was a registration that booted clean and shipped the master sealing key to whatever
+endpoint the same definition named.
+
+So a capability credential, a generative integration's and a tool server's alike, may not be LOOKED
+UP BY a variable the platform reads (`isReservedPlatformEnvKey`, `@cat-factory/contracts`). Five
+things about the shape are load-bearing:
+
+- **It is refused where the declaration is made AND at dispatch**, because a MOTHERSHIP-MODE node
+  boot-validates none of the definitions it resolves: they arrive per dispatch over
+  `/internal/binary-generators`, chosen by a process one build ahead of it, and the environment
+  they name is a developer's own laptop. That is also the case that makes this a boundary problem
+  rather than hygiene: `ENCRYPTION_KEY` and `HARNESS_SHARED_SECRET` are the keys to the split
+  BETWEEN the two processes, held by the side that is meant to keep them, and nothing else about
+  the mothership relationship reaches them (a prompt is in the transcript; a resolved key
+  deliberately is not).
+- **The dispatch-time check is at the CALL SITE, not inside `createEnvToolSecretResolver`**, so it
+  binds a deployment's own per-workspace resolver too, the one that could genuinely hold a value
+  under such a name, and an implementer of the port never has to know the rule exists.
+- **The reserved set is the platform's WHOLE environment, not a hand-picked secret list**, matched
+  case-insensitively (`process.env` lookup is case-insensitive on Windows, so a case-sensitive
+  check would pass `encryption_key` and then resolve the real key). Over-reserving costs nothing,
+  since nobody names an integration credential `PORT`, while a per-variable judgement is wrong the
+  moment a variable gains a sensitive use. The model-provider keys are reserved on purpose:
+  `OPENAI_API_KEY` is billable and exfiltratable. Prefix FAMILIES carry the drift protection, and
+  `scripts/check-reserved-env-keys.mjs` fails CI on a documented variable outside them.
+- **The rule is NOT a mandated prefix on the credential's own side** (`GEN_…`, `TOOL_…`), which is
+  the tidier positive rule and is unavailable here: a credential's `key` is also the ENVIRONMENT
+  VARIABLE NAME the agent reads the value from, so mandating a prefix renames the variable inside
+  the agent's process and breaks any SDK that auto-reads its vendor's documented name. The same
+  positive rule applied to the side that already HAS a namespace (the platform's own families)
+  costs nobody a rename.
+- **A credential therefore has TWO names, and the floor binds only the LOOKUP one.** The same
+  argument that rules out a mandated prefix rules out holding the INJECTION name to the reserved
+  list: the families cover `GITHUB_PERSONAL_ACCESS_TOKEN`, `SLACK_BOT_TOKEN` and
+  `AWS_ACCESS_KEY_ID`, which the platform does not read and a vendor's own SDK does. With one name
+  for both jobs the floor would make the commonest MCP servers unusable, with no workaround open to
+  a deployment. So `envName` carries the injection name, held to the narrower `isToolchainEnvName`
+  rule instead, since it reads nothing. An `http` tool server always had this split (`key` is the
+  lookup, `header` is where the value goes); `envName` is that split for the stdio and generative
+  cases.
+
+An operator-stated bound on everything OUTSIDE that floor stays a deployment's call, because only
+it knows which of a developer's own variables an integration may see. That is
+`EnvToolSecretResolverOptions.allowKeys`, and it is now reachable: every facade takes a
+`createToolSecretResolver` factory (`startLocal` / `start` / `createWorker`), defaulting to the env
+resolver. Until it did, `ToolSecretResolver` was a port with exactly one reachable implementation,
+the one each facade hard-coded, so the per-workspace credential store the port was designed for
+meant abandoning the facade and reassembling the boot sequence, forgoing every preflight `start()`
+exists to provide, to change one argument. A DERIVED bound (allow exactly the keys the registered
+subjects declare) was considered and rejected: in mothership mode the registrations are the thing
+the node does not control, so a bound derived from them is one the mothership chose, and on a
+standalone node it is redundant with the definitions being code that node already runs.
+
+### An integration declares what it PRODUCES, never what it consumes
+
+`BinaryModality` is a DECISION vocabulary (the picklist is closed precisely because it decides
+which generator may serve a step) and a descriptive `consumes: BinaryModality[]` would inherit
+every migration that axis takes while deciding nothing. The `3d` split into `3d-model`/`3d-scene`
+is the demonstration: every `consumes: ['3d']` would have become retired data needing a human to
+re-pick a value whose only effect was printing a line in a brief.
+
+It would not have removed the prose either. The fact worth stating about a pair of integrations is
+never "this one accepts images" but "A's output can feed B's image path, and it must go inline as
+base64 because B fetches `image_url` from its own network and the storage service is bearer-gated"
+which is a per-pair, per-transport fact that `consumes: ['image']` carries none of, so the paragraph in
+`guidance` stays either way and the field becomes a fragment of it that can disagree with it.
+
+**Chaining two integrations is a property of the WORK, and its home is the step's own prompt**,
+which the platform owns and a human writes. Modelling it on a definition puts a fact about a pair
+on one of its members, and the definition-level complaint underneath ("guidance attached to A does
+not reach a step that selected only B") is that misfiling showing through. This is the general
+rule, not a ruling about this one field: reach for the step's prompt before reaching for a
+definition field whenever the fact is about a COMBINATION.
+
 ## The SPA surfaces
 
 Both landed together. What each is, and the one design question the downstream proposal that

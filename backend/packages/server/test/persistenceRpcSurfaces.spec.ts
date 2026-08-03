@@ -505,6 +505,12 @@ describe('post-release-health settings surface (observability / release-health /
     { repo: 'releaseHealthConfigRepository', method: 'delete', args: ['blk_1'] },
     { repo: 'incidentEnrichmentConnectionRepository', method: 'get', args: [], echoes: true },
     { repo: 'incidentEnrichmentConnectionRepository', method: 'delete', args: [] },
+    // The per-workspace capability-credential store rides this same shape: sealed blob, three
+    // methods, workspace-scoped. It is `remote` rather than `local-sqlite` because a RUN resolves
+    // it — a mothership-mode node has no `db`, and a credential the operator set on the mothership
+    // must reach the dispatch that needs it.
+    { repo: 'capabilityCredentialRepository', method: 'get', args: [], echoes: true },
+    { repo: 'capabilityCredentialRepository', method: 'delete', args: [] },
   ]
 
   for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
@@ -533,6 +539,7 @@ describe('post-release-health settings surface (observability / release-health /
     'observabilityConnectionRepository',
     'releaseHealthConfigRepository',
     'incidentEnrichmentConnectionRepository',
+    'capabilityCredentialRepository',
   ]
 
   for (const repo of UPSERTS) {

@@ -26,6 +26,7 @@ import type {
   PublicApiKeyService,
   RunnerBackendRegistry,
   TestSecretsService,
+  CapabilityCredentialsService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -130,6 +131,11 @@ export interface ServerContainer extends Core {
    * the container executor (values, injected into the Tester out of band).
    */
   testSecrets?: TestSecretsService
+  /**
+   * The per-workspace capability-credential store (sealed). Present only when a facade wired the
+   * repository — which needs `ENCRYPTION_KEY`, like every other sealed store.
+   */
+  capabilityCredentials?: CapabilityCredentialsService
   /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config

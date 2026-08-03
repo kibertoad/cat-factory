@@ -313,6 +313,22 @@ describe('renderBinaryGeneratorSection', () => {
     expect(section).toContain('do not call `retro-diffusion` at all')
   })
 
+  it('names the INJECTION variable, never the lookup key, when a declaration splits them', () => {
+    // The two differ whenever a definition had to keep a vendor's documented variable name while
+    // looking the value up under one of its own (the reserved-family escape). Naming the lookup
+    // key here would tell the agent to read a variable that is never set: an integration reported
+    // unavailable on every run, with the brief itself as the reason nobody could see it.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credential: { key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' } })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`GITHUB_MODELS_TOKEN`')
+    expect(section).not.toContain('ACME_RD_TOKEN')
+  })
+
   it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
     // `required: false` is declared for an endpoint that genuinely works unauthenticated, so the
     // required case's "do not call it at all" is exactly the wrong instruction: it would strand a

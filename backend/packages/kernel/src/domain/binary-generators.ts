@@ -40,8 +40,24 @@ export interface ResolvedBinaryGenerator {
   id: string
   label: string
   modalities: BinaryModality[]
-  /** The environment variable the credential is delivered as; absent ⇒ none is declared. */
+  /**
+   * The credential's LOOKUP key, which is what the executor asks the resolver for. Absent means
+   * none is declared.
+   *
+   * This is NOT necessarily what the agent reads: {@link credentialEnvName} is, and the brief
+   * names that one. The two are separate because the lookup key is held to the platform's
+   * reserved-variable floor while the injected name is not, so an integration whose client reads
+   * a vendor's documented name can keep it.
+   */
   credentialKey?: string
+  /**
+   * The environment variable the credential is delivered as, when it differs from
+   * {@link credentialKey}. Absent means the lookup key is also the variable.
+   *
+   * Carried on the projection rather than re-derived, because the executor rebuilds a dispatch
+   * from the context alone and has neither the registry nor the step to look the definition up in.
+   */
+  credentialEnvName?: string
   /** Whether a missing credential means the integration must not be called (defaults true). */
   credentialRequired?: boolean
 }
@@ -57,6 +73,7 @@ export function dispatchBinaryGenerators(
     label: generator.name,
     modalities: [...generator.modalities],
     ...(generator.credential ? { credentialKey: generator.credential.key } : {}),
+    ...(generator.credential?.envName ? { credentialEnvName: generator.credential.envName } : {}),
     ...(generator.credential?.required === false ? { credentialRequired: false } : {}),
   }))
 }
@@ -396,19 +413,24 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
   const usage = credential.usage
     ? ` Send it as ${credential.usage}.`
     : ' Its API contract states how to present it.'
-  const provided = `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${credential.key}\`.${usage} Read it from the environment — never echo it, log it, commit it, or put it in your reply.`
+  // The INJECTION name, never the lookup key. They differ whenever a definition had to keep a
+  // vendor's documented variable name while looking the value up under one of its own, and naming
+  // the lookup key here would tell the agent to read a variable that is never set: an integration
+  // reported as unavailable on every run, with the brief itself as the reason nobody could see it.
+  const envName = credential.envName ?? credential.key
+  const provided = `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${envName}\`.${usage} Read it from the environment, and never echo it, log it, commit it, or put it in your reply.`
   // `required` defaults to TRUE: an integration whose declaration says nothing is authenticated,
-  // which is the safe reading — being wrong that way costs a reported gap, while being wrong the
+  // which is the safe reading. Being wrong that way costs a reported gap, while being wrong the
   // other way burns the run on a call that 401s.
   if (credential.required === false) {
     return [
       provided,
-      `\`${credential.key}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
+      `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
     ]
   }
   return [
     provided,
-    `If \`${credential.key}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
+    `If \`${envName}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
   ]
 }
 

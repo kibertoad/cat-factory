@@ -5,6 +5,53 @@ grouped by purpose and annotated with the deployment modes each applies to. For 
 narrative on how config is loaded per runtime, see the facade sections in
 [`CLAUDE.md`](../CLAUDE.md) and the example `.env` files under `deploy/*`.
 
+## These names are RESERVED
+
+Every variable in this reference belongs to the platform, and none of them can be the KEY a
+capability credential is looked up by. A tool server (MCP) or a generative binary integration
+declares the credential it needs by name, and the default resolver reads that name off this same
+environment before the value is injected into an agent process: a declaration of `ENCRYPTION_KEY`
+would hand a prompt-injectable agent the key every stored credential is sealed with. Such a
+declaration is refused at boot and again at dispatch. Look the credential up under a name of the
+integration's own (`ACME_IMAGE_API_KEY`) and set it beside these.
+
+The rule is enforced by `isReservedPlatformEnvKey`
+(`backend/packages/contracts/src/reserved-env-keys.ts`), which reserves the platform's prefix
+families (`AUTH_`, `GITHUB_`, `LOCAL_`, …) plus the remaining exact names, case-insensitively,
+because `process.env` lookup is case-insensitive on Windows.
+`scripts/check-reserved-env-keys.mjs` fails CI when a variable documented below is not covered, so
+**adding a row here is also how the reserved set stays current**.
+
+The model-provider keys are reserved too. That looks like over-reach and is not: `OPENAI_API_KEY`
+is billable and exfiltratable, and an integration that wants to call OpenAI on the deployment's
+account should say so in its own variable rather than silently inherit the one the model router
+spends.
+
+### A credential's OTHER name is not reserved
+
+The floor above binds the LOOKUP name, because that is the one that can read this environment. It
+does not bind the variable a resolved value is INJECTED under in the agent's or the MCP server's
+process, which reads nothing at all. A declaration keeps them apart with `envName`:
+
+```ts
+secretKeys: [{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }]
+```
+
+That escape is why the prefix families can be as broad as they are. The GitHub MCP server's client
+reads `GITHUB_PERSONAL_ACCESS_TOKEN`, the Slack one reads `SLACK_BOT_TOKEN`, and an AWS one reads
+`AWS_ACCESS_KEY_ID`: the platform reads none of those, but each falls inside a family it does own,
+and no deployment can rename what a vendor's own SDK looks for. Injection names have their own,
+narrower rule instead (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or the
+other names that would reconfigure the process rather than authenticate a call.
+
+### The environment is the FALLBACK, not the primary home
+
+Capability credentials are resolved from the per-workspace **capability-credential store** first,
+falling back to this environment per key, so a multi-tenant deployment gives each workspace its own
+vendor account instead of sharing one variable. See
+[`capability-credential-store.md`](initiatives/capability-credential-store.md). Setting a variable
+still works and is the right mechanism for a single-tenant or local install.
+
 ## Deployment modes
 
 The same `@cat-factory/server` app ships to several targets. "Mode" is which facade

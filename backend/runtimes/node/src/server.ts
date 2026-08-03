@@ -287,6 +287,18 @@ export async function start(
      */
     binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
     /**
+     * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+     * server's (MCP) and a generative binary integration's alike. Called once at composition with
+     * this process's environment. Absent → the deployment-environment default,
+     * `createEnvToolSecretResolver(env)`.
+     *
+     * The `ToolSecretResolver` port's extension seam: a deployment holding PER-WORKSPACE
+     * credentials (its own sealed store, Vault) implements the port and passes it here rather
+     * than reassembling the boot sequence — which is what reaching the port used to cost, and
+     * which forgoes every preflight `start()` exists to provide.
+     */
+    createToolSecretResolver?: NodeContainerOptions['createToolSecretResolver']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -680,6 +692,7 @@ async function bootServer(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    createToolSecretResolver: options.createToolSecretResolver,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,

@@ -27,6 +27,7 @@ import {
   buildPersonalSubscriptionService,
   buildPublicApiKeyService,
   buildSubscriptionService,
+  buildCapabilityCredentialsService,
   buildTestSecretsService,
   buildUserSecretService,
   buildValidationConfigService,
@@ -76,6 +77,7 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
   // The sensitive per-service test-credential store (sealed) — shared by the test-secrets
   // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
   const testSecretsService = buildTestSecretsService(env, db, clock)
+  const capabilityCredentialsService = buildCapabilityCredentialsService(env, db, clock)
 
   const validationConfigService = buildValidationConfigService(db, clock)
 
@@ -199,6 +201,7 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
     cloudflareModelsEnabled,
     subscriptions,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,

@@ -595,6 +595,10 @@ export type {
 } from './incident-enrichment-repositories.js'
 export type { TestSecretRecord, TestSecretsRepository } from './test-secrets-repositories.js'
 export type {
+  CapabilityCredentialRecord,
+  CapabilityCredentialRepository,
+} from './capability-credential-repositories.js'
+export type {
   ValidationConfigRecord,
   ValidationConfigRepository,
 } from './validation-repositories.js'

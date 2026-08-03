@@ -14,6 +14,7 @@ import {
   ProviderSubscriptionService,
   createGitHubIssueViaToken,
 } from '@cat-factory/integrations'
+import type { CapabilityCredentialsService } from '@cat-factory/integrations'
 import type {
   EnvironmentBackendRegistry,
   ProvisioningLogRecorder,
@@ -30,6 +31,7 @@ import type {
   RunnerPoolProvider,
   SubscriptionQuotaTarget,
   TestSecretEntry,
+  ToolSecretResolver,
   WebSearchAvailability,
 } from '@cat-factory/kernel'
 import {
@@ -56,7 +58,9 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
+  composeToolSecretResolvers,
   createEnvToolSecretResolver,
+  createWorkspaceToolSecretResolver,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -239,6 +243,26 @@ export interface NodeContainerExecutorDeps {
   resolveRepoOrigin?: ResolveRepoOrigin
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  /**
+   * Resolve the credentials a registered capability declared — a tool server's (MCP) and a
+   * generative binary integration's alike. Absent ⇒ the deployment-environment default over
+   * {@link NodeContainerExecutorDeps.env}.
+   *
+   * It sits beside {@link resolveTestSecrets} rather than being built here because it is the same
+   * KIND of thing: a deployment concern the composition root owns. It was the one credential seam
+   * with no such field, which made `ToolSecretResolver` a port with exactly one reachable
+   * implementation — an indirection buying nothing a direct `env[key]` would not have bought.
+   */
+  resolveToolSecrets?: ToolSecretResolver
+  /**
+   * The per-workspace capability-credential store, composed in FRONT of the deployment
+   * environment below. Absent (no `ENCRYPTION_KEY`) ⇒ the environment resolver alone, which is
+   * what this deployment had before the store existed.
+   *
+   * Ignored when {@link resolveToolSecrets} is set: a deployment that supplied its own resolver
+   * replaces the whole chain rather than being wrapped by it.
+   */
+  capabilityCredentials?: CapabilityCredentialsService
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
@@ -266,6 +290,8 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     resolveRepoOrigin,
     resolvePackageRegistries,
     resolveTestSecrets,
+    resolveToolSecrets,
+    capabilityCredentials,
     recordHarnessCalls,
     recordSubscriptionQuotaUsage,
   } = deps
@@ -409,10 +435,23 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
-    // Resolve the credentials a registered kind's TOOL SERVER (MCP) declared, off the node's own
-    // environment. A deployment needing per-workspace credentials replaces this with its own
-    // `ToolSecretResolver`; the rest of the dispatch path is unchanged either way.
-    resolveToolSecrets: createEnvToolSecretResolver(process.env),
+    // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
+    // integration) declared. Defaults to reading them off the node's own environment; a
+    // deployment needing per-workspace credentials passes its own `ToolSecretResolver` through
+    // `startLocal`/`start`'s `createToolSecretResolver`, and the rest of the dispatch path is
+    // unchanged either way. Reads the injected `env` rather than `process.env` directly, so a
+    // caller that supplies one (tests, an embedded boot) is not silently bypassed.
+    resolveToolSecrets:
+      resolveToolSecrets ??
+      composeToolSecretResolvers(
+        [
+          ...(capabilityCredentials
+            ? [createWorkspaceToolSecretResolver({ credentials: capabilityCredentials, logger })]
+            : []),
+          createEnvToolSecretResolver(env),
+        ],
+        logger,
+      ),
     logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab

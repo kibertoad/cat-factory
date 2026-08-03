@@ -183,4 +183,88 @@ describe('resolveBinaryGeneratorSecrets', () => {
       await resolveBinaryGeneratorSecrets({ context: context([retro]), workspaceId: 'ws1' }),
     ).toEqual([])
   })
+
+  // The platform's own configuration variables are not resolvable as an integration credential.
+  // The check is HERE rather than inside the env-backed default resolver so it holds whatever a
+  // facade wired — and a MOTHERSHIP-MODE node needs exactly that, since it boot-validates none of
+  // the definitions it resolves: they arrive per dispatch from the mothership, and the environment
+  // their keys name is a developer's own laptop.
+  it('refuses a reserved platform key without asking the resolver, and says so at WARN', async () => {
+    const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master-key' })
+    const logger = createRecordingLogger()
+    const secrets = await resolveBinaryGeneratorSecrets({
+      context: context([{ ...retro, credentialKey: 'ENCRYPTION_KEY' }]),
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver,
+      logger,
+    })
+    expect(secrets).toEqual([])
+    expect(subjects).toEqual([])
+    // WARN, not the `debug` an optional missing key gets: this is never a deployment's stated
+    // normal, and its fix is a declaration rather than a variable to set.
+    const warned = logger.lines.filter((line) => line.level === 'warn')
+    expect(warned).toHaveLength(1)
+    expect(warned[0]?.fields?.credentialKey).toBe('ENCRYPTION_KEY')
+  })
+
+  it('matches a reserved key case-insensitively, because `process.env` does on Windows', async () => {
+    const { resolver, subjects } = recordingResolver({ harness_shared_secret: 'shh' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([{ ...retro, credentialKey: 'harness_shared_secret' }]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+  })
+
+  // A credential has two names, and only the lookup one is a boundary. See
+  // `contracts/src/reserved-env-keys.ts` for why keeping them apart is what makes both rules
+  // affordable.
+  it('looks the value up under `credentialKey` and injects it under `credentialEnvName`', async () => {
+    const { resolver } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'GITHUB_MODELS_KEY' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([{ key: 'GITHUB_MODELS_KEY', value: 'tok' }])
+  })
+
+  it('dedupes on the INJECTION name, since that is what the job body is keyed by', async () => {
+    // Two integrations resolving different keys into one variable would otherwise both emit it and
+    // the last would silently win, handing the agent one vendor's key under the other's name.
+    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, id: 'one', credentialKey: 'FIRST_KEY', credentialEnvName: 'VENDOR_KEY' },
+          { ...retro, id: 'two', credentialKey: 'SECOND_KEY', credentialEnvName: 'VENDOR_KEY' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([{ key: 'VENDOR_KEY', value: 'a' }])
+  })
+
+  it('refuses a TOOLCHAIN injection name, which would reconfigure the run instead of authenticating', async () => {
+    const { resolver, subjects } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'NODE_OPTIONS' },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
+  })
 })

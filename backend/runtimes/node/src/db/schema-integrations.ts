@@ -102,3 +102,17 @@ export const testSecrets = pgTable(
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
 )
+
+// Per-workspace CAPABILITY CREDENTIALS (sealed; mirror of D1 migration 0077's
+// `capability_credentials`). The tenant-scoped home for the secrets a registered tool server or
+// generative binary integration declares by name — the shipped resolver read them off the
+// DEPLOYMENT'S environment, which is a single-tenant answer. `credentials` is a sealed JSON blob
+// of CapabilityCredentialEntry[] (domain tag 'cat-factory:capability-credentials'); `summary` is
+// a non-secret CapabilityCredentialRef[] display blob. ONE row per workspace.
+export const capabilityCredentials = pgTable('capability_credentials', {
+  workspace_id: text('workspace_id').primaryKey(),
+  credentials: text('credentials').notNull(),
+  summary: text('summary').notNull().default('[]'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})

@@ -22,6 +22,7 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   TestSecretsService,
+  CapabilityCredentialsService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -41,7 +42,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, RunLifecycleSink } from '@cat-factory/kernel'
+import type { NotificationChannel, RunLifecycleSink, ToolSecretResolver } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -146,6 +147,7 @@ export interface WorkerContainerAssemblyInput {
   resolveTransport: ResolveRunnerTransport | null
   subscriptions: ProviderSubscriptionService | undefined
   testSecretsService: TestSecretsService | undefined
+  capabilityCredentialsService: CapabilityCredentialsService | undefined
   validationConfigService: ValidationConfigService
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
@@ -172,6 +174,12 @@ export interface WorkerContainerAssemblyInput {
   executorPackageRegistries: WorkerExecutorDeps['resolvePackageRegistries']
   /** The container executor's dedicated, uncached account-settings reader — see {@link WorkerExecutorDeps}. */
   webSearchAccountSettings: AccountSettingsService | undefined
+  /**
+   * The deployment's own capability-credential resolver, built by `createWorker`'s
+   * `createToolSecretResolver` from THIS request's `env`. Absent ⇒ the executor builds the
+   * deployment-environment default. See {@link WorkerExecutorDeps.resolveToolSecrets}.
+   */
+  executorToolSecrets: ToolSecretResolver | undefined
   defaultWebSearchUpstream: WebSearchUpstream | undefined
   resolveBinaryArtifactStore: ResolveBinaryArtifactStore
   githubWebhookIngest: CfGitHubWebhookIngest
@@ -268,6 +276,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     accountSettings,
     executorPackageRegistries,
     webSearchAccountSettings,
+    executorToolSecrets,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -359,6 +368,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           agentContextObservability,
           resolvePackageRegistries: executorPackageRegistries,
           webSearchAccountSettings,
+          ...(executorToolSecrets ? { resolveToolSecrets: executorToolSecrets } : {}),
         }),
         env,
         config,
@@ -490,6 +500,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   const {
     subscriptions,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -660,6 +671,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    ...(capabilityCredentialsService
+      ? { capabilityCredentials: capabilityCredentialsService }
+      : {}),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,
