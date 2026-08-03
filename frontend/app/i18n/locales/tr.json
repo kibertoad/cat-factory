@@ -2880,8 +2880,8 @@
       "toast": {
         "loadFailed": "Yetenek kimlik bilgileri yüklenemedi",
         "saved": "{key} kaydedildi",
-        "saveFailed": "{key} kaydedilemedi",
-        "removeFailed": "{key} kaldırılamadı"
+        "saveFailed": "Kimlik bilgisi kaydedilemedi",
+        "removeFailed": "Kimlik bilgisi kaldırılamadı"
       }
     },
     "apiTokens": {

@@ -2739,8 +2739,8 @@
       "toast": {
         "loadFailed": "No se pudieron cargar las credenciales de capacidades",
         "saved": "{key} guardada",
-        "saveFailed": "No se pudo guardar {key}",
-        "removeFailed": "No se pudo quitar {key}"
+        "saveFailed": "No se pudo guardar la credencial",
+        "removeFailed": "No se pudo quitar la credencial"
       }
     },
     "apiTokens": {

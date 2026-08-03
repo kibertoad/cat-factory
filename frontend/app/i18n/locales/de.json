@@ -598,8 +598,8 @@
       "toast": {
         "loadFailed": "Zugangsdaten für Fähigkeiten konnten nicht geladen werden",
         "saved": "{key} gespeichert",
-        "saveFailed": "{key} konnte nicht gespeichert werden",
-        "removeFailed": "{key} konnte nicht entfernt werden"
+        "saveFailed": "Die Zugangsdaten konnten nicht gespeichert werden",
+        "removeFailed": "Die Zugangsdaten konnten nicht entfernt werden"
       }
     },
     "apiTokens": {

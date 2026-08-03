@@ -1,0 +1,1 @@
+ALTER TABLE "capability_credentials" ADD COLUMN "rev" integer DEFAULT 0 NOT NULL;

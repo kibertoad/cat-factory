@@ -47,6 +47,10 @@ export const setCapabilityCredentialContract = defineApiContract({
 
 // A per-KEY delete for the same reason, and the operation that makes an ORPHANED credential
 // removable at all: removing one stored key must not require re-sending every other value.
+// Deliberately LOOSE on the key (a bare string, not the credential-key schema the PUT holds):
+// what a delete targets is whatever is ALREADY STORED, and an orphan written before a rule
+// tightened (or under a rule a newer build added) must stay removable, or the invalid row is
+// exactly the one nothing can clean up.
 export const deleteCapabilityCredentialContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: keyParams,

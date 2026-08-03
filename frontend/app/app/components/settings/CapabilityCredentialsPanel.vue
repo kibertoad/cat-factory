@@ -35,17 +35,18 @@ const SUBJECT_LABELS = computed<Record<CredentialSubject, string>>(() => ({
 // masked placeholder standing in for a stored value would make "unchanged" and "retyped" look
 // identical at the save button.
 const drafts = reactive<Record<string, string>>({})
-const busyKey = ref<string | null>(null)
+// Which row's WHICH button is in flight. The action is part of the state because save and delete
+// sit beside each other on one row: a shared per-key flag would spin the delete button for the
+// save the user just clicked, which reads as a delete in progress.
+const busy = ref<{ key: string; action: 'save' | 'remove' } | null>(null)
+// Failures present through the shared status-class funnel (translated description up front, the
+// raw backend prose + requestId behind "Show details"), never raw `e.message` as the description.
+const { present } = usePipelineErrorToast()
 
 const view = computed(() => store.view)
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
+function isBusy(key: string, action: 'save' | 'remove') {
+  return busy.value?.key === key && busy.value.action === action
 }
 
 // The tab this renders in only exists once the window's probe resolved `available === true`, so
@@ -58,14 +59,14 @@ onMounted(async () => {
   try {
     await store.load()
   } catch (e) {
-    notifyError(t('settings.capabilityCredentials.toast.loadFailed'), e)
+    present(e, 'settings.capabilityCredentials.toast.loadFailed')
   }
 })
 
 async function saveKey(key: string) {
   const value = (drafts[key] ?? '').trim()
   if (!value) return
-  busyKey.value = key
+  busy.value = { key, action: 'save' }
   try {
     await store.save(key, value)
     drafts[key] = ''
@@ -75,23 +76,23 @@ async function saveKey(key: string) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.capabilityCredentials.toast.saveFailed', { key }), e)
+    present(e, 'settings.capabilityCredentials.toast.saveFailed')
   } finally {
-    busyKey.value = null
+    busy.value = null
   }
 }
 
 async function removeKey(key: string) {
   const noun = t('settings.capabilityCredentials.credentialNoun', { key })
   if (!(await confirmAction('remove', noun))) return
-  busyKey.value = key
+  busy.value = { key, action: 'remove' }
   try {
     await store.remove(key)
     toastDone('remove', noun)
   } catch (e) {
-    notifyError(t('settings.capabilityCredentials.toast.removeFailed', { key }), e)
+    present(e, 'settings.capabilityCredentials.toast.removeFailed')
   } finally {
-    busyKey.value = null
+    busy.value = null
   }
 }
 </script>
@@ -187,8 +188,8 @@ async function removeKey(key: string) {
           />
         </UFormField>
         <UButton
-          :loading="busyKey === entry.key"
-          :disabled="!(drafts[entry.key] ?? '').trim()"
+          :loading="isBusy(entry.key, 'save')"
+          :disabled="!(drafts[entry.key] ?? '').trim() || isBusy(entry.key, 'remove')"
           :data-testid="`capability-credential-save-${entry.key}`"
           @click="saveKey(entry.key)"
         >
@@ -199,7 +200,8 @@ async function removeKey(key: string) {
           color="error"
           variant="ghost"
           icon="i-lucide-trash-2"
-          :loading="busyKey === entry.key"
+          :loading="isBusy(entry.key, 'remove')"
+          :disabled="isBusy(entry.key, 'save')"
           :data-testid="`capability-credential-delete-${entry.key}`"
           :aria-label="t('settings.capabilityCredentials.remove')"
           @click="removeKey(entry.key)"
@@ -249,7 +251,7 @@ async function removeKey(key: string) {
           variant="ghost"
           icon="i-lucide-trash-2"
           size="sm"
-          :loading="busyKey === orphan.key"
+          :loading="isBusy(orphan.key, 'remove')"
           :data-testid="`capability-credential-delete-${orphan.key}`"
           :aria-label="t('settings.capabilityCredentials.remove')"
           @click="removeKey(orphan.key)"

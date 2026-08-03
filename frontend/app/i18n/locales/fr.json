@@ -2739,8 +2739,8 @@
       "toast": {
         "loadFailed": "Impossible de charger les identifiants des capacités",
         "saved": "{key} enregistré",
-        "saveFailed": "Impossible d'enregistrer {key}",
-        "removeFailed": "Impossible de supprimer {key}"
+        "saveFailed": "Impossible d'enregistrer l'identifiant",
+        "removeFailed": "Impossible de supprimer l'identifiant"
       }
     },
     "apiTokens": {

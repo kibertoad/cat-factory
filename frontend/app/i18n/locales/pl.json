@@ -2739,8 +2739,8 @@
       "toast": {
         "loadFailed": "Nie udało się wczytać poświadczeń funkcji",
         "saved": "Zapisano {key}",
-        "saveFailed": "Nie udało się zapisać {key}",
-        "removeFailed": "Nie udało się usunąć {key}"
+        "saveFailed": "Nie udało się zapisać poświadczenia",
+        "removeFailed": "Nie udało się usunąć poświadczenia"
       }
     },
     "apiTokens": {

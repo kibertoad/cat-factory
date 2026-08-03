@@ -799,12 +799,16 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // machine API — the same precedent as `testSecretsRepository` above. This is org state a RUN
   // resolves, so `remote` is the only bucket that works: a mothership-mode node has no `db` of its
   // own, and a credential the operator set on the mothership must reach the dispatch that needs
-  // it. The settings CRUD (`get`/`upsert`/`delete`) and the dispatch-time read are the SAME three
-  // methods, all workspace-scoped on arg0 except the record-based `upsert`, which binds on its
-  // `workspaceId` FIELD.
+  // it. The settings CRUD and the dispatch-time read are the SAME methods, all workspace-scoped
+  // on arg0 except the record-based `upsert` and `compareAndSwap`, which bind on the record's
+  // `workspaceId` FIELD. The rev-guarded pair (`compareAndSwap`/`deleteIfRev`) carries the
+  // checklist's per-key writes: the row is ONE blob, so without them a mothership-mode SPA could
+  // only ever save a key by blindly overwriting a concurrent editor's.
   capabilityCredentialRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspaceField', arg: 0 } },
+    deleteIfRev: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The per-service PRE-PR VALIDATION CHECKS, keyed by service-frame block like

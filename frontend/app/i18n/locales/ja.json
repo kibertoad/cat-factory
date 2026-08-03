@@ -2880,8 +2880,8 @@
       "toast": {
         "loadFailed": "機能の認証情報を読み込めませんでした",
         "saved": "{key} を保存しました",
-        "saveFailed": "{key} を保存できませんでした",
-        "removeFailed": "{key} を削除できませんでした"
+        "saveFailed": "認証情報を保存できませんでした",
+        "removeFailed": "認証情報を削除できませんでした"
       }
     },
     "apiTokens": {

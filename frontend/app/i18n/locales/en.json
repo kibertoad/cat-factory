@@ -2971,8 +2971,8 @@
       "toast": {
         "loadFailed": "Could not load capability credentials",
         "saved": "Saved {key}",
-        "saveFailed": "Could not save {key}",
-        "removeFailed": "Could not remove {key}"
+        "saveFailed": "Could not save the credential",
+        "removeFailed": "Could not remove the credential"
       }
     },
     "apiTokens": {
