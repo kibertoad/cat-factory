@@ -151,7 +151,9 @@
     "accountSettings": "Account settings",
     "operatorDashboard": "Platform observability",
     "reports": "Reports",
-    "foundationalServices": "Foundational services"
+    "foundationalServices": "Foundational services",
+    "tutorials": "Tutorials",
+    "help": "Help"
   },
   "board": {
     "toast": {
@@ -2164,7 +2166,6 @@
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
         "toggleUiMode": "Switch interface mode",
-        "tutorial": "Take a tour",
         "foundationalServices": "Foundational services"
       },
       "keywords": {
@@ -6380,16 +6381,50 @@
     "prompt": {
       "title": "Take a quick tour?",
       "intro": "Guided tours walk you through the app right on this screen: they highlight the actual controls and tell you what to click.",
+      "decline": "No thanks",
+      "later": "Maybe later",
+      "empty": "No tours are available for your role on this board yet.",
+      "browse": "See all tutorials"
+    },
+    "catalogue": {
+      "title": "Tutorials",
+      "intro": "Guided walkthroughs that highlight the real controls as you go. Start any of them whenever you like, and take one again as often as you want.",
+      "progress": "{completed} of {total} completed",
+      "steps": "1 step | {count} steps",
+      "@steps": {
+        "description": "The length of one walkthrough. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of steps."
+      },
+      "blocked": "Available once you have:",
+      "notApplicable": "Nothing on this board matches this walkthrough right now.",
+      "empty": "This deployment ships no tutorials.",
+      "reset": "Reset progress",
+      "resetHint": "Forget which tutorials you have finished and ask about the tour again on your next visit."
+    },
+    "action": {
       "start": "Start",
-      "restart": "Repeat",
       "resume": "Resume",
       "@resume": {
         "description": "Verb, on a button: pick a guided tour back up from where it was broken off. Not the noun (CV/resume)."
       },
-      "completed": "Completed",
-      "decline": "No thanks",
-      "later": "Maybe later",
-      "empty": "No tours are available for your role on this board yet."
+      "restart": "Repeat",
+      "continue": "Back to the tour",
+      "@continue": {
+        "description": "Button on the tour that is already running: return to it. It does not restart the walkthrough from the beginning."
+      }
+    },
+    "status": {
+      "notStarted": "Not started",
+      "inProgress": "In progress",
+      "paused": "Paused",
+      "completed": "Completed"
+    },
+    "requirements": {
+      "boardWrite": "Permission to edit this board",
+      "sourceControl": "A connected source-control provider",
+      "service": "A service on the board",
+      "task": "A task on the board",
+      "waitingAnswer": "A run waiting for your answer",
+      "finishedRun": "A run that finished successfully"
     },
     "overlay": {
       "next": "Next",

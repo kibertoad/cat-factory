@@ -310,6 +310,7 @@ describe('nav grouping helpers', () => {
       'infrastructure',
       'workspaceContext',
       'configuration',
+      'help',
     ])
     // The model layer is its own section, ahead of the optional integrations: the engines,
     // the per-agent model choice (beside the providers it picks from, rather than under
@@ -332,6 +333,12 @@ describe('nav grouping helpers', () => {
       'operator-dashboard',
       'reports',
     ])
+    // The tail section: what teaches the product, rather than what configures it. It is on
+    // the sidebar at all because the launch prompt is answered once and the palette was then
+    // the only route back to the walkthroughs — asking the user least likely to have found
+    // the palette to find it.
+    const help = groups.find((g) => g.group === 'help')
+    expect(help?.items.map((i) => i.id)).toEqual(['tutorial'])
   })
 
   it('groupCommands preserves the pre-slice-1 workspace-group order', () => {

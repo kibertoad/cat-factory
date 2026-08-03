@@ -127,7 +127,9 @@
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
     "reports": "Raporlar",
-    "foundationalServices": "Temel hizmetler"
+    "foundationalServices": "Temel hizmetler",
+    "tutorials": "Eğitimler",
+    "help": "Yardım"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,6 @@
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
         "toggleUiMode": "Arayüz modunu değiştir",
-        "tutorial": "Tura başla",
         "foundationalServices": "Temel hizmetler"
       },
       "keywords": {
@@ -6176,13 +6177,41 @@
     "prompt": {
       "title": "Hızlı bir tur ister misiniz?",
       "intro": "Rehberli turlar uygulamayı doğrudan bu ekranda gösterir: gerçek denetimleri vurgular ve nereye tıklayacağınızı söyler.",
-      "start": "Başla",
-      "restart": "Tekrarla",
-      "resume": "Devam et",
-      "completed": "Tamamlandı",
       "decline": "Hayır, teşekkürler",
       "later": "Belki daha sonra",
-      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok."
+      "empty": "Bu panodaki rolünüz için henüz kullanılabilir tur yok.",
+      "browse": "Tüm eğitimleri gör"
+    },
+    "catalogue": {
+      "title": "Eğitimler",
+      "intro": "İlerledikçe gerçek denetimleri vurgulayan rehberli turlar. İstediğiniz zaman herhangi birini başlatabilir, dilediğiniz kadar tekrar edebilirsiniz.",
+      "progress": "{total} turdan {completed} tanesi tamamlandı",
+      "steps": "1 adım | {count} adım",
+      "blocked": "Şunlar olduğunda kullanılabilir:",
+      "notApplicable": "Şu anda bu panoda bu turun gösterebileceği bir şey yok.",
+      "empty": "Bu kurulumda eğitim bulunmuyor.",
+      "reset": "İlerlemeyi sıfırla",
+      "resetHint": "Hangi eğitimleri tamamladığınızı unutur ve bir sonraki ziyaretinizde turu yeniden önerir."
+    },
+    "action": {
+      "start": "Başla",
+      "resume": "Devam et",
+      "restart": "Tekrarla",
+      "continue": "Tura dön"
+    },
+    "status": {
+      "notStarted": "Başlanmadı",
+      "inProgress": "Sürüyor",
+      "paused": "Duraklatıldı",
+      "completed": "Tamamlandı"
+    },
+    "requirements": {
+      "boardWrite": "Bu panoyu düzenleme izni",
+      "sourceControl": "Bağlı bir kaynak kontrol sağlayıcısı",
+      "service": "Panoda bir servis",
+      "task": "Panoda bir görev",
+      "waitingAnswer": "Yanıtınızı bekleyen bir çalıştırma",
+      "finishedRun": "Başarıyla tamamlanmış bir çalıştırma"
     },
     "overlay": {
       "next": "İleri",

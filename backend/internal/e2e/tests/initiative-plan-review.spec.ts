@@ -170,12 +170,22 @@ test.describe('initiative plan review', () => {
     // One anchored comment is enough to send back, with or without overall feedback.
     const sendBack = rail.getByTestId('initiative-plan-send-back')
     await expect(sendBack).toBeEnabled()
+    const sentGate = await rail.getAttribute('data-approval-id')
+    expect(sentGate, 'the rail publishes the gate it is reviewing').toBeTruthy()
     await sendBack.click()
 
-    // LIVE: the planner re-runs with the review folded in, so the rail goes while it works and
-    // comes back when the re-plan parks again — the loop the gate exists for.
-    await expect(rail).toBeHidden({ timeout: RUN_TERMINAL_TIMEOUT })
+    // LIVE: the planner re-runs with the review folded in and parks again on a NEW gate — the loop
+    // the gate exists for.
+    //
+    // Asserted on WHICH gate is on screen, not on the rail disappearing in between. The rail is
+    // driven by the pending approval, and the send-back's own `ws.refresh()` races the re-plan: a
+    // fast planner parks again before that snapshot is taken, so the SPA can go straight from one
+    // gate to the next and the "no approval" window need never exist. Waiting for it was a race
+    // this spec lost intermittently in CI while proving nothing the id does not prove better.
     await expect(rail).toBeVisible({ timeout: RUN_TERMINAL_TIMEOUT })
+    await expect(rail).not.toHaveAttribute('data-approval-id', sentGate ?? '', {
+      timeout: RUN_TERMINAL_TIMEOUT,
+    })
 
     // The drafts do not survive the round: the returning rail reviews the NEW plan clean.
     await expect(rail.getByTestId('initiative-plan-comment')).toHaveCount(0)

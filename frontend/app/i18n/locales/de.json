@@ -2162,7 +2162,6 @@
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
         "toggleUiMode": "Oberflächenmodus wechseln",
-        "tutorial": "Tour starten",
         "foundationalServices": "Basisdienste"
       },
       "keywords": {
@@ -4874,7 +4873,9 @@
     "accountSettings": "Kontoeinstellungen",
     "operatorDashboard": "Plattform-Observability",
     "reports": "Berichte",
-    "foundationalServices": "Basisdienste"
+    "foundationalServices": "Basisdienste",
+    "tutorials": "Tutorials",
+    "help": "Hilfe"
   },
   "errors": {
     "generic": {
@@ -6176,13 +6177,41 @@
     "prompt": {
       "title": "Eine kurze Tour machen?",
       "intro": "Geführte Touren zeigen dir die App direkt auf diesem Bildschirm: Sie heben die echten Bedienelemente hervor und sagen dir, was du anklicken sollst.",
-      "start": "Starten",
-      "restart": "Wiederholen",
-      "resume": "Fortsetzen",
-      "completed": "Abgeschlossen",
       "decline": "Nein danke",
       "later": "Vielleicht später",
-      "empty": "Für deine Rolle auf diesem Board sind noch keine Touren verfügbar."
+      "empty": "Für deine Rolle auf diesem Board sind noch keine Touren verfügbar.",
+      "browse": "Alle Tutorials anzeigen"
+    },
+    "catalogue": {
+      "title": "Tutorials",
+      "intro": "Geführte Rundgänge, die dir unterwegs die echten Bedienelemente hervorheben. Du kannst jeden davon jederzeit starten und beliebig oft wiederholen.",
+      "progress": "{completed} von {total} abgeschlossen",
+      "steps": "1 Schritt | {count} Schritte",
+      "blocked": "Verfügbar, sobald du Folgendes hast:",
+      "notApplicable": "Auf diesem Board gibt es derzeit nichts, was dieser Rundgang zeigen könnte.",
+      "empty": "Diese Installation enthält keine Tutorials.",
+      "reset": "Fortschritt zurücksetzen",
+      "resetHint": "Vergisst, welche Tutorials du abgeschlossen hast, und fragt dich beim nächsten Besuch erneut nach der Tour."
+    },
+    "action": {
+      "start": "Starten",
+      "resume": "Fortsetzen",
+      "restart": "Wiederholen",
+      "continue": "Zurück zur Tour"
+    },
+    "status": {
+      "notStarted": "Nicht begonnen",
+      "inProgress": "Läuft",
+      "paused": "Pausiert",
+      "completed": "Abgeschlossen"
+    },
+    "requirements": {
+      "boardWrite": "Berechtigung, dieses Board zu bearbeiten",
+      "sourceControl": "Eine verbundene Quellcodeverwaltung",
+      "service": "Ein Service auf dem Board",
+      "task": "Eine Aufgabe auf dem Board",
+      "waitingAnswer": "Ein Lauf, der auf deine Antwort wartet",
+      "finishedRun": "Ein erfolgreich abgeschlossener Lauf"
     },
     "overlay": {
       "next": "Weiter",

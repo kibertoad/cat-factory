@@ -59,7 +59,10 @@ export function useNavContributions() {
     operatorDashboard: () => ui.openOperatorDashboard(),
     reports: () => ui.openReports(),
     shortcuts: () => ui.openShortcutsHelp(),
-    tutorial: () => useTutorialStore().openPrompt(),
+    // The CATALOGUE, not the launch prompt: reaching this from the sidebar or the palette is
+    // "show me the walkthroughs", and the prompt answers a narrower question (would you like
+    // one now?) that a returning user has already answered once.
+    tutorial: () => useTutorialStore().openCatalogue(),
     // No-op under an env pin (`setMode` refuses), so the palette entry matches the sidebar
     // switcher's read-only state rather than pretending to flip a tier the resolver fixes.
     toggleUiMode: () => useUiModeStore().toggleMode(),

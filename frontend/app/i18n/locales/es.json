@@ -127,7 +127,9 @@
     "operatorDashboard": "Observabilidad de la plataforma",
     "reports": "Informes",
     "infrastructure": "Infraestructura",
-    "foundationalServices": "Servicios fundamentales"
+    "foundationalServices": "Servicios fundamentales",
+    "tutorials": "Tutoriales",
+    "help": "Ayuda"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,6 @@
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
         "toggleUiMode": "Cambiar el modo de interfaz",
-        "tutorial": "Hacer un recorrido",
         "foundationalServices": "Servicios fundamentales"
       },
       "keywords": {
@@ -6164,13 +6165,41 @@
     "prompt": {
       "title": "¿Hacer un recorrido rápido?",
       "intro": "Los recorridos guiados te muestran la aplicación directamente en esta pantalla: resaltan los controles reales y te dicen dónde hacer clic.",
-      "start": "Empezar",
-      "restart": "Repetir",
-      "resume": "Reanudar",
-      "completed": "Completado",
       "decline": "No, gracias",
       "later": "Quizás más tarde",
-      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero."
+      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero.",
+      "browse": "Ver todos los tutoriales"
+    },
+    "catalogue": {
+      "title": "Tutoriales",
+      "intro": "Recorridos guiados que resaltan los controles reales sobre la marcha. Puedes empezar cualquiera cuando quieras y repetirlo tantas veces como necesites.",
+      "progress": "{completed} de {total} completados",
+      "steps": "1 paso | {count} pasos",
+      "blocked": "Disponible cuando tengas:",
+      "notApplicable": "Ahora mismo no hay nada en este tablero que este recorrido pueda mostrar.",
+      "empty": "Esta instalación no incluye tutoriales.",
+      "reset": "Restablecer progreso",
+      "resetHint": "Olvida qué tutoriales has completado y vuelve a ofrecerte el recorrido en tu próxima visita."
+    },
+    "action": {
+      "start": "Empezar",
+      "resume": "Reanudar",
+      "restart": "Repetir",
+      "continue": "Volver al recorrido"
+    },
+    "status": {
+      "notStarted": "Sin empezar",
+      "inProgress": "En curso",
+      "paused": "En pausa",
+      "completed": "Completado"
+    },
+    "requirements": {
+      "boardWrite": "Permiso para editar este tablero",
+      "sourceControl": "Un proveedor de control de código conectado",
+      "service": "Un servicio en el tablero",
+      "task": "Una tarea en el tablero",
+      "waitingAnswer": "Una ejecución esperando tu respuesta",
+      "finishedRun": "Una ejecución terminada correctamente"
     },
     "overlay": {
       "next": "Siguiente",

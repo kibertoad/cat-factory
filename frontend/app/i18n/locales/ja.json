@@ -127,7 +127,9 @@
     "accountSettings": "アカウント設定",
     "operatorDashboard": "プラットフォームの可観測性",
     "reports": "レポート",
-    "foundationalServices": "基盤サービス"
+    "foundationalServices": "基盤サービス",
+    "tutorials": "チュートリアル",
+    "help": "ヘルプ"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,6 @@
         "shortcuts": "キーボードショートカット",
         "bugHunt": "バグハント",
         "toggleUiMode": "インターフェースモードを切り替え",
-        "tutorial": "ツアーを開始",
         "foundationalServices": "基盤サービス"
       },
       "keywords": {
@@ -6176,13 +6177,41 @@
     "prompt": {
       "title": "クイックツアーを始めますか？",
       "intro": "ガイドツアーは、この画面上でアプリの使い方を案内します。実際のコントロールをハイライトし、どこをクリックすればよいかをお知らせします。",
-      "start": "開始",
-      "restart": "もう一度",
-      "resume": "再開",
-      "completed": "完了",
       "decline": "結構です",
       "later": "あとで",
-      "empty": "このボードでのあなたのロールで利用できるツアーはまだありません。"
+      "empty": "このボードでのあなたのロールで利用できるツアーはまだありません。",
+      "browse": "すべてのチュートリアルを表示"
+    },
+    "catalogue": {
+      "title": "チュートリアル",
+      "intro": "実際のコントロールをハイライトしながら操作を案内するガイドツアーです。いつでも好きなものを開始でき、何度でもやり直せます。",
+      "progress": "{total} 件中 {completed} 件完了",
+      "steps": "1 ステップ | {count} ステップ",
+      "blocked": "次が揃うと利用できます:",
+      "notApplicable": "このツアーで見せられるものが、今このボードにはありません。",
+      "empty": "このデプロイにはチュートリアルがありません。",
+      "reset": "進捗をリセット",
+      "resetHint": "完了したチュートリアルの記録を消去し、次回アクセス時にもう一度ツアーを案内します。"
+    },
+    "action": {
+      "start": "開始",
+      "resume": "再開",
+      "restart": "もう一度",
+      "continue": "ツアーに戻る"
+    },
+    "status": {
+      "notStarted": "未実施",
+      "inProgress": "実行中",
+      "paused": "中断中",
+      "completed": "完了"
+    },
+    "requirements": {
+      "boardWrite": "このボードを編集する権限",
+      "sourceControl": "接続済みのソース管理サービス",
+      "service": "ボード上のサービス",
+      "task": "ボード上のタスク",
+      "waitingAnswer": "回答を待っている実行",
+      "finishedRun": "正常に完了した実行"
     },
     "overlay": {
       "next": "次へ",
