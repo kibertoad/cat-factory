@@ -4094,7 +4094,20 @@
       "binaryOutputMissing": "Tej usługi przechowywania nie ma już w katalogu; wybierz inną.",
       "binaryOutputNotStorage": "Ta usługa nie deklaruje już możliwości {capability}, więc uruchomienia będą odrzucane; wybierz inną.",
       "binaryOutputContextMissing": "Tych usług kontekstu nie ma już w katalogu: {ids}",
-      "binaryOutputUnavailable": "Katalog usług podstawowych jest nieosiągalny, więc nic nie da się tu jeszcze wybrać."
+      "binaryOutputUnavailable": "Katalog usług podstawowych jest nieosiągalny, więc nic nie da się tu jeszcze wybrać.",
+      "binaryOutputGenerators": "Generuj za pomocą",
+      "binaryOutputGeneratorsPlaceholder": "Nie wybrano integracji",
+      "binaryOutputModalities": "Musi dostarczyć",
+      "binaryOutputModalitiesPlaceholder": "Brak wymagania",
+      "binaryOutputGeneratorMissing": "Ta instalacja nie rejestruje tych integracji generatywnych: {ids}. Rejestruje się je w kodzie instalacji, a nie w tym obszarze roboczym.",
+      "binaryOutputModalityUncovered": "Żadna wybrana integracja nie tworzy {modalities}, które ten krok ma dostarczyć.",
+      "binaryOutputModality": {
+        "image": "Obrazy",
+        "audio": "Dźwięk",
+        "video": "Wideo",
+        "3d": "Modele 3D",
+        "document": "Dokumenty"
+      }
     },
     "progress": {
       "status": {
@@ -5394,8 +5407,10 @@
       "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({id}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
       "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
       "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
-      "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście."
-    }
+      "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście.",
+      "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym."
+    },
+    "unknownGeneratorBadge": "Niezarejestrowana"
   },
   "sandbox": {
     "title": "Piaskownica: testowanie promptów i modeli",

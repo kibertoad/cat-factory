@@ -205,7 +205,7 @@ export class FoundationalServiceRunResolver {
 }
 
 /**
- * One `.cat-context/binary-output/generator-<id>.md` per SELECTED integration that registers a
+ * One `.cat-context/binary-output/generators/<id>.md` per SELECTED integration that registers a
  * contract, rendered through the same `renderContractDocument` the catalog services use — an
  * agent reads one kind of contract file whatever registry it came from.
  *

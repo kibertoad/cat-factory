@@ -53,7 +53,12 @@ export interface ResolveBinaryGeneratorSecretsInput {
  *
  * Deduplicated by KEY: two integrations sharing one credential variable (a vendor with an image
  * and a music endpoint behind one account is the obvious case) must not fight over the value, and
- * the first resolution wins deterministically in selection order.
+ * the first declaration wins deterministically in selection order.
+ *
+ * The dedupe is decided BEFORE any resolution (the key name is on the projection), so the surviving
+ * lookups are independent and run CONCURRENTLY — a per-workspace sealed-store resolver is a real
+ * round trip, and a step holding three integrations should not pay for three of them in series.
+ * Order is preserved by resolving a pre-built list rather than pushing as results arrive.
  */
 export async function resolveBinaryGeneratorSecrets(
   input: ResolveBinaryGeneratorSecretsInput,
@@ -61,16 +66,20 @@ export async function resolveBinaryGeneratorSecrets(
   const generators = input.context.binaryGenerators ?? []
   const resolver = input.resolveToolSecrets
   if (!resolver || generators.length === 0) return []
-  const secrets: GeneratorSecretJobSpec[] = []
   const seen = new Set<string>()
-  for (const generator of generators) {
+  const wanted = generators.flatMap((generator) => {
     const key = generator.credentialKey
-    if (!key || seen.has(key)) continue
+    if (!key || seen.has(key)) return []
     seen.add(key)
-    const resolved = await resolveOne(input, resolver, generator, key)
-    if (resolved) secrets.push({ key, value: resolved })
-  }
-  return secrets
+    return [{ generator, key }]
+  })
+  const resolved = await Promise.all(
+    wanted.map(async ({ generator, key }) => {
+      const value = await resolveOne(input, resolver, generator, key)
+      return value === undefined ? null : { key, value }
+    }),
+  )
+  return resolved.filter((entry): entry is GeneratorSecretJobSpec => entry !== null)
 }
 
 async function resolveOne(
@@ -98,6 +107,18 @@ async function resolveOne(
   )
   const value = resolved?.[key]
   if (value) return value
+  // An unresolved credential is reported at the severity its DECLARATION earns, because the two
+  // cases need different reactions and a single severity would train an operator to ignore both.
+  // A required key that did not resolve is a misconfiguration that will cost this step its
+  // integration; an optional one is a state the deployment declared as normal, so reporting it as
+  // a warning would be crying wolf about a working endpoint.
+  if (generator.credentialRequired === false) {
+    input.logger?.debug(
+      'binary-generator optional credential did not resolve; the agent is told to call it unauthenticated',
+      { binaryGeneratorId: generator.id, credentialKey: key },
+    )
+    return undefined
+  }
   input.logger?.warn(
     'binary-generator credential did not resolve; the agent is told the integration is unavailable',
     { binaryGeneratorId: generator.id, credentialKey: key },

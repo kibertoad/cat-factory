@@ -4106,7 +4106,20 @@
       "binaryOutputMissing": "この保存サービスはカタログに存在しません。別のサービスを選んでください。",
       "binaryOutputNotStorage": "このサービスは {capability} 機能を宣言しなくなったため、実行は拒否されます。別のサービスを選んでください。",
       "binaryOutputContextMissing": "これらのコンテキストサービスはカタログに存在しません: {ids}",
-      "binaryOutputUnavailable": "基盤サービスのカタログに接続できないため、ここではまだ何も選択できません。"
+      "binaryOutputUnavailable": "基盤サービスのカタログに接続できないため、ここではまだ何も選択できません。",
+      "binaryOutputGenerators": "生成に使用",
+      "binaryOutputGeneratorsPlaceholder": "統合が未選択",
+      "binaryOutputModalities": "提供が必要",
+      "binaryOutputModalitiesPlaceholder": "要件なし",
+      "binaryOutputGeneratorMissing": "このデプロイメントは次の生成統合を登録していません: {ids}。これらはこのワークスペースではなくデプロイメントのコードで登録します。",
+      "binaryOutputModalityUncovered": "このステップが提供することになっている {modalities} を、選択されたどの統合も生成できません。",
+      "binaryOutputModality": {
+        "image": "画像",
+        "audio": "音声",
+        "video": "動画",
+        "3d": "3D モデル",
+        "document": "ドキュメント"
+      }
     },
     "progress": {
       "status": {
@@ -5406,8 +5419,10 @@
       "targetUnknown": "このステップ自身の保存サービス ({id}) がカタログにもうありません。このため下のどれも照合できませんでした。再登録するか、別のサービスを指定してください。",
       "misdirected": "{count} 件の成果物が {target} 以外のサービスに保存されました。",
       "invalidEntries": "サービスと場所のどちらも示さない宣言項目 {count} 件を破棄しました。",
-      "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。"
-    }
+      "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。",
+      "unknownGenerators": "このデプロイメントが登録していない生成統合が指定されました: {ids}。エントリは申告どおり保持されます。統合はこのワークスペースではなくデプロイメントのコードで登録します。"
+    },
+    "unknownGeneratorBadge": "未登録"
   },
   "sandbox": {
     "title": "Sandbox: プロンプトとモデルのテスト",

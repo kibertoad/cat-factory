@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import type { serve } from '@hono/node-server'
 import {
   type AgentKindRegistry,
+  type BinaryGeneratorRegistry,
   type InitiativePresetRegistry,
   type FoundationalServiceRegistry,
   type TaskTypeRegistry,
@@ -94,6 +95,14 @@ export async function startLocal(
      * and mothership paths) as the catalog's `builtin` tier. Absent → an empty tier.
      */
     foundationalServiceRegistry?: FoundationalServiceRegistry
+    /**
+     * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS — a deployment news a
+     * `defaultBinaryGeneratorRegistry()`, registers the image / music / video generation APIs it
+     * pays for on it, and passes it here. Threaded through to `buildLocalContainer` (both the
+     * Postgres and mothership paths), where a step carrying the `binary-output` trait selects from
+     * them (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry.
+     */
+    binaryGeneratorRegistry?: BinaryGeneratorRegistry
     /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
@@ -250,6 +259,7 @@ async function bootLocal(
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
+    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -309,6 +319,7 @@ async function startLocalMothership(
     defaultModelPresetId?: string
     taskTypeRegistry?: TaskTypeRegistry
     foundationalServiceRegistry?: FoundationalServiceRegistry
+    binaryGeneratorRegistry?: BinaryGeneratorRegistry
     seedEnvironmentHandlers?: RegisterHandlerInput[]
     seedSharedStacks?: CreateSharedStackInput[]
   },
@@ -320,6 +331,7 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     foundationalServiceRegistry,
+    binaryGeneratorRegistry,
     seedEnvironmentHandlers,
     seedSharedStacks,
   } = extensions
@@ -344,6 +356,7 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     foundationalServiceRegistry,
+    binaryGeneratorRegistry,
     seedEnvironmentHandlers,
     seedSharedStacks,
   })

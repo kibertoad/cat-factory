@@ -3742,7 +3742,20 @@
       "binaryOutputMissing": "Questo servizio di archiviazione non è più nel catalogo; scegline un altro.",
       "binaryOutputNotStorage": "Questo servizio non dichiara più la capacità {capability}, quindi le esecuzioni verranno rifiutate; scegline un altro.",
       "binaryOutputContextMissing": "Questi servizi di contesto non sono più nel catalogo: {ids}",
-      "binaryOutputUnavailable": "Il catalogo dei servizi fondamentali non è raggiungibile, quindi qui non si può ancora scegliere nulla."
+      "binaryOutputUnavailable": "Il catalogo dei servizi fondamentali non è raggiungibile, quindi qui non si può ancora scegliere nulla.",
+      "binaryOutputGenerators": "Genera con",
+      "binaryOutputGeneratorsPlaceholder": "Nessuna integrazione selezionata",
+      "binaryOutputModalities": "Deve fornire",
+      "binaryOutputModalitiesPlaceholder": "Nessun requisito",
+      "binaryOutputGeneratorMissing": "Questa installazione non registra queste integrazioni generative: {ids}. Si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
+      "binaryOutputModalityUncovered": "Nessuna integrazione selezionata produce {modalities}, che questo passaggio deve fornire.",
+      "binaryOutputModality": {
+        "image": "Immagini",
+        "audio": "Audio",
+        "video": "Video",
+        "3d": "Modelli 3D",
+        "document": "Documenti"
+      }
     },
     "progress": {
       "status": {
@@ -4431,8 +4444,10 @@
       "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
-      "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco."
-    }
+      "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco.",
+      "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro."
+    },
+    "unknownGeneratorBadge": "Non registrata"
   },
   "brainstorm": {
     "title": {

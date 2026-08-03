@@ -4094,7 +4094,20 @@
       "binaryOutputMissing": "Este servicio de almacenamiento ya no está en el catálogo; elige otro.",
       "binaryOutputNotStorage": "Este servicio ya no declara la capacidad {capability}, así que las ejecuciones se rechazarán; elige otro.",
       "binaryOutputContextMissing": "Estos servicios de contexto ya no están en el catálogo: {ids}",
-      "binaryOutputUnavailable": "El catálogo de servicios fundamentales no está disponible, así que aún no se puede elegir nada aquí."
+      "binaryOutputUnavailable": "El catálogo de servicios fundamentales no está disponible, así que aún no se puede elegir nada aquí.",
+      "binaryOutputGenerators": "Generar con",
+      "binaryOutputGeneratorsPlaceholder": "Ninguna integración seleccionada",
+      "binaryOutputModalities": "Debe entregar",
+      "binaryOutputModalitiesPlaceholder": "Sin requisito",
+      "binaryOutputGeneratorMissing": "Esta instalación no registra estas integraciones generativas: {ids}. Se registran en el código de la instalación, no en este espacio de trabajo.",
+      "binaryOutputModalityUncovered": "Ninguna integración seleccionada produce {modalities}, que este paso debe entregar.",
+      "binaryOutputModality": {
+        "image": "Imágenes",
+        "audio": "Audio",
+        "video": "Vídeo",
+        "3d": "Modelos 3D",
+        "document": "Documentos"
+      }
     },
     "progress": {
       "status": {
@@ -5394,8 +5407,10 @@
       "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({id}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
       "misdirected": "1 artefacto fue a un servicio distinto de {target}. | {count} artefactos fueron a un servicio distinto de {target}.",
       "invalidEntries": "Se descartó 1 entrada declarada: no nombraba servicio ni ubicación. | Se descartaron {count} entradas declaradas: no nombraban servicio ni ubicación.",
-      "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista."
-    }
+      "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista.",
+      "unknownGenerators": "Nombró una integración generativa que esta instalación no registra: {ids}. La entrada se conserva tal como se declaró; la integración se registra en el código de la instalación, no en este espacio de trabajo. | Nombró integraciones generativas que esta instalación no registra: {ids}. Sus entradas se conservan tal como se declararon; las integraciones se registran en el código de la instalación, no en este espacio de trabajo."
+    },
+    "unknownGeneratorBadge": "No registrada"
   },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",

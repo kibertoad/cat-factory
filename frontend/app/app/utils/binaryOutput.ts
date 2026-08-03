@@ -1,4 +1,5 @@
 import { ASSET_STORAGE_CAPABILITY } from '@cat-factory/contracts'
+import type { BinaryModality, RegisteredBinaryGenerator } from '@cat-factory/contracts'
 import type {
   BinaryOutputArtifact,
   BinaryOutputConfig,
@@ -63,6 +64,15 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
   misdirected: boolean
   /** The named service was not in the resolved catalog when the declaration was parsed. */
   unknown: boolean
+  /**
+   * The named GENERATIVE INTEGRATION (`artifact.generator`) was not one the deployment registers
+   * when the declaration was parsed. The generative twin of {@link unknown}, and kept as its own
+   * flag for the same reason the two unknown-id lists are: the fixes live in different places —
+   * an unknown service is workspace catalog state, an unknown integration is the deployment's
+   * build. A row that claims NO generator is not unknown, it is unattributed, which is a legal
+   * state (a model with native image output generates without a registered integration).
+   */
+  generatorUnknown: boolean
 }
 
 /** The whole surface's read model: one state, the join, and every loss the report counted. */
@@ -97,6 +107,25 @@ export interface BinaryOutputView {
    * that cannot overlap is the only shape where naming one cannot mis-state the other.
    */
   unknownDeclaredServices: readonly string[]
+  /**
+   * The GENERATIVE INTEGRATIONS the step selected (`stepOptions.binaryOutput.generatorIds`), in
+   * selection order. Empty is a real state and not a gap: a step may generate through whatever
+   * its agent already has, and its brief says so.
+   */
+  generators: readonly string[]
+  /**
+   * The CONTENT TYPES the step declares it must deliver (`stepOptions.binaryOutput.modalities`).
+   * Empty ⇒ the step imposes no requirement, so nothing is uncovered by construction.
+   */
+  modalities: readonly BinaryModality[]
+  /**
+   * Integration ids the AGENT named that the deployment does not register. The generative twin of
+   * {@link unknownDeclaredServices}, and it needs no exclusion to stay disjoint from anything —
+   * there is no single "target" integration a step selects, so the report's own list is already
+   * the whole fact. Rendering it is not optional: the entries are RETAINED, so dropping the list
+   * would leave an artifact attributed to something nobody can look up, with nothing saying so.
+   */
+  unknownDeclaredGenerators: readonly string[]
   /** Entries dropped because they were not `{ service, location }` objects. */
   invalidEntries: number
   /** Valid entries dropped past the report's cap — so {@link rows} is a PREFIX. */
@@ -129,6 +158,8 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
 
   const target = config?.storageServiceId ?? null
   const contextServices = config?.contextServiceIds ?? []
+  const generators = config?.generatorIds ?? []
+  const modalities = config?.modalities ?? []
   if (!report) {
     return {
       // A step still queued has not had the chance to record anything, which is a different
@@ -139,6 +170,9 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       rows: [],
       targetUnknown: false,
       unknownDeclaredServices: [],
+      generators,
+      modalities,
+      unknownDeclaredGenerators: [],
       invalidEntries: 0,
       omitted: 0,
       misdirected: 0,
@@ -146,11 +180,14 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
   }
 
   const unknown = new Set(report.unknownServices)
+  const unknownGenerators = new Set(report.unknownGenerators)
   const rows: BinaryOutputRow[] = report.stored.map((artifact) => ({
     ...artifact,
     // A null target cannot make anything misdirected: there is no place it was supposed to go.
     misdirected: target !== null && artifact.service !== target,
     unknown: unknown.has(artifact.service),
+    // An UNATTRIBUTED row (no `generator` claimed) is not unknown — see the field's own note.
+    generatorUnknown: artifact.generator !== undefined && unknownGenerators.has(artifact.generator),
   }))
 
   return {
@@ -160,6 +197,9 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     rows,
     targetUnknown: target !== null && unknown.has(target),
     unknownDeclaredServices: report.unknownServices.filter((id) => id !== target),
+    generators,
+    modalities,
+    unknownDeclaredGenerators: report.unknownGenerators,
     invalidEntries: report.invalidEntries,
     omitted: report.omitted,
     misdirected: rows.filter((row) => row.misdirected).length,
@@ -242,6 +282,7 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.state === 'undeclared' ||
     view.targetUnknown ||
     view.unknownDeclaredServices.length > 0 ||
+    view.unknownDeclaredGenerators.length > 0 ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0
@@ -277,12 +318,52 @@ export type BinaryOutputPickIssue =
   | 'not_storage_capable'
   /** One or more selected CONTEXT ids are not in the resolved catalog. */
   | 'unknown_context_service'
+  /**
+   * A selected GENERATIVE INTEGRATION is not one this deployment registers (kernel's
+   * `BinaryGeneratorSelectionIssue.problem` spelling verbatim, like the two `*_service` members).
+   */
+  | 'unknown_generator'
+  /** A content type the step declares it delivers is produced by NO selected integration. */
+  | 'modality_uncovered'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
   issues: readonly BinaryOutputPickIssue[]
   /** The unresolved CONTEXT ids, for the message that names them. */
   unknownContextIds: readonly string[]
+  /** The unregistered GENERATIVE INTEGRATION ids, for the message that names them. */
+  unknownGeneratorIds: readonly string[]
+  /** The declared content types nothing selected can produce, for the message that names them. */
+  uncoveredModalities: readonly BinaryModality[]
+}
+
+/**
+ * The GENERATIVE half of {@link binaryOutputPickIssues}, mirroring kernel's
+ * `binaryGeneratorSelectionIssues` so the builder surfaces the `binary_output_generator_invalid`
+ * refusal before the round trip rather than inventing a second opinion.
+ *
+ * It needs no `available` tri-state, unlike the catalog half: the integrations ride the workspace
+ * SNAPSHOT rather than their own probe, so there is no "not read yet" state distinct from the
+ * board not having loaded — if the caller has a snapshot at all, this list is the whole truth. An
+ * empty list is therefore a real EMPTY (this deployment registers none), which is exactly why a
+ * selected id in that state is `unknown_generator` and not silence.
+ */
+function generatorPickIssues(
+  config: BinaryOutputConfig | undefined,
+  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[],
+): { issues: BinaryOutputPickIssue[]; unknownGeneratorIds: string[]; uncovered: BinaryModality[] } {
+  const byId = new Map(generators.map((g) => [g.id, g]))
+  const selectedIds = config?.generatorIds ?? []
+  const unknownGeneratorIds = selectedIds.filter((id) => !byId.has(id))
+  // Coverage is judged against what RESOLVED, exactly as admission judges it: an unknown id
+  // contributes no content types, so a step whose only audio generator is unregistered is told
+  // BOTH things — the id is gone, and the requirement it was covering is now uncovered.
+  const covered = new Set(selectedIds.flatMap((id) => byId.get(id)?.modalities ?? []))
+  const uncovered = (config?.modalities ?? []).filter((m) => !covered.has(m))
+  const issues: BinaryOutputPickIssue[] = []
+  if (unknownGeneratorIds.length) issues.push('unknown_generator')
+  if (uncovered.length) issues.push('modality_uncovered')
+  return { issues, unknownGeneratorIds, uncovered }
 }
 
 /**
@@ -312,9 +393,15 @@ export function binaryOutputPickIssues(
   config: BinaryOutputConfig | undefined,
   catalog: readonly Pick<ResolvedFoundationalService, 'id' | 'capabilities'>[],
   available: boolean | null,
+  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[] = [],
 ): BinaryOutputPickState {
   const resolved = available === true
   const issues: BinaryOutputPickIssue[] = []
+  // Judged FIRST and outside the `not_selected` early return below, because the two halves
+  // resolve against different registries and a step missing its storage pick routinely has a
+  // generative fault too. Reporting them one round at a time is exactly the fix-and-retry cycle
+  // this function returns every issue to avoid.
+  const generative = generatorPickIssues(config, generators)
   const noStorageService =
     resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY))
   if (available === false) issues.push('catalog_unavailable')
@@ -323,7 +410,12 @@ export function binaryOutputPickIssues(
   const storageId = config?.storageServiceId?.trim()
   if (!storageId) {
     issues.push('not_selected')
-    return { issues, unknownContextIds: [] }
+    return {
+      issues: [...issues, ...generative.issues],
+      unknownContextIds: [],
+      unknownGeneratorIds: generative.unknownGeneratorIds,
+      uncoveredModalities: generative.uncovered,
+    }
   }
 
   if (resolved && !noStorageService) {
@@ -339,5 +431,10 @@ export function binaryOutputPickIssues(
     : []
   if (unknownContextIds.length) issues.push('unknown_context_service')
 
-  return { issues, unknownContextIds }
+  return {
+    issues: [...issues, ...generative.issues],
+    unknownContextIds,
+    unknownGeneratorIds: generative.unknownGeneratorIds,
+    uncoveredModalities: generative.uncovered,
+  }
 }

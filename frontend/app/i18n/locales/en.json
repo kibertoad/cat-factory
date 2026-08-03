@@ -4221,7 +4221,20 @@
       "binaryOutputMissing": "This storage service is no longer in the catalog; pick another.",
       "binaryOutputNotStorage": "This service no longer declares the {capability} capability, so runs will be refused; pick another.",
       "binaryOutputContextMissing": "These context services are no longer in the catalog: {ids}",
-      "binaryOutputUnavailable": "The foundational services catalog is unreachable, so nothing can be picked here yet."
+      "binaryOutputUnavailable": "The foundational services catalog is unreachable, so nothing can be picked here yet.",
+      "binaryOutputGenerators": "Generate with",
+      "binaryOutputGeneratorsPlaceholder": "No integration selected",
+      "binaryOutputModalities": "Must deliver",
+      "binaryOutputModalitiesPlaceholder": "No requirement",
+      "binaryOutputGeneratorMissing": "This deployment does not register these generative integrations: {ids}. They are registered in the deployment's code, not in this workspace.",
+      "binaryOutputModalityUncovered": "No selected integration produces {modalities}, which this step is set to deliver.",
+      "binaryOutputModality": {
+        "image": "Images",
+        "audio": "Audio",
+        "video": "Video",
+        "3d": "3D models",
+        "document": "Documents"
+      }
     },
     "progress": {
       "status": {
@@ -5643,8 +5656,10 @@
       "targetUnknown": "The catalog no longer contains this step's own storage service ({id}), so nothing below could be checked against it. Register it again, or point the step at another service.",
       "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
       "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
-      "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed."
-    }
+      "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed.",
+      "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace."
+    },
+    "unknownGeneratorBadge": "Not registered"
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",

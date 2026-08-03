@@ -4094,7 +4094,20 @@
       "binaryOutputMissing": "Ce service de stockage n'est plus dans le catalogue ; choisissez-en un autre.",
       "binaryOutputNotStorage": "Ce service ne déclare plus la capacité {capability}, les exécutions seront donc refusées ; choisissez-en un autre.",
       "binaryOutputContextMissing": "Ces services de contexte ne sont plus dans le catalogue : {ids}",
-      "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici."
+      "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici.",
+      "binaryOutputGenerators": "Générer avec",
+      "binaryOutputGeneratorsPlaceholder": "Aucune intégration sélectionnée",
+      "binaryOutputModalities": "Doit livrer",
+      "binaryOutputModalitiesPlaceholder": "Aucune exigence",
+      "binaryOutputGeneratorMissing": "Ce déploiement n'enregistre pas ces intégrations génératives : {ids}. Elles s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
+      "binaryOutputModalityUncovered": "Aucune intégration sélectionnée ne produit {modalities}, que cette étape doit livrer.",
+      "binaryOutputModality": {
+        "image": "Images",
+        "audio": "Audio",
+        "video": "Vidéo",
+        "3d": "Modèles 3D",
+        "document": "Documents"
+      }
     },
     "progress": {
       "status": {
@@ -5394,8 +5407,10 @@
       "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({id}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
       "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
       "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
-      "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés."
-    }
+      "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés.",
+      "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail."
+    },
+    "unknownGeneratorBadge": "Non enregistrée"
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",

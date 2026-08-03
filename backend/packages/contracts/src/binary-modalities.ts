@@ -60,7 +60,11 @@ export function modalityOfMediaType(value: string): BinaryModality | null {
   if (top === 'model') return '3d'
   if (top === 'application') {
     if (subtype === 'pdf') return 'document'
-    // The 3D formats that predate `model/*` and are still what tooling emits.
+    // The 3D formats that predate `model/*` and are still what tooling emits: `sla` is STL, and
+    // `x-tgif` is what the shared mime database maps `.obj` to (an old collision with the TGIF
+    // drawing format, but it IS the type an OBJ file is served as, so recognising it is right).
+    // `octet-stream` stays null on purpose — it is the "no idea" type, and guessing `3d` from it
+    // would classify every unlabelled download as a model.
     if (subtype === 'octet-stream') return null
     if (['gltf+json', 'x-gltf', 'sla', 'x-tgif'].includes(subtype)) return '3d'
     return null

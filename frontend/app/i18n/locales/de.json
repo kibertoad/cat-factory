@@ -3742,7 +3742,20 @@
       "binaryOutputMissing": "Dieser Speicherdienst ist nicht mehr im Katalog; wähle einen anderen.",
       "binaryOutputNotStorage": "Dieser Dienst deklariert die Fähigkeit {capability} nicht mehr, deshalb werden Läufe abgelehnt; wähle einen anderen.",
       "binaryOutputContextMissing": "Diese Kontextdienste sind nicht mehr im Katalog: {ids}",
-      "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen."
+      "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen.",
+      "binaryOutputGenerators": "Erzeugen mit",
+      "binaryOutputGeneratorsPlaceholder": "Keine Integration ausgewählt",
+      "binaryOutputModalities": "Muss liefern",
+      "binaryOutputModalitiesPlaceholder": "Keine Anforderung",
+      "binaryOutputGeneratorMissing": "Diese Installation registriert diese generativen Integrationen nicht: {ids}. Sie werden im Code der Installation registriert, nicht in diesem Workspace.",
+      "binaryOutputModalityUncovered": "Keine ausgewählte Integration erzeugt {modalities}, was dieser Schritt liefern soll.",
+      "binaryOutputModality": {
+        "image": "Bilder",
+        "audio": "Audio",
+        "video": "Video",
+        "3d": "3D-Modelle",
+        "document": "Dokumente"
+      }
     },
     "progress": {
       "status": {
@@ -4431,8 +4444,10 @@
       "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
-      "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt."
-    }
+      "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt.",
+      "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace."
+    },
+    "unknownGeneratorBadge": "Nicht registriert"
   },
   "brainstorm": {
     "title": {

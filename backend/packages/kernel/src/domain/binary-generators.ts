@@ -18,9 +18,20 @@ import { BINARY_OUTPUT_CONTEXT_DIR } from './binary-outputs.js'
 // identical behaviour by construction.
 // ---------------------------------------------------------------------------
 
+/**
+ * The `.cat-context/` sub-directory a selected integration's contract documents are injected
+ * under. Its OWN directory rather than a `generator-` filename prefix, because the two halves of
+ * a step's selection are named from different registries with the identical slug grammar: a
+ * catalog service legitimately called `generator-sprites` would land on exactly the path a
+ * generative integration called `sprites` writes, and one would silently overwrite the other. A
+ * slug cannot contain `/`, so a directory makes the collision structurally impossible rather than
+ * merely unlikely.
+ */
+export const BINARY_GENERATOR_CONTEXT_DIR = `${BINARY_OUTPUT_CONTEXT_DIR}/generators`
+
 /** The `.cat-context/` path one selected integration's contract documents are injected at. */
 export function binaryGeneratorContextFileFor(generatorId: string): string {
-  return `${BINARY_OUTPUT_CONTEXT_DIR}/generator-${generatorId}.md`
+  return `${BINARY_GENERATOR_CONTEXT_DIR}/${generatorId}.md`
 }
 
 /**
@@ -235,7 +246,16 @@ export function renderBinaryGeneratorSection(input: {
   return lines
 }
 
-/** What the agent is told about an integration's credential — including that it may not be there. */
+/**
+ * What the agent is told about an integration's credential — including that it may not be there.
+ *
+ * THREE cases, not two, because `required` is a real declaration and collapsing it changes what
+ * the agent does. A REQUIRED credential that did not arrive means the integration must not be
+ * called; an OPTIONAL one (declared for an endpoint that genuinely works unauthenticated) means
+ * exactly the opposite — call it anyway. Telling an optional integration's agent "do not call it
+ * at all" would strand a working endpoint on the most ordinary misconfiguration there is, which
+ * is the failure `required: false` exists to prevent.
+ */
 function credentialLines(generator: BinaryGeneratorView): string[] {
   const credential = generator.credential
   if (!credential) {
@@ -246,8 +266,18 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
   const usage = credential.usage
     ? ` Send it as ${credential.usage}.`
     : ' Its API contract states how to present it.'
+  const provided = `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${credential.key}\`.${usage} Read it from the environment — never echo it, log it, commit it, or put it in your reply.`
+  // `required` defaults to TRUE: an integration whose declaration says nothing is authenticated,
+  // which is the safe reading — being wrong that way costs a reported gap, while being wrong the
+  // other way burns the run on a call that 401s.
+  if (credential.required === false) {
+    return [
+      provided,
+      `\`${credential.key}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
+    ]
+  }
   return [
-    `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${credential.key}\`.${usage} Read it from the environment — never echo it, log it, commit it, or put it in your reply.`,
+    provided,
     `If \`${credential.key}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
   ]
 }

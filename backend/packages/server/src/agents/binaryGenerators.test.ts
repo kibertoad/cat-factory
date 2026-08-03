@@ -70,7 +70,58 @@ describe('resolveBinaryGeneratorSecrets', () => {
         logger,
       }),
     ).toEqual([])
-    expect(logger.lines.some((line) => line.msg.includes('did not resolve'))).toBe(true)
+    expect(
+      logger.lines.some((line) => line.level === 'warn' && line.msg.includes('did not resolve')),
+    ).toBe(true)
+  })
+
+  it('reports an unresolved OPTIONAL credential below warn, so it is not crying wolf', async () => {
+    // `credentialRequired: false` is a state the deployment DECLARED as normal — the endpoint
+    // works unauthenticated, and the brief tells the agent to call it anyway. Reporting that at
+    // the same severity as a required key that failed to resolve would train an operator to
+    // ignore the one that actually costs a step its integration.
+    const logger = createRecordingLogger()
+    const { resolver } = recordingResolver({})
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([{ ...retro, credentialRequired: false }]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([])
+    expect(logger.lines.some((line) => line.level === 'warn')).toBe(false)
+    expect(
+      logger.lines.some((line) => line.level === 'debug' && line.msg.includes('did not resolve')),
+    ).toBe(true)
+  })
+
+  it('resolves independent keys CONCURRENTLY while keeping selection order', async () => {
+    // The dedupe is decided off the projection before any lookup, so the surviving calls are
+    // independent — a step holding three integrations must not pay three serial round trips to a
+    // per-workspace sealed store. Order still comes from the selection, not from what returns first.
+    let inFlight = 0
+    let peak = 0
+    const resolver: ToolSecretResolver = {
+      resolve: async ({ keys }) => {
+        inFlight += 1
+        peak = Math.max(peak, inFlight)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        inFlight -= 1
+        return Object.fromEntries(keys.map((k) => [k.key, `v-${k.key}`]))
+      },
+    }
+    const secrets = await resolveBinaryGeneratorSecrets({
+      context: context([
+        retro,
+        { id: 'studio-music', label: 'Studio', modalities: ['audio'], credentialKey: 'STUDIO_KEY' },
+        { id: 'reel-video', label: 'Reel', modalities: ['video'], credentialKey: 'REEL_KEY' },
+      ]),
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver,
+    })
+    expect(secrets.map((s) => s.key)).toEqual(['RD_TOKEN', 'STUDIO_KEY', 'REEL_KEY'])
+    expect(peak).toBeGreaterThan(1)
   })
 
   it('never throws when the resolver does — a broken store costs the credential, not the run', async () => {

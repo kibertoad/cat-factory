@@ -105,8 +105,6 @@ export const binaryGeneratorDefinitionSchema = v.object({
    * this request.
    */
   endpoint: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2048))),
-  /** Human documentation, for whoever configures the step rather than for the agent. */
-  docsUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2048))),
   /**
    * Operating notes folded into the agent's brief verbatim — polling an async job, the shape of
    * a returned payload (base64 vs a signed URL), a rate limit worth respecting. This is where a
@@ -132,6 +130,28 @@ export type BinaryGeneratorDefinition = v.InferOutput<typeof binaryGeneratorDefi
  * validation) cannot depend on valibot, and re-stating the rules in a second place is how a
  * registration ends up accepted where an equivalent one is refused.
  */
+/**
+ * A registered integration as the WIRE carries it to the SPA (the workspace snapshot's
+ * `binaryGenerators`), so the pipeline builder can offer a step's `generatorIds` from the same
+ * set run admission validates against instead of asking a human to type an id.
+ *
+ * IDENTITY ONLY, and the omissions are the point. The credential's key NAME is left out — the
+ * picker has no use for it, and a workspace VIEWER has no business learning which environment
+ * variables the deployment sets. So are the contracts and the endpoint: they are the agent's
+ * interface to the integration, delivered as injected `.cat-context/` files at dispatch, and
+ * nothing a person picking from a list needs.
+ */
+export const registeredBinaryGeneratorSchema = v.object({
+  id: slug,
+  name: v.string(),
+  summary: v.string(),
+  /** What it produces — what the builder checks a step's declared content types against. */
+  modalities: v.array(binaryModalitySchema),
+  /** The concrete formats it pins down, when it declares any. Shown as detail, never a filter. */
+  mediaTypes: v.optional(v.array(mediaTypeSchema)),
+})
+export type RegisteredBinaryGenerator = v.InferOutput<typeof registeredBinaryGeneratorSchema>
+
 export function binaryGeneratorDefinitionIssues(definition: unknown): string[] {
   const parsed = v.safeParse(binaryGeneratorDefinitionSchema, definition)
   if (parsed.success) return []

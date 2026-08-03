@@ -12,7 +12,7 @@ import {
   renderBinaryGeneratorSection,
   resolveBinaryGeneratorSelection,
 } from './binary-generators.js'
-import { renderBinaryOutputBrief } from './binary-outputs.js'
+import { binaryContextFileFor, renderBinaryOutputBrief } from './binary-outputs.js'
 
 function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
   return {
@@ -180,6 +180,44 @@ describe('renderBinaryGeneratorSection', () => {
     expect(section).toContain('`RD_TOKEN`')
     expect(section).toContain('the X-RD-Token request header')
     expect(section).toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
+    // `required: false` is declared for an endpoint that genuinely works unauthenticated, so the
+    // required case's "do not call it at all" is exactly the wrong instruction: it would strand a
+    // working integration on the most ordinary misconfiguration there is.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credential: { key: 'RD_TOKEN', required: false } })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`RD_TOKEN` is OPTIONAL')
+    expect(section).toContain('still call the integration, unauthenticated')
+    expect(section).not.toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('treats an undeclared `required` as REQUIRED, so silence is the safe reading', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['studio-music'] },
+        [music],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('do not call `studio-music` at all')
+    expect(section).not.toContain('is OPTIONAL')
+  })
+
+  it('injects an integration’s contract under its OWN directory, so no service id can collide', () => {
+    // A catalog service may legitimately be called `generator-sprites`, which under a filename
+    // prefix would land on exactly the path the integration `sprites` writes. A slug cannot
+    // contain `/`, so the directory makes that structurally impossible.
+    expect(binaryGeneratorContextFileFor('sprites')).toBe('binary-output/generators/sprites.md')
+    expect(binaryGeneratorContextFileFor('sprites')).not.toBe(
+      binaryContextFileFor('generator-sprites'),
+    )
   })
 
   it('states an unresolved id and an uncovered content type rather than omitting them', () => {

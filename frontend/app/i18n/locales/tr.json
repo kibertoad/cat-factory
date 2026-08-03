@@ -4106,7 +4106,20 @@
       "binaryOutputMissing": "Bu depolama hizmeti artık katalogda yok; başka birini seç.",
       "binaryOutputNotStorage": "Bu hizmet artık {capability} yeteneğini bildirmiyor, bu yüzden çalıştırmalar reddedilecek; başka birini seç.",
       "binaryOutputContextMissing": "Bu bağlam hizmetleri artık katalogda yok: {ids}",
-      "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor."
+      "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor.",
+      "binaryOutputGenerators": "Şununla üret",
+      "binaryOutputGeneratorsPlaceholder": "Entegrasyon seçilmedi",
+      "binaryOutputModalities": "Teslim etmeli",
+      "binaryOutputModalitiesPlaceholder": "Gereksinim yok",
+      "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
+      "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
+      "binaryOutputModality": {
+        "image": "Görseller",
+        "audio": "Ses",
+        "video": "Video",
+        "3d": "3B modeller",
+        "document": "Belgeler"
+      }
     },
     "progress": {
       "status": {
@@ -5406,8 +5419,10 @@
       "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
-      "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor."
-    }
+      "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor.",
+      "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir."
+    },
+    "unknownGeneratorBadge": "Kayıtlı değil"
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",

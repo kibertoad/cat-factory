@@ -242,6 +242,11 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     // …and where that tier is READ from when it is not the registry above (mothership mode).
     foundationalBuiltinSource: options.foundationalBuiltinSource,
+    // The app-owned registry of the deployment's GENERATIVE BINARY INTEGRATIONS (what a
+    // binary-generating step produces WITH, as the catalog above is where its output GOES);
+    // createCore threads it into the execution service and re-exposes it on Core for boot-time
+    // validation.
+    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

@@ -270,6 +270,15 @@ export async function start(
      */
     foundationalServiceRegistry?: NodeContainerOptions['foundationalServiceRegistry']
     /**
+     * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS (the same shape once
+     * more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+     * video generation APIs it pays for on it by reference, and passes it here. A pipeline step
+     * whose kind carries the `binary-output` trait then SELECTS from them
+     * (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry, so any step selecting
+     * an integration is refused at admission rather than dispatching an agent that cannot generate.
+     */
+    binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -633,6 +642,7 @@ async function bootServer(
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
+    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,
