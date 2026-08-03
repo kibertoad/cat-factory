@@ -4233,6 +4233,12 @@
       "binaryOutputGeneratorsPlaceholder": "No integration selected",
       "binaryOutputModalities": "Must deliver",
       "binaryOutputModalitiesPlaceholder": "No requirement",
+      "binaryOutputMediaTypes": "Exact formats",
+      "binaryOutputMediaTypesPlaceholder": "No format requirement",
+      "binaryOutputDeclaredFormats": "Selected integrations declare: {formats}",
+      "binaryOutputMediaTypeUncovered": "No selected integration emits {formats}, which this step is set to deliver. Pick one that does, or drop the requirement.",
+      "binaryOutputMediaTypeUnverifiable": "No selected integration declares {formats}, but one of them declares no formats at all, so this could not be checked. The step still starts; confirm from the integration’s API that it can emit this.",
+      "binaryOutputMediaTypeUnusable": "Not saved, because these are not media types: {entries}. Write each one as type/subtype.",
       "binaryOutputGeneratorMissing": "This deployment does not register these generative integrations: {ids}. They are registered in the deployment's code, not in this workspace.",
       "binaryOutputModalityUncovered": "No selected integration produces {modalities}, which this step is set to deliver.",
       "binaryOutputModality": {
@@ -5630,6 +5636,7 @@
     "target": "Storage service",
     "targetNone": "None recorded on this step",
     "contextServices": "Generation context",
+    "mediaTypes": "Required formats",
     "misdirectedBadge": "Other service",
     "unknownBadge": "Not in catalog",
     "storedCount": "{outcome}, 1 artifact | {outcome}, {count} artifacts",
@@ -5661,6 +5668,7 @@
     "warning": {
       "unknownServices": "Named a service the catalog does not contain: {ids}. The entry is kept as claimed; check the id against the workspace catalog. | Named services the catalog does not contain: {ids}. Their entries are kept as claimed; check the ids against the workspace catalog.",
       "targetUnknown": "The catalog no longer contains this step's own storage service ({id}), so nothing below could be checked against it. Register it again, or point the step at another service.",
+      "undeliveredMediaTypes": "This step was set to deliver {formats}, and no artifact below reports that format. | This step was set to deliver {formats}, and no artifact below reports those formats.",
       "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
       "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
       "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed.",

@@ -19,10 +19,13 @@
 // ride the workspace snapshot (`binaryGenerators`) rather than a catalog read. Both halves are
 // offered here because a step needs both to work, and only this surface can tell a human that the
 // content types it promises to deliver are not covered by anything it selected.
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import * as v from 'valibot'
 import {
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
+  mediaTypeSchema,
+  normalizeMediaType,
   type BinaryModality,
   type BinaryOutputConfig,
 } from '@cat-factory/contracts'
@@ -143,6 +146,62 @@ function setGenerators(ids: string[]) {
 function setModalities(modalities: BinaryModality[]) {
   patch({ modalities })
 }
+
+/**
+ * The FORMAT requirement is free text, not a pick from the selection, and that is deliberate: the
+ * whole reason a step states a format is that the selected integrations might not cover it, and a
+ * picker offering only what they declare could never express the requirement whose violation this
+ * feature exists to catch. What the selection declares is offered as a HINT below instead.
+ *
+ * Held in a local ref rather than bound straight to the config so a half-typed `model/` is not
+ * parsed on every keystroke, and so the normalisation the field applies is VISIBLE — the text
+ * snaps back to what was stored.
+ */
+const mediaTypeText = ref((config.value?.mediaTypes ?? []).join(', '))
+watch(
+  () => config.value?.mediaTypes,
+  (mediaTypes) => {
+    mediaTypeText.value = (mediaTypes ?? []).join(', ')
+  },
+)
+
+/**
+ * Entries that are not a `type/subtype` at all, named rather than silently dropped — a
+ * requirement someone typed and the step does not carry is exactly the "absent reads as fine"
+ * failure the rest of this surface is built to avoid.
+ */
+const unusableMediaTypes = ref<string[]>([])
+
+function setMediaTypes(text: string) {
+  const entries = text
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  const usable: string[] = []
+  const unusable: string[] = []
+  for (const entry of entries) {
+    // Forgiving on the way IN, exact on the way out, and both halves are the backend's own rules
+    // imported rather than re-implemented: `normalizeMediaType` is the same reduction the
+    // comparison uses at both ends (a divergent local lowercasing would store a format that
+    // matches nothing and reads everywhere as one that was simply never emitted), and
+    // `mediaTypeSchema` is what the save boundary will hold this to — so what is refused here is
+    // exactly what would come back as a 422 one round trip later.
+    const normalized = normalizeMediaType(entry)
+    if (normalized && v.safeParse(mediaTypeSchema, normalized).success) usable.push(normalized)
+    else unusable.push(entry)
+  }
+  unusableMediaTypes.value = unusable
+  const deduped = [...new Set(usable)]
+  mediaTypeText.value = deduped.join(', ')
+  patch({ mediaTypes: deduped.length ? deduped : undefined })
+}
+
+/** What the SELECTED integrations say they emit — the discoverable half of the free-text field. */
+const declaredFormats = computed(() => {
+  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
+  const selected = (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
+  return [...new Set(selected.flatMap((generator) => generator.mediaTypes ?? []))]
+})
 </script>
 
 <template>
@@ -216,6 +275,33 @@ function setModalities(modalities: BinaryModality[]) {
       />
     </div>
 
+    <!-- The FORMAT requirement, one notch finer than the content types above it and shown right
+         under them. Both tiers: like the rest of this picker it is not an override of a default —
+         a format nobody stated is a format the run does not check. -->
+    <div v-if="config?.storageServiceId" class="flex items-center gap-2">
+      <span class="text-[10px] text-slate-500">{{
+        t('pipeline.builder.binaryOutputMediaTypes')
+      }}</span>
+      <UInput
+        class="w-56"
+        :model-value="mediaTypeText"
+        size="xs"
+        :placeholder="t('pipeline.builder.binaryOutputMediaTypesPlaceholder')"
+        data-testid="binary-output-media-type-input"
+        @update:model-value="mediaTypeText = String($event)"
+        @change="setMediaTypes(mediaTypeText)"
+      />
+    </div>
+    <p
+      v-if="config?.storageServiceId && declaredFormats.length"
+      class="ms-1 text-[10px] text-slate-500"
+      data-testid="binary-output-declared-formats"
+    >
+      {{
+        t('pipeline.builder.binaryOutputDeclaredFormats', { formats: declaredFormats.join(', ') })
+      }}
+    </p>
+
     <!-- Every refusal this step would hit, named where it is fixable. Each is its own line
          with its own remedy: an unreachable catalog is not an empty one, a lost service is not
          an untagged one, and a lost CONTEXT service is not a lost storage target. -->
@@ -277,6 +363,43 @@ function setModalities(modalities: BinaryModality[]) {
       {{
         t('pipeline.builder.binaryOutputModalityUncovered', {
           modalities: pick.uncoveredModalities.map(modalityLabel).join(', '),
+        })
+      }}
+    </p>
+    <p
+      v-if="has('media_type_uncovered')"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-media-type-uncovered"
+    >
+      {{
+        t('pipeline.builder.binaryOutputMediaTypeUncovered', {
+          formats: pick.uncoveredMediaTypes.join(', '),
+        })
+      }}
+    </p>
+    <!-- ADVISORY, and styled apart from every line above it: the step starts. The backend admits
+         a format requirement it could not judge, because a generator that declares no formats has
+         said only that its formats are unknown — and a surface that dressed that up as a refusal
+         would send someone editing a selection that is fine. -->
+    <p
+      v-if="has('media_type_unverifiable')"
+      class="text-[10px] text-slate-500"
+      data-testid="binary-output-media-type-unverifiable"
+    >
+      {{
+        t('pipeline.builder.binaryOutputMediaTypeUnverifiable', {
+          formats: pick.unverifiableMediaTypes.join(', '),
+        })
+      }}
+    </p>
+    <p
+      v-if="unusableMediaTypes.length"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-media-type-unusable"
+    >
+      {{
+        t('pipeline.builder.binaryOutputMediaTypeUnusable', {
+          entries: unusableMediaTypes.join(', '),
         })
       }}
     </p>

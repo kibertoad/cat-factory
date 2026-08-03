@@ -311,6 +311,66 @@ describe('the generative half of the read model', () => {
   })
 })
 
+// The one judgement this surface can make that admission cannot: admission checked what the
+// selected integrations CAN emit, this checks what the run actually came back with.
+describe('the delivered-format check', () => {
+  const required = (mediaTypes: string[], stored: { location: string; contentType?: string }[]) =>
+    binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', mediaTypes } },
+        binaryOutputs: report({
+          stored: stored.map((entry) => ({ service: 'files', ...entry })),
+        }),
+      }),
+    )
+
+  it('names a required format no declared artifact reports', () => {
+    const view = required(
+      ['model/gltf-binary', 'model/fbx'],
+      [{ location: 'a.glb', contentType: 'model/gltf-binary' }],
+    )
+    expect(view?.undeliveredMediaTypes).toEqual(['model/fbx'])
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('reduces the agent’s own spelling before comparing, and only then', () => {
+    // The requirement came through `mediaTypeSchema`; the artifact's content type is the model's
+    // prose. Comparing them raw reports a format as undelivered while the file sits where it was
+    // asked for.
+    expect(
+      required(['model/gltf-binary'], [{ location: 'a.glb', contentType: 'Model/GLTF-Binary' }])
+        ?.undeliveredMediaTypes,
+    ).toEqual([])
+  })
+
+  it('does not accept a near neighbour of the required format', () => {
+    // The entire point of requiring a format rather than a content type: both of these are 3D.
+    expect(
+      required(['model/gltf-binary'], [{ location: 'a.fbx', contentType: 'model/fbx' }])
+        ?.undeliveredMediaTypes,
+    ).toEqual(['model/gltf-binary'])
+  })
+
+  it('counts an artifact that reports no content type as covering nothing', () => {
+    expect(required(['model/gltf-binary'], [{ location: 'a.glb' }])?.undeliveredMediaTypes).toEqual(
+      ['model/gltf-binary'],
+    )
+  })
+
+  it('stays silent when there are no artifacts, because the state line already said so', () => {
+    // "It did not deliver a GLB" on top of "it declared nothing" is one fact stated twice as if
+    // it were two, and the second one adds nothing a reader can act on.
+    const view = binaryOutputView(
+      step({
+        stepOptions: { binaryOutput: { storageServiceId: 'files', mediaTypes: ['model/obj'] } },
+        binaryOutputs: report({ undeclared: true }),
+      }),
+    )
+    expect(view?.mediaTypes).toEqual(['model/obj'])
+    expect(view?.undeliveredMediaTypes).toEqual([])
+  })
+})
+
 describe('binaryOutputPickIssues, generative half', () => {
   const catalog = [{ id: 'files', capabilities: ['asset-storage'] }]
   const generators = [
@@ -365,6 +425,47 @@ describe('binaryOutputPickIssues, generative half', () => {
 
   it('is silent about a step that selects no integration at all', () => {
     const pick = binaryOutputPickIssues({ storageServiceId: 'files' }, catalog, true, generators)
+    expect(pick.issues).toEqual([])
+  })
+
+  // The FORMAT half, mirroring kernel's `binaryFormatCoverage` — and its three outcomes, which
+  // are what a second copy of the rule most easily loses.
+  const meshy = { id: 'meshy', modalities: ['3d' as const], mediaTypes: ['model/gltf-binary'] }
+
+  it('mirrors the refusal for a format no DECLARING integration emits', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['meshy'], mediaTypes: ['model/fbx'] },
+      catalog,
+      true,
+      [meshy],
+    )
+    expect(pick.issues).toContain('media_type_uncovered')
+    expect(pick.uncoveredMediaTypes).toEqual(['model/fbx'])
+    expect(pick.unverifiableMediaTypes).toEqual([])
+  })
+
+  it('keeps an UNCHECKABLE format apart from a refused one, because the step still starts', () => {
+    // `retro` declares no formats — "only my modality is known". Flagging this as a refusal would
+    // send someone editing a selection the backend admits; saying nothing would present an
+    // unchecked requirement as a checked one.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'], mediaTypes: ['image/webp'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toContain('media_type_unverifiable')
+    expect(pick.issues).not.toContain('media_type_uncovered')
+    expect(pick.unverifiableMediaTypes).toEqual(['image/webp'])
+  })
+
+  it('accepts a format the selection covers, however many other formats it emits', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['meshy'], mediaTypes: ['model/gltf-binary'] },
+      catalog,
+      true,
+      [meshy],
+    )
     expect(pick.issues).toEqual([])
   })
 

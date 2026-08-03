@@ -191,11 +191,18 @@ describe('mothership-mode generative binary integrations', () => {
 
   it('THROWS on a well-formed list whose ELEMENTS it cannot resolve a selection against', async () => {
     // The envelope being an array is not enough. A view with no `id` cannot be matched against a
-    // step's `generatorIds`, and one with no `modalities` cannot be checked for content-type
-    // coverage — so a reply carrying either is a reply whose registered set is unknown, which is
-    // the one thing this class must never answer quietly. The realistic source is a version
-    // skew, not a hostile peer.
-    for (const generators of [[{ modalities: ['image'] }], [{ id: 'retro' }], [null], ['retro']]) {
+    // step's `generatorIds`; one with no `modalities` cannot be checked for content-type
+    // coverage; one with no `mediaTypes` reaches the FORMAT rule as a crash rather than a verdict.
+    // So a reply carrying any of them is a reply whose registered set is unknown, which is the
+    // one thing this class must never answer quietly. The realistic source is a version skew, not
+    // a hostile peer.
+    for (const generators of [
+      [{ modalities: ['image'], mediaTypes: [] }],
+      [{ id: 'retro', mediaTypes: [] }],
+      [{ id: 'retro', modalities: ['image'] }],
+      [null],
+      ['retro'],
+    ]) {
       const source = new HttpBinaryGeneratorSource({
         baseUrl: 'https://mothership.test',
         token: 'tok',

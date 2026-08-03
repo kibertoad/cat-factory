@@ -3748,6 +3748,12 @@
       "binaryOutputGeneratorsPlaceholder": "Nessuna integrazione selezionata",
       "binaryOutputModalities": "Deve fornire",
       "binaryOutputModalitiesPlaceholder": "Nessun requisito",
+      "binaryOutputMediaTypes": "Formati esatti",
+      "binaryOutputMediaTypesPlaceholder": "Nessun requisito di formato",
+      "binaryOutputDeclaredFormats": "Le integrazioni selezionate dichiarano: {formats}",
+      "binaryOutputMediaTypeUncovered": "Nessuna integrazione selezionata emette {formats}, che questo passaggio deve fornire. Scegline una che lo faccia oppure rimuovi il requisito.",
+      "binaryOutputMediaTypeUnverifiable": "Nessuna integrazione selezionata dichiara {formats}, ma una di esse non dichiara alcun formato, quindi non è stato possibile verificarlo. Il passaggio parte comunque; verifica nell’API dell’integrazione che possa emetterlo.",
+      "binaryOutputMediaTypeUnusable": "Non salvato, perché questi non sono tipi di media: {entries}. Scrivi ciascuno come type/subtype.",
       "binaryOutputGeneratorMissing": "Questa installazione non registra queste integrazioni generative: {ids}. Si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "binaryOutputModalityUncovered": "Nessuna integrazione selezionata produce {modalities}, che questo passaggio deve fornire.",
       "binaryOutputModality": {
@@ -4412,6 +4418,7 @@
     "target": "Servizio di archiviazione",
     "targetNone": "Non registrato per questo passo",
     "contextServices": "Contesto della generazione",
+    "mediaTypes": "Formati richiesti",
     "misdirectedBadge": "Altro servizio",
     "unknownBadge": "Fuori catalogo",
     "storedCount": "{outcome}, 1 artefatto | {outcome}, {count} artefatti",
@@ -4443,6 +4450,7 @@
     "warning": {
       "unknownServices": "Ha indicato un servizio che il catalogo non contiene: {ids}. La voce viene conservata come dichiarata; verifica l'identificativo nel catalogo della board. | Ha indicato servizi che il catalogo non contiene: {ids}. Le voci vengono conservate come dichiarate; verifica gli identificativi nel catalogo della board.",
       "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
+      "undeliveredMediaTypes": "Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quel formato. | Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quei formati.",
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
       "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco.",

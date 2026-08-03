@@ -150,12 +150,63 @@ integration. A deployment telling a music generator from a speech generator says
 BOOT — a recognised media type contradicting them is an error, an unrecognised one is not (the
 classifier is not a registry of every format that exists).
 
+### A step may also require exact FORMATS, and `3d` is why
+
+`stepOptions.binaryOutput.mediaTypes` sits one notch under `modalities`: the concrete containers a
+step must deliver. It exists because the modality grain is exactly right for `image` and exactly
+wrong for `3d`. PNG versus WebP is a genre question that belongs in a prompt, but GLB, USDZ and FBX
+are all `3d` and none substitutes for another — a Godot importer takes the first, a RealityKit
+pipeline the second, an art pipeline the third — so a step whose mesh must load in the game could
+be admitted against an integration that cannot emit a loadable container, with the failure arriving
+at the end of a paid run as an asset nobody can open. `video` and `document` sit in between;
+`audio` genuinely does not need it.
+
+Four rules, each of which is the reason a plausible alternative was rejected:
+
+- **Every entry is required, not any one of them.** A step delivering a GLB for the engine AND an
+  FBX an artist can open in Blender declares both, and both are checked. An "any of these will do"
+  reading was rejected because the agent is the party that names the container on the vendor call:
+  a requirement that leaves it a choice hands that decision to the party with the least basis for
+  making it. Declare the format you need, not the set you would accept.
+- **A format is never translated into a modality.** `modalityOfMediaType` recognises only the
+  formats the platform happens to know, so inferring one here would make the strength of a
+  requirement depend on our vocabulary — a step spelled with a brand-new container would silently
+  lose the coarse check its neighbour keeps. The two lists are independent statements and both are
+  enforced as written.
+- **Matching is EXACT, after ONE shared reduction.** Both declarations come through
+  `mediaTypeSchema`; a settled artifact's `contentType` is the model's own prose and goes through
+  `normalizeMediaType` — the same function, imported, never a second lowercasing. No synonyms are
+  mapped: `model/obj` and `application/x-tgif` are the same file and stay different values, because
+  a matcher that quietly accepted a near-neighbour would admit a GLB where an OBJ was required,
+  which is the failure the requirement exists to prevent.
+- **THREE outcomes, not two.** A generator declaring no `mediaTypes` has said "only my modality is
+  known" — a documented state, not an empty answer — so a requirement it cannot be judged against
+  is UNVERIFIABLE (`binaryFormatCoverage`), the run is admitted, and the gap is stated in the brief
+  and the picker. Refusing there would punish the honest declaration; calling it covered would be
+  the mirror mistake, a clean bill of health nobody issued on the surface that decides whether the
+  run may start. It is the same disposition `generatorsUnverified` takes on the settlement side.
+  With NOTHING selected there is nobody to be silent, so a format requirement is uncovered outright.
+
+Two things sit outside the schema on purpose. **Whether a `3d` deliverable is one full scene or a
+file per model** is a packaging question no vendor declares, no generator's registration could be
+checked against, and nothing could compute from a settled artifact — it is a prompt fact, and it is
+already OBSERVABLE at the grain the report records: separate models arrive as separate entries with
+their own `entity`, one scene as one. Making it a closed vocabulary would repeat the "genre"
+mistake `binaryModalitySchema` warns about, with the platform unable to verify a word of it. And
+**what an integration CONSUMES** stays in `guidance`: a chain between two registered integrations
+(one's image feeding the other's image-to-3D path) is a fact about a PAIR, and the load-bearing
+half of it — how the handoff travels, an inline body versus a URL the vendor fetches from its own
+network — is exactly the part a modality-grained field could not carry. A structured field whose
+only actionable use needs an unstructured one beside it reads as a machine-checkable capability the
+platform never checks.
+
 ### Refusal, again in two layers, but against two different registries
 
 `binaryGeneratorSelectionIssues` is checked at admission alongside the storage-side one, and
 refuses under its OWN reason, `binary_output_generator_invalid`: `unknown_generator` (an id this
-build does not register) or `modality_uncovered` (a content type the step declares that nothing
-selected produces). Keeping it apart from `binary_output_service_invalid` is not tidiness — a
+build does not register), `modality_uncovered` (a content type the step declares that nothing
+selected produces) or `media_type_uncovered` (a format nothing that DECLARED its formats emits).
+Keeping it apart from `binary_output_service_invalid` is not tidiness — a
 storage id is fixed in the workspace catalog by whoever runs the board, an integration id is fixed
 in the deployment's own build, and one reason would send half the readers to the wrong place. It
 also runs with NO catalog seam wired, since the registry needs no I/O.
@@ -410,6 +461,18 @@ counterpart here rather than a follow-up: the report's `unknownGenerators` and e
 register is the generative `unknownDeclaredServices`, and dropping it would re-open exactly the
 silent-loss hole that field exists to close), and the picker offers `generatorIds` + `modalities`
 with `binaryOutputPickIssues` mirroring `binary_output_generator_invalid` inline.
+
+The FORMAT requirement reaches both surfaces too, and asymmetrically on purpose. In the picker it
+is free TEXT, not a pick from the selection: the whole reason a step states a format is that the
+selected integrations might not cover it, so a control offering only what they declare could never
+express the requirement whose violation this feature exists to catch — what the selection declares
+is offered as a hint beside it, and an entry that is not a `type/subtype` is named rather than
+silently dropped. Its unverifiable line is styled apart from every refusal above it, because the
+step starts. On the REPORT the surface makes the one judgement admission could not: admission
+checked what the selected integrations CAN emit, and `undeliveredMediaTypes` checks what the run
+came back with — derived in code from the step's own two records, never read off the agent's prose,
+and computed only where there are artifacts to compare against (with none, the state line already
+says nothing was recorded, and a second sentence would state one fact as if it were two).
 
 The picker's generative half needed one thing the other two did not: the integrations live in the
 deployment's CODE, so there is no catalog read to filter. They ride the workspace snapshot as

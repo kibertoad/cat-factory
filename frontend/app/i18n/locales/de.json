@@ -3748,6 +3748,12 @@
       "binaryOutputGeneratorsPlaceholder": "Keine Integration ausgewählt",
       "binaryOutputModalities": "Muss liefern",
       "binaryOutputModalitiesPlaceholder": "Keine Anforderung",
+      "binaryOutputMediaTypes": "Exakte Formate",
+      "binaryOutputMediaTypesPlaceholder": "Keine Formatanforderung",
+      "binaryOutputDeclaredFormats": "Ausgewählte Integrationen geben an: {formats}",
+      "binaryOutputMediaTypeUncovered": "Keine ausgewählte Integration erzeugt {formats}, was dieser Schritt liefern soll. Wähle eine, die das kann, oder entferne die Anforderung.",
+      "binaryOutputMediaTypeUnverifiable": "Keine ausgewählte Integration gibt {formats} an, aber eine von ihnen gibt überhaupt keine Formate an, daher konnte das nicht geprüft werden. Der Schritt startet trotzdem; prüfe in der API der Integration, ob sie das erzeugen kann.",
+      "binaryOutputMediaTypeUnusable": "Nicht gespeichert, denn dies sind keine Medientypen: {entries}. Schreibe jeden als type/subtype.",
       "binaryOutputGeneratorMissing": "Diese Installation registriert diese generativen Integrationen nicht: {ids}. Sie werden im Code der Installation registriert, nicht in diesem Workspace.",
       "binaryOutputModalityUncovered": "Keine ausgewählte Integration erzeugt {modalities}, was dieser Schritt liefern soll.",
       "binaryOutputModality": {
@@ -4412,6 +4418,7 @@
     "target": "Speicherdienst",
     "targetNone": "Für diesen Schritt nicht erfasst",
     "contextServices": "Kontext der Erzeugung",
+    "mediaTypes": "Geforderte Formate",
     "misdirectedBadge": "Anderer Dienst",
     "unknownBadge": "Nicht im Katalog",
     "storedCount": "{outcome}, 1 Artefakt | {outcome}, {count} Artefakte",
@@ -4443,6 +4450,7 @@
     "warning": {
       "unknownServices": "Nennt einen Dienst, den der Katalog nicht enthält: {ids}. Der Eintrag bleibt wie angegeben erhalten; prüfe die Kennung gegen den Katalog des Boards. | Nennt Dienste, die der Katalog nicht enthält: {ids}. Die Einträge bleiben wie angegeben erhalten; prüfe die Kennungen gegen den Katalog des Boards.",
       "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
+      "undeliveredMediaTypes": "Dieser Schritt sollte {formats} liefern, und kein Artefakt unten meldet dieses Format. | Dieser Schritt sollte {formats} liefern, und kein Artefakt unten meldet diese Formate.",
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
       "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt.",

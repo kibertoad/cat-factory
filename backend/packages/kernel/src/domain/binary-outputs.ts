@@ -359,6 +359,7 @@ export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
     ...renderBinaryGeneratorSection({
       selection: input.generators ?? { selected: [], unresolvedIds: [] },
       requestedModalities: input.config.modalities ?? [],
+      requestedMediaTypes: input.config.mediaTypes ?? [],
     }),
   )
   lines.push(...renderScopeSection(input), ...renderStorageSection(input))

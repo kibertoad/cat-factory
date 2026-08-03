@@ -921,9 +921,16 @@ step selects from it (`binaryOutput.generatorIds`) plus the content types it mus
 (`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
 (`image | audio | video | 3d | document`), because a free-form tag makes `images` and `image` two
 things that look identical and silently fail to match, and it is what the brief groups by so an
-image generator is never asked for music; **an uncovered content type is refused at admission**
-under its own `binary_output_generator_invalid` reason, kept apart from the storage-side refusal
-because one is fixed in the workspace catalog and the other in the deployment's build; and the
+image generator is never asked for music — with **`binaryOutput.mediaTypes` one notch under it**
+for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all `3d` and
+none substitutes for another), each entry required rather than any-of, never inferred from or into
+a modality, matched EXACTLY through the one `normalizeMediaType`, and carrying a THIRD outcome
+beside covered/uncovered: a generator declaring no formats has said "only my modality is known", so
+the requirement is UNVERIFIABLE, the run is ADMITTED, and the gap is stated in the brief and the
+picker (`binaryFormatCoverage`) — the admission-side twin of `generatorsUnverified`; **an uncovered
+content type is refused at admission** under its own `binary_output_generator_invalid` reason, kept
+apart from the storage-side refusal because one is fixed in the workspace catalog and the other in
+the deployment's build; and the
 **credential VALUE never reaches a prompt** — the engine puts the non-secret projection on
 `AgentRunContext.binaryGenerators`, the container executor resolves it through the SAME
 `ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a

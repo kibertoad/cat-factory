@@ -4118,6 +4118,12 @@
       "binaryOutputGeneratorsPlaceholder": "統合が未選択",
       "binaryOutputModalities": "提供が必要",
       "binaryOutputModalitiesPlaceholder": "要件なし",
+      "binaryOutputMediaTypes": "厳密な形式",
+      "binaryOutputMediaTypesPlaceholder": "形式の要件なし",
+      "binaryOutputDeclaredFormats": "選択した統合が宣言している形式: {formats}",
+      "binaryOutputMediaTypeUncovered": "このステップが提供することになっている {formats} を、選択されたどの統合も出力できません。出力できる統合を選ぶか、要件を外してください。",
+      "binaryOutputMediaTypeUnverifiable": "選択されたどの統合も {formats} を宣言していませんが、うち一つは形式をまったく宣言していないため、確認できませんでした。ステップはそのまま開始されます。その統合の API で出力できるか確認してください。",
+      "binaryOutputMediaTypeUnusable": "メディアタイプではないため保存されませんでした: {entries}。それぞれ type/subtype の形で入力してください。",
       "binaryOutputGeneratorMissing": "このデプロイメントは次の生成統合を登録していません: {ids}。これらはこのワークスペースではなくデプロイメントのコードで登録します。",
       "binaryOutputModalityUncovered": "このステップが提供することになっている {modalities} を、選択されたどの統合も生成できません。",
       "binaryOutputModality": {
@@ -5393,6 +5399,7 @@
     "target": "保存サービス",
     "targetNone": "このステップには記録なし",
     "contextServices": "生成のコンテキスト",
+    "mediaTypes": "必要な形式",
     "misdirectedBadge": "別のサービス",
     "unknownBadge": "カタログ外",
     "storedCount": "{outcome}、{count} 件",
@@ -5424,6 +5431,7 @@
     "warning": {
       "unknownServices": "カタログにないサービスが指定されています: {ids}。宣言のまま保持されます。ボードのカタログで ID を確認してください。",
       "targetUnknown": "このステップ自身の保存サービス ({id}) がカタログにもうありません。このため下のどれも照合できませんでした。再登録するか、別のサービスを指定してください。",
+      "undeliveredMediaTypes": "このステップは {formats} を提供するはずでしたが、下のどの成果物もそれを報告していません。",
       "misdirected": "{count} 件の成果物が {target} 以外のサービスに保存されました。",
       "invalidEntries": "サービスと場所のどちらも示さない宣言項目 {count} 件を破棄しました。",
       "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。",

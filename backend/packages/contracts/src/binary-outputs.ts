@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { binaryModalitySchema } from './binary-modalities.js'
+import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 
 // Wire vocabulary for BINARY-OUTPUT agent steps (docs/initiatives/binary-output-foundational-storage.md):
 // a step whose kind GENERATES binary artifacts (image generation is the canonical example) and
@@ -62,6 +62,37 @@ export const binaryOutputConfigSchema = v.object({
    * removing the audio generator look like a change of requirements rather than a break.
    */
   modalities: v.optional(v.array(binaryModalitySchema)),
+  /**
+   * The concrete FORMATS this step must deliver, one notch finer than {@link modalities}, for the
+   * deliverables where the container IS the requirement rather than a rendering preference.
+   *
+   * `3d` is why this exists. PNG versus WebP is a genre question and belongs in a prompt, but GLB,
+   * USDZ and FBX are all `3d` and none of them substitutes for another: a Godot importer takes the
+   * first, a RealityKit pipeline the second, an art pipeline the third. A step whose mesh must load
+   * in the game can otherwise be admitted against an integration that cannot emit a loadable
+   * container, and the failure arrives at the end of a paid run as an asset nobody can open —
+   * which reads as a bad generation rather than as a selection nothing checked.
+   *
+   * EVERY entry must be covered, not any one of them: a step needing a GLB for the engine AND an
+   * FBX the artists can open in Blender declares both, and both are checked. "Any of these will
+   * do" is deliberately not expressible — the agent has to name concrete formats on the vendor
+   * call, and a requirement that leaves it a choice hands that decision to the party with the
+   * least basis for making it. Declare the format you need, not the set you would accept.
+   *
+   * Checked by EXACT match against the {@link BinaryGeneratorDefinition.mediaTypes} a selected
+   * integration declares (both sides come through `mediaTypeSchema`, so case and parameters are
+   * already reconciled), and NOT translated into a modality: `modalityOfMediaType` recognises only
+   * the formats the platform happens to know, so inferring one here would make the strength of the
+   * check depend on whether we recognise the string — a requirement spelled with a brand-new
+   * container would silently lose the coarse check its neighbour keeps. The two lists are
+   * independent statements and both are enforced as written.
+   *
+   * Absent ⇒ no format requirement, which is the ordinary case and stays the ordinary case:
+   * {@link modalities} is the statement about the WORK. Like it, this is never defaulted from the
+   * current selection — deriving a requirement from what is selected would make REMOVING a
+   * generator look like a change of requirements rather than a break.
+   */
+  mediaTypes: v.optional(v.array(mediaTypeSchema)),
 })
 export type BinaryOutputConfig = v.InferOutput<typeof binaryOutputConfigSchema>
 

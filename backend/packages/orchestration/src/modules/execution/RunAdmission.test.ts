@@ -62,6 +62,16 @@ function generatorRegistry() {
       description: '',
       modalities: ['audio'],
     },
+    // The one that pins its formats down. `3d` is the modality where the container IS the
+    // requirement: a Godot importer takes GLB and not USDZ, and neither opens in an art pipeline.
+    {
+      id: 'meshy',
+      name: 'Meshy',
+      summary: 'Text- and image-to-3D.',
+      description: '',
+      modalities: ['3d'],
+      mediaTypes: ['model/gltf-binary', 'model/obj'],
+    },
   ])
   return generators
 }
@@ -336,6 +346,61 @@ describe('RunAdmission — generative integration selection', () => {
       modality: 'audio',
     })
     expect(error.message).toContain('audio')
+  })
+
+  it('refuses a FORMAT no selected integration emits, one notch under the content type', async () => {
+    // The failure this rule exists for: a mesh delivered in a container the engine cannot import
+    // is not a thinner deliverable, and at the end of a paid run it reads as a bad generation.
+    const error = await refusal(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['meshy'],
+                modalities: ['3d'],
+                mediaTypes: ['model/gltf-binary', 'model/fbx'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'media_type_uncovered',
+      mediaType: 'model/fbx',
+    })
+    expect(error.message).toContain('model/fbx')
+  })
+
+  it('admits a format an integration DECLINED to declare rather than punishing the honesty', async () => {
+    // `retro-diffusion` declares no `mediaTypes` — a documented "only the modality is known"
+    // state, not an empty answer. The run starts and the gap is stated in the brief instead.
+    await expect(
+      admission(storageOnly()).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['image-generator'],
+          stepOptions: [
+            {
+              binaryOutput: {
+                storageServiceId: 'asset-store',
+                generatorIds: ['retro-diffusion'],
+                mediaTypes: ['image/webp'],
+              },
+            },
+          ],
+        },
+        null,
+      ),
+    ).resolves.toBeUndefined()
   })
 
   it('refuses the generative half even with NO catalog seam wired', async () => {

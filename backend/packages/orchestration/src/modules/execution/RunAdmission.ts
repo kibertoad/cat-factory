@@ -32,6 +32,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { BinaryGeneratorSelectionIssue } from '@cat-factory/kernel'
 import {
   binaryGeneratorSelectionIssues,
   binaryOutputConfigIssues,
@@ -783,9 +784,7 @@ export class RunAdmission {
         {
           agentKind: kind,
           problem: first.problem,
-          ...(first.problem === 'unknown_generator'
-            ? { generatorId: first.generatorId }
-            : { modality: first.modality }),
+          ...namedSubject(first),
           issues,
         },
       )
@@ -927,5 +926,25 @@ export class RunAdmission {
         'models are paused until the budget is raised or the billing period resets. A task pinned ' +
         'to a local model or a connected subscription still runs.',
     )
+  }
+}
+
+/**
+ * The one id a generative-selection refusal is ABOUT, keyed by problem — a generator id, a
+ * content type, or a format.
+ *
+ * Exhaustive over the issue union rather than a two-branch ternary, so the next member fails the
+ * typecheck here instead of landing in `details` under whichever field the `else` happened to
+ * name. The whole list still rides `details.issues`; this names the first one for a reader (and
+ * for a client keying off a single subject) without ever mis-labelling it.
+ */
+function namedSubject(issue: BinaryGeneratorSelectionIssue): Record<string, string> {
+  switch (issue.problem) {
+    case 'unknown_generator':
+      return { generatorId: issue.generatorId }
+    case 'modality_uncovered':
+      return { modality: issue.modality }
+    case 'media_type_uncovered':
+      return { mediaType: issue.mediaType }
   }
 }

@@ -51,7 +51,7 @@ export type BinaryModality = v.InferOutput<typeof binaryModalitySchema>
  * than by asking the model what kind of thing it just made.
  */
 export function modalityOfMediaType(value: string): BinaryModality | null {
-  const type = value.trim().toLowerCase().split(';')[0]?.trim() ?? ''
+  const type = normalizeMediaType(value) ?? ''
   const [top, subtype] = type.split('/')
   if (!top || !subtype) return null
   if (top === 'image') return 'image'
@@ -66,10 +66,38 @@ export function modalityOfMediaType(value: string): BinaryModality | null {
     // `octet-stream` stays null on purpose — it is the "no idea" type, and guessing `3d` from it
     // would classify every unlabelled download as a model.
     if (subtype === 'octet-stream') return null
-    if (['gltf+json', 'x-gltf', 'sla', 'x-tgif'].includes(subtype)) return '3d'
+    // `x-blender` is the shared mime database's type for a `.blend` file, which is what an
+    // EDITABLE 3D deliverable looks like when the consumer is an artist rather than an engine —
+    // the same reason `sla` and `x-tgif` are here rather than only the registered `model/*` names.
+    if (['gltf+json', 'x-gltf', 'sla', 'x-tgif', 'x-blender'].includes(subtype)) return '3d'
     return null
   }
   return null
+}
+
+/**
+ * A media type reduced to the `type/subtype` two people mean the same thing by — lowercased,
+ * trimmed, parameters dropped — or `null` when there is no `type/subtype` in it at all.
+ *
+ * The ONE definition of "the same format", because three places compare media types and two of
+ * them receive text nobody normalised. A step's declared formats and a generator's declared
+ * formats both come through {@link mediaTypeSchema}, which already lowercases and refuses
+ * parameters, so those two match on plain equality; a SETTLED artifact's `contentType` is the
+ * agent's own prose (`image/PNG`, `model/gltf-binary; charset=binary`) and matches nothing until
+ * it comes through here. A second copy of this reduction is how `model/GLTF-binary` becomes a
+ * format the platform reports as undelivered while the file sits exactly where it was asked for.
+ *
+ * Note what it deliberately does NOT do: it maps no synonyms. `model/obj` and
+ * `application/x-tgif` are the same file and stay different values here, because a step's format
+ * requirement is checked by EXACT match against what a generator declared, and a matcher that
+ * quietly accepted a near-neighbour would admit a GLB where an OBJ was required — which is the
+ * failure the requirement exists to prevent. The two sides agree by spelling the format the same
+ * way, and the brief tells the agent the exact string.
+ */
+export function normalizeMediaType(value: string): string | null {
+  const type = value.trim().toLowerCase().split(';')[0]?.trim() ?? ''
+  const [top, subtype] = type.split('/')
+  return top && subtype ? `${top}/${subtype}` : null
 }
 
 /**
