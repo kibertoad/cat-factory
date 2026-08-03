@@ -71,7 +71,8 @@ Considered against the more resource-oriented alternatives and kept deliberately
 
 `Authorization: Bearer cf_live_…` — a public-API key, resolved to its workspace exactly like the
 rest of `/api/v1` (see [`PublicApiController`](../packages/server/src/modules/publicApi/PublicApiController.ts)).
-The whole surface needs the **`read`** rung of the scope ladder.
+The whole surface needs the **`read`** rung of the scope ladder. How keys are minted and the rest
+of the `/api/v1` surface: [`public-api.md`](./public-api.md).
 
 It is deliberately _not_ `admin`-gated. On this API `admin` also merges pull requests and deletes
 tasks, so requiring it would mean handing a debugging agent a destructive key — strictly worse
