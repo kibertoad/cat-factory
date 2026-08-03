@@ -139,14 +139,14 @@ describe('binaryGeneratorSelectionIssues', () => {
     ).toEqual([])
   })
 
-  // The format half. `3d` is the modality that forces it: GLB, USDZ and FBX are all `3d` and
+  // The format half. 3D is what forces it: GLB, USDZ and FBX are all one modality and
   // none substitutes for another, so a mesh in the wrong container is not a thinner deliverable
   // but an unusable one — and nothing downstream can tell it from a bad generation.
   const meshy = generator({
     id: 'meshy',
     name: 'Meshy',
     summary: 'Text- and image-to-3D.',
-    modalities: ['3d'],
+    modalities: ['3d-model'],
     mediaTypes: ['model/gltf-binary', 'model/obj'],
   })
 
@@ -156,7 +156,7 @@ describe('binaryGeneratorSelectionIssues', () => {
         {
           storageServiceId: 'asset-store',
           generatorIds: ['meshy'],
-          modalities: ['3d'],
+          modalities: ['3d-model'],
           mediaTypes: ['model/gltf-binary', 'model/fbx'],
         },
         [meshy],
@@ -167,7 +167,11 @@ describe('binaryGeneratorSelectionIssues', () => {
   it('checks EVERY declared format, so an engine build and an editable mesh are both covered', () => {
     // The two-consumer case: the game loads the GLB, an artist opens the FBX in Blender. Both are
     // required deliverables, so both are checked — this is why the list is not "any of these".
-    const artist = generator({ id: 'artist-3d', modalities: ['3d'], mediaTypes: ['model/fbx'] })
+    const artist = generator({
+      id: 'artist-3d',
+      modalities: ['3d-model'],
+      mediaTypes: ['model/fbx'],
+    })
     expect(
       binaryGeneratorSelectionIssues(
         {
@@ -184,7 +188,7 @@ describe('binaryGeneratorSelectionIssues', () => {
     // A generator that declares no `mediaTypes` has said "only my modality is known" — a
     // documented state. Refusing there would punish the honest declaration; the gap is STATED
     // in the brief and the picker instead.
-    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d'], mediaTypes: [] })
+    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d-model'], mediaTypes: [] })
     expect(
       binaryGeneratorSelectionIssues(
         {
@@ -199,6 +203,23 @@ describe('binaryGeneratorSelectionIssues', () => {
       uncovered: [],
       unverifiable: ['model/fbx'],
     })
+  })
+
+  it('tells an asset generator from a scene generator, which no media type could', () => {
+    // The split's own reason for existing: both emit GLB, so the FORMAT check passes and the
+    // step still cannot be served. Without the two members a level-producing step would be
+    // admitted against a prop generator with nothing anywhere able to notice.
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          modalities: ['3d-scene'],
+          mediaTypes: ['model/gltf-binary'],
+        },
+        [meshy],
+      ),
+    ).toEqual([{ problem: 'modality_uncovered', modality: '3d-scene' }])
   })
 
   it('refuses a format outright when NOTHING is selected to be silent about it', () => {
@@ -229,7 +250,7 @@ describe('binaryGeneratorSelectionIssues', () => {
           generatorIds: ['meshy'],
           mediaTypes: ['model/x-brand-new'],
         },
-        [generator({ id: 'meshy', modalities: ['3d'], mediaTypes: ['model/x-brand-new'] })],
+        [generator({ id: 'meshy', modalities: ['3d-model'], mediaTypes: ['model/x-brand-new'] })],
       ),
     ).toEqual([])
   })
@@ -343,7 +364,11 @@ describe('renderBinaryGeneratorSection', () => {
   })
 
   it('names the exact formats to request, since the agent is what chooses the container', () => {
-    const meshy = generator({ id: 'meshy', modalities: ['3d'], mediaTypes: ['model/gltf-binary'] })
+    const meshy = generator({
+      id: 'meshy',
+      modalities: ['3d-model'],
+      mediaTypes: ['model/gltf-binary'],
+    })
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         {
@@ -353,10 +378,12 @@ describe('renderBinaryGeneratorSection', () => {
         },
         [meshy],
       ),
-      requestedModalities: ['3d'],
+      requestedModalities: ['3d-model'],
       requestedMediaTypes: ['model/gltf-binary'],
     }).join('\n')
-    expect(section).toContain('This step is expected to deliver: 3D models.')
+    // The content type is spelled out for the agent, scope included: "3D models" alone would
+    // leave a prop generator sounding like it could be asked for the whole environment.
+    expect(section).toContain('This step is expected to deliver: 3D models (one asset each).')
     expect(section).toContain('`model/gltf-binary`')
     expect(section).toContain('do not substitute another container')
   })
@@ -364,7 +391,7 @@ describe('renderBinaryGeneratorSection', () => {
   it('keeps “nobody could check this” apart from “nothing produces it”', () => {
     // Told nothing, the agent proceeds as if the format were confirmed; told "no integration
     // produces it", it reports a gap that may not exist and skips work it could have done.
-    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d'], mediaTypes: [] })
+    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d-model'], mediaTypes: [] })
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['mystery-3d'] },

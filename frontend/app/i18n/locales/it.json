@@ -3760,7 +3760,8 @@
         "image": "Immagini",
         "audio": "Audio",
         "video": "Video",
-        "3d": "Modelli 3D",
+        "3d-model": "Modelli 3D",
+        "3d-scene": "Scene 3D",
         "document": "Documenti"
       }
     },

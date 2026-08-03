@@ -69,7 +69,7 @@ function generatorRegistry() {
       name: 'Meshy',
       summary: 'Text- and image-to-3D.',
       description: '',
-      modalities: ['3d'],
+      modalities: ['3d-model'],
       mediaTypes: ['model/gltf-binary', 'model/obj'],
     },
   ])
@@ -362,7 +362,7 @@ describe('RunAdmission — generative integration selection', () => {
               binaryOutput: {
                 storageServiceId: 'asset-store',
                 generatorIds: ['meshy'],
-                modalities: ['3d'],
+                modalities: ['3d-model'],
                 mediaTypes: ['model/gltf-binary', 'model/fbx'],
               },
             },

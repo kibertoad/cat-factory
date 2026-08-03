@@ -4118,7 +4118,8 @@
         "image": "Images",
         "audio": "Audio",
         "video": "Vidéo",
-        "3d": "Modèles 3D",
+        "3d-model": "Modèles 3D",
+        "3d-scene": "Scènes 3D",
         "document": "Documents"
       }
     },

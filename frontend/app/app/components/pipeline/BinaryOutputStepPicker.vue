@@ -47,10 +47,18 @@ const MODALITY_LABELS: Record<BinaryModality, () => string> = {
   image: () => t('pipeline.builder.binaryOutputModality.image'),
   audio: () => t('pipeline.builder.binaryOutputModality.audio'),
   video: () => t('pipeline.builder.binaryOutputModality.video'),
-  '3d': () => t('pipeline.builder.binaryOutputModality.3d'),
+  '3d-model': () => t('pipeline.builder.binaryOutputModality.3d-model'),
+  '3d-scene': () => t('pipeline.builder.binaryOutputModality.3d-scene'),
   document: () => t('pipeline.builder.binaryOutputModality.document'),
 }
-const MODALITY_ORDER: BinaryModality[] = ['image', 'audio', 'video', '3d', 'document']
+const MODALITY_ORDER: BinaryModality[] = [
+  'image',
+  'audio',
+  'video',
+  '3d-model',
+  '3d-scene',
+  'document',
+]
 function modalityLabel(modality: BinaryModality): string {
   return MODALITY_LABELS[modality]()
 }

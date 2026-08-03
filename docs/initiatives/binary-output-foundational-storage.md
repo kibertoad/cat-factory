@@ -147,8 +147,41 @@ The members are MODALITIES, not genres: music, speech and sound effects are all 
 what differs between them is the prompt while what differs between audio and video is the whole
 integration. A deployment telling a music generator from a speech generator says so in
 `mediaTypes` and the description. `mediaTypes` are validated against the declared modalities at
-BOOT — a recognised media type contradicting them is an error, an unrecognised one is not (the
-classifier is not a registry of every format that exists).
+BOOT — a media type CONTRADICTING them is an error, an unrecognised one is not (the classifier is
+not a registry of every format that exists).
+
+#### Why 3D is two members and image is one
+
+`3d-model` (one asset — a prop, a character, a part) and `3d-scene` (several assets composed, with
+a hierarchy and typically transforms, materials, cameras or lights) are separate members, and the
+asymmetry with `image` is the interesting part rather than an inconsistency.
+
+Three axes describe a deliverable, and the rule is that each fact lives on the axis that can
+actually carry it:
+
+| Fact                        | Where it lives | Why                                                |
+| --------------------------- | -------------- | -------------------------------------------------- |
+| What KIND of thing this is  | `modalities`   | Decides which generator may serve the step         |
+| What FORMAT it arrives in   | `mediaTypes`   | Providers differ; the consumer's importer is exact |
+| What it depicts / its style | the prompt     | Nothing declares it and nothing could check it     |
+
+A PNG and a JPEG are one modality with two formats, which is exactly what the second axis is for —
+`image` does not split, because a step that must have a PNG says `mediaTypes: ['image/png']` and
+admission checks it. A sprite and a background are one modality and one format, distinguished by
+the prompt. **An asset and a scene are the one case where neither of the lower axes can help**:
+they are the same modality by the old vocabulary AND the same format, because GLB, FBX, USDZ and
+`.blend` each carry either one object or a whole scene graph. There is no media type for "a scene",
+so a step that must deliver a level could be admitted against a prop generator with nothing
+anywhere able to notice — the same failure the format check was added for, one level up. Splitting
+the modality is the only axis left, which is precisely the bar a new member has to clear.
+
+That is also why the classifier answers a LIST. `modalitiesOfMediaType` returns BOTH 3D members for
+every 3D container, because that is the true statement about a `.glb`, and each consumer says what
+it does with a multi-member answer: the boot check passes when the sets INTERSECT (requiring every
+member would refuse a scene generator for declaring the only format it can emit), and a settled
+artifact's classification declines entirely (`modalityOfMediaType` answers null unless the answer is
+unambiguous) — a guess about something that already exists is worse than an absence, and the step's
+own declaration is the only thing that ever knew which of the two was being made.
 
 ### A step may also require exact FORMATS, and `3d` is why
 
@@ -187,13 +220,12 @@ Four rules, each of which is the reason a plausible alternative was rejected:
   run may start. It is the same disposition `generatorsUnverified` takes on the settlement side.
   With NOTHING selected there is nobody to be silent, so a format requirement is uncovered outright.
 
-Two things sit outside the schema on purpose. **Whether a `3d` deliverable is one full scene or a
-file per model** is a packaging question no vendor declares, no generator's registration could be
-checked against, and nothing could compute from a settled artifact — it is a prompt fact, and it is
-already OBSERVABLE at the grain the report records: separate models arrive as separate entries with
-their own `entity`, one scene as one. Making it a closed vocabulary would repeat the "genre"
-mistake `binaryModalitySchema` warns about, with the platform unable to verify a word of it. And
-**what an integration CONSUMES** stays in `guidance`: a chain between two registered integrations
+Asset-versus-scene is deliberately NOT one of these: the container carries no such distinction, so
+it is a MODALITY (`3d-model` / `3d-scene`, above) and the format axis stays about the container
+alone. What an artifact DEPICTS remains a prompt fact, observable at the grain the report already
+records — separate assets arrive as separate entries with their own `entity`.
+
+One thing sits outside the schema on purpose. **What an integration CONSUMES** stays in `guidance`: a chain between two registered integrations
 (one's image feeding the other's image-to-3D path) is a fact about a PAIR, and the load-bearing
 half of it — how the handoff travels, an inline body versus a URL the vendor fetches from its own
 network — is exactly the part a modality-grained field could not carry. A structured field whose

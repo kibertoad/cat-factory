@@ -195,8 +195,10 @@ export function describeModality(modality: BinaryModality): string {
       return 'audio (music, speech or sound)'
     case 'video':
       return 'video'
-    case '3d':
-      return '3D models'
+    case '3d-model':
+      return '3D models (one asset each)'
+    case '3d-scene':
+      return '3D scenes (several assets composed together)'
     case 'document':
       return 'documents'
   }

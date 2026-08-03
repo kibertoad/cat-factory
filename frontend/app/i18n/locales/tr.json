@@ -4130,7 +4130,8 @@
         "image": "Görseller",
         "audio": "Ses",
         "video": "Video",
-        "3d": "3B modeller",
+        "3d-model": "3B modeller",
+        "3d-scene": "3B sahneler",
         "document": "Belgeler"
       }
     },

@@ -919,9 +919,18 @@ video integrations in CODE — identity, the CONTENT TYPES it produces, its `med
 API contracts in the same `uploadApiContract` vocabulary, and a credential declared BY NAME — and a
 step selects from it (`binaryOutput.generatorIds`) plus the content types it must DELIVER
 (`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
-(`image | audio | video | 3d | document`), because a free-form tag makes `images` and `image` two
-things that look identical and silently fail to match, and it is what the brief groups by so an
-image generator is never asked for music — with **`binaryOutput.mediaTypes` one notch under it**
+(`image | audio | video | 3d-model | 3d-scene | document`), because a free-form tag makes `images`
+and `image` two things that look identical and silently fail to match, and it is what the brief
+groups by so an image generator is never asked for music. **A new member must clear the bar 3D
+cleared**: a deliverable is described on three axes — the KIND (`modalities`, which decides which
+generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
+else (the PROMPT) — and a member is earned only when neither lower axis can carry the distinction.
+`image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
+scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
+the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST — both 3D members
+for every 3D container, which is the true statement — the boot check passes on INTERSECTION, and a
+settled artifact classifies only when the answer is unambiguous (`modalityOfMediaType`), because a
+guess about an existing file is worse than an absence — with **`binaryOutput.mediaTypes` one notch under it**
 for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all `3d` and
 none substitutes for another), each entry required rather than any-of, never inferred from or into
 a modality, matched EXACTLY through the one `normalizeMediaType`, and carrying a THIRD outcome

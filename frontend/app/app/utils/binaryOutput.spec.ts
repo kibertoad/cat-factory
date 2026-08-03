@@ -430,7 +430,11 @@ describe('binaryOutputPickIssues, generative half', () => {
 
   // The FORMAT half, mirroring kernel's `binaryFormatCoverage` — and its three outcomes, which
   // are what a second copy of the rule most easily loses.
-  const meshy = { id: 'meshy', modalities: ['3d' as const], mediaTypes: ['model/gltf-binary'] }
+  const meshy = {
+    id: 'meshy',
+    modalities: ['3d-model' as const],
+    mediaTypes: ['model/gltf-binary'],
+  }
 
   it('mirrors the refusal for a format no DECLARING integration emits', () => {
     const pick = binaryOutputPickIssues(

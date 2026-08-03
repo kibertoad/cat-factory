@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
-import { mediaTypeSchema, modalityOfMediaType, normalizeMediaType } from './binary-modalities.js'
+import {
+  mediaTypeSchema,
+  modalitiesOfMediaType,
+  modalityOfMediaType,
+  normalizeMediaType,
+} from './binary-modalities.js'
 import { binaryOutputConfigSchema } from './binary-outputs.js'
 
 describe('normalizeMediaType', () => {
@@ -22,18 +27,40 @@ describe('normalizeMediaType', () => {
   })
 })
 
-describe('modalityOfMediaType', () => {
+describe('modalitiesOfMediaType', () => {
   it('recognises the containers an EDITABLE 3D deliverable arrives in', () => {
     // A `.blend` file is what a 3D deliverable looks like when the consumer is an artist rather
     // than an engine — the same reason the OBJ and STL legacy types are recognised.
-    expect(modalityOfMediaType('application/x-blender')).toBe('3d')
-    expect(modalityOfMediaType('model/gltf-binary')).toBe('3d')
-    expect(modalityOfMediaType('model/vnd.usdz+zip')).toBe('3d')
+    for (const mediaType of ['application/x-blender', 'model/gltf-binary', 'model/vnd.usdz+zip'])
+      expect(modalitiesOfMediaType(mediaType)).toEqual(['3d-model', '3d-scene'])
+  })
+
+  it('answers BOTH 3D modalities, because the container does not record which it holds', () => {
+    // The load-bearing fact behind the split: a GLB is one prop or an entire environment, and no
+    // media type distinguishes them. Answering `3d-model` here would classify every delivered
+    // scene as an asset and make the boot check refuse a correct scene-generator registration.
+    expect(modalitiesOfMediaType('model/gltf-binary')).toContain('3d-scene')
+    expect(modalitiesOfMediaType('model/obj')).toContain('3d-scene')
+  })
+
+  it('keeps a one-answer modality to exactly one', () => {
+    expect(modalitiesOfMediaType('image/png')).toEqual(['image'])
+    expect(modalitiesOfMediaType('application/pdf')).toEqual(['document'])
   })
 
   it('keeps “we cannot tell” apart from a modality', () => {
+    expect(modalitiesOfMediaType('application/octet-stream')).toEqual([])
+    expect(modalitiesOfMediaType('application/x-brand-new')).toEqual([])
+  })
+})
+
+describe('modalityOfMediaType', () => {
+  it('classifies only what is UNAMBIGUOUS, so a 3D artifact is left unclassified', () => {
+    // For classifying something that already exists, a guess is worse than an absence: the step's
+    // own declaration is the only thing that ever knew whether a `.glb` was an asset or a scene.
+    expect(modalityOfMediaType('image/png')).toBe('image')
+    expect(modalityOfMediaType('model/gltf-binary')).toBeNull()
     expect(modalityOfMediaType('application/octet-stream')).toBeNull()
-    expect(modalityOfMediaType('application/x-brand-new')).toBeNull()
   })
 })
 
