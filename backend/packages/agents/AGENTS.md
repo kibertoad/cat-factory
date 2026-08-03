@@ -124,7 +124,10 @@
   injected `.cat-context/` files. Its third read serves BINARY-OUTPUT steps
   (`docs/initiatives/binary-output-foundational-storage.md`): a kind carrying the
   `binary-output` trait gets `binary-output/brief.md` + contract files for the storage/context
-  services its step selected (`stepOptions.binaryOutput`).
+  services its step selected (`stepOptions.binaryOutput`), plus one per GENERATIVE INTEGRATION it
+  selected from the deployment's `BinaryGeneratorRegistry` (kernel). The brief leads with what
+  MAKES the artifacts — each integration's content types, endpoint, contract and credential
+  VARIABLE — because that is the decision an agent cannot recover from later.
 - `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts, plus the
   built-in post-ops (`builtin.ts`: `blueprintPostOp`, `specPostOp`, and `specPromotionPostOp` —
   the tester-driven `aspirational` → `established` promotion of the in-repo spec) and

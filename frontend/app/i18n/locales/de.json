@@ -3742,7 +3742,20 @@
       "binaryOutputMissing": "Dieser Speicherdienst ist nicht mehr im Katalog; wähle einen anderen.",
       "binaryOutputNotStorage": "Dieser Dienst deklariert die Fähigkeit {capability} nicht mehr, deshalb werden Läufe abgelehnt; wähle einen anderen.",
       "binaryOutputContextMissing": "Diese Kontextdienste sind nicht mehr im Katalog: {ids}",
-      "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen."
+      "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen.",
+      "binaryOutputGenerators": "Erzeugen mit",
+      "binaryOutputGeneratorsPlaceholder": "Keine Integration ausgewählt",
+      "binaryOutputModalities": "Muss liefern",
+      "binaryOutputModalitiesPlaceholder": "Keine Anforderung",
+      "binaryOutputGeneratorMissing": "Diese Installation registriert diese generativen Integrationen nicht: {ids}. Sie werden im Code der Installation registriert, nicht in diesem Workspace.",
+      "binaryOutputModalityUncovered": "Keine ausgewählte Integration erzeugt {modalities}, was dieser Schritt liefern soll.",
+      "binaryOutputModality": {
+        "image": "Bilder",
+        "audio": "Audio",
+        "video": "Video",
+        "3d": "3D-Modelle",
+        "document": "Dokumente"
+      }
     },
     "progress": {
       "status": {
@@ -4431,8 +4444,10 @@
       "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
-      "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt."
-    }
+      "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt.",
+      "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace."
+    },
+    "unknownGeneratorBadge": "Nicht registriert"
   },
   "brainstorm": {
     "title": {
@@ -4946,6 +4961,7 @@
         "pipeline_schedule_intake_unconfigured": "Zeitplan ohne Ticket-Erfassung",
         "foundational_service_exists": "Basisdienst existiert bereits",
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
+        "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert"
       },
       "description": {
@@ -4977,6 +4993,7 @@
         "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan.",
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
+        "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards."
       },
       "action": {

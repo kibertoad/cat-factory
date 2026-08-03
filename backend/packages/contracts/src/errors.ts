@@ -147,6 +147,18 @@ export const CONFLICT_REASONS = [
   // (A step MISSING its selection entirely is a structural pipeline fault, refused as a 422 at
   // save and start by `assertValidBinaryOutputSteps` — the skill-step precedent.)
   'binary_output_service_invalid',
+  // A binary-generating step's selected GENERATIVE INTEGRATION does not resolve — the id is not
+  // one this deployment registers on its `BinaryGeneratorRegistry`
+  // (`details.problem: 'unknown_generator'`, `details.generatorId` names it), or no selected
+  // integration produces a content type the step declares it delivers
+  // (`details.problem: 'modality_uncovered'`, `details.modality` names it).
+  //
+  // Deliberately NOT folded into `binary_output_service_invalid`, which is about the same step:
+  // that one resolves against the workspace's CATALOG and is fixed in the app, while this one
+  // resolves against the deployment's own CODE and is fixed in a build. One reason would send
+  // half the readers to the wrong place. Re-checked at every start/retry/restart, since a
+  // deployment can be rolled back under a saved pipeline.
+  'binary_output_generator_invalid',
   // A tier asked to SUPPRESS a foundational service that it already owns a row for at its own
   // tier. Suppression writes a tombstone so the INHERITED service of that id (an account
   // service for a board, a deployment `builtin` for either) loses the merge; against the

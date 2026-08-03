@@ -100,6 +100,7 @@ import type {
   SkillLibraryModule,
 } from './container-content-libraries.js'
 import type {
+  BinaryGeneratorRegistry,
   FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
@@ -326,6 +327,13 @@ export interface CoreSpine {
    */
   foundationalServiceRegistry: FoundationalServiceRegistry
   /**
+   * The app-owned generative-binary-integration registry the engine resolved (the facade's
+   * injected instance, else the empty default). Re-exposed for the SAME reason as its neighbour:
+   * the facade passes this instance to `validateRegistrations` at boot, so a malformed
+   * integration fails the deployment instead of a dispatch that can generate nothing.
+   */
+  binaryGeneratorRegistry: BinaryGeneratorRegistry
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -534,6 +542,7 @@ export function createCore(injected: CoreDependencies): Core {
     pipelineRegistry,
     taskTypeRegistry,
     foundationalServiceRegistry,
+    binaryGeneratorRegistry,
     foundationalBuiltins,
     initiativePresetRegistry,
     executionEventPublisher,
@@ -724,6 +733,7 @@ export function createCore(injected: CoreDependencies): Core {
     pipelineRegistry,
     taskTypeRegistry,
     foundationalServiceRegistry,
+    binaryGeneratorRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

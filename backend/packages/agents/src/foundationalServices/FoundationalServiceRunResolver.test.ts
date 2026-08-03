@@ -4,7 +4,9 @@ import {
   ASSET_STORAGE_CAPABILITY,
   FOUNDATIONAL_INDEX_FILE,
   binaryContextFileFor,
+  binaryGeneratorContextFileFor,
   contextFileFor,
+  defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
@@ -137,6 +139,54 @@ describe('FoundationalServiceRunResolver.binaryOutputContextFilesFor', () => {
     })
     expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
     expect(files[0]?.content).toContain('No API contract is registered for `asset-store`')
+  })
+
+  it('injects the generative integrations’ contracts and briefs their content types', async () => {
+    const generators = defaultBinaryGeneratorRegistry()
+    generators.register({
+      id: 'retro-diffusion',
+      name: 'Retro Diffusion',
+      summary: 'Pixel-art image generation.',
+      description: '',
+      modalities: ['image'],
+      credential: { key: 'RD_TOKEN' },
+      contracts: [
+        { contractId: 'api', format: 'openapi', title: 'Inference API', body: document.body },
+      ],
+    })
+    const resolver = new FoundationalServiceRunResolver(
+      catalog([storageEntry], new Map([['asset-store', [document]]])),
+    )
+    const files = await resolver.binaryOutputContextFilesFor(
+      'ws',
+      {
+        storageServiceId: 'asset-store',
+        generatorIds: ['retro-diffusion', 'ghost-synth'],
+        modalities: ['image'],
+      },
+      generators,
+    )
+    expect(files.map((f) => f.path)).toEqual([
+      BINARY_OUTPUT_BRIEF_FILE,
+      binaryGeneratorContextFileFor('retro-diffusion'),
+      binaryContextFileFor('asset-store'),
+    ])
+    const brief = files[0]?.content ?? ''
+    expect(brief).toContain('`retro-diffusion`')
+    expect(brief).toContain('`RD_TOKEN`')
+    // An id the deployment no longer registers is STATED, not dropped — a selection that silently
+    // shrinks reads like a step nobody configured.
+    expect(brief).toContain('`ghost-synth`')
+  })
+
+  it('states that no integration is configured when the deployment registers none', async () => {
+    const resolver = new FoundationalServiceRunResolver(catalog([storageEntry]))
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'asset-store',
+      generatorIds: ['retro-diffusion'],
+    })
+    expect(files[0]?.content).toContain('`retro-diffusion`')
+    expect(files[0]?.content).toContain('does not register')
   })
 
   it('injects a brief stating a missing selection rather than nothing at all', async () => {

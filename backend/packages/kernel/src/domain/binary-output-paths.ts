@@ -1,0 +1,51 @@
+// ---------------------------------------------------------------------------
+// The `.cat-context/binary-output/` PATH vocabulary — where a binary-generating step's brief and
+// each half of its selection's contract documents are injected.
+//
+// Its own LEAF module (no imports at all) because both halves of the feature need it and they
+// import each other: `binary-outputs.ts` renders the generator section, and `binary-generators.ts`
+// answers with paths under the same directory. That cycle is fine for FUNCTIONS, which resolve
+// lazily, and fatal for a CONSTANT: a module-level `` `${BINARY_OUTPUT_CONTEXT_DIR}/generators` ``
+// evaluated at import time throws `Cannot access 'BINARY_OUTPUT_CONTEXT_DIR' before
+// initialization` whenever the cycle is entered from the other side — which is to say, in the
+// assembled backend but not in a unit test that imports one module directly. Nothing typechecks
+// differently and no build fails; the process just dies on boot.
+//
+// So the shared VALUES live here, where neither module's evaluation order can matter. It is the
+// same remedy, for the same reason, that `@cat-factory/contracts`' `binary-modalities.ts` already
+// applies to the content-type vocabulary. Both modules re-export from here, so every consumer
+// (and the kernel barrel) keeps importing the name from where it always did.
+// ---------------------------------------------------------------------------
+
+/** The `.cat-context/` directory the binary-output brief and contract documents live under. */
+export const BINARY_OUTPUT_CONTEXT_DIR = 'binary-output'
+
+/**
+ * The brief a binary-generating kind starts from: which integrations to generate with, which
+ * service to store through, which to consult for scope, and what could NOT be resolved. The trait
+ * guidance names this one stable path, and also names its ABSENCE as meaningful (the platform
+ * could not provide storage — do not attempt uploads; report instead), so a resolution failure
+ * degrades loudly rather than into a prompt pointing at a file that does not exist.
+ */
+export const BINARY_OUTPUT_BRIEF_FILE = `${BINARY_OUTPUT_CONTEXT_DIR}/brief.md`
+
+/**
+ * The sub-directory a selected generative integration's contract documents are injected under.
+ *
+ * Its OWN directory rather than a `generator-` filename prefix, because the two halves of a
+ * step's selection are named from different registries with the identical slug grammar: a catalog
+ * service legitimately called `generator-sprites` would land on exactly the path a generative
+ * integration called `sprites` writes, and one would silently overwrite the other. A slug cannot
+ * contain `/`, so a directory makes the collision structurally impossible rather than unlikely.
+ */
+export const BINARY_GENERATOR_CONTEXT_DIR = `${BINARY_OUTPUT_CONTEXT_DIR}/generators`
+
+/** The `.cat-context/` path one selected foundational SERVICE's contract documents live at. */
+export function binaryContextFileFor(serviceId: string): string {
+  return `${BINARY_OUTPUT_CONTEXT_DIR}/${serviceId}.md`
+}
+
+/** The `.cat-context/` path one selected generative INTEGRATION's contract documents live at. */
+export function binaryGeneratorContextFileFor(generatorId: string): string {
+  return `${BINARY_GENERATOR_CONTEXT_DIR}/${generatorId}.md`
+}

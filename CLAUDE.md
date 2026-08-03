@@ -870,7 +870,27 @@ bookkept. **The trait is the ONE trait projected onto the wire** (`CustomAgentKi
 a boolean beside `container`, asked of the REGISTRY so an ASSIGNED trait projects too), because it
 is the one with a UI consequence: the builder's picker must know which steps are refused without a
 selection. The SPA reads the report as a step-resolved SECTION, not a declared result view — see
-the placement rule under Frontend extension seams. Doc:
+the placement rule under Frontend extension seams.
+
+**What MAKES those artifacts is its own registry**, and keeping it out of the foundational catalog
+is the point: the catalog is what a DESIGN is expected to consume, and a metered vendor API that
+makes pictures is an instrument a step is pointed at, not something to build on.
+`BinaryGeneratorRegistry` (kernel, app-owned like every other) takes a deployment's image / music /
+video integrations in CODE — identity, the CONTENT TYPES it produces, its `mediaTypes`, endpoint,
+API contracts in the same `uploadApiContract` vocabulary, and a credential declared BY NAME — and a
+step selects from it (`binaryOutput.generatorIds`) plus the content types it must DELIVER
+(`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
+(`image | audio | video | 3d | document`), because a free-form tag makes `images` and `image` two
+things that look identical and silently fail to match, and it is what the brief groups by so an
+image generator is never asked for music; **an uncovered content type is refused at admission**
+under its own `binary_output_generator_invalid` reason, kept apart from the storage-side refusal
+because one is fixed in the workspace catalog and the other in the deployment's build; and the
+**credential VALUE never reaches a prompt** — the engine puts the non-secret projection on
+`AgentRunContext.binaryGenerators`, the container executor resolves it through the SAME
+`ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a
+tool server of one id cannot collide), and it rides the job body's `generatorSecrets` into that ONE
+job's agent env. An unresolved key is not a failed dispatch: the brief already tells the agent an
+unset variable means the platform could not provide it, and to report rather than call. Doc:
 [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of

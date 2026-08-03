@@ -306,8 +306,14 @@ Rules worth knowing before declaring one:
 - **Mind what `secretKeys` can reach.** The default resolver reads any key off the deployment
   environment, and a definition also names the endpoint the value is sent to. If a deployment
   installs agent packages it did not author, wire
-  `createEnvToolSecretResolver(env, { allowKeys: [...] })` and keep the credentials behind an
-  `MCP_…` prefix. See ADR 0029 → Consequences.
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` and keep the credentials behind a
+  dedicated prefix. See ADR 0029 → Consequences.
+
+  **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary
+  integration's credential (`BinaryGeneratorRegistry`, below) goes through the same port. So an
+  allow-list holding only `MCP_…` keys silently resolves nothing for a registered image or music
+  generator — the run continues and the agent reports the integration as unavailable, with nothing
+  naming the allow-list as the cause. Cover both families, or list the exact keys.
 
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
@@ -329,14 +335,25 @@ it buys (full design: `docs/initiatives/binary-output-foundational-storage.md`):
   save + admission; a gap that appears mid-run (a catalog edit) is STATED in the brief, and an
   absent brief itself means "storage could not be provided" — the trait guidance tells the agent
   to refuse and report rather than guess at an endpoint.
+- **What GENERATES the artifacts is a separate registry**, selected on the same step:
+  `stepOptions.binaryOutput.generatorIds` names integrations from the deployment's own
+  `BinaryGeneratorRegistry` (image / music / video APIs registered in CODE, like the agent-kind
+  registry itself), and `.modalities` states the content types the step must deliver. Admission
+  refuses an unregistered id or a content type nothing selected produces, under its OWN
+  `binary_output_generator_invalid` reason — kept apart from the storage refusal because that one
+  is fixed in the workspace catalog and this one in the deployment's build.
 - **The agent declares what it stored** in a fenced ` ```binary-outputs ` block (`none`, or a
-  JSON array of `{ service, location, entity?, contentType?, description? }`), recorded onto
-  `PipelineStep.binaryOutputs` with degrade-loudly bookkeeping (undeclared / parse-failed /
-  invalid / omitted / unknown-service ids).
-- **Credentials are not this feature's job**: the contract says HOW to call the service; a
-  credential rides the existing capability seams (a tool server's named secret, test secrets),
-  and a missing one follows the standing rule — stated to the agent, reported as a named
-  omission.
+  JSON array of `{ service, location, generator?, entity?, contentType?, description? }`),
+  recorded onto `PipelineStep.binaryOutputs` with degrade-loudly bookkeeping (undeclared /
+  parse-failed / invalid / omitted / unknown-service and unknown-generator ids).
+- **The STORAGE service's credentials are not this feature's job**: the contract says HOW to call
+  it; a credential rides the existing capability seams (a tool server's named secret, test
+  secrets), and a missing one follows the standing rule — stated to the agent, reported as a named
+  omission. A GENERATIVE INTEGRATION's credential IS, because the agent writes that request
+  itself: it is declared by name on the registration, resolved per dispatch through the same
+  `ToolSecretResolver` port (with a `binary-generator` subject), and delivered as an environment
+  variable of that one job's agent process. The VALUE never reaches a prompt or the telemetry
+  snapshot — only the variable's NAME does, so the agent knows what to read.
 
 ### How the engine runs the hooks
 

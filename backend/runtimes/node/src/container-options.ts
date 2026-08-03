@@ -45,6 +45,7 @@ import {
   type PipelineRegistry,
   type PreviewTransport,
   type ProviderRegistry,
+  type BinaryGeneratorRegistry,
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type TaskTypeRegistry,
@@ -396,6 +397,20 @@ export interface NodeContainerOptions {
    * definition. See backend/docs/adr/0031-foundational-services.md.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * The app-owned registry of GENERATIVE BINARY INTEGRATIONS (the image / music / video
+   * generation APIs a deployment pays for, declared in CODE). Rides its own option like
+   * `foundationalServiceRegistry`; defaults (inside `createCore`) to
+   * `defaultBinaryGeneratorRegistry()` — EMPTY, since the platform ships none. A deployment
+   * registers its integrations on it so a step carrying the `binary-output` trait can select
+   * them (`stepOptions.binaryOutput.generatorIds`), and boot validation refuses a malformed
+   * definition, an unusable credential name or a cleartext endpoint.
+   *
+   * Deliberately NOT folded into the foundational registry above: that catalog is what a design
+   * is expected to build ON, while an integration is an instrument a specific step is pointed at.
+   * See docs/initiatives/binary-output-foundational-storage.md.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
    * Where the catalog's `builtin` tier is READ from, when it is not this process's own registry
    * above. Set by exactly one caller — the local facade booting in MOTHERSHIP mode, which reads

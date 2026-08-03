@@ -217,7 +217,7 @@ describe('createEnvToolSecretResolver', () => {
     expect(
       await resolve.resolve({
         workspaceId: 'ws1',
-        serverId: 'issues',
+        subject: { kind: 'tool-server', id: 'issues' },
         keys: [{ key: 'ISSUE_TOKEN' }, { key: 'EMPTY' }, { key: 'ABSENT' }],
       }),
     ).toEqual({ ISSUE_TOKEN: 'tok' })
@@ -235,7 +235,7 @@ describe('createEnvToolSecretResolver', () => {
     expect(
       await resolve.resolve({
         workspaceId: 'ws1',
-        serverId: 'issues',
+        subject: { kind: 'tool-server', id: 'issues' },
         keys: [{ key: 'MCP_ISSUE_TOKEN' }, { key: 'ENCRYPTION_KEY' }],
       }),
     ).toEqual({ MCP_ISSUE_TOKEN: 'tok' })

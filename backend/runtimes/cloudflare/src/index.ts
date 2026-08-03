@@ -72,6 +72,7 @@ import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
+  defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
@@ -151,6 +152,17 @@ export {
   type FoundationalServiceDefinition,
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
+// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// video generation APIs it pays for on it by reference, and injects it via the
+// `binaryGeneratorRegistry` override. A pipeline step whose kind carries the `binary-output`
+// trait then SELECTS from them (`stepOptions.binaryOutput.generatorIds`), and the engine briefs
+// the agent on each one's content types, contract and credential variable.
+export {
+  BinaryGeneratorRegistry,
+  type BinaryGeneratorDefinition,
+  defaultBinaryGeneratorRegistry,
+} from '@cat-factory/kernel'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
 export type { CreateAppOptions } from './app'
@@ -195,6 +207,10 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // malformed contract document fails boot rather than a design dispatch.
     foundationalServiceRegistry:
       overrides.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry(),
+    // Generative binary integrations (empty by default — the platform ships none). Registered
+    // ones are what a binary-generating step may produce with, and a malformed definition or a
+    // cleartext endpoint fails boot rather than a dispatch.
+    binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
   }
 }
 
@@ -862,6 +878,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         pipelineRegistry: registries.pipelineRegistry,
         taskTypeRegistry: registries.taskTypeRegistry,
         foundationalServiceRegistry: registries.foundationalServiceRegistry,
+        binaryGeneratorRegistry: registries.binaryGeneratorRegistry,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
       const response = Promise.resolve(app.fetch(request, env, ctx))
