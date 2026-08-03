@@ -9,9 +9,13 @@ import { telemetryReadController } from '../src/modules/telemetry/TelemetryReadC
 import {
   HttpMachineTelemetryReadClient,
   MAX_TELEMETRY_READ_CHARS,
+  MAX_TELEMETRY_READ_ROW_CHARS,
   MachineTokenUnavailableForReadError,
   TELEMETRY_READ_METHODS,
+  TELEMETRY_READ_PAGE_SIZES,
+  TELEMETRY_READ_TOO_LARGE_CODE,
 } from '../src/telemetry/machineTelemetryRead.js'
+import { MAX_AGENT_CONTEXT_TOTAL_CHARS, MAX_BODY_CHARS } from '@cat-factory/orchestration'
 
 // The mothership-mode telemetry READ-THROUGH endpoint (`POST /internal/telemetry/read`, PR 5's
 // last piece): a machine-authed mothership-mode node serving a run whose LOCAL telemetry it has
@@ -181,9 +185,10 @@ describe('POST /internal/telemetry/read', () => {
       // A node trying exactly that: an in-scope envelope, a foreign id smuggled into args.
       args: ['ws_other', { executionId: 'exe_1', limit: 50 }],
     })
-    // It is refused on the BOUND check, because the smuggled positional pushed the query out of
-    // arg 0 — but the point is the call never reaches the repo with a foreign workspace.
-    expect(res.status).toBe(413)
+    // Refused on the SHAPE check — the smuggled positional pushed the query out of arg 0 and past
+    // the method's declared arity — but the point is that the call never reaches the repository
+    // with a foreign workspace whichever check catches it first.
+    expect(res.status).toBe(422)
     expect(seen.calls).toHaveLength(0)
 
     const ok = await read(app, await machineToken(), RUN_PAGE)
@@ -276,6 +281,9 @@ describe('POST /internal/telemetry/read', () => {
     )
     // The snapshot page's cap is much smaller — one row is routinely megabytes.
     expect(TELEMETRY_READ_METHODS.agentContextSnapshotRepository.listRunPage.maxLimit).toBe(3)
+    // And the drain asks for one at a time, since there is no batching win in a sink whose rows
+    // are megabytes apiece.
+    expect(TELEMETRY_READ_PAGE_SIZES.snapshots).toBe(1)
     expect(seen.calls).toHaveLength(0)
     // A read with no row cap to check (an aggregate, a count) needs no limit.
     expect(
@@ -321,15 +329,85 @@ describe('POST /internal/telemetry/read', () => {
         })
       ).status,
     ).toBe(200)
+    // REQUIRED, not merely capped: an omitted window means "the whole bodies" to the port, which
+    // is the unstated size this surface exists to refuse — the same reason an unstated `limit` is.
+    // The read-through fills in the declared ceiling rather than sending nothing.
+    expect((await read(app, token, { ...RUN_PAGE, method: 'get', args: ['call_1'] })).status).toBe(
+      413,
+    )
   })
 
-  it('refuses a response over the byte backstop rather than shortening it', async () => {
+  it('refuses a malformed query as a CALLER error rather than letting it fault the store', async () => {
+    // Without a shape check these reach the repository and surface as a 500 — `execution_id =
+    // undefined` reads as a store fault, when it is the caller that is wrong. Every read on the
+    // table is run-scoped, which is what makes each one's size knowable in the first place.
+    const { app, seen } = makeApp()
+    const token = await machineToken()
+    for (const args of [
+      [{ limit: 10 }], // no run named
+      [{ executionId: '', limit: 10 }], // empty is not a run either
+      [{ executionId: 42, limit: 10 }],
+      ['exe_1'], // a page's argument is a query object, not an id
+      [[{ executionId: 'exe_1', limit: 10 }]],
+    ]) {
+      expect((await read(app, token, { ...RUN_PAGE, args })).status).toBe(422)
+    }
+    // The id-shaped reads are held to their own shape.
+    expect(
+      (await read(app, token, { ...RUN_PAGE, method: 'summarizeByExecution', args: [{}] })).status,
+    ).toBe(422)
+    // Arity is part of the shape: the args are SPREAD into the call, so a caller may not slip a
+    // positional past the ones its method declares.
+    expect(
+      (
+        await read(app, token, {
+          ...RUN_PAGE,
+          method: 'summarizeByExecution',
+          args: ['exe_1', { sneak: true }],
+        })
+      ).status,
+    ).toBe(422)
+    expect(seen.calls).toHaveLength(0)
+  })
+
+  it('refuses a response over the byte backstop under its OWN code, so the drain can retry smaller', async () => {
     // The row caps bound COUNT; this bounds the axis one pathological row moves. A shortened page
-    // would be one the node treats as complete.
+    // would be one the node treats as complete — so it is refused, and refused under a code the
+    // client can act on. The two 413s are NOT interchangeable: an over-cap `limit` is an ask the
+    // caller may not make (retrying would only fail more slowly), while an over-large RESPONSE is
+    // a legal ask the same cursor satisfies in smaller pages.
     const huge = metric({ id: 'm_huge', promptText: 'x'.repeat(MAX_TELEMETRY_READ_CHARS + 1_000) })
     const { app } = makeApp({ runPage: [huge] })
     const res = await read(app, await machineToken(), RUN_PAGE)
     expect(res.status).toBe(413)
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: TELEMETRY_READ_TOO_LARGE_CODE },
+    })
+  })
+
+  it('sizes the byte backstop above the largest single row either sink can capture', async () => {
+    // The inequality that makes the drain's halving TERMINATE, stated once here so raising a
+    // capture ceiling fails a test rather than a developer's panel.
+    //
+    // It is not decorative. The backstop shipped as a picked 8,000,000, which is NARROWER than one
+    // maximal snapshot worst-case escaped (4 MiB x 2 = 8,388,608): a run with large injected
+    // context files would have had every page refused, down to a page of one, and the drain — which
+    // treated a refusal as fatal — would have failed that run's panel permanently. Deriving the
+    // bound from the capture ceilings is what removes that class of run.
+    expect(MAX_TELEMETRY_READ_ROW_CHARS).toBeGreaterThanOrEqual(MAX_AGENT_CONTEXT_TOTAL_CHARS)
+    expect(MAX_TELEMETRY_READ_ROW_CHARS).toBeGreaterThanOrEqual(MAX_BODY_CHARS * 3)
+    expect(MAX_TELEMETRY_READ_CHARS).toBeGreaterThan(MAX_TELEMETRY_READ_ROW_CHARS)
+  })
+
+  it('gives each read a round-trip budget matched to what it moves', async () => {
+    // Not one global timeout: the `(agentKind, phase)` aggregate is folded onto every step
+    // settlement by `RunStateMachine.attachStepMetrics`, which AWAITS it on the emit path — so an
+    // unreachable mothership must cost that emit seconds, not the half-minute a megabyte-scale
+    // snapshot page is rightly allowed.
+    const { llmCallMetricRepository: m, agentContextSnapshotRepository: s } = TELEMETRY_READ_METHODS
+    expect(m.summarizeByExecution.timeoutMs).toBeLessThanOrEqual(5_000)
+    expect(s.countByExecution.timeoutMs).toBeLessThanOrEqual(5_000)
+    expect(s.listRunPage.timeoutMs).toBeGreaterThan(m.summarizeByExecution.timeoutMs)
   })
 
   it('answers 503 on a facade that is not a mothership, and on an unwired method', async () => {

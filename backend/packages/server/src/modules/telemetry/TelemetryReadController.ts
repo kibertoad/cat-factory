@@ -5,6 +5,7 @@ import { logger } from '../../observability/logger.js'
 import {
   MAX_TELEMETRY_READ_CHARS,
   TELEMETRY_READ_METHODS,
+  TELEMETRY_READ_TOO_LARGE_CODE,
   type TelemetryReadBound,
   type TelemetryReadRequest,
 } from '../../telemetry/machineTelemetryRead.js'
@@ -113,10 +114,23 @@ export function telemetryReadController(): Hono<AppEnv> {
     if (!bound) {
       return c.json({ ok: false, error: { code: 'validation', message: 'unknown_method' } }, 422)
     }
+    // SHAPE before SIZE, and the two carry different statuses because they are different faults:
+    // a malformed argument is unprocessable (422), where a well-formed ask for too much is a size
+    // refusal (413) the caller can re-issue smaller.
+    const malformed = invalidArgs(bound, body.args)
+    if (malformed) {
+      return c.json({ ok: false, error: { code: 'validation', message: malformed } }, 422)
+    }
     const overBound = exceedsBound(bound, body.args)
     if (overBound) {
       // Refused, never clamped: a node that asked for 500 rows and silently got 200 would page
       // on a cursor drawn from a page it believes was complete, losing everything between.
+      //
+      // `validation`, deliberately NOT the byte backstop's own code below: this is the caller
+      // asking for something it may not have, so the fix is to ask correctly, where an over-large
+      // RESPONSE is a legal ask the same cursor can satisfy in smaller pages. The drain retries
+      // one and reports the other, so collapsing them would have it retry a request that can only
+      // ever fail.
       return c.json({ ok: false, error: { code: 'validation', message: overBound } }, 413)
     }
 
@@ -155,13 +169,30 @@ export function telemetryReadController(): Hono<AppEnv> {
     // bound check refuses: a truncated page is one the node would treat as complete.
     const serialized = JSON.stringify({ ok: true, value })
     if (serialized.length > MAX_TELEMETRY_READ_CHARS) {
-      log.warn('telemetry read: response over the byte cap', {
-        workspaceId: body.workspaceId,
-        repo: body.repo,
-        method: body.method,
-        chars: serialized.length,
-      })
-      return c.json({ ok: false, error: { code: 'validation', message: 'result too large' } }, 413)
+      // A ROUTINE condition on a run with large prompts, not a bug: the row caps bound count, and
+      // a page within its count can still carry megabytes. `debug`, therefore, not `warn` — the
+      // drain halves its page and re-asks on the same cursor, losing nothing, and a warn per page
+      // would make the ordinary rendering of a heavy run look like an incident.
+      log.debug(
+        'telemetry read: response over the byte cap, refusing so the caller can page smaller',
+        {
+          workspaceId: body.workspaceId,
+          repo: body.repo,
+          method: body.method,
+          chars: serialized.length,
+          maxChars: MAX_TELEMETRY_READ_CHARS,
+        },
+      )
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: TELEMETRY_READ_TOO_LARGE_CODE,
+            message: `result of ${serialized.length} chars exceeds ${MAX_TELEMETRY_READ_CHARS}; retry with a smaller limit`,
+          },
+        },
+        413,
+      )
     }
     return c.body(serialized, 200, { 'content-type': 'application/json' })
   })
@@ -183,7 +214,33 @@ function lookupBound(repo: string, method: string): TelemetryReadBound | null {
   return methods[method] ?? null
 }
 
-/** The reason `args` breaks the declared bound, or null when it is within it. */
+/**
+ * The reason `args` is not the shape its method declares, or null when it is.
+ *
+ * Checked HERE rather than left to the repository, which would fault on it and report a 500 —
+ * `execution_id = undefined` reads as a store outage when it is the caller that is wrong. Arity is
+ * part of the shape: the args are SPREAD into the call, so a caller may not slip a positional past
+ * the ones its method declares.
+ */
+function invalidArgs(bound: TelemetryReadBound, args: unknown[]): string | null {
+  if (args.length > bound.maxArgs) return `expected at most ${bound.maxArgs} arguments`
+  if (bound.args === 'id') {
+    const id = args[0]
+    return typeof id === 'string' && id.length > 0 ? null : 'expected a non-empty id string'
+  }
+  const query = args[0]
+  if (typeof query !== 'object' || query === null || Array.isArray(query)) {
+    return 'expected a query object'
+  }
+  const executionId = (query as { executionId?: unknown }).executionId
+  // Every read on this table is RUN-SCOPED — that is what makes each one's size knowable. A query
+  // with no run names the whole workspace's telemetry, which is the bulk read the bucket forbids.
+  return typeof executionId === 'string' && executionId.length > 0
+    ? null
+    : 'query.executionId must be a non-empty string'
+}
+
+/** The reason `args` asks for more than the declared bound allows, or null when it is within it. */
 function exceedsBound(bound: TelemetryReadBound, args: unknown[]): string | null {
   const query = args[0] as { limit?: unknown; bodyChars?: unknown } | undefined
   if (bound.limit === 'query.limit' && bound.maxLimit != null) {
@@ -199,12 +256,17 @@ function exceedsBound(bound: TelemetryReadBound, args: unknown[]): string | null
     // The slice budget rides `query.bodyChars` on a page and `body.chars` on a point read; both
     // are the SECOND positional after the stamped workspace, so read whichever is present.
     const budget =
-      typeof query?.bodyChars === 'number'
-        ? query.bodyChars
+      bound.args === 'runQuery'
+        ? query?.bodyChars
         : (args[1] as { chars?: unknown } | undefined)?.chars
-    if (budget != null && (typeof budget !== 'number' || budget > bound.maxBodyChars)) {
-      return `body budget exceeds ${bound.maxBodyChars}`
+    // REQUIRED, not merely capped. An omitted budget means "the whole bodies" to the port, which
+    // is the unstated size this surface exists to refuse — the same reason an omitted `limit` is
+    // refused. A caller wanting everything asks for the ceiling and reads `totalChars` to see
+    // whether it got everything.
+    if (typeof budget !== 'number' || !Number.isInteger(budget) || budget < 0) {
+      return `body budget must be an integer between 0 and ${bound.maxBodyChars}`
     }
+    if (budget > bound.maxBodyChars) return `body budget exceeds ${bound.maxBodyChars}`
   }
   return null
 }

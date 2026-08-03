@@ -35,6 +35,11 @@ import {
   SqliteTelemetryIngestReader,
 } from './telemetryIngestReader.js'
 import {
+  TELEMETRY_COVERAGE_SCHEMA,
+  type LocalTelemetryCoverage,
+  SqliteTelemetryCoverage,
+} from './telemetryCoverage.js'
+import {
   type MetricRow,
   type SearchQueryRow,
   type SnapshotRow,
@@ -358,11 +363,15 @@ CREATE TABLE IF NOT EXISTS telemetry_ingest_state (
   ingested_at INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, execution_id)
 );
+${TELEMETRY_COVERAGE_SCHEMA}
 `
 
 /** The per-call LLM telemetry sink — the local-sqlite mirror of `D1LlmCallMetricRepository`. */
 class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly coverage: LocalTelemetryCoverage,
+  ) {}
 
   async record(metric: LlmCallMetric): Promise<void> {
     this.insert(metric)
@@ -651,6 +660,11 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
+    // Record which runs this delete makes the local store non-authoritative for BEFORE taking
+    // the rows — afterwards there is nothing left to tell. See `telemetryCoverage.ts`: a run that
+    // straddles the cutoff keeps its newer rows, and a subset answered as though it were the whole
+    // run is how a pruned run's token rollup silently reads low.
+    this.coverage.markPrunedBefore('llm_call_metrics', epochMs)
     const res = this.db.prepare('DELETE FROM llm_call_metrics WHERE created_at < ?').run(epochMs)
     return Number(res.changes)
   }
@@ -687,7 +701,10 @@ function rowToIndex(row: IndexRow): AgentContextSnapshotIndex {
 
 /** The per-dispatch agent-context sink — the local-sqlite mirror of `D1AgentContextSnapshotRepository`. */
 class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotRepository {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly coverage: LocalTelemetryCoverage,
+  ) {}
 
   async record(snapshot: AgentContextSnapshot): Promise<void> {
     this.insert(snapshot, false)
@@ -824,6 +841,11 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
+    // Record which runs this delete makes the local store non-authoritative for BEFORE taking
+    // the rows — afterwards there is nothing left to tell. See `telemetryCoverage.ts`: a run that
+    // straddles the cutoff keeps its newer rows, and a subset answered as though it were the whole
+    // run is how a pruned run's token rollup silently reads low.
+    this.coverage.markPrunedBefore('agent_context_snapshots', epochMs)
     const res = this.db
       .prepare('DELETE FROM agent_context_snapshots WHERE created_at < ?')
       .run(epochMs)
@@ -833,7 +855,10 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
 
 /** The performed-web-search sink — the local-sqlite mirror of `D1AgentSearchQueryRepository`. */
 class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly coverage: LocalTelemetryCoverage,
+  ) {}
 
   async record(query: AgentSearchQuery): Promise<void> {
     this.insert(query, false)
@@ -917,6 +942,11 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
+    // Record which runs this delete makes the local store non-authoritative for BEFORE taking
+    // the rows — afterwards there is nothing left to tell. See `telemetryCoverage.ts`: a run that
+    // straddles the cutoff keeps its newer rows, and a subset answered as though it were the whole
+    // run is how a pruned run's token rollup silently reads low.
+    this.coverage.markPrunedBefore('agent_search_queries', epochMs)
     const res = this.db
       .prepare('DELETE FROM agent_search_queries WHERE created_at < ?')
       .run(epochMs)
@@ -1173,9 +1203,14 @@ export interface LocalTelemetryRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
 }
 
-/** The local telemetry repositories plus the ingest reader and a handle to close the db. */
+/**
+ * The local telemetry repositories plus the two laptop-side collaborators over the same tables —
+ * the ingest reader (the sync UP) and the coverage record (what makes the read-through DOWN able
+ * to tell a complete local answer from a pruned subset) — and a handle to close the db.
+ */
 export interface LocalTelemetryStore extends LocalTelemetryRepositories {
   ingestReader: LocalTelemetryIngestReader
+  coverage: LocalTelemetryCoverage
   close(): void
 }
 
@@ -1186,13 +1221,17 @@ export interface LocalTelemetryStore extends LocalTelemetryRepositories {
  */
 export function createLocalTelemetryStore(path: string): LocalTelemetryStore {
   const db = openSqliteDb(path, SCHEMA)
+  // Shared by the three run-scoped sinks: each records what its own prune took, and the
+  // read-through asks the one record whether a run's local answer is still the whole of it.
+  const coverage = new SqliteTelemetryCoverage(db)
   return {
-    llmCallMetricRepository: new SqliteLlmCallMetricRepository(db),
-    agentContextSnapshotRepository: new SqliteAgentContextSnapshotRepository(db),
-    agentSearchQueryRepository: new SqliteAgentSearchQueryRepository(db),
+    llmCallMetricRepository: new SqliteLlmCallMetricRepository(db, coverage),
+    agentContextSnapshotRepository: new SqliteAgentContextSnapshotRepository(db, coverage),
+    agentSearchQueryRepository: new SqliteAgentSearchQueryRepository(db, coverage),
     provisioningLogRepository: new SqliteProvisioningLogRepository(db),
     subscriptionQuotaCycleRepository: new SqliteSubscriptionQuotaCycleRepository(db),
     ingestReader: new SqliteTelemetryIngestReader(db),
+    coverage,
     close: () => db.close(),
   }
 }

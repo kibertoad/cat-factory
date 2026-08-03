@@ -1,5 +1,6 @@
 ---
 '@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
@@ -27,11 +28,27 @@ un-resumable bulk read the bucket forbids); the node drains the paged reads inst
 the two new kernel port methods are for. An over-cap limit is refused, never clamped, and the
 scope-bound workspace is stamped as the call's first argument rather than trusted from the caller.
 
-On the laptop the rule is local-wins: the fallback is reached only on an empty local answer, so a run
-this node is driving stops paying round trips the moment it records its first call, and capture is not
-decorated at all. A failed fallback throws rather than degrading back into the empty answer it was
-called to replace — the one hot-path caller already treats a metrics read as best-effort, so an
-outage costs a board counter and never a run.
+On the laptop the rule is local-wins where local is WHOLE — not merely where it is non-empty. The
+distinction is a third blank-run case: the prune deletes by capture time, so a run straddling the
+cutoff keeps its newer rows and loses its older ones, and the store then answers, with nothing
+looking missing, with a strict subset. A short list is bad and the rollup is worse, because a token
+total that is simply too low carries no hint that it is short. A subset is undetectable after the
+fact, so the prune records it as it happens and that record is what makes a local answer
+authoritative: lists stitch across the two stores on the shared keyset, while counts and the rollup
+come wholly from the mothership, since a partial local aggregate and a complete remote one cannot be
+merged. Capture is not decorated at all. A failed fallback throws rather than degrading back into the
+empty answer it was called to replace — the one hot-path caller already treats a metrics read as
+best-effort, so an outage costs a board counter and never a run, and the aggregate reads carry a
+short round-trip budget precisely because that caller awaits them on the emit path.
+
+A page inside its row cap can still serialize past the response backstop, so that is treated as
+routine rather than as a fault: the mothership still refuses rather than shortening (a truncated page
+is one the node would treat as complete), but under its own code, and the drain re-asks smaller on
+the same cursor, losing nothing. It terminates because the backstop is derived from the two capture
+ceilings rather than picked — a one-row page can never be refused for size.
 
 Compatibility break: `LlmCallMetricRepository` and `AgentContextSnapshotRepository` each gain a
-required `listRunPage` method, so an out-of-tree implementation of either port must add it.
+required `listRunPage` method, so an out-of-tree implementation of either port must add it. The local
+telemetry store gains a `telemetry_pruned_runs` table, created on open; an existing store simply
+starts recording from its next prune, and until then reports itself complete, which is the same
+answer it gave before.

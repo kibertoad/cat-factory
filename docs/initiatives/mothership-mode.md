@@ -624,7 +624,8 @@
     different type, by contract), and `listByExecution` has no cursor. `agentSearchQueryRepository`
     needed none — its `listPage` already returns whole rows on the same keyset, because a search
     row carries no unbounded body.
-  - **On the laptop the rule is LOCAL WINS, fall through only on nothing** (`telemetryReadThrough.ts`,
+  - **On the laptop the rule is LOCAL WINS WHERE IT IS WHOLE — not merely where it is non-empty**
+    (`telemetryReadThrough.ts`,
     composed into the SAME `localFirst` map that declares the bucket, so every consumer — the
     recorders, the observability endpoints, the board rollups, `/api/v1/debug/*` — gets it with no
     per-consumer wiring). The local store is both the fresher copy (it holds the run in flight,
@@ -632,6 +633,40 @@
     trips the moment it records its first call. Capture is NOT decorated at all: `record` /
     `recordMany` / `latestChainTip` / `deleteOlderThan` go straight to the local store — the chain
     tip especially, or the node would store a prompt delta against a tip it cannot reproduce.
+  - **An EMPTINESS test is not the same as completeness, and the difference is a third blank-run
+    case the first cut missed.** The prune deletes by `created_at`, so a run straddling the cutoff
+    keeps its newer rows and loses its older ones: the store then ANSWERS — nothing looks missing —
+    with a strict SUBSET. A short list is bad; the rollup is worse, because `summarizeByExecution`
+    returns a token total that is simply too low and a number carries no hint that it is short.
+    That is this initiative's own "absent must not render as zero" rule one level in: PARTIAL must
+    not render as WHOLE. A subset is undetectable after the fact, so the PRUNE records it as it
+    happens (`sqlite/telemetryCoverage.ts`, `telemetry_pruned_runs`), and that record — not the
+    presence of rows — is what makes a local answer authoritative. Lists stitch (local's suffix,
+    then the mothership for everything strictly older, on the same cursor); counts and the rollup
+    come wholly from the mothership, because a partial local aggregate and a complete remote one
+    cannot be merged — nothing in either says which rows they share, so summing double-counts and
+    taking the larger is a guess. The marker is swept EXACTLY (dropped once the run has no local
+    rows left, at which point the emptiness gate covers it) rather than on a window, which would
+    expire it while it was still load-bearing. The stitch rests on the prune removing a PREFIX, so
+    a future local delete taking rows from the middle would have to be reflected here.
+  - **An over-large page is ROUTINE, and the drain halves rather than failing.** A page inside its
+    ROW cap can still serialize past the byte backstop — three whole snapshots at the capture
+    ceiling are ~12 MiB, a hundred whole calls ~150 MiB — so no fixed page size can be safe for a
+    sink's worst case. The mothership still refuses rather than shortening (a truncated page is one
+    the node treats as complete) but does so under its OWN code, and the drain re-asks smaller on
+    the same cursor, losing nothing because the cursor only advances over rows actually received.
+    That terminates because `MAX_TELEMETRY_READ_CHARS` is DERIVED from the two capture ceilings
+    rather than picked, so a one-row page can never be refused for size — the constant shipped as
+    8,000,000, narrower than a single maximal snapshot worst-case escaped (8,388,608), which would
+    have failed a large run's panel permanently. A page a CALLER sized propagates the refusal
+    instead: silently returning fewer rows than asked is read as the end of the run.
+  - **Each read carries its own round-trip budget** (`timeoutMs` on the table) rather than one
+    global default, because they are not equally patient: `attachStepMetrics` folds
+    `summarizeByExecution` onto every step settlement and AWAITS it on the emit path, so an
+    unreachable mothership costs that emit 5s, not the 30s a megabyte-scale snapshot page is
+    rightly allowed. The residual cost is real and accepted: a run this node drives that has
+    recorded no calls yet re-asks on each settlement, since nothing at the repository layer can
+    tell a young run of its own from one another node drove.
   - **A failed fallback THROWS; it never degrades to the empty answer it was called to replace.**
     The whole defect is that "no rows here" and "no rows anywhere" render identically, so a
     swallowed failure reinstates it with an extra step. This is safe on the one hot-path caller
@@ -640,8 +675,16 @@
   - **It composes with keyset paging rather than fighting it**, which is what makes a
     partially-pruned run read continuously: a debug client gets local rows while local has them and
     falls through on the first page local cannot fill, with the SAME cursor — exact, because the
-    ingest preserves each row's id and `createdAt`. A drain that stops at its cap is LOGGED with
-    the run it stopped on, since a list that quietly ends partway reads as the whole run.
+    ingest preserves each row's id and `createdAt`. A FULL page is always its own answer (the
+    caller will come back and hit the seam on a later one); a SHORT page is the end of the data
+    only when the coverage record says the run is whole. A drain that stops at its cap is LOGGED
+    with the run it stopped on, since a list that quietly ends partway reads as the whole run.
+  - **The wire arguments are shape-checked before dispatch**, so a query naming no run is a 422
+    rather than a 500 raised inside a repository's SQL (`execution_id = undefined` reads as a store
+    outage when it is the caller that is wrong), and arity is part of the shape because the args
+    are SPREAD into the call. A body slice budget is REQUIRED where the table declares a ceiling,
+    for the same reason an unstated `limit` is refused — "the whole bodies" computes no size — and
+    the read-through fills in the declared ceiling for a caller that named no window.
   - **The two sinks the ingest deliberately skips are deliberately NOT decorated**: there is
     nothing upstream to read through to, and wrapping them would buy a guaranteed-empty round trip
     per read.
@@ -654,7 +697,10 @@
     `runtimes/local/src/mothership.test.ts` (the local `listRunPage` SQL and the composed wiring),
     the two telemetry conformance suites (`listRunPage` parity on D1 + Drizzle), and the shared
     cross-runtime suite (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on
-    BOTH facades).
+    BOTH facades). The partial-prune rule is pinned end to end through the REAL prune
+    (`deleteOlderThan` marks, the stitch and the mothership-sourced rollup follow) plus the
+    marker's own lifecycle in `telemetryRetention.test.ts`; the derived backstop is pinned as an
+    inequality against both capture ceilings, so raising one fails a test rather than a panel.
 
 **Login (PR 3)**
 

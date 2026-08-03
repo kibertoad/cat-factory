@@ -213,11 +213,14 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // endpoints, the board rollups and the debug surface all get it with no per-consumer wiring.
   // The other two sinks are deliberately NOT wrapped — a provisioning log and a quota cycle are
   // never ingested, so there is nothing on the mothership to read through to.
-  const readThrough = withTelemetryReadThrough(
-    telemetryStore,
-    new HttpMachineTelemetryReadClient({ baseUrl, token: machineToken }),
+  const readThrough = withTelemetryReadThrough(telemetryStore, {
+    client: new HttpMachineTelemetryReadClient({ baseUrl, token: machineToken }),
+    // What lets it tell a WHOLE local answer from the suffix the prune left behind. Threaded from
+    // the store rather than defaulted, so a facade cannot compose a read-through that silently
+    // reports a partially pruned run's token total as the run's.
+    coverage: telemetryStore.coverage,
     logger,
-  )
+  })
   // Typed by `LocalFirstPersistenceRepository` (the server-side declaration of the bucket), so
   // the map can never be HALF-wired: omitting an entry fails to typecheck rather than silently
   // leaving that repository on a remote proxy the allow-list only ever answers `unknown_method`.
