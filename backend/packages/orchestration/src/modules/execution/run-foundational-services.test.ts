@@ -92,7 +92,14 @@ describe('resolveFoundationalContext', () => {
     ).toEqual([])
   })
 
-  it('degrades to no files (never a thrown run) when the catalog read fails', async () => {
+  // A failed read must not fail the RUN (the catalog is enrichment) and must not fall out as an
+  // OMITTED file either. These two pin the distinction, because the omission is the silent half:
+  // it reads to an Architect exactly like a deployment with no shared services, which is the one
+  // conclusion the whole feature exists to prevent it from reaching. The failure became reachable
+  // when a mothership-mode node started resolving the `builtin` tier over the machine API — that
+  // source throws rather than answering with an empty tier, and swallowing the throw into `[]`
+  // here would have discarded the distinction one layer further out.
+  it('states an UNREADABLE catalog in the catalog file, never omits it and never throws', async () => {
     const files = await resolveFoundationalContext({
       workspaceId: 'ws',
       agentKind: 'architect',
@@ -100,9 +107,44 @@ describe('resolveFoundationalContext', () => {
       priorSteps: [],
       foundationalServiceResolver: resolver({
         catalogFor: vi.fn(async () => {
-          throw new Error('store unreachable')
+          throw new Error('mothership unreachable')
         }),
       }),
+    })
+    expect(files.map((f) => f.path)).toEqual([FOUNDATIONAL_CATALOG_FILE])
+    // The trait guidance points the Architect at this path, so it has to exist — and it has to
+    // say something OTHER than the empty-estate answer, which invites building the capability.
+    expect(files[0]!.content).toContain('COULD NOT BE READ')
+    expect(files[0]!.content).not.toContain('none are registered')
+  })
+
+  it('states UNREADABLE contracts in the index file, distinct from a design that declared none', async () => {
+    const files = await resolveFoundationalContext({
+      workspaceId: 'ws',
+      agentKind: 'coder',
+      agentKindRegistry: registry,
+      priorSteps: [step({ foundationalServices: { declared: ['file-storage'], unknown: [] } })],
+      foundationalServiceResolver: resolver({
+        contextFilesFor: vi.fn(async () => {
+          throw new Error('mothership unreachable')
+        }),
+      }),
+    })
+    expect(files.map((f) => f.path)).toEqual([FOUNDATIONAL_INDEX_FILE])
+    expect(files[0]!.content).toContain('could not be read')
+    expect(files[0]!.content).not.toContain('declared no foundational services')
+  })
+
+  it('keeps a SUCCESSFUL empty read as no files at all', async () => {
+    // The disposition above must key off the FAILURE, not off emptiness: a deployment with no
+    // catalog legitimately injects nothing, and giving it an "unavailable" file would tell every
+    // such run that the platform is broken.
+    const files = await resolveFoundationalContext({
+      workspaceId: 'ws',
+      agentKind: 'coder',
+      agentKindRegistry: registry,
+      priorSteps: [step({ foundationalServices: { declared: [], unknown: [] } })],
+      foundationalServiceResolver: resolver({ contextFilesFor: vi.fn(async () => []) }),
     })
     expect(files).toEqual([])
   })

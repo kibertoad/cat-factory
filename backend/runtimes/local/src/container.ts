@@ -323,6 +323,11 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // delegating channel alongside the local in-app push (which already relays upstream),
           // so a notification a local run raises still reaches the team's Slack.
           notificationChannels: [mothership.notificationChannel],
+          // The catalog's `builtin` tier comes from the MOTHERSHIP, not from this node's own
+          // registry: the estate is org state, so a node's copy could only ever be a second one
+          // drifting behind (see `HttpFoundationalBuiltinSource`). `startLocal` warns at boot if
+          // this node registered an estate anyway, because that registration now does nothing.
+          foundationalBuiltinSource: mothership.foundationalBuiltins,
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

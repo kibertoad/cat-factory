@@ -7,6 +7,7 @@ import {
   HttpMachineEventClient,
   HttpMachineNotificationClient,
   HttpMachineTelemetryClient,
+  HttpFoundationalBuiltinSource,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
   type Logger,
@@ -110,6 +111,17 @@ export interface MothershipComposition {
    */
   githubTokenSource: DelegatedAppTokenSource
   /**
+   * The catalog's `builtin` tier, read from the MOTHERSHIP over
+   * `GET /internal/foundational-services` (+ the batched `POST .../contracts`) rather than from this node's own
+   * `FoundationalServiceRegistry`. A deployment's estate is org state: with only the registry as
+   * a route it had to be registered on both entry points, and a node one build behind — the
+   * normal state of a local node — silently resolved a catalog missing whatever the mothership
+   * had since added, which reads exactly like an Architect judging a service irrelevant. Reads
+   * the SAME per-request machine token as the persistence RPC. See
+   * backend/docs/adr/0031-foundational-services.md.
+   */
+  foundationalBuiltins: HttpFoundationalBuiltinSource
+  /**
    * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
    * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
    * sees the local node's activity live. `buildLocalContainer` wraps the local hub in a
@@ -205,6 +217,11 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
   // the exact connect/expiry lifecycle of the rest of the machine API.
   const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
+  // The foundational-service catalog's `builtin` tier, read from the mothership on the same base
+  // URL + per-request token. It is the deployment's ESTATE — org state — and this node's own
+  // build can only hold a second copy of it, so the node does not consult its own registry at all
+  // (see the boot warning in `server.ts` when one is nonetheless registered).
+  const foundationalBuiltins = new HttpFoundationalBuiltinSource({ baseUrl, token: machineToken })
   // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
   // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
   // publishes nor subscribes (its own SPA still gets every locally produced event).
@@ -248,6 +265,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   return {
     repos,
     githubTokenSource,
+    foundationalBuiltins,
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,

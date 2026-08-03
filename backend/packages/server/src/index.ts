@@ -427,6 +427,10 @@ export {
   createRemoteRepositoryRegistry,
   HttpPersistenceRpcClient,
 } from './persistence/remoteRepositories.js'
+// The catalog's `builtin` tier, read from the mothership rather than from the node's own
+// registry — the estate is org state, and a second copy in a node's build is only ever a
+// drifting one. Its dedicated `/internal/*` endpoint is the server half.
+export { HttpFoundationalBuiltinSource } from './persistence/foundationalBuiltins.js'
 // The complement of the allow-list: the repositories a mothership-mode node serves from its OWN
 // local store (the local-first telemetry bucket) rather than over the RPC. The local facade types
 // its composition by this list so the bucket can never be half-wired.

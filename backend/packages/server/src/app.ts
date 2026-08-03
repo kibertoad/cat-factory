@@ -91,6 +91,7 @@ import { workspaceController } from './modules/workspaces/WorkspaceController.js
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
+import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
@@ -142,6 +143,14 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
   // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
   app.route('/', githubDelegationController())
+  // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`
+  // + the batched `POST .../contracts`):
+  // the catalog tier a deployment registers in CODE is org state, and a mothership-mode node has
+  // no main database to hold it — so it reads the MOTHERSHIP's registry here rather than its own,
+  // which would be a second copy silently drifting one build behind. Machine-token gated like the
+  // persistence RPC; never 503s (an unregistered estate is legitimately empty). Mounted on both
+  // facades so either can be a mothership. See backend/docs/adr/0031-foundational-services.md.
+  app.route('/', foundationalBuiltinsController())
   // Mothership-mode real-time upstream (`/internal/events/publish`): a mothership-mode local node
   // POSTs its engine events here so the mothership's own realtime fan-out (hosted teammates on the
   // shared board) sees the local node's activity live. Machine-token gated like the persistence

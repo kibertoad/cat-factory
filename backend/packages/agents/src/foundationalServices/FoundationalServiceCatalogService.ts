@@ -12,8 +12,8 @@ import type {
   ApiContractRecord,
   ApiContractRepository,
   Clock,
+  FoundationalBuiltinSource,
   FoundationalServiceRecord,
-  FoundationalServiceRegistry,
   FoundationalServiceRepository,
   GroupCacheHandle,
   WorkspaceRepository,
@@ -22,6 +22,7 @@ import {
   ConflictError,
   NotFoundError,
   defaultFoundationalServiceRegistry,
+  registryBuiltinSource,
   summarizeContract,
 } from '@cat-factory/kernel'
 import { mergeFoundationalTiers, toWire } from './foundational-catalog.js'
@@ -37,9 +38,14 @@ export interface FoundationalServiceCatalogDependencies {
   /**
    * The deployment's own registered services — the `builtin` tier. Optional and defaulted to an
    * empty registry, so a construction site that omits it resolves the stored tiers exactly as
-   * before; a facade injects the SAME instance it registers on.
+   * before.
+   *
+   * A standalone facade passes its own registry wrapped in `registryBuiltinSource`; a
+   * MOTHERSHIP-MODE node passes the remote source, because the estate is org state the
+   * mothership owns and a node's own copy could only ever be a second, drifting one. See
+   * `kernel/src/ports/foundational-builtins.ts`.
    */
-  registry?: FoundationalServiceRegistry
+  builtins?: FoundationalBuiltinSource
 }
 
 /**
@@ -56,16 +62,17 @@ export interface FoundationalServiceCatalogDependencies {
  *   inherits.** That is what lets a board opt out of an org-wide service without an account
  *   admin — and an account out of a deployment `builtin` — and it is why the merge reads both
  *   stored tiers `includeDeleted`.
- * - **The `builtin` tier has no rows.** It is read from the app-owned
- *   {@link FoundationalServiceRegistry} on every resolve, so a deployment's catalog is present
- *   from a workspace's first request and cannot drift from the code that declares it.
+ * - **The `builtin` tier has no rows.** It is read from the {@link FoundationalBuiltinSource} on
+ *   every resolve — the app-owned registry in a standalone deployment, the MOTHERSHIP's own
+ *   registry over the machine API on a mothership-mode node — so a deployment's catalog is
+ *   present from a workspace's first request and cannot drift from the code that declares it.
  */
 export class FoundationalServiceCatalogService {
   /** The deployment's registered services; an empty registry when a facade wired none. */
-  private readonly registry: FoundationalServiceRegistry
+  private readonly builtins: FoundationalBuiltinSource
 
   constructor(private readonly deps: FoundationalServiceCatalogDependencies) {
-    this.registry = deps.registry ?? defaultFoundationalServiceRegistry()
+    this.builtins = deps.builtins ?? registryBuiltinSource(defaultFoundationalServiceRegistry())
   }
 
   /** One tier's registered services, contract manifests joined on. Raw — not merged. */
@@ -308,11 +315,11 @@ export class FoundationalServiceCatalogService {
     ownerId: string,
   ): Promise<{ id: string; name: string; summary: string }[]> {
     // An account's tier below is the deployment's registry and nothing else.
-    if (ownerKind === 'account') return this.registry.entries()
+    if (ownerKind === 'account') return this.builtins.entries()
     const accountId = await this.deps.workspaceRepository.accountOf(ownerId)
     // A board with no account inherits the deployment tier directly, with nothing able to
     // suppress it in between.
-    if (!accountId) return this.registry.entries()
+    if (!accountId) return this.builtins.entries()
     return this.loadTierView('account', accountId)
   }
 
@@ -372,12 +379,20 @@ export class FoundationalServiceCatalogService {
     // partially applied. So resolve the winning tier first, then take that tier's documents.
     const catalog = await this.resolve(workspaceId)
     const tierById = new Map(catalog.map((entry) => [entry.id, entry.tier]))
+    // The `builtin` winners in ONE read, before the loop — the tier's source can be remote (a
+    // mothership-mode node), where a per-id read inside the loop is an N+1 over the wire. The
+    // stored tiers are already batched above for the same reason.
+    const builtinIds = wanted.filter((id) => tierById.get(id) === 'builtin')
+    const builtinDocs =
+      builtinIds.length > 0
+        ? await this.builtins.documentsFor(builtinIds)
+        : new Map<string, ApiContractDocument[]>()
     const out = new Map<string, ApiContractDocument[]>()
     for (const id of wanted) {
       const tier = tierById.get(id)
       if (!tier) continue
       if (tier === 'builtin') {
-        out.set(id, this.registry.documentsFor(id))
+        out.set(id, builtinDocs.get(id) ?? [])
         continue
       }
       const docs = (tier === 'workspace' ? workspaceDocs : accountDocs).filter(
@@ -401,18 +416,24 @@ export class FoundationalServiceCatalogService {
 
   private async loadCatalog(workspaceId: string): Promise<ResolvedFoundationalService[]> {
     const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
-    const [workspaceRows, accountRows, workspaceManifest, accountManifest] = await Promise.all([
-      this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId, true),
-      accountId
-        ? this.deps.foundationalServiceRepository.listByOwner('account', accountId, true)
-        : Promise.resolve<FoundationalServiceRecord[]>([]),
-      this.deps.apiContractRepository.listManifestByOwner('workspace', workspaceId),
-      accountId
-        ? this.deps.apiContractRepository.listManifestByOwner('account', accountId)
-        : Promise.resolve<ApiContractManifestEntry[]>([]),
-    ])
+    // The `builtin` tier joins the SAME `Promise.all` as the stored tiers rather than being
+    // awaited after it: the source can be remote (a mothership-mode node), and a sequential
+    // await would put a network round trip strictly behind four others that never depended on
+    // it. In-process it resolves immediately, so this costs the default shape nothing.
+    const [builtins, workspaceRows, accountRows, workspaceManifest, accountManifest] =
+      await Promise.all([
+        this.builtins.entries(),
+        this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId, true),
+        accountId
+          ? this.deps.foundationalServiceRepository.listByOwner('account', accountId, true)
+          : Promise.resolve<FoundationalServiceRecord[]>([]),
+        this.deps.apiContractRepository.listManifestByOwner('workspace', workspaceId),
+        accountId
+          ? this.deps.apiContractRepository.listManifestByOwner('account', accountId)
+          : Promise.resolve<ApiContractManifestEntry[]>([]),
+      ])
     return mergeFoundationalTiers({
-      builtins: this.registry.entries(),
+      builtins,
       accountRows,
       workspaceRows,
       accountManifest: indexManifest(accountManifest),
@@ -430,12 +451,14 @@ export class FoundationalServiceCatalogService {
     ownerId: string,
   ): Promise<ResolvedFoundationalService[]> {
     if (ownerKind === 'workspace') return this.loadCatalog(ownerId)
-    const [accountRows, accountManifest] = await Promise.all([
+    // The `builtin` tier alongside the stored reads, not behind them — see `loadCatalog`.
+    const [builtins, accountRows, accountManifest] = await Promise.all([
+      this.builtins.entries(),
       this.deps.foundationalServiceRepository.listByOwner('account', ownerId, true),
       this.deps.apiContractRepository.listManifestByOwner('account', ownerId),
     ])
     return mergeFoundationalTiers({
-      builtins: this.registry.entries(),
+      builtins,
       accountRows,
       workspaceRows: [],
       accountManifest: indexManifest(accountManifest),

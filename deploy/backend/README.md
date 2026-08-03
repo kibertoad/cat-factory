@@ -26,6 +26,27 @@ instead:
 
 Nothing else changes — `src/index.ts` and `wrangler.toml` stay identical.
 
+## Registering your own extensions
+
+The bare re-export above is the shape for a deployment that extends nothing. To register your own
+agent kinds, gates, pipelines, task types or **foundational services** (your org's shared-capability
+catalog — [ADR 0031](../../backend/docs/adr/0031-foundational-services.md)), swap the `default`
+re-export for one line, keeping the class re-exports as they are:
+
+```ts
+import { createWorker, defaultFoundationalServiceRegistry } from '@cat-factory/worker'
+
+const foundationalServiceRegistry = defaultFoundationalServiceRegistry()
+foundationalServiceRegistry.registerAll(MY_ESTATE)
+
+export default createWorker({ overrides: { foundationalServiceRegistry } })
+```
+
+`createWorker` owns everything the default export owns — the log-level read, boot-time validation
+of _your_ registrations, and the `scheduled`/`queue` handlers — so there is nothing to reassemble
+and a handler added upstream later reaches you without a change here. It is the Cloudflare
+counterpart of `start({ … })` / `startLocal({ … })` on the Node and local facades.
+
 ## Configure
 
 Edit `wrangler.toml`:

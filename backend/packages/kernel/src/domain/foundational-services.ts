@@ -491,6 +491,26 @@ export interface FoundationalCatalogView {
 }
 
 /**
+ * The catalog as the renderer receives it. THREE outcomes, never two: a resolved catalog, a
+ * resolved-but-empty one, and one that could not be READ at all.
+ *
+ * Discriminated rather than `FoundationalCatalogView[] | null` for the reason
+ * `describeOwnService` is: the third state has to be impossible to forget. A nullable input
+ * invites `services ?? []` at a new call site, which renders an outage as "none are
+ * registered" — the one substitution this whole feature exists to prevent, and the one that
+ * leaves no trace when it happens.
+ */
+export type FoundationalCatalogRead =
+  | { status: 'resolved'; services: FoundationalCatalogView[] }
+  /**
+   * The catalog could not be read — on a mothership-mode node, typically the mothership being
+   * unreachable or older than the node (see `ports/foundational-builtins.ts`). Carries no
+   * services because none are KNOWN, which is precisely the point: what an outage produces is
+   * ignorance, not an empty estate.
+   */
+  | { status: 'unavailable' }
+
+/**
  * Render the catalog block folded into a design-time prompt. Deliberately compact: a name, a
  * one-line summary, the capability tags and each contract's format + operation names. The
  * DESCRIPTION is included because "when NOT to use this" is exactly the part a design step
@@ -498,9 +518,22 @@ export interface FoundationalCatalogView {
  *
  * An EMPTY catalog renders as an explicit "none are registered" line rather than nothing —
  * an absent section and an empty one read identically to a model, and the difference is
- * whether "I found no shared service for this" was a finding or an omission.
+ * whether "I found no shared service for this" was a finding or an omission. An UNREADABLE
+ * one renders as a third thing again: "none are registered" is a fact an Architect may act on
+ * by building the capability itself, and an outage is not that fact.
  */
-export function renderFoundationalCatalog(services: FoundationalCatalogView[]): string {
+export function renderFoundationalCatalog(read: FoundationalCatalogRead): string {
+  if (read.status === 'unavailable') {
+    return [
+      "FOUNDATIONAL SERVICES: the catalog of this deployment's shared services COULD NOT BE READ, so it is unknown whether one already provides part of what this task asks for.",
+      // Deliberately NOT phrased as "do not read this as <the empty-catalog sentence>": the
+      // negated form still puts that sentence in the context, and a skimming model acts on the
+      // clause, not the negation. State the uncertainty positively instead.
+      'This deployment may well run shared services that this task should consume; their absence here is a platform failure, not evidence about the estate.',
+      'Design so that a shared capability can be adopted later: keep any storage, notification, audit or auth concern behind a seam of its own rather than committing to a bespoke implementation of it, and state in your report that the foundational-service catalog was unavailable.',
+    ].join('\n')
+  }
+  const services = read.services
   if (services.length === 0) {
     return 'FOUNDATIONAL SERVICES: none are registered for this workspace. Design the capability yourself, and say so.'
   }
@@ -600,19 +633,38 @@ function capBody(body: string): { text: string; omitted: number } {
 }
 
 /**
+ * What the index file has to report. Discriminated for the same reason
+ * {@link FoundationalCatalogRead} is: a read that FAILED knows none of `bundles` / `unknown` /
+ * `noDeclaration`, and expressing it by passing empties would render an outage as the design
+ * having declared nothing — the state an implementer is entitled to act on.
+ */
+export type FoundationalIndexRead =
+  | {
+      status: 'resolved'
+      bundles: FoundationalContractBundle[]
+      unknown: string[]
+      /** True when no design step declared anything (skipped, or ran before this feature). */
+      noDeclaration: boolean
+    }
+  | { status: 'unavailable' }
+
+/**
  * Render the index file that accompanies the injected documents — WHAT was injected, and
  * (the load-bearing half) what the design declared that could NOT be. An id the Architect
- * named but the catalog does not know, and an architect step that never ran at all, are
- * different failures needing different fixes, and neither may render as "no foundational
- * services are involved".
+ * named but the catalog does not know, an architect step that never ran at all, and a catalog
+ * that could not be read are different failures needing different fixes, and none of them may
+ * render as "no foundational services are involved".
  */
-export function renderFoundationalIndex(input: {
-  bundles: FoundationalContractBundle[]
-  unknown: string[]
-  /** True when no design step declared anything (it was skipped, or ran before this feature). */
-  noDeclaration: boolean
-}): string {
+export function renderFoundationalIndex(input: FoundationalIndexRead): string {
   const lines: string[] = ['# Foundational services for this task', '']
+  if (input.status === 'unavailable') {
+    lines.push(
+      "The catalog of this deployment's shared services could not be read, so the API contracts this task's design declared are NOT available here.",
+      'What the design chose is unknown, not empty — this says nothing about whether a shared service applies.',
+      'Do not guess at the API of a shared service. Implement what you can without it, leave the integration point behind a seam, and state in your report that the foundational-service contracts were unavailable.',
+    )
+    return lines.join('\n').trimEnd()
+  }
   if (input.noDeclaration) {
     lines.push(
       'No design step declared any foundational service for this task (the design step did not run, or declared none).',

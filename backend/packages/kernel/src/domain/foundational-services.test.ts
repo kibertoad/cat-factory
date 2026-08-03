@@ -214,28 +214,44 @@ describe('parseFoundationalDeclaration', () => {
 
 describe('renderFoundationalCatalog', () => {
   it('states that none are registered rather than rendering an empty section', () => {
-    expect(renderFoundationalCatalog([])).toContain('none are registered')
+    expect(renderFoundationalCatalog({ status: 'resolved', services: [] })).toContain(
+      'none are registered',
+    )
+  })
+
+  it('states an UNREADABLE catalog as its own third outcome, never as an empty one', () => {
+    // "None are registered" licenses an Architect to design the capability itself. An outage
+    // does not, and the two must not read alike — this is the substitution ADR 0031's mothership
+    // section exists to make impossible.
+    const rendered = renderFoundationalCatalog({ status: 'unavailable' })
+    expect(rendered).toContain('COULD NOT BE READ')
+    expect(rendered).not.toContain('none are registered')
+    // …and it says what to DO about it, or a model reads an unexplained warning as noise.
+    expect(rendered).toContain('report')
   })
 
   it('renders identity, capabilities and operation names but no document bodies', () => {
-    const rendered = renderFoundationalCatalog([
-      {
-        id: 'file-storage',
-        name: 'File Storage',
-        summary: 'Stores and serves user uploads.',
-        description: 'Use for any binary blob. Not for structured records.',
-        capabilities: ['file-storage'],
-        contracts: [
-          summarizeContract({
-            contractId: 'openapi',
-            format: 'openapi',
-            title: 'HTTP API',
-            path: null,
-            body: OPENAPI_YAML,
-          }),
-        ],
-      },
-    ])
+    const rendered = renderFoundationalCatalog({
+      status: 'resolved',
+      services: [
+        {
+          id: 'file-storage',
+          name: 'File Storage',
+          summary: 'Stores and serves user uploads.',
+          description: 'Use for any binary blob. Not for structured records.',
+          capabilities: ['file-storage'],
+          contracts: [
+            summarizeContract({
+              contractId: 'openapi',
+              format: 'openapi',
+              title: 'HTTP API',
+              path: null,
+              body: OPENAPI_YAML,
+            }),
+          ],
+        },
+      ],
+    })
     expect(rendered).toContain('id: file-storage')
     expect(rendered).toContain('POST /files')
     expect(rendered).toContain('Not for structured records')
@@ -245,24 +261,27 @@ describe('renderFoundationalCatalog', () => {
   it('says how many operations it is holding back', () => {
     const paths: Record<string, unknown> = {}
     for (let i = 0; i < MAX_CATALOG_OPERATIONS + 3; i++) paths[`/p${i}`] = { get: {} }
-    const rendered = renderFoundationalCatalog([
-      {
-        id: 's',
-        name: 'S',
-        summary: 'x',
-        description: '',
-        capabilities: [],
-        contracts: [
-          summarizeContract({
-            contractId: 'c',
-            format: 'openapi',
-            title: 'T',
-            path: null,
-            body: JSON.stringify({ openapi: '3.0.0', paths }),
-          }),
-        ],
-      },
-    ])
+    const rendered = renderFoundationalCatalog({
+      status: 'resolved',
+      services: [
+        {
+          id: 's',
+          name: 'S',
+          summary: 'x',
+          description: '',
+          capabilities: [],
+          contracts: [
+            summarizeContract({
+              contractId: 'c',
+              format: 'openapi',
+              title: 'T',
+              path: null,
+              body: JSON.stringify({ openapi: '3.0.0', paths }),
+            }),
+          ],
+        },
+      ],
+    })
     expect(rendered).toContain('+3 more operations not listed here')
   })
 })
@@ -291,13 +310,30 @@ describe('renderFoundationalIndex', () => {
     contracts: [],
   }
 
+  it('distinguishes an UNREADABLE catalog from a design that declared nothing', () => {
+    // The third state: the read itself failed, so what the design chose is unknown rather than
+    // empty. An implementer may act on "the design declared none" — it may not act the same way
+    // on an outage, which is why these must not render alike.
+    const unavailable = renderFoundationalIndex({ status: 'unavailable' })
+    expect(unavailable).toContain('could not be read')
+    expect(unavailable).toContain('Do not guess')
+    expect(unavailable).not.toContain('declared no foundational services')
+    expect(unavailable).not.toContain('nothing was checked')
+  })
+
   it('distinguishes "nothing was declared" from "nothing was checked"', () => {
     const declaredNone = renderFoundationalIndex({
+      status: 'resolved',
       bundles: [],
       unknown: [],
       noDeclaration: false,
     })
-    const neverRan = renderFoundationalIndex({ bundles: [], unknown: [], noDeclaration: true })
+    const neverRan = renderFoundationalIndex({
+      status: 'resolved',
+      bundles: [],
+      unknown: [],
+      noDeclaration: true,
+    })
     expect(declaredNone).toContain('declared no foundational services')
     expect(neverRan).toContain('nothing was checked')
     expect(neverRan).not.toContain('declared no foundational services')
@@ -305,6 +341,7 @@ describe('renderFoundationalIndex', () => {
 
   it('names an unresolvable id and tells the agent not to guess its API', () => {
     const rendered = renderFoundationalIndex({
+      status: 'resolved',
       bundles: [bundle],
       unknown: ['imaginary-bus'],
       noDeclaration: false,
@@ -381,16 +418,19 @@ describe('renderFoundationalCatalog operation states', () => {
     format: 'openapi' | 'toad-contract' | 'lokalise-api-contract',
     body: string,
   ) =>
-    renderFoundationalCatalog([
-      {
-        id: 's',
-        name: 'S',
-        summary: 'x',
-        description: '',
-        capabilities: [],
-        contracts: [summarizeContract({ contractId: 'c', format, title: 'T', path: null, body })],
-      },
-    ])
+    renderFoundationalCatalog({
+      status: 'resolved',
+      services: [
+        {
+          id: 's',
+          name: 'S',
+          summary: 'x',
+          description: '',
+          capabilities: [],
+          contracts: [summarizeContract({ contractId: 'c', format, title: 'T', path: null, body })],
+        },
+      ],
+    })
 
   it('says a format is not indexed rather than letting the empty list read as "no endpoints"', () => {
     // The failure this prevents: an Architect told a fully-specified service offers nothing.

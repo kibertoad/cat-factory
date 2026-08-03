@@ -54,6 +54,12 @@ export class FoundationalServiceRunResolver {
    * the "degrade loudly" half: a coder handed no foundational context cannot otherwise tell
    * "the design decided none apply" from "the design step never ran" from "the design named a
    * service this deployment does not have", and those need three different reactions.
+   *
+   * A FOURTH state — the catalog could not be read at all, which a mothership-mode node's
+   * remote `builtin` tier can produce — is not one this method can report, because the read
+   * that failed is the one it would have reported through. It is rendered by
+   * `resolveFoundationalContext`, the seam that owns the failure policy and is where the throw
+   * becomes visible; the invariant holds for the injection path as a whole.
    */
   async contextFilesFor(
     workspaceId: string,
@@ -92,7 +98,7 @@ export class FoundationalServiceRunResolver {
     const files: InjectedContextFile[] = [
       {
         path: FOUNDATIONAL_INDEX_FILE,
-        content: renderFoundationalIndex({ bundles, unknown, noDeclaration }),
+        content: renderFoundationalIndex({ status: 'resolved', bundles, unknown, noDeclaration }),
       },
     ]
     for (const bundle of bundles) {
