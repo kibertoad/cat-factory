@@ -2,16 +2,22 @@
 
 Website: [www.catfactory.ai](http://www.catfactory.ai)
 
-**A self-hosted platform for designing software on a visual board and having LLM
-agents build it, turning architecture blocks into real, reviewed pull
-requests, with the whole pipeline observable in real time.**
+**A self-hosted platform that runs the software delivery loop with LLM agent
+pipelines, turning board tasks and tracker issues into reviewed, CI-gated,
+policy-merged pull requests, with humans holding the decisions and every step
+and model call observable in real time.**
 
-You sketch a system as a board of **services → modules → tasks**, attach
-requirements (PRDs, RFCs, tracker issues), and run **agent pipelines** against
-each block. Coding agents clone the linked repo, implement the work, open a PR,
-and push live progress back to the board. Reviewer, tester and acceptance agents
-sharpen the result; humans stay in the loop through decision prompts, PR review
-and a hard spend cap.
+Work arrives as tasks on a visual board of **services → modules → tasks**, as
+issues pushed from a connected tracker the moment they are filed, or headlessly
+over the `/api/v1` surface and its official SDKs. An **agent pipeline** carries
+each task through the whole loop: requirements are settled with you up front,
+architects design, coding agents implement on a real checkout of the linked
+GitHub or GitLab repository, and reviewers, testers, consensus panels and
+rubric judges verify the work before the merge gates hold the PR for green CI
+and your merge policy, then merge it for real. Humans keep the levers: decision
+prompts, PR review, per-class merge rules, credential policy and a hard spend
+cap. Every seam is a registry, so a deployment adds its own agent kinds, gates,
+judges, tool servers and runner infrastructure without forking.
 
 ## Table of contents
 
