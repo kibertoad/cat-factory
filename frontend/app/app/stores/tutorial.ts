@@ -16,7 +16,7 @@ export type TutorialDecision = 'accepted' | 'declined'
  *    is a real state distinct from `declined` — only an explicit answer stops the launch
  *    prompt from returning, while closing it without answering merely defers it to the
  *    next launch.
- *  - SESSION-ONLY (`promptOpen`, `activeTourId`, `stepIndex`) — a tour is anchored to live
+ *  - SESSION-ONLY (`promptOpen`, `catalogueOpen`, `activeTourId`, `stepIndex`) — a tour is anchored to live
  *    DOM, so replaying progress across a reload would point step N at a board that hasn't
  *    reached that state; a reloaded tour restarts from its beginning instead.
  *
