@@ -551,6 +551,11 @@ export {
   type TestSecretsServiceDependencies,
 } from './modules/testSecrets/TestSecretsService.js'
 export {
+  CapabilityCredentialsService,
+  CAPABILITY_CREDENTIALS_CIPHER_INFO,
+  type CapabilityCredentialsServiceDependencies,
+} from './modules/capabilityCredentials/CapabilityCredentialsService.js'
+export {
   ValidationConfigService,
   type ValidationConfigServiceDependencies,
 } from './modules/validation/ValidationConfigService.js'

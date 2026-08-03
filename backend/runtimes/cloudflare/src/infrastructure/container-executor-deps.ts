@@ -16,6 +16,7 @@ import {
   type ProvisioningSubsystem,
   type RunnerPoolProvider,
   type RunnerTransport,
+  type ToolSecretResolver,
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import {
@@ -46,7 +47,9 @@ import {
   noRunnerBackendAvailableError,
   type MintInstallationToken,
   type WebSearchUpstream,
+  composeToolSecretResolvers,
   createEnvToolSecretResolver,
+  createWorkspaceToolSecretResolver,
   operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig } from './config'
@@ -69,7 +72,10 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { buildTestSecretsService } from './wireCredentialServices'
+import {
+  buildCapabilityCredentialsService,
+  buildTestSecretsService,
+} from './wireCredentialServices'
 import { CryptoIdGenerator } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
@@ -114,6 +120,17 @@ export interface WorkerExecutorDeps {
    * gets the shared slice. Undefined when account settings aren't wired.
    */
   webSearchAccountSettings: AccountSettingsService | undefined
+  /**
+   * Resolve the credentials a registered capability declared — a tool server's (MCP) and a
+   * generative binary integration's alike. Absent ⇒ the deployment-environment default over the
+   * Worker's own configured vars.
+   *
+   * Passed in for the same reason `resolvePackageRegistries` is: it is the composition root's to
+   * decide, and a deployment holding PER-WORKSPACE credentials replaces it wholesale
+   * (`createWorker({ createToolSecretResolver })`). Until it existed, `ToolSecretResolver` was a
+   * port with exactly one reachable implementation — the one this module hard-coded.
+   */
+  resolveToolSecrets?: ToolSecretResolver
 }
 
 /**
@@ -384,6 +401,9 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
 
   // Decrypt the service frame's sensitive test credentials onto the tester job body (out of band).
   const testSecretsForDispatch = buildTestSecretsService(env, db, clock)
+  // The per-workspace credential store, for the resolver chain below. Built here rather than
+  // threaded, exactly like `testSecretsForDispatch` beside it — the store is stateless.
+  const capabilityCredentials = buildCapabilityCredentialsService(env, db, clock)
   const resolveTestSecrets = testSecretsForDispatch
     ? (workspaceId: string, blockId: string) =>
         testSecretsForDispatch.resolveValuesForBlock(workspaceId, blockId)
@@ -486,10 +506,27 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
-    // Resolve the credentials a registered kind's TOOL SERVER (MCP) declared, off the Worker's own
-    // configured vars. A deployment needing per-workspace credentials replaces this with its own
-    // `ToolSecretResolver`; the rest of the dispatch path is unchanged either way.
-    resolveToolSecrets: createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+    // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
+    // integration) declared. Defaults to reading them off the Worker's own configured vars; a
+    // deployment needing per-workspace credentials passes its own `ToolSecretResolver` through
+    // `createWorker`'s `createToolSecretResolver`, and the rest of the dispatch path is unchanged
+    // either way.
+    // How a registered capability's declared credentials are resolved at dispatch. A deployment's
+    // own resolver REPLACES the whole chain; otherwise the platform's own per-workspace sealed
+    // store answers first and the Worker's configured vars answer behind it, per KEY — a tenant's
+    // own value must win, while a workspace that has stored nothing resolves exactly as it did
+    // before the store existed.
+    resolveToolSecrets:
+      deps.resolveToolSecrets ??
+      composeToolSecretResolvers(
+        [
+          ...(capabilityCredentials
+            ? [createWorkspaceToolSecretResolver({ credentials: capabilityCredentials, logger })]
+            : []),
+          createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+        ],
+        logger,
+      ),
     logger,
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)

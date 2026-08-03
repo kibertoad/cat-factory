@@ -29,6 +29,7 @@ import type {
   PublicApiKeyService,
   RunnerBackendRegistry,
   TestSecretsService,
+  CapabilityCredentialsService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -134,6 +135,11 @@ export interface ServerContainer extends Core {
    */
   testSecrets?: TestSecretsService
   /**
+   * The per-workspace capability-credential store (sealed). Present only when a facade wired the
+   * repository — which needs `ENCRYPTION_KEY`, like every other sealed store.
+   */
+  capabilityCredentials?: CapabilityCredentialsService
+  /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config
    * repository. Backs the validation-check CRUD controller; its `resolveForBlock` is also
@@ -174,6 +180,14 @@ export interface ServerContainer extends Core {
    * not selectable.
    */
   cloudflareModelsEnabled?: boolean
+  /**
+   * The deployment's AWS Bedrock allow-list (`BEDROCK_MODELS`, gated on `BEDROCK_REGION`),
+   * built by `bedrockAllowListFromEnv`. Spread into the per-workspace capability set, where
+   * it decides which catalog entries' `bedrock` flavour is selectable. Absent ⇒ no `bedrock`
+   * flavour is offered; Bedrock is a deployment-credential route, so there is nothing
+   * per-workspace to resolve.
+   */
+  bedrockModels?: Set<string>
   /**
    * The deployment's direct-provider base-URL resolver (env override → built-in default,
    * or null when none — e.g. an unconfigured operator-hosted LiteLLM gateway). The model

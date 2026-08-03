@@ -104,7 +104,8 @@ export {
 export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
-// deployment-environment credential resolver both facades wire by default.
+// deployment-environment credential resolver every facade wires as the FALLBACK behind the
+// per-workspace store.
 export {
   type EnvToolSecretResolverOptions,
   type McpServerJobSpec,
@@ -112,6 +113,20 @@ export {
   createEnvToolSecretResolver,
   resolveToolServers,
 } from './agents/toolServers.js'
+// The per-workspace capability-credential resolver and the per-KEY composition that puts it in
+// front of the environment one. See `capabilityCredentialResolver.ts` for why an environment
+// variable is a single-tenant answer, and why the fallback is a real mechanism rather than a shim.
+export {
+  createWorkspaceToolSecretResolver,
+  composeToolSecretResolvers,
+  type WorkspaceToolSecretResolverOptions,
+} from './agents/capabilityCredentialResolver.js'
+export {
+  buildCapabilityCredentialsView,
+  collectDeclaredCapabilityCredentials,
+  type DeclaredCapabilityCredential,
+  type DeclaredCapabilityCredentials,
+} from './modules/capabilityCredentials/declaredCredentials.js'
 export {
   createScopedModelProviderResolver,
   // The individual instrumentation / limiter wraps are deliberately NOT exported: their
@@ -129,6 +144,7 @@ export {
   resolveWorkspaceCapabilities,
   type CapabilityServices,
 } from './agents/providerCapabilities.js'
+export { bedrockAllowListFromEnv, bedrockRegionFromEnv, type BedrockEnv } from './agents/bedrock.js'
 export {
   ContainerRepoBootstrapper,
   type ContainerRepoBootstrapperDependencies,

@@ -39,6 +39,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   inherited). Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
+  `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has
+  configured into kernel's `ProviderCapabilities`, the one join point the model catalog and the
+  pipeline-start guard share; `agents/bedrock.ts` parses `BEDROCK_MODELS` for it and is the ONLY
+  parse of that var, because the Bedrock resolver's own allow-list has to be the same list
+  (parsed twice, the picker could offer an id the resolver throws on).
   `agents/promptOverrides.ts` is the container half of the per-workspace **agent prompt
   override**: `dispatchSystemPromptFor` is what every container prompt assembly rides (the
   inline + consensus executors pass the override to `systemPromptFor` directly), and

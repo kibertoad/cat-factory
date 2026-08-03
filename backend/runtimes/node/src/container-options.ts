@@ -50,6 +50,7 @@ import {
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type TaskTypeRegistry,
+  type ToolSecretResolver,
   type VcsProviderRegistry,
 } from '@cat-factory/kernel'
 import { type PgBoss } from 'pg-boss'
@@ -428,6 +429,27 @@ export interface NodeContainerOptions {
    * one set. See `kernel/src/ports/binary-generators.ts`.
    */
   binaryGeneratorSource?: BinaryGeneratorSource
+  /**
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+   * server's (MCP) and a generative binary integration's alike. Called once at composition, with
+   * this process's environment, and defaulting to `createEnvToolSecretResolver(env)`.
+   *
+   * This is the seam the `ToolSecretResolver` port was designed for and did not have: a
+   * deployment holding PER-WORKSPACE credentials (its own sealed store, Vault, the Cloudflare
+   * Secrets Store) implements the port and passes it here, and nothing else in the dispatch path
+   * changes. Without it, reaching the port meant abandoning the facade and reassembling the boot
+   * sequence — forgoing exactly the preflights `start()` exists to provide — to change one
+   * argument.
+   *
+   * A FACTORY rather than an instance so the narrower env bound composes in one line, and so the
+   * Worker's per-request build can take the same option shape:
+   *
+   *     createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })
+   *
+   * A custom resolver does NOT weaken the reserved-key floor: a key naming a platform
+   * configuration variable is dropped at the call site, before any resolver is asked.
+   */
+  createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode

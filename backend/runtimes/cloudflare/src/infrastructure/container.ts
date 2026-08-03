@@ -54,6 +54,7 @@ import { selectTraceSink } from './container-trace-sinks.js'
 export { selectTraceSink }
 import { buildWorkerSharedServices } from './container-shared-services.js'
 import { assembleWorkerContainer } from './container-assembly.js'
+import { resolveRegisteredToolSecretResolver } from './toolSecretResolver.js'
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
@@ -1277,7 +1278,10 @@ function workerInfrastructureCapabilities(
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+  opts: {
+    cloudflareModelsEnabled?: boolean
+    gateProviders?: GateProviderOverrides
+  } = {},
 ): Container {
   const config = loadConfig(env)
   config.infrastructure = workerInfrastructureCapabilities(config)
@@ -1417,6 +1421,18 @@ export function buildContainer(
     caches,
     overrides,
     gateProviders: opts.gateProviders,
+    // The deployment's own capability-credential resolver, built from THIS entry point's `env`
+    // (a Worker binding, D1 or a Secrets Store, is only reachable that way, which is why the
+    // registration holds a factory rather than an instance).
+    //
+    // Read from the PROCESS-WIDE registration rather than from `opts`, because this function has
+    // many callers and only one of them is the request path: the durable driver
+    // (`ExecutionWorkflow`), the queue consumers and every cron sweeper each build their own
+    // container from a bare `buildContainer(env)`. Container agents are dispatched by the durable
+    // driver, so an option carried on `createApp` alone would be accepted and then never asked
+    // anything. Absent ⇒ the executor composes the platform's own per-workspace store in front of
+    // the deployment environment.
+    executorToolSecrets: resolveRegisteredToolSecretResolver(env),
     registries: {
       environmentBackendRegistry,
       runnerBackendRegistry,

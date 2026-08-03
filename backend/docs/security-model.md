@@ -96,6 +96,58 @@ secret-bearing name to `EXACT_ALLOW`/`PREFIX_ALLOW` hands it to every native age
 deploy-harness transport opts out deliberately (`envMode: 'inherit'`, because kubectl/helm need
 ambient cloud env), which is exactly why that transport is not for untrusted input either.
 
+### The second path between those two environments: a capability CREDENTIAL
+
+`childEnv.ts` states the invariant on the path where the platform's environment and an agent's
+process meet by INHERITANCE. There is one other path, and it is a deliberate one: a tool server or
+a generative binary integration declares the credential it needs BY NAME, and the facade-wired
+`ToolSecretResolver` resolves it onto the job body, from where the harness injects it into that one
+job's agent process. The platform's own resolver chain answers from the per-workspace credential
+store first and falls back per key to `createEnvToolSecretResolver`, which reads the deployment's
+own environment.
+
+That mechanism is what makes an integration work with no new table, store or UI, and it is worth
+keeping. What it must not do is carry the platform's OWN configuration across. A definition is
+composition-root data that names both the key it wants AND the endpoint that key is sent to, so
+`{ key: 'ENCRYPTION_KEY', usage: 'Authorization: Bearer <value>' }` was a registration that booted
+clean and shipped the deployment's master sealing key to a third party. So:
+
+- **A credential has TWO names and only one of them is a boundary.** The LOOKUP name (`key`) is
+  what a resolver is asked for, so it is the one that can reach the deployment's environment. The
+  INJECTION name (`envName`, defaulting to the lookup name) is what the value is set as inside the
+  agent's or the MCP server's process, and it reads nothing. Everything below binds the lookup
+  name. An `http` tool server always had this split (`key` is the lookup, `header` is where the
+  value goes); `envName` is the same split for the stdio and generative-integration cases.
+- **A capability credential may not be LOOKED UP BY a variable the platform reads**
+  (`isReservedPlatformEnvKey`, `backend/packages/contracts/src/reserved-env-keys.ts`): the same
+  exact-names-plus-prefix-families shape `childEnv.ts` uses, and case-insensitive for the same
+  reason (`process.env` lookup is case-insensitive on Windows). Refused where the declaration is
+  made (the generative-integration credential schema; boot validation for a tool server) AND at
+  dispatch, because a **mothership-mode node boot-validates none of the definitions it resolves**:
+  they arrive per dispatch over `/internal/binary-generators`, authored by a process one build
+  ahead of it, against an environment that is a developer's own laptop. `ENCRYPTION_KEY` and
+  `HARNESS_SHARED_SECRET` are the keys to the boundary BETWEEN those two processes, held by the
+  side meant to keep them; that is what the floor protects, with no configuration.
+- **The injection name carries a narrower rule, not the floor** (`isToolchainEnvName`): not `PATH`,
+  `NODE_OPTIONS`, `npm_config_*` or anything else that reconfigures a process rather than
+  authenticating a call. Holding it to the floor instead would have been the stricter-looking
+  choice and the wrong one, because the floor's prefix families cover names the platform does not
+  read and a vendor's own SDK does (`GITHUB_PERSONAL_ACCESS_TOKEN`, `SLACK_BOT_TOKEN`,
+  `AWS_ACCESS_KEY_ID`). With one name for both jobs, the floor would have made the commonest MCP
+  servers unusable, with no workaround open to a deployment, which is the same objection that ruled
+  out mandating a `TOOL_` prefix on the lookup side.
+- **The dispatch-time check sits at the CALL SITE, not inside the env resolver**, so it holds for
+  a deployment's own `ToolSecretResolver` too, which is the one that could genuinely have a value
+  stored under such a name.
+- **Everything outside the platform's own configuration is the deployment's call**, because only
+  it knows which of a developer's variables (`AWS_PROFILE`, a personal token) an integration may
+  see. That bound is `EnvToolSecretResolverOptions.allowKeys`, reachable through every facade's
+  `createToolSecretResolver` option, the same seam a deployment uses to swap in a per-workspace
+  sealed store or a secret manager. A deployment installing third-party agent packages, and a
+  mothership-mode node, are the two cases that should set it. On the Worker that option registers
+  the resolver PROCESS-WIDE, because container agents are dispatched by the durable driver, which
+  builds its own container and would never see an option held on the app.
+
 ## Layer 3: what the token can reach (mechanism)
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:

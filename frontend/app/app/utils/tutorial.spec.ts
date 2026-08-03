@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import en from '../../i18n/locales/en.json'
 import {
   computeCoachMarkLayout,
+  isLaunchOffer,
   launchActionFor,
   needsReveal,
   resolveTourCatalogue,
@@ -89,6 +90,24 @@ describe('resolveTours', () => {
     // a required tour is still offered and its branch steps are not silently thinned.
     const t = withSteps('a', [step('one'), step('two', (g) => g.advancedMode)], [needsAdvanced])
     expect(resolveTours([t], null)[0]?.steps.map((s) => s.id)).toEqual(['one', 'two'])
+  })
+})
+
+describe('isLaunchOffer', () => {
+  it('offers a tour that declares nothing, and only withholds an explicit opt-out', () => {
+    // The DEFAULT is the whole point: a consumer deployment contributes a tour with no extra
+    // field and it appears in the launch prompt beside the built-ins, exactly as documented.
+    // Only `false` withholds it, so a tour cannot fall out of the offer by omission.
+    expect(isLaunchOffer(tour('a', 10))).toBe(true)
+    expect(isLaunchOffer({ ...tour('a', 10), offeredAtLaunch: true })).toBe(true)
+    expect(isLaunchOffer({ ...tour('a', 10), offeredAtLaunch: false })).toBe(false)
+  })
+
+  it('is orthogonal to availability, so an un-offered tour still resolves as ready', () => {
+    // It thins an OFFER, never the library: the catalogue lists, counts and starts these.
+    const t = { ...withSteps('a', [step('one')]), offeredAtLaunch: false }
+    expect(resolveTours([t], gates(true)).map((x) => x.id)).toEqual(['a'])
+    expect(resolveTourCatalogue([t], gates(true))[0]?.availability).toBe('ready')
   })
 })
 

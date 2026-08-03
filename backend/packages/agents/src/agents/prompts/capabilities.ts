@@ -63,4 +63,10 @@ const UNAVAILABLE_REASONS: Record<
 > = {
   harness_unsupported: 'not supported by the agent runtime this run uses',
   missing_secret: 'its credential is not configured for this deployment',
+  // Deliberately the SAME shape of statement as the line above rather than the operator's fault.
+  // The agent's disposition is identical (the tool is absent and retrying will not produce it),
+  // and telling it that a declaration is misconfigured invites it to work around the platform.
+  // The distinction that matters is the operator's, and it is carried by the log line and the
+  // boot problem, both of which name the reserved key.
+  reserved_secret: 'its credential is not available to this deployment',
 }

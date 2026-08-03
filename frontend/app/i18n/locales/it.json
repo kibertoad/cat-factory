@@ -6214,7 +6214,7 @@
       "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
       "decline": "No grazie",
       "later": "Forse più tardi",
-      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board.",
+      "empty": "Non ci sono ancora tour introduttivi disponibili per il tuo ruolo su questa board, ma il catalogo completo potrebbe averne uno che puoi seguire.",
       "browse": "Vedi tutti i tutorial"
     },
     "catalogue": {
@@ -6246,7 +6246,10 @@
       "service": "Un servizio sulla board",
       "task": "Un'attività sulla board",
       "waitingAnswer": "Un'esecuzione in attesa di una tua risposta",
-      "finishedRun": "Un'esecuzione conclusa con successo"
+      "finishedRun": "Un'esecuzione conclusa con successo",
+      "integrationsManage": "L'autorizzazione a gestire le integrazioni",
+      "settingsManage": "L'autorizzazione a gestire le impostazioni dello workspace",
+      "library": "La libreria dei frammenti di contesto abilitata su questo deployment"
     },
     "overlay": {
       "next": "Avanti",
@@ -6438,6 +6441,102 @@
           "finish": {
             "title": "Consegnato",
             "body": "Il lavoro unito segna l'attività come conclusa sulla lavagna. Questo è il ciclo intero: pianificare, eseguire, rispondere, revisionare, unire."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Collegare un provider di modelli",
+        "description": "Indica allo workspace i motori su cui girano i tuoi agenti.",
+        "steps": {
+          "intro": {
+            "title": "Gli agenti hanno bisogno di un motore",
+            "body": "Ogni passo di ogni pipeline è una chiamata a un modello, quindi non gira nulla finché questo workspace non raggiunge un provider. Questo tour mostra dove sta quel collegamento."
+          },
+          "open": {
+            "title": "Provider di modelli",
+            "body": "Questo apre l'hub dei provider: ogni motore che questo deployment può collegare, con quelli già pronti segnati come collegati."
+          },
+          "hub": {
+            "title": "Scegli come collegarti",
+            "body": "Una chiave gateway sblocca in un colpo solo un catalogo ampio. Una chiave del vendor, un piano personale o un runner di modelli sulla tua macchina funzionano altrettanto bene, e puoi tenerne diversi insieme."
+          },
+          "finish": {
+            "title": "Poi scegli per agente",
+            "body": "La configurazione del modello, nella stessa sezione della barra laterale, decide quale modello usa ogni tipo di agente. I passi semplici possono girare su modelli economici e quelli difficili sul tuo migliore, senza modificare nessuna pipeline."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Progettare una pipeline",
+        "description": "Assembla gli agenti che realizzano un'attività e salvala per qualsiasi attività.",
+        "steps": {
+          "intro": {
+            "title": "La sequenza è tua",
+            "body": "Una pipeline è l'insieme ordinato di agenti che trasforma un'attività in una pull request unita. Quelle incluse coprono la maggior parte del lavoro, e questo tour apre il costruttore dove puoi dare forma alla tua."
+          },
+          "open": {
+            "title": "Crea una pipeline",
+            "body": "Il costruttore si apre accanto alla board, così il lavoro resta in vista mentre dai forma al flusso."
+          },
+          "palette": {
+            "title": "La palette degli agenti",
+            "body": "Qui sono elencati tutti i tipi di agente che questo deployment offre, da quelli che pianificano il lavoro a quelli che lo revisionano, lo testano e lo uniscono. Clicca su uno per aggiungerlo come passo."
+          },
+          "chain": {
+            "title": "La catena che stai costruendo",
+            "body": "I passi girano dall'alto in basso, e ogni riga ha i suoi interruttori: agganciare il revisore che rimanda indietro un passo quando il punteggio è troppo basso, richiedere la tua approvazione prima che parta il successivo, oppure eseguire un passo come panel di più modelli."
+          },
+          "save": {
+            "title": "Salvare la pipeline",
+            "body": "Salva diventa attivo appena la bozza contiene almeno un passo. Una pipeline salvata entra nella libreria di questa finestra e viene proposta ovunque un'attività ne scelga una; dalle il nome del lavoro che fa e non degli agenti che contiene, perché quel nome è tutto ciò che vedrai quando sceglierai."
+          },
+          "finish": {
+            "title": "Pronta per l'uso",
+            "body": "Clonare una pipeline inclusa è il modo più rapido di partire: copia quella più vicina, cambia un passo, salvala con un nome tuo. Nulla di ciò che salvi ha effetto finché un'attività non viene avviata con essa."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Stabilire gli standard che gli agenti seguono",
+        "description": "Cura le linee guida che ogni agente legge prima di toccare il tuo codice.",
+        "steps": {
+          "intro": {
+            "title": "Standard, non istruzioni",
+            "body": "I frammenti di contesto sono le regole di casa: convenzioni, criteri di revisione e buone pratiche inseriti nel prompt di un agente a ogni esecuzione. Curarli è il modo di indirizzare il risultato invece di ripetere le stesse regole in ogni attività."
+          },
+          "open": {
+            "title": "Frammenti di contesto",
+            "body": "Questo apre la libreria di questa board."
+          },
+          "library": {
+            "title": "Un unico catalogo",
+            "body": "Il catalogo incluso, i frammenti del tuo account e quelli di questa board vengono uniti in un solo elenco, e vince il livello più vicino. Puoi scriverne uno qui, importare un documento o collegare una cartella di un repository, così i file che già mantieni restano la fonte di verità."
+          },
+          "finish": {
+            "title": "Dove finiscono",
+            "body": "Un servizio o un'attività può restringere quali frammenti ricevono i suoi agenti, e i valori predefiniti per tutta la board stanno nelle impostazioni dello workspace. Gli agenti che scrivono codice ricevono una sintesi condensata di ogni frammento, così uno standard lungo non soffoca l'attività stessa."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Collegare i sistemi che già usi",
+        "description": "Tracker, documenti, chat e monitoraggio, e cosa aggiunge ognuno a un'esecuzione.",
+        "steps": {
+          "intro": {
+            "title": "Le esecuzioni possono arrivare più lontano",
+            "body": "Le segnalazioni possono arrivare dal tuo tracker, i requisiti dai tuoi documenti, le notifiche nella chat del team e la salute di un rilascio dal tuo monitoraggio. Ogni collegamento è opzionale, e ognuno cambia ciò che un'esecuzione può vedere o dire."
+          },
+          "open": {
+            "title": "L'hub delle integrazioni",
+            "body": "Un elenco di tutti i sistemi esterni che questo workspace può collegare, con ciò che è già collegato segnato."
+          },
+          "hub": {
+            "title": "Collega quello che ti serve",
+            "body": "Il controllo del codice viene per primo, perché le pipeline hanno bisogno di codice su cui lavorare. Il resto può attendere il momento in cui serve: un tracker da cui importare segnalazioni, una fonte di documenti per il contesto dei requisiti, la chat per le notifiche, il monitoraggio per seguire un rilascio dopo la pubblicazione."
+          },
+          "finish": {
+            "title": "Tuo o dello workspace",
+            "body": "Alcune voci appartengono a te e non alla board, come un token di accesso personale o un piano, e servono solo per le esecuzioni che avvii tu. L'hub segnala quale è quale, e La mia configurazione raccoglie quelle tue."
           }
         }
       }

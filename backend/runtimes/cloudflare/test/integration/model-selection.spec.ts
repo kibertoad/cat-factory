@@ -42,27 +42,49 @@ const directModels = MODEL_CATALOG.filter((m) => m.direct)
 // "subscriptions always win" override — that is a per-workspace, token-aware step in
 // the executor — so a dual-mode base model (GLM/Kimi) still resolves to its base here.
 const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => m.cloudflare && !m.direct)
-const subscriptionOnlyModels = MODEL_CATALOG.filter((m) => !m.cloudflare && !m.direct)
+const subscriptionOnlyModels = MODEL_CATALOG.filter(
+  (m) => m.subscription && !m.cloudflare && !m.direct,
+)
 // Direct-ONLY models (LiteLLM): a direct variant with no Cloudflare or subscription base.
 // With no key they have no base to fall back to, so the resolver returns their direct ref
 // as a best-effort (selectability is reported separately).
-const directOnlyModels = MODEL_CATALOG.filter((m) => m.direct && !m.cloudflare && !m.subscription)
+const directOnlyModels = MODEL_CATALOG.filter(
+  (m) => m.direct && !m.cloudflare && !m.subscription && !m.bedrock,
+)
 // Gateway-ONLY models (e.g. Gemini via OpenRouter): an `openrouter` variant with no
-// Cloudflare/direct/subscription base. With no OpenRouter key they likewise have no base, so
-// the resolver returns the gateway ref as a best-effort.
+// Cloudflare/direct/Bedrock/subscription base. With no OpenRouter key they likewise have no
+// base, so the resolver returns the gateway ref as a best-effort.
 const openRouterOnlyModels = MODEL_CATALOG.filter(
-  (m) => m.openrouter && !m.cloudflare && !m.direct && !m.subscription,
+  (m) => m.openrouter && !m.cloudflare && !m.direct && !m.subscription && !m.bedrock,
+)
+// Bedrock-ONLY models (Claude Opus 4.8): reachable only in an AWS account whose allow-list
+// carries them. `caps` above sets no `bedrockModels`, so they are never usable here and always
+// take the best-effort branch, which must still yield a ref, or the resolver would throw for
+// every deployment that hasn't configured Bedrock.
+const bedrockOnlyModels = MODEL_CATALOG.filter(
+  (m) => m.bedrock && !m.cloudflare && !m.direct && !m.openrouter && !m.subscription,
 )
 
-/** The ref the base resolver lands on with no direct/gateway key. Two of `effectiveVariant`'s
- *  branches, in order: what is USABLE under `noKeys` (the Cloudflare base, else a subscription
+/** The concrete ref a bedrock flavour builds with NO allow-list: the catalog base id itself. */
+const bedrockRef = (m: (typeof MODEL_CATALOG)[number]) =>
+  m.bedrock
+    ? {
+        provider: 'bedrock',
+        model: m.bedrock.baseModelId,
+        ...(m.bedrock.contextTokens ? { contextTokens: m.bedrock.contextTokens } : {}),
+      }
+    : undefined
+
+/** The ref the base resolver lands on with no direct/gateway key. Both of `effectiveVariant`'s
+ *  walks, in order: what is USABLE under `noKeys` (the Cloudflare base, else a subscription
  *  model's subscription ref — its vendor is connected here), then, for a model with neither,
- *  its BEST-EFFORT ref, which walks the same direct > openrouter precedence the usable branch
- *  does. `direct` must precede `openrouter` here for that reason: a model carrying both and no
- *  base (Kimi K3) resolves to its native provider, not the gateway. This helper duplicates that
- *  ordering, so it has to be corrected in step with the resolver. */
+ *  its BEST-EFFORT ref, which follows the same `DEFAULT_PROVIDER_PREFERENCE` the usable walk
+ *  does. `direct` must precede `bedrock` must precede `openrouter` here for that reason: a
+ *  model carrying direct and gateway routes with no base (Kimi K3) resolves to its native
+ *  provider, not the gateway. This helper duplicates that ordering, so it has to be corrected
+ *  in step with the resolver. */
 const baseRef = (m: (typeof MODEL_CATALOG)[number]) =>
-  m.cloudflare ?? m.subscription?.ref ?? m.direct?.ref ?? m.openrouter?.ref
+  m.cloudflare ?? m.subscription?.ref ?? m.direct?.ref ?? bedrockRef(m) ?? m.openrouter?.ref
 
 describe('per-block model selection', () => {
   describe('catalog resolution', () => {
@@ -82,6 +104,23 @@ describe('per-block model selection', () => {
       for (const model of MODEL_CATALOG) {
         expect(resolveModelRef(model.id, allKeys)).toEqual(model.direct?.ref ?? baseRef(model))
       }
+    })
+
+    it('switches a model to Bedrock when the account allow-list carries it', () => {
+      const model = MODEL_CATALOG.find((m) => m.bedrock)
+      expect(model).toBeDefined()
+      // The catalog declares only the UNPREFIXED base; what an account calls carries a
+      // geo/global inference prefix that differs per Region, so the operator's own entry is
+      // what must reach the ref.
+      const listed = `eu.${model!.bedrock!.baseModelId}`
+      const onBedrock = caps({ bedrockModels: new Set([listed]) })
+      expect(resolveModelRef(model!.id, onBedrock)).toMatchObject({
+        provider: 'bedrock',
+        model: listed,
+      })
+      // Bedrock is a per-MODEL grant: another account's list doesn't enable this one.
+      const otherModelOnly = caps({ bedrockModels: new Set(['amazon.nova-something-else']) })
+      expect(resolveModelRef(model!.id, otherModelOnly)?.provider).not.toBe('bedrock')
     })
 
     it('honours each key independently', () => {
@@ -123,6 +162,13 @@ describe('per-block model selection', () => {
           expect(option.flavor).toBe('direct')
           expect(option.providerLabel).toBe(model.direct.providerLabel)
           expect(option.available).toBe(false)
+        } else if (model.bedrock) {
+          // Bedrock-only (Claude Opus 4.8): best-effort bedrock flavour at the catalog BASE id
+          // (no allow-list entry to prefer), NOT selectable until this account grants the model.
+          expect(option.flavor).toBe('bedrock')
+          expect(option.providerLabel).toBe('AWS Bedrock')
+          expect(option.model).toBe(model.bedrock.baseModelId)
+          expect(option.available).toBe(false)
         } else {
           // Gateway-only (Gemini via OpenRouter): best-effort gateway flavour, NOT selectable
           // until the OpenRouter key is configured.
@@ -149,6 +195,10 @@ describe('per-block model selection', () => {
           // Subscription model stays on its subscription flavour (allKeys carries no
           // OpenRouter key, so a gateway route doesn't apply).
           expect(option.flavor).toBe('subscription')
+        } else if (model.bedrock) {
+          // allKeys carries no Bedrock allow-list either (it is an AWS account grant, not a
+          // key in the pool), so a Bedrock-only model stays on its best-effort bedrock flavour.
+          expect(option.flavor).toBe('bedrock')
         } else {
           // Gateway-only (Gemini via OpenRouter): no native key in allKeys, so best-effort gateway.
           expect(option.flavor).toBe('openrouter')
@@ -160,6 +210,7 @@ describe('per-block model selection', () => {
       expect(subscriptionOnlyModels.length).toBeGreaterThan(0)
       expect(directOnlyModels.length).toBeGreaterThan(0)
       expect(openRouterOnlyModels.length).toBeGreaterThan(0)
+      expect(bedrockOnlyModels.length).toBeGreaterThan(0)
     })
 
     it('returns undefined for unknown/empty ids so the caller falls back', () => {

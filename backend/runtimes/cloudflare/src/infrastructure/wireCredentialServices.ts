@@ -13,6 +13,8 @@ import {
   PublicApiKeyService,
   TEST_SECRETS_CIPHER_INFO,
   TestSecretsService,
+  CAPABILITY_CREDENTIALS_CIPHER_INFO,
+  CapabilityCredentialsService,
   UserSecretService,
   ValidationConfigService,
   type UserSecretKindRegistry,
@@ -24,6 +26,7 @@ import type { Env } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
+import { D1CapabilityCredentialRepository } from './repositories/D1CapabilityCredentialRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
@@ -261,6 +264,32 @@ export function buildTestSecretsService(
       info: TEST_SECRETS_CIPHER_INFO,
     }),
     blockRepository: new D1BlockRepository({ db }),
+    clock,
+  })
+}
+
+/**
+ * Build the PER-WORKSPACE CAPABILITY-CREDENTIAL store (sealed), or undefined when the shared
+ * encryption key is absent. Backs the credential CRUD controller AND the dispatch-time resolver
+ * the executor composes in FRONT of the deployment-environment one — a tenant's own value must
+ * win over a variable the whole deployment shares.
+ *
+ * Stateless, so building a fresh instance per call site is safe (mirrors the two above); the
+ * executor and the controller each build their own.
+ */
+export function buildCapabilityCredentialsService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): CapabilityCredentialsService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new CapabilityCredentialsService({
+    capabilityCredentialRepository: new D1CapabilityCredentialRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: CAPABILITY_CREDENTIALS_CIPHER_INFO,
+    }),
     clock,
   })
 }

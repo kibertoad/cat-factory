@@ -1,4 +1,6 @@
 import type { ProviderRegistry } from '@cat-factory/agents'
+import type { Logger } from '@cat-factory/kernel'
+import { bedrockAllowListFromEnv, logger } from '@cat-factory/server'
 import type { Env } from '../env'
 
 // Installation-level model-provider extension point. The Worker library ships the
@@ -34,4 +36,32 @@ export function resolveExtraRegistries(env: Env): ProviderRegistry[] {
 /** Drop all registered registries. Intended for tests that exercise registration. */
 export function clearModelRegistries(): void {
   factories.length = 0
+  warnedBedrockUnservable = false
+}
+
+let warnedBedrockUnservable = false
+
+/**
+ * The Bedrock allow-list as a PICKER capability: `bedrockAllowListFromEnv`'s parse, granted
+ * only when a registered extra registry can actually serve `provider: 'bedrock'` refs. On
+ * Node the same env that enables the flavour also registers the resolver, so the parse alone
+ * proves dispatchability; here registration is a deployment's own `registerModelRegistry`
+ * call, so the env alone proves nothing, and offering the flavour on it would put rows in the
+ * picker whose dispatch fails on an unregistered provider (exactly the disagreement the one
+ * shared parser exists to prevent). Set-but-unregistered degrades loudly: no flavour, plus
+ * one warn per isolate naming the missing mix-in.
+ */
+export function bedrockModelsCapability(env: Env, log: Logger = logger): Set<string> | undefined {
+  const models = bedrockAllowListFromEnv(env)
+  if (!models) return undefined
+  if (resolveExtraRegistries(env).some((registry) => !!registry.bedrock)) return models
+  if (!warnedBedrockUnservable) {
+    warnedBedrockUnservable = true
+    log.warn(
+      'BEDROCK_MODELS is set but no registered model registry serves `bedrock`, so the ' +
+        'picker flavour stays off. Mix in @cat-factory/provider-bedrock via registerModelRegistry.',
+      { models: models.size },
+    )
+  }
+  return undefined
 }

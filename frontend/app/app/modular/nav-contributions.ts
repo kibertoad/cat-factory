@@ -610,14 +610,30 @@ export const navigationModule = defineModule({
 })
 
 /**
+ * Does a shell render this contribution under `gates`?
+ *
+ * The two axes a destination is gated on, in ONE place. They are independent and BOTH must
+ * pass: an `advanced` item is dropped in basic mode, and every item still answers to its own
+ * `gate`. Order doesn't matter (it's a conjunction) but the tier is checked first, since it's
+ * the cheaper read.
+ *
+ * Named rather than inlined in {@link navSlotFilter} because a second reader has to agree with
+ * it exactly: a tutorial tour whose step CLICKS a nav entry declares the requirement that
+ * renders it, and `tutorial-tours.spec.ts` pairs the two through this function. Spelling the
+ * conjunction out there instead would be a copy that keeps passing while this one changes —
+ * and the drift it would miss (an entry gaining a gate clause, or being marked `advanced` and
+ * so leaving the DEFAULT interface tier) is precisely a tour offered to a user who then finds
+ * no such control.
+ */
+export function navItemVisible(item: NavContribution, gates: NavGates): boolean {
+  return (item.advanced ? gates.advancedMode : true) && (item.gate ? item.gate(gates) : true)
+}
+
+/**
  * Reactive RBAC/availability/interface-tier filter over the merged `nav` slot. Reads
  * `deps.gates.*` (the reactive gate service) per item, so evaluated inside
  * `useReactiveSlots` it re-runs when a permission, connection, or the interface
  * mode flips. Passed to `installModularApp` as the global `slotFilter`.
- *
- * The two axes are independent and BOTH must pass: an `advanced` item is dropped in
- * basic mode, and every item still answers to its own `gate`. Order doesn't matter
- * (it's a conjunction) but the tier is checked first, since it's the cheaper read.
  *
  * Typed against `AppSlots` (not the generic `SlotFilter`) so it matches the
  * filter shape the runtime infers for this registry. `deps` is widened to an
@@ -631,11 +647,7 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
     ...slots,
     // No gates service wired (tests / bare install) ⇒ show everything, matching
     // the dev-open "absent access allows all" backend parity.
-    nav: gates
-      ? nav.filter(
-          (i) => (i.advanced ? gates.advancedMode : true) && (i.gate ? i.gate(gates) : true),
-        )
-      : nav,
+    nav: gates ? nav.filter((i) => navItemVisible(i, gates)) : nav,
     // `tutorialTours` is deliberately NOT filtered here, unlike every other gated slot. A
     // `SlotFilter` can only DROP, and the tutorial catalogue's whole job is to explain what
     // was dropped — which tour this board can't run yet, and what would unlock it. That is a

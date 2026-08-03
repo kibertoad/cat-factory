@@ -16,6 +16,7 @@ import {
   type ServerContainer,
   ContainerSessionService,
   GitHubIdentityResolver,
+  bedrockAllowListFromEnv,
   testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
   makePreviewJobBuilder,
@@ -331,6 +332,7 @@ interface NodeServerContainerBundle {
   gateways: ReturnType<typeof createNodeGateways>
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
+  capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
   validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
@@ -371,6 +373,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     gateways,
     vcsRegistry,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     subscriptions,
     personalSubscriptions,
@@ -385,6 +388,11 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     openRouterCatalog,
     traceSink,
   } = bundle
+  // The Bedrock allow-list that gates `bedrock`-flavour selectability. Derived from `env` here
+  // (like `baseUrlFor` below) rather than threaded from the model deps: it is one
+  // deployment-level env read, and the SAME parser feeds the resolver's own allow-list, so the
+  // picker cannot offer a Bedrock id the resolver would throw on.
+  const bedrockModels = bedrockAllowListFromEnv(env)
   return {
     ...createCore(dependencies),
     config,
@@ -514,6 +522,9 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    ...(capabilityCredentialsService
+      ? { capabilityCredentials: capabilityCredentialsService }
+      : {}),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
@@ -532,6 +543,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     notificationWebhooks,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
+    ...(bedrockModels ? { bedrockModels } : {}),
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
     // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
@@ -622,6 +634,7 @@ interface NodeContainerFinalizeBundle {
   repoProjectionRepository: DrizzleRepoProjectionRepository
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
+  capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
   validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
@@ -682,6 +695,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     repoProjectionRepository,
     vcsRegistry,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     publicApiKeys,
     userSecrets,
@@ -858,6 +872,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     gateways,
     vcsRegistry,
     testSecretsService,
+    capabilityCredentialsService,
     validationConfigService,
     subscriptions,
     personalSubscriptions,

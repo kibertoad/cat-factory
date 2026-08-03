@@ -4,6 +4,8 @@ import {
   RegistrySubscriptionQuotaProvider,
   TEST_SECRETS_CIPHER_INFO,
   TestSecretsService,
+  CAPABILITY_CREDENTIALS_CIPHER_INFO,
+  CapabilityCredentialsService,
   ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
@@ -175,6 +177,21 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     ? (workspaceId: string, blockId: string) =>
         testSecretsService.resolveRefsForBlock(workspaceId, blockId)
     : undefined
+  // Per-workspace CAPABILITY CREDENTIALS (sealed): the tenant-scoped home for the secrets a
+  // registered tool server / generative binary integration declares by name. Backs the CRUD
+  // controller AND the dispatch-time resolver the executor composes in FRONT of the
+  // deployment-environment one. Guarded by ENCRYPTION_KEY like every other sealed store — a
+  // deployment with no key keeps the environment resolver alone, which is what it had before.
+  const capabilityCredentialsService = testSecretsEncryptionKey
+    ? new CapabilityCredentialsService({
+        capabilityCredentialRepository: repos.capabilityCredentialRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: testSecretsEncryptionKey,
+          info: CAPABILITY_CREDENTIALS_CIPHER_INFO,
+        }),
+        clock,
+      })
+    : undefined
   // Pre-PR validation checks: the service backs the CRUD controller and the engine's dispatch
   // resolution (`resolveValidationChecks`), which folds the service frame's commands onto the
   // agent run context so they ride the coding job body. Nothing is sealed here — the commands are
@@ -209,6 +226,7 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     testSecretsService,
     resolveTestSecrets,
     resolveTestSecretRefs,
+    capabilityCredentialsService,
     validationConfigService,
     resolveValidationChecks,
     subscriptionQuotaProvider,

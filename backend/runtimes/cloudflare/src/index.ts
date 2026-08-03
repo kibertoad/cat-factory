@@ -118,6 +118,17 @@ export {
   type ModelRegistryFactory,
 } from './infrastructure/ai/registries'
 
+// Installation-level extension point for the CAPABILITY-CREDENTIAL resolver, registered the same
+// way and for the same reason: every container build reads it, so the resolver also serves the
+// durable driver, which is where container agents are actually dispatched. Most deployments never
+// call this directly, since `createWorker({ createToolSecretResolver })` registers on their
+// behalf; it is exported for one assembling its own app, and for tests.
+export {
+  registerToolSecretResolverFactory,
+  clearToolSecretResolverFactory,
+  type ToolSecretResolverFactory,
+} from './infrastructure/toolSecretResolver'
+
 // Installation-level extension point for custom agent kinds (alongside registerModelRegistry
 // above): a deployment news a `defaultAgentKindRegistry()`, registers its own kinds on it by
 // reference, and injects it into `buildContainer`/`createApp` via the `agentKindRegistry`

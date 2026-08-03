@@ -276,9 +276,10 @@ an AMBIENT claude-code run (which has no isolated config home to install into).
 
 A tool server is `stdio` (a child process in the run container) or `http` (a remote endpoint). Its
 credentials are declared BY NAME and resolved at dispatch by the facade-wired kernel
-`ToolSecretResolver`; both facades wire `createEnvToolSecretResolver`, which reads each key off the
-deployment's own environment. A deployment needing PER-WORKSPACE credentials implements the port
-itself: nothing else in the dispatch path changes. A secret value never reaches
+`ToolSecretResolver`; every facade defaults to `createEnvToolSecretResolver`, which reads each key
+off the deployment's own environment. A deployment needing PER-WORKSPACE credentials implements the
+port itself and registers it through its facade's `createToolSecretResolver` option (`startLocal` /
+`start` / `createWorker`): nothing else in the dispatch path changes. A secret value never reaches
 `AgentRunContext`, a prompt, or the telemetry snapshot: it rides the job body's dedicated
 `mcpServers` field, exactly like the tester's `testSecrets`.
 
@@ -302,11 +303,43 @@ Rules worth knowing before declaring one:
   additionally passed to claude-code's `--allowedTools`, but whether that CLI list gates depends
   on the run's permission mode, and Codex cannot express a per-tool restriction at all. If an agent
   kind must never reach a server's other tools, do not wire that server for that kind.
-- **Mind what `secretKeys` can reach.** The default resolver reads any key off the deployment
-  environment, and a definition also names the endpoint the value is sent to. If a deployment
-  installs agent packages it did not author, wire
-  `createEnvToolSecretResolver(env, { allowKeys: [...] })` and keep the credentials behind a
-  dedicated prefix. See ADR 0029 → Consequences.
+- **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
+  both the key it wants and the endpoint that key is sent to, so
+  `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
+  master sealing key to a third party. Every variable in `docs/environment-variables.md` is
+  reserved (`isReservedPlatformEnvKey`, case-insensitively, because `process.env` lookup is
+  case-insensitive on Windows). The declaration is refused at boot (`reserved_credential_key`), and
+  refused again at dispatch, where the server is reported unavailable under its own
+  `reserved_secret` reason rather than `missing_secret`: the two need opposite fixes, and setting
+  the variable is precisely what must not help. This floor needs no configuration and cannot be
+  widened.
+- **Use `envName` when the server's own client requires a specific variable.** The floor binds the
+  LOOKUP key, not the variable the value is injected under in the server's process, which reads
+  nothing. That distinction is what keeps the floor affordable: the GitHub MCP server reads
+  `GITHUB_PERSONAL_ACCESS_TOKEN`, the Slack one `SLACK_BOT_TOKEN`, and the platform reads neither
+  while owning both families. Declare
+  `{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }` and the value is looked
+  up under a name of your own and injected under the one the SDK wants. `envName` has its own,
+  narrower rule (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or anything else
+  that would reconfigure the process instead of authenticating a call. It applies to `stdio`
+  servers; an `http` server's value goes to its `header`, so an `envName` there is warned about as
+  inert.
+
+- **A workspace's OWN value wins over the deployment's.** Every facade composes the per-workspace
+  capability-credential store (sealed, `secrets.manage`-gated, edited over
+  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY, so a
+  tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
+  as it did before the store existed. The surface is a CHECKLIST, not a blank form: it projects
+  the credentials this deployment's registered capabilities declare, so an operator never has to
+  read the deployment's source to learn what to fill in. See
+  [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md).
+
+- **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
+  configuration is a developer's own tooling, and only the deployment knows which of it an
+  integration may see. If a deployment installs agent packages it did not author, wire
+  `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` and
+  keep the credentials behind a dedicated prefix. Note that a deployment resolver REPLACES the
+  chain above rather than being wrapped by it. See ADR 0029 → Consequences.
 
   **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary
   integration's credential (`BinaryGeneratorRegistry`, below) goes through the same port. So an

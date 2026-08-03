@@ -22,6 +22,8 @@ import type {
   SubscriptionQuotaWindowKind,
   TestSecretRecord,
   TestSecretsRepository,
+  CapabilityCredentialRecord,
+  CapabilityCredentialRepository,
 } from '@cat-factory/kernel'
 import type { SubscriptionVendor } from '@cat-factory/contracts'
 import { subscriptionVendorSchema } from '@cat-factory/contracts'
@@ -36,6 +38,7 @@ import {
   validationConfigs,
   subscriptionQuotaCycles,
   testSecrets,
+  capabilityCredentials,
 } from '../../db/schema.js'
 
 export class DrizzleObservabilityConnectionRepository implements ObservabilityConnectionRepository {
@@ -568,5 +571,59 @@ export class DrizzleTestSecretsRepository implements TestSecretsRepository {
     await this.db
       .delete(testSecrets)
       .where(and(eq(testSecrets.workspace_id, workspaceId), eq(testSecrets.block_id, blockId)))
+  }
+}
+
+/**
+ * A workspace's capability credentials — the sealed, tenant-scoped home for the secrets a
+ * registered tool server or generative binary integration declares by name. One row per
+ * workspace; `credentials` is the sealed `CapabilityCredentialEntry[]` blob, `summary` the
+ * non-secret display list. The D1 mirror is `D1CapabilityCredentialRepository`.
+ */
+export class DrizzleCapabilityCredentialRepository implements CapabilityCredentialRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<CapabilityCredentialRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(capabilityCredentials)
+      .where(eq(capabilityCredentials.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      credentials: row.credentials,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: CapabilityCredentialRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      credentials: record.credentials,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(capabilityCredentials)
+      .values(values)
+      .onConflictDoUpdate({
+        target: capabilityCredentials.workspace_id,
+        set: {
+          credentials: values.credentials,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db
+      .delete(capabilityCredentials)
+      .where(eq(capabilityCredentials.workspace_id, workspaceId))
   }
 }

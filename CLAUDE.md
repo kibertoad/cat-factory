@@ -654,7 +654,10 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 - `node scripts/check-component-imports.mjs`: requires every layer component used in a Vue
   template to be imported by path (a bare tag renders nothing, silently). See
   [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
-- `node --test 'scripts/*.test.mjs'` runs both guards' own fixtures (CI runs all three).
+- `node scripts/check-reserved-env-keys.mjs`: requires every variable documented in
+  `docs/environment-variables.md` to be RESERVED, so it cannot be named as a capability credential
+  and resolved into an agent process.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all four).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
@@ -1163,11 +1166,44 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   `assignToolServers`. **Skills resolve in the ENGINE**; **tool servers resolve in the container
   EXECUTOR**, because what is servable depends on the resolved HARNESS and the facade-wired credential
   resolver, neither of which the runtime-neutral engine knows.
-- **A tool-server credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
+- **A capability credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
   port, so a server needs no table and no UI. The VALUE rides the job body only; `context.toolServers` is
-  the non-secret projection the prompt and telemetry see. The default env resolver is a TRUST BOUNDARY (a
-  definition names both the key it wants and the endpoint it reaches), so a deployment installing
-  third-party agent packages passes `{ allowKeys }`.
+  the non-secret projection the prompt and telemetry see. **A credential has TWO names and only one of
+  them is a boundary**: the LOOKUP key is what a resolver is asked for, so it can reach the deployment's
+  environment, while `envName` is what the value is INJECTED as in the agent's or the MCP server's
+  process and reads nothing. Every rule below binds the lookup key. (An `http` tool server always had
+  the split, `key` vs `header`; `envName` is that split for the stdio and generator cases.) Two rules
+  bind it, a FLOOR plus a BOUND rather than one setting. **The floor: a credential may NEVER be looked
+  up by a variable the platform reads** (`isReservedPlatformEnvKey`, case-insensitively, since
+  `process.env` lookup is case-insensitive on Windows). A definition names both the key it wants and
+  the endpoint it reaches, so `{ key: 'ENCRYPTION_KEY' }` was a registration that booted clean and
+  shipped the deployment's master sealing key to a third party. Refused at DECLARATION (the
+  generative-integration schema; boot validation for a tool server) and again at DISPATCH, because a
+  mothership-mode node boot-validates nothing it resolves, and refused at the CALL SITE rather than
+  inside the env resolver, so it binds a deployment's own resolver too. It needs no configuration and
+  cannot be widened; a new platform variable is covered by its prefix family, with
+  `check-reserved-env-keys.mjs` as the drift guard. **Holding `envName` to that floor too would break
+  the commonest integrations there are** and is the whole reason the names are separate: the families
+  cover `GITHUB_PERSONAL_ACCESS_TOKEN` / `SLACK_BOT_TOKEN` / `AWS_ACCESS_KEY_ID`, which the platform
+  does not read and a vendor's own SDK does, and no deployment can rename what an SDK looks for. So
+  `envName` carries the narrower `isToolchainEnvName` rule instead (not `PATH` / `NODE_OPTIONS` /
+  `npm_config_*`, which reconfigure a process rather than authenticate a call). **The bound:
+  everything outside the platform's own configuration** is a developer's own tooling, and only the
+  deployment knows what an integration may see: `{ allowKeys }`, which a deployment installing
+  third-party agent packages (or a mothership-mode node) sets through its facade's
+  `createToolSecretResolver` factory. **On the Worker that factory registers PROCESS-WIDE**
+  (`registerToolSecretResolverFactory`, the `registerModelRegistry` pattern), because a Worker builds a
+  container per entry point and the one that dispatches container agents is the durable driver, so an
+  option held on the app would be accepted and never asked anything. **The VALUE's primary home is the
+  per-workspace capability-credential store**, not the environment: every facade composes it in FRONT
+  of the env resolver PER KEY (a partially-filled workspace must not lose the keys it has not typed
+  yet), so a tenant brings its own vendor account and a workspace storing nothing resolves exactly as
+  before. Its surface is a CHECKLIST projected from the registries, and it keeps three states apart
+  that an empty list would flatten: a stored key nothing declares (`orphaned`), a declaration read that
+  FAILED (`declarationsIncomplete`, which also suppresses the orphan list, or an unreachable
+  mothership reports every generator credential as stale), and a key the environment still answers
+  (`environmentFallback`). Doc:
+  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.

@@ -25,7 +25,11 @@ import {
   parseLogLevel,
   setLogLevel,
 } from '@cat-factory/server'
-import { runBestEffort, type CreateSharedStackInput } from '@cat-factory/kernel'
+import {
+  runBestEffort,
+  type CreateSharedStackInput,
+  type ToolSecretResolver,
+} from '@cat-factory/kernel'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -109,6 +113,21 @@ export async function startLocal(
      * a laptop is the cheapest place to learn a definition is malformed.)
      */
     binaryGeneratorRegistry?: BinaryGeneratorRegistry
+    /**
+     * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+     * server's (MCP) and a generative binary integration's alike. Threaded through to
+     * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the
+     * deployment-environment default, `createEnvToolSecretResolver(env)`.
+     *
+     * This is the `ToolSecretResolver` port's own extension seam: a deployment holding
+     * PER-WORKSPACE credentials implements the port and passes it here, and nothing else in the
+     * dispatch path changes. The narrower env bound composes through the same option —
+     * `(env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` — which is the shape a
+     * MOTHERSHIP-MODE node wants: its integration definitions are authored by the mothership, and
+     * the environment their keys are read from is this laptop's. (The platform's OWN
+     * configuration variables need no such list; they are refused with no configuration at all.)
+     */
+    createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
     /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
@@ -266,6 +285,7 @@ async function bootLocal(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    createToolSecretResolver: options.createToolSecretResolver,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -326,6 +346,7 @@ async function startLocalMothership(
     taskTypeRegistry?: TaskTypeRegistry
     foundationalServiceRegistry?: FoundationalServiceRegistry
     binaryGeneratorRegistry?: BinaryGeneratorRegistry
+    createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
     seedEnvironmentHandlers?: RegisterHandlerInput[]
     seedSharedStacks?: CreateSharedStackInput[]
   },
@@ -338,6 +359,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    createToolSecretResolver,
     seedEnvironmentHandlers,
     seedSharedStacks,
   } = extensions
@@ -363,6 +385,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    createToolSecretResolver,
     seedEnvironmentHandlers,
     seedSharedStacks,
   })

@@ -24,8 +24,13 @@ import {
   type BinaryGeneratorDefinition,
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
+  isEnvVariableName,
   isNamespacedId,
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
   modalitiesOfMediaType,
+  reservedEnvKeyMessage,
+  toolchainEnvNameMessage,
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
 } from '@cat-factory/contracts'
@@ -499,6 +504,13 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
  * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
  *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
  *   it here only moves the failure to a place with no registration to point at;
+ * - a credential naming a PLATFORM CONFIGURATION VARIABLE is an ERROR, and it is the sharpest of
+ *   these: a definition names both the key it wants and the endpoint that key is sent to, so
+ *   `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` is a registration that boots clean and
+ *   ships the deployment's master sealing key to a third party. The generative-integration half
+ *   of the same rule is enforced by its credential SCHEMA (there is no schema here — a tool
+ *   server is a TypeScript registration), and dispatch refuses both again for the mothership
+ *   case;
  * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
  *   into, so they can never take effect. A warning rather than an error because a deployment may
  *   deliberately declare them ahead of moving the kind onto a container surface.
@@ -526,6 +538,52 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
           `becomes part of the tool names the CLI exposes (mcp__<id>__<tool>) and a Codex ` +
           `config key, so it must match [a-z0-9][a-z0-9_-]*.`,
       })
+    }
+    for (const secret of server.secretKeys ?? []) {
+      if (isReservedPlatformEnvKey(secret.key)) {
+        problems.push({
+          severity: 'error',
+          code: 'reserved_credential_key',
+          message:
+            `Tool server "${server.id}" (on agent kind "${kind}") declares credential ` +
+            `${reservedEnvKeyMessage(secret.key)}`,
+        })
+      }
+      // The injection name is NOT held to the reserved floor (it reads nothing), so it carries its
+      // own rule: a value set as `PATH` or `npm_config_registry` reconfigures the server's process
+      // instead of authenticating a call. Dispatch drops one too, for the mothership case.
+      if (secret.envName !== undefined && !isEnvVariableName(secret.envName)) {
+        problems.push({
+          severity: 'error',
+          code: 'invalid_credential_env_name',
+          message:
+            `Tool server "${server.id}" (on agent kind "${kind}") declares credential envName ` +
+            `"${secret.envName}", which is not a valid environment variable name. It becomes a ` +
+            `variable of the server's process, and the harness drops anything else.`,
+        })
+      }
+      if (secret.envName !== undefined && isToolchainEnvName(secret.envName)) {
+        problems.push({
+          severity: 'error',
+          code: 'toolchain_credential_env_name',
+          message:
+            `Tool server "${server.id}" (on agent kind "${kind}") declares credential ` +
+            `${toolchainEnvNameMessage(secret.envName)}`,
+        })
+      }
+      // An `http` server sends its value as a HEADER, so an injection name would be read by
+      // nothing. A warning rather than an error: the declaration still works, it just says
+      // something that cannot take effect, and failing boot over it would be out of proportion.
+      if (secret.envName !== undefined && server.transport.kind === 'http' && secret.header) {
+        problems.push({
+          severity: 'warn',
+          code: 'unused_credential_env_name',
+          message:
+            `Tool server "${server.id}" (on agent kind "${kind}") declares credential envName ` +
+            `"${secret.envName}" on a key that names a header. An http server's value is sent as ` +
+            `that header, so the injection name is never used.`,
+        })
+      }
     }
     if (server.transport.kind === 'http' && !isAllowedMcpHttpUrl(server.transport.url)) {
       problems.push({

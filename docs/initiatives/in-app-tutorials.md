@@ -42,14 +42,36 @@ authority; this tracker records the arc and what each slice learned.
       slots, so it can only DROP, and the whole point of the catalogue is to explain what was
       dropped. Resolution moved to the pure `resolveTourCatalogue`, read once in
       `useTutorialTours`, which reads the same registered `gates` service the nav filter does.
-- [ ] **4: Reaching the user who needs it.** The catalogue is now discoverable; whether it is
-      DISCOVERED is unmeasured. Three candidates, in rough order of expected value: a CONTEXTUAL
+- [x] **4: The platform half of the catalog.** Four tours for the machinery under the delivery
+      loop: connect an engine (`wire-models`), assemble a flow (`design-pipeline`), curate the
+      standards agents read (`agent-standards`), link the systems a run talks to
+      (`connect-systems`). Each covers one surface, declares the permission that renders the
+      sidebar entry it clicks, and anchors on the ids those surfaces now carry.
+      _Learned:_ growing the catalog is not free for the PROMPT. These tours gate on a permission
+      rather than on board state, so every one is startable on a brand-new board, and offered
+      unfiltered they turned a two-item first-run question into a six-item list that buried the two
+      tours a new user can act on. Hence `offeredAtLaunch`: a declared opt-out of the OFFER, never
+      of the library, defaulting to offered so a consumer's tour still appears and nothing can drop
+      out of the prompt by omission. The alternative, capping the prompt's list, was rejected: a cap
+      would pick which walkthroughs to bury by sort order rather than by what they are for.
+      The second learning was that "each tour requires what renders the control it clicks" could
+      not stay a convention checked by restating the permission: it now binds through
+      `navRequirementDrift`, which reads the nav catalog's own gates, because the two edits that
+      break it (tightening an entry's `gate`, marking one `advanced` and so hiding it from the
+      DEFAULT tier) are both invisible to every other check and to the tour itself.
+- [ ] **5: Reaching the user who needs it.** The catalogue is now discoverable; whether it is
+      DISCOVERED is unmeasured. Two candidates, in rough order of expected value: a CONTEXTUAL
       offer, surfacing the one relevant tour beside the surface it explains (the first time a run
-      parks, the first time a PR is ready to merge) rather than only at launch; completion that
+      parks, the first time a PR is ready to merge) rather than only at launch; and completion that
       follows the USER rather than the browser, which the persisted store does not (a second
-      machine re-offers everything); and tours for the surfaces later initiatives added
-      (foundational services, consensus panels, compose environments), which the catalogue can now
-      hold without crowding the launch prompt.
+      machine re-offers everything). Slice 4 took the third (tours for the surfaces later
+      initiatives added) as far as the platform basics; the newer ones (foundational services,
+      consensus panels, compose environments) are still uncovered, and now have somewhere to land
+      that costs the launch prompt nothing.
+      One residual this slice deliberately did not close: `offeredAtLaunch` defaults to OFFERED, so
+      the crowding it fixes returns for a deployment that ships four tours of its own. That is the
+      right default (nothing may fall out of the prompt by omission), and the answer is a
+      CONTEXTUAL offer rather than a cap, which is why it belongs to this slice.
 
 ## Gotchas the slices surfaced
 
@@ -61,6 +83,15 @@ authority; this tracker records the arc and what each slice learned.
   the deployment's whole catalog: a filtered list is indistinguishable from a smaller product.
 - **The launch prompt is the offer, not the library.** Growing it into a browsing surface was the
   alternative to slice 3 and was rejected: it is a modal the user is trying to answer and dismiss,
-  and a returning user has already answered it once.
+  and a returning user has already answered it once. Slice 4 is the same rule from the other side:
+  a tour worth shipping is not automatically a tour worth ASKING about on someone's first launch.
+- **A tour's requirement must be the same fact that renders the control it clicks**, and that is
+  CHECKED against the nav catalog rather than restated. Anything weaker offers the tour to a user who
+  has no such control, and the tour then hunts for the anchor, skips the steps behind it, and tells
+  someone who saw the right thing that they missed half of it. Restating the permission in a spec's
+  gate literal cannot catch it: the two edits that break the pairing happen in `nav-contributions.ts`
+  (tightening an entry's `gate`, marking one `advanced` and so hiding it from the DEFAULT interface
+  tier), and neither one touches the tour. So `navRequirementDrift` derives the pairing from the nav
+  entry's own `gate`, over a permutation matrix of the gates each side reads.
 - **Copy for a state or an action is looked up from data**, so it needs an exhaustive `Record` plus a
   spec pinning every value against `en.json`; the typed-message-key check cannot see an assembled key.

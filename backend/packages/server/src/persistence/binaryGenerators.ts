@@ -32,13 +32,20 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  *
  * **On what the reply is trusted to name.** A definition carries its credential's KEY NAME, and
  * this node resolves that key against its OWN environment before the value rides a job body into
- * an agent process. That is a real widening of `createEnvToolSecretResolver`'s default over the
- * standalone case, where the key was named by code this process itself runs — but not a new
- * grant: a mothership already supplies the pipelines, prompts and repo targets of every run this
- * node executes, so it can already reach the laptop's environment through any agent it dispatches.
- * The lever for a deployment that wants the narrower boundary anyway (or simply wants a
- * mis-declared key to fail loudly instead of siphoning a developer's own token) is
- * `EnvToolSecretResolverOptions.allowKeys`, which gates this subject family too.
+ * an agent process. That is a real widening over the standalone case, where the key was named by
+ * code this process itself runs, and it is why the reserved-key floor is enforced at the
+ * dispatch call site rather than only at registration: this node boot-validates nothing it reads
+ * here (see `isGeneratorView` below — the elements are checked for SHAPE, because re-validating a
+ * definition the mothership already boot-checked is not this client's job), so a check that only
+ * ran on the mothership would be a check a node one build behind could not rely on. What the
+ * floor guarantees is the part the trust relationship should never have included: the node's own
+ * half of the security material between the two processes (`ENCRYPTION_KEY`,
+ * `HARNESS_SHARED_SECRET`) is unreachable through this path, with no configuration.
+ *
+ * Everything OUTSIDE the platform's own configuration is a different question and stays a
+ * DEPLOYMENT's to answer, because only it knows which of a developer's own variables an
+ * integration may see: `EnvToolSecretResolverOptions.allowKeys` is that bound, reachable through
+ * every facade's `createToolSecretResolver` option.
  *
  * There is no cache here on purpose, for the reason its sibling gives: the reads are already
  * bounded by the callers in front of them, and the set changes only when the mothership is
