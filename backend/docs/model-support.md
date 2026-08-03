@@ -299,15 +299,18 @@ enforces a **supported-model allow-list** (`BEDROCK_MODELS`): a model id outside
 list throws `Unsupported Bedrock model: <model>` rather than forwarding an
 unvetted id.
 
-**Bedrock contributes NOTHING to the picker catalog, by design.** No `MODEL_CATALOG`
-entry carries a `bedrock` flavour and `SelectableModel` has no field for one, so a
-Bedrock model is reachable only as a **routing default** — `AGENT_DEFAULT_PROVIDER` +
+**Bedrock contributes nothing to the picker catalog today.** No `MODEL_CATALOG` entry
+carries a `bedrock` flavour and `SelectableModel` has no field for one, so a Bedrock
+model is currently reachable only as a **routing default** — `AGENT_DEFAULT_PROVIDER` +
 `AGENT_DEFAULT_MODEL`, or a per-kind `AGENT_MODELS` entry. A user cannot pin one to a
-block. That is the right shape for what Bedrock is used for here (a residency-guaranteed
-route an operator selects deployment-wide, and the `trustedProviders` escape hatch on the
-account model policy — §2 of [ADR 0025](./adr/0025-workspace-rbac.md)'s sibling
-`modelPolicy`); making it selectable per block would mean a per-deployment catalog, since
-what Bedrock serves depends on the account's region and model access grants.
+block.
+
+**This is a gap, not a design choice, and it is being closed.** The account model policy
+already ships `trustedProviders: ['bedrock']` specifically so a blocked family can pass on
+a residency-guaranteed route — which nobody can select per task, leaving that exemption
+reachable only by repointing the whole deployment. `BEDROCK_MODELS` is already a per-model
+allow-list, so per-model enablement falls straight out of it. Design + work items:
+[`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
 
 Bedrock ids are `provider.model`, optionally carrying a **geo/global inference prefix**
 (`us.` / `eu.` / `jp.` / `au.` / `global.`) — several models are reachable ONLY through a
