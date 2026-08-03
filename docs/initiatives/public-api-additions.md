@@ -236,6 +236,9 @@ Recorded so these are not re-proposed:
   an answer path without updating it leaves the API still telling operators the park is unanswerable.
 - **Regenerate `docs/openapi.json`** (`pnpm gen:openapi`) in the same PR, with the
   `COMPONENT_SCHEMAS` + `OPERATION_DOCS` entries each new named DTO needs; CI fails on drift.
+- **Update the usage guide** ([`backend/docs/public-api.md`](../../backend/docs/public-api.md)) in
+  the same PR — its reference tables (routes, scopes, error codes) are hand-maintained, and a slice
+  that ships without the doc leaves the API documenting itself as narrower than it is.
 
 ## Open question for the maintainer
 
