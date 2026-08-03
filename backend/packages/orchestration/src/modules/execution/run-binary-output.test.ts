@@ -1,12 +1,30 @@
 import { AgentKindRegistry, BINARY_OUTPUT_TRAIT } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
-import { BINARY_OUTPUT_BRIEF_FILE, BINARY_OUTPUT_DECLARATION_TAG } from '@cat-factory/kernel'
+import {
+  BINARY_OUTPUT_BRIEF_FILE,
+  BINARY_OUTPUT_DECLARATION_TAG,
+  defaultBinaryGeneratorRegistry,
+} from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import {
   createBinaryOutputDeclarationRecorder,
+  dispatchBinaryGeneratorsFor,
   resolveBinaryOutputContext,
 } from './run-binary-output.js'
+
+function generatorRegistry() {
+  const generators = defaultBinaryGeneratorRegistry()
+  generators.register({
+    id: 'retro-diffusion',
+    name: 'Retro Diffusion',
+    summary: 'Pixel-art image generation.',
+    description: '',
+    modalities: ['image'],
+    credential: { key: 'RD_TOKEN' },
+  })
+  return generators
+}
 
 const registry = new AgentKindRegistry()
 registry.register({
@@ -43,9 +61,11 @@ describe('resolveBinaryOutputContext', () => {
       foundationalServiceResolver: deps,
     })
     expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
-    expect(deps.binaryOutputContextFilesFor).toHaveBeenCalledWith('ws', {
-      storageServiceId: 'asset-store',
-    })
+    expect(deps.binaryOutputContextFilesFor).toHaveBeenCalledWith(
+      'ws',
+      { storageServiceId: 'asset-store' },
+      undefined,
+    )
   })
 
   it('injects nothing for a kind without the trait, and reads nothing', async () => {
@@ -100,6 +120,7 @@ describe('createBinaryOutputDeclarationRecorder', () => {
     expect(target.binaryOutputs).toEqual({
       stored: [{ service: 'asset-store', location: 'a.png' }],
       unknownServices: [],
+      unknownGenerators: [],
       invalidEntries: 0,
       omitted: 0,
     })
@@ -165,5 +186,62 @@ describe('createBinaryOutputDeclarationRecorder', () => {
       }),
     })('ws', target, declaration)
     expect(target.binaryOutputs).toBeUndefined()
+  })
+})
+
+describe('dispatchBinaryGeneratorsFor', () => {
+  it('projects the step’s selected integrations for a trait-carrying dispatch', () => {
+    expect(
+      dispatchBinaryGeneratorsFor({
+        agentKind: 'image-generator',
+        agentKindRegistry: registry,
+        step: step({
+          stepOptions: {
+            binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+          },
+        }),
+        binaryGeneratorRegistry: generatorRegistry(),
+      }),
+    ).toEqual([
+      {
+        id: 'retro-diffusion',
+        label: 'Retro Diffusion',
+        modalities: ['image'],
+        credentialKey: 'RD_TOKEN',
+      },
+    ])
+  })
+
+  it('projects nothing for a kind without the trait — the SAME gate the brief uses', () => {
+    // The two are halves of one hand-off: the brief tells the agent to read `$RD_TOKEN`, and this
+    // is what puts a value there. A kind that got one without the other is either an agent told
+    // to use a credential nobody delivered, or a credential delivered in silence.
+    expect(
+      dispatchBinaryGeneratorsFor({
+        agentKind: 'coder',
+        agentKindRegistry: registry,
+        step: step({
+          agentKind: 'coder',
+          stepOptions: {
+            binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+          },
+        }),
+        binaryGeneratorRegistry: generatorRegistry(),
+      }),
+    ).toEqual([])
+  })
+
+  it('projects nothing when the deployment registers no integrations', () => {
+    expect(
+      dispatchBinaryGeneratorsFor({
+        agentKind: 'image-generator',
+        agentKindRegistry: registry,
+        step: step({
+          stepOptions: {
+            binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+          },
+        }),
+      }),
+    ).toEqual([])
   })
 })

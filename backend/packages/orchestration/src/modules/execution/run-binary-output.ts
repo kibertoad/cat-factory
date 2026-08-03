@@ -1,8 +1,20 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { BINARY_OUTPUT_TRAIT, hasTrait } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
-import type { AgentKind, InjectedContextFile, Logger } from '@cat-factory/kernel'
-import { noopLogger, parseBinaryOutputDeclaration, runBestEffort } from '@cat-factory/kernel'
+import type {
+  AgentKind,
+  BinaryGeneratorRegistry,
+  InjectedContextFile,
+  Logger,
+  ResolvedBinaryGenerator,
+} from '@cat-factory/kernel'
+import {
+  dispatchBinaryGenerators,
+  noopLogger,
+  parseBinaryOutputDeclaration,
+  resolveBinaryGeneratorSelection,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 
 // ---------------------------------------------------------------------------
@@ -26,6 +38,8 @@ export interface ResolveBinaryOutputContextInput {
   /** The step being dispatched — its `stepOptions.binaryOutput` is the selection. */
   step: PipelineStep
   foundationalServiceResolver?: FoundationalServiceResolver
+  /** The deployment's generative integrations. Absent ⇒ none resolve, and the brief says so. */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   logger?: Logger
 }
 
@@ -50,10 +64,44 @@ export async function resolveBinaryOutputContext(
     input.logger ?? noopLogger,
     'binaryOutput.context',
     () =>
-      resolver.binaryOutputContextFilesFor(input.workspaceId, input.step.stepOptions?.binaryOutput),
+      resolver.binaryOutputContextFilesFor(
+        input.workspaceId,
+        input.step.stepOptions?.binaryOutput,
+        input.binaryGeneratorRegistry,
+      ),
     { workspaceId: input.workspaceId, agentKind: input.agentKind },
   )
   return files ?? []
+}
+
+/**
+ * The GENERATIVE INTEGRATIONS this dispatch carries on its `AgentRunContext` — the non-secret
+ * projection (ids, content types, the credential's KEY NAME) the container executor needs to
+ * resolve each declared credential onto the job body.
+ *
+ * Gated on the SAME condition as the brief — the effective kind carries the trait — because the
+ * two are two halves of one hand-off: the brief tells the agent to read `$RD_TOKEN`, and this is
+ * what puts a value there. A kind that gets one without the other is either an agent told to use
+ * a credential nobody delivered, or a credential delivered to an agent with no idea it exists.
+ *
+ * Resolved SYNCHRONOUSLY and outside the best-effort wrapper above: the registry is in-process
+ * composition data with no I/O, so there is nothing here that can fail at run time — an id that
+ * does not resolve is simply not in the result, and the brief is where that is stated.
+ */
+export function dispatchBinaryGeneratorsFor(input: {
+  agentKind: AgentKind
+  agentKindRegistry: AgentKindRegistry
+  step: PipelineStep
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+}): ResolvedBinaryGenerator[] {
+  if (!input.binaryGeneratorRegistry) return []
+  if (!hasTrait(input.agentKind, BINARY_OUTPUT_TRAIT, input.agentKindRegistry)) return []
+  return dispatchBinaryGenerators(
+    resolveBinaryGeneratorSelection(
+      input.step.stepOptions?.binaryOutput,
+      input.binaryGeneratorRegistry.views(),
+    ),
+  )
 }
 
 /**
@@ -109,6 +157,7 @@ export type BinaryOutputDeclarationRecorder = (
 export function createBinaryOutputDeclarationRecorder(deps: {
   agentKindRegistry: AgentKindRegistry
   foundationalServiceResolver?: FoundationalServiceResolver
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   logger?: Logger
 }): BinaryOutputDeclarationRecorder {
   return async (workspaceId, step, output) => {
@@ -117,10 +166,15 @@ export function createBinaryOutputDeclarationRecorder(deps: {
       deps.logger ?? noopLogger,
       'binaryOutput.recordDeclaration',
       async () => {
-        const known = deps.foundationalServiceResolver
+        const services = deps.foundationalServiceResolver
           ? await deps.foundationalServiceResolver.catalogIdsFor(workspaceId)
           : []
-        step.binaryOutputs = parseBinaryOutputDeclaration(output, known)
+        // The generative ids come from deployment code, so — unlike the catalog — they are known
+        // without a read and cannot fail. An unwired registry checks against an EMPTY set, which
+        // is the honest answer on a deployment that registers no integrations: every id the agent
+        // claimed lands in `unknownGenerators` rather than being quietly accepted.
+        const generators = deps.binaryGeneratorRegistry?.ids() ?? []
+        step.binaryOutputs = parseBinaryOutputDeclaration(output, { services, generators })
       },
       { workspaceId, agentKind: step.agentKind },
     )

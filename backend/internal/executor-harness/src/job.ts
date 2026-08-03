@@ -20,6 +20,11 @@ import {
   type SkillResourceSpec,
   type SkillSpec,
 } from './agent-capabilities.js'
+import { type TestSecretSpec, parseInfraEnv, parseSecretEnvPairs, str } from './job-env.js'
+
+// Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
+// body field like any other; only its VALIDATION moved out).
+export type { TestSecretSpec }
 
 // Re-exported so the job body stays the one import site for a harness handler describing a job.
 export type { McpServerSpec, SkillResourceSpec, SkillSpec }
@@ -140,13 +145,6 @@ export interface ReferenceRepoSpec {
   repo: RepoSpec
   /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
   ghToken?: string
-}
-
-function str(value: unknown, path: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Invalid job: '${path}' must be a non-empty string`)
-  }
-  return value
 }
 
 /** A positive finite integer, or undefined for any other input (silently ignored). */
@@ -494,49 +492,6 @@ export function parsePackageRegistries(
   return entries
 }
 
-/**
- * One sensitive test credential the tester receives: an env-var name + its (secret) value.
- * The backend seals these at rest and decrypts them at dispatch; the harness injects each as an
- * environment variable the tester's shell can read (out of band — the value is NEVER in the
- * prompt/telemetry). See {@link parseTestSecrets}.
- */
-export interface TestSecretSpec {
-  key: string
-  value: string
-}
-
-/** A valid POSIX shell variable name (letters, digits, underscore; not starting with a digit). */
-const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-/**
- * Validate the optional tester `testSecrets` list — `{ key, value }` env pairs the harness
- * injects into the run environment. Keys must be valid env-var names; toolchain-critical /
- * reserved names ({@link isReservedEnvName}) and duplicates are dropped so a drifted body can't
- * clobber PATH/NODE_OPTIONS/etc. Absent ⇒ no secrets injected.
- */
-export function parseTestSecrets(value: unknown): TestSecretSpec[] {
-  if (value === undefined || value === null) return []
-  if (!Array.isArray(value)) throw new Error("Invalid job: 'testSecrets' must be an array")
-  const entries: TestSecretSpec[] = []
-  const seen = new Set<string>()
-  for (const [i, raw] of value.entries()) {
-    if (typeof raw !== 'object' || raw === null) {
-      throw new Error(`Invalid job: 'testSecrets[${i}]' must be an object`)
-    }
-    const entry = raw as Record<string, unknown>
-    const key = str(entry.key, `testSecrets[${i}].key`).trim()
-    if (!ENV_VAR_NAME_PATTERN.test(key)) {
-      throw new Error(
-        `Invalid job: 'testSecrets[${i}].key' must be a valid environment variable name`,
-      )
-    }
-    if (isReservedEnvName(key) || seen.has(key)) continue
-    seen.add(key)
-    entries.push({ key, value: str(entry.value, `testSecrets[${i}].value`) })
-  }
-  return entries
-}
-
 // ---- Shared repo-bootstrap target ---------------------------------------
 
 /** The new repository a repo-bootstrap run force-pushes its fresh history to. */
@@ -782,6 +737,16 @@ export interface AgentJob extends HarnessAuthFields {
    * Absent ⇒ no secrets injected.
    */
   testSecrets?: TestSecretSpec[]
+  /**
+   * The resolved credentials of the step's GENERATIVE BINARY INTEGRATIONS (the image / music /
+   * video generation APIs its `binaryOutput` selection named), as env pairs the harness injects
+   * into the agent's own process — where the agent's brief has already told it to read them from.
+   * Distinct from {@link testSecrets} because the two have different producers and different
+   * lifetimes: tester secrets are workspace state a human stored, these are a deployment's
+   * registration resolved per dispatch. Absent ⇒ no integration declared a credential, or none
+   * resolved (which the agent is told to report rather than work around).
+   */
+  generatorSecrets?: TestSecretSpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -1110,66 +1075,6 @@ function parseStringMap(value: unknown): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
-/**
- * Env-var names never injected from a frontend binding: spread over `process.env` at build
- * time, so any of these would break the toolchain (or enable code execution / cert overrides)
- * rather than name an upstream URL. Matched exactly (Linux env is case-sensitive); the
- * {@link RESERVED_ENV_PREFIXES} below cover whole families (`npm_config_*`, `GIT_*`, …).
- */
-const RESERVED_ENV_NAMES = new Set([
-  'PATH',
-  'HOME',
-  'NODE_OPTIONS',
-  'NODE_PATH',
-  'NODE_EXTRA_CA_CERTS',
-  'LD_PRELOAD',
-  'LD_LIBRARY_PATH',
-  'BASH_ENV',
-  'ENV',
-  'SHELL',
-  'IFS',
-])
-
-/**
- * Env-var name PREFIXES never injected from a frontend binding. `npm_config_*` reconfigures the
- * package manager (registry, scripts, prefix), and `GIT_*` reconfigures git — both run during a
- * frontend install/build, so a binding in either family is toolchain control, not an upstream URL.
- * Compared case-INSENSITIVELY (lower-cased here, matched lower-cased below): npm reads its config
- * env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY` is honoured just like
- * `npm_config_registry` — a case-sensitive prefix match would let the upper-cased form slip through.
- */
-const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
-
-/**
- * Whether an env-var name is reserved (an exact name, or a reserved family prefix). The exact
- * names are canonical upper-case env vars matched verbatim (Linux env is case-sensitive, so a
- * distinct lower-cased `home` is a different, harmless var); the family PREFIXES are matched
- * case-insensitively because npm interprets `npm_config_*` regardless of case (see above).
- */
-function isReservedEnvName(key: string): boolean {
-  if (RESERVED_ENV_NAMES.has(key)) return true
-  const lower = key.toLowerCase()
-  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
-}
-
-/**
- * Collect only string→string entries from a raw `env` bag. A non-string value is dropped so a
- * malformed binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved
- * names that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
- * dropped too: they are spread over `process.env` at build time, so a binding named `PATH` would
- * replace it with a URL and the build would no longer find its tools. Extracted from the infra
- * parsers to keep their cyclomatic complexity down.
- */
-function parseInfraEnv(raw: unknown): Record<string, string> {
-  const env: Record<string, string> = {}
-  if (typeof raw === 'object' && raw !== null) {
-    for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
-      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
-    }
-  }
-  return env
-}
-
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
 function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const packageManager =
@@ -1321,7 +1226,8 @@ export function parseAgentJob(input: unknown): AgentJob {
     packageRegistries: parsePackageRegistries(o.packageRegistries),
     skills: parseSkillSpecs(o.skills),
     mcpServers: parseMcpServerSpecs(o.mcpServers),
-    testSecrets: parseTestSecrets(o.testSecrets),
+    testSecrets: parseSecretEnvPairs(o.testSecrets, 'testSecrets'),
+    generatorSecrets: parseSecretEnvPairs(o.generatorSecrets, 'generatorSecrets'),
     guardLimits: parseGuardLimits(o.guardLimits),
     validation: parseValidationSpec(o.validation),
     validationChecks: parseValidationChecksSpec(o.validationChecks),
@@ -1362,7 +1268,8 @@ interface ParsedAgentJobParts {
   packageRegistries: ReturnType<typeof parsePackageRegistries>
   skills: ReturnType<typeof parseSkillSpecs>
   mcpServers: ReturnType<typeof parseMcpServerSpecs>
-  testSecrets: ReturnType<typeof parseTestSecrets>
+  testSecrets: ReturnType<typeof parseSecretEnvPairs>
+  generatorSecrets: ReturnType<typeof parseSecretEnvPairs>
   guardLimits: ReturnType<typeof parseGuardLimits>
   validation: ReturnType<typeof parseValidationSpec>
   validationChecks: ReturnType<typeof parseValidationChecksSpec>
@@ -1425,6 +1332,7 @@ function assembleAgentJob(
     reproduction,
     dependencyInstall,
     reviewPrNumber,
+    generatorSecrets,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
   return {
@@ -1445,6 +1353,7 @@ function assembleAgentJob(
     ...(skills ? { skills } : {}),
     ...(mcpServers ? { mcpServers } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
+    ...(generatorSecrets.length ? { generatorSecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(pr ? { pr } : {}),
     ...(peerRepos.length ? { peerRepos } : {}),

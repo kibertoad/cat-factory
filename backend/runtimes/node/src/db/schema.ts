@@ -323,6 +323,10 @@ export const agentRuns = pgTable(
     // Optimistic-concurrency revision, bumped on every write; guarded by compareAndSwap
     // so a human-action write that raced the driver is retried, not silently clobbered.
     rev: integer('rev').notNull().default(0),
+    // Sweeper re-drives of this run. Deliberately NOT rev-guarded (a monotonic counter about
+    // the run, not derived from its state, so it can never fail a re-drive) and it survives the
+    // restart/eviction the sweeper's in-memory orphan map does not. Mirrors D1 migration 0076.
+    redrive_count: integer('redrive_count').notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -1358,43 +1362,9 @@ export const referenceArchitectures = pgTable(
   ],
 )
 
-// Slack integration (mirror of D1 migration 0037). An additional delivery transport
-// for the notification mechanism. Per-account connection (+ encrypted bot token,
-// `token_cipher` is a WebCryptoSecretCipher envelope, never plaintext), per-workspace
-// routing, and the per-account GitHub→Slack member map for @-mentions.
-export const slackConnections = pgTable(
-  'slack_connections',
-  {
-    account_id: text('account_id').primaryKey(),
-    team_id: text('team_id').notNull(),
-    team_name: text('team_name').notNull(),
-    team_icon_url: text('team_icon_url'),
-    bot_user_id: text('bot_user_id'),
-    scopes: text('scopes'),
-    token_cipher: text('token_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  // A Slack team binds to at most one live account (mirrors the D1 partial unique).
-  (t) => [
-    uniqueIndex('idx_slack_conn_team')
-      .on(t.team_id)
-      .where(sql`deleted_at IS NULL`),
-  ],
-)
-
-export const slackSettings = pgTable('slack_settings', {
-  workspace_id: text('workspace_id').primaryKey(),
-  routes: text('routes').notNull().default('{}'),
-  mentions_enabled: integer('mentions_enabled').notNull().default(0),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-export const slackMemberMappings = pgTable('slack_member_mappings', {
-  account_id: text('account_id').primaryKey(),
-  entries: text('entries').notNull().default('[]'),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
+// The Slack integration's tables live in their own module (this file is at its size ratchet);
+// re-exported here so drizzle-kit and every repository still read ONE schema module.
+export { slackConnections, slackMemberMappings, slackSettings } from './schema-slack.js'
 
 // Provider-subscription token pool (mirror of D1 migration 0035): per-workspace,
 // per-vendor subscription credentials (Claude Pro/Max OAuth token, ChatGPT

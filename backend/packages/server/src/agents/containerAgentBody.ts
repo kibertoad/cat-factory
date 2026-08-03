@@ -8,6 +8,7 @@ import {
 } from '@cat-factory/orchestration'
 import { DOC_WRITER_KIND, READ_ONLY_AGENT_KINDS } from '@cat-factory/agents'
 import type { McpServerJobSpec } from './toolServers.js'
+import type { GeneratorSecretJobSpec } from './binaryGenerators.js'
 import { aprioriReferenceBranches } from '@cat-factory/contracts'
 import {
   renderMergerMultiRepoSection,
@@ -92,12 +93,13 @@ export function buildCommonBody(
     contextFiles: { path: string; title: string; url: string; content: string }[]
     skillsBody?: unknown[]
     mcpServers?: McpServerJobSpec[]
+    generatorSecrets?: GeneratorSecretJobSpec[]
     guardLimits?: unknown
   },
   deps: ContainerAgentExecutorDependencies,
 ): Record<string, unknown> {
   const { jobId, model, auth, ghToken, packageRegistries, repoSpec, contextFiles } = args
-  const { skillsBody, mcpServers, guardLimits } = args
+  const { skillsBody, mcpServers, generatorSecrets, guardLimits } = args
   // The UI tester uploads its captured screenshots back to the backend from inside the
   // container. It reuses the SAME container session token it already carries for the LLM
   // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
@@ -146,6 +148,13 @@ export function buildCommonBody(
     // credentials. Also a dedicated top-level field the agent-context snapshot allow-list omits —
     // the prompt-facing (non-secret) projection rides `context.toolServers` instead.
     ...(mcpServers?.length ? { mcpServers } : {}),
+    // The resolved credentials of this step's generative binary integrations, as `{ key, value }`
+    // env pairs the harness injects into the agent's own process — the same channel and the same
+    // secrecy contract as the tester's `testSecrets`, and likewise omitted by the agent-context
+    // snapshot's allow-list. On the BASE body (not a per-kind one) because the kind that carries
+    // the `binary-output` trait is a deployment's own, and gating this on a built-in kind list is
+    // exactly the coupling the trait exists to avoid.
+    ...(generatorSecrets?.length ? { generatorSecrets } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }

@@ -126,6 +126,21 @@ const state = computed(() => {
           >
             {{ t('binaryOutput.unknownBadge') }}
           </UBadge>
+          <!-- WHAT MADE IT, beside where it went. Absent is a real state, not a gap: a step may
+               generate through its own model with no registered integration, so an unattributed
+               row is rendered without a generator rather than with an "unknown" one. -->
+          <span v-if="row.generator" class="font-mono" data-testid="binary-output-generator">{{
+            row.generator
+          }}</span>
+          <UBadge
+            v-if="row.generatorUnknown"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            data-testid="binary-output-unknown-generator-badge"
+          >
+            {{ t('binaryOutput.unknownGeneratorBadge') }}
+          </UBadge>
           <span v-if="row.entity">{{ row.entity }}</span>
           <span v-if="row.contentType" class="font-mono">{{ row.contentType }}</span>
         </div>
@@ -157,6 +172,25 @@ const state = computed(() => {
               count: view.unknownDeclaredServices.length,
             },
             view.unknownDeclaredServices.length,
+          )
+        }}
+      </li>
+      <!-- The generative twin of the line above, and its own line for the same reason: an
+           unregistered integration is fixed in the DEPLOYMENT'S BUILD, where an unknown service is
+           fixed in the workspace catalog. The entries themselves are RETAINED, so leaving this out
+           would attribute an artifact to something nobody can look up with nothing saying so. -->
+      <li
+        v-if="view.unknownDeclaredGenerators.length"
+        data-testid="binary-output-unknown-generators"
+      >
+        {{
+          t(
+            'binaryOutput.warning.unknownGenerators',
+            {
+              ids: view.unknownDeclaredGenerators.join(', '),
+              count: view.unknownDeclaredGenerators.length,
+            },
+            view.unknownDeclaredGenerators.length,
           )
         }}
       </li>

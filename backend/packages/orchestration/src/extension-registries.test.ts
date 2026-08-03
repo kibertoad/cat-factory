@@ -11,6 +11,7 @@ import {
 } from './validation/validateRegistrations.js'
 import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
+  defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
   defaultPipelineRegistry,
@@ -783,5 +784,71 @@ describe('foundational-service registry validation', () => {
     expect(problemsFor([{ ...valid, id: 'Bad Id', capabilities: ['asset_storage'] }])).toHaveLength(
       1,
     )
+  })
+})
+
+describe('generative binary integration registry validation', () => {
+  const gates = defaultGateRegistry()
+  const kinds = defaultAgentKindRegistry()
+  const problemsFor = (
+    definitions: Parameters<ReturnType<typeof defaultBinaryGeneratorRegistry>['register']>[0][],
+  ) => {
+    const binaryGeneratorRegistry = defaultBinaryGeneratorRegistry()
+    binaryGeneratorRegistry.registerAll(definitions)
+    return collectRegistrationProblems({
+      agentKindRegistry: kinds,
+      gateRegistry: gates,
+      binaryGeneratorRegistry,
+    }).filter((p) => p.code.startsWith('binary_generator') || p.code.endsWith('generator_endpoint'))
+  }
+
+  const valid = {
+    id: 'retro-diffusion',
+    name: 'Retro Diffusion',
+    summary: 'Pixel-art image generation.',
+    description: 'Sprites and tiles; not photorealism.',
+    modalities: ['image' as const],
+    mediaTypes: ['image/png'],
+    endpoint: 'https://api.retrodiffusion.ai/v1',
+    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token header' },
+  }
+
+  it('passes a well-formed registration', () => {
+    expect(problemsFor([valid])).toEqual([])
+  })
+
+  it('fails boot on a credential key that is not a usable environment variable name', () => {
+    // The failure it replaces: the harness drops the malformed name at parse and the integration
+    // 401s mid-run, naming nothing that points back at the registration.
+    const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
+    expect(problems[0]?.message).toContain('environment variable name')
+  })
+
+  it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
+    const problems = problemsFor([{ ...valid, endpoint: 'http://api.example.com/v1' }])
+    expect(problems[0]?.code).toBe('insecure_binary_generator_endpoint')
+    expect(problemsFor([{ ...valid, endpoint: 'http://localhost:8080' }])).toEqual([])
+  })
+
+  it('fails boot when a declared media type contradicts the declared content types', () => {
+    // Both halves drive selection — coverage is checked against `modalities`, while the brief
+    // tells the agent the `mediaTypes` — so this integration would be picked for one job and
+    // asked to do the other.
+    const problems = problemsFor([{ ...valid, modalities: ['audio'], mediaTypes: ['image/png'] }])
+    expect(problems[0]?.code).toBe('binary_generator_modality_mismatch')
+  })
+
+  it('accepts a media type it cannot classify rather than refusing a format it has not heard of', () => {
+    expect(problemsFor([{ ...valid, mediaTypes: ['application/x-newfangled'] }])).toEqual([])
+  })
+
+  it('reports a malformed definition ONCE rather than restating it as several', () => {
+    expect(
+      problemsFor([{ ...valid, id: 'Retro Diffusion', endpoint: 'http://api.example.com' }]),
+    ).toHaveLength(1)
+  })
+
+  it('requires at least one content type — a generator that produces nothing is not one', () => {
+    expect(problemsFor([{ ...valid, modalities: [] }])).toHaveLength(1)
   })
 })

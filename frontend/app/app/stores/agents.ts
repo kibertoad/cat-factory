@@ -10,6 +10,7 @@ import {
   SYSTEM_AGENT_META,
   uid,
 } from '~/utils/catalog'
+import type { RegisteredBinaryGenerator } from '@cat-factory/contracts'
 import type { AgentArchetype, AgentKind, AgentKindVariant, CustomAgentKind } from '~/types/domain'
 
 /**
@@ -45,6 +46,13 @@ export const useAgentsStore = defineStore('agents', () => {
   // there — so folding it into the kind catalog would make it placeable, which is exactly what
   // the backend model says it is not. A straight replace, like the skills catalog it mirrors.
   const variants = ref<AgentKindVariant[]>([])
+  /**
+   * The deployment's GENERATIVE BINARY INTEGRATIONS, from the workspace snapshot. Static
+   * deployment-registered composition data like {@link variants}, and it rides the same store for
+   * the same reason: it is a fact ABOUT the agent catalog that the pipeline builder branches on,
+   * with no workspace state behind it. Empty on the stock product — the platform ships none.
+   */
+  const binaryGenerators = ref<RegisteredBinaryGenerator[]>([])
 
   /**
    * The merged CUSTOM catalog (consumer-slot → backend-manifest → runtime), each
@@ -140,6 +148,16 @@ export const useAgentsStore = defineStore('agents', () => {
     capabilitiesManifest.value = manifest
   }
 
+  /**
+   * Hydrate the deployment's registered generative binary integrations from the snapshot (a
+   * straight replace, like {@link hydrateVariants}). The builder's binary-output picker offers
+   * exactly these ids, so they are the same set run admission resolves a step's `generatorIds`
+   * against — an id offered from anywhere else would save clean and be refused at run START.
+   */
+  function hydrateBinaryGenerators(list: readonly RegisteredBinaryGenerator[]) {
+    binaryGenerators.value = [...list]
+  }
+
   /** Hydrate the deployment's registered agent-kind variants from the snapshot (straight replace). */
   function hydrateVariants(list: readonly AgentKindVariant[]) {
     variants.value = [...list]
@@ -172,6 +190,8 @@ export const useAgentsStore = defineStore('agents', () => {
     variants,
     hydrateVariants,
     variantsForKind,
+    binaryGenerators,
+    hydrateBinaryGenerators,
     variantLabel,
   }
 })

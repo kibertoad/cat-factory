@@ -745,6 +745,10 @@ export const stepOptionsSchema = v.object({
    * each is described). Required on such a step: refused at pipeline save and at run admission
    * when missing, exactly as a `skill` step without a `skillId` is — a generator with nowhere
    * to store its deliverable would silently produce nothing. Ignored on every other kind.
+   *
+   * It also carries the step's GENERATIVE INTEGRATIONS (`generatorIds`, from the deployment's
+   * code-registered `BinaryGeneratorRegistry`) and the CONTENT TYPES the step must deliver
+   * (`modalities`), which admission checks the selected integrations cover.
    * See `docs/initiatives/binary-output-foundational-storage.md`.
    */
   binaryOutput: v.optional(binaryOutputConfigSchema),

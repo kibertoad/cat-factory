@@ -71,6 +71,7 @@ import type {
   FragmentBriefRepository,
   FragmentSelector,
   ApiContractRepository,
+  BinaryGeneratorRegistry,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   FoundationalServiceRepository,
@@ -100,6 +101,7 @@ import type {
   MergeTrackRecordRepository,
   ModelPresetRepository,
   ModelProvider,
+  OperationalMetrics,
   ModelProviderResolver,
   ModelRef,
   NotificationChannel,
@@ -229,6 +231,18 @@ export interface CoreDependencies {
    * signature gives the call sites.
    */
   logger: Logger
+  /**
+   * Where operational EVENTS are counted (kernel `ports/operational-metrics.ts`) — container
+   * dispatch failures, evictions, cache hit/miss, dropped telemetry. The dual of `logger`: a
+   * log line answers "what happened to THIS run", a counter answers "how often is this
+   * happening at all", and only the second one can tell an operator that a rate has changed.
+   *
+   * REQUIRED for exactly the reason `logger` is. An un-wired counter reads as a zero, and a
+   * zero here is the most dangerous value in the whole initiative: it says "no evictions" on a
+   * runtime where every container is dying. A facade with nothing to export passes
+   * `noopOperationalMetrics` explicitly, which says that in code.
+   */
+  operationalMetrics: OperationalMetrics
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -909,6 +923,18 @@ export interface CoreDependencies {
    * reads it back so a malformed definition fails the deployment rather than a design dispatch.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * The app-owned registry of GENERATIVE BINARY INTEGRATIONS a DEPLOYMENT ships in CODE — the
+   * image / music / video generation APIs a binary-generating step may call
+   * (`stepOptions.binaryOutput.generatorIds`). Optional + defaulted to
+   * `defaultBinaryGeneratorRegistry()` (EMPTY — the platform ships none, and every one of them is
+   * a metered vendor), so existing construction sites behave exactly as before; a facade injects
+   * the SAME instance it registers its integrations on, and boot validation reads it back so a
+   * malformed definition or an unusable credential name fails the deployment rather than a
+   * dispatch. Deliberately NOT the foundational-service registry: that catalog is what a design
+   * is expected to build ON, while an integration is an instrument a specific step is pointed at.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
    * Where the `builtin` tier is READ from, when that is not this process's own registry.
    * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)` — i.e. exactly the

@@ -52,6 +52,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'logger'
   | 'workspaceAgentSettingsRepository'
   | 'foundationalServiceResolver'
+  | 'binaryGeneratorRegistry'
 >
 
 export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
@@ -81,6 +82,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     fragmentResolver: deps.fragmentResolver,
     skillResolver: deps.skillResolver,
     foundationalServiceResolver: deps.foundationalServiceResolver,
+    binaryGeneratorRegistry: deps.binaryGeneratorRegistry,
     logger: deps.logger,
   })
   // The run-admission preflights (the shared start/retry/restart `assert*` gate family).
@@ -96,6 +98,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     workspaceSettingsService: deps.workspaceSettingsService,
     resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
     foundationalServiceResolver: deps.foundationalServiceResolver,
+    binaryGeneratorRegistry: deps.binaryGeneratorRegistry,
     resolveProviderCapabilities: deps.resolveProviderCapabilities,
     inlineHarnessRef: deps.inlineHarnessRef,
     resolveWorkspaceModelDefault: deps.resolveWorkspaceModelDefault,

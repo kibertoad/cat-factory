@@ -11,6 +11,7 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   AgentKind,
+  BinaryGeneratorRegistry,
   FoundationalCatalogView,
   InjectedContextFile,
   Logger,
@@ -61,10 +62,17 @@ export interface FoundationalServiceResolver {
    * generating step's own selection (`stepOptions.binaryOutput`). On this interface rather
    * than its own seam because it is the same catalog behind the same tier merge and cache —
    * two resolvers would be two places for a workspace override to win differently.
+   *
+   * The GENERATIVE half of that selection resolves against the deployment's code registry, which
+   * is passed in rather than held by the resolver: it is engine-level composition data with no
+   * I/O and no tenancy, so binding it to a catalog service (which has both) would misplace it.
+   * Absent ⇒ no integration resolves, and the brief states that rather than implying the step
+   * has one.
    */
   binaryOutputContextFilesFor(
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
+    generatorRegistry?: BinaryGeneratorRegistry,
   ): Promise<InjectedContextFile[]>
 }
 

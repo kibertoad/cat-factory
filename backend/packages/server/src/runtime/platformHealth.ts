@@ -6,6 +6,7 @@ import {
 } from '@cat-factory/orchestration'
 import type { ServerContainer } from '../http/env.js'
 import type { Logger } from '@cat-factory/kernel'
+import { sweepHealth } from '../observability/sweepHealth.js'
 
 // Runtime-neutral platform-health ALERT sweep — the push counterpart to the operator dashboard
 // read, shared by both facades' periodic sweeps (the Worker's cron `scheduled` handler and the
@@ -68,13 +69,19 @@ export async function sweepPlatformHealth(
     ).keys(),
   )
 
+  const worstSweep = sweepHealth.worst()
   let raised = 0
   let cleared = 0
   for (const accountId of distinctAccountIds(workspaces)) {
     const workspaceIds = byAccount.get(accountId) ?? []
     try {
       const snapshot = await observability.summarize(accountId, cfg.window)
-      const reasons = platformAlertReasons(evaluatePlatformHealth(snapshot, cfg.thresholds))
+      // The sweeper streak is deployment-wide, not per account, so it is read once outside
+      // the per-account loop and applies to every account's card: a wedged retention sweep is
+      // everyone's problem, not the tenant's whose turn it happened to be.
+      const reasons = platformAlertReasons(
+        evaluatePlatformHealth(snapshot, cfg.thresholds, worstSweep),
+      )
       for (const workspaceId of workspaceIds) {
         if (reasons.length > 0) {
           const { title, body } = platformHealthCardContent(reasons, cfg.window)

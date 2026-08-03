@@ -188,11 +188,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   executionRepository: { listByService: 'pending', listStale: 'sweeper' },
   // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/
   // `liveRunIds`/`listPausedExecutions` are the stale-run/paused-resume sweeper's kind-spanning
-  // reads — mothership-internal cron.
+  // reads — mothership-internal cron. `recordRedrive` is the WRITE half of that same sweep and
+  // has no other caller, so it is classified with the reads it accompanies rather than
+  // allow-listed: proxying it would expose a counter bump to a node that never runs the sweep
+  // that earns it.
   agentRunRepository: {
     listStale: 'sweeper',
     liveRunIds: 'sweeper',
     listPausedExecutions: 'sweeper',
+    recordRedrive: 'sweeper',
   },
   // The operator-dashboard rollups are admin-gated reads (`GET /accounts/:id/observability/platform`
   // guards on `requireAdmin`), and the machine RPC bypasses that service-layer gate, so they stay

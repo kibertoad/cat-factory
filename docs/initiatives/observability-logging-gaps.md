@@ -1,6 +1,7 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** Phases 1, 1b + 2 landed; Phase 3 landed except 3.3; Phases 4–6 open (plus 1.2d)
+**Status:** Phases 1, 1b, 2 + 4 landed; Phase 3 landed except 3.3; Phase 5 landed for 5.6–5.8;
+Phase 6 open (plus 1.2d, 3.3, 5.1–5.5)
 · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
@@ -161,6 +162,7 @@ throws, i.e. a pg-boss maintenance hiccup can take down the orchestrator with no
 pg-boss.
 
 **B5 — Two Cloudflare queue consumers fail with zero logging; no DLQ exists anywhere. (P1)**
+_(Logging half FIXED in Phase 1.4; the DLQ half in Phase 4.5.)_
 `sync-consumer.ts:59-61` (GitHub sync) and `index.ts:745-747` (execution admission) are bare
 `catch { message.retry() }` — a permanently failing webhook delivery or a run that can never
 start burns its retries with no evidence (the tracker-sync sibling at `:129-139` logs; copy it).
@@ -221,6 +223,7 @@ prompt/response bodies to Langfuse/OTel.** The gating asymmetry is a privacy bug
 coverage gap.
 
 **C3 — Operational metrics are five run-level gauges behind a double opt-in. (P1)**
+_(FIXED in Phase 4.1 — the kernel `OperationalMetrics` seam plus the counters/gauges below.)_
 `sweepPlatformMetrics` pushes exactly `runs`/`run_success_rate`/`run_failures`/`live_runs`/
 `run_duration` (per-account, from `agent_runs` only), and only when `OTEL_ENABLED` AND an
 endpoint AND `OTEL_PLATFORM_METRICS` are all set. Missing entirely: HTTP request
@@ -230,6 +233,8 @@ re-driven, stalled), dropped telemetry/notification batches, DB errors. No `/met
 endpoint exists.
 
 **C4 — Health probes under-report; the Worker has none. (P2)**
+_(FIXED in Phase 4.3. Redis + the telemetry store are deliberately still unprobed — see the
+phase's notes for why each would be worse than the gap.)_
 Node `/ready` checks a DB `SELECT 1` and a **process-local boolean** for pg-boss (a wedged boss
 reads healthy — acknowledged in-code at `server.ts:544-549`); Redis, the telemetry store, and the
 runner backend are unprobed. The embedded/mothership variant returns a permanently green
@@ -237,6 +242,7 @@ runner backend are unprobed. The embedded/mothership variant returns a permanent
 (D1, TELEMETRY_DB, queues, containers all unprobed).
 
 **C5 — `platform_health` cannot see a dead deployment. (P2)**
+_(FIXED in Phase 4.2: `throughput_stalled`, `failure_kind_dominant`, `sweep_degraded`.)_
 Exactly three conditions (failure rate, p99 duration, backlog). If run creation stops entirely,
 `total = 0` → all three silent: a fully dead platform reads identically to a quiet healthy one.
 No absolute failure counts, no failure-kind-specific condition (100% `evicted` reads the same as
@@ -244,12 +250,15 @@ No absolute failure counts, no failure-kind-specific condition (100% `evicted` r
 itself failing raises nothing. Off by default (`PLATFORM_ALERTS`).
 
 **C6 — One sick table silently stops all telemetry pruning. (P2)**
+_(FIXED in Phase 4.4 — shared per-table isolation plus a reported `failedTables`.)_
 Both retention sweeps (`node/src/retention.ts:114-149`,
 `cloudflare/.../workflows/retention.ts:120-159`) are a chain of sequential `await`s with no
 per-table isolation — the first failing `deleteOlderThan` aborts every later prune in the pass,
 indefinitely, with only a generic sweep-failed log.
 
 **C7 — Telemetry drops its own failures silently. (P2)**
+_(PARTLY FIXED in Phase 4.1: `CompositeTraceSink`'s bare `catch {}` now logs AND counts
+`telemetry.export_dropped`. The Langfuse sink's own rate-limit batch drops are its to report.)_
 `CompositeTraceSink` swallows per-sink errors with bare `catch {}` and no logging
 (`llm-trace-sink.ts:118-133`); a failed `llm_call_metrics` write is a single `log.warn`
 (`LlmProxyController.ts:589-595`); the Langfuse sink documents that a chatty run can drop batches
@@ -312,6 +321,8 @@ could not promote any (GitHub 403, shard mismatch) reports as fully green with n
 persisted note, no user surface. Blocked on A1 (RepoOp ctx has no logger to wire).
 
 **D4 — Re-drives, stalls and orphan-finalizations are uncountable. (P1)**
+_(PARTLY FIXED in Phase 4.1: the per-run `redrive_count` column plus the sweep counters. The
+`instanceState` swallow that turns a Workflows outage into a mass re-drive is still 5.4.)_
 Neither sweeper persists a re-drive count; `orphanedSince` is an in-memory map holding only a
 timestamp. "Was this run re-driven 3 times?" is unanswerable except by grepping logs — and on
 Cloudflare not even that: the sweep logs only aggregates (`{redriven: 3}`, no run ids), and
@@ -695,7 +706,7 @@ behaviour changes.
   and the trace id is an FNV hash of `executionId`), plus a harness change — so it batches
   naturally with 5.5 rather than paying a second image bump for the id alone.
 
-### Phase 4 — Operational metrics, health, alerting
+### Phase 4 — Operational metrics, health, alerting — **LANDED**
 
 | #   | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Fixes            | Sev |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | --- |
@@ -704,6 +715,106 @@ behaviour changes.
 | 4.3 | Harden readiness: real pg-boss round-trip (or last-maintenance-tick age) instead of the boolean; optional Redis + telemetry-store checks; decide and document the Worker story (a `/ready` that probes D1/TELEMETRY_DB bindings, or an explicit ADR that the platform relies on Cloudflare's own health).                                                                                                                                                 | C4               | P2  |
 | 4.4 | Isolate retention pruning per table (per-table try/catch + one summary log naming failed tables).                                                                                                                                                                                                                                                                                                                                                         | C6               | P2  |
 | 4.5 | Enable DLQs: uncomment + document the `dead_letter_queue` config in `deploy/backend/wrangler.toml`; add `deadLetter` to the pg-boss `createQueue` calls with a sweeper that logs/alerts on dead-lettered jobs.                                                                                                                                                                                                                                            | B5 (policy half) | P2  |
+
+#### What Phase 4 actually shipped
+
+The through-line: `PlatformMetricsRepository` answers "how are the RUNS doing" by aggregating
+`agent_runs`, and it structurally cannot answer what an operator asks during an incident —
+how often dispatch is failing, whether the sweeper is re-driving more than it was, whether the
+queue is draining — because none of those are rows in a table. They are EVENTS. Phase 4 is
+where they became countable.
+
+- **A kernel `OperationalMetrics` port** (`ports/operational-metrics.ts`): a closed
+  `OperationalCounter` union, an `OperationalGauge` union, `noopOperationalMetrics`, and
+  `createOperationalMetricsCollector()` — an in-memory accumulate/drain pair. Both unions are
+  CLOSED so adding a signal is a typecheck-visible decision, and the OTel mapping names each one
+  through an exhaustive `Record`, so a new counter fails to compile until it has a metric name
+  and a unit.
+- **Counters are exported as DELTA sums, and that is load-bearing.** A collector is per PROCESS
+  on Node and per ISOLATE on the Worker, and each flushes independently — which sums correctly in
+  the backend only as a delta. `queue.depth` stays a real gauge (a reading, never accumulated).
+- **`CoreDependencies.operationalMetrics` is REQUIRED**, for the same reason and with the same
+  history as `logger`: an un-wired counter reads as a zero, and a zero here is the most dangerous
+  value in the initiative — it says "no evictions" on a runtime where every container is dying.
+- **The flush TIMING is the one deliberate facade difference.** Node drains on the
+  platform-metrics sweep interval (one long-lived process, nothing lost between flushes); the
+  Worker flushes at the end of EVERY invocation that recorded something, because an isolate is
+  discarded without warning and a cron tick runs in a different isolate that saw none of it.
+  Draining only on cron there would have zeroed everything the request and queue paths did.
+- **Wired at every increment site named in C3/D4**: both stale-run sweepers (re-driven /
+  finalized / stalled, dimensioned by run kind), EVERY sweep pass on both facades (`sweep.failed`,
+  dimensioned by sweep), the container seam's dispatch failures and evictions,
+  `CompositeTraceSink`'s dropped exports, the notification webhook's spent deliveries, and every
+  app-cache read's hit/miss.
+- **A sweep's rate and its STREAK are one call, and that is what keeps the facades together.**
+  They shipped as two calls at each site and the runtimes immediately diverged: Node recorded a
+  streak for every `startSweeper` sweep but only a counter for its two hand-rolled intervals,
+  while the Worker recorded a streak for exactly one sweep and neither signal for the other
+  fourteen — so `sweep_degraded` described a DISJOINT set of sweepers on each facade and a wedged
+  retention cron on Cloudflare raised nothing. `SweepHealthTracker.recordFailure` now emits both,
+  `SweeperOptions.health` replaces the raw metrics sink (a sweep site has no business holding
+  one), and the Worker's `SweepTick` is the facade-symmetric twin of `startSweeper`: named pass,
+  fixed failure message, outcome reported, no way to do half of it.
+- **`SweepTick` also owns the cron tick's FLUSH ORDERING.** The Worker's collector is per isolate,
+  so a counter a cron pass records can only be exported by a flush that runs after it; draining
+  while the passes were still in flight left every cron-recorded counter waiting for a next tick
+  in the same isolate — for the daily retention cron, a tick that never comes.
+- **Dead-lettered jobs are a GAUGE, not a counter.** `queue.depth{state=dead_letter}` carries them.
+  The counter this replaced was fed pg-boss's standing `totalCount` on an hourly sweep, so five
+  dead-lettered jobs re-reported as ~120/day; deriving a delta from a level in memory would tell
+  the same lie after every restart. The hourly sweep remains, for the log line naming the SOURCE
+  queue — the metric says how many, the line says where to look.
+- **`agent_runs.redrive_count`** (D1 0076 ⇄ Drizzle, with a conformance assertion). The sweeper's
+  `orphanedSince` map holds a timestamp and dies with the process/isolate, and the Worker's sweep
+  logs only aggregates with no run ids — so "was this run re-driven three times?" had no answer
+  anywhere. Deliberately NOT rev-guarded and written AFTER the re-drive: it is bookkeeping about
+  a recovery and must never be able to fail one.
+- **`platform_health` gained three conditions** (4.2), all read off fields the projection already
+  carries — no new SQL, no port change. `throughput_stalled` is the headline: every existing
+  condition divides by runs and goes silent at `total = 0`, so a deployment that stopped
+  accepting work read identically to a quiet one. It fires on trailing EMPTY trend buckets
+  against a busy earlier half, so an idle deployment stays quiet — which is what keeps the alert
+  from being muted before the night it matters. `failure_kind_dominant` splits 100% `evicted`
+  from 100% `agent` (identical failure rate, opposite fixes). `sweep_degraded` alerts on the
+  WATCHER, off a `SweepHealthTracker` streak the caller supplies.
+- **Retention pruning is isolated per table** (4.4) through one shared `createRetentionPass`,
+  because the passes were a chain of bare `await`s: the first failing `deleteOlderThan` aborted
+  every later one, indefinitely, and the heaviest tables sit late in the chain. Isolation alone
+  was not the fix — the pass also REPORTS `failedTables`, since a failed prune and an empty table
+  both reclaim 0 rows and only one of them means the table is still growing.
+- **Readiness** (4.3): the pg-boss check was a process-local boolean flipped only by a graceful
+  `stopped`, so the one failure a readiness probe exists to catch — the substrate dying under a
+  running process — reported healthy forever. It now also round-trips pg-boss's OWN pool. The
+  Worker gained a `/ready` that probes its D1 + `TELEMETRY_DB` bindings; it is deliberately not a
+  drain signal (there is no rotation to leave) but a bindings answer.
+- **Dead-letter queues** (4.5): every pg-boss queue is created through `createQueueWithDeadLetter`,
+  and an hourly sweep REPORTS what has landed there. Deliberately never a replay: a job that
+  failed every retry will fail again, and an automatic replay turns a bounded loss into an
+  unbounded loop.
+
+#### Notes for the next implementer
+
+- **Two dependencies are deliberately NOT probed by `/ready`, and the reasons are in the module.**
+  Redis, because probing it per request means either a connection per probe or widening the
+  propagator seam — and a dead bus degrades real-time, which a replica should keep serving HTTP
+  through rather than drain on. The telemetry store, because on Node it is a SCHEMA in the same
+  database the `SELECT 1` already reached.
+- **A readiness probe cannot tell you a consumer is WEDGED**, only that its connection is alive.
+  That is what `queue.depth` is for; do not try to fold it into `/ready`, which would drain a
+  replica that is serving HTTP perfectly well.
+- **Cloudflare Queues expose no backlog to the Worker consuming them**, so that facade emits no
+  `queue.depth` series at all rather than a zero — an absent point says "nobody could look",
+  where a zero says "the queue is empty". If Cloudflare ever exposes it, that is where it goes.
+- **Dimensions must stay BOUNDED.** Every distinct value is its own time series in the operator's
+  backend, so a run/workspace/job id is a cardinality explosion. The correlation ids belong on
+  the log line — which is why every increment site also logs.
+- **The sweep-failure streak is in-memory**, so it spans the process on Node and the ISOLATE on
+  the Worker (an eviction resets it and the condition needs a fresh run of failures to re-arm).
+  Same trade-off, in the same place, that `orphanedSince` already makes: it can only UNDER-report,
+  so the failure mode is a missed alert rather than a false one.
+- **Two files were at their size ratchet and were SPLIT rather than bumped**: the Slack tables out
+  of `db/schema.ts` (1716 → 1700) and the binary-artifact storage pair out of the Worker's
+  `container.ts` (1500 → 1470).
 
 ### Phase 5 — Execution-path forensics — **5.6 + 5.7 LANDED**
 

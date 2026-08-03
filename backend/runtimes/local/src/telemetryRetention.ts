@@ -1,6 +1,6 @@
 import type { Clock, Logger } from '@cat-factory/kernel'
 import { startSweeper } from '@cat-factory/node-server'
-import type { RetentionConfig } from '@cat-factory/server'
+import type { RetentionConfig, SweepHealthTracker } from '@cat-factory/server'
 import type { LocalTelemetryStore } from './sqlite/telemetryStore.js'
 
 // Retention for the mothership-mode LOCAL telemetry store (docs/initiatives/mothership-mode.md,
@@ -113,6 +113,8 @@ export function startLocalTelemetryRetention(
   retention: RetentionConfig,
   clock: Clock,
   log: Logger,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => Promise<void> {
   let stopped = false
   let inFlight: Promise<unknown> | undefined
@@ -120,6 +122,7 @@ export function startLocalTelemetryRetention(
     name: 'local-telemetry-retention',
     intervalMs: LOCAL_TELEMETRY_SWEEP_INTERVAL_MS,
     log,
+    health,
     failureMessage: 'local telemetry retention sweep failed',
     tick: async () => {
       if (stopped) return

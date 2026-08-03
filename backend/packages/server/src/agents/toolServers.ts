@@ -181,7 +181,7 @@ async function resolveSecrets(
           resolver.resolve({
             workspaceId: input.workspaceId,
             ...(input.blockId ? { blockId: input.blockId } : {}),
-            serverId: definition.id,
+            subject: { kind: 'tool-server', id: definition.id },
             keys,
           }),
         { toolServerId: definition.id },
@@ -280,8 +280,15 @@ export interface EnvToolSecretResolverOptions {
    * see only what it was passed can now ask for any binding by name.
    *
    * That is fine for a deployment whose agent packages are all its own. Set this when it is not —
-   * an installed third-party agent package is exactly the case the option exists for. The
-   * convention we recommend is a dedicated prefix (`MCP_…`) so the list stays short and additive.
+   * an installed third-party agent package is exactly the case the option exists for.
+   *
+   * It gates EVERY subject this resolver serves, not only tool servers: a generative binary
+   * integration's credential (`BinaryGeneratorRegistry`) is resolved through the same port and is
+   * held to the same list. So a `MCP_…`-prefixed convention is no longer sufficient on its own —
+   * an allow-list that names only MCP keys silently resolves nothing for a registered image or
+   * music generator, and the failure surfaces as the agent reporting the integration unavailable
+   * rather than as anything pointing back here. List a prefix per subject family (`MCP_…`,
+   * `GEN_…`), or the exact keys the registrations declare.
    */
   allowKeys?: Iterable<string>
 }

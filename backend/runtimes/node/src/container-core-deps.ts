@@ -32,6 +32,7 @@ import {
   WebCryptoPasswordHasher,
   WebCryptoSecretCipher,
   logger,
+  operationalMetrics,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
@@ -166,6 +167,9 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     // buried in one of the builders) because its Worker twin sits in the same position — the
     // pair is a facade-parity obligation, not an optional integration.
     logger,
+    // The counter half of the same obligation, wired in the same position for the same reason:
+    // an un-wired collector reads as "none of this ever happened".
+    operationalMetrics,
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
   }
@@ -242,6 +246,11 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     // …and where that tier is READ from when it is not the registry above (mothership mode).
     foundationalBuiltinSource: options.foundationalBuiltinSource,
+    // The app-owned registry of the deployment's GENERATIVE BINARY INTEGRATIONS (what a
+    // binary-generating step produces WITH, as the catalog above is where its output GOES);
+    // createCore threads it into the execution service and re-exposes it on Core for boot-time
+    // validation.
+    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

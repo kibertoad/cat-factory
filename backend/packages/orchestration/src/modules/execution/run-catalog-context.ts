@@ -1,6 +1,12 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
-import type { ExecutionInstance, InjectedContextFile, Logger } from '@cat-factory/kernel'
+import type {
+  BinaryGeneratorRegistry,
+  ExecutionInstance,
+  InjectedContextFile,
+  Logger,
+  ResolvedBinaryGenerator,
+} from '@cat-factory/kernel'
 import {
   type FoundationalDeclarationRecorder,
   type FoundationalServiceResolver,
@@ -10,6 +16,7 @@ import {
 import {
   type BinaryOutputDeclarationRecorder,
   createBinaryOutputDeclarationRecorder,
+  dispatchBinaryGeneratorsFor,
   resolveBinaryOutputContext,
 } from './run-binary-output.js'
 
@@ -26,6 +33,13 @@ import {
 export interface CatalogRunContextDeps {
   agentKindRegistry: AgentKindRegistry
   foundationalServiceResolver?: FoundationalServiceResolver
+  /**
+   * The deployment's generative binary integrations. It rides HERE, beside the catalog resolver,
+   * because the binary-output brief describes both halves of one selection and the declaration
+   * read-back resolves ids against both — keeping them apart would be two places for a dispatch
+   * and its settlement to disagree about which integrations existed.
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
   logger?: Logger
 }
 
@@ -74,6 +88,15 @@ export class CatalogRunContext {
     step: PipelineStep,
   ): Promise<InjectedContextFile[]> {
     return resolveBinaryOutputContext({ ...this.deps, workspaceId, agentKind, step })
+  }
+
+  /**
+   * The GENERATIVE INTEGRATIONS this dispatch carries on its run context — the non-secret half
+   * the container executor turns into resolved credentials on the job body. The counterpart of
+   * {@link binaryOutputContextFor}: same gate, same selection, the other channel.
+   */
+  binaryGeneratorsFor(agentKind: string, step: PipelineStep): ResolvedBinaryGenerator[] {
+    return dispatchBinaryGeneratorsFor({ ...this.deps, agentKind, step })
   }
 
   /**

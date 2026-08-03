@@ -1,4 +1,5 @@
 import { NotFoundError } from '@cat-factory/kernel'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type {
   GitHubBackfillScheduler,
   GitHubWebhookIngest,
@@ -208,7 +209,7 @@ export async function startGitHubSyncWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 10)
-  await boss.createQueue(GITHUB_SYNC_QUEUE)
+  await createQueueWithDeadLetter(boss, GITHUB_SYNC_QUEUE)
   await boss.work<GitHubSyncJob>(
     GITHUB_SYNC_QUEUE,
     { localConcurrency: concurrency },

@@ -3,7 +3,10 @@ import type {
   AgentRunRepository,
   Clock,
   EnvironmentTestRunRecord,
+  Logger,
+  OperationalMetrics,
 } from '@cat-factory/kernel'
+import { noopLogger, noopOperationalMetrics, runBestEffort } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 
 /**
@@ -84,6 +87,15 @@ export interface SweepDeps {
    * (the degenerate unit-test case), never wrongly on a first observation.
    */
   orphanedSince?: Map<string, number>
+  /**
+   * Counts each disposition (re-drive / finalize / stall). The per-sweep RESULT below already
+   * carries these numbers, but only for this tick's log line: nothing accumulates them, so
+   * "has the re-drive rate tripled since the deploy" was unanswerable except by grepping.
+   * Absent ⇒ uncounted (a unit test).
+   */
+  metrics?: OperationalMetrics
+  /** Reports the best-effort re-drive bookkeeping below. Absent ⇒ silent (a unit test). */
+  logger?: Logger
 }
 
 /** What a sweep did, for logging. */
@@ -117,6 +129,8 @@ export async function sweepStuckRuns({
   leaseMs,
   hardStallMs,
   orphanedSince = new Map<string, number>(),
+  metrics = noopOperationalMetrics,
+  logger = noopLogger,
 }: SweepDeps): Promise<SweepResult> {
   const now = clock.now()
   const stale = await agentRunRepository.listStale(now - leaseMs)
@@ -137,6 +151,9 @@ export async function sweepStuckRuns({
       orphanedSince.delete(ref.id)
       await finalizeOrphan(ref)
       finalized++
+      // The run KIND is a bounded enum and the split that matters: bootstrap runs and
+      // execution runs are lost for different reasons and fixed in different places.
+      metrics.increment('sweep.run_finalized', { kind: ref.kind })
       continue
     }
     // `missing`: the instance was lost (eviction, a missed event) and can be re-created.
@@ -153,12 +170,20 @@ export async function sweepStuckRuns({
     if (ref.kind === 'execution' && now - firstSeenOrphaned > hardStallMs) {
       await failStalled(ref)
       stalled++
+      metrics.increment('sweep.run_stalled', { kind: ref.kind })
       orphanedSince.delete(ref.id)
       stillOrphaned.delete(ref.id)
       continue
     }
     await redrive(ref)
     redriven++
+    metrics.increment('sweep.run_redriven', { kind: ref.kind })
+    // Persist the per-run count AFTER the re-drive and best-effort: this is bookkeeping about
+    // the recovery, so it must never be able to fail one. Ordered after for the same reason —
+    // a counter claiming a run was re-driven when it was not is worse than one that missed.
+    await runBestEffort(logger, 'sweep.recordRedrive', () =>
+      agentRunRepository.recordRedrive(ref.workspaceId, ref.id),
+    )
   }
   // Forget runs that recovered (bumped their lease → left the stale set) or went terminal, so
   // their per-process orphaned clock restarts if they ever stall again.

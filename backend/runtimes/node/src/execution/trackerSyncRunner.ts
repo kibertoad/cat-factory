@@ -1,4 +1,5 @@
 import type { Logger, ServerContainer, TrackerWebhookIngest } from '@cat-factory/server'
+import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 
@@ -79,7 +80,7 @@ export async function startTrackerSyncWorker(
   options: { concurrency?: number } = {},
 ): Promise<void> {
   const concurrency = Math.max(1, options.concurrency ?? 5)
-  await boss.createQueue(TRACKER_SYNC_QUEUE)
+  await createQueueWithDeadLetter(boss, TRACKER_SYNC_QUEUE)
   await boss.work<TrackerSyncJob>(
     TRACKER_SYNC_QUEUE,
     { localConcurrency: concurrency },

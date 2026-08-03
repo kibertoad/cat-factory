@@ -262,6 +262,9 @@ describe('storage retention sweep', () => {
       provisioningLog: 0,
       passwordResetTokens: 0,
       notifications: 0,
+      // A clean pass names no failed table. This list is what distinguishes a prune that
+      // reclaimed nothing from one that could not run — both report 0 rows.
+      failedTables: [],
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })

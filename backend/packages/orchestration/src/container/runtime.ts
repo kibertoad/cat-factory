@@ -2,6 +2,7 @@ import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-
 import {
   NoopEventPublisher,
   NoopWorkRunner,
+  defaultBinaryGeneratorRegistry,
   defaultGateRegistry,
   defaultJudgeRegistry,
   defaultPipelineRegistry,
@@ -40,6 +41,12 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     foundationalServiceRegistry,
+    // The deployment's generative binary integrations (image / music / video generation APIs).
+    // Empty by default, exactly like the foundational registry above and for the same reason: a
+    // facade injects the one instance it registered on, so the engine, the boot validation and
+    // the dispatch brief can never be looking at different sets.
+    binaryGeneratorRegistry:
+      dependencies.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
     // Where the catalog's `builtin` tier is READ from. Defaults to this process's own registry
     // (the same instance, so the engine and the boot validation can never disagree); a
     // mothership-mode node injects the REMOTE source instead, because the estate is org state
@@ -55,5 +62,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // its neighbours there is nothing to fall back to — it is re-listed here purely so every
     // service is threaded the SAME instance out of one resolution point.
     logger: dependencies.logger,
+    // Required for the same reason and re-listed here for the same reason as `logger` above:
+    // an operational counter nobody increments is indistinguishable from an event that never
+    // happened, which is precisely the confusion this seam exists to remove.
+    operationalMetrics: dependencies.operationalMetrics,
   }
 }

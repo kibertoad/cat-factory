@@ -127,18 +127,22 @@ export const FOUNDATIONAL_CATALOG_GUIDANCE = [
  * storage service and the selected CONTEXT services (an inventory that can say which entities
  * exist, which lack an asset, and how each is described), each with its API contract, and reads
  * the agent's machine-readable declaration of what it stored back onto the step
- * (`PipelineStep.binaryOutputs`). Run admission refuses a step carrying this trait whose
- * selection is missing or does not resolve against the catalog. No built-in kind carries it —
- * a deployment's generator opts in via `registerAgentKind({ traits })`.
+ * (`PipelineStep.binaryOutputs`). The same selection names the GENERATIVE INTEGRATIONS the step
+ * may call to produce those artifacts (`generatorIds`, from the deployment's code-registered
+ * `BinaryGeneratorRegistry`) and the CONTENT TYPES it must deliver (`modalities`), which the
+ * brief lays out per integration so an image generator is never asked for music. Run admission
+ * refuses a step carrying this trait whose selection is missing, does not resolve against the
+ * catalog/registry, or cannot cover a content type the step declares. No built-in kind carries
+ * it — a deployment's generator opts in via `registerAgentKind({ traits })`.
  * See docs/initiatives/binary-output-foundational-storage.md.
  */
 export const BINARY_OUTPUT_TRAIT: AgentTrait = 'binary-output'
 
 /** The guidance a binary-generating kind gets: the brief, the workflow, and the declaration. */
 export const BINARY_OUTPUT_GUIDANCE = [
-  `Your deliverable is BINARY artifacts (images, audio, or similar), stored through a shared storage service this deployment runs. Start from \`.cat-context/${BINARY_OUTPUT_BRIEF_FILE}\`: it names the storage service to use and any context services selected for this step, and points at their API contracts. If that file is absent, the platform could not provide storage — do not attempt any upload; state it in your report and stop generating.`,
-  `Before generating, establish SCOPE from the selected context services (what entities exist, which already have an asset, what each thing's description says) rather than inventing subjects. Store every artifact through the named storage service's contract — call the operations it declares, with the shapes it declares; never invent an endpoint, and never deliver binaries by committing them to the repository or embedding them in your reply.`,
-  `END your reply with a fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block containing either the literal \`none\` (you stored nothing) or a JSON array of entries \`{"service": "<service id>", "location": "<where the service stored it>", "entity": "<what it is for>", "contentType": "<media type>", "description": "<one line>"}\` — \`service\` and \`location\` are required, the rest optional. This block is machine-read and recorded on the run; an artifact you omit is one nobody can find later. Anything you could NOT store (a failed upload, a missing credential, a contract gap) belongs in your report as a named omission, never silently dropped.`,
+  `Your deliverable is BINARY artifacts (images, audio, video or similar), produced through the generative integrations this step was given and stored through a shared storage service this deployment runs. Start from \`.cat-context/${BINARY_OUTPUT_BRIEF_FILE}\`: it names the integrations you may generate with (and the content types each one produces), the storage service to store through, any context services selected for this step, and where their API contracts are. If that file is absent, the platform could not provide storage — do not attempt any upload; state it in your report and stop generating.`,
+  `Before generating, establish SCOPE from the selected context services (what entities exist, which already have an asset, what each thing's description says) rather than inventing subjects. Generate ONLY through the integrations the brief names, and only for the content types it says each one produces; a credential it names arrives as an environment variable, and an unset one means the platform could not provide it — report that instead of calling the API anyway. Store every artifact through the named storage service's contract — call the operations it declares, with the shapes it declares; never invent an endpoint, and never deliver binaries by committing them to the repository or embedding them in your reply.`,
+  `END your reply with a fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block containing either the literal \`none\` (you stored nothing) or a JSON array of entries \`{"service": "<service id>", "location": "<where the service stored it>", "generator": "<integration id that produced it>", "entity": "<what it is for>", "contentType": "<media type>", "description": "<one line>"}\` — \`service\` and \`location\` are required, the rest optional. This block is machine-read and recorded on the run; an artifact you omit is one nobody can find later. Anything you could NOT produce or store (an integration with no credential, a content type nothing available generates, a failed upload, a contract gap) belongs in your report as a named omission, never silently dropped.`,
 ].join('\n')
 
 /** The guidance a consumer kind gets: the contracts are files, and they are authoritative. */

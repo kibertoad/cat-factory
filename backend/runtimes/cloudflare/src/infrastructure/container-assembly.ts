@@ -27,6 +27,7 @@ import type {
 } from '@cat-factory/integrations'
 import {
   logger,
+  operationalMetrics,
   runWithInitiator,
   resolveWorkspaceCapabilities,
   testEnvHasZeroConfigDefault,
@@ -287,6 +288,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // or the Worker's engine silently falls back to `noopLogger` — which would put exactly the
     // best-effort paths this logger exists to surface back in the dark on the deployed runtime.
     logger,
+    // The counter half of the same obligation, wired in the same position for the same reason:
+    // an un-wired collector reads as "none of this ever happened". On this runtime it is
+    // per-ISOLATE, which is why the entry points flush it rather than the cron alone.
+    operationalMetrics,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

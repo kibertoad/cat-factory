@@ -6,6 +6,8 @@ import type {
   LlmTraceSink,
 } from './llm-trace-sink.js'
 import { CompositeTraceSink, composeTraceSinks } from './llm-trace-sink.js'
+import { createRecordingLogger } from './logging.js'
+import { createOperationalMetricsCollector } from './operational-metrics.js'
 
 // Focused coverage for the fan-out + 0/1/many collapse used by every facade to compose
 // multiple external trace destinations (Langfuse + OTLP) into the single sink slot.
@@ -47,6 +49,16 @@ describe('composeTraceSinks', () => {
     expect(composeTraceSinks([undefined, undefined])).toBeUndefined()
   })
 
+  it('wraps even a SINGLE sink once there is somewhere to report drops', () => {
+    // The bare collapse would leave drop counting absent from the COMMON deployment shape —
+    // one external destination — and an absent counter reads as "no drops".
+    const sink = fakeSink()
+    const composed = composeTraceSinks([sink], {
+      operationalMetrics: createOperationalMetricsCollector(),
+    })
+    expect(composed).toBeInstanceOf(CompositeTraceSink)
+  })
+
   it('returns the single sink verbatim (no wrapper) for exactly one', () => {
     const sink = fakeSink()
     expect(composeTraceSinks([undefined, sink])).toBe(sink)
@@ -81,6 +93,28 @@ describe('CompositeTraceSink', () => {
 
     await expect(composite.recordGeneration(EVENT)).resolves.toBeUndefined()
     expect(ok.gen).toHaveBeenCalledWith(EVENT)
+  })
+
+  it('counts and names a dropped export instead of swallowing it', async () => {
+    // Telemetry completeness was the one property nothing anywhere measured: a deployment
+    // whose collector had been rejecting every batch for a week looked exactly like one with
+    // nothing to report. Still best-effort — the other sink and the caller are untouched.
+    const boom = fakeSink()
+    boom.gen.mockRejectedValue(new Error('collector rejected the batch'))
+    const ok = fakeSink()
+    const metrics = createOperationalMetricsCollector()
+    const logger = createRecordingLogger()
+    const composite = new CompositeTraceSink([boom, ok], { logger, operationalMetrics: metrics })
+
+    await expect(composite.recordGeneration(EVENT)).resolves.toBeUndefined()
+    expect(ok.gen).toHaveBeenCalledTimes(1)
+    const dropped = metrics.drain().find((s) => s.counter === 'telemetry.export_dropped')
+    expect(dropped).toEqual({
+      counter: 'telemetry.export_dropped',
+      dimensions: { operation: 'recordGeneration' },
+      value: 1,
+    })
+    expect(logger.lines.some((l) => l.msg.includes('trace sink export dropped'))).toBe(true)
   })
 
   it('tolerates a sink without recordToolSpans', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CachedRepoRead, ResolvedCatalogEntry } from '@cat-factory/kernel'
+import { createOperationalMetricsCollector } from '@cat-factory/kernel'
 import { AbstractNotificationConsumer, type InMemoryGroupCache } from 'layered-loader/core'
 import {
   DEFAULT_APP_CACHES_PROFILE,
@@ -47,6 +48,45 @@ describe('createAppCaches (bare in-memory)', () => {
     expect(first.map((e) => e.id)).toEqual(['a'])
     expect(second.map((e) => e.id)).toEqual(['a'])
     expect(loads).toBe(1)
+  })
+
+  it('counts a miss when the loader runs and a hit when it does not', async () => {
+    // Hit RATE is the only way to tell a cache doing its job from one whose invalidation fires
+    // so often it never serves anything — two states with identical latency graphs and opposite
+    // fixes. What is measured is precisely that: a MISS is a read whose loader ran.
+    const metrics = createOperationalMetricsCollector()
+    const caches = createAppCaches({ operationalMetrics: metrics })
+    const load = async () => [entry('a')]
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    await caches.fragmentCatalog.get('other', 'ws1', load)
+
+    const samples = metrics.drain()
+    const by = (counter: string) => samples.find((sample) => sample.counter === counter)
+    expect(by('cache.miss')).toEqual({
+      counter: 'cache.miss',
+      // Dimensioned by cache NAME — bounded, and the split that matters, since one cold cache
+      // among a dozen warm ones is invisible in an aggregate hit rate.
+      dimensions: { cache: 'fragment-catalog' },
+      value: 2,
+    })
+    expect(by('cache.hit')?.value).toBe(1)
+  })
+
+  it('counts every read as a miss on the pass-through profile', async () => {
+    // The Worker's stance for mutable state: no in-memory tier, so every read runs its load.
+    // Reporting those as hits would make an isolate look warm when nothing is ever cached.
+    const metrics = createOperationalMetricsCollector()
+    const caches = createAppCaches({
+      profile: ISOLATE_SAFE_APP_CACHES_PROFILE,
+      operationalMetrics: metrics,
+    })
+    const load = async () => [entry('a')]
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    const samples = metrics.drain()
+    expect(samples.find((sample) => sample.counter === 'cache.miss')?.value).toBe(2)
+    expect(samples.find((sample) => sample.counter === 'cache.hit')).toBeUndefined()
   })
 
   it('deduplicates concurrent loads of the same key', async () => {

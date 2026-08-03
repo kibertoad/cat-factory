@@ -32,6 +32,10 @@ export interface PlatformAlertEnvInput {
   maxFailureRate?: string
   maxP99Minutes?: string
   maxBacklog?: string
+  stalledBuckets?: string
+  minStalledPriorRuns?: string
+  maxFailureKindShare?: string
+  maxSweepFailures?: string
 }
 
 /**
@@ -68,6 +72,38 @@ export function resolvePlatformAlertConfig(env: PlatformAlertEnvInput): Platform
       maxFailureRate: Math.min(1, failureRate),
       maxP99DurationMs: maxP99Minutes * 60_000,
       maxBacklog: Math.max(1, nonNeg('PLATFORM_ALERTS_MAX_BACKLOG', env.maxBacklog, d.maxBacklog)),
+      // Floored at 1: a zero would make "the last zero buckets were empty" trivially true and
+      // fire the stall alert on every healthy sweep.
+      stalledBuckets: Math.max(
+        1,
+        nonNeg('PLATFORM_ALERTS_STALLED_BUCKETS', env.stalledBuckets, d.stalledBuckets),
+      ),
+      // NOT floored: 0 is a meaningful choice here — it says "alert on silence even if the
+      // window was idle to begin with", which suits a deployment that should never be quiet.
+      minStalledPriorRuns: nonNeg(
+        'PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS',
+        env.minStalledPriorRuns,
+        d.minStalledPriorRuns,
+      ),
+      // Clamped into (0, 1]. The upper clamp keeps "100% of failures" reachable; the lower one
+      // matters for the same reason `stalledBuckets` is floored — a share of 0 is satisfied by
+      // ANY failure distribution, so it would fire `failure_kind_dominant` on every window that
+      // cleared `minRuns` and had a single failure, which is not a threshold anyone means to set.
+      maxFailureKindShare: Math.min(
+        1,
+        Math.max(
+          Number.EPSILON,
+          nonNeg(
+            'PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE',
+            env.maxFailureKindShare,
+            d.maxFailureKindShare,
+          ),
+        ),
+      ),
+      maxSweepFailures: Math.max(
+        1,
+        nonNeg('PLATFORM_ALERTS_MAX_SWEEP_FAILURES', env.maxSweepFailures, d.maxSweepFailures),
+      ),
     },
   }
 }

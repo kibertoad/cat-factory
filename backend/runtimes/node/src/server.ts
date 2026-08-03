@@ -11,12 +11,14 @@ import {
   handleError,
   isConfigValidationError,
   logger,
+  operationalMetrics,
   parseLogLevel,
   mountAuthGate,
   mountRequestLogging,
   setLogLevel,
   registerCoreControllers,
   resolveCorsOrigin,
+  sweepHealth,
   sweepKeyDriftAndRaise,
   WebCryptoSecretCipher,
 } from '@cat-factory/server'
@@ -59,6 +61,12 @@ import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
 import { startGitHubReconcileSweeper } from './githubReconcile.js'
 import { startPlatformMetricsSweeper } from './platformMetrics.js'
+import { startSweeper } from './sweeper.js'
+import {
+  DEAD_LETTER_SWEEP_INTERVAL_MS,
+  probePgBossQueueDepth,
+  sweepDeadLetterQueues,
+} from './queueDepth.js'
 import {
   DrizzleCommitProjectionRepository,
   DrizzleRepoProjectionRepository,
@@ -270,6 +278,15 @@ export async function start(
      */
     foundationalServiceRegistry?: NodeContainerOptions['foundationalServiceRegistry']
     /**
+     * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS (the same shape once
+     * more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+     * video generation APIs it pays for on it by reference, and passes it here. A pipeline step
+     * whose kind carries the `binary-output` trait then SELECTS from them
+     * (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry, so any step selecting
+     * an integration is refused at admission rather than dispatching an agent that cannot generate.
+     */
+    binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -404,14 +421,11 @@ function startBackgroundSweepers(deps: {
   env: NodeJS.ProcessEnv
 }) {
   const { boss, pool, db, container, repos, runtime, clock, env } = deps
-  const stopSweeper = startStaleRunSweeper(
-    boss,
-    pool,
-    container,
-    runtime.sweeper,
-    runtime.queue,
-    logger,
-  )
+  const stopSweeper = startStaleRunSweeper(boss, pool, container, runtime.sweeper, runtime.queue, {
+    log: logger,
+    metrics: operationalMetrics,
+    health: sweepHealth,
+  })
   // Env-test self-tests live in their own table (not agent_runs), so the stale-run
   // sweeper above never sees them — this sibling re-enqueues a drive for any stale run;
   // the drive's own budget-exhaustion finalize settles one that still can't finish.
@@ -422,6 +436,8 @@ function startBackgroundSweepers(deps: {
     new DrizzleEnvironmentTestRunRepository(db),
     { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
     logger,
+    operationalMetrics,
+    sweepHealth,
   )
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
@@ -443,6 +459,7 @@ function startBackgroundSweepers(deps: {
     container.config.retention,
     clock,
     logger,
+    sweepHealth,
   )
   // Per-workspace binary-artifact (screenshot) retention; only when content storage is wired
   // (the resolver is present once an encryption key is configured). The sweep resolves each
@@ -454,10 +471,11 @@ function startBackgroundSweepers(deps: {
         repos.workspaceSettingsRepository,
         clock,
         logger,
+        sweepHealth,
       )
     : () => {}
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
-  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
+  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger, sweepHealth)
   // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
   // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
   // is the backstop cadence; no-op unless the initiatives module is wired. Resolve the interval
@@ -467,17 +485,23 @@ function startBackgroundSweepers(deps: {
     container,
     clock,
     logger,
+    sweepHealth,
     resolveSweepInterval(env),
   )
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
   // environments integration is wired.
-  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
+  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger, sweepHealth)
   // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
   // overdue-human signal now that runs never time out waiting for input.
-  const stopNotificationEscalation = startNotificationEscalationSweeper(container, clock, logger)
+  const stopNotificationEscalation = startNotificationEscalationSweeper(
+    container,
+    clock,
+    logger,
+    sweepHealth,
+  )
   // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
   // unless the Kaizen feature is wired.
-  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
+  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger, sweepHealth)
   // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
   // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
   const stopGitHubReconcile = container.github
@@ -490,6 +514,7 @@ function startBackgroundSweepers(deps: {
         },
         clock,
         logger,
+        sweepHealth,
       )
     : () => {}
   // Push deployment-level (platform-operator) observability aggregates to the OTLP endpoint
@@ -501,24 +526,44 @@ function startBackgroundSweepers(deps: {
           otel: container.config.otel,
           platformObservability: container.platformObservability,
           workspaceRepository: repos.workspaceRepository,
+          // The queue gauge rides the SAME flush as the counters, so an operator sees backlog
+          // and the events that caused it on one timeline. One `getQueues()` per tick answers
+          // every queue, so this is an aggregate read, not a per-queue probe loop.
+          probeQueueDepth: () => probePgBossQueueDepth(boss),
         },
         clock,
         logger,
+        operationalMetrics,
+        sweepHealth,
       )
     : () => {}
   // Raise/clear `platform_health` notifications when the deployment's own run health crosses a
   // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
   // notifications + platform-observability reads are wired.
-  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger)
+  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger, sweepHealth)
   // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
   // `unreachable` (the Worker uses cron). No-op unless `INFRA_REACHABILITY_WATCH` is opted in.
-  const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger)
+  const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger, sweepHealth)
   // Refresh repo-linked foundational-service sources so a merged contract change reaches the
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
-  const stopFoundationalSources = startFoundationalSourceSweeper(container, logger)
+  const stopFoundationalSources = startFoundationalSourceSweeper(container, logger, sweepHealth)
+  // Report what has landed in the dead-letter queues (slice 4.5). Reporting only, never a
+  // replay: a job that failed every retry will fail again, so the decision to re-drive one
+  // stays a human's. Before this, a job that exhausted `retryLimit` simply stopped existing.
+  const stopDeadLetter = startSweeper({
+    name: 'dead-letter',
+    intervalMs: DEAD_LETTER_SWEEP_INTERVAL_MS,
+    log: logger,
+    health: sweepHealth,
+    failureMessage: 'dead-letter sweep failed',
+    tick: async () => {
+      await sweepDeadLetterQueues(boss, logger)
+    },
+  })
   return {
     stopSweeper,
+    stopDeadLetter,
     stopEnvTestSweeper,
     stopRetention,
     stopArtifactRetention,
@@ -620,6 +665,7 @@ async function bootServer(
   const caches = createAppCaches({
     notificationPairFactory: await buildCacheNotifications(env, logger),
     logger,
+    operationalMetrics,
     ...(options.cachesProfile ? { profile: options.cachesProfile } : {}),
   })
   const container = buildContainer({
@@ -633,6 +679,7 @@ async function bootServer(
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
+    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,
@@ -680,19 +727,28 @@ async function bootServer(
     pipelineRegistry: container.pipelineRegistry,
     taskTypeRegistry: container.taskTypeRegistry,
     foundationalServiceRegistry: container.foundationalServiceRegistry,
+    binaryGeneratorRegistry: container.binaryGeneratorRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 
   const runtime = executionRuntime(container.config, env)
   await startDurableWorkers(boss, container, runtime)
   bootClock.mark('workers')
-  // Readiness probe for `/ready`: a live Postgres round-trip + the pg-boss flag, draining the
-  // instant shutdown begins so a load balancer stops routing here while in-flight requests finish.
+  // Readiness probe for `/ready`: a live Postgres round-trip, the pg-boss graceful-stop flag AND
+  // a real round-trip through pg-boss's OWN connection, draining the instant shutdown begins so a
+  // load balancer stops routing here while in-flight requests finish. The boss round-trip is
+  // slice 4.3: the flag alone only ever observed the clean `stopped` transition, so a boss whose
+  // substrate died under a running process reported healthy forever — the one thing a readiness
+  // probe exists to catch. `getQueues()` is a metadata read through pg-boss's own pool (the app's
+  // `SELECT 1` uses a different one), so it fails exactly when that pool is gone.
   const readiness = makeReadinessProbe({
     ping: async () => {
       await pool.query('SELECT 1')
     },
     pgBossHealthy: isBossRunning,
+    pgBossPing: async () => {
+      await boss.getQueues()
+    },
     isDraining: () => draining,
   })
   const app = createApp(container, env, { readiness })
@@ -722,6 +778,7 @@ async function bootServer(
   // workers above stay before listen so an enqueued job always has a consumer.
   const {
     stopSweeper,
+    stopDeadLetter,
     stopEnvTestSweeper,
     stopRetention,
     stopArtifactRetention,
@@ -755,6 +812,7 @@ async function bootServer(
     draining = true
     logger.info('shutting down cat-factory node server', { signal })
     stopSweeper()
+    stopDeadLetter()
     stopEnvTestSweeper()
     stopRetention()
     stopArtifactRetention()

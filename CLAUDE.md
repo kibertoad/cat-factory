@@ -221,6 +221,46 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 
+## Operational EVENTS are counted, not just logged
+
+A log line answers "what happened to THIS run"; only a counter answers "is this happening more
+than it was". The seam is the kernel `OperationalMetrics` port (`ports/operational-metrics.ts`),
+required on `CoreDependencies` and exposed as `container.operationalMetrics`; the process-wide
+(Node) / per-isolate (Worker) collector is `@cat-factory/server`'s `operationalMetrics`, the
+sibling of `logger`.
+
+- **The counter and gauge unions are CLOSED**, and the OTel mapping names each member through an
+  exhaustive `Record` — so adding a signal fails to compile until it has a metric name and a unit.
+- **Counters export as DELTAS.** A collector is per process on Node and per ISOLATE on the Worker,
+  and each flushes independently; only a delta sums correctly across the flushers. That is also
+  why the Worker flushes at the end of every invocation rather than on its cron, which runs in an
+  isolate that saw none of the request path's events.
+- **Dimensions must be BOUNDED, and named at the CALL SITE** — a queue name, a cache name, an
+  eviction kind. Every distinct value is its own time series, so a run/workspace/job id is a
+  cardinality explosion. The ids stay on the log line, which is why every increment site also
+  logs. Never pick the dimension back out of the log fields (`fields.kind ?? fields.evicted`): it
+  reads as correct until someone logs one more field and the series silently re-points.
+- **A COUNTER counts EVENTS; a standing level is a GAUGE.** The test is whether the producer can
+  see what arrived since the last look. A periodic `SELECT` returning a total cannot — feeding
+  that to a delta counter re-reports the same rows every pass (an hourly sweep turned five
+  dead-lettered jobs into ~120/day), and diffing it in memory tells the same lie after a restart.
+- **An un-wired counter reads as a ZERO**, which is why `CoreDependencies.operationalMetrics` is
+  required rather than optional. A caller with nothing to export passes `noopOperationalMetrics`,
+  which says so in code.
+- **An empty flush sends nothing.** An unflushed zero and a genuine zero are different facts, and
+  only the ABSENCE of a data point states the first one honestly. Same rule as "absent ≠ zero"
+  above: where a runtime genuinely cannot read a gauge (Cloudflare Queues expose no backlog to
+  their consumer), it emits no series rather than a 0.
+
+**A background sweep reports its pass through ONE call**, on both facades: Node's `startSweeper`
+takes `SweeperOptions.health`, the Worker's crons go through `SweepTick.run`, and both land on
+`SweepHealthTracker.recordFailure`, which emits the `sweep.failed` RATE and the `sweep_degraded`
+STREAK together. They were two calls at each site once and the facades promptly drifted into
+tracking disjoint sets of sweepers. A new sweep on either runtime goes through its facade's
+helper — never a bare `metrics.increment('sweep.failed', …)`, which is half a report. On the
+Worker, `SweepTick` also orders the tick's metrics flush AFTER its passes settle, because the
+collector is per isolate and a cron's counters are otherwise exported by nobody.
+
 ## A controller REFUSES by throwing a `DomainError`, never by building an envelope
 
 `handleError` (`@cat-factory/server`'s `http/errorHandler.ts`) is mounted as `app.onError` on every
@@ -867,7 +907,27 @@ bookkept. **The trait is the ONE trait projected onto the wire** (`CustomAgentKi
 a boolean beside `container`, asked of the REGISTRY so an ASSIGNED trait projects too), because it
 is the one with a UI consequence: the builder's picker must know which steps are refused without a
 selection. The SPA reads the report as a step-resolved SECTION, not a declared result view — see
-the placement rule under Frontend extension seams. Doc:
+the placement rule under Frontend extension seams.
+
+**What MAKES those artifacts is its own registry**, and keeping it out of the foundational catalog
+is the point: the catalog is what a DESIGN is expected to consume, and a metered vendor API that
+makes pictures is an instrument a step is pointed at, not something to build on.
+`BinaryGeneratorRegistry` (kernel, app-owned like every other) takes a deployment's image / music /
+video integrations in CODE — identity, the CONTENT TYPES it produces, its `mediaTypes`, endpoint,
+API contracts in the same `uploadApiContract` vocabulary, and a credential declared BY NAME — and a
+step selects from it (`binaryOutput.generatorIds`) plus the content types it must DELIVER
+(`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
+(`image | audio | video | 3d | document`), because a free-form tag makes `images` and `image` two
+things that look identical and silently fail to match, and it is what the brief groups by so an
+image generator is never asked for music; **an uncovered content type is refused at admission**
+under its own `binary_output_generator_invalid` reason, kept apart from the storage-side refusal
+because one is fixed in the workspace catalog and the other in the deployment's build; and the
+**credential VALUE never reaches a prompt** — the engine puts the non-secret projection on
+`AgentRunContext.binaryGenerators`, the container executor resolves it through the SAME
+`ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a
+tool server of one id cannot collide), and it rides the job body's `generatorSecrets` into that ONE
+job's agent env. An unresolved key is not a failed dispatch: the brief already tells the agent an
+unset variable means the platform could not provide it, and to report rather than call. Doc:
 [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers** — a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of

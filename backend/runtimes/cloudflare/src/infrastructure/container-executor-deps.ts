@@ -47,6 +47,7 @@ import {
   type MintInstallationToken,
   type WebSearchUpstream,
   createEnvToolSecretResolver,
+  operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig } from './config'
 import type { Env } from './env'
@@ -415,6 +416,9 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
 
   return new ContainerAgentExecutor({
     resolveTransport,
+    // Counts the seam's operational faults (dispatch failures, container evictions) beside the
+    // per-job log lines. Wired on both facades — an absent collector would report zero of them.
+    operationalMetrics,
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     // The workspace's per-agent-kind default model, consulted when a block pins none

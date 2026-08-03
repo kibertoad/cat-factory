@@ -1,5 +1,10 @@
 import type { Clock } from '@cat-factory/kernel'
-import { type Logger, type ServerContainer, sweepPlatformHealth } from '@cat-factory/server'
+import {
+  type Logger,
+  type ServerContainer,
+  type SweepHealthTracker,
+  sweepPlatformHealth,
+} from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic platform-health ALERT sweep for the Node facade — the analogue of the Worker's
@@ -20,6 +25,8 @@ export function startPlatformHealthSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
+  health: SweepHealthTracker,
 ): () => void {
   const cfg = container.config.platformAlerts
   if (!cfg.enabled) return () => {}
@@ -27,6 +34,7 @@ export function startPlatformHealthSweeper(
     name: 'platform-health',
     intervalMs: cfg.intervalMs,
     log,
+    health,
     failureMessage: 'platform health sweep failed',
     tick: async () => {
       const { raised, cleared } = await sweepPlatformHealth(container, log)

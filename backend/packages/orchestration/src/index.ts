@@ -255,6 +255,12 @@ export {
   type PlatformMetricsSink,
   type PlatformMetricsSweepDeps,
 } from './modules/observability/platformMetricsSweep.js'
+export { createRetentionPass, type RetentionPass } from './modules/observability/retentionPass.js'
+export {
+  flushOperationalMetrics,
+  type OperationalMetricsFlushDeps,
+  type OperationalMetricsSink,
+} from './modules/observability/operationalMetricsFlush.js'
 export {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
   evaluatePlatformHealth,

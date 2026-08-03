@@ -1,4 +1,5 @@
 import { describeError, type Logger } from '@cat-factory/kernel'
+import type { SweepHealthTracker } from '@cat-factory/server'
 import { AsyncTask, SimpleIntervalJob, ToadScheduler } from 'toad-scheduler'
 
 // The Node facade has no cron, so every periodic task the Worker runs on a schedule is an
@@ -23,6 +24,15 @@ export interface SweeperOptions {
   intervalMs: number
   /** Logger for the best-effort failure line. */
   log: Logger
+  /**
+   * Where each pass's OUTCOME is recorded, under {@link name} — the `sweep.failed` rate and
+   * the consecutive-failure streak `sweep_degraded` reads, which the tracker emits together.
+   * REQUIRED rather than optional: a sweeper that has been throwing every tick for a week logs
+   * one line per tick and nothing that says the rate changed, and an optional sink here would
+   * be forgotten by exactly the sweeper nobody is watching. A caller with nothing to export
+   * passes `createSweepHealthTracker()`, which says so in code.
+   */
+  health: SweepHealthTracker
   /** The message logged (with the error) when a pass throws. */
   failureMessage: string
   /** One sweep pass. Any success logging lives inside it; throws are caught + logged. */
@@ -38,11 +48,21 @@ export interface SweeperOptions {
  * shutdown so a long pass in flight can't outlive the rest of the teardown.
  */
 export function startSweeper(options: SweeperOptions): () => void {
-  const { name, intervalMs, log, failureMessage, tick } = options
+  const { name, intervalMs, log, health, failureMessage, tick } = options
   const scheduler = new ToadScheduler()
-  const task = new AsyncTask(name, tick, (error) => {
-    log.error(failureMessage, describeError(error))
-  })
+  // The success side is recorded too, and it is what makes the streak mean something: without
+  // it `sweep_degraded` would fire on the third failure a sweeper ever had, however far apart.
+  const task = new AsyncTask(
+    name,
+    async () => {
+      await tick()
+      health.recordSuccess(name)
+    },
+    (error) => {
+      log.error(failureMessage, describeError(error))
+      health.recordFailure(name)
+    },
+  )
   const job = new SimpleIntervalJob({ milliseconds: intervalMs, runImmediately: true }, task, {
     preventOverrun: true,
     unref: true,
