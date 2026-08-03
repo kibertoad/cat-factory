@@ -756,6 +756,11 @@ mothership providing durability, email sending, and notification delivery.
 
 1. **Mothership target: both Node + Cloudflare.** The new `/internal/*` machine API is served from
    the shared `@cat-factory/server`, so both facades work as a mothership (symmetry + conformance).
+   What still behaves DIFFERENTLY when the mothership is a Worker + D1 rather than Node + Postgres
+   — the run-sweeper hijack, D1's 2 MB row cap against the 4 MiB agent-context snapshot, the
+   untested Worker-side registry, the per-isolate mint brake — is investigated in
+   [`mothership-cloudflare-host-gaps.md`](./mothership-cloudflare-host-gaps.md). Nothing there is
+   fixed yet; read it before picking up a slice that touches run recovery or the telemetry sync.
 2. **No PostgreSQL at all in mothership mode.** `DATABASE_URL`, `migrate()`, and pg-boss are not
    used or expected. The only local database is a file-based **`node:sqlite`** store.
 3. **Secrets split.** Agent/model credentials are stored **locally** in the `node:sqlite` store,
