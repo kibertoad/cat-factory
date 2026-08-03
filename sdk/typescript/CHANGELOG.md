@@ -1,0 +1,70 @@
+# @cat-factory/sdk
+
+## 0.2.0
+
+### Minor Changes
+
+- 8b31fe0: Add official public-API SDK clients for TypeScript, Python, Go and Java (the Java artifact also
+  serving Kotlin), plus a cross-SDK smoketest and release gating.
+
+  Models and operation methods are **generated** from `docs/openapi.json` — itself generated from
+  the Valibot route contracts — so a client cannot drift from the deployment it talks to. Each SDK's
+  transport, error hierarchy, retry policy, pagination helper and SSE reader are hand-written, so a
+  contract change never rewrites behaviour and a behaviour fix is never re-applied 38 times in four
+  languages. `pnpm gen:sdk` regenerates; `pnpm check:sdk` guards drift and version skew in CI.
+
+  `backend/internal/sdk-smoketest` boots a real Node backend and drives the same scenario through
+  all four clients, comparing their observation reports — the only check that can see the four
+  disagree.
+
+  **No separate Kotlin SDK, deliberately.** Kotlin's own `@Metadata` cannot be synthesised onto a
+  Java jar, but the metadata Kotlin _reads_ can be: the model and resource packages are JSpecify
+  `@NullMarked`, Kotlin hard keywords are escaped (`PublicPipeline.public` → `isPublic()`, wire name
+  preserved), the error hierarchy is sealed, builders replace absent default arguments, and enums
+  tolerate unknown values. A Kotlin caller gets real nullability instead of platform types; what it
+  does not get is `copy()`/destructuring on the records.
+
+  Also fills a documentation gap in the published OpenAPI spec: 11 operations (the whole
+  `/api/v1/debug/*` surface plus `deletePublicTask`, `listPublicJobs` and `resolvePublicRunJudge`)
+  carried no summary or description and were tagged with a catch-all `Public API` tag. They are now
+  documented and tagged `Debug` / `Tasks` / `Initiatives` / `Decisions`, so the four generated
+  clients inherit real docs.
+
+### Patch Changes
+
+- 8b31fe0: Keep the SDK `User-Agent` version constants in step with their manifests on release.
+
+  `@cat-factory/sdk` is an ordinary workspace package, so changesets bumps
+  `sdk/typescript/package.json` when it builds the release PR — but nothing updated the two constants
+  derived from that number (the TypeScript transport's `SDK_VERSION`, and Go's `Version`, which
+  tracks the TypeScript manifest because a Go module carries no version of its own). Every release PR
+  would have been born red on the version-skew half of `check:sdk`.
+
+  `scripts/sync-sdk-versions.mjs` now runs from the root `version` script, the twin of
+  `sync-runner-image-tags.mjs`, with the manifest/constant table shared with the guard so the writer
+  and the checker cannot drift.
+
+- 8b31fe0: Fix what the SDK clients' request deadline bounds, and how live stream frames reach a caller.
+
+  The four clients disagreed about a stream's lifetime, and two of them were wrong. Go's per-attempt
+  `context.WithTimeout` kept running over the response body, so every `Stream` died at `Timeout`
+  (30s by default) with `context deadline exceeded` on a run that was healthy. Python's reader called
+  `read(1024)` on urllib's `HTTPResponse`, which blocks until it has 1024 bytes — so no frame reached
+  the caller until the stream ENDED and they all arrived at once. Both present as the same thing in
+  production: a run that silently appears to stall.
+
+  The deadline now bounds the RESPONSE and never a stream, in all four. That is the correct semantic
+  for this API rather than a convenience: the deployment writes an SSE frame only when a run's
+  projection changes, sends no heartbeat, and a parked run waits for a human indefinitely by design,
+  so a quiet stream is the normal state of a healthy one.
+
+  Also in the hand-written halves: a TypeScript caller abort carrying a non-`AbortError` reason is no
+  longer retried and reported as a connection failure; `close()` on a stream that was never iterated
+  now actually releases the socket; Java stops emitting duplicate `authorization` headers when a
+  caller supplies their own, and an unmapped 4xx (402, 413, a status this surface gains later) stays
+  the base exception instead of being reported as a deployment fault; Go gains the `TimeoutError` the
+  other three already had; every SDK reads both `Retry-After` wire forms; and an auto-pager that is
+  handed back the cursor it just sent raises instead of looping forever.
+
+  Generated Go parameter names lose a leading-initialism bug that spelled ten published signatures
+  `Cancel(ctx, iD string)`.

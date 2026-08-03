@@ -1,0 +1,50 @@
+{
+  "name": "@cat-factory/sdk",
+  "version": "0.2.0",
+  "description": "TypeScript/JavaScript client for the cat-factory public API (/api/v1): typed models and resource clients generated from the published OpenAPI spec, over a hand-written fetch transport with bearer auth, bounded retries, keyset auto-pagination and an SSE reader for the run streams.",
+  "keywords": [
+    "api-client",
+    "cat-factory",
+    "openapi",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "sdk/typescript"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "@cat-factory/contracts": "workspace:*",
+    "@types/node": "^26.1.2",
+    "typescript": "7.0.2",
+    "valibot": "^1.4.2",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -4,6 +4,7 @@ import {
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_DECLARATION_TAG,
   defaultBinaryGeneratorRegistry,
+  registryBinaryGeneratorSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
@@ -187,11 +188,52 @@ describe('createBinaryOutputDeclarationRecorder', () => {
     })('ws', target, declaration)
     expect(target.binaryOutputs).toBeUndefined()
   })
+
+  it('still records the artifacts when the GENERATIVE set could not be read, marking it unverified', async () => {
+    // The asymmetry with the catalog case above is the point. A failed catalog read leaves
+    // nothing to judge an artifact's `service` against, so there is no report to write; a failed
+    // GENERATIVE read leaves the artifacts and the whole storage-side verdict intact and
+    // withholds exactly one judgement. Dropping the record here would lose a completed
+    // generation's evidence over a question nobody asked about it — on a mothership-mode node,
+    // for the duration of an outage.
+    const target = step()
+    await createBinaryOutputDeclarationRecorder({
+      agentKindRegistry: registry,
+      foundationalServiceResolver: resolver(),
+      binaryGeneratorSource: {
+        views: async () => {
+          throw new Error('mothership unreachable')
+        },
+        documentsFor: async () => new Map(),
+      },
+    })('ws', target, declaration)
+    expect(target.binaryOutputs?.stored).toEqual([{ service: 'asset-store', location: 'a.png' }])
+    expect(target.binaryOutputs?.generatorsUnverified).toBe(true)
+    // The claim that must NOT be made: with nothing to compare against, an id cannot be called
+    // invented. An empty list here would otherwise read as "every id checked out".
+    expect(target.binaryOutputs?.unknownGenerators).toEqual([])
+  })
+
+  it('reports an unregistered id as unknown when the set WAS read — the opposite fact', async () => {
+    // Same empty-looking outcome, opposite meaning, which is why the flag exists at all.
+    const target = step()
+    await createBinaryOutputDeclarationRecorder({
+      agentKindRegistry: registry,
+      foundationalServiceResolver: resolver(),
+      binaryGeneratorSource: registryBinaryGeneratorSource(defaultBinaryGeneratorRegistry()),
+    })(
+      'ws',
+      target,
+      '```binary-outputs\n[{"service":"asset-store","location":"a.png","generator":"ghost"}]\n```',
+    )
+    expect(target.binaryOutputs?.unknownGenerators).toEqual(['ghost'])
+    expect(target.binaryOutputs?.generatorsUnverified).toBeUndefined()
+  })
 })
 
 describe('dispatchBinaryGeneratorsFor', () => {
-  it('projects the step’s selected integrations for a trait-carrying dispatch', () => {
-    expect(
+  it('projects the step’s selected integrations for a trait-carrying dispatch', async () => {
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'image-generator',
         agentKindRegistry: registry,
@@ -200,9 +242,9 @@ describe('dispatchBinaryGeneratorsFor', () => {
             binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
           },
         }),
-        binaryGeneratorRegistry: generatorRegistry(),
+        binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
       }),
-    ).toEqual([
+    ).resolves.toEqual([
       {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
@@ -212,11 +254,11 @@ describe('dispatchBinaryGeneratorsFor', () => {
     ])
   })
 
-  it('projects nothing for a kind without the trait — the SAME gate the brief uses', () => {
+  it('projects nothing for a kind without the trait — the SAME gate the brief uses', async () => {
     // The two are halves of one hand-off: the brief tells the agent to read `$RD_TOKEN`, and this
     // is what puts a value there. A kind that got one without the other is either an agent told
     // to use a credential nobody delivered, or a credential delivered in silence.
-    expect(
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'coder',
         agentKindRegistry: registry,
@@ -226,13 +268,37 @@ describe('dispatchBinaryGeneratorsFor', () => {
             binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
           },
         }),
-        binaryGeneratorRegistry: generatorRegistry(),
+        binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
       }),
-    ).toEqual([])
+    ).resolves.toEqual([])
   })
 
-  it('projects nothing when the deployment registers no integrations', () => {
-    expect(
+  it('projects nothing — never throws — when the set cannot be READ', async () => {
+    // The credential half's own disposition, and the reason it is safe for the brief to keep a
+    // separate one. An agent that gets no credentials and no brief was told nothing and handed
+    // nothing; what must never happen is a dispatch FAILING here, because the source being
+    // remote is a property of the deployment's topology and not of this run.
+    await expect(
+      dispatchBinaryGeneratorsFor({
+        agentKind: 'image-generator',
+        agentKindRegistry: registry,
+        step: step({
+          stepOptions: {
+            binaryOutput: { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+          },
+        }),
+        binaryGeneratorSource: {
+          views: async () => {
+            throw new Error('mothership unreachable')
+          },
+          documentsFor: async () => new Map(),
+        },
+      }),
+    ).resolves.toEqual([])
+  })
+
+  it('projects nothing when the deployment registers no integrations', async () => {
+    await expect(
       dispatchBinaryGeneratorsFor({
         agentKind: 'image-generator',
         agentKindRegistry: registry,
@@ -242,6 +308,6 @@ describe('dispatchBinaryGeneratorsFor', () => {
           },
         }),
       }),
-    ).toEqual([])
+    ).resolves.toEqual([])
   })
 })

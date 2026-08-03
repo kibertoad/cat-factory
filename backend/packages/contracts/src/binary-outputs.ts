@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { binaryModalitySchema } from './binary-modalities.js'
+import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 
 // Wire vocabulary for BINARY-OUTPUT agent steps (docs/initiatives/binary-output-foundational-storage.md):
 // a step whose kind GENERATES binary artifacts (image generation is the canonical example) and
@@ -62,6 +62,42 @@ export const binaryOutputConfigSchema = v.object({
    * removing the audio generator look like a change of requirements rather than a break.
    */
   modalities: v.optional(v.array(binaryModalitySchema)),
+  /**
+   * The concrete FORMATS this step must deliver, one notch finer than {@link modalities}, for the
+   * deliverables where the container IS the requirement rather than a rendering preference.
+   *
+   * 3D is why this exists. PNG versus WebP is a genre question and belongs in a prompt, but GLB,
+   * USDZ and FBX are all one modality and none of them substitutes for another: a Godot importer
+   * takes the first, a RealityKit pipeline the second, an art pipeline the third. A step whose
+   * mesh must load in the game can otherwise be admitted against an integration that cannot emit a
+   * loadable container, and the failure arrives at the end of a paid run as an asset nobody can
+   * open — which reads as a bad generation rather than as a selection nothing checked.
+   *
+   * Note the direction that gives this axis its scope: it is what the modality vocabulary does NOT
+   * have to split for. `3d-model` and `3d-scene` are two members precisely because no format tells
+   * them apart, and `image` stays one because a format tells PNG from JPEG — so a distinction any
+   * container can carry is stated HERE, and only what none can carry earns a modality.
+   *
+   * EVERY entry must be covered, not any one of them: a step needing a GLB for the engine AND an
+   * FBX the artists can open in Blender declares both, and both are checked. "Any of these will
+   * do" is deliberately not expressible — the agent has to name concrete formats on the vendor
+   * call, and a requirement that leaves it a choice hands that decision to the party with the
+   * least basis for making it. Declare the format you need, not the set you would accept.
+   *
+   * Checked by EXACT match against the {@link BinaryGeneratorDefinition.mediaTypes} a selected
+   * integration declares (both sides come through `mediaTypeSchema`, so case and parameters are
+   * already reconciled), and NOT translated into a modality: `modalityOfMediaType` recognises only
+   * the formats the platform happens to know, so inferring one here would make the strength of the
+   * check depend on whether we recognise the string — a requirement spelled with a brand-new
+   * container would silently lose the coarse check its neighbour keeps. The two lists are
+   * independent statements and both are enforced as written.
+   *
+   * Absent ⇒ no format requirement, which is the ordinary case and stays the ordinary case:
+   * {@link modalities} is the statement about the WORK. Like it, this is never defaulted from the
+   * current selection — deriving a requirement from what is selected would make REMOVING a
+   * generator look like a change of requirements rather than a break.
+   */
+  mediaTypes: v.optional(v.array(mediaTypeSchema)),
 })
 export type BinaryOutputConfig = v.InferOutput<typeof binaryOutputConfigSchema>
 
@@ -130,6 +166,16 @@ export const binaryOutputReportSchema = v.object({
    * agent claimed and a reader judges it.
    */
   unknownGenerators: v.array(v.string()),
+  /**
+   * Set when the deployment's registered integrations could not be READ at settlement, so no
+   * claimed `generator` id could be checked against them (a mothership-mode node whose mothership
+   * was unreachable). Its own field rather than an empty {@link unknownGenerators}, for the
+   * reason that runs through this whole feature: "every id checked out" and "nothing could be
+   * checked" are the same value and opposite facts, and only one of them is evidence. The
+   * artifacts themselves — and the STORAGE half's verdict, which resolves against a different
+   * catalog and is unaffected — are recorded either way, because what could be derived must be.
+   */
+  generatorsUnverified: v.optional(v.literal(true)),
   /** Entries dropped because they were not an object with `service` + `location` strings. */
   invalidEntries: v.number(),
   /** Valid entries dropped past the per-report cap. */

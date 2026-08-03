@@ -32,6 +32,11 @@
     { "path": "internal/example-custom-agent/tsconfig.build.json" },
     { "path": "runtimes/cloudflare/tsconfig.build.json" },
     { "path": "runtimes/node/tsconfig.build.json" },
-    { "path": "runtimes/local/tsconfig.build.json" }
+    { "path": "runtimes/local/tsconfig.build.json" },
+    // The public-API TypeScript SDK. It lives outside `backend/` (beside its three sibling
+    // clients under `sdk/`) but is an ordinary published workspace package, so it belongs in the
+    // build graph like any other — a package reachable only transitively drops out the moment
+    // that reference goes away.
+    { "path": "../sdk/typescript/tsconfig.build.json" }
   ]
 }

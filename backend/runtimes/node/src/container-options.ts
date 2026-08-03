@@ -46,6 +46,7 @@ import {
   type PreviewTransport,
   type ProviderRegistry,
   type BinaryGeneratorRegistry,
+  type BinaryGeneratorSource,
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type TaskTypeRegistry,
@@ -419,6 +420,14 @@ export interface NodeContainerOptions {
    * `kernel/src/ports/foundational-builtins.ts`.
    */
   foundationalBuiltinSource?: FoundationalBuiltinSource
+  /**
+   * Where the deployment's GENERATIVE BINARY INTEGRATIONS are READ from, when that is not this
+   * process's own registry above. Set by exactly one caller — the local facade booting in
+   * MOTHERSHIP mode, which reads the mothership's registry over `GET /internal/binary-generators`
+   * because the set the pipeline builder OFFERED and the set run admission RESOLVES have to be
+   * one set. See `kernel/src/ports/binary-generators.ts`.
+   */
+  binaryGeneratorSource?: BinaryGeneratorSource
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode

@@ -25,7 +25,11 @@ else imports its **ports** and domain types from here.
   GENERATIVE binary integrations a deployment declares in code — an image / music / video API a
   `binary-output` step selects to PRODUCE its artifacts, with the pure selection validation and
   agent-facing rendering beside it; deliberately NOT the foundational catalog, which is what a
-  DESIGN consumes), `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
+  DESIGN consumes), `service-registration.ts`. Two of those registries are also READ through a
+  port, because a mothership deployment is two processes and what a deployment registers in code
+  is org state its node's build can only hold a stale copy of: `ports/foundational-builtins.ts`
+  and `ports/binary-generators.ts`, each defaulting to the in-process registry and pointed at the
+  mothership on a node. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are

@@ -87,7 +87,9 @@ export {
 // video generation APIs it pays for on it, and passes it via the `binaryGeneratorRegistry`
 // option. A pipeline step whose kind carries the `binary-output` trait then SELECTS from them
 // (`stepOptions.binaryOutput.generatorIds`), and the engine briefs the agent on each one's
-// content types, contract and credential variable.
+// content types, contract and credential variable. In MOTHERSHIP mode register them on the
+// MOTHERSHIP's entry point rather than here: a run resolves the set from there (it is what the
+// builder's picker offered), and this node's copy would only ever be the stale one.
 export {
   BinaryGeneratorRegistry,
   type BinaryGeneratorDefinition,

@@ -7,6 +7,7 @@ import {
   binaryGeneratorContextFileFor,
   contextFileFor,
   defaultBinaryGeneratorRegistry,
+  registryBinaryGeneratorSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FoundationalServiceCatalogService } from './FoundationalServiceCatalogService.js'
@@ -164,7 +165,7 @@ describe('FoundationalServiceRunResolver.binaryOutputContextFilesFor', () => {
         generatorIds: ['retro-diffusion', 'ghost-synth'],
         modalities: ['image'],
       },
-      generators,
+      registryBinaryGeneratorSource(generators),
     )
     expect(files.map((f) => f.path)).toEqual([
       BINARY_OUTPUT_BRIEF_FILE,

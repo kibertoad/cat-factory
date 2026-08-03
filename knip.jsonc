@@ -109,9 +109,27 @@
       // sees no static import.
       "ignoreDependencies": ["@cat-factory/executor-harness"],
     },
+    // The public-API SDK client. The smoketest program is an entry point in its own right (the
+    // cross-SDK harness runs it), not something `src/index.ts` reaches. The generated modules need
+    // no `ignore`: `src/index.ts` re-exports them and is an entry, so their exports are not
+    // reported.
+    "sdk/typescript": {
+      "entry": ["src/index.ts", "test/**/*.test.ts", "smoketest/main.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "smoketest/**/*.ts"],
+    },
     "backend/internal/*": {
       "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],
+    },
+    "backend/internal/sdk-smoketest": {
+      "entry": ["src/**/*.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // The harness SPAWNS the e2e test server rather than importing it — it resolves
+      // `@cat-factory/e2e/package.json` to locate `testServer.ts` and runs it as a child process,
+      // which is the whole point (the SDKs must be smoketested against a real HTTP deployment, not
+      // an in-process app). Knip cannot see a `require.resolve` of a package manifest, so the
+      // dependency has to be declared here or it reads as unused.
+      "ignoreDependencies": ["@cat-factory/e2e"],
     },
     "backend/internal/benchmark-harness": {
       "entry": ["src/**/*.ts"],

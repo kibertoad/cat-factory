@@ -497,6 +497,12 @@
         "unexpected": "Serwer zwrócił nieoczekiwaną odpowiedź. Spróbuj ponownie, a jeśli problem się powtarza, przekaż szczegóły operatorowi wdrożenia."
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+      }
+    },
     "action": {
       "retryFailed": "Ponowienie nie powiodło się",
       "startFailed": "Nie udało się uruchomić",
@@ -4096,16 +4102,25 @@
       "binaryOutputContextMissing": "Tych usług kontekstu nie ma już w katalogu: {ids}",
       "binaryOutputUnavailable": "Katalog usług podstawowych jest nieosiągalny, więc nic nie da się tu jeszcze wybrać.",
       "binaryOutputGenerators": "Generuj za pomocą",
+      "binaryOutputGeneratorsUnavailable": "Nie udało się odczytać integracji generatywnych tego wdrożenia, więc nie można tu jeszcze niczego wybrać. To problem z połączeniem, a nie brak rejestracji.",
       "binaryOutputGeneratorsPlaceholder": "Nie wybrano integracji",
       "binaryOutputModalities": "Musi dostarczyć",
       "binaryOutputModalitiesPlaceholder": "Brak wymagania",
+      "binaryOutputMediaTypes": "Dokładne formaty",
+      "binaryOutputMediaTypesPlaceholder": "Brak wymagania formatu",
+      "binaryOutputDeclaredFormats": "Wybrane integracje deklarują: {formats}",
+      "binaryOutputMediaTypeUncovered": "Żadna wybrana integracja nie tworzy {formats}, które ten krok ma dostarczyć. Wybierz taką, która to potrafi, albo usuń wymaganie.",
+      "binaryOutputMediaTypeUnverifiable": "Żadna wybrana integracja nie deklaruje {formats}, ale jedna z nich nie deklaruje żadnych formatów, więc nie dało się tego sprawdzić. Krok i tak wystartuje; potwierdź w API integracji, że potrafi to wytworzyć.",
+      "binaryOutputMediaTypeUnusable": "Nie zapisano, bo to nie są typy mediów: {entries}. Zapisz każdy jako type/subtype.",
       "binaryOutputGeneratorMissing": "Ta instalacja nie rejestruje tych integracji generatywnych: {ids}. Rejestruje się je w kodzie instalacji, a nie w tym obszarze roboczym.",
       "binaryOutputModalityUncovered": "Żadna wybrana integracja nie tworzy {modalities}, które ten krok ma dostarczyć.",
+      "binaryOutputModalityRetired": "{modality} (już niedostępne — wybierz ponownie typy treści tego kroku)",
       "binaryOutputModality": {
         "image": "Obrazy",
         "audio": "Dźwięk",
         "video": "Wideo",
-        "3d": "Modele 3D",
+        "3d-model": "Modele 3D",
+        "3d-scene": "Sceny 3D",
         "document": "Dokumenty"
       }
     },
@@ -5374,6 +5389,7 @@
     "target": "Usługa przechowywania",
     "targetNone": "Nie zapisano dla tego kroku",
     "contextServices": "Kontekst generowania",
+    "mediaTypes": "Wymagane formaty",
     "misdirectedBadge": "Inna usługa",
     "unknownBadge": "Spoza katalogu",
     "storedCount": "{outcome}, 1 artefakt | {outcome}, {count} artefakty | {outcome}, {count} artefaktów",
@@ -5405,10 +5421,12 @@
     "warning": {
       "unknownServices": "Wskazał usługę, której nie ma w katalogu: {ids}. Wpis zachowano w zadeklarowanej postaci; sprawdź identyfikator w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy.",
       "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({id}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
+      "undeliveredMediaTypes": "Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tego formatu. | Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tych formatów. | Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tych formatów.",
       "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
       "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
       "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście.",
-      "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym."
+      "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym.",
+      "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
     "unknownGeneratorBadge": "Niezarejestrowana"
   },

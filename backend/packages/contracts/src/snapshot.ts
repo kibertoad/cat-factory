@@ -248,6 +248,16 @@ export const workspaceSnapshotSchema = v.object({
    */
   binaryGenerators: v.optional(v.array(registeredBinaryGeneratorSchema)),
   /**
+   * Set when the deployment's registered integrations could not be READ, which on a
+   * mothership-mode node means the mothership was unreachable. Its own field rather than an empty
+   * `binaryGenerators`, because the two are opposite facts a picker must not render alike: an
+   * absent list says "this deployment registers none, look in the build", and someone acting on
+   * that during an outage goes looking in the wrong place entirely. Never set alongside
+   * `binaryGenerators`, and absent on every healthy deployment — including the stock product,
+   * which registers none.
+   */
+  binaryGeneratorsUnavailable: v.optional(v.literal(true)),
+  /**
    * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
    * deployment registered into the app-owned backend registries), each `{ kind, label }`. The
    * SPA drives the provider-connect backend-kind selector from these instead of a hardcoded

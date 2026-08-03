@@ -55,6 +55,15 @@ export const useAgentsStore = defineStore('agents', () => {
   const binaryGenerators = ref<RegisteredBinaryGenerator[]>([])
 
   /**
+   * Whether that set could not be READ, straight off the snapshot's own flag. Its own piece of
+   * state rather than something inferred from an empty list, because the two are opposite facts:
+   * an empty list means this deployment registers none (fix it in the build), and an unreadable
+   * one means nobody knows (fix the connection). A picker that renders them alike sends someone
+   * to the wrong repository. False on every deployment that reads its integrations in-process.
+   */
+  const binaryGeneratorsUnavailable = ref(false)
+
+  /**
    * The merged CUSTOM catalog (consumer-slot → backend-manifest → runtime), each
    * mapped to display metadata, de-duplicated, and never shadowing a built-in or
    * system kind. The old `registerCustomKinds` only guarded `AGENT_BY_KIND`; this
@@ -154,8 +163,12 @@ export const useAgentsStore = defineStore('agents', () => {
    * exactly these ids, so they are the same set run admission resolves a step's `generatorIds`
    * against — an id offered from anywhere else would save clean and be refused at run START.
    */
-  function hydrateBinaryGenerators(list: readonly RegisteredBinaryGenerator[]) {
+  function hydrateBinaryGenerators(
+    list: readonly RegisteredBinaryGenerator[],
+    unavailable = false,
+  ) {
     binaryGenerators.value = [...list]
+    binaryGeneratorsUnavailable.value = unavailable
   }
 
   /** Hydrate the deployment's registered agent-kind variants from the snapshot (straight replace). */
@@ -191,6 +204,7 @@ export const useAgentsStore = defineStore('agents', () => {
     hydrateVariants,
     variantsForKind,
     binaryGenerators,
+    binaryGeneratorsUnavailable,
     hydrateBinaryGenerators,
     variantLabel,
   }

@@ -72,6 +72,7 @@ import type {
   FragmentSelector,
   ApiContractRepository,
   BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   FoundationalServiceRepository,
@@ -935,6 +936,25 @@ export interface CoreDependencies {
    * is expected to build ON, while an integration is an instrument a specific step is pointed at.
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * Where those integrations are READ from, when that is not this process's own registry.
+   * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)` — i.e. exactly the
+   * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
+   * mothership's registry over `GET /internal/binary-generators`.
+   *
+   * The sibling of {@link foundationalBuiltinSource}, and it exists for the same reason with a
+   * louder symptom. A mothership deployment is TWO processes, so a deployment had to register
+   * its integrations on both entry points; a node one build behind — the normal state of a local
+   * node — then refuses a step the mothership's own picker offered, with `unknown_generator`
+   * naming a configuration that is correct. See `kernel/src/ports/binary-generators.ts`.
+   *
+   * When it is set, this process's own `binaryGeneratorRegistry` is NOT consulted for a run (the
+   * facade warns at boot if it is non-empty) — the two are alternatives, never a merge: a merge
+   * would reinstate the drift, since a stale local copy would win by id over the authoritative
+   * one. The registry is still read for BOOT VALIDATION and for serving
+   * `/internal/binary-generators` when this process is itself a mothership.
+   */
+  binaryGeneratorSource?: BinaryGeneratorSource
   /**
    * Where the `builtin` tier is READ from, when that is not this process's own registry.
    * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)` — i.e. exactly the

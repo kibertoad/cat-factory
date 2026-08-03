@@ -5,6 +5,7 @@ import {
   type BinaryGeneratorView,
 } from './binary-generator-registry.js'
 import {
+  binaryFormatCoverage,
   binaryGeneratorContextFileFor,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
@@ -138,6 +139,122 @@ describe('binaryGeneratorSelectionIssues', () => {
     ).toEqual([])
   })
 
+  // The format half. 3D is what forces it: GLB, USDZ and FBX are all one modality and
+  // none substitutes for another, so a mesh in the wrong container is not a thinner deliverable
+  // but an unusable one — and nothing downstream can tell it from a bad generation.
+  const meshy = generator({
+    id: 'meshy',
+    name: 'Meshy',
+    summary: 'Text- and image-to-3D.',
+    modalities: ['3d-model'],
+    mediaTypes: ['model/gltf-binary', 'model/obj'],
+  })
+
+  it('refuses a format no selected integration emits, even when the modality is covered', () => {
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          modalities: ['3d-model'],
+          mediaTypes: ['model/gltf-binary', 'model/fbx'],
+        },
+        [meshy],
+      ),
+    ).toEqual([{ problem: 'media_type_uncovered', mediaType: 'model/fbx' }])
+  })
+
+  it('checks EVERY declared format, so an engine build and an editable mesh are both covered', () => {
+    // The two-consumer case: the game loads the GLB, an artist opens the FBX in Blender. Both are
+    // required deliverables, so both are checked — this is why the list is not "any of these".
+    const artist = generator({
+      id: 'artist-3d',
+      modalities: ['3d-model'],
+      mediaTypes: ['model/fbx'],
+    })
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy', 'artist-3d'],
+          mediaTypes: ['model/gltf-binary', 'model/fbx'],
+        },
+        [meshy, artist],
+      ),
+    ).toEqual([])
+  })
+
+  it('admits a format it could not judge, because an undeclared list is not an empty one', () => {
+    // A generator that declares no `mediaTypes` has said "only my modality is known" — a
+    // documented state. Refusing there would punish the honest declaration; the gap is STATED
+    // in the brief and the picker instead.
+    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d-model'], mediaTypes: [] })
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['mystery-3d'],
+          mediaTypes: ['model/fbx'],
+        },
+        [undeclared],
+      ),
+    ).toEqual([])
+    expect(binaryFormatCoverage(['model/fbx'], [undeclared])).toEqual({
+      uncovered: [],
+      unverifiable: ['model/fbx'],
+    })
+  })
+
+  it('tells an asset generator from a scene generator, which no media type could', () => {
+    // The split's own reason for existing: both emit GLB, so the FORMAT check passes and the
+    // step still cannot be served. Without the two members a level-producing step would be
+    // admitted against a prop generator with nothing anywhere able to notice.
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          modalities: ['3d-scene'],
+          mediaTypes: ['model/gltf-binary'],
+        },
+        [meshy],
+      ),
+    ).toEqual([{ problem: 'modality_uncovered', modality: '3d-scene' }])
+  })
+
+  it('refuses a format outright when NOTHING is selected to be silent about it', () => {
+    expect(binaryFormatCoverage(['model/fbx'], [])).toEqual({
+      uncovered: ['model/fbx'],
+      unverifiable: [],
+    })
+  })
+
+  it('does not translate a format into its modality, so an exotic one is checked as written', () => {
+    // `modalityOfMediaType` knows only the formats the platform happens to recognise. Inferring a
+    // modality here would make the coarse check fire for `model/gltf-binary` and silently not for
+    // a brand-new container — the strength of a requirement must not depend on our vocabulary.
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          mediaTypes: ['model/x-brand-new'],
+        },
+        [meshy],
+      ),
+    ).toEqual([{ problem: 'media_type_uncovered', mediaType: 'model/x-brand-new' }])
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          mediaTypes: ['model/x-brand-new'],
+        },
+        [generator({ id: 'meshy', modalities: ['3d-model'], mediaTypes: ['model/x-brand-new'] })],
+      ),
+    ).toEqual([])
+  })
+
   it('sends the reader to the DEPLOYMENT, not the workspace catalog', () => {
     const message = describeBinaryGeneratorSelectionIssues('image-generator', [
       { problem: 'unknown_generator', generatorId: 'ghost-synth' },
@@ -146,6 +263,20 @@ describe('binaryGeneratorSelectionIssues', () => {
     expect(message).toContain('ghost-synth')
     expect(message).toContain('audio')
     expect(message).toContain('BinaryGeneratorRegistry')
+  })
+
+  it('names a RETIRED content type rather than rendering it as undefined', () => {
+    // `modalities` is persisted, so a member removed from the union outlives it in saved
+    // pipelines — `3d` did exactly that when it split. Such a value is uncovered by every
+    // registered integration by construction, so it reaches this message, which is the one whose
+    // job is to say what must be re-picked. An exhaustive switch with no runtime arm rendered it
+    // "produces undefined", turning a deliberate break into a nonsense sentence.
+    const message = describeBinaryGeneratorSelectionIssues('image-generator', [
+      { problem: 'modality_uncovered', modality: '3d' as never },
+    ])
+    expect(message).toContain("'3d'")
+    expect(message).toContain('no longer defines')
+    expect(message).not.toContain('undefined')
   })
 })
 
@@ -244,6 +375,62 @@ describe('renderBinaryGeneratorSection', () => {
     }).join('\n')
     expect(section).toContain('No generative integration is configured')
     expect(section).toContain('Do not call an outside generation API')
+  })
+
+  it('names the exact formats to request, since the agent is what chooses the container', () => {
+    const meshy = generator({
+      id: 'meshy',
+      modalities: ['3d-model'],
+      mediaTypes: ['model/gltf-binary'],
+    })
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['meshy'],
+          mediaTypes: ['model/gltf-binary'],
+        },
+        [meshy],
+      ),
+      requestedModalities: ['3d-model'],
+      requestedMediaTypes: ['model/gltf-binary'],
+    }).join('\n')
+    // The content type is spelled out for the agent, scope included: "3D models" alone would
+    // leave a prop generator sounding like it could be asked for the whole environment.
+    expect(section).toContain('This step is expected to deliver: 3D models (one asset each).')
+    expect(section).toContain('`model/gltf-binary`')
+    expect(section).toContain('do not substitute another container')
+  })
+
+  it('keeps “nobody could check this” apart from “nothing produces it”', () => {
+    // Told nothing, the agent proceeds as if the format were confirmed; told "no integration
+    // produces it", it reports a gap that may not exist and skips work it could have done.
+    const undeclared = generator({ id: 'mystery-3d', modalities: ['3d-model'], mediaTypes: [] })
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['mystery-3d'] },
+        [undeclared],
+      ),
+      requestedModalities: [],
+      requestedMediaTypes: ['model/fbx'],
+    }).join('\n')
+    expect(section).toContain('unknown rather than settled either way')
+    expect(section).not.toContain('No available integration declares that it emits')
+  })
+
+  it('states a format requirement even when the step declares no content type', () => {
+    // The two lists are independent statements: a step may pin the container without restating
+    // the modality, and the requirement block must not disappear with the coarser half.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator()],
+      ),
+      requestedModalities: [],
+      requestedMediaTypes: ['image/png'],
+    }).join('\n')
+    expect(section).toContain('`image/png`')
+    expect(section).not.toContain('This step is expected to deliver:')
   })
 
   it('points at the injected contract file when the integration registers one', () => {

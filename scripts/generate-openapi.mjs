@@ -138,6 +138,24 @@ const OPERATION_DOCS = {
     description:
       'Read a task’s run in detail: per-step status/progress/subtasks, the failure kind and message, and the PR (url + branch).',
   },
+  deletePublicTask: {
+    tag: 'Tasks',
+    summary: 'Delete a task',
+    description:
+      'Delete a task and its run history. Destructive, so it sits at the top of the scope ladder: requires an `admin`-scoped key.',
+  },
+  listPublicJobs: {
+    tag: 'Initiatives',
+    summary: "List the workspace's initiative jobs",
+    description:
+      'List the headless initiative runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.',
+  },
+  resolvePublicRunJudge: {
+    tag: 'Decisions',
+    summary: 'Resolve a parked judge verdict',
+    description:
+      'Settle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.',
+  },
   listPublicPipelines: {
     tag: 'Pipelines',
     summary: "List the workspace's pipelines",
@@ -221,6 +239,60 @@ const OPERATION_DOCS = {
     description:
       'Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.',
   },
+
+  // The remote-debugging reads (`/api/v1/debug/*`, `read` scope). A two-level drill-down: the
+  // run-scoped lists live under `/debug/runs/:runId/*`, while a point read that carries BODIES is
+  // addressed by the row's own id, so a caller holding a call id from a list need not also
+  // remember the run it came from. Every response's size is computable before the request — lists
+  // never carry bodies, and a body is reached at any offset through its own read.
+  listDebugRuns: {
+    tag: 'Debug',
+    summary: "List the workspace's runs",
+    description:
+      'The triage entry point: the workspace’s runs, newest first and keyset-paginated, with an optional status and `since` filter.',
+  },
+  getDebugRun: {
+    tag: 'Debug',
+    summary: "Get a run's diagnostic map",
+    description:
+      'One run’s diagnostic overview: its steps, which telemetry sinks this deployment retains (and how much each holds), the LLM cost/latency rollups, and the derived signals worth looking at first.',
+  },
+  listDebugLlmCalls: {
+    tag: 'Debug',
+    summary: "List a run's LLM calls",
+    description:
+      'The model calls a run made, keyset-paginated and filterable by agent kind, phase, outcome or a substring of the bodies. Bodies are returned only when `bodyChars` asks for them.',
+  },
+  getDebugLlmCall: {
+    tag: 'Debug',
+    summary: 'Get one LLM call',
+    description:
+      'One recorded model call with its budgeted prompt delta, response and reasoning. `bodyOffset`/`bodyChars` window the bodies, so an arbitrarily long transcript is readable in bounded pages.',
+  },
+  listDebugAgentContext: {
+    tag: 'Debug',
+    summary: "List a run's agent-context dispatches",
+    description:
+      'Every dispatch whose provided context was captured, with SIZES only (no bodies) so the list stays bounded. Read one in full through the snapshot endpoint.',
+  },
+  getDebugAgentContext: {
+    tag: 'Debug',
+    summary: 'Get one agent-context snapshot',
+    description:
+      'The complete context one dispatch was PROVIDED: system and user prompts, the folded standards fragments, and the injected `.cat-context/*` files an agent reads through tools (which therefore appear in no proxy telemetry). Windowed by `bodyOffset`/`bodyChars`.',
+  },
+  listDebugSearchQueries: {
+    tag: 'Debug',
+    summary: "List a run's web searches",
+    description:
+      'The web searches the run’s agents actually performed, keyset-paginated. Retained only when the deployment records agent context.',
+  },
+  listDebugLogs: {
+    tag: 'Debug',
+    summary: "List a run's infrastructure log",
+    description:
+      'The run’s provisioning event log — how its environment, runner pool and containers came up, or why they did not.',
+  },
 }
 
 /** Descriptions for the operation tags (groups). */
@@ -233,6 +305,8 @@ const TAG_DESCRIPTIONS = {
     'The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).',
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
+  Debug:
+    'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */

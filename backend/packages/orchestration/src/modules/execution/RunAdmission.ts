@@ -1,5 +1,5 @@
 import type {
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   Block,
   BlockRepository,
   ExecutionRepository,
@@ -32,6 +32,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { BinaryGeneratorSelectionIssue } from '@cat-factory/kernel'
 import {
   binaryGeneratorSelectionIssues,
   binaryOutputConfigIssues,
@@ -82,11 +83,12 @@ export interface RunAdmissionDeps {
   foundationalServiceResolver?: FoundationalServiceResolver
   /**
    * The deployment's GENERATIVE BINARY INTEGRATIONS, for validating a binary-generating step's
-   * `generatorIds` + declared content types. Unlike the catalog seam above this needs no I/O and
-   * cannot be "unconfigured" in the same sense — a facade always news one — but it stays optional
-   * so a test constructing this class by hand keeps the guard as a pass-through.
+   * `generatorIds` + declared content types. Optional so a test constructing this class by hand
+   * keeps the guard as a pass-through; a facade always resolves one. On a mothership-mode node
+   * it is REMOTE, which is what makes this check resolve against the same set the pipeline
+   * builder offered rather than against whatever this node's build happens to hold.
    */
-  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  binaryGeneratorSource?: BinaryGeneratorSource
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -120,7 +122,7 @@ export class RunAdmission {
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly foundationalServiceResolver?: FoundationalServiceResolver
-  private readonly binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  private readonly binaryGeneratorSource?: BinaryGeneratorSource
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -144,7 +146,7 @@ export class RunAdmission {
     this.workspaceSettingsService = deps.workspaceSettingsService
     this.resolveBinaryArtifactStore = deps.resolveBinaryArtifactStore
     this.foundationalServiceResolver = deps.foundationalServiceResolver
-    this.binaryGeneratorRegistry = deps.binaryGeneratorRegistry
+    this.binaryGeneratorSource = deps.binaryGeneratorSource
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.inlineHarnessRef = deps.inlineHarnessRef
     this.resolveWorkspaceModelDefault = deps.resolveWorkspaceModelDefault
@@ -717,11 +719,11 @@ export class RunAdmission {
       return [{ kind, config }]
     })
     if (steps.length === 0) return
-    // The GENERATIVE half first, and without any I/O: it resolves against deployment code, so a
-    // step selecting an integration nobody registered is refused even on a deployment with no
-    // catalog seam wired — and refusing it BEFORE the catalog read means the operator hears about
-    // the fault they can fix in their own build rather than about the workspace's catalog.
-    this.assertBinaryGeneratorsSelected(steps)
+    // The GENERATIVE half first: it resolves against deployment code, so a step selecting an
+    // integration nobody registered is refused even on a deployment with no catalog seam wired —
+    // and refusing it BEFORE the catalog read means the operator hears about the fault they can
+    // fix in their own build rather than about the workspace's catalog.
+    await this.assertBinaryGeneratorsSelected(steps)
     const resolver = this.foundationalServiceResolver
     if (!resolver) return
     const catalog = await resolver.catalogFor(workspaceId)
@@ -755,15 +757,23 @@ export class RunAdmission {
    * can fix in the app, while an unknown integration id means nobody registered it in this
    * BUILD — the same reason kept apart in the message, the reason code and the SPA's remedy copy.
    *
-   * Synchronous and unconditional (no seam to be unwired): the registry is in-process
-   * composition data, so this check costs nothing and holds even on a facade with no catalog.
-   * An absent registry is treated as an EMPTY one, which is the honest reading — a deployment
+   * An UNWIRED source is treated as an EMPTY one, which is the honest reading — a deployment
    * that registers no integrations cannot satisfy a step that selects one.
+   *
+   * An UNREACHABLE one is the opposite fact and must not collapse into it. The source is remote
+   * on a mothership-mode node, where it throws rather than answering empty precisely so this
+   * check cannot refuse a correctly configured step with `unknown_generator` for the duration of
+   * an outage — a false configuration error, reported against the very step the product's own
+   * picker just filled in, which is the misattribution the remote source exists to remove. The
+   * throw is therefore RE-THROWN, not re-mapped: it is already an `UnavailableError` naming
+   * `binary_generators_unreachable`, so the caller gets a 503-shaped, retryable refusal that
+   * says the deployment could not read its integrations, and the operator is pointed at the
+   * mothership rather than at a step with nothing wrong with it.
    */
-  private assertBinaryGeneratorsSelected(
+  private async assertBinaryGeneratorsSelected(
     steps: readonly { kind: string; config: NonNullable<StepOptions['binaryOutput']> }[],
-  ): void {
-    const generators = this.binaryGeneratorRegistry?.views() ?? []
+  ): Promise<void> {
+    const generators = (await this.binaryGeneratorSource?.views()) ?? []
     for (const { kind, config } of steps) {
       const issues = binaryGeneratorSelectionIssues(config, generators)
       const first = issues[0]
@@ -774,9 +784,7 @@ export class RunAdmission {
         {
           agentKind: kind,
           problem: first.problem,
-          ...(first.problem === 'unknown_generator'
-            ? { generatorId: first.generatorId }
-            : { modality: first.modality }),
+          ...namedSubject(first),
           issues,
         },
       )
@@ -918,5 +926,25 @@ export class RunAdmission {
         'models are paused until the budget is raised or the billing period resets. A task pinned ' +
         'to a local model or a connected subscription still runs.',
     )
+  }
+}
+
+/**
+ * The one id a generative-selection refusal is ABOUT, keyed by problem — a generator id, a
+ * content type, or a format.
+ *
+ * Exhaustive over the issue union rather than a two-branch ternary, so the next member fails the
+ * typecheck here instead of landing in `details` under whichever field the `else` happened to
+ * name. The whole list still rides `details.issues`; this names the first one for a reader (and
+ * for a client keying off a single subject) without ever mis-labelling it.
+ */
+function namedSubject(issue: BinaryGeneratorSelectionIssue): Record<string, string> {
+  switch (issue.problem) {
+    case 'unknown_generator':
+      return { generatorId: issue.generatorId }
+    case 'modality_uncovered':
+      return { modality: issue.modality }
+    case 'media_type_uncovered':
+      return { mediaType: issue.mediaType }
   }
 }

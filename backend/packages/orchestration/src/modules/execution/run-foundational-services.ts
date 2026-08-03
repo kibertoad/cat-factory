@@ -11,7 +11,7 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   AgentKind,
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   FoundationalCatalogView,
   InjectedContextFile,
   Logger,
@@ -63,16 +63,17 @@ export interface FoundationalServiceResolver {
    * than its own seam because it is the same catalog behind the same tier merge and cache —
    * two resolvers would be two places for a workspace override to win differently.
    *
-   * The GENERATIVE half of that selection resolves against the deployment's code registry, which
-   * is passed in rather than held by the resolver: it is engine-level composition data with no
-   * I/O and no tenancy, so binding it to a catalog service (which has both) would misplace it.
-   * Absent ⇒ no integration resolves, and the brief states that rather than implying the step
-   * has one.
+   * The GENERATIVE half of that selection resolves against the deployment's own integrations,
+   * passed in rather than held by the resolver: they are a different kind of fact from the
+   * workspace catalog (deployment code, no tenancy), so binding them to a catalog service would
+   * misplace them. Absent ⇒ no integration resolves, and the brief states that rather than
+   * implying the step has one. On a mothership-mode node the source is remote and can THROW,
+   * which the caller's best-effort wrapper turns into an absent brief.
    */
   binaryOutputContextFilesFor(
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
-    generatorRegistry?: BinaryGeneratorRegistry,
+    generatorSource?: BinaryGeneratorSource,
   ): Promise<InjectedContextFile[]>
 }
 
