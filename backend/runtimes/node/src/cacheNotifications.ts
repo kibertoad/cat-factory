@@ -71,22 +71,22 @@ type CreateGroupNotificationPair = <T>(config: {
 }) => GroupCacheNotifications<T>
 
 async function loadNotificationFactory(): Promise<CreateGroupNotificationPair> {
-  // Loaded dynamically for the same reason as ioredis: layered-loader's root index
-  // imports its Redis modules (and thereby ioredis) at module scope, which is why
-  // @cat-factory/caching itself only deep-imports the in-memory machinery. The
-  // opaque specifier keeps this out of the TS build graph too.
+  // `layered-loader/redis` is the only entrypoint whose exports can reach ioredis, so it is
+  // imported here — inside the REDIS_URL-gated path — and never from @cat-factory/caching,
+  // which takes the Redis-free `layered-loader/core`. Loaded dynamically with an opaque
+  // specifier to keep it out of the TS build graph, matching `loadRedis` below.
   try {
-    const mod = (await import('layered-loader' as string)) as {
+    const mod = (await import('layered-loader/redis' as string)) as {
       createGroupNotificationPair: CreateGroupNotificationPair
     }
     return mod.createGroupNotificationPair
   } catch (err) {
-    // layered-loader is a hard dependency (always installed), so the only way its ROOT import
-    // fails is the transitive optional `ioredis` being absent — the same missing-dependency
-    // condition `loadRedis` reports below. Crucially this import runs FIRST (before loadRedis),
-    // so without this wrap the missing-ioredis case would throw a bare Error here and crash boot
-    // opaquely, never reaching loadRedis's ConfigValidationError. Report it as the shared
-    // ConfigValidationError so it lands on the misconfigured fallback screen either way.
+    // Since layered-loader 16, ioredis is an OPTIONAL PEER resolved lazily and only on the
+    // branch that builds a client from connection options — and we always hand over already
+    // constructed clients, so this import no longer fails when ioredis is absent. That case now
+    // surfaces from `loadRedis` below, which is the dedicated reporter for it. This wrap is
+    // retained as the catch-all for any other import failure, reported as the same
+    // ConfigValidationError so it still lands on the misconfigured fallback screen.
     throw missingIoredisProblem('distributed cache invalidation', err)
   }
 }

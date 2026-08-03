@@ -15,15 +15,17 @@ import type {
   WorkspaceSettingsCacheValue,
   ResolvedFoundationalService,
 } from '@cat-factory/kernel'
-// Deep imports on purpose: layered-loader's root index eagerly requires its Redis
-// modules (and thereby `ioredis`), which must never load outside the Node facade's
-// REDIS_URL-gated notification wiring — the Worker imports this package too. The
-// non-Redis modules below pull in only in-memory machinery.
-import { GroupLoader } from 'layered-loader/dist/lib/GroupLoader.js'
-import type { AbstractNotificationConsumer } from 'layered-loader/dist/lib/notifications/AbstractNotificationConsumer.js'
-import type { GroupNotificationPublisher } from 'layered-loader/dist/lib/notifications/GroupNotificationPublisher.js'
-import type { InMemoryGroupCache } from 'layered-loader/dist/lib/memory/InMemoryGroupCache.js'
-import type { Logger as LayeredLoaderLogger } from 'layered-loader/dist/lib/util/Logger.js'
+// `layered-loader/core` is the package's Redis-free entrypoint: nothing reachable from it
+// imports `ioredis`, which must never load outside the Node facade's REDIS_URL-gated
+// notification wiring — the Worker imports this package too. The package root re-exports
+// the Redis surface as well, so it is NOT interchangeable with this import; keep it `/core`.
+import { GroupLoader } from 'layered-loader/core'
+import type {
+  AbstractNotificationConsumer,
+  GroupNotificationPublisher,
+  InMemoryGroupCache,
+  Logger as LayeredLoaderLogger,
+} from 'layered-loader/core'
 
 /**
  * layered-loader logs its background failures through a pino-shaped `error(obj, msg?)`.

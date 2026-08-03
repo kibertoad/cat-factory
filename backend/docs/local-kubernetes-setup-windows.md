@@ -32,9 +32,9 @@ an existing cluster and ships **no** k3d). So local runs reproduce CI/container 
 
 | Tool      | Version   | Source of truth   | Notes                                                                        |
 | --------- | --------- | ----------------- | ---------------------------------------------------------------------------- |
-| kubectl   | `v1.36.2` | deploy-harness    | Docker Desktop ships its own (older) kubectl — see PATH note.                |
+| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own (older) kubectl — see PATH note.                |
 | kustomize | `v5.8.1`  | deploy-harness    | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
-| helm      | `v4.2.2`  | deploy-harness    |                                                                              |
+| helm      | `v4.2.3`  | deploy-harness    |                                                                              |
 | k3d       | `v5.7.5`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
 
 > Bump these deliberately and in lockstep with their source of truth when the pinned versions
@@ -56,8 +56,8 @@ New-Item -ItemType Directory -Force -Path $bin | Out-Null
 $tmp = Join-Path $env:TEMP 'k8s-dl'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
-# kubectl v1.36.2 (single exe)
-Invoke-WebRequest 'https://dl.k8s.io/release/v1.36.2/bin/windows/amd64/kubectl.exe' -OutFile "$bin\kubectl.exe"
+# kubectl v1.36.3 (single exe)
+Invoke-WebRequest 'https://dl.k8s.io/release/v1.36.3/bin/windows/amd64/kubectl.exe' -OutFile "$bin\kubectl.exe"
 
 # k3d v5.7.5 (single exe, renamed)
 Invoke-WebRequest 'https://github.com/k3d-io/k3d/releases/download/v5.7.5/k3d-windows-amd64.exe' -OutFile "$bin\k3d.exe"
@@ -67,8 +67,8 @@ Invoke-WebRequest 'https://github.com/kubernetes-sigs/kustomize/releases/downloa
 Expand-Archive "$tmp\kustomize.zip" -DestinationPath "$tmp\kustomize" -Force
 Move-Item "$tmp\kustomize\kustomize.exe" "$bin\kustomize.exe" -Force
 
-# helm v4.2.2 (.zip contains windows-amd64\helm.exe)
-Invoke-WebRequest 'https://get.helm.sh/helm-v4.2.2-windows-amd64.zip' -OutFile "$tmp\helm.zip"
+# helm v4.2.3 (.zip contains windows-amd64\helm.exe)
+Invoke-WebRequest 'https://get.helm.sh/helm-v4.2.3-windows-amd64.zip' -OutFile "$tmp\helm.zip"
 Expand-Archive "$tmp\helm.zip" -DestinationPath "$tmp\helm" -Force
 Move-Item "$tmp\helm\windows-amd64\helm.exe" "$bin\helm.exe" -Force
 
@@ -85,9 +85,9 @@ if (($userPath -split ';') -notcontains $bin) {
 Open a **new** terminal (so the PATH change takes effect) and verify:
 
 ```powershell
-kubectl version --client   # Client Version: v1.36.2 ; Kustomize Version: v5.7.1 (bundled)
+kubectl version --client   # Client Version: v1.36.3 ; Kustomize Version: v5.8.1 (bundled)
 kustomize version          # v5.8.1
-helm version --short       # v4.2.2+g...
+helm version --short       # v4.2.3+g...
 k3d version                # k3d version v5.7.5
 ```
 
@@ -96,9 +96,9 @@ k3d version                # k3d version v5.7.5
 Docker Desktop installs its own `kubectl` (today `v1.36.1`) under
 `C:\Program Files\Docker\Docker\resources\bin`, which is on the **machine** PATH. Windows
 searches the machine PATH **before** the user PATH, so in a fresh shell a bare `kubectl` may
-resolve to Docker's client rather than the `v1.36.2` installed above. Both drive a k3d
+resolve to Docker's client rather than the `v1.36.3` installed above. Both drive a k3d
 cluster fine (a slightly older client is compatible), so this is usually harmless. If
-you want the pinned `v1.36.2` to win, either:
+you want the pinned `v1.36.3` to win, either:
 
 - call it explicitly: `& "$env:USERPROFILE\bin\kubectl.exe" ...`, or
 - prepend the bin dir for the session: `$env:Path = "$env:USERPROFILE\bin;$env:Path"`, or

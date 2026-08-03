@@ -21,7 +21,7 @@
 # here — the runtime uses only Node built-ins + the global k8s CLIs). Pinned by the
 # multi-arch index digest (valid for amd64 + arm64 via buildx); the mutable tag is kept
 # for readability. To bump: `docker buildx imagetools inspect node:26-trixie-slim`.
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS build
+FROM node:26-trixie-slim@sha256:deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a AS build
 WORKDIR /app
 COPY tsconfig.json ./
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
@@ -34,7 +34,7 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 
 # ---- runtime: git + the k8s CLIs + the compiled wrapper ------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
-FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS runtime
+FROM node:26-trixie-slim@sha256:deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a AS runtime
 ENV NODE_ENV=production
 # buildx sets TARGETARCH (amd64 | arm64) — the CLI release assets use the same names.
 ARG TARGETARCH
@@ -51,9 +51,9 @@ RUN groupadd --system harness \
 # silently break a deploy — bump deliberately, and bump the image tag (CONTRIBUTING /
 # CLAUDE.md) when you do. git's dubious-ownership guard is disabled system-wide because
 # the clone may be owned by another uid in some runtimes.
-ARG KUBECTL_VERSION=v1.36.2
+ARG KUBECTL_VERSION=v1.36.3
 ARG KUSTOMIZE_VERSION=v5.8.1
-ARG HELM_VERSION=v4.2.2
+ARG HELM_VERSION=v4.2.3
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
     apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl tar && rm -rf /var/lib/apt/lists/*; \
