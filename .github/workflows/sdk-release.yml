@@ -154,10 +154,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          # Cached HERE but deliberately not in ci.yml's smoketest job, and the difference is the
+          # dependency set: that job needs three jars, while `-P release deploy` pulls the gpg,
+          # javadoc, source and central-publishing plugins, so a warm cache genuinely pays.
           cache: maven
-          # Name the cache key's input rather than letting setup-java glob `**/pom.xml` from the
-          # repository root (see the same pin in ci.yml, where that walk cost the job its whole
-          # timeout budget).
+          # The key's input is NAMED rather than globbed. Left unset, setup-java walks
+          # `**/pom.xml` from the repository root — the unbounded restore that cost the smoketest
+          # job its entire timeout budget once (see the note on its setup steps). This checkout
+          # has no `node_modules` to descend, but there is exactly one pom either way and a key
+          # computable in one stat cannot regress into that.
           cache-dependency-path: sdk/java/pom.xml
           # Writes a settings.xml wiring these to the `central` server id.
           server-id: central
