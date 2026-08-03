@@ -249,6 +249,56 @@ function selectWorkerDurableJobDeps(args: {
   }
 }
 
+/**
+ * The run-observability surface: the telemetry stores (TELEMETRY_DB), the deployment-level
+ * rollup readers (MAIN db), the provisioning event log and the two capture sinks with their
+ * prompt-recording switch. Grouped out of {@link buildWorkerCoreDependencies} for the
+ * per-function line budget, like {@link selectWorkerDurableJobDeps}; every entry is spread
+ * straight back into the same position in the same literal.
+ */
+function selectWorkerObservabilityDeps(args: {
+  config: AppConfig
+  db: D1Database
+  telemetryDb: WorkerContainerAssemblyInput['telemetryDb']
+  provisioningLogRepository: WorkerContainerAssemblyInput['provisioningLogRepository']
+  agentContextObservability: AgentContextObservabilityService
+  searchQueryObservability: SearchQueryObservabilityService
+}): Partial<CoreDependencies> {
+  const {
+    config,
+    db,
+    telemetryDb,
+    provisioningLogRepository,
+    agentContextObservability,
+    searchQueryObservability,
+  } = args
+  return {
+    // Telemetry lives in the dedicated TELEMETRY_DB database.
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // The stores behind the agent-context + search-query sinks re-exposed beside them, handed
+    // in alongside for the remote debugging reader — a pure reader that wants neither capture
+    // gate.
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
+    // the Reports view.
+    reportsRepository: new D1ReportsRepository({ db }),
+    // Unified provisioning event log (separate D1 binding). Threads the recorder into
+    // the env services and exposes the read service for the logs controller; undefined
+    // when PROVISIONING_DB isn't bound.
+    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
+    recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance is
+    // injected into the container executor for the write path.
+    agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -331,28 +381,14 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
-    // Telemetry lives in the dedicated TELEMETRY_DB database.
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
-    // The stores behind the agent-context + search-query sinks below, handed in alongside
-    // them for the remote debugging reader — a pure reader that wants neither capture gate.
-    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
-    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
-    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
-    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
-    // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
-    // the Reports view.
-    reportsRepository: new D1ReportsRepository({ db }),
-    // Unified provisioning event log (separate D1 binding). Threads the recorder into
-    // the env services and exposes the read service for the logs controller; undefined
-    // when PROVISIONING_DB isn't bound.
-    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
-    recordLlmPrompts: config.observability.recordPrompts,
-    // Re-exposed on the core for the agent-context read endpoint; the same instance is
-    // injected into the container executor below for the write path.
-    agentContextObservability,
-    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
-    // write path (it reads it off the request container).
-    searchQueryObservability,
+    ...selectWorkerObservabilityDeps({
+      config,
+      db,
+      telemetryDb,
+      provisioningLogRepository,
+      agentContextObservability,
+      searchQueryObservability,
+    }),
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
