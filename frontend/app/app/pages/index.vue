@@ -142,10 +142,14 @@ const AiPresetMismatchDialog = defineAsyncComponent(
   () => import('~/components/providers/AiPresetMismatchDialog.vue'),
 )
 // The in-app tutorial: the launch prompt (auto-opened once for a user who never answered
-// it) and the coach-mark overlay that runs a tour. Both mount only while their store flag
-// is set, so they cost the initial bundle nothing.
+// it), the catalogue of every tour the deployment ships (opened from the sidebar's Help
+// section or the palette, at any time), and the coach-mark overlay that runs a tour. All
+// mount only while their store flag is set, so they cost the initial bundle nothing.
 const TutorialPrompt = defineAsyncComponent(
   () => import('~/components/tutorial/TutorialPrompt.vue'),
+)
+const TutorialCatalogue = defineAsyncComponent(
+  () => import('~/components/tutorial/TutorialCatalogue.vue'),
 )
 const TutorialOverlay = defineAsyncComponent(
   () => import('~/components/tutorial/TutorialOverlay.vue'),
@@ -512,6 +516,7 @@ watch(
       <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
       <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
       <TutorialPrompt v-if="tutorial.promptOpen" />
+      <TutorialCatalogue v-if="tutorial.catalogueOpen" />
       <TutorialOverlay v-if="tutorial.touring" />
     </template>
 

@@ -1,5 +1,78 @@
 # @cat-factory/worker
 
+## 0.137.2
+
+### Patch Changes
+
+- Updated dependencies [87ed4f9]
+  - @cat-factory/contracts@0.211.0
+  - @cat-factory/server@0.194.0
+  - @cat-factory/agents@0.104.3
+  - @cat-factory/consensus@0.13.25
+  - @cat-factory/eks@0.1.199
+  - @cat-factory/gates@0.8.45
+  - @cat-factory/gitlab@0.15.4
+  - @cat-factory/integrations@0.116.4
+  - @cat-factory/kernel@0.214.1
+  - @cat-factory/observability-otel@0.4.42
+  - @cat-factory/orchestration@0.185.2
+  - @cat-factory/prompt-fragments@0.15.36
+  - @cat-factory/spend@0.13.1
+  - @cat-factory/provider-cloudflare@0.7.351
+  - @cat-factory/caching@0.12.12
+  - @cat-factory/observability-langfuse@0.9.42
+
+## 0.137.1
+
+### Patch Changes
+
+- 3435bd1: Refresh the model catalog against what the providers actually serve (Aug 2026). Several
+  curated entries pointed at ids their provider has since retired, so the model was
+  un-runnable rather than merely dated:
+
+  - **Cloudflare Workers AI**: `@cf/meta/llama-3.1-8b-instruct` and `@cf/moonshotai/kimi-k2.5`
+    were deprecated on 30 May 2026. `cloudflare-llama` now serves `llama-4-scout` (131K,
+    tool calling) and the `kimi-k2.5` entry is removed. The `conflict-resolver` routing
+    default on BOTH runtimes pointed at the deprecated K2.5 and moves to K2.6. Adds
+    `gpt-oss-120b` and `glm-flash` (GLM-4.7 Flash) as the missing open-weights and
+    cheap-tier options.
+  - **ChatGPT / Codex**: `gpt-5.5-codex` and `gpt-5.4-codex` were never valid Codex
+    `--model` slugs (the `-codex` family ended at GPT-5.3), so both entries failed with
+    `Unknown model`. The catalog now carries the GPT-5.6 tiers Codex actually serves —
+    `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` — plus plain `gpt-5.5`. **The `gpt-5.4`
+    entry is removed** (Codex retires it for ChatGPT sign-ins on 31 Aug 2026); a block
+    pinned to it falls through to the workspace/deployment default.
+  - **DeepSeek**: the `deepseek-chat` alias was retired on 24 Jul 2026 in favour of the V4
+    pair. The `deepseek` entry moves to `deepseek-v4-flash` (1M context) across its direct,
+    OpenRouter and subscription flavours, and `deepseek-v4-pro` gains direct + OpenRouter
+    flavours beside its Cloudflare one.
+  - **OpenRouter**: `google/gemini-3-pro` no longer exists on the gateway — the `gemini`
+    entry moves to `google/gemini-3.1-pro-preview`. Adds gateway routes for GLM-5.2 and
+    Qwen, and a `kimi-k3` entry.
+  - Claude Sonnet moves from 4.6 to 5; Qwen's direct flavour from `qwen3-max` to
+    `qwen3.7-max`.
+
+  Spend pricing gains per-model entries for every Workers AI model that is billed per
+  token rather than by neuron. **GLM-5.2 — the architect/reviewer routing default — and the
+  DeepSeek R1 distill had none, so they were metering at the near-free neuron rate and
+  escaping the budget gate.**
+
+- Updated dependencies [3435bd1]
+  - @cat-factory/kernel@0.214.0
+  - @cat-factory/spend@0.13.0
+  - @cat-factory/agents@0.104.2
+  - @cat-factory/caching@0.12.11
+  - @cat-factory/consensus@0.13.24
+  - @cat-factory/eks@0.1.198
+  - @cat-factory/gates@0.8.44
+  - @cat-factory/gitlab@0.15.3
+  - @cat-factory/integrations@0.116.3
+  - @cat-factory/observability-langfuse@0.9.41
+  - @cat-factory/observability-otel@0.4.41
+  - @cat-factory/orchestration@0.185.1
+  - @cat-factory/provider-cloudflare@0.7.350
+  - @cat-factory/server@0.193.1
+
 ## 0.137.0
 
 ### Minor Changes

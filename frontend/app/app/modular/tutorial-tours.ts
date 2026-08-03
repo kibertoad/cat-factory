@@ -1,5 +1,5 @@
 import { defineModule } from '@modular-vue/core'
-import type { TutorialTour } from '~/utils/tutorial'
+import type { TutorialRequirement, TutorialTour } from '~/utils/tutorial'
 
 /**
  * The first-party tutorial-tour catalog, contributed to the `tutorialTours` slot the same
@@ -27,11 +27,15 @@ import type { TutorialTour } from '~/utils/tutorial'
  *  - A step whose branch of the flow this board simply isn't on declares `when`, so it is
  *    DROPPED rather than skipped: a skip is reported as an abridged tour, and a parked run
  *    that has a decision and no approval gate is not an abridged anything.
+ *  - A tour's own preconditions are DECLARED ({@link TUTORIAL_REQUIREMENTS}), never an
+ *    anonymous predicate: the catalogue lists every tour this deployment ships and has to say
+ *    what a user must do before one it is holding back becomes available.
  *
  * Together the tours below walk the delivery loop end to end — get a repo onto the board,
  * put a task on it, run it, answer it when it asks, read the result and merge it — with each
- * later tour gated on the state the previous one produces, so the launch prompt only ever
- * offers what this board can actually demonstrate.
+ * later tour requiring the state the previous one produces, so the launch prompt only ever
+ * offers what this board can actually demonstrate, and the catalogue turns the rest into a
+ * to-do list rather than an absence.
  */
 
 /**
@@ -42,6 +46,51 @@ import type { TutorialTour } from '~/utils/tutorial'
  * translated, and nine other catalogs would each hold their own copy of it to drift.
  */
 export const SAMPLE_REPO = 'kibertoad/cat-factory-sample-repository'
+
+/**
+ * The preconditions the built-in tours declare, each pairing the gate that decides it with
+ * the copy that NAMES it — so a tour the board can't run yet is listed with the one thing
+ * still missing instead of being silently absent from the catalogue.
+ *
+ * Shared constants rather than a literal per tour because several tours need the same fact
+ * (`service` gates two of them), and a second copy of a requirement is a second reason string
+ * to keep in step with the gate it describes.
+ */
+export const TUTORIAL_REQUIREMENTS = {
+  boardWrite: {
+    id: 'board-write',
+    labelKey: 'tutorial.requirements.boardWrite',
+    met: (gates) => gates.canWriteBoard,
+  },
+  sourceControl: {
+    id: 'source-control',
+    labelKey: 'tutorial.requirements.sourceControl',
+    met: (gates) => gates.githubAvailable,
+  },
+  service: {
+    id: 'service',
+    labelKey: 'tutorial.requirements.service',
+    met: (gates) => gates.boardHasService,
+  },
+  task: {
+    id: 'task',
+    labelKey: 'tutorial.requirements.task',
+    met: (gates) => gates.boardHasTask,
+  },
+  // One requirement over both kinds of park, mirroring the tour's single `task-resolve`
+  // anchor: the card offers ONE attention action whichever way a run is waiting, so splitting
+  // this would list two things to go and do where either one alone unlocks the tour.
+  waitingAnswer: {
+    id: 'waiting-answer',
+    labelKey: 'tutorial.requirements.waitingAnswer',
+    met: (gates) => gates.boardHasOpenDecision || gates.boardHasPendingApproval,
+  },
+  finishedRun: {
+    id: 'finished-run',
+    labelKey: 'tutorial.requirements.finishedRun',
+    met: (gates) => gates.boardHasFinishedRun,
+  },
+} as const satisfies Record<string, TutorialRequirement>
 
 export const TUTORIAL_TOURS: readonly TutorialTour[] = [
   {
@@ -116,7 +165,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // repo is a board write against a connected source, and in basic interface mode
     // add-from-repo is the ONLY route (bootstrap is advanced), which is what makes this
     // worth a tour rather than a hint.
-    when: (gates) => gates.canWriteBoard && gates.githubAvailable,
+    requires: [TUTORIAL_REQUIREMENTS.boardWrite, TUTORIAL_REQUIREMENTS.sourceControl],
     steps: [
       {
         id: 'intro',
@@ -172,7 +221,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // hunting for controls and then claim to have taught the core loop. Offering it only
     // once a service exists is the honest version — and the launch prompt still lists
     // `board-basics`, which is the tour an empty board can actually deliver.
-    when: (gates) => gates.canWriteBoard && gates.boardHasService,
+    requires: [TUTORIAL_REQUIREMENTS.boardWrite, TUTORIAL_REQUIREMENTS.service],
     steps: [
       {
         id: 'intro',
@@ -236,7 +285,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // pipeline it will run, the start control, the live step list. `first-task` stops at the
     // card, so without this tour a user who finished the shipped walkthrough has never seen
     // the inspector. Needs a task to open, not merely a service to hold one.
-    when: (gates) => gates.canWriteBoard && gates.boardHasTask,
+    requires: [TUTORIAL_REQUIREMENTS.boardWrite, TUTORIAL_REQUIREMENTS.task],
     steps: [
       {
         id: 'intro',
@@ -306,7 +355,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // realise a run is asking them something has a run that never finishes and a workspace
     // in-flight slot held open. Offered only while something is actually waiting, because
     // the whole tour anchors on controls that exist only then.
-    when: (gates) => gates.boardHasOpenDecision || gates.boardHasPendingApproval,
+    requires: [TUTORIAL_REQUIREMENTS.waitingAnswer],
     steps: [
       {
         id: 'intro',
@@ -361,7 +410,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // The last mile: a task is only DONE when its PR actually merged, so a user who never
     // finds the result and the merge control has a board full of finished-looking work that
     // shipped nothing. Its subject is a run's output, so it needs a run that produced one.
-    when: (gates) => gates.boardHasFinishedRun,
+    requires: [TUTORIAL_REQUIREMENTS.finishedRun],
     steps: [
       {
         id: 'intro',

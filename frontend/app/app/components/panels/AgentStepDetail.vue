@@ -8,6 +8,7 @@ import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
+import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
@@ -556,6 +557,15 @@ async function copyOutput() {
               <!-- container agent's effort self-assessment (how hard it was, what reduced its
                    effectiveness, key obstacles). Only when the agent reported one. -->
               <StepEffortReport v-if="step.effortReport" :report="step.effortReport" />
+
+              <!-- what the step declared it stored through a foundational storage service, and
+                   every way that record is incomplete. This panel is the OTHER half of the
+                   result-window shell's trailing section: a step whose kind declares no
+                   dedicated result view opens here instead, and the shell is not involved — so
+                   without this the artifacts of exactly the kinds that need no bespoke window
+                   would have nowhere to appear. Self-hiding when the step has neither a report
+                   nor a selection, which is every step of every stock pipeline. -->
+              <BinaryOutputReport :step="step" variant="card" />
 
               <!-- edit-then-approve: a direct editor over the raw conclusions; the
                    edits become the approved proposal that flows to the next step -->

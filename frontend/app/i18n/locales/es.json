@@ -127,7 +127,9 @@
     "operatorDashboard": "Observabilidad de la plataforma",
     "reports": "Informes",
     "infrastructure": "Infraestructura",
-    "foundationalServices": "Servicios fundamentales"
+    "foundationalServices": "Servicios fundamentales",
+    "tutorials": "Tutoriales",
+    "help": "Ayuda"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,6 @@
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
         "toggleUiMode": "Cambiar el modo de interfaz",
-        "tutorial": "Hacer un recorrido",
         "foundationalServices": "Servicios fundamentales"
       },
       "keywords": {
@@ -4081,7 +4082,17 @@
       "consensusGroupsActive": "Este paso ejecuta el grupo seleccionado. Deselecciona todos los grupos para configurar aquí los participantes.",
       "consensusGroupAlways": "siempre",
       "variantLabel": "Variante del prompt",
-      "variantShipped": "Prompt original"
+      "variantShipped": "Prompt original",
+      "binaryOutputStorage": "Almacenar en",
+      "binaryOutputContext": "Contexto de generación",
+      "binaryOutputPlaceholder": "Elige un servicio de almacenamiento",
+      "binaryOutputContextPlaceholder": "Opcional: servicios que delimitan la generación",
+      "binaryOutputNeedsPick": "Un paso que genera salidas binarias no tiene servicio de almacenamiento elegido. Elige uno antes de guardar.",
+      "binaryOutputNoStorage": "Ningún servicio del catálogo de este tablero declara la capacidad {capability}. Registra uno, o añade la capacidad al servicio que tenías en mente, en servicios fundamentales.",
+      "binaryOutputMissing": "Este servicio de almacenamiento ya no está en el catálogo; elige otro.",
+      "binaryOutputNotStorage": "Este servicio ya no declara la capacidad {capability}, así que las ejecuciones se rechazarán; elige otro.",
+      "binaryOutputContextMissing": "Estos servicios de contexto ya no están en el catálogo: {ids}",
+      "binaryOutputUnavailable": "El catálogo de servicios fundamentales no está disponible, así que aún no se puede elegir nada aquí."
     },
     "progress": {
       "status": {
@@ -5343,6 +5354,47 @@
       "unlinkSourceFailed": "No se pudo desvincular el repositorio"
     }
   },
+  "binaryOutput": {
+    "heading": "Salidas binarias",
+    "target": "Servicio de almacenamiento",
+    "targetNone": "No registrado en este paso",
+    "contextServices": "Contexto de generación",
+    "misdirectedBadge": "Otro servicio",
+    "unknownBadge": "Fuera del catálogo",
+    "storedCount": "{outcome}, 1 artefacto | {outcome}, {count} artefactos",
+    "state": {
+      "notStarted": {
+        "summary": "Aún no ha empezado",
+        "detail": "Este paso todavía no ha empezado. Cuando se ejecute, almacenará sus salidas binarias a través del servicio indicado abajo."
+      },
+      "configured": {
+        "summary": "Aún sin registrar nada",
+        "detail": "Este paso está configurado para almacenar salidas binarias, pero aún no ha informado de ninguna. Sigue en curso, o terminó antes de informar."
+      },
+      "undeclared": {
+        "summary": "Sin declaración",
+        "detail": "Este paso terminó sin declarar qué almacenó. Puede que almacenara algo o puede que no; en cualquier caso, no se registró nada."
+      },
+      "parseFailed": {
+        "summary": "Declaración ilegible",
+        "detail": "Este paso terminó con una declaración que la plataforma no pudo leer, así que no se registró nada. Lo que almacenara falta en la lista de abajo."
+      },
+      "declaredNone": {
+        "summary": "No almacenó nada",
+        "detail": "El agente informó de que no almacenó ningún artefacto binario. Es un resultado válido, no un fallo."
+      },
+      "stored": {
+        "summary": "Almacenado"
+      }
+    },
+    "warning": {
+      "unknownServices": "Nombró un servicio que el catálogo no contiene: {ids}. La entrada se conserva tal como se declaró; comprueba el identificador con el catálogo del tablero. | Nombró servicios que el catálogo no contiene: {ids}. Sus entradas se conservan tal como se declararon; comprueba los identificadores con el catálogo del tablero.",
+      "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({id}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
+      "misdirected": "1 artefacto fue a un servicio distinto de {target}. | {count} artefactos fueron a un servicio distinto de {target}.",
+      "invalidEntries": "Se descartó 1 entrada declarada: no nombraba servicio ni ubicación. | Se descartaron {count} entradas declaradas: no nombraban servicio ni ubicación.",
+      "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista."
+    }
+  },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",
     "description": "Prueba versiones de prompts y modelos contra fixtures calificados, evaluados por un modelo juez.",
@@ -6113,13 +6165,41 @@
     "prompt": {
       "title": "¿Hacer un recorrido rápido?",
       "intro": "Los recorridos guiados te muestran la aplicación directamente en esta pantalla: resaltan los controles reales y te dicen dónde hacer clic.",
-      "start": "Empezar",
-      "restart": "Repetir",
-      "resume": "Reanudar",
-      "completed": "Completado",
       "decline": "No, gracias",
       "later": "Quizás más tarde",
-      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero."
+      "empty": "Todavía no hay recorridos disponibles para tu rol en este tablero.",
+      "browse": "Ver todos los tutoriales"
+    },
+    "catalogue": {
+      "title": "Tutoriales",
+      "intro": "Recorridos guiados que resaltan los controles reales sobre la marcha. Puedes empezar cualquiera cuando quieras y repetirlo tantas veces como necesites.",
+      "progress": "{completed} de {total} completados",
+      "steps": "1 paso | {count} pasos",
+      "blocked": "Disponible cuando tengas:",
+      "notApplicable": "Ahora mismo no hay nada en este tablero que este recorrido pueda mostrar.",
+      "empty": "Esta instalación no incluye tutoriales.",
+      "reset": "Restablecer progreso",
+      "resetHint": "Olvida qué tutoriales has completado y vuelve a ofrecerte el recorrido en tu próxima visita."
+    },
+    "action": {
+      "start": "Empezar",
+      "resume": "Reanudar",
+      "restart": "Repetir",
+      "continue": "Volver al recorrido"
+    },
+    "status": {
+      "notStarted": "Sin empezar",
+      "inProgress": "En curso",
+      "paused": "En pausa",
+      "completed": "Completado"
+    },
+    "requirements": {
+      "boardWrite": "Permiso para editar este tablero",
+      "sourceControl": "Un proveedor de control de código conectado",
+      "service": "Un servicio en el tablero",
+      "task": "Una tarea en el tablero",
+      "waitingAnswer": "Una ejecución esperando tu respuesta",
+      "finishedRun": "Una ejecución terminada correctamente"
     },
     "overlay": {
       "next": "Siguiente",
