@@ -28,7 +28,7 @@ observability tables live in a **dedicated telemetry store** rather than the mai
 
 Two tables live there: `llm_call_metrics` (per-call LLM telemetry) and
 `agent_context_snapshots` (the complete, redacted context provided to each container
-agent — composed prompts, folded-in fragment bodies, and the full content of the files
+agent; composed prompts, folded-in fragment bodies, and the full content of the files
 injected into the container). Both are pruned to the same window
 (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days).
 
@@ -41,16 +41,16 @@ values noted per item below, and a window of `0` disables that table's pass.
 
 It runs on its **own daily cron** (`0 3 * * *`), separate from the 2-min
 run-sweeper cron; `src/index.ts` `scheduled` routes by `controller.cron`. The
-windows are days-to-months long, so a daily pass is plenty — running the same
+windows are days-to-months long, so a daily pass is plenty: running the same
 boundary `DELETE`s every two minutes would just add pointless write load on the
 single D1 primary (the very contention §4 warns about).
 
 ## Background: the relevant D1 constraints
 
-(Cloudflare platform limits — confirm against current docs, they have been raised
+(Cloudflare platform limits: confirm against current docs, they have been raised
 before.)
 
-- **10 GB per database** — the hard ceiling.
+- **10 GB per database**: the hard ceiling.
 - **Single writer.** D1 is SQLite; reads can fan out to replicas but every write
   serializes through one primary.
 - **Per-query row-read / response-size limits**, and ~100 bound parameters per
@@ -71,8 +71,8 @@ LLM call and is never pruned (`D1TokenUsageRepository` only `INSERT`s; there is 
 `DELETE` anywhere). It grows for the life of the deployment whenever agents are
 enabled.
 
-**Why it's not urgent.** Rows are tiny and the hot read — `totalsSince()` for the
-spend budget — is already a range scan on `idx_token_usage_created`
+**Why it's not urgent.** Rows are tiny and the hot read (`totalsSince()` for the
+spend budget) is already a range scan on `idx_token_usage_created`
 (`WHERE created_at >= periodStart`), so query cost is bounded by rows _in the
 current period_, not by total history. The table grows but the budget query does
 not slow down.
@@ -86,7 +86,7 @@ spend gating.
 **Still open (deferred).** A **monthly rollup** into a `token_usage_monthly`
 aggregate (per workspace / provider / model) would preserve long-range reporting
 while letting raw rows be purged far sooner. Skipped for now because no reporting
-consumer reads beyond the current period yet — deletion already bounds the table,
+consumer reads beyond the current period yet: deletion already bounds the table,
 and the rollup can be added when such reporting exists.
 
 ## 2. Bound or expire the `github_rate_limits` telemetry
@@ -94,10 +94,10 @@ and the rollup can be added when such reporting exists.
 **Concern.** `github_rate_limits` (migration `0004`) records one append-only row
 per observed `x-ratelimit-*` header snapshot (`D1RateLimitRepository.record`),
 with no pruning. Under busy GitHub sync this can out-grow `token_usage`, and it is
-pure operational telemetry — the only consumer cares about _recent_ headroom.
+pure operational telemetry: the only consumer cares about _recent_ headroom.
 
 **Implemented.** The same sweep deletes snapshots older than
-`GITHUB_RATE_LIMIT_RETENTION_DAYS` (default **7**, the most aggressive window —
+`GITHUB_RATE_LIMIT_RETENTION_DAYS` (default **7**, the most aggressive window:
 this table has the least reason to retain history) via
 `RateLimitRepository.deleteOlderThan`.
 
@@ -109,7 +109,7 @@ this is only worth doing if the ledger shape turns out to be unwanted.
 ## 3. Bound the `github_commits` backfill
 
 **Concern.** `github_commits` (migration `0004`) is the only append-only GitHub
-projection — it has **no `deleted_at` tombstone**, so rows are never reclaimed,
+projection: it has **no `deleted_at` tombstone**, so rows are never reclaimed,
 and `message` is a comparatively bulky `TEXT` column. The risk here is a **step,
 not a drip**: a large monorepo's `GitHubBackfillWorkflow` can insert 100k+ commits
 in a single connect/full-resync.
@@ -131,7 +131,7 @@ in a single connect/full-resync.
 ## 4. Single-writer throughput (watch item, not a task yet)
 
 **Concern.** Storage is not the first ceiling we'd hit under heavy multi-tenant
-load — write _throughput_ is. All projection writes plus token metering serialize
+load: write _throughput_ is. All projection writes plus token metering serialize
 through one D1 primary. This is a "many busy tenants" problem, not a near-term one,
 and the fast-ack → queue design (ADR 0001) already smooths webhook write bursts.
 
@@ -146,8 +146,8 @@ and the fast-ack → queue design (ADR 0001) already smooths webhook write burst
 
 ## Suggested sequencing
 
-1. ~~**`token_usage` retention/rollup**~~ — done (deletion-based; rollup deferred).
-2. ~~**`github_rate_limits` retention**~~ — done.
-3. ~~**`github_commits` backfill bounds + retention**~~ — done.
-4. **Throughput / read-replica review** — revisit when real multi-tenant load
+1. ~~**`token_usage` retention/rollup**~~: done (deletion-based; rollup deferred).
+2. ~~**`github_rate_limits` retention**~~: done.
+3. ~~**`github_commits` backfill bounds + retention**~~: done.
+4. **Throughput / read-replica review**: revisit when real multi-tenant load
    data exists; don't pre-optimize.

@@ -1,4 +1,4 @@
-# ADR 0029: Agent-kind capabilities — declared skills and tool servers (MCP)
+# ADR 0029: Agent-kind capabilities; declared skills and tool servers (MCP)
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-07-28
@@ -14,7 +14,7 @@ one the two things that most change what an agent can actually do:
 - **Skills.** Repo-sourced Claude Skills (ADR 0024) existed, but only as the built-in `skill` agent
   kind running ONE skill picked per step (`stepOptions.skillId`). A custom kind could not say "my
   work is always done according to this playbook", and a deployment shipping an agent package had
-  no way to ship its playbook with it — the skill had to be authored in a customer repo and synced,
+  no way to ship its playbook with it: the skill had to be authored in a customer repo and synced,
   which a fresh deployment with no skill library configured cannot do at all.
 - **Tools.** There was no MCP support anywhere. The only extra capability an agent could be given
   was proxy-backed web search, hard-wired end to end. A company agent that needs to read its own
@@ -28,16 +28,16 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   `toolServers?: AgentKindToolRef[]`. Each ref is a registered id, an inline definition, or (skills
   only) `{ catalogSkillId }` for a repo-synced one. Reusable definitions are registered on the SAME
   app-owned `AgentKindRegistry` (`registerSkill` / `registerToolServer`), and
-  `assignSkills` / `assignToolServers` attach them to an EXISTING kind — the seam that gives the
+  `assignSkills` / `assignToolServers` attach them to an EXISTING kind: the seam that gives the
   built-in `coder` the house playbook or the org's MCP server without redefining it. Both mirror the
   registry's existing `registerTrait` / `assignTraits` pair.
 - **Skills resolve in the ENGINE** (`resolveRunSkills`, called by `AgentContextBuilder`) onto
-  `AgentRunContext.skills` — the kind's declarations then the step's pick, deduped by id — with
+  `AgentRunContext.skills` (the kind's declarations then the step's pick, deduped by id) with
   catalog versions pinned onto `step.skillVersions`. A BUNDLED skill (shipped in the deployment's
   code) resolves with no library, no GitHub and no pin.
 - **Tool servers resolve in the CONTAINER EXECUTOR** (`resolveToolServers`), because what is
   possible depends on the resolved HARNESS, on whether the run uses the developer's own ambient CLI
-  login, and on the facade-wired credential resolver — none of which the runtime-neutral engine
+  login, and on the facade-wired credential resolver: none of which the runtime-neutral engine
   knows. The result splits in two: the non-secret
   `toolServers` / `unavailableToolServers` projection folded onto the prompt context (and therefore
   into the agent-context snapshot), and the secret-bearing `mcpServers` job-body field.
@@ -69,7 +69,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   silently would let an agent plan around a tool that was never there and discover the gap
   mid-run; the prompt's "not available on this run" line is what makes that a planning input.
 - **A required credential that does not resolve DROPS the server.** Handing an agent a tool whose
-  first call 401s is worse than telling it the tool is absent — so `required` defaults to true.
+  first call 401s is worse than telling it the tool is absent, so `required` defaults to true.
 - **The credential is a PORT, not a table.** Reading declared keys off the deployment environment
   makes a tool server usable with no new storage, migration or UI; a deployment needing
   per-workspace credentials implements the port, and nothing else in the dispatch path changes.
@@ -78,7 +78,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
 
 ## Consequences
 
-- **Runtime symmetry** holds by construction: no table, no migration, no repository method — the
+- **Runtime symmetry** holds by construction: no table, no migration, no repository method; the
   capability state rides the run context, the step JSON and the job body. Both facades wire the
   same default credential resolver, and a conformance assertion pins that a registered kind's
   declared skill reaches the dispatched run context on every runtime.
@@ -87,7 +87,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
 - **Codex is stdio-only**, so an HTTP tool server is skipped in its config rather than rendered as
   a broken block; declare `harnesses: ['claude-code']` on such a server so the drop is reported to
   the agent as unavailable rather than being invisible.
-- **`allowedTools` is SCOPING, not a security boundary — and it is stated in the prompt on every
+- **`allowedTools` is SCOPING, not a security boundary, and it is stated in the prompt on every
   harness.** It is additionally sent to claude-code's `--allowedTools`, but only when a server
   actually narrows something, and always together with the CLI's built-in tool names: an allow-list
   is WHOLE-SESSION, not MCP-scoped, so a list of bare `mcp__*` patterns would leave the agent
@@ -97,7 +97,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   either way. Codex cannot express a per-tool restriction at all. A server whose other tools an
   agent kind must genuinely never reach should not be wired for that kind.
 - **An HTTP tool server must be `https`, or loopback.** Its resolved credential rides the request as
-  a header, so cleartext off-box would put it on the wire. Enforced twice on purpose — at
+  a header, so cleartext off-box would put it on the wire. Enforced twice on purpose: at
   registration (`insecure_tool_server_url`, where the failure names the registration that caused it)
   and again at the harness job boundary (which a body arriving by another route would otherwise
   skip). Loopback is exempt so a sidecar server with no certificate stays usable.
@@ -106,7 +106,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   deployment environment variable with a transport that ships it somewhere. On Node that grants
   nothing new (in-process code can read `process.env` directly); on the Worker it is a genuine
   widening, since `env` is not otherwise ambient to a registration. Acceptable when every agent
-  package is the deployment's own — and `{ allowKeys }` is the lever when it is not. The
+  package is the deployment's own, and `{ allowKeys }` is the lever when it is not. The
   recommended convention is a dedicated `MCP_…` prefix.
 - **A capability declared on a NON-container kind is inert, and boot says so**
   (`tool_servers_without_container` / `skills_without_container`, both warnings). Only a container
@@ -115,7 +115,7 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   deployment with no skill library, for a skill that could never have reached the model.
 - **Image bump required**: the harness gained the `skills` / `mcpServers` body fields, so a
   deployment must roll a new `@cat-factory/executor-harness` tag for capabilities to reach a
-  container. A self-hosted runner pool left on an older image silently drops both fields — see the
+  container. A self-hosted runner pool left on an older image silently drops both fields: see the
   changeset for why the claude-code case is a blind run rather than a failed one.
 - **Deliberately not pursued.** No per-workspace tool-server UI or credential store (the resolver
   port is the seam for one); no MCP for Pi (it has no client); the built-in agents' migration onto

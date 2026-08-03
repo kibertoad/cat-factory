@@ -1,11 +1,11 @@
-# Reports — design
+# Reports: design
 
 **Status:** Implemented (see the "Landed code" map at the end).
 **Scope:** account-scoped, admin-gated, read-only. No new table, no migration.
 
 ## Problem
 
-The deployment already answers _"is it healthy?"_ — `PlatformObservabilityService` rolls
+The deployment already answers _"is it healthy?"_: `PlatformObservabilityService` rolls
 `agent_runs` up into outcomes, a failure taxonomy, live/parked depth and duration
 percentiles. It does not answer the other operator question: **where are the money and the
 work actually going?**
@@ -16,7 +16,7 @@ What existed was scattered and none of it composed:
   period for ONE workspace, grouped by `(billing, vendor, provider, model)` only. There is
   no agent-kind axis, no service axis, no task-type axis, no cross-workspace view, and no
   window other than "this month so far".
-- The **per-run** observability panel shows one run's calls in full detail — the opposite
+- The **per-run** observability panel shows one run's calls in full detail, the opposite
   end of the aggregation scale.
 - Nothing at all connected spend to the BOARD SHAPE. "Which service is expensive?" and
   "does the bug pipeline cost more than the feature pipeline?" were unanswerable without
@@ -41,14 +41,14 @@ Every number comes from tables that already exist in the MAIN store on both runt
 
 | Source        | Supplies                                                                                       |
 | ------------- | ---------------------------------------------------------------------------------------------- |
-| `token_usage` | the metered ledger — workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp |
+| `token_usage` | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp  |
 | `agent_runs`  | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                 |
 | `blocks`      | a task's `task_type`, and a service frame's `title` (its display name)                         |
 | `services`    | the service → frame-block link                                                                 |
 | `workspaces`  | the board's name, and the `account_id` scope sub-select                                        |
 
-`token_usage` carries no service or task type — a metered call records the RUN, not the
-board shape — so those two spend dimensions join through `execution_id → agent_runs` and
+`token_usage` carries no service or task type (a metered call records the RUN, not the
+board shape), so those two spend dimensions join through `execution_id → agent_runs` and
 then to the run's service/block. That join is why the port lives in the main store and
 never touches the telemetry database (a physically separate D1 database on Cloudflare).
 
@@ -57,12 +57,12 @@ never touches the telemetry database (a physically separate D1 database on Cloud
 ### Account-scoped and admin-gated, with a board filter
 
 Reports read across every board an account owns, which is exactly the cross-workspace
-operational data `platformObservabilityController` already reserves for admins — so
+operational data `platformObservabilityController` already reserves for admins, so
 `GET /accounts/:accountId/reports` reuses that gate (`accountService.requireAdmin`).
 
 The optional `workspaceId` query param narrows every breakdown at once. It needs no
 authorization of its own: an admin already sees every board's numbers in the account-wide
-rollup, so filtering to one reveals nothing new, and the account scope is applied in SQL —
+rollup, so filtering to one reveals nothing new, and the account scope is applied in SQL;
 a foreign board id simply matches no rows rather than escaping the scope. A conformance
 assertion pins that.
 
@@ -78,8 +78,8 @@ nothing, so the port documents it, the wire schema documents it, the totals fold
 them apart, and the SPA renders them as two tiles and two bar segments with distinct
 colours and a legend.
 
-Anything that is not literally `'subscription'` is priced as metered — matching how the
-row decoders widen the column — so an unexpected value reads as real spend rather than
+Anything that is not literally `'subscription'` is priced as metered (matching how the
+row decoders widen the column) so an unexpected value reads as real spend rather than
 being silently discounted to zero.
 
 ### The unattributed bucket is a real slice
@@ -91,7 +91,7 @@ labels it "Unattributed"; conformance asserts it survives.
 
 ### No row cap
 
-Every dimension has naturally bounded cardinality — the model catalog, the agent-kind
+Every dimension has naturally bounded cardinality: the model catalog, the agent-kind
 catalog, an account's boards, its services, the task-type picklist. Capping would either
 silently drop slices (which the repo's "no silent caps" rule forbids) or make the folded
 totals disagree with the rows shown. Documented on the port so a future dimension with
@@ -101,14 +101,14 @@ unbounded cardinality is a deliberate decision, not an accident.
 
 Every spend breakdown partitions the SAME ledger rows, so any of them totals identically.
 `foldTotals` sums the model breakdown in JS rather than costing a sixth aggregate query.
-(This is not the banned "reduce rows in JS" pattern — it reduces already-aggregated
+(This is not the banned "reduce rows in JS" pattern: it reduces already-aggregated
 GROUP BY output, not raw rows.)
 
 This is only true while every breakdown stays one-row-per-ledger-row, which is why the
 `service` label is resolved through a **pre-aggregated** sub-select (`SERVICE_LABELS` /
 `serviceLabels`) instead of joining `blocks` straight from the aggregate. `blocks` is keyed
-`(workspace_id, id)` and a block id is only unique WITHIN a board — the reason the
-services↔frame unique index is account-scoped — so a seeded or templated frame id recurring
+`(workspace_id, id)` and a block id is only unique WITHIN a board (the reason the
+services↔frame unique index is account-scoped) so a seeded or templated frame id recurring
 across an account's boards would make a direct join match N rows and multiply that service's
 calls, tokens and cost by N. The failure is silent: the numbers stay plausible, and only the
 service breakdown's disagreement with the folded totals gives it away. Grouping the title
@@ -118,7 +118,7 @@ this collision, so every `service` assertion doubles as the fan-out guard.
 
 ### Costs are never summed into one figure for a reader
 
-`meteredCost` and `subscriptionCost` are added together in exactly one place — the ranking
+`meteredCost` and `subscriptionCost` are added together in exactly one place: the ranking
 and bar-scaling measure (`spendMagnitude` / `trendMagnitude`, mirroring the SQL `ORDER BY`).
 Nothing renders that sum with a currency symbol: only metered spend is money, and the
 subscription figure is the illustrative equivalent-API cost of flat-rate quota usage, so
@@ -127,14 +127,14 @@ subscription amount beside it in its own series colour when non-zero.
 
 ### Activity counts every run kind
 
-The activity breakdowns span `execution`, `bootstrap` and `env-config-repair` alike —
+The activity breakdowns span `execution`, `bootstrap` and `env-config-repair` alike:
 deliberately unlike `PlatformMetricsRepository`, which groups by kind because its question
 is run health. Here activity sits beside spend on the same row, and spend is the ledger of
 the calls those same runs made: a bootstrap's LLM calls are in `token_usage` like any
 other's. Filtering activity to `execution` would put the two halves of one row on different
 populations, so a board could show more spend than it had runs to explain. The cost is that
 a bootstrap run, carrying no block and usually no service, lands in the unattributed slice
-of the `service` and `taskType` breakdowns — which is where it belongs, since there is
+of the `service` and `taskType` breakdowns, which is where it belongs, since there is
 genuinely nothing to attribute it to.
 
 ### The window start is snapped to a bucket edge
@@ -142,14 +142,14 @@ genuinely nothing to attribute it to.
 `since` is `generatedAt - window` floored to a multiple of the trend's bucket width.
 Unsnapped, the first column of the chart holds a fraction of a bucket's data while rendering
 at the same width as its complete neighbours, and nothing distinguishes that short column
-from a genuinely quiet period — the one reading a trend must not get wrong. Snapping makes
+from a genuinely quiet period: the one reading a trend must not get wrong. Snapping makes
 every bucket complete except the trailing in-progress one, whose partialness is inherent.
 A window therefore covers up to one bucket more than its nominal length; the projection
 reports the real `since`, and the panel prints it, so the view always says what it charted.
 
 ### Activity has a narrower axis than spend
 
-A RUN carries no single agent kind or model — those are per-step facts, which is precisely
+A RUN carries no single agent kind or model: those are per-step facts, which is precisely
 what the spend breakdowns key on. So `ReportActivityDimension` is `workspace | service |
 taskType` while `ReportSpendDimension` adds `model` and `agentKind`. The contract encodes
 the difference rather than returning empty arrays for combinations that cannot exist.
@@ -165,8 +165,8 @@ requests serially from the browser.
 
 The `workspace` and `service` dimensions resolve a display name with a `LEFT JOIN` inside
 the same aggregate (`max(workspaces.name)`, `max(blocks.title)` through
-`services.frame_block_id`). The alternative — returning bare ids and resolving them in the
-service through batch repository reads — would need a new `WorkspaceRepository.listByIds`
+`services.frame_block_id`). The alternative (returning bare ids and resolving them in the
+service through batch repository reads) would need a new `WorkspaceRepository.listByIds`
 mirrored across both runtimes to save nothing. The remaining dimensions are
 self-describing, so their `label` is null and the SPA renders the key.
 
@@ -189,7 +189,7 @@ one number would be wrong.
 
 The trend is zero-filled into a contiguous, oldest-first series so a quiet period reads as
 a flat run of zeros rather than a collapsed gap implying continuous spend. A bucket outside
-the zero-filled span (clock skew across nodes) is kept rather than discarded — it is spend
+the zero-filled span (clock skew across nodes) is kept rather than discarded: it is spend
 that happened.
 
 ## Presentation
@@ -198,7 +198,7 @@ that happened.
 dashboard) and mounted lazily from `pages/index.vue`. It follows the panel-native charting
 idiom (Tailwind marks, no charting dependency), with two deliberate encodings:
 
-- **Spend** is two series — `violet-500` metered, `amber-600` subscription. The pair is
+- **Spend** is two series: `violet-500` metered, `amber-600` subscription. The pair is
   validated colourblind-safe against the dark surface, and a legend is always present.
   Bars scale against the heaviest slice in their own list, so a full bar means "the biggest
   consumer here", never an absolute budget.

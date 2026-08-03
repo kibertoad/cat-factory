@@ -10,16 +10,16 @@ The cluster tooling and versions here mirror what CI's `test-k8s` job and the
 [`deploy-harness` Dockerfile](../internal/deploy-harness/Dockerfile) use, so the behaviour you
 exercise locally matches what ships.
 
-> **Why k3d, not k3s directly?** k3s is Linux-only — it does not run natively on Windows. k3d
+> **Why k3d, not k3s directly?** k3s is Linux-only: it does not run natively on Windows. k3d
 > runs a real k3s cluster **inside Docker**, which on Windows means Docker Desktop. This is the
 > same approach CI uses (`Test k8s (k3d)`), and it avoids needing a WSL2 k3s install. (Pointing
-> at a k3s running inside WSL2 is still supported — see `local-k3s-environments.md` — but k3d on
+> at a k3s running inside WSL2 is still supported (see `local-k3s-environments.md`) but k3d on
 > Docker Desktop is the simpler path and what this guide installs.)
 
 ## Prerequisites
 
 - **Docker Desktop**, running (the k3s nodes are Docker containers). Verify: `docker version`.
-- A package manager is optional — the steps below download pinned release binaries directly so
+- A package manager is optional: the steps below download pinned release binaries directly so
   no admin/UAC is required and you get the **exact** versions the harness pins. (Chocolatey/
   winget also work but lag the pinned versions and `choco install` needs elevation.)
 
@@ -32,19 +32,19 @@ an existing cluster and ships **no** k3d). So local runs reproduce CI/container 
 
 | Tool      | Version   | Source of truth   | Notes                                                                        |
 | --------- | --------- | ----------------- | ---------------------------------------------------------------------------- |
-| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own (older) kubectl — see PATH note.                |
+| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own (older) kubectl: see PATH note.                |
 | kustomize | `v5.8.1`  | deploy-harness    | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
 | helm      | `v4.2.3`  | deploy-harness    |                                                                              |
 | k3d       | `v5.7.5`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
 
 > Bump these deliberately and in lockstep with their source of truth when the pinned versions
-> move — `kubectl`/`kustomize`/`helm` with the deploy-harness Dockerfile, `k3d` with the CI
+> move: `kubectl`/`kustomize`/`helm` with the deploy-harness Dockerfile, `k3d` with the CI
 > `test-k8s` job (see CLAUDE.md / CONTRIBUTING).
 
 ## Install the CLIs (no admin required)
 
 Run in PowerShell. This downloads the pinned binaries into a per-user `bin` directory and adds
-it to your **user** PATH — no elevation, nothing written to `Program Files`.
+it to your **user** PATH, no elevation, nothing written to `Program Files`.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -62,7 +62,7 @@ Invoke-WebRequest 'https://dl.k8s.io/release/v1.36.3/bin/windows/amd64/kubectl.e
 # k3d v5.7.5 (single exe, renamed)
 Invoke-WebRequest 'https://github.com/k3d-io/k3d/releases/download/v5.7.5/k3d-windows-amd64.exe' -OutFile "$bin\k3d.exe"
 
-# kustomize v5.8.1 (Windows asset is a .zip — note the Linux Dockerfile uses .tar.gz)
+# kustomize v5.8.1 (Windows asset is a .zip - note the Linux Dockerfile uses .tar.gz)
 Invoke-WebRequest 'https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.8.1/kustomize_v5.8.1_windows_amd64.zip' -OutFile "$tmp\kustomize.zip"
 Expand-Archive "$tmp\kustomize.zip" -DestinationPath "$tmp\kustomize" -Force
 Move-Item "$tmp\kustomize\kustomize.exe" "$bin\kustomize.exe" -Force
@@ -103,7 +103,7 @@ you want the pinned `v1.36.3` to win, either:
 - call it explicitly: `& "$env:USERPROFILE\bin\kubectl.exe" ...`, or
 - prepend the bin dir for the session: `$env:Path = "$env:USERPROFILE\bin;$env:Path"`, or
 - (admin) move `%USERPROFILE%\bin` ahead of the Docker entry in the **machine** PATH.
-  `helm`, `kustomize`, and `k3d` have no such conflict — Docker Desktop ships none of them.
+  `helm`, `kustomize`, and `k3d` have no such conflict: Docker Desktop ships none of them.
 
 ## Bring up a local k3d cluster
 
@@ -128,7 +128,7 @@ and `helm` talk to the new cluster immediately. Tear it down with
 Both the Kubernetes suite (`@cat-factory/integrations`) and the deploy-harness suite
 (`@cat-factory/deploy-harness`) read the live cluster connection from `K8S_IT_*` env vars (see
 `backend/internal/deploy-harness/test/cluster.ts`) and **self-skip** when they're absent. Mint a
-ServiceAccount + token and export the vars — the PowerShell equivalent of CI's `test-k8s` job:
+ServiceAccount + token and export the vars: the PowerShell equivalent of CI's `test-k8s` job:
 
 ```powershell
 $env:Path = "$env:USERPROFILE\bin;$env:Path"   # ensure the pinned kubectl for this session
@@ -181,17 +181,17 @@ $env:K8S_IT_RUNNER_IMAGE = 'cat-factory-mock-harness:it'
 ## Pointing the product at the cluster (local mode)
 
 Once the cluster is up, local mode (`@cat-factory/local-server`) can use it as a Tester
-**environment** backend and/or the **agent runner** backend with no code change — connect a
+**environment** backend and/or the **agent runner** backend with no code change: connect a
 native `kubernetes` backend (`apiServerUrl: https://127.0.0.1:6443`, the ServiceAccount token,
 `insecureSkipTlsVerify` for a throwaway cluster).
 
-The quickest path is the guided **`cat-factory k3s`** command — it probes the cluster you just
+The quickest path is the guided **`cat-factory k3s`** command: it probes the cluster you just
 brought up (or creates a fresh k3d one), applies the least-privilege ServiceAccount + RBAC, mints
 a token, and opens the Infrastructure form pre-filled for you (the **environment** backend).
 
 > **On Windows, install k3d first (the steps above).** The guided command's fallback "install
 > k3s" path is Linux-only (`curl … | sh -`), so on a Windows host with no k3d it deliberately
-> **doesn't** print that command — it points back here to install k3d and create the cluster,
+> **doesn't** print that command: it points back here to install k3d and create the cluster,
 > then detects it on the next run. Once k3d is on your PATH the command offers the "create a
 > local k3d cluster" path directly.
 

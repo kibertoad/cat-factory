@@ -2,8 +2,8 @@
 
 By default cat-factory runs every repo-operating agent job in a **per-run
 Cloudflare Container**. If your organization would rather run that workload on
-**your own container/runner pool** — k3s, Nomad, Kubernetes, or an internal
-scheduler — you register a runner pool for a workspace and cat-factory dispatches
+**your own container/runner pool** (k3s, Nomad, Kubernetes, or an internal
+scheduler) you register a runner pool for a workspace and cat-factory dispatches
 its agent jobs there instead. The rollout is **per-workspace and reversible**: a
 workspace with no registered pool falls back to Cloudflare Containers (when those
 are enabled).
@@ -19,15 +19,15 @@ for the design rationale; this is the operator + integrator playbook.
 A workspace's runner connection is a **discriminated "agent runner backend"**
 (`kind`), registered through the same endpoints and the same Integrations window:
 
-- **`manifest`** — the self-hosted pool described in the rest of this document. You
+- **`manifest`**: the self-hosted pool described in the rest of this document. You
   bring your own scheduler API; we drive it through the manifest. Use this when you
   already run a scheduler (Nomad, an internal queue, an Argo Workflows front end, …)
   or want full control of placement.
-- **`kubernetes`** — a **native** backend (no manifest, no scheduler API to build).
+- **`kubernetes`**: a **native** backend (no manifest, no scheduler API to build).
   You give cat-factory your **kube-apiserver URL, namespace, a ServiceAccount token,
   and the executor image**; it creates **one bare Pod per run** and talks to the
   per-pod harness through the apiserver **pod-proxy subresource**
-  (`…/pods/<name>:8080/proxy/…`). Only HTTPS to the apiserver is required — no
+  (`…/pods/<name>:8080/proxy/…`). Only HTTPS to the apiserver is required, no
   in-cluster networking, no per-run Service/Ingress, and full job-progress/result
   fidelity (the harness is unchanged). Target **Kubernetes 1.35+**.
 
@@ -58,7 +58,7 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   config at registration. Use a publicly-trusted apiserver certificate to run a
   Kubernetes backend on the Worker.
 
-  Security: the per-run Pod has **no Service and no inbound shared secret** — it is
+  Security: the per-run Pod has **no Service and no inbound shared secret**; it is
   reached only through the RBAC-gated apiserver pod-proxy. RBAC does NOT firewall the
   pod network, though, and the dispatch body carries short-lived credentials (a
   per-job GitHub token + the LLM-proxy session token). In a namespace without a
@@ -72,7 +72,7 @@ into the app-owned `RunnerBackendRegistry` (`createBackendRegistries()` →
 `runnerBackendRegistry.register(provider)`, mirroring custom env backends). A custom kind
 rides the contract's **generic
 manifest member** (`runnerBackendConfigSchema`), so it needs **no new config variant** and
-no new table, service, controller, or window — it becomes a first-class option in the same
+no new table, service, controller, or window: it becomes a first-class option in the same
 connect form (advertised to the SPA via the workspace snapshot's `runnerBackendKinds`, with
 an optional `displayLabel`) and is selectable per workspace by its `kind`. See
 [Custom runner backends](./native-environment-adapter.md#custom-runner-backends) for the
@@ -80,9 +80,9 @@ an optional `displayLabel`) and is selectable per workspace by its `kind`. See
 
 The work splits cleanly across two teams:
 
-- **Platform / Infra team** — stands up runners and a small scheduler API in front
+- **Platform / Infra team**: stands up runners and a small scheduler API in front
   of them (§1, §2, §6). This is the part that touches your cluster.
-- **Application team** — writes the manifest and registers the pool against a
+- **Application team**: writes the manifest and registers the pool against a
   workspace through the cat-factory API (§3, §4). This is pure configuration.
 
 ---
@@ -91,7 +91,7 @@ The work splits cleanly across two teams:
 
 1. **Runners** that run the standard cat-factory **executor-harness** image and
    speak its fixed HTTP **job protocol** (§1). The harness is the same image
-   Cloudflare Containers run — runtime parity is the whole point, so a runner
+   Cloudflare Containers run: runtime parity is the whole point, so a runner
    serves _every_ job kind with no per-kind work on your side.
 2. A small **pool scheduler API** in front of those runners that cat-factory calls
    to **dispatch / poll / release** a job. You describe it as a **manifest** (§3)
@@ -133,13 +133,13 @@ bootstrap, …) flows like this. Steps 2–7 repeat for **every** step of a run.
 3. **Dispatch.** `RunnerPoolTransport` calls `HttpRunnerPoolProvider.dispatch`, which
    interpolates your manifest's `dispatch` template and `POST`s (or whatever method
    you declared) to your scheduler, carrying your scheduler-API auth. The job is
-   keyed on `jobId` — your scheduler **must route by it (sticky)** so later polls
+   keyed on `jobId`: your scheduler **must route by it (sticky)** so later polls
    reach the same runner/job. Dispatch returns as soon as your API accepts it; the
    agent keeps working in the background.
 4. **Your scheduler places the job** on a runner (queueing if the pool is saturated)
    and `POST`s the job spec to the matching harness route on that runner. The runner
    clones the repo, runs the agent, and (for write kinds) pushes a branch / opens a
-   PR — reaching models **only** through the Worker LLM proxy and GitHub directly.
+   PR: reaching models **only** through the Worker LLM proxy and GitHub directly.
 5. **Poll.** On the durable driver's cadence (default 15s), the executor calls
    `poll`, which interpolates your `poll` template (re-supplying `{{input.jobId}}`),
    reads your scheduler's status response, and projects it onto the canonical **job
@@ -149,18 +149,18 @@ bootstrap, …) flows like this. Steps 2–7 repeat for **every** step of a run.
    structured **result** (a PR url/branch/summary for code kinds, or a blueprint
    tree / spec doc / merge assessment / test report / bootstrap branch for the
    others) and hands it to the engine, which advances the run.
-7. **Release (optional).** When the executor is done with a job — or to reclaim a
-   cancelled/aborted one — it calls `release`, which fires your manifest's optional
+7. **Release (optional).** When the executor is done with a job, or to reclaim a
+   cancelled/aborted one, it calls `release`, which fires your manifest's optional
    `release` template (e.g. `DELETE /jobs/{id}`). Best-effort and idempotent.
 
 Crash-safety: cat-factory persists **no per-job dispatch state**. Because the job is
 addressed by `jobId` and the workspace re-resolves the same backend on every poll, a
 durable-driver replay just re-dispatches (your harness re-attaches to the running
-job) or re-polls — there is only a **connection table**, no job registry.
+job) or re-polls: there is only a **connection table**, no job registry.
 
 ### What runs on a pool today
 
-**Every asynchronous agent kind** routes to a registered pool — there is no opt-in
+**Every asynchronous agent kind** routes to a registered pool: there is no opt-in
 allow-list, because a pool runs the same harness image as Cloudflare:
 
 Every kind is dispatched to the **same** harness endpoint, `POST /jobs`, with the
@@ -200,7 +200,7 @@ sizing without decoding the job JSON.
 ### Get the image
 
 The runner image is published publicly (multi-arch, `amd64` + `arm64`) to both
-GHCR and Docker Hub, so you can pull it directly — no build needed:
+GHCR and Docker Hub, so you can pull it directly, no build needed:
 
 ```bash
 docker pull ghcr.io/kibertoad/cat-factory-executor:latest
@@ -218,14 +218,14 @@ docker build -t my-org/cat-factory-runner \
 ```
 
 (Maintainers / forks: publish your own with
-`pnpm --filter @cat-factory/executor-harness run image:publish` — see that
+`pnpm --filter @cat-factory/executor-harness run image:publish`; see that
 package's README.)
 
 The image **carries no secrets**. It bundles git + the pinned Pi coding-agent CLI
 (and the Claude Code / Codex CLIs for subscription harnesses) and runs an HTTP
 server on port `8080`. All per-job secrets arrive in the dispatch body and live
 only for the job. (Behind a TLS-inspecting corporate proxy, pass the proxy CA as a
-build secret — see the comment block at the top of the Dockerfile.)
+build secret: see the comment block at the top of the Dockerfile.)
 
 ### The job protocol a runner speaks
 
@@ -236,11 +236,11 @@ build secret — see the comment block at the top of the Dockerfile.)
 | `GET /jobs/{id}` | Poll any job. Returns the **job view** below.                       |
 
 `POST /jobs` returns `202 { jobId, state }`. **All kinds are dispatched and polled
-identically** — one endpoint to start (the `kind` field in the body selects the
+identically**: one endpoint to start (the `kind` field in the body selects the
 agent), one uniform job view on `GET /jobs/{id}` regardless of kind; the per-kind work
 product lands in its `result` fields.
 
-**Dispatch body** — the job spec cat-factory sends. Treat it as **opaque and
+**Dispatch body**: the job spec cat-factory sends. Treat it as **opaque and
 forward it verbatim**; do not depend on its exact shape (it grows as agent kinds are
 added). The fields that matter to _you_ are `jobId` (route key) and `kind` (which
 harness route); the rest is for the harness:
@@ -248,7 +248,7 @@ harness route); the rest is for the harness:
 ```jsonc
 {
   "jobId": "<execution-id>-<agentKind>", // route key; re-POST re-attaches (idempotent)
-  "kind": "run", // which harness route — maps 1:1 to the path
+  "kind": "run", // which harness route - maps 1:1 to the path
   "model": "qwen3-max",
   "harness": "pi", // "pi" | "claude-code" | "codex"
   // Pi harness: reaches models ONLY via the proxy with a model-locked session token.
@@ -274,14 +274,14 @@ harness route); the rest is for the harness:
 }
 ```
 
-**Job view** — what `GET /jobs/{id}` returns, and what your `poll` mapping must be
+**Job view**: what `GET /jobs/{id}` returns, and what your `poll` mapping must be
 able to project onto:
 
 ```jsonc
 {
   "state": "running" | "done" | "failed",
   "progress": { "completed": 3, "inProgress": 1, "total": 8 }, // optional, while running
-  "result": {           // when done — populated per kind:
+  "result": {           // when done - populated per kind:
     "prUrl": "...", "branch": "...", "summary": "...",          //   run / ci-fix / …
     "service": { ... },  "spec": { ... },                       //   blueprint / spec
     "assessment": { ... }, "report": { ... },                   //   merge / test
@@ -306,7 +306,7 @@ reach the same runner/job.
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
 
-Rely on these watchdogs to reap stuck jobs — cat-factory will not kill a runner for
+Rely on these watchdogs to reap stuck jobs: cat-factory will not kill a runner for
 you (it only calls your `release`).
 
 ---
@@ -316,13 +316,13 @@ you (it only calls your `release`).
 - **Ingress (cat-factory → your scheduler):** the manifest `baseUrl` (and OAuth
   `tokenUrl`, if any) must be reachable from the cat-factory backend over **public
   HTTPS** (a tunnel / reverse proxy is fine). The SSRF guard rejects `http://`,
-  embedded credentials, and internal / RFC1918 / loopback / link-local hosts — so an
+  embedded credentials, and internal / RFC1918 / loopback / link-local hosts, so an
   internal cluster API must be fronted by a public ingress. **Or:** a trusted
   operator can widen the guard per facade so the scheduler can live on an
-  internal/VPN host directly — see §6.
+  internal/VPN host directly: see §6.
 - **Egress (runner → out):** each runner must reach
   - the Worker LLM proxy at `${WORKER_PUBLIC_URL}/v1` (all Pi model calls go through
-    it — no provider keys live on the runner), and for subscription harnesses the
+    it, no provider keys live on the runner), and for subscription harnesses the
     vendor API (`subscriptionBaseUrl`); and
   - GitHub (`github.com` or your GitHub Enterprise host) to clone, push and open PRs.
 
@@ -337,12 +337,12 @@ Valibot-validated on registration (`backend/packages/contracts/src/runners.ts`).
 ### Template variables
 
 Requests support `{{var}}` interpolation over a **bounded** namespace (unknown
-references resolve to empty — a manifest can never reach arbitrary host state):
+references resolve to empty: a manifest can never reach arbitrary host state):
 
 | Variable                  | Value                                                                                                                                   |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `{{input.jobId}}`         | The job id the pool is keyed on (sticky-routing target).                                                                                |
-| `{{input.job}}`           | The **full** harness job spec as a JSON string — embed raw to forward verbatim.                                                         |
+| `{{input.job}}`           | The **full** harness job spec as a JSON string: embed raw to forward verbatim.                                                         |
 | `{{input.kind}}`          | The agent kind the job runs (`run`, `merge`, …). The harness reads this from the job body; use it to route/size on your scheduler side. |
 | `{{input.instanceType}}`  | Concrete instance-type id, when the service pins a size (else empty).                                                                   |
 | `{{input.cloudProvider}}` | The cloud the service selected, when pinned (else empty).                                                                               |
@@ -352,7 +352,7 @@ convenience projections of fields that also live inside `{{input.job}}`; they ex
 so a path/query/header template can route or size **without parsing** the embedded
 JSON.
 
-### Example A — transparent proxy (recommended; routes by kind)
+### Example A: transparent proxy (recommended; routes by kind)
 
 Your scheduler exposes the harness routes 1:1 behind a sticky-routed gateway. The
 manifest just forwards everything; `{{input.kind}}` selects the path:
@@ -390,7 +390,7 @@ manifest just forwards everything; `{{input.kind}}` selects the path:
 }
 ```
 
-### Example B — opaque envelope (your scheduler wraps the job)
+### Example B: opaque envelope (your scheduler wraps the job)
 
 Your scheduler accepts one generic "create job" call, queues it, and exposes its own
 status shape. Your sidecar reads `kind` from the embedded job and routes internally:
@@ -431,12 +431,12 @@ status shape. Your sidecar reads `kind` from the embedded job and routes interna
 ### Auth schemes (for calling **your** scheduler)
 
 Each references its secret(s) by **logical key**; you supply the values at
-registration (§4) and they are stored encrypted at rest — values never appear in the
+registration (§4) and they are stored encrypted at rest: values never appear in the
 manifest.
 
 | `auth.type`                 | fields                                                                          | effect                             |
 | --------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
-| `none`                      | —                                                                               | no auth header                     |
+| `none`                      |:                                                                               | no auth header                     |
 | `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`     |
 | `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`   |
 | `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)` |
@@ -447,49 +447,49 @@ manifest.
 
 - **`resultPath` is the field most schedulers want.** Point it at the object that
   holds the harness `result` envelope and cat-factory forwards **every** structured
-  product — blueprint tree, spec doc, merge assessment, test report, bootstrap branch
-  — not just the PR scalars. Known fields are coerced by type; unknown ones ignored.
+  product (blueprint tree, spec doc, merge assessment, test report, bootstrap branch
+ ) not just the PR scalars. Known fields are coerced by type; unknown ones ignored.
 - The scalar paths (`prUrlPath`, `branchPath`, `summaryPath`) still apply and
-  **override** `resultPath` when set — for schedulers that surface those outside any
+  **override** `resultPath` when set: for schedulers that surface those outside any
   envelope.
 - `statusMap` matching is case-insensitive (and ignores surrounding whitespace) and always
   wins. A status your manifest does **not** map is matched against a built-in vocabulary of
-  common scheduler words — `done`/`completed`/`succeeded`/… → `done`,
-  `failed`/`error`/`cancelled`/`timeout`/… → `failed` — and anything still unrecognised
+  common scheduler words (`done`/`completed`/`succeeded`/… → `done`,
+  `failed`/`error`/`cancelled`/`timeout`/… → `failed`) and anything still unrecognised
   falls back to `running` (keeps the driver waiting rather than wrongly failing a live run).
   Map your terminal states explicitly anyway: the vocabulary is a safety net, not a
   substitute for a mapping. Only words that are terminal in EVERY vocabulary they could come
   from are in it, so a word that can also mean "still waiting for capacity" (Kubernetes'
-  `Unschedulable`, for one) is deliberately absent and reads as `running` — map it yourself
+  `Unschedulable`, for one) is deliberately absent and reads as `running`: map it yourself
   if your scheduler means it terminally.
 - **Report a reclaimed runner with a reclaim word and the step is retried on a fresh
   runner.** `evicted` / `preempted` / `oomkilled` / `node_lost` (and friends) are read as
   the RUNNER going away rather than the job failing, so cat-factory re-dispatches the step
-  onto a new pool member instead of failing the run. This applies to a mapped status too —
+  onto a new pool member instead of failing the run. This applies to a mapped status too:
   `{"from": "evicted", "to": "failed"}` still gets the retry. Words that usually mean a
   human intervened (`cancelled`, `killed`, `aborted`) are deliberately **not** treated this
   way: they fail the step, they never resurrect it.
 - **A poll that 404s (or 410s) is read the same way.** If your scheduler forgets a job whose
-  runner died, answering the poll with a 404 is the simplest way to say so — cat-factory
+  runner died, answering the poll with a 404 is the simplest way to say so: cat-factory
   treats it as a reclaimed runner and re-dispatches. Any other non-2xx is treated as _your
   scheduler_ being unwell (retried a few times, then the run fails), so don't 404 a job that
-  merely hasn't been scheduled yet — report it as `running`. The run's failure detail records
+  merely hasn't been scheduled yet: report it as `running`. The run's failure detail records
   the raw status line, since a 404 can also mean a mistyped `poll` path template or an
-  endpoint that hides an unauthorized read behind a 404 — check it before assuming a runner
+  endpoint that hides an unauthorized read behind a 404: check it before assuming a runner
   really died.
-- **A re-dispatched step arrives as a NEW `jobId`.** Both retry paths — a Tester→Fixer or
-  gate-helper round, and a recovery after a reclaimed runner — suffix the id
+- **A re-dispatched step arrives as a NEW `jobId`.** Both retry paths (a Tester→Fixer or
+  gate-helper round, and a recovery after a reclaimed runner) suffix the id
   (`<executionId>-<agentKind>-<n>`). Combined with the sticky routing below, that is what
   makes an eviction recovery land on a fresh pool member instead of back on the dead job:
   treat an unseen id as a new job and place it accordingly.
 - **Set `callMetricsPath` if your poll response proxies the harness view verbatim** (it is
   `callMetrics` there). The harness drains per-model-call telemetry on every poll, so
   mapping it lands a run's token spend and prompt/response bodies in observability WHILE the
-  run is in flight — and, more to the point, keeps them when a run dies before it can return
+  run is in flight, and, more to the point, keeps them when a run dies before it can return
   a terminal result. Leave it unset and those calls are recorded only from the terminal
   result envelope, which an evicted or OOM-killed run never produces. Recording is
   idempotent (each call carries a job-scoped `seq`), so the terminal envelope repeating them
-  costs nothing. Pass each call through VERBATIM — it also carries the `phase` that spent it
+  costs nothing. Pass each call through VERBATIM: it also carries the `phase` that spent it
   (the agent's own loop vs a validation/reproduction repair round), which is what makes a run's
   burn attributable to the slice that caused it.
 - **Set `sliceReviewsPath` too** (it is `sliceReviews` on the harness view). A PR review fans its
@@ -509,7 +509,7 @@ manifest.
 **One-time (Platform):** opt in and set the at-rest encryption key on the backend.
 
 ```toml
-# wrangler.toml (Cloudflare)  —  or env vars for the Node facade
+# wrangler.toml (Cloudflare) - or env vars for the Node facade
 RUNNERS_ENABLED = "true"
 ```
 
@@ -520,10 +520,10 @@ openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 
 The agent-job path also needs what the Cloudflare/Node container path needs: a
 configured GitHub App, `WORKER_PUBLIC_URL` (the LLM proxy), and `AUTH_SESSION_SECRET`.
-The feature refuses to assemble without `ENCRYPTION_KEY` — there is no plaintext
+The feature refuses to assemble without `ENCRYPTION_KEY`: there is no plaintext
 fallback.
 
-**Per workspace (Application):** register the pool. Secret values are **write-only** —
+**Per workspace (Application):** register the pool. Secret values are **write-only**:
 encrypted, stored, and never returned. Every `secretRef.key` in the manifest must have
 a matching entry in `secrets`.
 
@@ -547,7 +547,7 @@ run on your pool; unregister to revert.
 
 ## 5. Mapping the manifest onto k3s / Nomad / Kubernetes _(Platform team)_
 
-cat-factory only speaks HTTP to **your scheduler API** — it never talks to your
+cat-factory only speaks HTTP to **your scheduler API**: it never talks to your
 orchestrator directly. So you always put a thin API in front, and you have full
 freedom to wrap it however your platform works. Two robust shapes:
 
@@ -567,7 +567,7 @@ Concrete tips for each:
 - **Kubernetes / k3s.** A small operator or web service that maps `dispatch → create
 Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   `{{input.instanceType}}` to pick a node selector / resource request and
-  `{{input.kind}}` to select a Job template. Front it with an Ingress (public HTTPS) —
+  `{{input.kind}}` to select a Job template. Front it with an Ingress (public HTTPS):
   that Ingress URL is your manifest `baseUrl`. Sticky routing falls out naturally
   because each `jobId` is its own Job/pod.
 - **Nomad.** A service that maps `dispatch → submit a parameterized/batch job` keyed
@@ -582,9 +582,9 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 
 **The minimum contract your wrapper must honour**, regardless of orchestrator:
 
-1. Accept the dispatch call, run the **harness image**, and hand it the job spec —
+1. Accept the dispatch call, run the **harness image**, and hand it the job spec:
    `POST`ed to the route named by `kind` (the values map 1:1 to harness paths).
-2. **Route by `jobId`, stickily** — dispatch and every poll for a job hit the same
+2. **Route by `jobId`, stickily**: dispatch and every poll for a job hit the same
    runner; a re-dispatch of the same `jobId` re-attaches (don't start a duplicate).
 3. Expose a status your `poll` mapping can read, including the harness `result`
    envelope (so `resultPath` can forward the structured products).
@@ -597,23 +597,23 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 
 - Your pool and network receive the **short-lived per-job** GitHub installation token
   and the LLM-proxy session token in the dispatch body. They are scoped and expiring,
-  but they do leave cat-factory — treat your scheduler and runners as part of the
+  but they do leave cat-factory: treat your scheduler and runners as part of the
   trust boundary.
 - **Subscription harnesses are different.** A Claude Code / Codex step hands your
   runner the **raw, longer-lived subscription credential** (a Claude OAuth token or a
-  full ChatGPT `auth.json`), not a model-locked proxy token — it must reach the vendor
+  full ChatGPT `auth.json`), not a model-locked proxy token: it must reach the vendor
   API directly. Only point subscription-harness steps at a pool **you operate and
   trust**; the credential stays within the workspace's own BYO trust domain, but it
   does leave the backend. (Pi-harness steps only ever carry the model-locked proxy
   token.)
 - The runner image holds **no** long-lived secrets of ours; Pi models are reachable
-  only through the Worker proxy, which meters token spend — so spend safeguards still
+  only through the Worker proxy, which meters token spend, so spend safeguards still
   apply to jobs that run on your pool.
 - Scheduler-API credentials are encrypted at rest (AES-256-GCM, per-record salt + IV,
   HKDF-derived key under the `cat-factory:runners` domain) under the shared
   `ENCRYPTION_KEY`; the feature refuses to start without that key.
 - Every manifest URL is SSRF-guarded before it is fetched; secrets are placed only in
-  outgoing request headers — never logged, never echoed in (length-capped,
+  outgoing request headers, never logged, never echoed in (length-capped,
   header-free) error bodies, never returned by the read API.
 - **Internal-host escape hatch (trusted operator).** When your scheduler must live on
   an internal/VPN host rather than behind a public ingress, widen the guard per
@@ -625,7 +625,7 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   | `RUNNERS_ALLOW_HTTP_URLS`           | `true` to also permit `http` (not just `https`).                                                                                                                                             |
 
   Only the listed hosts are exempted; everything else stays strict, and embedded URL
-  credentials remain forbidden. This policy is scoped to the runner pool **only** —
+  credentials remain forbidden. This policy is scoped to the runner pool **only**:
   it is resolved independently of the
   [environment integration](./environments-integration.md)'s `ENVIRONMENTS_ALLOW_URL_HOSTS`
   / `ENVIRONMENTS_ALLOW_HTTP_URLS`, so a host you allow here is **not** reachable by the
@@ -639,7 +639,7 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 - cat-factory dispatches one job per pipeline **step** and polls it on the durable
   driver's cadence (`JOB_POLL_INTERVAL`, default 15s). A run executes a _sequence_ of
   steps, each its own pool job (distinct `jobId` = `<executionId>-<agentKind>`, suffixed
-  `-<n>` on a retry round), so a busy workspace produces many short-lived jobs — size your
+  `-<n>` on a retry round), so a busy workspace produces many short-lived jobs: size your
   pool for concurrency, not for one job per run.
 - **Your scheduler owns capacity.** Queue jobs when the pool is saturated and report
   them as `running` until a runner picks them up; cat-factory will keep polling.
@@ -653,15 +653,15 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   runner vanished is yours to reap.
 - **Define `release` even if it only sets a cancel flag.** Without it there is no way to
   tell your pool that a cancelled or failed run's job is no longer wanted, so its runner
-  stays busy until your own TTL reaps it. A manifest with no `release` — or no
-  `response.statusPath`, which leaves every job to expire on the run's poll budget — reports
+  stays busy until your own TTL reaps it. A manifest with no `release`, or no
+  `response.statusPath`, which leaves every job to expire on the run's poll budget, reports
   the gap on its **connection test** in Settings, and logs it once at registration.
 
 ---
 
 ## See also
 
-- [ADR 0004](./adr/0004-self-hosted-runner-pool.md) — design rationale.
-- [Ephemeral environment provider](./environments-integration.md) — the sibling
+- [ADR 0004](./adr/0004-self-hosted-runner-pool.md): design rationale.
+- [Ephemeral environment provider](./environments-integration.md): the sibling
   manifest integration (same auth schemes, dot-path mapping, SSRF guard, encryption),
   used when a `tester` agent needs a live preview environment to run against.

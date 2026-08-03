@@ -3,7 +3,7 @@
 This document collects three related findings from investigating one local PR-review run,
 plus a fix plan for the two defects it surfaced.
 
-> **Status:** the concrete fixes below have since landed — the parked PR-review approve routing
+> **Status:** the concrete fixes below have since landed: the parked PR-review approve routing
 > (§2), the container `spend.record` model threading + fresh-vs-cached token surfacing (§1's two
 > data-quality gaps), and 3-day session-transcript retention (§3). The turn-count reduction floated
 > in §1 ("hand the pr-reviewer the diff up front") is now implemented as Slice 1 of

@@ -1,23 +1,23 @@
-# Public API (`/api/v1`) — setup & usage guide
+# Public API (`/api/v1`): setup & usage guide
 
 The key-authenticated HTTP surface an external system builds on: an issue tracker that files and
 starts tasks, a CI system that reacts to run outcomes, a bot that answers a parked review, a
 dashboard that reads spend. Every route is the external counterpart of a service call the SPA
-already makes — same behaviour, same arbitration — projected through deliberately small public
+already makes (same behaviour, same arbitration), projected through deliberately small public
 resources (`publicTask`, `publicRun`, `publicPipeline`, …) rather than the raw internal entities.
 
 This is the **how-to and reference**. Its siblings each own a different slice:
 
-- [ADR 0030](./adr/0030-public-api-surface.md) — the design record: why the surface has this shape,
-  what was rejected, the paging/idempotency rules a new endpoint must follow.
-- [`docs/openapi.json`](../../docs/openapi.json) — the generated OpenAPI 3.1 spec (schema-exact,
+- [ADR 0030](./adr/0030-public-api-surface.md): the design record covering why the surface has this
+  shape, what was rejected, and the paging/idempotency rules a new endpoint must follow.
+- [`docs/openapi.json`](../../docs/openapi.json): the generated OpenAPI 3.1 spec (schema-exact,
   suitable for client codegen). See [Extending the surface](#extending-the-surface) for how it is kept
   current.
-- [`debug-api.md`](./debug-api.md) — the read-only `/api/v1/debug/*` diagnostic surface (same keys,
+- [`debug-api.md`](./debug-api.md): the read-only `/api/v1/debug/*` diagnostic surface (same keys,
   `read` scope), for walking a run's telemetry from outside the browser.
-- [`public-api-additions.md`](../../docs/initiatives/public-api-additions.md) — the live tracker of
+- [`public-api-additions.md`](../../docs/initiatives/public-api-additions.md): the live tracker of
   what the decision surface **cannot** answer yet. Read it before building on parked decisions.
-- [`sdk/README.md`](../../sdk/README.md) — the **official SDK clients** (TypeScript, Python, Go,
+- [`sdk/README.md`](../../sdk/README.md): the **official SDK clients** (TypeScript, Python, Go,
   Java+Kotlin), generated from the spec below. Reach for one before hand-rolling HTTP: see
   [Client SDKs](#client-sdks).
 
@@ -33,17 +33,17 @@ hides the token panel entirely.
 ### 1. Mint a key
 
 In the SPA: **Integrations hub → Development → "API access tokens"**. Pick a label and a scope; the
-full token is shown **exactly once**, on creation — store it immediately, it cannot be recovered
+full token is shown **exactly once**, on creation. Store it immediately, it cannot be recovered
 (the server keeps only a one-way peppered `HMAC-SHA256` hash). Rotation = revoke + mint a new one.
 
-Over REST (session-authed, workspace-scoped — this is the one management surface that is _not_ under
+Over REST (session-authed, workspace-scoped; this is the one management surface that is _not_ under
 `/api/v1`):
 
 | Method / path                                | Permission                    | Result                                    |
 | -------------------------------------------- | ----------------------------- | ----------------------------------------- |
-| `GET /workspaces/:ws/public-api-keys`        | workspace member (read)       | `{ keys: [...] }` — metadata, no secret   |
-| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage` (admin tier) | `201 { key, secret }` — secret shown once |
-| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204` — revoked keys never authenticate   |
+| `GET /workspaces/:ws/public-api-keys`        | workspace member (read)       | `{ keys: [...] }` (metadata, no secret)   |
+| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage` (admin tier) | `201 { key, secret }` (secret shown once) |
+| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204`; revoked keys never authenticate    |
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
@@ -56,23 +56,23 @@ existed.
 
 ### 2. Pick the right scope
 
-Scopes are an ordered, **inclusive** ladder — each rung can do everything below it:
+Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
 | Scope    | Adds                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).  |
 | `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start an initiative run, cancel a job, dismiss a notification.                         |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) — and, because of that, start an initiative on a pipeline that can park at all. |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start an initiative on a pipeline that can park at all.   |
 | `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                  |
 
 Two things to know before minting `decide` or `admin`:
 
 - **`decide` is workspace-wide, not limited to runs the key started.** The decision surface resolves
-  any run in the key's workspace — including a board task a human started in the SPA. That is the
+  any run in the key's workspace, including a board task a human started in the SPA. That is the
   point (a headless overseer watching a team's board), but it means minting `decide` is the operator
   asserting "this integration answers decisions for this workspace". Prefer `write` for an
   integration that only authors and launches.
-- Handing out even a `read` key is not free once the debug surface is in play — it reaches prompt
+- Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
 
@@ -85,7 +85,7 @@ curl -s -H "Authorization: Bearer cf_live_pak_…" \
   "https://<your-backend-origin>/api/v1/services"
 ```
 
-The base URL is your **backend** origin (the Worker or Node service — e.g. what the SPA was built
+The base URL is your **backend** origin (the Worker or Node service, e.g. what the SPA was built
 with as `NUXT_PUBLIC_API_BASE`), not the frontend's. The token format is
 `cf_live_<keyId>.<secret>`; treat it as opaque. Auth failures:
 
@@ -112,15 +112,15 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
   | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                         |
   | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                  |
-  | `pipeline_not_public`            | 400     | `POST /initiatives` — unknown or non-public pipeline                                                         |
-  | `pipeline_not_inline`            | 400     | `POST /initiatives` — pipeline has container/GitHub steps                                                    |
-  | `pipeline_requires_decide_scope` | 403     | `POST /initiatives` — pipeline can park on a human, key is below `decide`                                    |
-  | `too_many_active_runs`           | 429     | `POST /initiatives` — the workspace already has 5 initiative runs in flight                                  |
-  | `pipeline_required`              | 400     | `POST /tasks/:id/start` — no pinned pipeline and no `pipelineId` passed                                      |
-  | `service_archived`               | 409     | `POST /tasks/:id/start` — the enclosing service is archived                                                  |
+  | `pipeline_not_public`            | 400     | `POST /initiatives`: unknown or non-public pipeline                                                          |
+  | `pipeline_not_inline`            | 400     | `POST /initiatives`: pipeline has container/GitHub steps                                                     |
+  | `pipeline_requires_decide_scope` | 403     | `POST /initiatives`: pipeline can park on a human, key is below `decide`                                     |
+  | `too_many_active_runs`           | 429     | `POST /initiatives`: the workspace already has 5 initiative runs in flight                                   |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                       |
+  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                   |
   | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
-  | `no_run`                         | 404/409 | task run reads (404 — never started) and stop/retry (409 — nothing to act on)                                |
-  | `no_review`                      | 404     | requirements decision routes — the run has no live requirements review                                       |
+  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                  |
+  | `no_review`                      | 404     | requirements decision routes: the run has no live requirements review                                        |
   | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
 
 ### Pagination
@@ -128,31 +128,31 @@ machine-readable; `message` is operator prose. Codes fall in two families:
 Bounded lists (`GET /jobs`, `GET /services/:id/tasks`, and everything under `/debug`) are
 **keyset**-paginated:
 
-- `?limit=` — 1..100, digits only (defaults: jobs 25, tasks 50). Anything else is a 400.
-- `?cursor=` — opaque; echo a previous page's `nextCursor` back verbatim. A tampered or truncated
+- `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50). Anything else is a 400.
+- `?cursor=`: opaque; echo a previous page's `nextCursor` back verbatim. A tampered or truncated
   cursor is `400 invalid_cursor`, never a silent reset to page one.
-- `nextCursor: null` means last page. Non-null means "there may be more" — page until null; the next
+- `nextCursor: null` means last page. Non-null means "there may be more": page until null; the next
   page may legitimately be empty.
 
 Keyset means a poll loop never sees a row skipped or repeated because of concurrent inserts.
 Ordering caveats: the **jobs** list is newest-first and takes `?status=` (coarse public status) and
-`?since=` (epoch ms, created-at-or-after) filters; the **task** list is ordered by stable task id —
+`?since=` (epoch ms, created-at-or-after) filters; the **task** list is ordered by stable task id,
 deterministic and safe to page, but **not** chronological, and it has no `since` (see ADR 0030 for
 why).
 
-### Runs park indefinitely — plan the exits
+### Runs park indefinitely: plan the exits
 
 A run parked on a human decision waits **forever**; there is no timeout to design against. If your
 integration starts runs that can park, it must either answer them (a `decide` key, the
 [decisions surface](#parked-decisions-apiv1runsrunid-decisions)) or free them:
 `POST /api/v1/jobs/:id/cancel` (initiative jobs) and `POST /api/v1/tasks/:id/stop` (board tasks)
 both clear a park at the cost of the run's work. This matters doubly because the decision surface
-does not yet answer every park type the engine has — the
+does not yet answer every park type the engine has; the
 [additions tracker](../../docs/initiatives/public-api-additions.md) is the authoritative list.
 
 ### Versioning
 
-`/api/v1` is **additive forever** — there is no v2 planned, and breaking shape changes are flagged
+`/api/v1` is **additive forever**: there is no v2 planned, and breaking shape changes are flagged
 prominently in changesets. Build clients to tolerate new fields.
 
 ## Quick start
@@ -190,7 +190,7 @@ curl -s -H "$AUTH" "$BASE/api/v1/usage"
 
 The headless-initiative flow is the same shape one level up: `POST /api/v1/initiatives` with
 `{ pipelineId, input }` returns `202 { jobId, links: { self, events } }`; poll `GET /jobs/:id` or
-stream `GET /jobs/:id/events`. Initiative runs are **inline-only** — nothing is pushed to GitHub.
+stream `GET /jobs/:id/events`. Initiative runs are **inline-only**: nothing is pushed to GitHub.
 
 ## Client SDKs
 
@@ -204,7 +204,7 @@ Official clients ship for four languages, so most integrations should not be wri
 | Java / Kotlin | `ai.catfactory:cat-factory-sdk` (one artifact serves both) |
 
 Their models and operation methods are **generated from [`docs/openapi.json`](../../docs/openapi.json)**
-— which is itself generated from the Valibot route contracts — so a client cannot drift from the
+(itself generated from the Valibot route contracts), so a client cannot drift from the
 surface documented below. They also implement the conventions on this page for you: keyset
 auto-pagination, SSE framing, bounded retries on idempotent requests only, and an error type per
 status class with the machine-readable `code` exposed verbatim.
@@ -212,7 +212,7 @@ status class with the machine-readable `code` exposed verbatim.
 Details, the design rules the four share, and the Java/Kotlin story:
 [`sdk/README.md`](../../sdk/README.md).
 
-Everything below still applies — the SDKs are a typed skin over exactly these endpoints, and the
+Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
 error codes, scopes and paging rules are the same whichever you use.
 
 ## Reference
@@ -222,7 +222,7 @@ Scope column = the minimum rung. Refusal codes are in the [conventions table](#t
 ### Initiatives & jobs (headless runs)
 
 An initiative run executes a **public, inline pipeline** against a supplied brief, anchored on an
-internal block — it is not a board task and never touches GitHub. Jobs are double-scoped: this
+internal block; it is not a board task and never touches GitHub. Jobs are double-scoped: this
 surface only ever sees runs it created, never the workspace's ordinary board runs.
 
 | Method / path                  | Scope    | Behaviour                                                                                                                                                                                            |
@@ -231,7 +231,7 @@ surface only ever sees runs it created, never the workspace's ordinary board run
 | `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
 | `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
 | `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
-| `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream — see [Streaming](#streaming-sse).                                                                                                                                                        |
+| `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream; see [Streaming](#streaming-sse).                                                                                                                                                         |
 
 ¹ Starting a pipeline that can park on a human requires `decide`; the `403
 pipeline_requires_decide_scope` message names which of its park surfaces are answerable through the
@@ -250,13 +250,13 @@ mapping, so it always agrees with the field it filters on.
 | `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                 |
 | `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, executionId, pullRequestUrl }`.                                   |
 | `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                          |
-| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }` — falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
+| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.  |
 | `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                     |
 | `POST /api/v1/tasks/:taskId/retry`       | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                  |
 | `DELETE /api/v1/tasks/:taskId`           | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                      |
 
 Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `blocked` / `pr_ready` /
-`done`) — a decoupled public mirror of the board status, stable even if the board grows internal
+`done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
 Board-task `start` deliberately applies **no pipeline admission** (unlike `POST /initiatives`): a
@@ -269,16 +269,16 @@ open question about tightening it.
 | Method / path                      | Scope  | Behaviour                                                                                                                                       |
 | ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
-| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection — see [Streaming](#streaming-sse).                                                                                |
+| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                 |
 
-Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human —
+Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
 `{ agentKind, state, progress, subtasks }`, with live subtask counts while a container step works.
 
 #### Streaming (SSE)
 
 Both `/events` endpoints are `text/event-stream` responses driven by a 1-second poll of the
-persisted run. Frames are **de-duplicated** — a frame is sent only when the payload changed, and
+persisted run. Frames are **de-duplicated** (a frame is sent only when the payload changed) and
 there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
 | Event      | Meaning                                                                                                                                                      |
@@ -288,7 +288,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 | `done`     | Terminal success. Stream closes.                                                                                                                             |
 | `error`    | Terminal failure. Stream closes.                                                                                                                             |
 | `stopped`  | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                                |
-| `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong — reconnect to keep watching.                                                               |
+| `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
 poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
@@ -300,7 +300,7 @@ poll; for push at scale, register the [outbound webhook](#outbound-webhook-push)
 | `GET /api/v1/pipelines` | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`. |
 
 `public` marks the pipelines `POST /initiatives` accepts. `headlessStartable` means every enabled
-step is inline **and** nothing can park on a human — the pipeline can run end-to-end with no
+step is inline **and** nothing can park on a human: the pipeline can run end-to-end with no
 interactive user. A pipeline can be startable on a board task without being either.
 
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
@@ -312,45 +312,45 @@ possibly started by a human in the SPA). Reading needs `read`; **answering needs
 Every action returns the run's **whole decision list**, re-read after the action:
 `{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
 run is waiting on a park type this surface cannot answer yet
-([tracker](../../docs/initiatives/public-api-additions.md)) — your options are the SPA or cancel.
+([tracker](../../docs/initiatives/public-api-additions.md)); your options are the SPA or cancel.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                     |
 | ----------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                          |
 | `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                       |
-| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }` — dismiss a finding as not applicable, or reopen one.                                                                                |
-| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous** — the response shows `incorporating`; poll or stream for the next round. |
+| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                 |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.  |
 | `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                        |
 | `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                            |
-| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }` — resolve a review that hit its iteration cap.                                                                  |
-| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)` — choose the implementation approach.                                                 |
+| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                   |
+| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                  |
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                  |
 
 Three decision kinds appear in `decisions[]`, discriminated by `kind`:
 
-- **`requirements-review`** — the clarification loop. Findings carry a stable `itemId`, category,
+- **`requirements-review`**: the clarification loop. Findings carry a stable `itemId`, category,
   severity, status and any recorded `reply`; the decision carries `iteration` / `maxIterations` and
   the `incorporatedRequirements` document once one exists (that document is what downstream agents
-  implement — read it before `proceed`). Loop: answer or dismiss every `open` finding →
+  implement; read it before `proceed`). Loop: answer or dismiss every `open` finding →
   `incorporate` → the review converges, returns a fresh round, or hits its cap (`resolve-exceeded`).
-- **`fork`** — materially different implementation approaches proposed before code is written, each
+- **`fork`**: materially different implementation approaches proposed before code is written, each
   with its full approach / trade-offs / risk text. Pick one or supply your own.
-- **`judge`** — a rubric scored the work below the task's threshold: score, threshold, findings,
+- **`judge`**: a rubric scored the work below the task's threshold: score, threshold, findings,
   and the `bounces` / `maxBounces` budget, resolved with proceed / bounce / stop.
 
 Answers ride the **same service methods** the SPA calls, so racing surfaces (a human in the app and
-your integration) are already arbitrated — whoever answers first wins, no locking needed on your
+your integration) are already arbitrated: whoever answers first wins, no locking needed on your
 side.
 
 ### Notification inbox
 
-The workspace's open notification cards — the human-gated run tails (a PR awaiting merge review, a
+The workspace's open notification cards: the human-gated run tails (a PR awaiting merge review, a
 run whose CI could not be fixed). `act` runs the card's typed side-effect; on a `merge_review` /
 `pipeline_complete` card that is a **real merge** of the PR, which is why it sits at `admin`.
 
 | Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                        |
 | ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated — humans keep this list short).                                                                                                                                                                  |
+| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                   |
 | `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
 | `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
 
@@ -361,15 +361,15 @@ run whose CI could not be fixed). `act` runs the card's typed side-effect; on a 
 | `GET /api/v1/usage` | `read` | The current period's spend + budget position, as one resource. |
 
 Response: `{ periodStart, currency, budget, rows }`. `budget` is the **metered** position the spend
-safeguard acts on — `costSpent`, `costLimit` and `exceeded: true` when runs are paused at the cap.
+safeguard acts on: `costSpent`, `costLimit` and `exceeded: true` when runs are paused at the cap.
 `rows` is the per-`(billing, vendor, provider, model)` breakdown. **Do not sum the two billing
 kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans bill nothing per
-token); only `metered` rows are money. Workspace tier only, by design — a workspace key never learns
+token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
 
 ### Run debugging (`/api/v1/debug/*`)
 
-Eight read-only endpoints for diagnosing a run from outside the browser — run index, per-run
+Eight read-only endpoints for diagnosing a run from outside the browser: run index, per-run
 overview with precomputed signals, and budgeted drill-downs into model calls, agent context,
 searches and provisioning logs. Same keys, `read` scope. Fully documented in
 [`debug-api.md`](./debug-api.md).
@@ -380,9 +380,9 @@ Polling has no answer for the two cases that matter most: a parked run waits **i
 fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
 endpoint and subscribe it to either or both delivery families:
 
-- **Notification cards** — the same cards as `GET /api/v1/notifications`, pushed as they are raised
+- **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
-- **Run-lifecycle events** — `run.started` / `run.completed` / `run.failed`, one delivery per
+- **Run-lifecycle events**: `run.started` / `run.completed` / `run.failed`, one delivery per
   transition, including the happy path that raises no card.
 
 ### Register the endpoint
@@ -403,21 +403,21 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
   "$BASE/workspaces/$WS/notification-webhook"
 ```
 
-`GET` returns the config with `hasSecret: true|false` — the secret itself is **write-only**, sealed
-at rest, never readable back; omitting `secret` on a later `PUT` keeps the stored one, supplying it
+`GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
+at rest, never readable back. Omitting `secret` on a later `PUT` keeps the stored one, supplying it
 rotates. `DELETE` unregisters (idempotent, `204`).
 
 Two filters with **opposite** empty semantics, both deliberate:
 
-- `types: []` (or unset) means **the default card types** — the parked-decision and merge/CI tails
+- `types: []` (or unset) means **the default card types**: the parked-decision and merge/CI tails
   (`requirement_review`, `clarity_review`, `decision_required`, `fork_decision_pending`,
   `merge_review`, `pipeline_complete`, `ci_failed`, `test_failed`). Name types explicitly to widen
   or narrow (system cards like `platform_health`, `budget_paused`, `key_drift` are excluded from the
   defaults but nameable).
-- `runEvents: []` (or unset) means **none** — lifecycle events are opt-in per event, so a receiver
+- `runEvents: []` (or unset) means **none**: lifecycle events are opt-in per event, so a receiver
   registered for parked decisions does not silently start hearing about every run.
 
-The URL must be public `https://` — loopback, RFC 1918, link-local, `.internal`/`.local` hosts and
+The URL must be public `https://`: loopback, RFC 1918, link-local, `.internal`/`.local` hosts and
 embedded credentials are refused at registration **and re-checked on every delivery hop** (redirects
 are followed at most 5 times, each hop re-validated; a cross-origin hop drops the body and auth
 headers). For local development, a deployment can relax this with
@@ -442,7 +442,7 @@ two families share the endpoint and are told apart by shape:
 
 // Run-lifecycle event (carries `event` + `run`)
 {
-  "deliveryId": "exec_9:run.completed",   // <runId>:<event> — THE dedupe key
+  "deliveryId": "exec_9:run.completed",   // <runId>:<event> - THE dedupe key
   "sentAt": 1722600000000,
   "workspaceId": "ws_1",
   "event": "run.completed",
@@ -467,16 +467,16 @@ Semantics your receiver must honour:
   `GET /api/v1/jobs/:id` and its SSE stream already serve them).
 - Delivery is **best-effort**: 3 attempts (exponential backoff, 250 ms base), 5 s per attempt, 6 s
   total budget per delivery; a 4xx from your endpoint does not retry. A dead receiver never stalls a
-  run — but it also means missed deliveries are possible, so treat the webhook as a trigger and the
+  run, but it also means missed deliveries are possible, so treat the webhook as a trigger and the
   API as the source of truth. Failures are logged on the platform side for diagnosis.
-- Answer fast (2xx) and process async — the 5-second per-attempt timeout includes your handler.
+- Answer fast (2xx) and process async: the 5-second per-attempt timeout includes your handler.
 
 ### Verify signatures
 
 When a `secret` is registered, every delivery carries:
 
-- `x-cat-factory-timestamp` — epoch ms, equal to the body's `sentAt`
-- `x-cat-factory-signature` — `v1=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>`
+- `x-cat-factory-timestamp`: epoch ms, equal to the body's `sentAt`
+- `x-cat-factory-signature`: `v1=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>`
 
 The timestamp is bound into the MAC, so it can be trusted for replay rejection. Verify against the
 **raw request bytes**, before any JSON parsing:
@@ -495,12 +495,12 @@ function verifyDelivery(headers, rawBody, secret, maxSkewMs = 5 * 60 * 1000) {
 }
 ```
 
-A delivery with no registered secret is sent unsigned — register one unless your endpoint is
+A delivery with no registered secret is sent unsigned; register one unless your endpoint is
 otherwise authenticated.
 
 ## Extending the surface
 
-For contributors adding or changing `/api/v1` endpoints — the short version, with the full rules in
+For contributors adding or changing `/api/v1` endpoints, the short version, with the full rules in
 [ADR 0030](./adr/0030-public-api-surface.md) (shape, paging, scoping) and the
 [additions tracker](../../docs/initiatives/public-api-additions.md) (decision-surface slices and
 their gotchas):
@@ -512,4 +512,4 @@ their gotchas):
 - Regenerate the spec in the same PR: `pnpm build && pnpm gen:openapi` (CI fails on drift via
   `check:openapi`); a new named DTO needs `COMPONENT_SCHEMAS` + `OPERATION_DOCS` entries in
   `scripts/generate-openapi.mjs`.
-- **Update this document** — the reference tables above are hand-maintained.
+- **Update this document**: the reference tables above are hand-maintained.

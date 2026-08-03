@@ -1,4 +1,4 @@
-# Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
+# Initiative: system audit; data lifecycle, runtime parity, robustness & coverage
 
 **Status:** in progress (items 1–10 landed; item 15 first slice landed) · **Owner:** core · **Started:** 2026-07-11
 
@@ -14,20 +14,20 @@ self-tracked, so the bulk of this audit's job was **deduplication**: everything 
 owned elsewhere is explicitly excluded (see below) and must NOT be re-added here. What
 remains clusters into four themes:
 
-- **Data lifecycle** — tables and blobs that grow without bound or orphan permanently on
+- **Data lifecycle**: tables and blobs that grow without bound or orphan permanently on
   normal operations (workspace delete, notification churn). Invisible today, unbounded
   cost tomorrow.
-- **Runtime symmetry** — machinery duplicated verbatim across facades, a Node ingest path
+- **Runtime symmetry**: machinery duplicated verbatim across facades, a Node ingest path
   that silently degrades to inline execution, and conformance-suite blind spots where a
   D1 ⇄ Drizzle drift would ship untested.
-- **Robustness & correctness** — small, verified gaps: a periodic sweep with an N+1 the
+- **Robustness & correctness**: small, verified gaps: a periodic sweep with an N+1 the
   planned cache can't fix on the Worker, a health endpoint with no readiness signal, one
   frontend store missing the standard anti-clobber guard.
-- **Coverage & hygiene** — the largest frontend component has zero e2e coverage, the CI
+- **Coverage & hygiene**: the largest frontend component has zero e2e coverage, the CI
   lane-gating filters are themselves unguarded, and several docs (including CLAUDE.md)
   have drifted from verified reality.
 
-### Explicitly excluded (already tracked elsewhere — do not re-add)
+### Explicitly excluded (already tracked elsewhere: do not re-add)
 
 - Every N+1 / homebrew-cache / hot-path finding in
   [`performance-optimizations.md`](./performance-optimizations.md) items 1–23 (incl. the
@@ -52,7 +52,7 @@ remains clusters into four themes:
 
 ## Target patterns (copy these, don't invent)
 
-- **Retention prune**: copy an existing sweep pair — a `deleteOlderThan`-shaped port
+- **Retention prune**: copy an existing sweep pair; a `deleteOlderThan`-shaped port
   method mirrored D1 ⇄ Drizzle, invoked from BOTH
   `backend/runtimes/cloudflare/src/infrastructure/workflows/retention.ts` and
   `backend/runtimes/node/src/retention.ts`, with a conformance prune assertion (copy
@@ -61,7 +61,7 @@ remains clusters into four themes:
 - **Guarded sweeper**: the `running`-flag re-entrancy guard in
   `backend/runtimes/node/src/kaizen.ts:28-46` / `githubReconcile.ts:97-112`.
 - **Batched port method** instead of a loop point-read: copy
-  `ServiceRepository.listByIds` — add the chunked-`IN` method to the kernel port,
+  `ServiceRepository.listByIds`; add the chunked-`IN` method to the kernel port,
   implement in BOTH repos, assert in conformance.
 - **Monotonic-refresh store guard**: `stores/workspace.ts`'s sequence guard + its
   `workspace.spec.ts` out-of-order test (the CLAUDE.md live-push coherence rule).
@@ -82,18 +82,18 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done        | #1020     |
 | 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done        | (this PR) |
 | 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ✅ done        | (this PR) |
-| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done        | (this PR) |
+| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker: hoist to shared server pkg   | S      | ✅ done        | (this PR) |
 | 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ✅ done        | (this PR) |
 | 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done        | (this PR) |
 | 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done        | (this PR) |
 | 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done        | (this PR) |
-| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ✅ done        | (this PR) |
+| 9   | P2  | ops         | Node `/health` is a static 200; add a `/ready` readiness probe (pool + pg-boss)            | S      | ✅ done        | (this PR) |
 | 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ✅ done        | (this PR) |
 | 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo        |           |
 | 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo        |           |
 | 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo        |           |
 | 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo        |           |
-| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | 🔄 in-progress | (this PR) |
+| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores; establish the rule | M      | 🔄 in-progress | (this PR) |
 | 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo        |           |
 | 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo        |           |
 | 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo        |           |
@@ -102,15 +102,15 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 
 ## Detailed findings
 
-### Cluster A — data lifecycle & retention
+### Cluster A: data lifecycle & retention
 
-#### 1. `notifications` never pruned in either facade — P1
+#### 1. `notifications` never pruned in either facade: P1
 
 `D1NotificationRepository`
 (`backend/runtimes/cloudflare/src/infrastructure/repositories/D1NotificationRepository.ts`)
 and the Drizzle equivalent (`backend/runtimes/node/src/repositories/notifications.ts`)
 expose `get` / `listOpen` / `findOpenByBlock` / `upsert` / `claimForAction` /
-`escalateStaleOpen` — and **no delete**. Neither retention sweep
+`escalateStaleOpen`, and **no delete**. Neither retention sweep
 (`cloudflare/src/infrastructure/workflows/retention.ts`, `node/src/retention.ts`) touches
 the table, and the workspace-delete cascade doesn't either (item 2). A busy workspace
 emits a notification on every waiting/decision/park event, so resolved rows accumulate
@@ -119,13 +119,13 @@ forever on a table read on the hot path (`listOpen` per snapshot; the
 
 **Fix:** add `deleteResolvedOlderThan(cutoff)` to the kernel port + both repos, wire into
 both retention sweeps under a retention knob (default generous, e.g. 90 days for
-resolved/dismissed rows only — never open ones), and add a conformance prune assertion
+resolved/dismissed rows only, never open ones), and add a conformance prune assertion
 (pairs with item 7's suite).
 
-#### 2. Workspace-delete cascade incomplete → permanent orphans — P1
+#### 2. Workspace-delete cascade incomplete → permanent orphans: P1
 
 Both facades' workspace delete clears the same 7 tables (`workspace_services`,
-`services`, `environments`, `agent_runs`, `blocks`, `pipelines`, `workspaces`) —
+`services`, `environments`, `agent_runs`, `blocks`, `pipelines`, `workspaces`):
 symmetric, good (`D1WorkspaceRepository.ts:94-142`,
 `node/src/repositories/drizzle.ts:345-357`). But there are **zero `ON DELETE CASCADE`
 constraints in the D1 migrations** and only a handful of `onDelete` in the Drizzle
@@ -141,7 +141,7 @@ are invisible.
 **Fix:** a shared kernel list of workspace-scoped tables driving both cascades (so a new
 table can't silently miss the list), + broaden the cleanup spec / conformance assertion
 to iterate that list. Deleting the orphans of already-deleted workspaces needs no
-migration ceremony (backwards compatibility is a non-goal) — a one-time cleanup in the
+migration ceremony (backwards compatibility is a non-goal): a one-time cleanup in the
 same slice is fine.
 
 **Landed (this PR).** `WORKSPACE_SCOPED_TABLES` in
@@ -167,28 +167,28 @@ Deliberately deferred / excluded:
 - **Isolated schemas** (`telemetry` / `sandbox` / `provisioning`) are out of scope: on the
   Worker `telemetry` is a physically separate D1 database, and on Node these are
   append-heavy / short-retention stores reclaimed by their own retention sweeps (e.g.
-  `llm_call_metrics`) or the extractable sandbox surface — never by the board-delete
+  `llm_call_metrics`) or the extractable sandbox surface, never by the board-delete
   cascade. The completeness guard filters to `schema === undefined` for this reason.
 - **One-time historical orphan cleanup** (rows of already-deleted workspaces) was NOT done
-  in this slice — the forward fix is the core value, and pre-1.0 the stale rows are
+  in this slice: the forward fix is the core value, and pre-1.0 the stale rows are
   acceptable. A follow-up boot/retention sweep could reclaim them if it ever matters.
 
-#### 3. Binary-artifact blobs of deleted workspaces never reclaimed — P1
+#### 3. Binary-artifact blobs of deleted workspaces never reclaimed: P1
 
 The artifact retention sweeps (`node/src/retention.ts:180-214` and the Worker analogue in
 `cloudflare/src/index.ts:212-243`) iterate `workspaceRepository.listVisible(...)` and
 prune each **live** workspace's screenshots/reference images per its
 `artifactRetentionDays`. A **deleted** workspace is no longer in `listVisible`, and the
-delete cascade (item 2) doesn't touch `binary_artifacts` — so both the metadata rows and
+delete cascade (item 2) doesn't touch `binary_artifacts`, so both the metadata rows and
 the backing blob bytes (R2 / S3 / filesystem) leak forever. These are the heavy objects,
 so this is unbounded object-storage cost with no surfacing.
 
 **Fix:** delete artifacts (rows + blobs via the `BinaryBlobBackend` port) in the
-workspace-delete path — the service layer, not bare SQL. Now the clean next slice: item 2
+workspace-delete path: the service layer, not bare SQL. Now the clean next slice: item 2
 landed the cascade WITHOUT `binary_artifacts` (its rows stay out of `WORKSPACE_SCOPED_TABLES`
 precisely so their bytes aren't stranded). Add a `deleteByWorkspace(workspaceId)` to the
 `BinaryArtifactStore` + `BinaryArtifactMetadataStore` ports (mirrored D1 ⇄ Drizzle, blobs
-first then rows — copy `pruneOlderThan`'s fail-safe ordering), inject
+first then rows: copy `pruneOlderThan`'s fail-safe ordering), inject
 `resolveBinaryArtifactStore` into `WorkspaceService`, and purge in `WorkspaceService.delete`
 before `workspaceRepository.delete`. Add a conformance assertion (blob + row gone on both
 runtimes).
@@ -198,16 +198,16 @@ artifact's rows AND bytes, backed by new `listByWorkspace` / `deleteByWorkspace`
 `BinaryArtifactMetadataStore` (mirrored in both `D1BinaryArtifactMetadataStore` and
 `DrizzleBinaryArtifactMetadataStore`). The composed-store factory now shares one `reclaim`
 helper between `pruneOlderThan` and `deleteByWorkspace` (blobs first, best-effort per object,
-then a single bulk row delete on the all-succeeded fast path — a blob delete that throws
+then a single bulk row delete on the all-succeeded fast path: a blob delete that throws
 keeps its metadata row rather than orphaning the bytes). Note the retry asymmetry: for
 `pruneOlderThan` the hourly retention sweep revisits the LIVE workspace and genuinely retries a
 retained row, but a DELETED workspace never reappears in `listVisible`, so a row retained on the
-`deleteByWorkspace` path is NOT auto-retried — it needs an out-of-band reclaim. So the composed
+`deleteByWorkspace` path is NOT auto-retried; it needs an out-of-band reclaim. So the composed
 store takes an optional `logger` and WARNs whenever a blob delete fails (partial reclaim), and
 `WorkspaceService.delete` logs a swallowed total purge failure, so the residual leak is surfaced
 rather than promising a retry that can't happen.
 `WorkspaceService` takes an optional `resolveBinaryArtifactStore` and purges through it in
-`delete()` BEFORE the row cascade (best-effort — a blob-backend outage can't wedge the board
+`delete()` BEFORE the row cascade (best-effort: a blob-backend outage can't wedge the board
 delete; the rows survive for an out-of-band reclaim). `createCore` already passes the
 resolver + logger into `new WorkspaceService(dependencies)`, so both facades wire it for free.
 Guards: the cross-runtime `defineBinaryArtifactsSuite` asserts `deleteByWorkspace` removes every
@@ -218,23 +218,23 @@ the cascade, that an unwired resolver / null store / blob outage all still compl
 and that the outage is logged. The `binary_artifacts` note in `workspace-cascade.ts` is updated
 to point at this purge (no longer "until that lands").
 
-### Cluster B — runtime symmetry & shared machinery
+### Cluster B: runtime symmetry & shared machinery
 
-#### 4. GitHub reconcile loop duplicated verbatim across runtimes — P2
+#### 4. GitHub reconcile loop duplicated verbatim across runtimes: P2
 
 `backend/runtimes/node/src/githubReconcile.ts:36-143` mirrors the Worker's
 `sync-consumer.ts` `reconcileStaleRepos` + `isInstallationGoneError` /
-`isInstallationTokenGoneError` classifiers verbatim — the Node copy's own comment says
+`isInstallationTokenGoneError` classifiers verbatim: the Node copy's own comment says
 "Mirrors the Worker's `sync-consumer.ts` classification". Two copies of best-effort
 per-repo sync, tombstone-on-token-gone, and warn-vs-error log routing, with **no shared
 test**: if one copy changes, the other silently diverges (one runtime stops tombstoning
-dead installations while the other keeps working — the exact drift the symmetry rule
+dead installations while the other keeps working; the exact drift the symmetry rule
 exists to prevent).
 
 **Fix:** hoist `reconcileStaleRepos` + the classifiers into `@cat-factory/server` (the
 `escalateNotifications.ts` precedent), leaving each facade to supply only its driver
 (setInterval vs cron/queue). NOTE: converting the classifiers from message-regex to a
-structured code is **NOT this item** — that is
+structured code is **NOT this item**; that is
 [`error-message-coverage.md`](./error-message-coverage.md) row **I7**; land the hoist
 first so I7's conversion is a single-file change.
 
@@ -244,17 +244,17 @@ alongside `GitHubReconcileDeps`). Each facade supplies ONLY its per-repo driver 
 `syncRepoById`: the Worker's `sync-consumer.ts` closure enqueues on `GITHUB_SYNC_QUEUE`
 (or direct-syncs when unbound), the Node `githubReconcile.ts` closure direct-syncs inline.
 The classifiers were moved **verbatim** (regex→structured code is I7's job, sequenced
-after this). The pure unit test moved to `server/test/reconcileStaleRepos.spec.ts` — one
+after this). The pure unit test moved to `server/test/reconcileStaleRepos.spec.ts`: one
 test for one implementation, so the facades can't silently diverge (the drift this item
-existed to stop). The behavioural harmonisations: all reconcile logs — per-repo lines AND
-the Worker's cron summary — now use `sweep: 'github-reconcile'` (was `sweeper:` on Node /
+existed to stop). The behavioural harmonisations: all reconcile logs (per-repo lines AND
+the Worker's cron summary) now use `sweep: 'github-reconcile'` (was `sweeper:` on Node /
 `cron:` on the Worker), and the Worker's reconcile warn/error no longer carries a stack
 (Node never did). Review follow-ups on the same slice: the 30-minute staleness window is
 the shared exported `GITHUB_RECONCILE_STALE_MS` (both facades + the test consume it, so it
 can't drift either), and the Worker's queue-less direct-sync fallback resolves its DI
 container once per pass instead of once per stale repo.
 
-#### 5. Node async GitHub ingest is inline; Cloudflare uses a queue — P1
+#### 5. Node async GitHub ingest is inline; Cloudflare uses a queue: P1
 
 `backend/runtimes/node/src/gateways.ts:44-60`: `InlineGitHubBackfillScheduler.scheduleBackfill`
 returns `false` and `InlineGitHubWebhookIngest.enqueueWebhook` / `queueRepoResync` return
@@ -272,7 +272,7 @@ inline paths" caveat in CLAUDE.md's Node facade section (update the doc in the s
 slice; pairs with item 16).
 
 **Landed (this PR).** `backend/runtimes/node/src/execution/githubSyncRunner.ts` is the
-Node durable driver — the analogue of the Worker's `sync-consumer.ts` queue consumer +
+Node durable driver: the analogue of the Worker's `sync-consumer.ts` queue consumer +
 `GitHubBackfillWorkflow`. `PgBossGitHubBackfillScheduler` / `PgBossGitHubWebhookIngest`
 implement the `githubBackfill` / `githubWebhook` seams by enqueuing a `GitHubSyncJob`
 (`webhook` / `resync-repo` / `backfill`) onto the new `github.sync` pg-boss queue and
@@ -280,33 +280,33 @@ returning `true`, so the shared controllers ack fast (a webhook → 202, a full 
 `backfill_started`) instead of running the deep sync inline in the request. `createNodeGateways`
 now takes the boss (threaded from `buildNodeContainer`'s `options.boss`) and picks the pg-boss
 seams when it's wired, keeping the inline (`false`) fallback for a container built with no boss
-(a pure-logic test — this is what keeps `github-projections.spec.ts`'s inline persistence
+(a pure-logic test: this is what keeps `github-projections.spec.ts`'s inline persistence
 green). `startGitHubSyncWorker` (wired in `server.ts` beside the execution/bootstrap/env-repair
 workers) drains the queue and applies each job via the SAME `WebhookService.handle` /
-`GitHubSyncService.syncRepoById` / `backfillInstallation` the inline path used — so the
+`GitHubSyncService.syncRepoById` / `backfillInstallation` the inline path used, so the
 projection result is byte-identical, only WHERE it runs changes; it drops (completes) a job when
 the GitHub module is unwired (mirroring the Worker consumer's `ack()`) and rethrows an apply
 failure so pg-boss retries with backoff. `expireInSeconds` is sized past a full backfill (the
 Worker gives its backfill step 10 min) so a healthy long backfill is never expired mid-run.
 Webhook-response semantics are unchanged (the controller still returns the fast 2xx; the enqueue
-just replaces the inline processing behind it — the item's stated constraint). Guard:
+just replaces the inline processing behind it: the item's stated constraint). Guard:
 `node/test/github-sync-runner.spec.ts` asserts the enqueue path is taken (right queue + payload,
 returns `true`) when a boss is wired and falls back to inline (`false`) without one, that
 `applyGitHubSyncJob` routes each kind to the matching service method, and that the worker applies
 a dequeued job / drops an unwired-module job / rethrows an apply failure. CLAUDE.md's Node-facade
 "Async GitHub ingest still falls back to the inline paths" sentence is rewritten to describe the
 pg-boss path (the item-16 half of the doc drift). **Not folded in:** hoisting the apply switch
-into `@cat-factory/server` — like the execution/bootstrap pg-boss runners, the durable driver is
+into `@cat-factory/server`: like the execution/bootstrap pg-boss runners, the durable driver is
 a per-facade analogue of the Worker's Queue/Workflow (the two message unions even differ: the
 Worker drives backfill through a separate Workflow, not its queue), so the thin apply mirror
 stays local beside its driver, exactly as the Worker's own `applyGitHubSyncMessage` does.
 
-#### 6. Node sweeper re-entrancy guards inconsistent — P2
+#### 6. Node sweeper re-entrancy guards inconsistent: P2
 
 `kaizen.ts:28-46` and `githubReconcile.ts:97-112` both guard their `setInterval` sweeps
 with a `running` flag ("setInterval would otherwise stack overlapping passes"). The
 sweeps most likely to be slow are **unguarded**: `initiativeLoop.ts:44-58` (`runDue`
-reconciles child tasks and spawns the next wave — DB-heavy), `recurring.ts:25-39`, and
+reconciles child tasks and spawns the next wave; DB-heavy), `recurring.ts:25-39`, and
 the notification-escalation timer in `notifications.ts`. If one tick outlasts the
 interval, two concurrent `runDue` passes can both observe "no active run" and
 double-spawn.
@@ -315,22 +315,22 @@ double-spawn.
 `nonOverlapping(fn)` helper in the Node facade so the next sweeper can't forget it.
 
 **Landed (this PR).** Rather than hand-roll a `running` flag per sweeper, ALL of the Node
-facade's periodic sweeps now go through one seam — `startSweeper` in
+facade's periodic sweeps now go through one seam: `startSweeper` in
 `backend/runtimes/node/src/sweeper.ts`, built on **`toad-scheduler`**. A
 `SimpleIntervalJob` with `preventOverrun: true` is the non-overlap guard (so the DB-heavy
 `initiativeLoop` / `recurring` / notification-escalation sweeps can no longer double-spawn),
 `runImmediately: true` keeps the run-once-first behaviour, and the `AsyncTask` error handler
 keeps the best-effort logging. All eight sweepers were converted (kaizen, githubReconcile,
 initiativeLoop, recurring, notifications, environments, and both retention sweeps), deleting
-the per-file timer/guard boilerplate — a new sweeper physically cannot forget the guard now.
+the per-file timer/guard boilerplate: a new sweeper physically cannot forget the guard now.
 Each sweep passes a distinct `name` used as the toad-scheduler task id, so a
 scheduler-surfaced error names its sweep.
 Guard: `node/test/sweeper.spec.ts` pins the immediate run, the non-overlap skip, best-effort
 failure logging, and clean stop. The jobs pass `unref: true` (toad-scheduler ≥4.1.0), so a
-sweep timer never keeps the process alive on its own — the same contract as the hand-rolled
+sweep timer never keeps the process alive on its own: the same contract as the hand-rolled
 `setInterval(...).unref()` timers this replaced.
 
-#### 7. Conformance prune-assertion gaps — P2
+#### 7. Conformance prune-assertion gaps: P2
 
 Six pruned tables have cross-runtime prune assertions (`agent-context-suite.ts:118`,
 `agent-search-queries-suite.ts:92`, `llm-metrics-suite.ts:301`,
@@ -340,7 +340,7 @@ equally-swept prunes have **none**: `TokenUsageRepository.deleteOlderThan`,
 `CommitProjectionRepository.deleteOlderThan` (github_commits),
 `PipelineScheduleRepository.pruneRunsBefore`, `SubscriptionActivationRepository.deleteExpired`.
 A D1 ⇄ Drizzle drift in an un-asserted prune (wrong column, `<` vs `<=`, missing WHERE)
-either deletes live data or never reclaims — silently.
+either deletes live data or never reclaims: silently.
 
 **Fix:** add prune assertions mirroring the existing suites (extend the relevant suite
 per table; new prunes from items 1–3 land WITH their assertion, per the standing rule).
@@ -351,29 +351,29 @@ extend an existing one, each got a focused `define*Suite(name, makeRepo)` mirror
 BOTH facades' test suites (Worker D1 in `runtimes/cloudflare/test/integration/*`, Node
 Postgres in `runtimes/node/test/*`): `defineTokenUsageSuite` (`token_usage`:
 `deleteOlderThan`, plus the per-group breakdown + metered-only spend rollup),
-`defineCommitProjectionSuite` (`github_commits`: `deleteOlderThan` — asserts the exclusive
+`defineCommitProjectionSuite` (`github_commits`: `deleteOlderThan`; asserts the exclusive
 `authored_at` cutoff AND that null-authored rows survive, the one predicate a facade could
 get wrong), `defineScheduleRunSuite` (`pipeline_schedule_runs`: `pruneRunsBefore`, plus
 insert/patch/list-newest-first), and `defineSubscriptionActivationSuite`
 (`subscription_activations`: `deleteExpired`, plus upsert/get-live-only/deleteByExecution).
-Each prune is table-wide, so — like the existing suites — the assertions scope to a
+Each prune is table-wide, so (like the existing suites) the assertions scope to a
 per-case unique key and check the deterministic survivors rather than the global count. The
 activation suite's factory also hands back a `UserRepository` to seed the `users` row its
-Postgres `user_id` FK (ON DELETE RESTRICT) requires; D1 doesn't enforce the FK. Test-only —
+Postgres `user_id` FK (ON DELETE RESTRICT) requires; D1 doesn't enforce the FK. Test-only,
 no runtime behaviour changed; 26 assertions (13 per facade) run green on real D1 (workerd)
 and real Postgres.
 
-### Cluster C — robustness & correctness
+### Cluster C: robustness & correctness
 
-#### 8. Notification-escalation sweep N+1 — P2
+#### 8. Notification-escalation sweep N+1: P2
 
 `backend/packages/server/src/runtime/escalateNotifications.ts:20-26` loads every
-workspace (`workspaceService.list(null)`) then calls `settings.service.get(ws.id)` — a
-point-read — **inside the loop**, every ~2 minutes on both facades
+workspace (`workspaceService.list(null)`) then calls `settings.service.get(ws.id)` (a
+point-read) **inside the loop**, every ~2 minutes on both facades
 (`node/src/notifications.ts:26`, `cloudflare/src/index.ts:400`). Distinct from
 perf-optimizations item 9 (which caches `WorkspaceSettingsService.get` for the
 per-LLM-call path): that cache slice is **pass-through on the Worker** profile
-(own-mutable-D1-state rule), so it cannot help this sweep there — every cron tick still
+(own-mutable-D1-state rule), so it cannot help this sweep there; every cron tick still
 issues N reads for the escalation threshold.
 
 **Fix:** a batched `listByWorkspaceIds` (chunked `IN`) on `WorkspaceSettingsRepository`,
@@ -387,7 +387,7 @@ default for absent ones), implemented as a chunked `IN` in BOTH `D1WorkspaceSett
 a new module-level `rowToWorkspaceSettings` mapper with `get`). `WorkspaceSettingsService.getMany`
 wraps it, filling `DEFAULT_WORKSPACE_SETTINGS` for every requested id with no row, and
 `escalateStaleNotifications` (`@cat-factory/server`) now calls it ONCE before the per-workspace
-loop instead of a `get` per workspace — the N+1 the Worker's pass-through settings cache (perf
+loop instead of a `get` per workspace: the N+1 the Worker's pass-through settings cache (perf
 item 9) can't fix. The port didn't collide with perf item 9 (that slice caches `get`, this adds
 a distinct batch method). Guards: a cross-runtime `defineWorkspaceSettingsSuite` asserts the
 round-trip + batched read (absent workspace absent, empty input → empty map, no all-rows scan)
@@ -396,17 +396,17 @@ the defaults-fill for absent workspaces. The batch method is a global sweeper re
 mothership-internal (`NON_REMOTE` `'sweeper'` in `mothership-allowlist.spec.ts`, not the RPC
 allow-list), matching the ADR-0009 "global sweeper reads are excluded" rule.
 
-#### 9. Node `/health` is a static 200 — P2
+#### 9. Node `/health` is a static 200: P2
 
-`backend/runtimes/node/src/server.ts:79`: `app.get('/health', c => c.json({ status: 'ok' }))`
-— always 200 regardless of Postgres pool / pg-boss health. A running node whose pool has
+`backend/runtimes/node/src/server.ts:79`: `app.get('/health', c => c.json({ status: 'ok' }))`;
+always 200 regardless of Postgres pool / pg-boss health. A running node whose pool has
 died (or whose pg-boss worker crashed) still reports healthy, so a load balancer can't
-drain the broken replica. (Graceful shutdown itself, `server.ts:442-483`, is thorough —
+drain the broken replica. (Graceful shutdown itself, `server.ts:442-483`, is thorough:
 this is only the inbound readiness signal.)
 
 **Fix:** add `/ready` (pool `SELECT 1` + pg-boss state check) distinct from the cheap
 liveness `/health`. Node-facade-specific by nature (the Worker has no long-lived process
-to probe) — a legitimate asymmetry, note it as such.
+to probe): a legitimate asymmetry, note it as such.
 
 **Landed (this PR).** `backend/runtimes/node/src/readiness.ts` owns the pure verdict
 (`checkReadiness` → `{ ready, checks }`): it round-trips the app's Postgres pool (a bounded
@@ -416,23 +416,23 @@ flag the boot sequence owns (set true after `boss.start()`, flipped on the `stop
 (before the auth gate, like `/health`) that answers `200 {status:'ready'}` /
 `503 {status:'not_ready'}` with the per-dependency `checks`. `bootServer` wires the probe
 from the live `pool` + the boss flag + a `draining` flag it sets at the TOP of `shutdown()`,
-so a SIGTERM'd replica reports not-ready IMMEDIATELY (short-circuiting the downstream probes)
-— a load balancer stops routing new traffic while in-flight requests drain, before anything
+so a SIGTERM'd replica reports not-ready IMMEDIATELY (short-circuiting the downstream probes):
+a load balancer stops routing new traffic while in-flight requests drain, before anything
 is torn down. `/health` stays a static 200 (liveness: a restart can't fix a dead pool). The
 asymmetry is genuine and documented in `readiness.ts`: the Worker has no long-lived process
 (each request is a fresh isolate), and local **mothership** mode has no local Postgres/pg-boss
-(org state is remote) — both wire no probe, so `/ready` falls back to a bare `ready`. Local's
+(org state is remote); both wire no probe, so `/ready` falls back to a bare `ready`. Local's
 Postgres path reuses `start()`, so it gets the real probe for free. Guard:
 `node/test/readiness.spec.ts` pins the pure verdict (ready / pool-down / boss-stopped /
 draining-short-circuit / probe-timeout) AND the `createApp` glue (200/503 status + the route
-being public before the auth gate). No persistence/port change, so no conformance assertion —
+being public before the auth gate). No persistence/port change, so no conformance assertion:
 readiness is a per-process signal with no D1 analogue.
 
-#### 10. `provisioningLogs` store: unbounded map + unguarded overwrite — P2
+#### 10. `provisioningLogs` store: unbounded map + unguarded overwrite; P2
 
 `frontend/app/app/stores/provisioningLogs.ts`: `byExecution` accretes one `LogState` per
 execution id and never evicts (slow memory creep across a long board session), and
-`loadForExecution` performs an unguarded `s.entries = entries` — the silent poll and a
+`loadForExecution` performs an unguarded `s.entries = entries`; the silent poll and a
 manual refresh can resolve out of order and clobber the newer result. This is exactly the
 out-of-order-overwrite shape the CLAUDE.md live-push rules warn about, minus the
 monotonic guard the core stores carry.
@@ -443,20 +443,20 @@ pattern).
 
 **Landed (this PR).** `loadForExecution` now stamps each call with a per-execution
 monotonic `loadSeq` and discards its result if a newer load (the drawer's silent poll or a
-manual refresh) superseded it in flight — the same anti-clobber guard `stores/workspace.ts`
+manual refresh) superseded it in flight: the same anti-clobber guard `stores/workspace.ts`
 carries on its full refresh, so a slower/staler fetch can't overwrite the fresher timeline
 (the visible spinner still clears in its own `finally` regardless of supersession, so a
 superseded visible load never leaves a stuck spinner). Eviction is lifecycle-based rather
 than terminal-status-based: the store exposes `evict(executionId)` and
 `ProvisioningLogsDrawer.vue` calls it in `onBeforeUnmount` (executionId mode only), so
 `byExecution` holds only currently-open drawers instead of accreting one `LogState` per run
-viewed for the app's lifetime — a re-opened drawer re-fetches on mount, and keeping the state
+viewed for the app's lifetime; a re-opened drawer re-fetches on mount, and keeping the state
 while OPEN is exactly what the manual-refresh-after-terminal affordance needs. Guard:
 `stores/provisioningLogs.spec.ts` adds an out-of-order-resolve test (newest-issued wins over
 a late stale resolver), a superseding-visible-load test (fresh entries + no stuck spinner),
 and an eviction test (state dropped, seq reset, a fresh load re-seeds cleanly).
 
-#### 11. Error code `validation` maps to two HTTP statuses — P3
+#### 11. Error code `validation` maps to two HTTP statuses: P3
 
 `backend/packages/server/src/http/errorHandler.ts:21-52`: `SchemaValidationError` →
 **400**, domain `validation` `DomainError` → **422**, both with `code: 'validation'`. The
@@ -467,13 +467,13 @@ inconsistent statuses.
 `validation`) / document the split in the API docs so the asymmetry is contractual, not
 accidental.
 
-### Cluster D — test & CI coverage
+### Cluster D: test & CI coverage
 
-#### 12. Requirements-review flow has zero e2e coverage — P1
+#### 12. Requirements-review flow has zero e2e coverage: P1
 
 `RequirementsReviewWindow.vue` is the **largest frontend component (~1,200 lines)** and
 drives the most intricate human-in-the-loop flow (answer/dismiss → incorporate →
-re-review/redo → proceed/exceeded), yet none of the 25 e2e specs covers it — the e2e
+re-review/redo → proceed/exceeded), yet none of the 25 e2e specs covers it: the e2e
 README itself notes no spec asserts on an inline-gate outcome. The inline-model fake seam
 (`fakeInlineModel.ts`) already makes the reviewer deterministic; what's missing is a
 `data-testid` pass on the window (a behaviour-neutral patch-changeset frontend change per
@@ -482,18 +482,18 @@ the e2e rules) and the spec.
 **Fix:** testids first, then a spec driving one full loop (raise findings → answer →
 incorporate → re-review converge → run advances) asserting only on live pushed updates.
 
-#### 13. Inline agent windows have no e2e specs — P2
+#### 13. Inline agent windows have no e2e specs: P2
 
 `components/{brainstorm,clarity,consensus}/` and the doc-interview window are first-class
 features with zero e2e coverage, while the harness for determinism (`fakeInlineModel.ts`)
 already exists. Also fold in the explicitly deferred stack-recipes slice-7 wizard spec
-(see [`stack-recipes-and-shared-stacks.md`](./stack-recipes-and-shared-stacks.md)) —
+(see [`stack-recipes-and-shared-stacks.md`](./stack-recipes-and-shared-stacks.md)):
 already scoped there, just unwritten.
 
 **Fix:** one spec per window, same testid-first mechanics as item 12; each spec seeds its
 own workspace per the suite rules.
 
-#### 14. CI `paths-filter` globs unguarded against drift — P2
+#### 14. CI `paths-filter` globs unguarded against drift: P2
 
 The entire lane-gating matrix in `.github/workflows/ci.yml` hinges on the `changes` job's
 `dorny/paths-filter` globs; a mis-scoped glob **silently skips a suite** (e.g. a change
@@ -503,9 +503,9 @@ that should trigger the `eks` lane but matches no filter). Nothing asserts
 **Fix:** either a small meta-test (unit-test the filter globs against representative
 paths with the same matcher library) or a scheduled filter-ignoring full run
 (cron `workflow_dispatch` with all lanes forced) that would surface a lane that only ever
-skips. The meta-test is preferred — deterministic and per-PR.
+skips. The meta-test is preferred: deterministic and per-PR.
 
-#### 15. Store-level clobber specs cover ~5 of ~40 stateful stores — P3
+#### 15. Store-level clobber specs cover ~5 of ~40 stateful stores: P3
 
 Only `workspace` / `execution` / `observability` / `agentRuns` / `board` carry the
 out-of-order-refresh unit specs the flake rule demands; every other store that both
@@ -513,14 +513,14 @@ snapshot-hydrates and live-upserts is unpinned. Incremental, mechanical work wit
 established pattern.
 
 **Fix:** establish the rule ("every store with both delivery shapes gets an out-of-order
-spec"), then burn down store-by-store — starting with the stores backing live badges
+spec"), then burn down store-by-store: starting with the stores backing live badges
 (item 10's `provisioningLogs` first).
 
 **First slice landed (this PR).** The rule is: **every store that has BOTH a snapshot/load
 path and a live-`upsert` path must carry an out-of-order spec, and its load must reconcile
 (monotonic-guard + merge/newest-wins) rather than blind-replace.** Auditing the live-stream
-stores (`useWorkspaceStream.ts`) for the `provisioningLogs` clobber shape — an independent
-per-key async `load()` doing an unguarded replace — surfaced two REAL bugs plus one good
+stores (`useWorkspaceStream.ts`) for the `provisioningLogs` clobber shape (an independent
+per-key async `load()` doing an unguarded replace) surfaced two REAL bugs plus one good
 citizen, now the first burn-down batch:
 
 - **`kaizen`** (fixed): `loadForExecution` / `loadOverview` blind-replaced `byExecution` /
@@ -528,32 +528,32 @@ citizen, now the first burn-down batch:
   mid-load was silently dropped, and two loads could resolve out of order. Now each load
   takes a monotonic ticket (only the newest commits) and merges via `reconcileWithLive`
   (loaded rows authoritative per id, newer `updatedAt` wins on a shared id, live-only rows
-  preserved — safe because gradings are append/update-only).
+  preserved: safe because gradings are append/update-only).
 - **`consensus`** (fixed): `load` blind-replaced the session, bypassing the `updatedAt`
-  newest-wins guard the live `upsert` already applied — a stale load regressed the transcript.
+  newest-wins guard the live `upsert` already applied; a stale load regressed the transcript.
   `load` now reconciles by `updatedAt` and never nulls out an existing live session.
 - **`docInterview`** (already correct): its `load` already routed through `upsert`'s
   newest-wins guard; pinned with a regression spec so it can't silently regress.
 
 Guards: `stores/{kaizen,consensus,docInterview}.spec.ts` drive the out-of-order resolves
 (stale load issued first / resolves last, live push mid-load) and assert the fresher state
-survives — 13 assertions, stable across repeated runs.
+survives; 13 assertions, stable across repeated runs.
 
 Deliberately deferred: **kaizen `byExecution` eviction.** Like `provisioningLogs` (item 10)
-its per-execution map accretes one entry per run viewed. Unlike `provisioningLogs` — whose
-drawer already owned an unmount lifecycle to hang `evict` on — kaizen's cache has no single
+its per-execution map accretes one entry per run viewed. Unlike `provisioningLogs`, whose
+drawer already owned an unmount lifecycle to hang `evict` on, kaizen's cache has no single
 lifecycle owner (it feeds both the run window and the Kaizen screen), so picking an eviction
 point needs component analysis and is a separate, non-clobber concern; left for a later slice
 rather than dropping state a still-open surface needs.
 
 Remaining item-15 burn-down (other stores with both delivery shapes, no out-of-order spec):
-`initiatives` / `kaizen`-overview-adjacent screens, `notifications` (snapshot-`hydrate`d — its
+`initiatives` / `kaizen`-overview-adjacent screens, `notifications` (snapshot-`hydrate`d; its
 ordering is governed by the monotonic `workspace.refresh`, so lower risk), and the
 non-live stores with their own independent fetch-and-replace loads.
 
-### Cluster E — docs & hygiene
+### Cluster E: docs & hygiene
 
-#### 16. CLAUDE.md's Node GitHub connect/sync note is stale — P2
+#### 16. CLAUDE.md's Node GitHub connect/sync note is stale: P2
 
 CLAUDE.md still says "populating `github_installations` / `github_repos` still needs the
 GitHub connect/sync integration on Postgres (the remaining follow-up)". Verified:
@@ -561,32 +561,32 @@ GitHub connect/sync integration on Postgres (the remaining follow-up)". Verified
 core, `GitHubInstallationService` / `WebhookService` (the upsert/seed paths) are
 runtime-neutral, and `githubReconcile.ts` provides the missing-webhook backstop. Either
 the follow-up is done (delete the note) or a precise residual gap remains (e.g. the App
-install-callback seeding path on Node) — verify end-to-end and state exactly that,
+install-callback seeding path on Node): verify end-to-end and state exactly that,
 instead of the blanket claim. Also update the "Async GitHub ingest still falls back to
 the inline paths" sentence when item 5 lands.
 
-#### 17. `refactoring-candidates.md` / `modularisation.md` stale; biggest files untracked — P3
+#### 17. `refactoring-candidates.md` / `modularisation.md` stale; biggest files untracked: P3
 
-`ExecutionService.ts` is now ~3,550 lines and `RunDispatcher.ts` ~3,911 — ~40% past the
+`ExecutionService.ts` is now ~3,550 lines and `RunDispatcher.ts` ~3,911: ~40% past the
 numbers recorded in `docs/refactoring-candidates.md`, and **neither** is in
 `docs/modularisation.md`'s active backlog (which lists smaller files). Frontend counts
 are similarly stale (`RequirementsReviewWindow.vue` 978→1,192, `PipelineBuilder.vue`
 890→1,040, `ui.ts` 781→1,043). Refresh the numbers and add the two engine files as
 explicit split targets so the largest, fastest-growing files stop being untracked.
 
-#### 18. Convert finished initiatives to ADRs — P3
+#### 18. Convert finished initiatives to ADRs: P3
 
 Per the CLAUDE.md tracker→ADR rule: `custom-initiative-definitions.md` is
-"near-complete (only slice 4, low-prio/droppable, remains)" — decide slice 4 (drop or
+"near-complete (only slice 4, low-prio/droppable, remains)"; decide slice 4 (drop or
 do), then convert to the next free ADR number and `git rm` the tracker.
-`coder-fork-decision.md` (PR 1 landed) — either split the remaining chat slice into a
+`coder-fork-decision.md` (PR 1 landed): either split the remaining chat slice into a
 follow-up or close it out the same way. Cheap hygiene that keeps the initiatives list
 meaning "active".
 
-#### 19. Accessibility whitespace — P2
+#### 19. Accessibility whitespace: P2
 
 48/176 SPA components use any `aria-*` attribute; 31 use `role=`; no tracker, doc, or CI
-check covers accessibility at all — a genuine gap given how thoroughly everything else is
+check covers accessibility at all: a genuine gap given how thoroughly everything else is
 tracked. Highest-value surfaces: the Vue-Flow board canvas (keyboard reachability),
 off-canvas drawers/modals (focus trap + `aria-modal`), the command bar, and the
 notification inbox.
@@ -595,36 +595,36 @@ notification inbox.
 axe-based smoke check in the e2e suite for the shell + one board view so regressions are
 caught mechanically.
 
-#### 20. Close i18n phase X — P3
+#### 20. Close i18n phase X: P3
 
 Tracked in detail in `docs/localization.md` (phases 0–9 done, ~117/121 components
 migrated); listed here only so this checklist is complete. Remaining: the raw-English
 meta tables in `frontend/app/app/utils/catalog.ts` (`STATUS_META`, `agentKindMeta`,
-`blockTypeMeta`, `MODULE_META` — enum-keyed, so use the exhaustive-`Record` tier-2
+`blockTypeMeta`, `MODULE_META`; enum-keyed, so use the exhaustive-`Record` tier-2
 pattern) and `pages/index.vue` + `pages/reset-password.vue`. Then retire the
 localization progress table. Translate every locale in the same PR (parity gate).
 
 ## Conventions & gotchas for implementers
 
-- **Keep the runtimes symmetric** — every persistence/port change here (items 1, 2, 3, 7, 8) lands D1 ⇄ Drizzle in the same PR with a conformance assertion; that's most of the
+- **Keep the runtimes symmetric**: every persistence/port change here (items 1, 2, 3, 7, 8) lands D1 ⇄ Drizzle in the same PR with a conformance assertion; that's most of the
   point of this initiative.
 - **Retention deletes only terminal state.** Item 1 prunes resolved/dismissed
-  notifications only — never `open` ones (they're the actionable inbox). Item 3 deletes
+  notifications only, never `open` ones (they're the actionable inbox). Item 3 deletes
   blobs through the `BinaryBlobBackend` port, not by guessing keys.
 - **The workspace-scoped-tables list (item 2) must be additive-safe**: a single shared
   list in kernel that both cascades AND the cleanup test iterate, so a future table
   missing from it fails a test instead of orphaning.
-- **Don't touch the regex classifiers under item 4** — the hoist moves them verbatim;
+- **Don't touch the regex classifiers under item 4**: the hoist moves them verbatim;
   their conversion to a structured code is `error-message-coverage.md` I7 (sequenced
   after the hoist). The mint-failure message text is regex-load-bearing until then.
 - **Item 5 must not change webhook-response semantics**: GitHub expects a fast 2xx; the
   pg-boss enqueue replaces the inline processing, the controller contract stays.
 - **e2e items (12, 13): testids first**, as their own behaviour-neutral frontend change +
   patch changeset; specs follow the suite's live-push assertion rules (no reloads, no
-  sleeps). A flaky new spec is a blocking bug per CLAUDE.md — deflake at the source.
+  sleeps). A flaky new spec is a blocking bug per CLAUDE.md: deflake at the source.
 - **Changesets**: empty for doc-only slices (14, 16–18); patch for `@cat-factory/app`
   testid/i18n changes; per-package otherwise. No executor-harness changes are in scope
   here, so no image bumps.
-- **Doc updates ride their code slice** — item 5 updates CLAUDE.md's ingest sentence in
+- **Doc updates ride their code slice**: item 5 updates CLAUDE.md's ingest sentence in
   the same PR; don't leave the docs to a separate cleanup pass (that's how item 16
   happened).

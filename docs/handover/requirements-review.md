@@ -1,4 +1,4 @@
-# Handover — Requirements-Review experience improvements
+# Handover: Requirements-Review experience improvements
 
 Status snapshot for the in-progress feature work on the requirements-review flow. Full
 design lives in `~/.claude/plans/let-s-improve-experience-of-buzzing-crystal.md`.
@@ -23,13 +23,13 @@ never overridden; accepted recommendations fold into the next incorporation; fra
 
 ---
 
-## ✅ Done and verified (items 1, 2, 3) — this PR
+## ✅ Done and verified (items 1, 2, 3): this PR
 
 All backend packages build (`pnpm -r --filter './backend/**' build`, incl. both runtime
 facades + conformance), and the Nuxt frontend `pnpm --filter @cat-factory/app typecheck`
 passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 
-### Item 1 — auto-save answers (no button)
+### Item 1: auto-save answers (no button)
 
 - `frontend/app/app/components/requirements/RequirementsReviewWindow.vue`
   - Removed the "Save answer" button. The answer `<UTextarea>` is seeded from `item.reply`
@@ -37,9 +37,9 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
     `flushDrafts()` runs before `incorporate()`/`proceed()` so nothing typed is lost.
   - The standalone "recorded answer" box now only renders for non-editable findings.
 
-### Item 2 — board progress for the review companions
+### Item 2: board progress for the review companions
 
-- `frontend/app/app/composables/useReviewStage.ts` — `ReviewStage` gains `'recommending'`.
+- `frontend/app/app/composables/useReviewStage.ts`: `ReviewStage` gains `'recommending'`.
 - `'Recommending…'` label added alongside `Incorporating…`/`Re-reviewing…` in:
   `components/pipeline/PipelineProgress.vue`, `components/board/nodes/TaskCard.vue`,
   `components/panels/inspector/TaskExecution.vue`. `BlockNode.vue` / `TaskPipelineMini.vue`
@@ -47,7 +47,7 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 - Companions already render as dashed sub-nodes in `PipelineProgress.vue` via
   `gateCompanionFor` / `COMPANION_STATE_META` (unchanged).
 
-### Item 3 — "Recommend something" + the Requirement Writer (end-to-end)
+### Item 3: "Recommend something" + the Requirement Writer (end-to-end)
 
 **Contracts** (`backend/packages/contracts/src/requirements.ts`)
 
@@ -59,14 +59,14 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 - Re-exported through `backend/packages/kernel/src/domain/types.ts`.
 - Frontend mirror: `frontend/app/app/types/requirements.ts`.
 
-**Persistence (both runtimes — parity)**
+**Persistence (both runtimes: parity)**
 
 - D1: column added in `backend/runtimes/cloudflare/migrations/0009_requirement_recommendations.sql`;
   `D1RequirementReviewRepository` reads/writes `recommendations`.
 - Node/Drizzle: `recommendations` column in `backend/runtimes/node/src/db/schema.ts`;
   `DrizzleRequirementReviewRepository` read/write; generated migration
   `backend/runtimes/node/drizzle/20260625130000_requirement_recommendations/`
-  (hand-authored v1 snapshot+SQL — drizzle-kit needs a TTY this env lacks).
+  (hand-authored v1 snapshot+SQL; drizzle-kit needs a TTY this env lacks).
 
 **Prompt** (`backend/packages/agents`)
 
@@ -79,7 +79,7 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
   tech-spec → web), `coerceRecommendations`, grounding types.
 - `RequirementReviewService.ts`: `recommend()`, `acceptRecommendation()`,
   `rejectRecommendation()`, `reRequestRecommendation()`, plus a `gatherGrounding()` helper.
-  New optional deps: `resolveRunRepoContext`, `resolveBlockFragments`, `webSearch` — all
+  New optional deps: `resolveRunRepoContext`, `resolveBlockFragments`, `webSearch`; all
   degrade gracefully when unwired. Provider-hosted web search is attached via
   `providerWebSearchTools(ref.provider)` for Anthropic/OpenAI models.
 - `container.ts` `createRequirementsModule`: wires `resolveRunRepoContext` (already in
@@ -104,16 +104,16 @@ passes. Changeset: `.changeset/requirements-review-recommendations.md`.
 
 ---
 
-## ✅ Done and verified (items 4, 5) — branch `feat/business-only-specs-technical-label`
+## ✅ Done and verified (items 4, 5): branch `feat/business-only-specs-technical-label`
 
 Workstream F is implemented + verified (backend `pnpm -r --filter './backend/**' build` green;
 `@cat-factory/app` typecheck green; orchestration `test:run` 221 green incl. new
 `technical.logic.test.ts`; Node conformance `test:run conformance` 96 green incl. 4 new
 technical-label inference assertions, run against a throwaway `postgres:18-alpine`). Changeset:
-`.changeset/business-only-specs-technical-label.md` (minor; no executor-harness image bump —
+`.changeset/business-only-specs-technical-label.md` (minor; no executor-harness image bump;
 the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet committed.
 
-### Item 4 — business-only specs + "no new specs" outcome
+### Item 4: business-only specs + "no new specs" outcome
 
 - New `AgentRunResult.noBusinessSpecs` channel (`kernel/ports/agent-executor.ts`). `toRunResult`
   (`server/.../ContainerAgentExecutor.ts`) reads `{"noBusinessSpecs":true}` off the spec-writer's
@@ -125,36 +125,36 @@ the spec-writer prompt lives in `@cat-factory/server`, not the harness). Not yet
   the spec-companion prompt (`agents/prompts/companion.ts`) instructs it to corroborate/dispute
   the writer's determination and emit the flag.
 
-### Item 5 — explicit `technical` label
+### Item 5: explicit `technical` label
 
 - `Block.technical?: boolean | null` (`contracts/entities.ts` + frontend `types/domain.ts`);
   persisted on both runtimes (D1 `0010_block_technical.sql` + Drizzle column + hand-authored
-  `drizzle/20260625140000_block_technical/` — a MERGED-head snapshot unioning the three branched
+  `drizzle/20260625140000_block_technical/`: a MERGED-head snapshot unioning the three branched
   `20260625130000_*` siblings; shared block mapper in `server/persistence/mappers.ts`). Patch +
   create schemas (`contracts/requests.ts`) + `BoardService.addTask`.
 - Engine inference: `spec-writer` step records `step.noBusinessSpecs` (new `pipelineStepSchema`
   field); on spec-companion convergence `CompanionController` calls the engine's
   `inferBlockTechnical`, which uses the pure `inferTechnicalLabel` (`execution/technical.logic.ts`)
-  — a human-set value is NEVER overridden.
+ ; a human-set value is NEVER overridden.
 - Implementer awareness: `AgentRunContext.block.technical` threaded by `AgentContextBuilder`;
   build SYSTEM prompt gains the rule (**`build` bumped v2→v3**) + a per-task
   `technicalContextSection` in the user prompt (`agents/prompts/standard.ts`).
 - Frontend: creation checkbox (`AddTaskModal.vue`) + tri-state inspector toggle
   (`TaskRunSettings.vue`, unset/technical/business).
 
-**drizzle-kit `db:generate` still needs a TTY this env lacks** — the Node migration folder was
+**drizzle-kit `db:generate` still needs a TTY this env lacks**: the Node migration folder was
 hand-authored (runtime migrator only reads each folder's `migration.sql`, sorted by name; the
 `snapshot.json` is solely for a future real-terminal `db:generate`). Same as the prior session.
 
 ---
 
-## ⛔ Not started (supporting C, E) — follow-up PRs
+## ⛔ Not started (supporting C, E): follow-up PRs
 
 Each is a multi-file, two-runtime effort. Keep parity (D1 ⇄ Drizzle + generated migration),
 bump prompt versions on any prompt edit, add a changeset, and add cross-runtime conformance
 assertions. **Do not land a shared behaviour into only one facade** (parity is a showstopper).
 
-### C — tech-spec writer/reviewer pair (after the architect)
+### C: tech-spec writer/reviewer pair (after the architect)
 
 Mirror the spec-writer/spec-companion pattern. Captures architecture / tech-stack / cross-
 cutting patterns (pagination, REST-vs-gRPC, libraries) so the Requirement Writer can ground
@@ -164,7 +164,7 @@ technical recommendations on `tech-spec/`.
   `targets: ['tech-spec-writer']` in `backend/packages/agents/src/agents/kinds/companions.ts`).
 - `tech-spec-writer` system/user prompts (sibling of `SPEC_WRITER_SYSTEM_PROMPT` in
   `backend/packages/server/src/agents/ContainerAgentExecutor.ts`); **fragments-first guidance**
-  (don't re-document team/org standards already in fragments — reference them); register a
+  (don't re-document team/org standards already in fragments: reference them); register a
   versioned prompt.
 - `techSpecPostOp` in `backend/packages/agents/src/repo-ops/builtin.ts` (mirror `specPostOp`)
   rendering/committing a `tech-spec/` tree; add `techSpecDocSchema` + `coerceTechSpecDoc` to
@@ -175,7 +175,7 @@ technical recommendations on `tech-spec/`.
   (`backend/packages/kernel/src/domain/seed.ts`); gates `false`/`false`.
 - Frontend: palette/result view for `tech-spec-writer` (snapshot/catalog seam).
 
-### E — web-search UI connection + Writer gateway access
+### E: web-search UI connection + Writer gateway access
 
 Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observability_connections`).
 
@@ -195,12 +195,12 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   web-search allow-list (`DEFAULT_INLINE_WEB_SEARCH_KINDS`) if/when the Writer is ever routed
   through the inline executor.
 
-### F — items 4 & 5
+### F: items 4 & 5
 
-**Item 4 — business-only spec prompts (bump versions)**
+**Item 4: business-only spec prompts (bump versions)**
 
 - Extend `SPEC_WRITER_SYSTEM_PROMPT` + `specWriterUserPrompt` (`ContainerAgentExecutor.ts`):
-  incorporate ONLY business requirements; for purely technical tasks "no new specs" is valid —
+  incorporate ONLY business requirements; for purely technical tasks "no new specs" is valid;
   return the baseline unchanged and emit `result.noBusinessSpecs: true` (add optional field to
   the spec result in `backend/packages/contracts/src/spec.ts`; `specPostOp` no-ops when set).
 - Extend the spec-companion guidance (`backend/packages/agents/src/agents/prompts/companion.ts`,
@@ -209,7 +209,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   `companionAssessmentSchema` (`backend/packages/contracts/src/companion.ts`), parsed in
   `CompanionController`.
 
-**Item 5 — the `technical` label**
+**Item 5: the `technical` label**
 
 - Add `technical?: boolean` (default undefined) to `blockSchema`
   (`backend/packages/contracts/src/entities.ts`) + frontend mirror
@@ -258,6 +258,6 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
   Replicate that approach for future Node migrations here, or run `db:generate` from a real
   terminal.
 - The Requirement Writer's `webSearch` (gateway-RAG) dep is intentionally left **unwired** in
-  `createRequirementsModule` pending Workstream E — until then the Writer only gets
+  `createRequirementsModule` pending Workstream E: until then the Writer only gets
   provider-hosted web search on Anthropic/OpenAI models. The service + prompt already accept it.
 - Pre-1.0: no back-compat shims. New columns default sensibly (`recommendations` → `'[]'`).

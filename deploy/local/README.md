@@ -1,15 +1,15 @@
-# deploy/local — run cat-factory on your own machine
+# deploy/local: run cat-factory on your own machine
 
 This package is the **local-mode** deployment: the whole product running on a
 developer's laptop. The reusable logic lives in
-[`@cat-factory/local-server`](../../backend/runtimes/local) — the Node.js facade
+[`@cat-factory/local-server`](../../backend/runtimes/local): the Node.js facade
 ([`@cat-factory/node-server`](../../backend/runtimes/node): shared Hono app +
 Drizzle/Postgres + pg-boss) with two local differentiators:
 
 - **Agent jobs run as local containers.** Each repo-operating step (coder, mocker,
   playwright, blueprints, tester, fixer, ci-fixer, conflict-resolver, merger) is launched
-  as its own container of the executor-harness image — the same image the Cloudflare
-  Worker runs per-run Containers from — via the `LocalContainerRunnerTransport`. Docker,
+  as its own container of the executor-harness image (the same image the Cloudflare
+  Worker runs per-run Containers from) via the `LocalContainerRunnerTransport`. Docker,
   Podman, OrbStack, Colima and Apple's `container` are all supported (see
   [Container runtimes](#container-runtimes)). No Cloudflare and no self-hosted runner
   pool required.
@@ -21,10 +21,10 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 
 ## Prerequisites
 
-- A container runtime running locally — used both for Postgres and for the per-run
+- A container runtime running locally: used both for Postgres and for the per-run
   agent containers. Docker, Podman, OrbStack, Colima and Apple `container` all work; see
   [Container runtimes](#container-runtimes) for selecting and configuring one.
-- The executor-harness image. You don't need to fetch it yourself — it's **pinned to the
+- The executor-harness image. You don't need to fetch it yourself: it's **pinned to the
   version this backend was released against and pulled at boot** (see
   [The executor-harness image](#the-executor-harness-image-pinned--auto-refreshed)). Only
   build it manually if you want to run your own:
@@ -38,7 +38,7 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 
 ```sh
 cp .env.example .env          # then fill in the values below
-pnpm secrets                  # prints the three crypto secrets — paste them into .env
+pnpm secrets                  # prints the three crypto secrets - paste them into .env
 pnpm db:up                    # start the local Postgres
 pnpm start                    # migrate + boot the service on :8787
 ```
@@ -46,7 +46,7 @@ pnpm start                    # migrate + boot the service on :8787
 Four values are **mandatory** and boot fails loudly without them: `DATABASE_URL` (the
 compose default is already in `.env.example`) plus `AUTH_SESSION_SECRET`,
 `ENCRYPTION_KEY` and `HARNESS_SHARED_SECRET`. All three secrets must stay **stable**
-across restarts — regenerating them forces a re-login, orphans every credential sealed
+across restarts: regenerating them forces a re-login, orphans every credential sealed
 under the old key, or breaks re-attach to jobs still running from before the restart.
 `npx @cat-factory/cli env` writes a complete `.env` (secrets, `DATABASE_URL`, a minted
 PAT) in one step if you'd rather not assemble it by hand. Everything else is optional:
@@ -66,9 +66,9 @@ and restart to actually run repo-operating agent steps.
 ### Recovering a wedged database
 
 Boot validates its migration state and **fails fast** with an actionable message if the
-migration ledger is ahead of the actual schema (the drizzle-kit 1.0 ledger↔schema split —
+migration ledger is ahead of the actual schema (the drizzle-kit 1.0 ledger↔schema split:
 most often from a hand `DROP SCHEMA public CASCADE` or a stray test run against this DB).
-To recover, reset to a clean slate and re-migrate on the next boot — this **permanently
+To recover, reset to a clean slate and re-migrate on the next boot: this **permanently
 deletes all data** in `DATABASE_URL`:
 
 ```sh
@@ -78,25 +78,25 @@ pnpm start
 
 `db:reset` drops all app-owned schemas together (`public`, `telemetry`, `sandbox`,
 `provisioning`, the `drizzle` ledger, and pg-boss's `pgboss`) so the ledger can never
-outlive the data — never hand-drop `public` alone, which is what causes the split.
+outlive the data, never hand-drop `public` alone, which is what causes the split.
 
 ## The executor-harness image (pinned + auto-refreshed)
 
 Every agent step runs in a per-run container built from the executor-harness image, which
 is versioned as **its own Docker image**, separately from the `@cat-factory/*` npm
 packages. `LOCAL_HARNESS_IMAGE` is **optional**: unset, `@cat-factory/local-server` uses
-the image version it was released against, so the image and the backend always match — no
+the image version it was released against, so the image and the backend always match, no
 "too stale", no "too new" (this project has no cross-version compatibility guarantee, so a
 `:latest` that's newer than your backend can break).
 
 `startLocal()` **refreshes the resolved image at boot**, so `pnpm dev` / `pnpm start`
-can't launch a stale copy — a container runtime never re-pulls a tag it already has, nor
+can't launch a stale copy: a container runtime never re-pulls a tag it already has, nor
 notices a locally-built image is out of date, which is how an already-fixed harness bug
 keeps reproducing. It's best-effort: an unreachable registry falls back to the local copy
 rather than blocking boot.
 
 - **Leave `LOCAL_HARNESS_IMAGE` unset** to run the matched, pinned image (recommended).
-- **Set it to a custom build or a different pin** to override — boot warns if your value
+- **Set it to a custom build or a different pin** to override: boot warns if your value
   differs from the matched version, or if it's a mutable tag like `:latest`.
 - **Set a bare local tag** (`cat-factory-executor:local`) to run an image you build
   yourself; boot then only checks it exists and reminds you to rebuild after harness
@@ -147,7 +147,7 @@ curl -s https://api.cloudflare.com/client/v4/accounts \
 ```
 
 `ENCRYPTION_KEY` is mandatory (see [Run it](#run-it)) and must be valid base64 of at
-least 32 bytes — `pnpm secrets` prints one, as does `openssl rand -base64 32`. A
+least 32 bytes: `pnpm secrets` prints one, as does `openssl rand -base64 32`. A
 non-base64 value like `dummy` is rejected at boot. Keep it stable: it seals the
 encrypted-at-rest credentials (integration tokens, personal subscriptions, local-runner
 keys), so a new key orphans every one of them and they have to be re-entered.
@@ -159,7 +159,7 @@ Every workspace's model-preset library is seeded on first use with three built-i
 local runs subscription-backed models (your ambient `claude` CLI for inline steps, a
 leased personal credential for container steps), so Claude is first-class even though it
 can't run on the bare Cloudflare baseline. To ship a different out-of-the-box default,
-pass `defaultModelPresetId` to `startLocal()` — the entry (`src/main.ts`) is yours to
+pass `defaultModelPresetId` to `startLocal()`: the entry (`src/main.ts`) is yours to
 edit:
 
 ```ts
@@ -173,7 +173,7 @@ startLocal({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi }).catch((err: unk
 
 `MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude`), so
 you don't need a direct `@cat-factory/kernel` import. This is a **deployment-level fact**
-resolved at composition time, not an env var — the same programmatic seam as the
+resolved at composition time, not an env var: the same programmatic seam as the
 `agentKindRegistry` / `backendRegistries` options. It applies only at the **first** seed of
 a workspace, so a user's later manual default choice is always preserved; changing it does
 not retroactively re-flag existing workspaces (they can reseed from the UI).
@@ -190,9 +190,9 @@ port:
 | LM Studio | `http://localhost:1234/v1`  | enable the local server in the LM Studio UI      |
 | llama.cpp | `http://localhost:8080/v1`  | `llama-server -m model.gguf`                     |
 | vLLM      | `http://localhost:8000/v1`  | `vllm serve <model>`                             |
-| Custom    | (none — supply your own)    | any OpenAI-compatible server (Jan, GPT4All, …)   |
+| Custom    | (none: supply your own)    | any OpenAI-compatible server (Jan, GPT4All, …)   |
 
-Any model the runner serves works — e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
+Any model the runner serves works, e.g. `qwen2.5-coder:32b`, `qwen3-coder`,
 `deepseek-coder-v2`, `llama3.3`, `gemma3` (Gemma is a _model_ served through a runner,
 not a runner itself).
 
@@ -201,15 +201,15 @@ Local runners are configured **per user** (a runner lives on your machine) in th
 1. Pull/serve a model with your runner (e.g. `ollama pull gemma3`).
 2. Sidebar → **Configuration → My local runners** → add a runner. Pick the type (the
    base URL prefills), optionally set a bearer key (most runners ignore auth), then
-   **Test connection** — the server probes the runner's `/v1/models` and lists what's
+   **Test connection**: the server probes the runner's `/v1/models` and lists what's
    installed. Tick the models you want to enable.
 3. Those models now appear in the model picker (as the `direct` flavour). Pin one on a
-   task and run the pipeline — the agent containers reach the model through this
+   task and run the pipeline: the agent containers reach the model through this
    service's LLM proxy (no key leaves your machine).
 
-Local models need no API key, so no `*_API_KEY` env var — your runner config is sealed
+Local models need no API key, so no `*_API_KEY` env var: your runner config is sealed
 with the mandatory `ENCRYPTION_KEY`. Networking: the LLM proxy runs in **this host process**,
-so it reaches the runner at `localhost` directly — you only need a non-default base URL
+so it reaches the runner at `localhost` directly; you only need a non-default base URL
 if your runner listens elsewhere or you run the orchestrator itself in a container.
 
 ## Open the UI
@@ -271,7 +271,7 @@ Tester's local infra works:
 
 Notes:
 
-- **Podman** needs fully-qualified image refs (`ghcr.io/…`, `localhost/…`) — set
+- **Podman** needs fully-qualified image refs (`ghcr.io/…`, `localhost/…`): set
   `LOCAL_HARNESS_IMAGE` accordingly. Rootless Podman nests containers without
   `--privileged`, so set `LOCAL_DOCKER_PRIVILEGED_TEST_JOBS=false`.
 - **Colima / Apple** run the daemon in a VM, so `host.docker.internal` may not route to
@@ -279,7 +279,7 @@ Notes:
   Colima, the `192.168.64.1` vmnet gateway for Apple) work in common setups; if a job
   container can't reach the LLM proxy, set `PUBLIC_URL` (or `LOCAL_HARNESS_HOST_ALIAS`)
   to your machine's LAN IP.
-- **Apple `container` — limited mode.** Each container runs in its own lightweight VM
+- **Apple `container`: limited mode.** Each container runs in its own lightweight VM
   with no Docker-in-Docker, so the Tester's **Local** infra mode (`docker compose up`
   inside the job container) is unavailable. A pipeline whose Tester needs it is **refused
   at start** with an actionable message. The Tester still works on Apple when the task
@@ -289,7 +289,7 @@ Notes:
   containers, rather than DinD, is a possible future enhancement.)
 
 At boot the service logs the resolved runtime, its capabilities and the host alias, and
-probes that the CLI is installed — so a misconfiguration shows up immediately rather than
+probes that the CLI is installed, so a misconfiguration shows up immediately rather than
 on the first agent job.
 
 ## Ephemeral test environments
@@ -297,24 +297,24 @@ on the first agent job.
 A task's **Test environment** (inspector → Agent configuration) chooses how the Tester
 gets something to test against:
 
-- **Local** — stands the service's docker-compose dependencies up inside the job
+- **Local**: stands the service's docker-compose dependencies up inside the job
   container (Docker-in-Docker). Self-contained and offline, but requires a runtime that
   can nest containers (every runtime except Apple `container`).
-- **Ephemeral** (default) — a **deployer** step provisions an environment through a
-  registered **environment provider** (your own HTTP management API — e.g. a custom
+- **Ephemeral** (default): a **deployer** step provisions an environment through a
+  registered **environment provider** (your own HTTP management API, e.g. a custom
   container pool) and the Tester tests the returned URL. Runtime-independent (it's just
   HTTP), offloads the heavy infra, and is the way to run the Tester on Apple `container`.
 
 The environment provider is identical to the cloud facades: it is available wherever
-`ENCRYPTION_KEY` is set (always, in local mode) — just register a connection in the UI.
-Without it, ephemeral tasks have no URL to test — fine on a DinD-capable runtime (use
+`ENCRYPTION_KEY` is set (always, in local mode); just register a connection in the UI.
+Without it, ephemeral tasks have no URL to test: fine on a DinD-capable runtime (use
 Local instead), but on Apple `container` a Tester with neither a provider nor a no-infra
 service is refused at start.
 
 ## Networking notes
 
 - The harness inside a job container reaches this service's LLM proxy at
-  `${PUBLIC_URL}/v1` — `PUBLIC_URL` defaults to the selected runtime's host alias (see
+  `${PUBLIC_URL}/v1`: `PUBLIC_URL` defaults to the selected runtime's host alias (see
   [Container runtimes](#container-runtimes)). On Linux the docker-family transport
   publishes the alias with `--add-host=<alias>:host-gateway`; on Docker Desktop / OrbStack
   it already resolves.
@@ -325,7 +325,7 @@ service is refused at start.
 A full pipeline runs end to end on real GitHub: the harness opens a real PR with the
 PAT, the `ci` gate reads the PR's **real GitHub Actions** check runs (and dispatches a
 ci-fixer container on failure), and the merger step **merges the PR for real** once it
-clears the task's merge threshold — all via the PAT. A merge that needs review (or a
+clears the task's merge threshold; all via the PAT. A merge that needs review (or a
 pipeline with no merger) raises an in-app notification instead.
 
 ## Running the Tester locally (Docker-in-Docker)
@@ -336,13 +336,13 @@ budget) and re-tests. It can stand the service's dependencies up two ways, chose
 the task's **Test environment** config (inspector → Agent configuration, or on the
 task-creation form):
 
-- **Ephemeral** (default) — test against a provisioned environment URL; nothing is
+- **Ephemeral** (default): test against a provisioned environment URL; nothing is
   stood up locally. Zero extra setup.
-- **Local** — the Tester runs `docker compose up` for the service's dependencies
+- **Local**: the Tester runs `docker compose up` for the service's dependencies
   **inside its own job container** (Docker-in-Docker), so they sit on that container's
   `localhost`. To use it you must, on the **service frame** (inspector → Test
   infrastructure), either set the **docker-compose path** or tick **No infra
-  dependencies** — a local-mode Tester pipeline refuses to start until one is set.
+  dependencies**: a local-mode Tester pipeline refuses to start until one is set.
 
 Because the job runs Docker inside Docker, in local mode the Tester's container is
 launched **`--privileged`** so its in-container daemon can start. This is the only kind
@@ -353,7 +353,7 @@ in-container daemon can't start, the Tester is told and runs what it can rather 
 failing the job.
 
 On **Apple `container`** there is no Docker-in-Docker, so the **Local** mode is
-unavailable and a pipeline that needs it is refused at start — use the **Ephemeral** test
+unavailable and a pipeline that needs it is refused at start: use the **Ephemeral** test
 environment (with a provider, see [Ephemeral test environments](#ephemeral-test-environments))
 or mark the service **No infra dependencies**.
 
@@ -371,17 +371,17 @@ to the per-job container's resource limits on your host daemon:
 | xlarge | 8g         | 8        |
 
 New services inherit the active account's **default cloud provider** (set it once from
-the account menu — e.g. to `docker` for a local install); a service can still override
+the account menu, e.g. to `docker` for a local install); a service can still override
 it per-frame.
 
 ## Warm container pool (faster startup)
 
 By default every run cold-starts its own harness container and clones the repo from
 scratch. Set a **pool size** > 0 to keep idle harness containers **warm** and re-lease one
-to each run — preferring a container that already holds the run's repo, so it does a
+to each run: preferring a container that already holds the run's repo, so it does a
 `git fetch` + branch switch instead of a fresh clone.
 
-These knobs live in the **DB, not env** — configure them in the UI under **Integrations >
+These knobs live in the **DB, not env**: configure them in the UI under **Integrations >
 "Local mode"** (they used to be the `LOCAL_POOL_*` / `HARNESS_*` env vars):
 
 | Setting                | Default                                         | Meaning                                                             |
@@ -393,7 +393,7 @@ These knobs live in the **DB, not env** — configure them in the UI under **Int
 | Workspace root         | `/workspace`                                    | Where the reused per-repo checkout lives inside the container.      |
 | Keep on clean          | `node_modules,.venv,target,.gradle,.pnpm-store` | Dirs the between-run clean sweep PRESERVES (dependency caches).     |
 
-Saving resizes the warm pool **live** — no restart needed (idle members beyond the new size
+Saving resizes the warm pool **live**, no restart needed (idle members beyond the new size
 are reaped and the pool re-warms to the new minimum); in-flight runs keep the container they
 already hold, and the checkout config applies to containers started after the save. Between
 runs each reused checkout is **clean-swept** (`git reset --hard` + remove
@@ -402,31 +402,31 @@ never leaks into the next. **Trust boundary:** local mode is single-user, so a w
 container is reused across that one developer's runs; different repos always get separate
 checkout directories (no cross-repo bleed). Pooling is supported on
 Docker/Podman/OrbStack/Colima; Apple `container` ignores the pool size and keeps the
-per-run path. A stale dependency cache is the residual risk — clear it by tightening the
+per-run path. A stale dependency cache is the residual risk: clear it by tightening the
 "Keep on clean" list.
 
 ## Native execution (use your installed Claude Code / Codex)
 
 Set `LOCAL_NATIVE_AGENTS=claude-code,codex` (a comma-separated **allow-list** of the
 subscription harnesses to run natively) to run those agents as a **host process** driving
-your OWN already-installed `claude` / `codex` CLI with its ambient login — no leased
+your OWN already-installed `claude` / `codex` CLI with its ambient login, no leased
 credential. That's the only required setting: the harness server it spawns
 (`node <entry>`) defaults to the `@cat-factory/executor-harness` package that ships as a
-dependency of `@cat-factory/local-server`, so a fresh install works out of the box — just
+dependency of `@cat-factory/local-server`, so a fresh install works out of the box; just
 like an unset `LOCAL_HARNESS_IMAGE` falls back to the pinned recommended image. Set
 `LOCAL_HARNESS_ENTRY` only to override it with a custom or source-checkout build.
 
 Only a step whose model maps to a **listed harness's NATIVE vendor** goes native: that is
 Anthropic's own `claude` (for `claude-code`) and OpenAI's `codex`. A step pinned to a
 non-native vendor that merely reuses the `claude-code` harness (GLM / Kimi / DeepSeek), or
-to a proxy model, is **not** run natively — it still uses the sandboxed per-run container
+to a proxy model, is **not** run natively: it still uses the sandboxed per-run container
 path (so it leases its real credential / base URL instead of silently running on your own
 Anthropic login). Those steps therefore still need `LOCAL_HARNESS_IMAGE`; if every step in
 your pipelines is Claude/Codex you can run native-only with no image.
 
 > ⚠️ **No sandbox.** The agent runs as a plain subprocess with your full shell + file
 > access and your personal subscription (no spend metering, no model-locking). This is
-> acceptable ONLY because it's your own machine — it is opt-in and off by default. The
+> acceptable ONLY because it's your own machine: it is opt-in and off by default. The
 > Tester's local docker-compose infra is unavailable in native mode for now (a follow-up
 > adds host-Docker compose with per-run project names + git-worktree isolation).
 
@@ -451,12 +451,12 @@ value out of both. Concretely, in native mode:
 - **Tester secrets go to the agent's child process only**, not the harness's own environment,
   so two overlapping Tester runs can't read or clobber each other's.
 
-Your `~/.claude` / `~/.codex` login is still used as-is — that's the point of native mode.
+Your `~/.claude` / `~/.codex` login is still used as-is: that's the point of native mode.
 
 ### Inline steps on your subscription (`LOCAL_NATIVE_INLINE`, default on)
 
-The inline LLM steps — the requirements reviewer, brainstorm, task-estimator and inline
-document kinds — are one-shot text calls, not container agents. A subscription-only model
+The inline LLM steps (the requirements reviewer, brainstorm, task-estimator and inline
+document kinds) are one-shot text calls, not container agents. A subscription-only model
 (`claude-opus`, GPT via Codex) can't be reached by an inline HTTP call, so by default local
 and mothership mode run these steps on your ambient `claude` / `codex` CLI, exactly like
 the native container path above but **without** the `LOCAL_NATIVE_AGENTS` sandbox trade-off
@@ -471,21 +471,21 @@ subset, e.g. `LOCAL_NATIVE_INLINE=claude-code`, to allow only Claude). Only the 
 vendors (`claude` / `codex`) are eligible; a non-native vendor that reuses the `claude-code`
 harness (GLM / Kimi / DeepSeek) still degrades to a provider model for inline steps. Running
 these steps in a **prewarmed container** with the leased subscription credential (so the
-host CLI need not be installed) is a planned follow-up — see
+host CLI need not be installed) is a planned follow-up: see
 `docs/initiatives/inline-harness-and-preset-satisfiability.md`.
 
 #### If an inline step dies with a timeout
 
 A host-CLI inline run is supervised by two budgets, and the failure message names which one
-ended it — they want opposite reactions:
+ended it: they want opposite reactions:
 
 | Failure says                              | Meaning                                               | Do                                                                                                      |
 | ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `timed out after 300000ms with no output` | The CLI went **silent** that long — presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
+| `timed out after 300000ms with no output` | The CLI went **silent** that long: presumed stuck.   | Retry. Raise `LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS` only if a healthy run on a slow link keeps tripping it. |
 | `hit its 3600000ms wall-clock ceiling`    | It was **still working** when the wall-clock cap hit. | Raise `LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`, or narrow the step.                                            |
 
 The idle budget is measured from the **last byte**, not from the spawn, so a step that keeps
-streaming is never killed for taking long — only for going quiet. That distinction matters
+streaming is never killed for taking long: only for going quiet. That distinction matters
 because a killed run is also an **unrecorded** one: usage reaches `token_usage` from a call that
 COMPLETED, so a step that dies on every attempt leaves no spend behind, however much it burned.
 The failure message carries what its partial stream had already accounted for (`burned 897k
@@ -493,8 +493,8 @@ tokens across 16 model calls`), and the CLI's own session log under
 `~/.claude/projects/<cwd-slug>/*.jsonl` has the full record.
 
 Both knobs take a whole number of milliseconds from `1` to `2147483647` (about 24 days, the
-largest delay a timer can hold). Anything else — `5m`, `0`, a negative, a fraction, or a number
-above that ceiling — is **reported at boot and ignored** in favour of the default. That is
+largest delay a timer can hold). Anything else (`5m`, `0`, a negative, a fraction, or a number
+above that ceiling) is **reported at boot and ignored** in favour of the default. That is
 deliberately stricter than the platform's other numeric variables: every unusable spelling of a
 timer budget makes the watchdog fire immediately, so the value someone types meaning "effectively
 no ceiling" is precisely the one that would otherwise kill every inline step within milliseconds.

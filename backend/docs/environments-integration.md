@@ -3,7 +3,7 @@
 Let a workspace plug in its **own** ephemeral/preview-environment tooling so a
 `deployer` agent can provision an environment and a `tester` agent can run against
 it. The integration is declarative and **API-only**: you describe your self-rolled
-management API as an HTTP manifest — there are no provider presets and no code to
+management API as an HTTP manifest; there are no provider presets and no code to
 write. It assembles wherever the shared encryption key is set (the same "always on
 where the key is present" model as documents/tasks); nothing provisions until a
 workspace registers a connection and its pipeline runs a `deployer`/`tester` step.
@@ -17,14 +17,14 @@ environment tooling (k8s namespaces, a Vercel-style service, an internal provisi
 an **Application team** writes the manifest and registers it per workspace.
 
 See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md). When your tooling is too
-bespoke to describe declaratively, you can instead inject a hand-written **native adapter** —
+bespoke to describe declaratively, you can instead inject a hand-written **native adapter**:
 see [Native environment adapters](./native-environment-adapter.md).
 
 > **Before writing a manifest, check whether a built-in backend already covers you.** Three ship
 > in the box and need no manifest at all:
 > `kubernetes` (per-PR namespaces over the apiserver, provision type `kubernetes`),
 > `eks` (the same over an EKS cluster, via `@cat-factory/eks`), and
-> **`cloudflare`** (a per-PR Cloudflare Worker, provision type `cloudflare`) — which stands the
+> **`cloudflare`** (a per-PR Cloudflare Worker, provision type `cloudflare`), which stands the
 > Worker up by driving the target repository's OWN preview workflow over the VCS Deployments
 > API, so it needs nothing but outbound HTTPS and therefore works on every facade, including the
 > Cloudflare Worker one that has no Docker daemon and no filesystem. Its reference workflow and
@@ -45,7 +45,7 @@ manifest_id)`), and a service selects its type/source independently of the works
 ## How it works (the sequence of actions)
 
 1. A pipeline on an `environment` block reaches its **`deployer`** step. The engine
-   calls `HttpEnvironmentProvider.provision` — interpolating your manifest's
+   calls `HttpEnvironmentProvider.provision`: interpolating your manifest's
    `provision` template (with `{{input.*}}` from the block) and `POST`ing to your
    management API with your auth. It runs **deterministically** (no LLM, no token
    spend) and persists an environment handle.
@@ -53,7 +53,7 @@ manifest_id)`), and a service selects its type/source independently of the works
    until the mapped status reaches `ready` (or `failed`); the handle's URL + access
    creds are captured via the `response` dot-paths.
 3. Downstream **`tester`** (and later) steps receive the live environment in their
-   prompt context — the URL and how to authenticate — so they test the real build.
+   prompt context (the URL and how to authenticate) so they test the real build.
    (The tester job's `test.environmentUrl` is wired straight from this handle.)
 4. When the handle's TTL elapses (from `expiresAtPath`, or `defaultTtlMs`), the cron
    sweep (every 2 min) calls your `teardown` template and tombstones the record.
@@ -62,9 +62,9 @@ manifest_id)`), and a service selects its type/source independently of the works
 ## Enabling it
 
 The module assembles wherever a service-level encryption key is set (per-tenant
-credentials are always stored encrypted — there is no plaintext fallback). That key is
+credentials are always stored encrypted: there is no plaintext fallback). That key is
 already required service-wide (the always-on document/task sources fail config load
-without it), so there is nothing extra to turn on — register a connection and add a
+without it), so there is nothing extra to turn on: register a connection and add a
 `deployer`/`tester` step to a pipeline. To keep environments out of a pipeline, omit
 those steps.
 
@@ -111,7 +111,7 @@ A manifest describes your management API. The worker's single generic
     "externalIdPath": "data.id",
     "expiresAtPath": "data.expires_at", // epoch-ms, numeric string, or ISO
     // How the *provisioned env* itself is reached by the tester (per-env creds,
-    // read from the provision response — distinct from the management-API auth):
+    // read from the provision response - distinct from the management-API auth):
     "access": { "scheme": "bearer", "tokenPath": "data.access_token" },
   },
 
@@ -119,10 +119,10 @@ A manifest describes your management API. The worker's single generic
 }
 ```
 
-### Worked example — a PR-environment platform
+### Worked example: a PR-environment platform
 
 Most preview-environment platforms expose three calls: "create an environment for
-this PR", "get its status", "delete it" — and key the environment on the PR's git
+this PR", "get its status", "delete it", and key the environment on the PR's git
 ref. Here is a complete manifest for that common shape. A project/tenant slug the
 platform requires (`my-project` below) isn't derivable from a block, so it lives as
 a literal in the paths; the git ref + repo come from the
@@ -173,7 +173,7 @@ Two things to check against your platform's real API:
 - **Where the URL lives.** `urlPath` reads a single string via a dot-path
   (`data.url`, or an array index like `data.links.0.href`). If your platform returns
   the reachable URL only inside a nested/array-valued or templated structure that a
-  dot-path can't pull out cleanly, you have outgrown the manifest path — use the
+  dot-path can't pull out cleanly, you have outgrown the manifest path: use the
   [code-adapter seam](#code-adapter-seam-when-the-manifest-isnt-enough).
 - **Async provisioning.** If create returns before the environment is live, supply a
   `status` template; the cron sweep polls it until `statusMap` yields `ready` (or
@@ -181,14 +181,14 @@ Two things to check against your platform's real API:
 
 ### Templating
 
-- `{{input.*}}` — provision inputs. On a pipeline `deployer` step these are derived
+- `{{input.*}}`: provision inputs. On a pipeline `deployer` step these are derived
   from the block (`blockId`, `title`, `type`, `description`, `features`) plus the
   **git/PR/repo context** below; on a manual provision they come from the request
   `inputs` (plus `blockId`). Explicit request `inputs` always win over the derived
   values.
-- `{{provision.*}}` — fields captured from the provision response (`externalId`,
+- `{{provision.*}}`: fields captured from the provision response (`externalId`,
   `url`), available to `status`/`teardown`.
-- Unknown references resolve to empty — a manifest can't reach arbitrary state.
+- Unknown references resolve to empty: a manifest can't reach arbitrary state.
 
 #### Git/PR/repo context (`{{input.*}}` on a `deployer` step)
 
@@ -210,7 +210,7 @@ fewer):
 | `{{input.repoName}}`   | The repo name, parsed from the PR URL.                   |
 
 This is what lets a manifest build a "create an environment for PR #N of
-owner/repo" request without any per-block configuration. Note that any identifier a
+owner/repo" request without any per-block configuration. Any identifier a
 platform needs which is **not** derivable from the block (a project/team/tenant
 slug, a target cluster) is not in this namespace: bake it into the manifest as a
 literal in the `pathTemplate`/`bodyTemplate`, or pass it as a manual-provision
@@ -223,7 +223,7 @@ Each references its secret(s) by **logical key**; values are supplied separately
 
 | `auth.type`                 | fields                                                                          | effect                                 |
 | --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
-| `none`                      | —                                                                               | no auth header                         |
+| `none`                      |:                                                                               | no auth header                         |
 | `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
 | `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
 | `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
@@ -252,14 +252,14 @@ import type {
 
 export class MyEnvironmentProvider implements EnvironmentProvider {
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
-    // Typed context — no string parsing. Present when the block has an open PR.
+    // Typed context - no string parsing. Present when the block has an open PR.
     const ctx = req.provisionContext // { branch?, pullNumber?, pullUrl?, repoOwner?, repoName?, blockId? }
     const token = req.resolveSecret('API_TOKEN') // resolved from the encrypted bundle
     // ...call your platform however it needs to be called...
     return {
       externalId: createdRef,
       url: liveUrl, // SSRF-guarded by the engine before it is stored
-      status: 'ready', // or 'provisioning' for async — status() is polled
+      status: 'ready', // or 'provisioning' for async - status() is polled
       expiresAt: null, // epoch ms, or null to use defaultTtlMs
       access: null, // per-env creds for the tester, when applicable
       fields: { ref: createdRef }, // arbitrary, persisted (encrypted) for status/teardown
@@ -276,7 +276,7 @@ export class MyEnvironmentProvider implements EnvironmentProvider {
 
 The adapter still registers a connection (so secrets are encrypted at rest and the
 module assembles), but the `manifest`'s request templates are ignored in favour of
-your code — the `secrets`, `providerId`, and `label` still apply. Define the backend as a
+your code: the `secrets`, `providerId`, and `label` still apply. Define the backend as a
 value and **register it by reference** into the app-owned registry, under a custom `kind`:
 
 ```ts
@@ -331,7 +331,7 @@ hosts/schemes:
 | `ENVIRONMENTS_ALLOW_HTTP_URLS`      | `true` to also permit `http` (not just `https`).                                                                                                                                                                           |
 
 ```toml
-# wrangler.toml (Worker)  —  or env vars on the Node facade
+# wrangler.toml (Worker) - or env vars on the Node facade
 ENVIRONMENTS_ALLOW_URL_HOSTS = "envs.corp.internal,.preview.internal"
 ENVIRONMENTS_ALLOW_HTTP_URLS = "false"
 ```
@@ -341,7 +341,7 @@ embedded URL credentials are forbidden regardless. Leave both unset (the default
 keep the strict public-https guard everywhere.
 
 > The runner-pool integration has the matching `RUNNERS_ALLOW_URL_HOSTS` /
-> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two integrations are scoped **independently** —
+> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two integrations are scoped **independently**:
 > each resolves its own policy from its own settings, so a host you allow here does
 > **not** become reachable by the runner pool (and vice versa). Set each one's
 > allow-list to exactly what that integration needs.
@@ -374,7 +374,7 @@ The intended flow is a pipeline on an `environment` block with agent kinds
    engine calls the provider, persists the environment, and writes a summary to the
    step output.
 2. The **`tester`** step (and any later step) receives the live environment in its
-   prompt context — the URL and how to authenticate — so it tests the real build.
+   prompt context (the URL and how to authenticate) so it tests the real build.
 
 You can also drive it directly:
 
@@ -396,7 +396,7 @@ retried on the next pass rather than wedging the registry.
 
 - **Encryption at rest.** The per-tenant secret bundle and every env's access creds
   are AES-256-GCM ciphertext in D1; only the service-level master key lives in env.
-- **No secret leakage.** Secrets are placed only in outgoing request headers — never
+- **No secret leakage.** Secrets are placed only in outgoing request headers, never
   in logs, error bodies (which are length-capped and carry no auth headers), list
   responses, or the LLM prompt (the tester prompt names the auth _scheme_, not the
   token).
@@ -404,5 +404,5 @@ retried on the next pass rather than wedging the registry.
   `tokenUrl`, the extracted env URL) must be https, carry no embedded credentials,
   and resolve to a public host (loopback/link-local/RFC1918 are rejected). A trusted
   operator can widen the host/scheme allow-list per facade to reach an internal
-  platform — see [Reaching an internal / VPN-hosted platform](#reaching-an-internal--vpn-hosted-platform).
+  platform: see [Reaching an internal / VPN-hosted platform](#reaching-an-internal--vpn-hosted-platform).
   Embedded credentials stay forbidden regardless.

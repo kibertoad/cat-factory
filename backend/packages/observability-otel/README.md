@@ -4,16 +4,16 @@ Opt-in [OpenTelemetry](https://opentelemetry.io) (OTLP) trace + metrics publishe
 Agent Architecture Board.
 
 It implements the runtime-neutral `LlmTraceSink` port from `@cat-factory/kernel`, so when
-wired into a facade every LLM call — container-agent calls (through the LLM proxy) **and**
-inline calls (requirements review, document planner, fragment selector, inline agent) —
+wired into a facade every LLM call: container-agent calls (through the LLM proxy) **and**
+inline calls (requirements review, document planner, fragment selector, inline agent):
 is exported to any **OTLP/HTTP** backend (Grafana Tempo/Mimir, Honeycomb, Datadog OTLP,
 Jaeger, an OpenTelemetry Collector, …) as:
 
 - **a trace span per generation**, plus a span per container tool call, all grouped under a
-  shared per-run trace id (they are sibling spans sharing the trace, not parent/child —
+  shared per-run trace id (they are sibling spans sharing the trace, not parent/child:
   generations and tool calls arrive as independent, stateless emissions); and
-- **metrics** — a `gen_ai.client.token.usage` counter (input/output) and a
-  `gen_ai.client.operation.duration` histogram — following the OpenTelemetry GenAI
+- **metrics**: a `gen_ai.client.token.usage` counter (input/output) and a
+  `gen_ai.client.operation.duration` histogram: following the OpenTelemetry GenAI
   semantic conventions.
 
 ## Two transports, one behaviour
@@ -29,7 +29,7 @@ port:
 
 Both map events through the **same** `src/mapping.ts` layer, so they emit identical span
 names, attributes, trace-id grouping and metric names/units. `src/conformity.test.ts`
-feeds the same events through both and asserts the emitted telemetry matches — the guard
+feeds the same events through both and asserts the emitted telemetry matches: the guard
 that the transports never drift.
 
 The Worker entry (`.`) never imports `@opentelemetry/*`, so the SDK is kept out of the
@@ -43,7 +43,7 @@ workerd bundle; it depends only on the `fetch`/`crypto` globals.
   prompt recording is off, spans carry usage/timing/attributes but no prompt or response
   bodies.
 - Composes **alongside** the Langfuse sink (`@cat-factory/observability-langfuse`) via the
-  kernel `composeTraceSinks` fan-out — a deployment can export to both at once.
+  kernel `composeTraceSinks` fan-out: a deployment can export to both at once.
 
 ## Usage
 
@@ -75,21 +75,21 @@ The per-call sink above answers "what did THIS run do". The **`PlatformMetricsOt
 (`createPlatformMetricsOtelExporter`, the `.` entry) answers "how is the WHOLE deployment
 doing": a periodic sweep (Worker `scheduled` cron ⇄ Node interval, runtime-symmetric) computes
 the platform-observability projection per account and this exporter pushes it to the same
-OTLP endpoint as OpenTelemetry **gauge** metrics — so an operator watches deployment health in
+OTLP endpoint as OpenTelemetry **gauge** metrics, so an operator watches deployment health in
 their own metrics backend, the dual of the `post-release-health` gate that watches the
 _user's_ release.
 
-Metrics (`cat_factory.platform.*`, all gauges — the OTel backend trends the series over time):
+Metrics (`cat_factory.platform.*`, all gauges: the OTel backend trends the series over time):
 
 | Metric                                  | Unit    | Split dimension             |
 | --------------------------------------- | ------- | --------------------------- |
 | `cat_factory.platform.runs`             | `{run}` | `cat_factory.run_status`    |
-| `cat_factory.platform.run_success_rate` | `1`     | —                           |
+| `cat_factory.platform.run_success_rate` | `1`     |:                           |
 | `cat_factory.platform.run_failures`     | `{run}` | `cat_factory.failure_kind`  |
 | `cat_factory.platform.live_runs`        | `{run}` | `cat_factory.run_state`     |
 | `cat_factory.platform.run_duration`     | `s`     | `cat_factory.duration_stat` |
 
-Every point carries `cat_factory.account_id` (the bounded tenant scope — safe on a metric,
+Every point carries `cat_factory.account_id` (the bounded tenant scope: safe on a metric,
 unlike the unbounded workspace id excluded from the per-call metrics); the windowed gauges
 also carry `cat_factory.window`. Null aggregates (a success rate / percentiles with no
 terminal runs) are omitted rather than emitted as a misleading zero.

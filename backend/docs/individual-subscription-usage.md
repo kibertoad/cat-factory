@@ -83,7 +83,7 @@ never accidentally ride yours. There is no API that pools or shares these tokens
 browser (`localStorage`, single key, ~40h TTL) so a start/retry rides along without a
 re-prompt. Every gated action (start / confirm / retry) re-validates the cache against an **8h
 expiry buffer**: a key with less than that runway left is _withheld_ (treated as absent) so
-the server's 428 gate re-challenges and the user re-enters **early** — refreshing the full
+the server's 428 gate re-challenges and the user re-enters **early**, refreshing the full
 window while they are present at the action, rather than letting the key lapse mid-pipeline and
 surface as a broken run that asks for a retry. This does not weaken at-rest protection, which
 is carried by the system encryption, not by how long the password lives on the user's own
@@ -103,7 +103,7 @@ so the window is kept tight: the default TTL is **~12h**, and a healthy run **de
 activation the moment it finishes**, so in the common case the window is far shorter. The TTL
 can stay short without ever re-prompting a working user because an actively-tended run
 **re-mints** the activation on each interaction (resolve a decision / approve a step / retry)
-from the cached password — the interaction hard-gates exactly like start/retry, so a healthy
+from the cached password; the interaction hard-gates exactly like start/retry, so a healthy
 (≥8h) key re-mints silently while a within-buffer/lapsed one prompts for early re-entry rather
 than coasting. The TTL only ever bounds a stuck or abandoned run, never a live
 one. It also has to outlast a fully-autonomous run (which has no human touch-points to

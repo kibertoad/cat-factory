@@ -4,7 +4,7 @@ The Kubernetes environment backend provisions a per-PR preview environment by ap
 operator-authored set of Kubernetes/k3s manifests into a fresh namespace, reached over the
 kube-apiserver. It reuses the same apiserver client (bearer token + custom-CA TLS) as the
 [native Kubernetes runner backend](./adr/0003-ephemeral-environment-provider.md), and plugs
-in through the app-owned env-backend registry (`EnvironmentBackendRegistry`) — the same seam a
+in through the app-owned env-backend registry (`EnvironmentBackendRegistry`): the same seam a
 third-party adapter uses (registered by reference via `createBackendRegistries()`). Selection is per-workspace: a workspace connects either the generic
 `manifest` HTTP backend or the native `kubernetes` backend.
 
@@ -13,10 +13,10 @@ third-party adapter uses (registered by reference via `createBackendRegistries()
 > the manifest source + render inputs** (`block.provisioning`: colocated/separate path,
 > `renderer`, image overrides, secret injections, per-env helm releases), while the **workspace
 > handler owns the engine** (apiserver URL + token + CA + URL derivation + shared helm). The
-> `kubernetes` backend serves two engines — `local-k3s` (this doc) and `remote-kubernetes`. The
+> `kubernetes` backend serves two engines: `local-k3s` (this doc) and `remote-kubernetes`. The
 > setup below is the **engine** side (the apiserver connection); a `raw`-manifest service is
 > applied synchronously over the apiserver REST client (described here), while a
-> `kustomize`/helm/Gateway service is rendered in the **deploy container** — see
+> `kustomize`/helm/Gateway service is rendered in the **deploy container**: see
 > [per-service-provisioning.md](./per-service-provisioning.md).
 
 ## How it works
@@ -32,8 +32,8 @@ third-party adapter uses (registered by reference via `createBackendRegistries()
 
 Manifests come from one of two sources (both read checkout-free via the GitHub Git Data API):
 
-- `colocated` — a path/dir in the PR repo, read at the PR head branch.
-- `separate` — a different repo (`owner/repo` + optional `ref`) + path, for when the Kubernetes
+- `colocated`: a path/dir in the PR repo, read at the PR head branch.
+- `separate`: a different repo (`owner/repo` + optional `ref`) + path, for when the Kubernetes
   definition lives outside the service repo.
 
 Supported manifest kinds are a built-in allow-list (Deployment, Service, Ingress, ConfigMap,
@@ -49,8 +49,8 @@ can use the `kubernetes` backend with no extra code.
 ### Guided setup (recommended): `cat-factory k3s`
 
 The [`@cat-factory/cli`](../packages/cli) ships a guided command that does the whole dance below
-**on your behalf** — probe the host for a reachable cluster (or a running k3d/kind), offer to
-create a k3d cluster (Docker, no root — the default) or guide a `sudo` k3s install, apply the
+**on your behalf**: probe the host for a reachable cluster (or a running k3d/kind), offer to
+create a k3d cluster (Docker, no root: the default) or guide a `sudo` k3s install, apply the
 least-privilege ServiceAccount + RBAC, mint a long-lived token, read the apiserver URL from the
 kubeconfig, then open the Infrastructure → Test environments form **pre-filled** with everything
 except the token (a secret is never put in a URL):
@@ -62,7 +62,7 @@ cat-factory k3s --yes        # non-interactive: accept every mutating step (auto
 
 Every mutating step (cluster create, RBAC apply) asks for an explicit confirmation first; the k3s
 `curl | sh` install is only ever **printed**, never run. When it finishes, the CLI prints the
-minted ServiceAccount token once — paste it into the opened form, then **Test → Save**. The form's
+minted ServiceAccount token once: paste it into the opened form, then **Test → Save**. The form's
 **Auto-setup with the CLI** hint surfaces the same command in-app. Useful flags: `--cluster-name`,
 `--runtime`, `--app-url` (default `http://localhost:3000`), and `--no-open`. See `cat-factory k3s
 --help` for the full list.
@@ -82,7 +82,7 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
    - `apiToken`: the ServiceAccount token (stored encrypted).
    - the **URL derivation** (ingress-template host like `{{branch}}.127.0.0.1.nip.io` works with
      k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
-     The **`manifestSource`** is no longer on this connection — it is declared per-service on the
+     The **`manifestSource`** is no longer on this connection: it is declared per-service on the
      block's `provisioning` (colocated path or a separate repo), and merged with this engine config
      at provision time. In local mode you can additionally set a per-user "this-machine" override of
      the handler.
@@ -97,7 +97,7 @@ Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_AL
 ### Networking from WSL2 (Windows)
 
 > For the **Windows host toolchain** (installing native `kubectl`/`helm`/`kustomize`/`k3d` and
-> bringing up a local k3d cluster — the simpler alternative to a WSL2 k3s), see
+> bringing up a local k3d cluster: the simpler alternative to a WSL2 k3s), see
 > [`local-kubernetes-setup-windows.md`](./local-kubernetes-setup-windows.md). The notes below
 > apply specifically to running k3s **inside** a WSL2 distro.
 
@@ -105,23 +105,23 @@ On Windows, k3s runs inside a WSL2 distro (e.g. Ubuntu), not natively. Two facts
 with no port-forwarding layer:
 
 - **WSL2 localhost-forwarding bridges Windows → WSL.** The k3s apiserver binds `0.0.0.0:6443`,
-  so `https://127.0.0.1:6443` reaches it from BOTH inside WSL and from a Windows-host process —
+  so `https://127.0.0.1:6443` reaches it from BOTH inside WSL and from a Windows-host process:
   no `netsh portproxy` / `.wslconfig` change needed. Always use `127.0.0.1` / `localhost`, never
   the WSL `eth0` address (the `172.x` NAT IP is reassigned on every reboot).
 - **Where you run `local-server` matters for the RUNNER path** (see below): running it _inside_
   WSL (the same distro as k3s) keeps the executor-pod → host-proxy callback to a single hop.
   Running it on the Windows host instead adds a pod → WSL → Windows-gateway hop plus a Windows
   Firewall inbound rule, so prefer WSL for the runner backend. For _environments_ it makes no
-  difference — provisioning only needs outbound HTTPS to `:6443`.
+  difference: provisioning only needs outbound HTTPS to `:6443`.
 
 ### ServiceAccount, RBAC, and token
 
-Both backends authenticate with a ServiceAccount bearer token. Apply this once — it covers the
+Both backends authenticate with a ServiceAccount bearer token. Apply this once: it covers the
 runner Role + a long-lived token; uncomment the `ClusterRoleBinding` to add the cluster-wide
 grant the ephemeral-ENVIRONMENTS backend needs to create per-PR namespaces:
 
 ```yaml
-# k3s-cat-factory-rbac.yaml — kubectl apply -f k3s-cat-factory-rbac.yaml
+# k3s-cat-factory-rbac.yaml - kubectl apply -f k3s-cat-factory-rbac.yaml
 apiVersion: v1
 kind: Namespace
 metadata: { name: cat-factory }
@@ -187,7 +187,7 @@ kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificat
 The same cluster can also back the **agent runner** (not just Tester environments): connect a
 native `kubernetes` runner backend so each agent run is a pod in the cluster. Local mode
 surfaces a one-click **Local Kubernetes (k3s)** preset for this in the Infrastructure window's
-"Agent containers" list — it prefills the runner form for a local cluster
+"Agent containers" list: it prefills the runner form for a local cluster
 (`apiServerUrl: https://127.0.0.1:6443`, `namespace: cat-factory`, `insecureSkipTlsVerify`, and
 the executor `image` from the deployment's `LOCAL_HARNESS_IMAGE`), so the operator only pastes a
 ServiceAccount token. No backend change is needed: the apiserver-URL validator already permits
@@ -198,7 +198,7 @@ create/get/delete `pods` and `pods/proxy` in the namespace.
 **The executor pod must reach this service's LLM proxy, and the local-mode default `PUBLIC_URL`
 does NOT resolve from inside a k3s pod.** The Docker per-run transport injects
 `--add-host=host.docker.internal:host-gateway`, so `PUBLIC_URL`'s default
-(`http://host.docker.internal:<port>`) works there — but a k3s pod runs in the cluster network
+(`http://host.docker.internal:<port>`) works there, but a k3s pod runs in the cluster network
 namespace, where `host.docker.internal` is undefined, so the harness's `${PUBLIC_URL}/v1` model
 calls would fail DNS. Set `PUBLIC_URL` explicitly to an address the pod can reach the host-run
 proxy on:
@@ -209,9 +209,9 @@ proxy on:
   that NAT IP changes across reboots, either re-resolve it on each start or pin a stable
   in-cluster name with a headless `Service` + manual `Endpoints` pointing at the host IP.
 - **`local-server` on the Windows host:** the pod reaches Windows through the WSL gateway
-  (`http://<wsl-gateway-ip>:8787` — the `eth0` default-route address, e.g. `172.x.x.1`). You
+  (`http://<wsl-gateway-ip>:8787`: the `eth0` default-route address, e.g. `172.x.x.1`). You
   must also open that port inbound in Windows Firewall and ensure `local-server` binds all
-  interfaces (the local default). This is the fiddlier path — prefer running `local-server` in
+  interfaces (the local default). This is the fiddlier path: prefer running `local-server` in
   WSL.
 
 This applies only to the **runner** backend; Tester **environments** never call back to the
@@ -221,7 +221,7 @@ proxy, so they need none of it.
 
 The **guided one-shot setup** described above (`cat-factory k3s`) already provisions a cluster and
 mints/wires credentials on demand. What is still future is having local mode **own the cluster's
-ongoing lifecycle** — a cluster adapter analogous to the per-run `ContainerRuntimeAdapter`
+ongoing lifecycle**: a cluster adapter analogous to the per-run `ContainerRuntimeAdapter`
 (`runtimes/local/src/runtimes/*`). Sketch of what that needs:
 
 - **Bring-up / tear-down**: create a k3s cluster on demand (k3d `cluster create`, or k3s in a
@@ -231,7 +231,7 @@ ongoing lifecycle** — a cluster adapter analogous to the per-run `ContainerRun
   cluster CA, and seed the workspace's `kubernetes` connection automatically (a `linkCluster`
   helper, analogous to local mode's `linkRepo`).
 - **Image loading**: a local image the PR built must be importable into the cluster (`k3d image
-import`) rather than pulled from a registry — wire the provision flow to load `{{image}}` when
+import`) rather than pulled from a registry; wire the provision flow to load `{{image}}` when
   it's a local tag.
 - **URL exposure**: decide the default ingress story (k3d maps a host port to Traefik; the
   ingress-template host should resolve to that port). Document the `nip.io`/`localhost` host

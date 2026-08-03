@@ -10,7 +10,7 @@ A local-mode run on a `kubernetes` service dead-ended at the `tester-api` step w
 run mode selected but no environment coordinates/credentials were provided and no instance of
 the service is reachable." Root cause: the tester's run mode is chosen from
 `provisioning.type` (`kubernetes`/`custom` ⇒ ephemeral), but its coordinates are rendered only
-when a provisioned environment record already exists — and the pipeline in question
+when a provisioned environment record already exists, and the pipeline in question
 (`pl_quick`) had no `deployer` step, so nothing ever provisioned one. Any `kubernetes`/`custom`
 service run through a deployer-less pipeline was a guaranteed dead-end at the tester.
 
@@ -21,7 +21,7 @@ human testing exercised, and orphaned environments on redeploy.
 ## Decision
 
 The Deployer is the **only** place environments are provisioned. No other agent or gate
-self-provisions — in particular, the `human-test` gate stops standing up its own environment and
+self-provisions: in particular, the `human-test` gate stops standing up its own environment and
 instead consumes the one the Deployer provisioned. An environment is provisioned **once per
 run**, shared by both AI and human usage.
 
