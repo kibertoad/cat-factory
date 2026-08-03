@@ -7,6 +7,7 @@ import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
 import EstimateThresholdFields from '~/components/pipeline/EstimateThresholdFields.vue'
 import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
+import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
 import {
@@ -202,6 +203,36 @@ const stepsDisallowedByPurpose = computed(() =>
   }),
 )
 
+// The workspace's foundational-services catalog, for the binary-output storage/context picker.
+const foundational = useFoundationalServicesStore()
+
+/**
+ * Whether this step's kind is a BINARY-OUTPUT generator, and therefore needs the storage +
+ * context picker. Read off the kind's projected `binaryOutput` flag rather than a kind-id list,
+ * so a deployment's generator opts in by carrying the trait exactly as the engine's own checks
+ * key on it.
+ *
+ * Deliberately NOT behind `showOverrideField` / `isAdvanced` the way the variant picker is: a
+ * variant OVERRIDES what the kind ships, while this selection is REQUIRED. A basic-mode user
+ * who cannot see it has a step that cannot be saved and no way to find out why.
+ */
+function showBinaryOutputPicker(kind: AgentKind): boolean {
+  return agentKindMeta(kind).binaryOutput === true
+}
+
+// An enabled generator step with no storage selection — mirrors the backend save/start
+// rejection (`assertValidBinaryOutputSteps`), surfaced as an inline hint so the user fixes it
+// before the round trip. Same disposition as `skillStepNeedsPick`, for the same reason: both
+// are a step parametrized by a selection it cannot run without.
+const binaryOutputStepNeedsPick = computed(() =>
+  pipelines.draft.some(
+    (kind, i) =>
+      showBinaryOutputPicker(kind) &&
+      pipelines.draftEnabled[i] !== false &&
+      !pipelines.draftBinaryOutput(i)?.storageServiceId,
+  ),
+)
+
 // A step's picked skill id is no longer in the account catalog (the source dir was renamed or
 // unlinked). The step will fail cleanly at dispatch; flag it so the user re-picks.
 function skillMissing(index: number): boolean {
@@ -226,6 +257,11 @@ watch(open, (isOpen) => {
   // The workspace's per-kind output ceilings, which the per-step field shows as its inherited
   // placeholder and the prompt editor edits. Best-effort on the same terms as the prompt index.
   if (isOpen) agentSettings.load().catch(() => {})
+  // The resolved foundational-services catalog, which the binary-output picker offers from.
+  // Single-flighted per workspace, so this shares the panel's load rather than adding one. A
+  // failure is not swallowed into an empty picker: the store records `available: false`, and
+  // the picker says the catalog is unreachable rather than "no services exist".
+  if (isOpen) void foundational.ensureProbed()
 })
 
 function add(kind: AgentKind) {
@@ -532,6 +568,15 @@ async function clone(p: Pipeline) {
           </p>
 
           <p
+            v-if="binaryOutputStepNeedsPick"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            data-testid="binary-output-needs-pick"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+            {{ t('pipeline.builder.binaryOutputNeedsPick') }}
+          </p>
+
+          <p
             v-if="stepsDisallowedByPurpose.length"
             class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
           >
@@ -791,6 +836,15 @@ async function clone(p: Pipeline) {
                   "
                 />
               </div>
+
+              <!-- Binary-output picker: a generator kind's step is parametrized by the
+                 foundational STORAGE service its artifacts go through (`stepOptions.binaryOutput`)
+                 plus any services consulted for the generation's scope. Required, not an
+                 override — so it shows in both interface tiers. -->
+              <BinaryOutputStepPicker
+                v-if="showBinaryOutputPicker(unit.kind)"
+                :index="unit.index"
+              />
 
               <!-- This step's own output-token ceiling. An OVERRIDE of the workspace's per-kind
                  setting (itself an override of the deployment routing default), so it is

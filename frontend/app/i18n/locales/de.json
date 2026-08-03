@@ -3733,7 +3733,17 @@
       "consensusGroupsActive": "Dieser Schritt führt die ausgewählte Gruppe aus. Hebe die Auswahl aller Gruppen auf, um die Teilnehmer hier zu konfigurieren.",
       "consensusGroupAlways": "immer",
       "variantLabel": "Prompt-Variante",
-      "variantShipped": "Ausgelieferter Prompt"
+      "variantShipped": "Ausgelieferter Prompt",
+      "binaryOutputStorage": "Speichern über",
+      "binaryOutputContext": "Kontext der Erzeugung",
+      "binaryOutputPlaceholder": "Speicherdienst wählen",
+      "binaryOutputContextPlaceholder": "Optional: Dienste, die den Umfang bestimmen",
+      "binaryOutputNeedsPick": "Für einen Schritt, der binäre Ausgaben erzeugt, ist kein Speicherdienst gewählt. Wähle einen vor dem Speichern.",
+      "binaryOutputNoStorage": "Kein Dienst im Katalog dieses Boards deklariert die Fähigkeit {capability}. Registriere einen, oder ergänze die Fähigkeit beim gemeinten Dienst unter den grundlegenden Diensten.",
+      "binaryOutputMissing": "Dieser Speicherdienst ist nicht mehr im Katalog; wähle einen anderen.",
+      "binaryOutputNotStorage": "Dieser Dienst deklariert die Fähigkeit {capability} nicht mehr, deshalb werden Läufe abgelehnt; wähle einen anderen.",
+      "binaryOutputContextMissing": "Diese Kontextdienste sind nicht mehr im Katalog: {ids}",
+      "binaryOutputUnavailable": "Der Katalog der grundlegenden Dienste ist nicht erreichbar, deshalb lässt sich hier noch nichts wählen."
     },
     "progress": {
       "status": {
@@ -4382,6 +4392,47 @@
       "checkSourceFailed": "Repo konnte nicht geprüft werden",
       "sourceUnlinked": "Repo-Verknüpfung gelöst",
       "unlinkSourceFailed": "Repo-Verknüpfung konnte nicht gelöst werden"
+    }
+  },
+  "binaryOutput": {
+    "heading": "Binäre Ausgaben",
+    "target": "Speicherdienst",
+    "targetNone": "Für diesen Schritt nicht erfasst",
+    "contextServices": "Kontext der Erzeugung",
+    "misdirectedBadge": "Anderer Dienst",
+    "unknownBadge": "Nicht im Katalog",
+    "storedCount": "{outcome}, 1 Artefakt | {outcome}, {count} Artefakte",
+    "state": {
+      "notStarted": {
+        "summary": "Noch nicht gestartet",
+        "detail": "Dieser Schritt hat noch nicht begonnen. Wenn er läuft, speichert er seine binären Ausgaben über den unten genannten Dienst."
+      },
+      "configured": {
+        "summary": "Noch nichts erfasst",
+        "detail": "Dieser Schritt ist auf das Speichern binärer Ausgaben eingerichtet, hat aber noch keine gemeldet. Er läuft noch, oder er endete vor seiner Meldung."
+      },
+      "undeclared": {
+        "summary": "Nichts angegeben",
+        "detail": "Dieser Schritt endete, ohne anzugeben, was er gespeichert hat. Möglicherweise hat er etwas gespeichert, möglicherweise nicht; erfasst wurde in beiden Fällen nichts."
+      },
+      "parseFailed": {
+        "summary": "Angabe unlesbar",
+        "detail": "Dieser Schritt endete mit einer Angabe, welche die Plattform nicht lesen konnte, deshalb wurde nichts erfasst. Was er gespeichert hat, fehlt in der Liste unten."
+      },
+      "declaredNone": {
+        "summary": "Nichts gespeichert",
+        "detail": "Der Agent hat gemeldet, dass er keine binären Artefakte gespeichert hat. Das ist ein gültiges Ergebnis, kein Fehler."
+      },
+      "stored": {
+        "summary": "Gespeichert"
+      }
+    },
+    "warning": {
+      "unknownServices": "Nennt einen Dienst, den der Katalog nicht enthält: {ids}. Der Eintrag bleibt wie angegeben erhalten; prüfe die Kennung gegen den Katalog des Boards. | Nennt Dienste, die der Katalog nicht enthält: {ids}. Die Einträge bleiben wie angegeben erhalten; prüfe die Kennungen gegen den Katalog des Boards.",
+      "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
+      "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
+      "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
+      "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt."
     }
   },
   "brainstorm": {

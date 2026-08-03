@@ -4093,7 +4093,17 @@
       "consensusGroupsActive": "このステップは選択したグループを実行します。ここで参加者を設定するには、すべてのグループの選択を解除してください。",
       "consensusGroupAlways": "常時",
       "variantLabel": "プロンプトのバリアント",
-      "variantShipped": "標準のプロンプト"
+      "variantShipped": "標準のプロンプト",
+      "binaryOutputStorage": "保存先",
+      "binaryOutputContext": "生成のコンテキスト",
+      "binaryOutputPlaceholder": "保存サービスを選択",
+      "binaryOutputContextPlaceholder": "任意: 生成の範囲を定めるサービス",
+      "binaryOutputNeedsPick": "バイナリ成果物を生成するステップに保存サービスが選択されていません。保存前に選んでください。",
+      "binaryOutputNoStorage": "このボードのカタログに {capability} 機能を宣言するサービスがありません。基盤サービスで新たに登録するか、意図したサービスにこの機能を追加してください。",
+      "binaryOutputMissing": "この保存サービスはカタログに存在しません。別のサービスを選んでください。",
+      "binaryOutputNotStorage": "このサービスは {capability} 機能を宣言しなくなったため、実行は拒否されます。別のサービスを選んでください。",
+      "binaryOutputContextMissing": "これらのコンテキストサービスはカタログに存在しません: {ids}",
+      "binaryOutputUnavailable": "基盤サービスのカタログに接続できないため、ここではまだ何も選択できません。"
     },
     "progress": {
       "status": {
@@ -5353,6 +5363,47 @@
       "checkSourceFailed": "リポジトリを確認できませんでした",
       "sourceUnlinked": "リポジトリの連携を解除しました",
       "unlinkSourceFailed": "リポジトリの連携を解除できませんでした"
+    }
+  },
+  "binaryOutput": {
+    "heading": "バイナリ成果物",
+    "target": "保存サービス",
+    "targetNone": "このステップには記録なし",
+    "contextServices": "生成のコンテキスト",
+    "misdirectedBadge": "別のサービス",
+    "unknownBadge": "カタログ外",
+    "storedCount": "{outcome}、{count} 件",
+    "state": {
+      "notStarted": {
+        "summary": "まだ開始していません",
+        "detail": "このステップはまだ開始していません。実行されると、下に示すサービスを通じてバイナリ成果物を保存します。"
+      },
+      "configured": {
+        "summary": "まだ何も記録されていません",
+        "detail": "このステップはバイナリ成果物を保存する設定ですが、まだ何も報告していません。実行中であるか、報告する前に終了しました。"
+      },
+      "undeclared": {
+        "summary": "宣言なし",
+        "detail": "このステップは何を保存したかを宣言せずに終了しました。何かを保存した可能性もしていない可能性もありますが、いずれにせよ記録は残っていません。"
+      },
+      "parseFailed": {
+        "summary": "宣言を読み取れません",
+        "detail": "このステップはプラットフォームが読み取れない宣言を残して終了したため、何も記録されませんでした。保存されたものがあっても下の一覧にはありません。"
+      },
+      "declaredNone": {
+        "summary": "保存なし",
+        "detail": "エージェントはバイナリ成果物を何も保存しなかったと報告しました。これは失敗ではなく、正当な結果です。"
+      },
+      "stored": {
+        "summary": "保存済み"
+      }
+    },
+    "warning": {
+      "unknownServices": "カタログにないサービスが指定されています: {ids}。宣言のまま保持されます。ボードのカタログで ID を確認してください。",
+      "targetUnknown": "このステップ自身の保存サービス ({id}) がカタログにもうありません。このため下のどれも照合できませんでした。再登録するか、別のサービスを指定してください。",
+      "misdirected": "{count} 件の成果物が {target} 以外のサービスに保存されました。",
+      "invalidEntries": "サービスと場所のどちらも示さない宣言項目 {count} 件を破棄しました。",
+      "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。"
     }
   },
   "sandbox": {

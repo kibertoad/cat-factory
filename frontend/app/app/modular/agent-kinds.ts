@@ -32,5 +32,11 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     // projection would fork the rule the moment the default changes.
     ...(p.tier ? { tier: p.tier } : {}),
     ...(p.resultView ? { resultView: p.resultView } : {}),
+    // Not part of `presentation` on the wire — it is a fact about how the kind RUNS, projected
+    // beside `container` — so it is lifted from the entry itself. Carried onto the archetype
+    // because the pipeline builder resolves a step's meta through `agentKindMeta`, not through
+    // the snapshot, and a required step option cannot be gated on something the read model
+    // does not carry.
+    ...(kind.binaryOutput ? { binaryOutput: true } : {}),
   }
 }

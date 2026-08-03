@@ -4081,7 +4081,17 @@
       "consensusGroupsActive": "Cette étape exécute le groupe sélectionné. Désélectionne tous les groupes pour configurer les participants ici.",
       "consensusGroupAlways": "toujours",
       "variantLabel": "Variante de prompt",
-      "variantShipped": "Prompt fourni"
+      "variantShipped": "Prompt fourni",
+      "binaryOutputStorage": "Stocker via",
+      "binaryOutputContext": "Contexte de génération",
+      "binaryOutputPlaceholder": "Choisir un service de stockage",
+      "binaryOutputContextPlaceholder": "Facultatif : services qui délimitent la génération",
+      "binaryOutputNeedsPick": "Une étape qui génère des sorties binaires n'a aucun service de stockage choisi. Choisissez-en un avant d'enregistrer.",
+      "binaryOutputNoStorage": "Aucun service du catalogue de ce tableau ne déclare la capacité {capability}. Enregistrez-en un, ou ajoutez la capacité au service que vous visiez, dans les services fondamentaux.",
+      "binaryOutputMissing": "Ce service de stockage n'est plus dans le catalogue ; choisissez-en un autre.",
+      "binaryOutputNotStorage": "Ce service ne déclare plus la capacité {capability}, les exécutions seront donc refusées ; choisissez-en un autre.",
+      "binaryOutputContextMissing": "Ces services de contexte ne sont plus dans le catalogue : {ids}",
+      "binaryOutputUnavailable": "Le catalogue des services fondamentaux est injoignable, rien ne peut donc encore être choisi ici."
     },
     "progress": {
       "status": {
@@ -5341,6 +5351,47 @@
       "checkSourceFailed": "Impossible de vérifier le dépôt",
       "sourceUnlinked": "Dépôt délié",
       "unlinkSourceFailed": "Impossible de délier le dépôt"
+    }
+  },
+  "binaryOutput": {
+    "heading": "Sorties binaires",
+    "target": "Service de stockage",
+    "targetNone": "Non enregistré pour cette étape",
+    "contextServices": "Contexte de génération",
+    "misdirectedBadge": "Autre service",
+    "unknownBadge": "Hors catalogue",
+    "storedCount": "{outcome}, 1 artefact | {outcome}, {count} artefacts",
+    "state": {
+      "notStarted": {
+        "summary": "Pas encore démarrée",
+        "detail": "Cette étape n'a pas encore démarré. Lorsqu'elle s'exécutera, elle stockera ses sorties binaires via le service indiqué ci-dessous."
+      },
+      "configured": {
+        "summary": "Rien d'enregistré pour l'instant",
+        "detail": "Cette étape est configurée pour stocker des sorties binaires, mais elle n'en a encore signalé aucune. Elle est toujours en cours, ou elle s'est terminée avant de le signaler."
+      },
+      "undeclared": {
+        "summary": "Rien de déclaré",
+        "detail": "Cette étape s'est terminée sans déclarer ce qu'elle avait stocké. Elle a peut-être stocké quelque chose, peut-être pas ; dans les deux cas, rien n'a été enregistré."
+      },
+      "parseFailed": {
+        "summary": "Déclaration illisible",
+        "detail": "Cette étape s'est terminée avec une déclaration que la plateforme n'a pas pu lire, donc rien n'a été enregistré. Ce qu'elle a stocké manque dans la liste ci-dessous."
+      },
+      "declaredNone": {
+        "summary": "Rien de stocké",
+        "detail": "L'agent a signalé n'avoir stocké aucun artefact binaire. C'est un résultat valide, pas un échec."
+      },
+      "stored": {
+        "summary": "Stocké"
+      }
+    },
+    "warning": {
+      "unknownServices": "A nommé un service absent du catalogue : {ids}. L'entrée est conservée telle que déclarée ; vérifiez l'identifiant dans le catalogue du tableau. | A nommé des services absents du catalogue : {ids}. Leurs entrées sont conservées telles que déclarées ; vérifiez les identifiants dans le catalogue du tableau.",
+      "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({id}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
+      "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
+      "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
+      "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés."
     }
   },
   "sandbox": {

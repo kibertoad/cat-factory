@@ -5,7 +5,7 @@ import {
   listWorkspacesContract,
   updateWorkspaceContract,
 } from '@cat-factory/contracts'
-import { configContributionCatalog } from '@cat-factory/agents'
+import { BINARY_OUTPUT_TRAIT, configContributionCatalog, hasTrait } from '@cat-factory/agents'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { logger as sharedLogger } from '../../observability/logger.js'
@@ -117,6 +117,10 @@ function snapshotCustomAgentKinds(
       kind: def.kind,
       presentation: def.presentation!,
       container: registry.requiresContainer(def.kind),
+      // Asked of the REGISTRY, not read off `def.traits`: a trait also reaches a kind through
+      // `assignTraits`, and a projection that read the declaration alone would tell the builder
+      // a kind needs no storage selection right up until its run is refused at admission.
+      ...(hasTrait(def.kind, BINARY_OUTPUT_TRAIT, registry) ? { binaryOutput: true } : {}),
     }))
   // Registered JUDGES (the fourth step-taxonomy bucket) reach the palette through the SAME
   // projection: a judge is a step kind the SPA must be able to place and open a result window
