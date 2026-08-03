@@ -36,6 +36,13 @@ export const useTutorialStore = defineStore(
     const promptOpen = ref(false)
     /** Once-per-session guard for the launch auto-open; later opens are user-driven. */
     const promptAutoOpened = ref(false)
+    /**
+     * The tutorial catalogue (every tour this deployment ships, startable at any time) is
+     * open. Always user-driven — nothing auto-opens it — which is why it carries none of the
+     * prompt's decision machinery: browsing the catalogue answers no question, so it neither
+     * writes a decision nor consumes the launch offer.
+     */
+    const catalogueOpen = ref(false)
     const activeTourId = ref<string | null>(null)
     const stepIndex = ref(0)
     /**
@@ -91,6 +98,21 @@ export const useTutorialStore = defineStore(
       promptOpen.value = false
     }
 
+    /**
+     * Open the catalogue. Closes the launch prompt WITHOUT answering it: browsing the full
+     * list is not "no thanks" (it is the opposite), and the two are modals that would
+     * otherwise stack — so the offer returns next launch if the user browses and starts
+     * nothing.
+     */
+    function openCatalogue() {
+      promptOpen.value = false
+      catalogueOpen.value = true
+    }
+
+    function closeCatalogue() {
+      catalogueOpen.value = false
+    }
+
     /** The explicit "no thanks": saved, so the launch prompt never auto-opens again. */
     function decline() {
       decision.value = 'declined'
@@ -105,6 +127,7 @@ export const useTutorialStore = defineStore(
     function startTour(tourId: string) {
       decision.value = 'accepted'
       promptOpen.value = false
+      catalogueOpen.value = false
       activeTourId.value = tourId
       stepIndex.value = 0
       // Starting from the top is an explicit choice to discard THIS tour's old position;
@@ -134,6 +157,7 @@ export const useTutorialStore = defineStore(
       }
       decision.value = 'accepted'
       promptOpen.value = false
+      catalogueOpen.value = false
       activeTourId.value = tourId
       stepIndex.value = at.stepIndex
       interrupted.value = null
@@ -189,11 +213,32 @@ export const useTutorialStore = defineStore(
       return completedTourIds.value.includes(tourId)
     }
 
+    /**
+     * Forget everything this browser remembers about the tutorial: which tours were finished,
+     * where one was broken off, and the answer to the launch offer.
+     *
+     * The decision goes with it deliberately. "Reset" is asked for by someone handing the app
+     * to a colleague, demoing it, or re-walking the product after it changed — and every one
+     * of those wants the first-launch experience back, which a cleared completion list alone
+     * does not restore. It does NOT re-open the prompt in this session: `promptAutoOpened` is
+     * session state and stays spent, so the offer returns at the next launch rather than
+     * appearing on top of the catalogue the user is still reading.
+     *
+     * A running tour is left alone: this clears a record, it does not interrupt a walkthrough
+     * the user is in the middle of (which would end it, unrecorded, on a click about history).
+     */
+    function resetProgress() {
+      completedTourIds.value = []
+      interrupted.value = null
+      decision.value = null
+    }
+
     return {
       decision,
       completedTourIds,
       promptOpen,
       promptAutoOpened,
+      catalogueOpen,
       activeTourId,
       stepIndex,
       interrupted,
@@ -202,6 +247,9 @@ export const useTutorialStore = defineStore(
       openPrompt,
       closePrompt,
       deferPrompt,
+      openCatalogue,
+      closeCatalogue,
+      resetProgress,
       decline,
       startTour,
       resumeTour,

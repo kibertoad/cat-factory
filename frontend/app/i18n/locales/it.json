@@ -2162,7 +2162,7 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
-        "tutorial": "Fai un tour",
+        "tutorial": "Tutorial",
         "foundationalServices": "Servizi fondamentali"
       },
       "keywords": {
@@ -4823,7 +4823,9 @@
     "accountSettings": "Impostazioni dell'account",
     "operatorDashboard": "Osservabilità della piattaforma",
     "reports": "Report",
-    "foundationalServices": "Servizi fondamentali"
+    "foundationalServices": "Servizi fondamentali",
+    "tutorials": "Tutorial",
+    "help": "Aiuto"
   },
   "errors": {
     "generic": {
@@ -6125,13 +6127,41 @@
     "prompt": {
       "title": "Fare un rapido tour?",
       "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
-      "start": "Inizia",
-      "restart": "Ripeti",
-      "resume": "Riprendi",
-      "completed": "Completato",
       "decline": "No grazie",
       "later": "Forse più tardi",
-      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board."
+      "empty": "Non ci sono ancora tour disponibili per il tuo ruolo su questa board.",
+      "browse": "Vedi tutti i tutorial"
+    },
+    "catalogue": {
+      "title": "Tutorial",
+      "intro": "Tour guidati che evidenziano i controlli reali mentre procedi. Puoi avviarne uno quando vuoi e ripeterlo tutte le volte che ti serve.",
+      "progress": "{completed} di {total} completati",
+      "steps": "1 passaggio | {count} passaggi",
+      "blocked": "Disponibile quando avrai:",
+      "notApplicable": "In questo momento non c'è nulla su questa board che questo tour possa mostrare.",
+      "empty": "Questa installazione non include tutorial.",
+      "reset": "Reimposta i progressi",
+      "resetHint": "Dimentica quali tutorial hai completato e ti riproporrà il tour al prossimo accesso."
+    },
+    "action": {
+      "start": "Inizia",
+      "resume": "Riprendi",
+      "restart": "Ripeti",
+      "continue": "Torna al tour"
+    },
+    "status": {
+      "notStarted": "Non iniziato",
+      "inProgress": "In corso",
+      "paused": "In pausa",
+      "completed": "Completato"
+    },
+    "requirements": {
+      "boardWrite": "L'autorizzazione a modificare questa board",
+      "sourceControl": "Un sistema di controllo del codice collegato",
+      "service": "Un servizio sulla board",
+      "task": "Un'attività sulla board",
+      "waitingAnswer": "Un'esecuzione in attesa di una tua risposta",
+      "finishedRun": "Un'esecuzione conclusa con successo"
     },
     "overlay": {
       "next": "Avanti",

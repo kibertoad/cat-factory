@@ -1,5 +1,4 @@
 import { defineModule } from '@modular-vue/core'
-import { resolveTours } from '~/utils/tutorial'
 import { filterExternalTools } from './external-tools'
 import type { AppSlots } from './slots'
 
@@ -47,6 +46,11 @@ export type NavSurface = 'sidebar' | 'command' | 'toolbar'
  * dropped entirely where none are registered. It is separate from `integrations` for the same
  * reason `models` is — an integration is a system cat-factory READS FROM or WRITES TO on your
  * behalf, while these are places a person GOES.
+ *
+ * `help` is the tail section: surfaces that teach the product rather than configure it. It is
+ * separate from `configuration` because nothing in it changes what a run does — and it is a
+ * SIDEBAR section rather than a palette-only entry because the people it serves are the ones
+ * least likely to know the palette exists.
  */
 export type NavSidebarGroup =
   | 'create'
@@ -57,6 +61,7 @@ export type NavSidebarGroup =
   | 'workspaceContext'
   | 'externalTools'
   | 'configuration'
+  | 'help'
 
 /** Command-palette group (its i18n label is `layout.commandBar.groups.<group>`). */
 export type NavCommandGroup =
@@ -539,21 +544,25 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'configuration', order: 45 },
   },
   {
-    // Deliberately NOT `advanced`: the tours exist for exactly the users basic mode serves,
-    // and the palette entry is the way back to them after the launch prompt was declined
-    // or dismissed. Ungated: every tour gates itself via its own `when` predicate, and the
-    // prompt is worth reaching even when it can only list some tours.
+    // Deliberately NOT `advanced`: the tutorials exist for exactly the users basic mode
+    // serves. It is on the SIDEBAR as well as in the palette because the launch prompt is
+    // shown once and answered once — after that, a palette entry was the only route back to
+    // the walkthroughs, which asks the user least likely to have found the palette to find
+    // it. Ungated: every tour answers for itself (an unavailable one is listed with what
+    // would unlock it), so the catalogue is worth reaching even when little of it can run.
     id: 'tutorial',
-    labelKey: 'layout.commandBar.cmd.tutorial',
+    labelKey: 'nav.tutorials',
     icon: 'i-lucide-graduation-cap',
-    surfaces: S('command'),
+    surfaces: S('sidebar', 'command'),
     action: 'tutorial',
     testId: 'nav-tutorial',
+    sidebar: { group: 'help', order: 10 },
     command: {
       // After the pre-slice-1 tail (the workspace group pins that order): genuinely new
       // entries append rather than interleave.
       group: 'workspace',
       order: 100,
+      labelKey: 'layout.commandBar.cmd.tutorial',
       keywordsKey: 'layout.commandBar.keywords.tutorial',
     },
   },
@@ -615,7 +624,6 @@ export const navigationModule = defineModule({
 export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppSlots {
   const gates = deps.gates
   const nav = slots.nav ?? []
-  const tutorialTours = slots.tutorialTours ?? []
   const externalTools = slots.externalTools ?? []
   return {
     ...slots,
@@ -626,11 +634,12 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
           (i) => (i.advanced ? gates.advancedMode : true) && (i.gate ? i.gate(gates) : true),
         )
       : nav,
-    // Tutorial tours gate over the same reactive service, so a tour about a surface the
-    // caller can't reach (e.g. creating tasks without board write) never shows, and a step
-    // about a branch this board isn't on is dropped rather than skipped (see `resolveTours`).
-    // Same gates-absent pass-through as `nav`.
-    tutorialTours: gates ? resolveTours(tutorialTours, gates) : tutorialTours,
+    // `tutorialTours` is deliberately NOT filtered here, unlike every other gated slot. A
+    // `SlotFilter` can only DROP, and the tutorial catalogue's whole job is to explain what
+    // was dropped — which tour this board can't run yet, and what would unlock it. That is a
+    // richer value than a thinned list, so tour resolution lives in `resolveTourCatalogue`
+    // (pure, gates-nullable) and runs once in `useTutorialTours`, whose `tours` is the same
+    // gated set the launch prompt and the overlay always saw.
     // External tools gate on the same two axes as `nav` — they become nav items downstream
     // (`useNavContributions` projects them), so gating them anywhere else would let a tool the
     // caller can't use reach the palette while its sidebar twin was correctly hidden.
@@ -650,6 +659,7 @@ export const SIDEBAR_GROUP_ORDER: readonly NavSidebarGroup[] = [
   // configuration tail: they are destinations someone reaches mid-work, not settings.
   'externalTools',
   'configuration',
+  'help',
 ]
 
 /** Command-palette groups, in render order; each label is `layout.commandBar.groups.<group>`. */

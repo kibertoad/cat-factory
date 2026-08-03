@@ -127,7 +127,9 @@
     "operatorDashboard": "Observabilité de la plateforme",
     "reports": "Rapports",
     "infrastructure": "Infrastructure",
-    "foundationalServices": "Services fondamentaux"
+    "foundationalServices": "Services fondamentaux",
+    "tutorials": "Tutoriels",
+    "help": "Aide"
   },
   "board": {
     "toast": {
@@ -2082,7 +2084,7 @@
         "shortcuts": "Raccourcis clavier",
         "bugHunt": "Chasse aux bugs",
         "toggleUiMode": "Changer le mode d'interface",
-        "tutorial": "Faire une visite guidée",
+        "tutorial": "Tutoriels",
         "foundationalServices": "Services fondamentaux"
       },
       "keywords": {
@@ -6113,13 +6115,41 @@
     "prompt": {
       "title": "Faire une visite rapide ?",
       "intro": "Les visites guidées vous montrent l'application directement à l'écran : elles mettent en évidence les vrais contrôles et vous indiquent où cliquer.",
-      "start": "Commencer",
-      "restart": "Refaire",
-      "resume": "Reprendre",
-      "completed": "Terminée",
       "decline": "Non merci",
       "later": "Peut-être plus tard",
-      "empty": "Aucune visite n'est encore disponible pour votre rôle sur ce tableau."
+      "empty": "Aucune visite n'est encore disponible pour votre rôle sur ce tableau.",
+      "browse": "Voir tous les tutoriels"
+    },
+    "catalogue": {
+      "title": "Tutoriels",
+      "intro": "Des visites guidées qui mettent en évidence les vrais contrôles au fur et à mesure. Vous pouvez en lancer une à tout moment et la refaire autant de fois que vous voulez.",
+      "progress": "{completed} sur {total} terminées",
+      "steps": "1 étape | {count} étapes",
+      "blocked": "Disponible dès que vous aurez :",
+      "notApplicable": "Rien sur ce tableau ne correspond à cette visite pour le moment.",
+      "empty": "Cette installation ne propose aucun tutoriel.",
+      "reset": "Réinitialiser la progression",
+      "resetHint": "Oublie les tutoriels que vous avez terminés et vous reproposera la visite à votre prochaine connexion."
+    },
+    "action": {
+      "start": "Commencer",
+      "resume": "Reprendre",
+      "restart": "Refaire",
+      "continue": "Revenir à la visite"
+    },
+    "status": {
+      "notStarted": "Non commencée",
+      "inProgress": "En cours",
+      "paused": "En pause",
+      "completed": "Terminée"
+    },
+    "requirements": {
+      "boardWrite": "L'autorisation de modifier ce tableau",
+      "sourceControl": "Un gestionnaire de code source connecté",
+      "service": "Un service sur le tableau",
+      "task": "Une tâche sur le tableau",
+      "waitingAnswer": "Une exécution en attente de votre réponse",
+      "finishedRun": "Une exécution terminée avec succès"
     },
     "overlay": {
       "next": "Suivant",

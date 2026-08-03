@@ -95,6 +95,30 @@ export interface TutorialStep {
   when?: (gates: NavGates) => boolean
 }
 
+/**
+ * One named precondition a tour needs before it can be taken — a board write permission, a
+ * source-control connection, a service on the board.
+ *
+ * A DECLARED object rather than the bare `when(gates)` predicate a tour used to carry, because
+ * the catalogue has to say why a tour it is showing cannot be started right now. A predicate
+ * answers only "no", and a surface that lists what it can offer while silently omitting the
+ * rest reads exactly like a deployment that ships four tours instead of six — the "absent and
+ * zero must never render the same" rule, applied to a catalog. Pairing the predicate with the
+ * i18n key that NAMES it means the reason is computed from the same fact that withheld the
+ * tour, rather than restated beside it and left to drift.
+ *
+ * A consumer deployment writes its own: this is a plain object with its own copy key, so it
+ * needs no registration and no entry in a first-party table.
+ */
+export interface TutorialRequirement {
+  /** Stable id, unique within a tour's list; the catalogue keys its reason list on it. */
+  id: string
+  /** i18n key naming the requirement as a noun phrase ("A service on the board"). */
+  labelKey: string
+  /** Whether this board/user currently satisfies it. */
+  met: (gates: NavGates) => boolean
+}
+
 export interface TutorialTour {
   /** Stable id; completion is persisted against it, so renaming one resets its state. */
   id: string
@@ -104,11 +128,12 @@ export interface TutorialTour {
   /** Sort key in the tour list; ties break on `id` so the order is deterministic. */
   order: number
   /**
-   * Availability gate over the same reactive {@link NavGates} the nav catalog uses, so a
-   * tour about a surface the caller can't reach (no board write, no GitHub) never shows.
-   * Absent = always offered.
+   * What this board/user must have before the tour can run, over the same reactive
+   * {@link NavGates} the nav catalog uses — so a tour about a surface the caller can't reach
+   * (no board write, no source control) is never started, and the catalogue can say which of
+   * these is the one still missing. Absent = always available.
    */
-  when?: (gates: NavGates) => boolean
+  requires?: readonly TutorialRequirement[]
   steps: readonly TutorialStep[]
 }
 
@@ -153,28 +178,133 @@ export function sortTours(tours: readonly TutorialTour[]): TutorialTour[] {
 }
 
 /**
- * Resolve every tour against the gates: drop the tours whose own `when` rejects them, drop
- * the steps whose `when` rejects them, and then drop a tour left with no steps at all.
+ * Why a tour is or isn't offered right now.
  *
- * That last rule is what makes per-step gating safe to reach for. A tour whose every step
- * is branch-specific (the parked-run tour: some boards have a decision waiting, some an
- * approval) would otherwise survive its own `when` and open on an empty cursor — which the
+ * Three values rather than a boolean, because the two unavailable ones need different copy
+ * and different action from the reader: `blocked` names things they can go and do (link a
+ * repository, start a run), while `not-applicable` is a tour whose every step is about a
+ * branch this board isn't on — nothing to fix, and telling someone to fix it would send them
+ * looking for a control that was never missing.
+ */
+export type TutorialAvailability = 'ready' | 'blocked' | 'not-applicable'
+
+/** One tour as this board sees it: the resolved script plus why it can (or can't) run. */
+export interface TutorialCatalogueEntry {
+  /** The tour with its inapplicable steps already dropped — what a start would run. */
+  tour: TutorialTour
+  availability: TutorialAvailability
+  /** The requirements this board/user does not meet. Empty unless `blocked`. */
+  unmet: readonly TutorialRequirement[]
+}
+
+/**
+ * Resolve the whole catalog against the gates: which tours can run now, and for the rest,
+ * exactly what is standing in the way.
+ *
+ * Per-step `when`s are applied here too, and a tour left with NO applicable steps is
+ * `not-applicable` rather than ready. That rule is what makes per-step gating safe to reach
+ * for: a tour whose every step is branch-specific (the parked-run tour — some boards have a
+ * decision waiting, some an approval) would otherwise open on an empty cursor, which the
  * overlay ends immediately, so the user presses Start and nothing happens.
  *
- * Pure and total, so `navSlotFilter` (which runs inside a reactive computed, once per gate
- * flip) stays a straight fold and the rules above are unit-testable without a Vue runtime.
+ * `gates` is nullable for the same reason `navSlotFilter` passes everything through when no
+ * gates service is wired (a bare install / dev-open parity): with nothing to gate against,
+ * nothing is withheld — including the per-step branches, which must not be silently thinned.
+ *
+ * Pure, total and sorted, so both consumers (the launch prompt's offer list and the
+ * catalogue) read one resolution rather than each re-deriving availability, and the rules
+ * above are unit-testable without a Vue runtime.
  */
-export function resolveTours(tours: readonly TutorialTour[], gates: NavGates): TutorialTour[] {
-  const out: TutorialTour[] = []
-  for (const tour of tours) {
-    if (tour.when && !tour.when(gates)) continue
-    const steps = tour.steps.filter((s) => (s.when ? s.when(gates) : true))
-    if (steps.length === 0) continue
-    // Reuse the original object when nothing was dropped: the prompt keys its list on the
-    // tour, and a fresh object per gate read would re-render it on every unrelated flip.
-    out.push(steps.length === tour.steps.length ? tour : { ...tour, steps })
+export function resolveTourCatalogue(
+  tours: readonly TutorialTour[],
+  gates: NavGates | null,
+): TutorialCatalogueEntry[] {
+  return sortTours(tours).map((tour) => {
+    const unmet = gates ? (tour.requires ?? []).filter((r) => !r.met(gates)) : []
+    const steps = gates ? tour.steps.filter((s) => (s.when ? s.when(gates) : true)) : tour.steps
+    // Reuse the original object when nothing was dropped: both surfaces key their lists on
+    // the tour, and a fresh object per gate read would re-render on every unrelated flip.
+    const resolved = steps.length === tour.steps.length ? tour : { ...tour, steps }
+    const availability: TutorialAvailability =
+      unmet.length > 0 ? 'blocked' : steps.length === 0 ? 'not-applicable' : 'ready'
+    return { tour: resolved, availability, unmet }
+  })
+}
+
+/** The tours that can be started right now, resolved — the launch prompt's offer list. */
+export function resolveTours(
+  tours: readonly TutorialTour[],
+  gates: NavGates | null,
+): TutorialTour[] {
+  return resolveTourCatalogue(tours, gates)
+    .filter((entry) => entry.availability === 'ready')
+    .map((entry) => entry.tour)
+}
+
+/**
+ * Where a tour stands for this user: the state the catalogue badges and the action label
+ * derive from. Camel-cased because the values ARE the i18n leaf keys
+ * (`tutorial.status.<state>`, `tutorial.action.<action>`), which keeps those lookups total.
+ */
+export type TutorialTourState = 'notStarted' | 'inProgress' | 'paused' | 'completed'
+
+/** What the tour's button does, given that state. */
+export type TutorialLaunchAction = 'start' | 'resume' | 'restart' | 'continue'
+
+/**
+ * Which state a tour is in, in precedence order: the one RUNNING wins over everything, then a
+ * broken-off position, then completion.
+ *
+ * Paused beating completed is the deliberate half: a tour taken again and broken off is
+ * offered where it stopped, rather than being described by the badge it earned last time.
+ */
+export function tourState(input: {
+  active: boolean
+  resumable: boolean
+  completed: boolean
+}): TutorialTourState {
+  if (input.active) return 'inProgress'
+  if (input.resumable) return 'paused'
+  return input.completed ? 'completed' : 'notStarted'
+}
+
+/**
+ * The action offered for a state. Total, so a new state cannot reach a surface without an
+ * action — `continue` exists because the catalogue is reachable DURING a tour (nothing about
+ * the overlay blocks the sidebar), and offering "Start" for the walkthrough already on screen
+ * would restart it from step one on a click most people would read as "back to it".
+ */
+export function launchActionFor(state: TutorialTourState): TutorialLaunchAction {
+  const actions: Record<TutorialTourState, TutorialLaunchAction> = {
+    notStarted: 'start',
+    inProgress: 'continue',
+    paused: 'resume',
+    completed: 'restart',
   }
-  return out
+  return actions[state]
+}
+
+/**
+ * The copy for each state / action, as exhaustive `Record`s rather than a key assembled at
+ * the call site (`t(\`tutorial.action.${action}\`)`).
+ *
+ * The typed-message-key check only covers keys written as literals, so an assembled one is
+ * exactly the drift it cannot see — the i18n guard's tier-2 rule. Declared this way, adding a
+ * state without its copy fails the typecheck, and `tutorial.spec.ts` pins every value against
+ * the catalog so a RENAMED key fails a test instead of rendering a raw path to the user.
+ */
+export const TUTORIAL_STATUS_KEYS: Record<TutorialTourState, string> = {
+  notStarted: 'tutorial.status.notStarted',
+  inProgress: 'tutorial.status.inProgress',
+  paused: 'tutorial.status.paused',
+  completed: 'tutorial.status.completed',
+}
+
+export const TUTORIAL_ACTION_KEYS: Record<TutorialLaunchAction, string> = {
+  start: 'tutorial.action.start',
+  resume: 'tutorial.action.resume',
+  restart: 'tutorial.action.restart',
+  continue: 'tutorial.action.continue',
 }
 
 /** A DOMRect-shaped box, structurally typed so the geometry below is unit-testable. */

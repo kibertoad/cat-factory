@@ -64,6 +64,61 @@ describe('useTutorialStore launch prompt', () => {
   })
 })
 
+describe('useTutorialStore catalogue', () => {
+  it('opens over the launch prompt without answering it', () => {
+    // Browsing the full list is not "no thanks" — it is the opposite — so the offer must
+    // return next launch if the user browses and starts nothing. And the two are modals:
+    // leaving the prompt open would stack them.
+    const tutorial = useTutorialStore()
+    tutorial.maybeOfferOnLaunch()
+    tutorial.openCatalogue()
+    expect(tutorial.catalogueOpen).toBe(true)
+    expect(tutorial.promptOpen).toBe(false)
+    expect(tutorial.decision).toBeNull()
+  })
+
+  it('closes when a tour starts or resumes from it', () => {
+    const tutorial = useTutorialStore()
+    tutorial.openCatalogue()
+    tutorial.startTour('board-basics')
+    expect(tutorial.catalogueOpen).toBe(false)
+
+    tutorial.setStepIndex(2)
+    tutorial.stopTour()
+    tutorial.openCatalogue()
+    tutorial.resumeTour('board-basics')
+    expect(tutorial.catalogueOpen).toBe(false)
+  })
+
+  it('resets every record of progress, including the answered offer', () => {
+    // What someone handing the app to a colleague is asking for: the first-launch experience
+    // back. Clearing only the completion list would leave the offer answered, so the prompt
+    // they are trying to demo would never appear.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    tutorial.startTour('run-task')
+    tutorial.setStepIndex(2)
+    tutorial.stopTour()
+
+    tutorial.resetProgress()
+    expect(tutorial.completedTourIds).toEqual([])
+    expect(tutorial.interruptedAt('run-task')).toBeNull()
+    expect(tutorial.decision).toBeNull()
+  })
+
+  it('leaves a running tour alone when progress is reset', () => {
+    // A click about history must not end the walkthrough the user is in the middle of —
+    // which would also leave it unrecorded, since nothing marks a stopped tour complete.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.setStepIndex(2)
+    tutorial.resetProgress()
+    expect(tutorial.activeTourId).toBe('board-basics')
+    expect(tutorial.stepIndex).toBe(2)
+  })
+})
+
 describe('useTutorialStore tours', () => {
   it('starting a tour records acceptance, closes the prompt, and resets the cursor', () => {
     const tutorial = useTutorialStore()

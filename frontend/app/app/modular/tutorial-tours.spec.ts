@@ -2,10 +2,14 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import en from '../../i18n/locales/en.json'
-import { TUTORIAL_TOURS, tutorialToursModule } from '~/modular/tutorial-tours'
-import { NAV_CONTRIBUTIONS, navSlotFilter } from '~/modular/nav-contributions'
+import {
+  TUTORIAL_REQUIREMENTS,
+  TUTORIAL_TOURS,
+  tutorialToursModule,
+} from '~/modular/tutorial-tours'
+import { resolveTourCatalogue, resolveTours } from '~/utils/tutorial'
 import { isSafeTargetId } from '~/components/tutorial/TutorialOverlay.logic'
-import type { AppSlots, NavGates } from '~/modular/nav-contributions'
+import type { NavGates } from '~/modular/nav-contributions'
 
 const ALL_GATES: NavGates = {
   canWriteBoard: true,
@@ -39,12 +43,6 @@ const FRESH_BOARD: NavGates = {
   boardHasPendingApproval: false,
   boardHasFinishedRun: false,
 }
-
-const slots = (): AppSlots =>
-  ({
-    nav: [...NAV_CONTRIBUTIONS],
-    tutorialTours: [...TUTORIAL_TOURS],
-  }) as unknown as AppSlots
 
 /** Resolve a dot-path against the en catalog; undefined when any hop is missing. */
 function lookupKey(key: string): unknown {
@@ -197,73 +195,112 @@ describe('the built-in tutorial tour catalog', () => {
   })
 })
 
-describe('navSlotFilter over tutorialTours', () => {
-  it('keeps every tour for a fully-gated user', () => {
-    const filtered = navSlotFilter(slots(), { gates: ALL_GATES })
-    expect(filtered.tutorialTours.map((t) => t.id)).toEqual(TUTORIAL_TOURS.map((t) => t.id))
+describe('tour availability across the catalog', () => {
+  /** The ids a board can START right now — what the launch prompt offers. */
+  const ready = (gates: NavGates) => resolveTours(TUTORIAL_TOURS, gates).map((t) => t.id)
+  /** The catalogue's own view: every tour, with what is holding each one back. */
+  const entry = (gates: NavGates, tourId: string) =>
+    resolveTourCatalogue(TUTORIAL_TOURS, gates).find((e) => e.tour.id === tourId)
+
+  it('offers every tour to a fully-gated user on a fully-populated board', () => {
+    expect(ready(ALL_GATES)).toEqual(TUTORIAL_TOURS.map((t) => t.id))
   })
 
-  it('drops the task-creating tour for a read-only viewer', () => {
+  it('lists the whole catalog whatever the gates say, holding back rather than hiding', () => {
+    // The catalogue surface's contract. A fresh board can run two of the six walkthroughs;
+    // dropping the other four (all a slot filter could do) would misrepresent the product as
+    // shipping two, to exactly the user who came looking for the rest.
+    const catalogue = resolveTourCatalogue(TUTORIAL_TOURS, FRESH_BOARD)
+    expect(catalogue.map((e) => e.tour.id)).toEqual(TUTORIAL_TOURS.map((t) => t.id))
+    expect(catalogue.filter((e) => e.availability === 'ready').map((e) => e.tour.id)).toEqual([
+      'board-basics',
+      'add-service',
+    ])
+  })
+
+  it('holds the task-creating tour back from a read-only viewer, and says why', () => {
     const viewer: NavGates = { ...ALL_GATES, canWriteBoard: false }
-    const filtered = navSlotFilter(slots(), { gates: viewer })
-    const ids = filtered.tutorialTours.map((t) => t.id)
-    expect(ids).toContain('board-basics')
-    expect(ids).not.toContain('first-task')
+    expect(ready(viewer)).toContain('board-basics')
+    expect(ready(viewer)).not.toContain('first-task')
+    expect(entry(viewer, 'first-task')?.unmet.map((r) => r.id)).toEqual(['board-write'])
   })
 
-  it('drops the task-creating tour on a board with no service to add a task to', () => {
+  it('holds the task-creating tour back on a board with no service to add a task to', () => {
     // Every targeted step of that tour would time out in turn and it would then claim to
     // have taught the core loop; `board-basics` is what an empty board can deliver.
     const emptyBoard: NavGates = { ...ALL_GATES, boardHasService: false }
-    const filtered = navSlotFilter(slots(), { gates: emptyBoard })
-    expect(filtered.tutorialTours.map((t) => t.id)).not.toContain('first-task')
+    expect(ready(emptyBoard)).not.toContain('first-task')
+    expect(entry(emptyBoard, 'first-task')?.unmet.map((r) => r.id)).toEqual(['service'])
   })
 
   it('offers a brand-new board the orientation tour AND the way out of being empty', () => {
     // The state the launch prompt actually auto-opens in. Orientation alone would leave a
     // new workspace with a tour of an empty canvas and no route to a first service, which
     // is what `add-service` exists to fix — so it must survive exactly this gate set.
-    const filtered = navSlotFilter(slots(), { gates: FRESH_BOARD })
-    expect(filtered.tutorialTours.map((t) => t.id)).toEqual(['board-basics', 'add-service'])
+    expect(ready(FRESH_BOARD)).toEqual(['board-basics', 'add-service'])
   })
 
-  it('drops the repo tour when no source-control connection can list repositories', () => {
+  it('names the missing connection when no source control can list repositories', () => {
     const noSource: NavGates = { ...FRESH_BOARD, githubAvailable: false }
-    expect(navSlotFilter(slots(), { gates: noSource }).tutorialTours.map((t) => t.id)).toEqual([
-      'board-basics',
-    ])
+    expect(ready(noSource)).toEqual(['board-basics'])
+    expect(entry(noSource, 'add-service')?.unmet.map((r) => r.id)).toEqual(['source-control'])
   })
 
   it('offers the run tour once a task exists, and the review tour once a run finished', () => {
     const withTask: NavGates = { ...FRESH_BOARD, boardHasService: true, boardHasTask: true }
-    expect(navSlotFilter(slots(), { gates: withTask }).tutorialTours.map((t) => t.id)).toContain(
-      'run-task',
-    )
-    expect(
-      navSlotFilter(slots(), { gates: withTask }).tutorialTours.map((t) => t.id),
-    ).not.toContain('review-merge')
+    expect(ready(withTask)).toContain('run-task')
+    expect(ready(withTask)).not.toContain('review-merge')
+    expect(entry(withTask, 'review-merge')?.unmet.map((r) => r.id)).toEqual(['finished-run'])
 
     const finished: NavGates = { ...withTask, boardHasRun: true, boardHasFinishedRun: true }
-    expect(navSlotFilter(slots(), { gates: finished }).tutorialTours.map((t) => t.id)).toContain(
-      'review-merge',
-    )
+    expect(ready(finished)).toContain('review-merge')
+  })
+
+  it('names every unmet requirement, not just the first', () => {
+    // The reader has to do all of them; reporting one at a time turns unblocking a tour into
+    // a guessing game with a fresh answer after each attempt.
+    const bare: NavGates = { ...FRESH_BOARD, canWriteBoard: false, githubAvailable: false }
+    expect(entry(bare, 'add-service')?.unmet.map((r) => r.id)).toEqual([
+      'board-write',
+      'source-control',
+    ])
+  })
+
+  it('resolves every requirement copy key against the en catalog', () => {
+    // Same tier-2 i18n guard as the tour copy above: a requirement's label is looked up from
+    // data, so a renamed key would reach the user as a raw path in the "available once" list.
+    for (const requirement of Object.values(TUTORIAL_REQUIREMENTS)) {
+      expect(typeof lookupKey(requirement.labelKey), requirement.labelKey).toBe('string')
+    }
+  })
+
+  it('declares its requirements from the shared set', () => {
+    // A tour with an inline requirement object is not wrong, but a duplicate of a shared one
+    // is: two copies of "a service on the board" drift into two different sentences about the
+    // same gate. Pinning the built-ins to the table keeps that a deliberate act.
+    const shared = new Set(Object.values(TUTORIAL_REQUIREMENTS).map((r) => r.id))
+    for (const tour of TUTORIAL_TOURS) {
+      for (const requirement of tour.requires ?? []) {
+        expect(shared, `${tour.id}: ${requirement.id}`).toContain(requirement.id)
+      }
+    }
   })
 
   it('passes tours through untouched when no gates service is wired', () => {
-    const filtered = navSlotFilter(slots(), {})
-    expect(filtered.tutorialTours.map((t) => t.id)).toEqual(TUTORIAL_TOURS.map((t) => t.id))
+    expect(resolveTours(TUTORIAL_TOURS, null).map((t) => t.id)).toEqual(
+      TUTORIAL_TOURS.map((t) => t.id),
+    )
   })
 })
 
 describe('the parked-run tour branches', () => {
   const stepIds = (gates: NavGates, tourId: string) =>
-    navSlotFilter(slots(), { gates })
-      .tutorialTours.find((t) => t.id === tourId)
+    resolveTours(TUTORIAL_TOURS, gates)
+      .find((t) => t.id === tourId)
       ?.steps.map((s) => s.id)
 
   it('is not offered while nothing is waiting for a human', () => {
-    const ids = navSlotFilter(slots(), { gates: FRESH_BOARD }).tutorialTours.map((t) => t.id)
-    expect(ids).not.toContain('answer-park')
+    expect(resolveTours(TUTORIAL_TOURS, FRESH_BOARD).map((t) => t.id)).not.toContain('answer-park')
   })
 
   it('shows the decision branch only, for a run parked on a decision', () => {
@@ -297,7 +334,7 @@ describe('the parked-run tour branches', () => {
   it('keeps every branch when no gates service is wired', () => {
     // Same dev-open parity as `nav`: with nothing to gate against, nothing is withheld —
     // including the per-step branches, which a bare install must not silently thin out.
-    const answerPark = navSlotFilter(slots(), {}).tutorialTours.find((t) => t.id === 'answer-park')
+    const answerPark = resolveTours(TUTORIAL_TOURS, null).find((t) => t.id === 'answer-park')
     expect(answerPark?.steps.map((s) => s.id)).toEqual([
       'intro',
       'resolve',

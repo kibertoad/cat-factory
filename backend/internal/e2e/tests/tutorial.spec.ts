@@ -9,11 +9,12 @@ import {
   taskCard,
 } from './helpers'
 
-// The in-app tutorial is the one surface whose whole subject is the FIRST launch, so it is
-// also the one spec that must NOT use the `seededBoard` fixture: that fixture pre-answers the
-// launch prompt (as every other spec needs — a first-run modal would make their clicks
-// unactionable), which is precisely the thing under test here. So each test below runs the
-// seed → pin → open preamble itself, opting into `tutorial: 'unanswered'`.
+// The launch offer is the one surface whose whole subject is the FIRST launch, so this first
+// describe must NOT use the `seededBoard` fixture: that fixture pre-answers the launch prompt
+// (as every other spec needs — a first-run modal would make their clicks unactionable), which
+// is precisely the thing under test here. So each test in it runs the seed → pin → open
+// preamble itself, opting into `tutorial: 'unanswered'`. The describes below it are about a
+// RETURNING user and take the fixture as-is.
 //
 // What only the assembled product can show, and what these assert:
 //  - the launch prompt really auto-opens for a user who has never answered;
@@ -75,9 +76,70 @@ test.describe('in-app tutorial', () => {
   })
 })
 
+// The catalogue is the surface a RETURNING user reaches — the one whose whole point is that
+// it is there after the launch prompt has been answered and gone. Everything below is what
+// only the assembled product shows: the sidebar entry really opens it, its rows really reflect
+// this board's live state, and a tour started from it really runs.
+test.describe('the tutorial catalogue', () => {
+  test('opens from the sidebar at any time, listing what can and cannot run yet', async ({
+    page,
+    seededBoard,
+  }) => {
+    // `seededBoard` pre-answers the launch prompt, which is exactly the state under test: a
+    // user who said "no thanks" once must still have a way back to the walkthroughs.
+    void seededBoard
+    await expect(page.getByTestId('tutorial-prompt')).toBeHidden()
+
+    await page.getByTestId('nav-tutorial').click()
+    const catalogue = page.getByTestId('tutorial-catalogue')
+    await expect(catalogue).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // Every built-in is listed, whether or not this board can run it. A seeded board has a
+    // service and tasks, so the run tour is startable; nothing has finished, so the
+    // review/merge tour is held back — and SAYS so rather than being missing.
+    await expect(catalogue.getByTestId('tutorial-catalogue-entry-board-basics')).toBeVisible()
+    await expect(catalogue.getByTestId('tutorial-catalogue-start-run-task')).toBeEnabled()
+    await expect(catalogue.getByTestId('tutorial-catalogue-start-review-merge')).toBeDisabled()
+    await expect(
+      catalogue.getByTestId('tutorial-catalogue-requirements-review-merge'),
+    ).toBeVisible()
+  })
+
+  test('starts a tour, offers it back where it stopped, and resets that record', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+
+    await page.getByTestId('nav-tutorial').click()
+    await page.getByTestId('tutorial-catalogue-start-board-basics').click()
+
+    // The catalogue gets out of the way and the real coach mark runs, anchored to the board.
+    await expect(page.getByTestId('tutorial-catalogue')).toBeHidden({ timeout: LIVE_TIMEOUT })
+    const tooltip = page.getByTestId('tutorial-tooltip')
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await tooltip.getByTestId('tutorial-next').click()
+    await expect(page.getByTestId('tutorial-highlight')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await tooltip.getByTestId('tutorial-skip').click()
+    await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
+
+    // Broken off past the first step, so the row now offers the position back — the whole
+    // reason a stray Esc is survivable.
+    await page.getByTestId('nav-tutorial').click()
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toBeVisible({
+      timeout: LIVE_TIMEOUT,
+    })
+
+    // ...and Reset really clears it, which is what makes this demoable to the next person.
+    await page.getByTestId('tutorial-catalogue-reset').click()
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toBeHidden()
+    await expect(page.getByTestId('tutorial-catalogue-reset')).toBeHidden()
+  })
+})
+
 // The tours that key off RUN state are the only ones whose availability the unit tests
-// cannot reach: those drive `navSlotFilter` with a fixture gate object, while what decides
-// this in production is `createNavGates` reading the live execution store. So the assertion
+// cannot reach: those drive `resolveTourCatalogue` with a fixture gate object, while what
+// decides this in production is `createNavGates` reading the live execution store. So the assertion
 // that matters is the assembled one — a run really parks, and the tour about answering it
 // really appears, with no reload between the two.
 test.describe('tutorial tours that follow a live run', () => {
@@ -92,23 +154,27 @@ test.describe('tutorial tours that follow a live run', () => {
     const pipeline = await createSimplePipeline(request, workspaceId)
     const card = taskCard(page, 'task_login')
 
-    // Nothing is waiting yet, so the tour has nothing to teach and is not on offer.
+    // Nothing is waiting yet, so the tour has nothing to teach: the catalogue still LISTS it
+    // (that is the point of the catalogue) with its button inert and the requirement named.
     await page.getByTestId('command-bar-launcher').click()
     await expect(page.getByTestId('command-bar')).toBeVisible()
     await page.getByTestId('command-tutorial').click()
-    await expect(page.getByTestId('tutorial-prompt')).toBeVisible({ timeout: LIVE_TIMEOUT })
-    await expect(page.getByTestId('tutorial-start-answer-park')).toBeHidden()
-    await page.getByTestId('tutorial-close').click()
+    await expect(page.getByTestId('tutorial-catalogue')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('tutorial-catalogue-start-answer-park')).toBeDisabled()
+    await expect(page.getByTestId('tutorial-catalogue-requirements-answer-park')).toBeVisible()
+    await page.getByTestId('tutorial-catalogue-close').click()
 
     // The fake agent parks the first step on a human decision, pushed live.
     await startRun(request, workspaceId, 'task_login', pipeline.id)
     await expect(page.getByTestId('decision-badge')).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-    // LIVE: the gate flipped with no reload, so the tour is now offered.
+    // LIVE: the gate flipped with no reload, so the same catalogue row is now startable and
+    // its "available once you have" note is gone.
     await page.getByTestId('command-bar-launcher').click()
     await page.getByTestId('command-tutorial').click()
-    const start = page.getByTestId('tutorial-start-answer-park')
-    await expect(start).toBeVisible({ timeout: LIVE_TIMEOUT })
+    const start = page.getByTestId('tutorial-catalogue-start-answer-park')
+    await expect(start).toBeEnabled({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('tutorial-catalogue-requirements-answer-park')).toBeHidden()
     await start.click()
 
     // Step 1 is the untargeted intro; Next moves onto the card's own Resolve affordance,
