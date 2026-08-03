@@ -1,5 +1,53 @@
 # @cat-factory/kernel
 
+## 0.215.0
+
+### Minor Changes
+
+- 233e279: Register generative binary integrations (image / music / video generation APIs) in a deployment's own code, and let binary-generating agent steps select them.
+
+  `BinaryGeneratorRegistry` is a new app-owned registry beside the foundational-service one: an integration declares the content types it produces (`image | audio | video | 3d | document`), its media types, endpoint, API contracts and the credential it needs BY NAME. A step picks from it via `stepOptions.binaryOutput.generatorIds` and states the content types it must deliver via `.modalities`; run admission refuses an unregistered id or an uncovered content type under the new `binary_output_generator_invalid` conflict reason. The agent's `.cat-context/binary-output/brief.md` now leads with a Generation section describing each integration, and the credential value reaches only that job's agent process (job body `generatorSecrets`), never a prompt or the telemetry snapshot.
+
+  All three facades take the registry as their own DI option (`binaryGeneratorRegistry`), so a deployment registers integrations on Node and local exactly as on the Worker, and each facade boot-validates the instance it was handed. A new `registry-seams` guard derives the app-owned registry set from `CoreDependencies` and holds each one to a declared route, so the next registry cannot land threaded on one runtime and inert on another.
+
+  The SPA follows the shapes through: the binary-output step picker offers the generative selection (from the workspace snapshot's new `binaryGenerators`, identity only — never a credential key name) and mirrors both new refusals inline, and the report names the integration that produced each artifact plus any the deployment does not register.
+
+  Breaking, pre-1.0: `PipelineStep.binaryOutputs` gains a required `unknownGenerators` array, so reports recorded before this change no longer parse — an affected step's declaration record is re-created on its next run. `ToolSecretResolver.resolve` takes a discriminated `subject` (`tool-server` | `binary-generator`) in place of `serverId`; a deployment implementing that port per workspace must update its signature, and one passing `allowKeys` to the env-backed default must extend the list to cover its integrations' credential keys or they resolve to nothing.
+
+- 54d531d: Count the deployment's operational EVENTS, and let the health alerts see a dead one.
+
+  The platform-observability projection answers "how are the runs doing" by aggregating
+  `agent_runs`. It structurally cannot answer what an operator asks during an incident — how often
+  container dispatch is failing, whether the sweeper is re-driving more than it was, whether a queue
+  is draining — because none of those are rows in a table. A new kernel `OperationalMetrics` port
+  counts them, and the OTLP platform exporter ships them as delta sums beside the existing gauges.
+  Wired at the sweepers, the container seam, the trace sinks, the notification webhook and every
+  app-cache read; `agent_runs` gained a persisted `redrive_count`, so "was this run re-driven three
+  times?" is answerable after the process (or the isolate) that did it is gone.
+
+  `platform_health` gained three conditions. The important one is zero-throughput: every existing
+  condition divides by runs and goes silent at zero, so a deployment that stopped accepting work
+  read identically to a quiet healthy one. Alongside it, a dominant-failure-kind condition (100%
+  `evicted` and 100% `agent` produce the same failure rate and need opposite fixes) and one that
+  alerts on the sweepers themselves, since a wedged sweeper makes every other signal stale without
+  making any of them fire. A sweep pass reports its rate and its failure streak through ONE call
+  (`SweepHealthTracker.recordFailure`), and the Worker drives its crons through a `SweepTick` that
+  is the facade-symmetric twin of Node's `startSweeper` — so both runtimes cover the same set of
+  sweepers, and the tick's counters are flushed after its passes have settled rather than before.
+
+  Also: retention pruning is now isolated per table (one sick table used to abort the whole pass,
+  indefinitely, and report zeroes indistinguishable from an empty table); `/ready` round-trips
+  pg-boss's own connection instead of trusting a process-local boolean, and the Worker gained a
+  bindings-probing `/ready`; and every pg-boss queue is created with a dead-letter sibling whose
+  depth rides the `queue.depth` gauge under `state: dead_letter`, with an hourly sweep logging the
+  source queue to go and look at.
+
+### Patch Changes
+
+- Updated dependencies [233e279]
+- Updated dependencies [54d531d]
+  - @cat-factory/contracts@0.212.0
+
 ## 0.214.1
 
 ### Patch Changes
