@@ -144,14 +144,22 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
 
 /**
  * The shallow structural check one served view must pass to be resolvable here: an `id` to match
- * a step's `generatorIds` against, and the `modalities` admission compares a step's declared
- * content types to. Everything else a view carries is rendered rather than decided on, so a
- * missing field degrades a brief instead of silently changing a verdict.
+ * a step's `generatorIds` against, and the two lists admission compares a step's declared
+ * deliverables to — `modalities` for the content type, `mediaTypes` for the concrete format.
+ * Everything else a view carries is rendered rather than decided on, so a missing field degrades
+ * a brief instead of silently changing a verdict.
+ *
+ * `mediaTypes` is checked for the reason it is DECIDED on: an absent one reaches the coverage
+ * rule as a crash rather than a verdict, which is an unreadable reply escaping as a 500 instead
+ * of the one `UnavailableError` every route to "we do not know what is registered" ends at. A
+ * registry that declares no formats serves `[]`, which every version of the projection emits.
  */
 function isGeneratorView(value: unknown): value is BinaryGeneratorView {
   if (!value || typeof value !== 'object') return false
   const view = value as Partial<BinaryGeneratorView>
-  return typeof view.id === 'string' && Array.isArray(view.modalities)
+  return (
+    typeof view.id === 'string' && Array.isArray(view.modalities) && Array.isArray(view.mediaTypes)
+  )
 }
 
 /**

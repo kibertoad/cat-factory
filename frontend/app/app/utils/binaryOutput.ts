@@ -1,4 +1,4 @@
-import { ASSET_STORAGE_CAPABILITY } from '@cat-factory/contracts'
+import { ASSET_STORAGE_CAPABILITY, normalizeMediaType } from '@cat-factory/contracts'
 import type { BinaryModality, RegisteredBinaryGenerator } from '@cat-factory/contracts'
 import type {
   BinaryOutputArtifact,
@@ -119,6 +119,28 @@ export interface BinaryOutputView {
    */
   modalities: readonly BinaryModality[]
   /**
+   * The concrete FORMATS the step declares it must deliver
+   * (`stepOptions.binaryOutput.mediaTypes`), for the deliverables where the container is the
+   * requirement rather than a preference — a mesh the engine can import.
+   */
+  mediaTypes: readonly string[]
+  /**
+   * Required formats no DECLARED artifact reports a matching `contentType` for.
+   *
+   * The one judgement this surface can make that admission cannot: admission checked what the
+   * selected integrations CAN emit, and this checks what the run actually came back with. It is
+   * derived in code from the two records the step already carries — never read off the agent's
+   * prose — and it is the question a human opens this panel to answer once a mesh is supposed to
+   * load in a build.
+   *
+   * Computed only when there ARE artifacts to compare against: with none, the state line above
+   * already says nothing was recorded, and "it did not deliver a GLB" on top of "it declared
+   * nothing" is the same fact stated twice as if it were two. An artifact that reports no
+   * `contentType` covers nothing — the platform does not guess a format from a filename — so a
+   * report with formats required and none reported says so rather than passing.
+   */
+  undeliveredMediaTypes: readonly string[]
+  /**
    * Integration ids the AGENT named that the deployment does not register. The generative twin of
    * {@link unknownDeclaredServices}, and it needs no exclusion to stay disjoint from anything —
    * there is no single "target" integration a step selects, so the report's own list is already
@@ -168,6 +190,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
   const contextServices = config?.contextServiceIds ?? []
   const generators = config?.generatorIds ?? []
   const modalities = config?.modalities ?? []
+  const mediaTypes = config?.mediaTypes ?? []
   if (!report) {
     return {
       // A step still queued has not had the chance to record anything, which is a different
@@ -180,6 +203,8 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       unknownDeclaredServices: [],
       generators,
       modalities,
+      mediaTypes,
+      undeliveredMediaTypes: [],
       unknownDeclaredGenerators: [],
       generatorsUnverified: false,
       invalidEntries: 0,
@@ -208,12 +233,38 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     unknownDeclaredServices: report.unknownServices.filter((id) => id !== target),
     generators,
     modalities,
+    mediaTypes,
+    undeliveredMediaTypes: undeliveredMediaTypes(mediaTypes, rows),
     unknownDeclaredGenerators: report.unknownGenerators,
     generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
     omitted: report.omitted,
     misdirected: rows.filter((row) => row.misdirected).length,
   }
+}
+
+/**
+ * The required formats {@link BinaryOutputRow.contentType} does not account for.
+ *
+ * Compared through `normalizeMediaType` on the DECLARED side only: the step's requirement already
+ * came through `mediaTypeSchema` at the write boundary, while the artifact's content type is the
+ * agent's own prose and matches nothing until it is reduced the same way. Exact match after that,
+ * never a modality fallback — an artifact reported as `model/fbx` does not satisfy a requirement
+ * for `model/gltf-binary` just because both are 3D, and that is the entire point of requiring a
+ * format rather than a content type.
+ */
+function undeliveredMediaTypes(
+  required: readonly string[],
+  rows: readonly BinaryOutputRow[],
+): string[] {
+  if (required.length === 0 || rows.length === 0) return []
+  const delivered = new Set(
+    rows.flatMap((row) => {
+      const normalized = row.contentType ? normalizeMediaType(row.contentType) : null
+      return normalized ? [normalized] : []
+    }),
+  )
+  return required.filter((mediaType) => !delivered.has(mediaType))
 }
 
 /**
@@ -298,6 +349,7 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.unknownDeclaredServices.length > 0 ||
     view.unknownDeclaredGenerators.length > 0 ||
     view.generatorsUnverified ||
+    view.undeliveredMediaTypes.length > 0 ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0
@@ -345,6 +397,21 @@ export type BinaryOutputPickIssue =
   | 'unknown_generator'
   /** A content type the step declares it delivers is produced by NO selected integration. */
   | 'modality_uncovered'
+  /**
+   * A concrete FORMAT the step declares it delivers is emitted by no selected integration that
+   * declared its formats (kernel's `media_type_uncovered` spelling verbatim). A refusal, like the
+   * two above it.
+   */
+  | 'media_type_uncovered'
+  /**
+   * A declared format nothing selected claims, where a selected integration declares no formats
+   * at all — so it MIGHT be met and nothing may say otherwise. ADVISORY: unlike every other
+   * member here it is not a refusal and must not be styled as one, or a step that is going to
+   * start perfectly well reads as broken. It is here rather than nowhere because the alternative
+   * is silence about a requirement the platform could not check, which is how "nobody looked"
+   * comes to look exactly like "this is fine".
+   */
+  | 'media_type_unverifiable'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -355,6 +422,10 @@ export interface BinaryOutputPickState {
   unknownGeneratorIds: readonly string[]
   /** The declared content types nothing selected can produce, for the message that names them. */
   uncoveredModalities: readonly BinaryModality[]
+  /** The declared formats no DECLARING integration emits — the refusal's own list. */
+  uncoveredMediaTypes: readonly string[]
+  /** The declared formats that could not be judged, kept apart from the refusal above. */
+  unverifiableMediaTypes: readonly string[]
 }
 
 /**
@@ -374,24 +445,72 @@ export interface BinaryOutputPickState {
  */
 function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[],
+  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[],
   unavailable: boolean,
-): { issues: BinaryOutputPickIssue[]; unknownGeneratorIds: string[]; uncovered: BinaryModality[] } {
-  if (unavailable) {
-    return { issues: ['generators_unavailable'], unknownGeneratorIds: [], uncovered: [] }
+): {
+  issues: BinaryOutputPickIssue[]
+  unknownGeneratorIds: string[]
+  uncovered: BinaryModality[]
+  uncoveredMediaTypes: string[]
+  unverifiableMediaTypes: string[]
+} {
+  const none = {
+    unknownGeneratorIds: [],
+    uncovered: [],
+    uncoveredMediaTypes: [],
+    unverifiableMediaTypes: [],
   }
+  if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
   const selectedIds = config?.generatorIds ?? []
   const unknownGeneratorIds = selectedIds.filter((id) => !byId.has(id))
   // Coverage is judged against what RESOLVED, exactly as admission judges it: an unknown id
   // contributes no content types, so a step whose only audio generator is unregistered is told
   // BOTH things — the id is gone, and the requirement it was covering is now uncovered.
-  const covered = new Set(selectedIds.flatMap((id) => byId.get(id)?.modalities ?? []))
+  const selected = selectedIds.flatMap((id) => byId.get(id) ?? [])
+  const covered = new Set(selected.flatMap((g) => g.modalities))
   const uncovered = (config?.modalities ?? []).filter((m) => !covered.has(m))
+  const format = formatCoverage(config?.mediaTypes ?? [], selected)
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
-  return { issues, unknownGeneratorIds, uncovered }
+  if (format.uncovered.length) issues.push('media_type_uncovered')
+  if (format.unverifiable.length) issues.push('media_type_unverifiable')
+  return {
+    issues,
+    unknownGeneratorIds,
+    uncovered,
+    uncoveredMediaTypes: format.uncovered,
+    unverifiableMediaTypes: format.unverifiable,
+  }
+}
+
+/**
+ * The SPA's copy of kernel's `binaryFormatCoverage`, restated for the reason the two `*_service`
+ * members above are: the builder cannot see kernel, and the wire vocabulary that does cross
+ * (`@cat-factory/contracts`) carries the schema, not the rule.
+ *
+ * The THIRD outcome is what must not be lost in the copying. A generator that declares no formats
+ * has said "only my modality is known" — a documented state, not an empty answer — so a
+ * requirement it cannot be judged against is unverifiable and the step still starts. Collapsing
+ * that into `uncovered` would flag steps the backend admits (and send someone editing a selection
+ * that is fine); collapsing it into silence would present an unchecked requirement as a checked
+ * one.
+ */
+function formatCoverage(
+  required: readonly string[],
+  selected: readonly Pick<RegisteredBinaryGenerator, 'mediaTypes'>[],
+): { uncovered: string[]; unverifiable: string[] } {
+  const emitted = new Set(selected.flatMap((g) => g.mediaTypes ?? []))
+  const undeclared = selected.some((g) => (g.mediaTypes ?? []).length === 0)
+  const uncovered: string[] = []
+  const unverifiable: string[] = []
+  for (const mediaType of required) {
+    if (emitted.has(mediaType)) continue
+    if (undeclared) unverifiable.push(mediaType)
+    else uncovered.push(mediaType)
+  }
+  return { uncovered, unverifiable }
 }
 
 /**
@@ -425,7 +544,7 @@ export function binaryOutputPickIssues(
   // that registers no integrations cannot satisfy a step that selects one. So a call site that
   // omits this FLAGS a selection rather than passing it — the loud direction — and the default
   // stays a legitimate value rather than a hole.
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities'>[] = [],
+  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[] = [],
   // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
   // default, since every deployment but a mothership-mode node reads them in-process and cannot
   // fail — so an omitting call site judges the list it was given rather than claiming an outage.
@@ -451,6 +570,8 @@ export function binaryOutputPickIssues(
       unknownContextIds: [],
       unknownGeneratorIds: generative.unknownGeneratorIds,
       uncoveredModalities: generative.uncovered,
+      uncoveredMediaTypes: generative.uncoveredMediaTypes,
+      unverifiableMediaTypes: generative.unverifiableMediaTypes,
     }
   }
 
@@ -472,5 +593,7 @@ export function binaryOutputPickIssues(
     unknownContextIds,
     unknownGeneratorIds: generative.unknownGeneratorIds,
     uncoveredModalities: generative.uncovered,
+    uncoveredMediaTypes: generative.uncoveredMediaTypes,
+    unverifiableMediaTypes: generative.unverifiableMediaTypes,
   }
 }

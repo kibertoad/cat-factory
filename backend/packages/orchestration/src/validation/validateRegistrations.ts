@@ -25,7 +25,7 @@ import {
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
   isNamespacedId,
-  modalityOfMediaType,
+  modalitiesOfMediaType,
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
 } from '@cat-factory/contracts'
@@ -278,16 +278,22 @@ function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): Reg
   }
   const declared = new Set(definition.modalities)
   for (const mediaType of definition.mediaTypes ?? []) {
-    const modality = modalityOfMediaType(mediaType)
+    const consistent = modalitiesOfMediaType(mediaType)
     // An UNRECOGNISED media type is not a fault: the platform's classifier is not a registry of
     // every format that exists, and refusing one would make registering a new codec impossible.
-    // A recognised one that contradicts the declaration is, because both drive selection.
-    if (modality && !declared.has(modality)) {
+    // A recognised one that CONTRADICTS the declaration is, because both drive selection.
+    //
+    // Contradiction is an empty INTERSECTION, not an absent member, and for 3D that is the whole
+    // difference: a `.glb` is consistent with both `3d-model` and `3d-scene` because the container
+    // does not record which it holds, so requiring every member would refuse a scene generator
+    // for declaring the only format it can emit.
+    if (consistent.length > 0 && !consistent.some((modality) => declared.has(modality))) {
+      const names = consistent.join('/')
       invalid(
         'binary_generator_modality_mismatch',
         `Generative binary integration "${definition.id}" declares media type "${mediaType}" ` +
-          `(${modality}) but does not list "${modality}" among its modalities ` +
-          `(${definition.modalities.join(', ')}). A step selecting it for ${modality} would be ` +
+          `(${names}) but lists none of those among its modalities ` +
+          `(${definition.modalities.join(', ')}). A step selecting it for ${names} would be ` +
           `refused, and one selecting it for the listed modalities would be told it can emit this.`,
       )
     }

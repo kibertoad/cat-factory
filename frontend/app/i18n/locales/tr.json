@@ -4118,13 +4118,21 @@
       "binaryOutputGeneratorsPlaceholder": "Entegrasyon seçilmedi",
       "binaryOutputModalities": "Teslim etmeli",
       "binaryOutputModalitiesPlaceholder": "Gereksinim yok",
+      "binaryOutputMediaTypes": "Kesin biçimler",
+      "binaryOutputMediaTypesPlaceholder": "Biçim gereksinimi yok",
+      "binaryOutputDeclaredFormats": "Seçili entegrasyonların bildirdiği biçimler: {formats}",
+      "binaryOutputMediaTypeUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {formats} biçimini üretmiyor. Üretebilen birini seçin ya da gereksinimi kaldırın.",
+      "binaryOutputMediaTypeUnverifiable": "Seçili entegrasyonların hiçbiri {formats} bildirmiyor, ancak içlerinden biri hiç biçim bildirmiyor; bu yüzden denetlenemedi. Adım yine de başlar; entegrasyonun API’sinden bunu üretebildiğini doğrulayın.",
+      "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
+      "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {
         "image": "Görseller",
         "audio": "Ses",
         "video": "Video",
-        "3d": "3B modeller",
+        "3d-model": "3B modeller",
+        "3d-scene": "3B sahneler",
         "document": "Belgeler"
       }
     },
@@ -5393,6 +5401,7 @@
     "target": "Depolama hizmeti",
     "targetNone": "Bu adım için kaydedilmedi",
     "contextServices": "Üretim bağlamı",
+    "mediaTypes": "Gerekli biçimler",
     "misdirectedBadge": "Başka hizmet",
     "unknownBadge": "Katalogda yok",
     "storedCount": "{outcome}, 1 ürün | {outcome}, {count} ürün",
@@ -5424,6 +5433,7 @@
     "warning": {
       "unknownServices": "Katalogda bulunmayan bir hizmet adı verdi: {ids}. Kayıt bildirildiği gibi saklanır; kimliği pano kataloguyla karşılaştır. | Katalogda bulunmayan hizmet adları verdi: {ids}. Kayıtları bildirildiği gibi saklanır; kimlikleri pano kataloguyla karşılaştır.",
       "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
+      "undeliveredMediaTypes": "Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimi bildirmiyor. | Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimleri bildirmiyor.",
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
       "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor.",

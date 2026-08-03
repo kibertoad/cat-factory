@@ -4106,13 +4106,21 @@
       "binaryOutputGeneratorsPlaceholder": "Ninguna integración seleccionada",
       "binaryOutputModalities": "Debe entregar",
       "binaryOutputModalitiesPlaceholder": "Sin requisito",
+      "binaryOutputMediaTypes": "Formatos exactos",
+      "binaryOutputMediaTypesPlaceholder": "Sin requisito de formato",
+      "binaryOutputDeclaredFormats": "Las integraciones seleccionadas declaran: {formats}",
+      "binaryOutputMediaTypeUncovered": "Ninguna integración seleccionada emite {formats}, que este paso debe entregar. Elige una que lo haga o quita el requisito.",
+      "binaryOutputMediaTypeUnverifiable": "Ninguna integración seleccionada declara {formats}, pero una de ellas no declara ningún formato, así que no se pudo comprobar. El paso se inicia igualmente; confirma en la API de la integración que puede emitirlo.",
+      "binaryOutputMediaTypeUnusable": "No se guardó, porque esto no son tipos de medio: {entries}. Escribe cada uno como type/subtype.",
       "binaryOutputGeneratorMissing": "Esta instalación no registra estas integraciones generativas: {ids}. Se registran en el código de la instalación, no en este espacio de trabajo.",
       "binaryOutputModalityUncovered": "Ninguna integración seleccionada produce {modalities}, que este paso debe entregar.",
+      "binaryOutputModalityRetired": "{modality} (ya no disponible: vuelve a elegir los tipos de contenido de este paso)",
       "binaryOutputModality": {
         "image": "Imágenes",
         "audio": "Audio",
         "video": "Vídeo",
-        "3d": "Modelos 3D",
+        "3d-model": "Modelos 3D",
+        "3d-scene": "Escenas 3D",
         "document": "Documentos"
       }
     },
@@ -5381,6 +5389,7 @@
     "target": "Servicio de almacenamiento",
     "targetNone": "No registrado en este paso",
     "contextServices": "Contexto de generación",
+    "mediaTypes": "Formatos requeridos",
     "misdirectedBadge": "Otro servicio",
     "unknownBadge": "Fuera del catálogo",
     "storedCount": "{outcome}, 1 artefacto | {outcome}, {count} artefactos",
@@ -5412,6 +5421,7 @@
     "warning": {
       "unknownServices": "Nombró un servicio que el catálogo no contiene: {ids}. La entrada se conserva tal como se declaró; comprueba el identificador con el catálogo del tablero. | Nombró servicios que el catálogo no contiene: {ids}. Sus entradas se conservan tal como se declararon; comprueba los identificadores con el catálogo del tablero.",
       "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({id}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
+      "undeliveredMediaTypes": "Este paso debía entregar {formats} y ningún artefacto de abajo informa ese formato. | Este paso debía entregar {formats} y ningún artefacto de abajo informa esos formatos.",
       "misdirected": "1 artefacto fue a un servicio distinto de {target}. | {count} artefactos fueron a un servicio distinto de {target}.",
       "invalidEntries": "Se descartó 1 entrada declarada: no nombraba servicio ni ubicación. | Se descartaron {count} entradas declaradas: no nombraban servicio ni ubicación.",
       "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista.",

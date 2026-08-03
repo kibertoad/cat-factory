@@ -285,6 +285,9 @@ function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
   if (generator) artifact.generator = generator
   // The platform CLASSIFIES; the model only reports. An unrecognised media type leaves `modality`
   // ABSENT rather than guessing one — "we cannot tell what this is" is not "this is not an image".
+  // So does an AMBIGUOUS one, which for 3D is every one of them: a `.glb` is one asset or a whole
+  // scene and the container does not record which, so `modalityOfMediaType` answers null and the
+  // step's own declaration stays the only thing that ever knew.
   const modality: BinaryModality | null = contentType ? modalityOfMediaType(contentType) : null
   if (modality) artifact.modality = modality
   return artifact
@@ -359,6 +362,7 @@ export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
     ...renderBinaryGeneratorSection({
       selection: input.generators ?? { selected: [], unresolvedIds: [] },
       requestedModalities: input.config.modalities ?? [],
+      requestedMediaTypes: input.config.mediaTypes ?? [],
     }),
   )
   lines.push(...renderScopeSection(input), ...renderStorageSection(input))

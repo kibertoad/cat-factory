@@ -282,8 +282,11 @@ export {
   registryBinaryGeneratorSource,
 } from './ports/binary-generators.js'
 export {
+  type BinaryFormatCoverage,
+  type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
+  binaryFormatCoverage,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,

@@ -44,6 +44,19 @@ windows, or "legacy" fallbacks to preserve old data or old wire shapes. When a c
 rows, tokens, config, or request/response shapes obsolete, it is fine for them to break: prefer the clean
 shape and let stale state be re-created. Flag the break in the changeset.
 
+**But a break must ARRIVE as one.** Retiring a member of a CLOSED vocabulary that is also PERSISTED
+(`BinaryModality`, a step's stored enum, a reason code on a saved row) does not remove the old value
+from the database, so every exhaustive `switch` and `Record<TheEnum, …>` over it is total against the
+TYPE and partial against the DATA — and the reader that hits the stale value first is, by
+construction, the refusal whose whole job is to name what a human must re-pick. Left bare that is
+`undefined` spliced into the operator's message, or a `TypeError` white-screening the very editor the
+fix is made in. So a retired value is NAMED as retired, never silently dropped and never guessed onto
+a current member (nothing knows which one was meant — that unknowability is usually why it split).
+Keep the compile-time guard while you add the runtime one: route a `switch`'s `default` through a
+helper taking `never` (kernel's `describeModality`), and narrow a lookup with a predicate DERIVED from
+the schema (`isBinaryModality`, built from the picklist's own options) rather than an optional call —
+so adding a member still fails the build, and a member that was removed still renders honestly.
+
 ## PR workflow
 
 **Always finish a task with a PR, unprompted.** When the work is done, branch, commit, push, open a PR.
@@ -919,11 +932,27 @@ video integrations in CODE — identity, the CONTENT TYPES it produces, its `med
 API contracts in the same `uploadApiContract` vocabulary, and a credential declared BY NAME — and a
 step selects from it (`binaryOutput.generatorIds`) plus the content types it must DELIVER
 (`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
-(`image | audio | video | 3d | document`), because a free-form tag makes `images` and `image` two
-things that look identical and silently fail to match, and it is what the brief groups by so an
-image generator is never asked for music; **an uncovered content type is refused at admission**
-under its own `binary_output_generator_invalid` reason, kept apart from the storage-side refusal
-because one is fixed in the workspace catalog and the other in the deployment's build; and the
+(`image | audio | video | 3d-model | 3d-scene | document`), because a free-form tag makes `images`
+and `image` two things that look identical and silently fail to match, and it is what the brief
+groups by so an image generator is never asked for music. **A new member must clear the bar 3D
+cleared**: a deliverable is described on three axes — the KIND (`modalities`, which decides which
+generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
+else (the PROMPT) — and a member is earned only when neither lower axis can carry the distinction.
+`image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
+scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
+the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST — both 3D members
+for every 3D container, which is the true statement — the boot check passes on INTERSECTION, and a
+settled artifact classifies only when the answer is unambiguous (`modalityOfMediaType`), because a
+guess about an existing file is worse than an absence — with **`binaryOutput.mediaTypes` one notch under it**
+for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all one modality
+and none substitutes for another), each entry required rather than any-of, never inferred from or into
+a modality, matched EXACTLY through the one `normalizeMediaType`, and carrying a THIRD outcome
+beside covered/uncovered: a generator declaring no formats has said "only my modality is known", so
+the requirement is UNVERIFIABLE, the run is ADMITTED, and the gap is stated in the brief and the
+picker (`binaryFormatCoverage`) — the admission-side twin of `generatorsUnverified`; **an uncovered
+content type is refused at admission** under its own `binary_output_generator_invalid` reason, kept
+apart from the storage-side refusal because one is fixed in the workspace catalog and the other in
+the deployment's build; and the
 **credential VALUE never reaches a prompt** — the engine puts the non-secret projection on
 `AgentRunContext.binaryGenerators`, the container executor resolves it through the SAME
 `ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a

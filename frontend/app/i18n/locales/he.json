@@ -4117,13 +4117,21 @@
       "binaryOutputGeneratorsPlaceholder": "לא נבחרה אינטגרציה",
       "binaryOutputModalities": "חייב לספק",
       "binaryOutputModalitiesPlaceholder": "ללא דרישה",
+      "binaryOutputMediaTypes": "פורמטים מדויקים",
+      "binaryOutputMediaTypesPlaceholder": "ללא דרישת פורמט",
+      "binaryOutputDeclaredFormats": "האינטגרציות שנבחרו מצהירות על: {formats}",
+      "binaryOutputMediaTypeUncovered": "אף אינטגרציה שנבחרה אינה מפיקה {formats}, שהשלב הזה אמור לספק. בחרו אחת שמפיקה, או הסירו את הדרישה.",
+      "binaryOutputMediaTypeUnverifiable": "אף אינטגרציה שנבחרה אינה מצהירה על {formats}, אבל אחת מהן אינה מצהירה על פורמטים כלל, ולכן לא ניתן היה לבדוק זאת. השלב יתחיל בכל מקרה; ודאו ב-API של האינטגרציה שהיא יכולה להפיק את זה.",
+      "binaryOutputMediaTypeUnusable": "לא נשמר, כי אלה אינם סוגי מדיה: {entries}. כתבו כל אחד בצורה type/subtype.",
       "binaryOutputGeneratorMissing": "ההתקנה הזו אינה רושמת את האינטגרציות הגנרטיביות האלה: {ids}. הן נרשמות בקוד ההתקנה, לא במרחב העבודה הזה.",
       "binaryOutputModalityUncovered": "אף אינטגרציה שנבחרה אינה מייצרת {modalities}, שהשלב הזה אמור לספק.",
+      "binaryOutputModalityRetired": "{modality} (כבר לא נתמך — בחרו מחדש את סוגי התוכן של השלב)",
       "binaryOutputModality": {
         "image": "תמונות",
         "audio": "אודיו",
         "video": "וידאו",
-        "3d": "מודלים תלת-ממדיים",
+        "3d-model": "מודלים תלת-ממדיים",
+        "3d-scene": "סצנות תלת-ממדיות",
         "document": "מסמכים"
       }
     },
@@ -5392,6 +5400,7 @@
     "target": "שירות אחסון",
     "targetNone": "לא נרשם בשלב זה",
     "contextServices": "הקשר ליצירה",
+    "mediaTypes": "פורמטים נדרשים",
     "misdirectedBadge": "שירות אחר",
     "unknownBadge": "לא בקטלוג",
     "storedCount": "{outcome}, פריט אחד | {outcome}, {count} פריטים",
@@ -5423,6 +5432,7 @@
     "warning": {
       "unknownServices": "צוין שירות שאינו בקטלוג: {ids}. הרשומה נשמרת כפי שהוצהרה; בדוק את המזהה מול קטלוג הלוח. | צוינו שירותים שאינם בקטלוג: {ids}. הרשומות נשמרות כפי שהוצהרו; בדוק את המזהים מול קטלוג הלוח.",
       "targetUnknown": "הקטלוג כבר אינו מכיל את שירות האחסון של השלב הזה ({id}), ולכן לא ניתן היה להשוות מולו דבר ממה שלהלן. רשום אותו מחדש, או הפנה את השלב לשירות אחר.",
+      "undeliveredMediaTypes": "השלב הזה אמור היה לספק {formats}, ואף פריט למטה אינו מדווח על הפורמט הזה. | השלב הזה אמור היה לספק {formats}, ואף פריט למטה אינו מדווח על הפורמטים האלה.",
       "misdirected": "פריט אחד הגיע לשירות אחר מ- {target}. | {count} פריטים הגיעו לשירות אחר מ- {target}.",
       "invalidEntries": "רשומה מוצהרת אחת נדחתה: לא צוינו בה שירות ומיקום. | {count} רשומות מוצהרות נדחו: לא צוינו בהן שירות ומיקום.",
       "omitted": "פריט נוסף אחד הוצהר מעבר למגבלת הדוח ואינו מופיע ברשימה. | {count} פריטים נוספים הוצהרו מעבר למגבלת הדוח ואינם מופיעים ברשימה.",
