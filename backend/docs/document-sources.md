@@ -7,13 +7,13 @@ execution.
 
 The integration is **source-agnostic**. A `DocumentSourceProvider` encapsulates
 everything specific to one source (credential validation, page-id parsing,
-fetching, body → Markdown), and the rest of the stack — connection/import/plan/
-spawn/link services, the D1 tables, the HTTP surface and the frontend — is
+fetching, body → Markdown), and the rest of the stack (connection/import/plan/
+spawn/link services, the D1 tables, the HTTP surface and the frontend) is
 shared. Two providers ship today:
 
-- **Confluence Cloud** — HTTP Basic (account email + API token), storage-format
+- **Confluence Cloud**: HTTP Basic (account email + API token), storage-format
   XHTML bodies.
-- **Notion** — a single internal-integration token (Bearer), block-based bodies.
+- **Notion**: a single internal-integration token (Bearer), block-based bodies.
 
 Adding a third source is just another provider: implement
 `DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
@@ -22,7 +22,7 @@ Adding a third source is just another provider: implement
 This integration is **always on**: tenants connect their own sources
 interactively through the app, so there is no enable flag to forget. The one
 thing it requires is a master key to encrypt the per-workspace credentials at
-rest — and to make a misconfiguration impossible to miss, the worker **fails to
+rest, and to make a misconfiguration impossible to miss, the worker **fails to
 boot** (a loud config error) when the key is unset rather than silently dropping
 the feature from the UI.
 
@@ -30,7 +30,7 @@ the feature from the UI.
 
 Per-workspace credentials are entered in the app and stored (encrypted) in D1;
 there are no source secrets in `wrangler.toml`. A couple of knobs are global,
-plus the one required secret — the master key used to encrypt the per-workspace
+plus the one required secret: the master key used to encrypt the per-workspace
 source credentials at rest:
 
 ```toml
@@ -43,7 +43,7 @@ DOCUMENT_PLANNER = "llm"
 ```
 
 ```sh
-# Shared master key for credential encryption at rest (REQUIRED — config load throws
+# Shared master key for credential encryption at rest (REQUIRED - config load throws
 # without it; set as a secret, never commit it). One key backs every integration; the
 # cipher domain-separates per integration via its HKDF `info` tag:
 openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
@@ -55,7 +55,7 @@ In `llm` mode the planner reuses the agents' default model
 parsed, it degrades to the deterministic heading parser, so import/plan/spawn
 always work.
 
-Credentials are stored encrypted at rest in D1 — the per-source JSON bag is
+Credentials are stored encrypted at rest in D1: the per-source JSON bag is
 sealed with AES-256-GCM (the same `WebCryptoSecretCipher` envelope the
 environments integration uses, under a documents-scoped HKDF `info`) before it
 is written, and decrypted only on the import path. They are never returned on the
@@ -69,10 +69,10 @@ plaintext and re-encrypted on the next write.
 - **Notion**: create an **internal integration**
   (`notion.so/my-integrations`), share each page with it, and paste the token.
   The API host is fixed (`api.notion.com`), so there is no SSRF surface.
-- **GitHub** (repo docs — READMEs / RFCs / notes under `docs/`): rides the
+- **GitHub** (repo docs: READMEs / RFCs / notes under `docs/`): rides the
   workspace's installed GitHub App (or PAT in local mode), so it stores **no
   per-workspace credential and needs no separate connect step**. It is reported as a
-  live connection as soon as the App is installed — the provider's
+  live connection as soon as the App is installed: the provider's
   `resolveImplicitConnection` resolves the workspace's installation, and
   `DocumentConnectionService` surfaces it in `listConnections` / `requireConnection`
   without a stored marker row (an explicit stored connection, if one exists, still
@@ -82,12 +82,12 @@ plaintext and re-encrypted on the next write.
   installation account, so a crafted `owner/repo:path` id can't reach another tenant's
   repo through a different workspace's installation token (the same scoping `search` uses).
   In the UI the GitHub (and, via the VCS adapter, GitLab) source doesn't use the generic
-  free-text search box — instead the context-document picker offers a **repository
+  free-text search box: instead the context-document picker offers a **repository
   picker**: search for a repo (reusing the shared server-side repo search), then pick one
   or more **files** from it by searching the whole tree by path or browsing it with the
   same tree browser the monorepo add-service flow uses (now multi-pick in file mode). The
-  file search is backed by a single recursive tree read per repo — `listRepoFiles`
-  (`GET /github/repos/:repoGithubId/files`) over the `listTree` client port — so the
+  file search is backed by a single recursive tree read per repo: `listRepoFiles`
+  (`GET /github/repos/:repoGithubId/files`) over the `listTree` client port, so the
   picker filters files client-side without walking the contents API level-by-level.
 
 ## HTTP API
@@ -130,13 +130,13 @@ prose) and both remedied by the human:
 | The reference resolves to a page with **no readable content** (blank body AND excerpt) | `context_document_unreadable`   | `resolveLinkedContext`, plus `RequirementReviewService.gatherContext` |
 | The corpus **overflows** the ~256 KB materialised-context budget                       | `context_documents_over_budget` | `buildContextFiles`                                                   |
 
-Both land on the run as a **`preflight`** failure — the honest kind, since no agent ran —
+Both land on the run as a **`preflight`** failure (the honest kind, since no agent ran)
 but they refuse at different depths, so different seams classify them:
 `buildContextFiles` throws inside `startJob`, where `classifyDispatchFailure` sees it;
 `resolveLinkedContext` throws earlier, inside the context builder, so the throw leaves
 `advanceInstance` and the driver's `failureFromAdvanceError` sees it. Both map a
 `DomainError` to `preflight` plus its `details.reason`, and `runFailure.test.ts` pins that
-they agree — otherwise which seam happens to catch a refusal would decide how the board
+they agree: otherwise which seam happens to catch a refusal would decide how the board
 describes it.
 
 **Where in the run each one bites** is worth knowing, because they differ: the unreadable
@@ -144,14 +144,14 @@ refusal fires on the first step that resolves context, which on the default pipe
 `requirements-review` (step 1); the over-budget refusal fires on the first CONTAINER
 dispatch, which can be after a human has already answered a requirements round. Catching
 the latter at run start would mean wiring the documents/tasks repositories into
-`ExecutionService` for a check the first dispatch performs anyway — and the reworked
+`ExecutionService` for a check the first dispatch performs anyway, and the reworked
 description path re-resolves per dispatch, so the resolver-level check would still be
 needed underneath it.
 
 Neither is hypothetical: `import` persists whatever the provider returned, so a
 permission-limited Confluence page, an empty Notion page or a design node whose extraction
 yielded nothing all project to a blank body. Before this rule, both cases were dropped on
-the floor — the run looked completely healthy while the agent worked from a spec nobody
+the floor: the run looked completely healthy while the agent worked from a spec nobody
 noticed it never read. The remedy is always named in the message: re-import the page, or
 detach it from the task (a task may proceed without a document; it may never do so
 silently). The over-budget message says "detach the linked context this task does not
@@ -159,7 +159,7 @@ need" rather than naming a page, because linked **tracker issues** are sized int
 budget and can be what overflows it.
 
 **A refusal is asserted over the content its caller actually renders.**
-`hasReadableContent` (body OR excerpt) is right where the RAW body is delivered — a
+`hasReadableContent` (body OR excerpt) is right where the RAW body is delivered: a
 container agent opens the materialised markdown source and can at least see what is in it.
 An inline caller with no checkout renders only a short excerpt, so it asserts over
 `contextExcerptFor`, which can be empty for a body that is not: `import` stores
@@ -172,24 +172,24 @@ Two deliberate NON-refusals:
 - **A URL that matches nothing imported is logged, not refused.** The providers' `parseRef`
   implementations are host-blind (`parseNotionRef` claims any string carrying a UUID-shaped
   run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so a claim is
-  evidence of a shape, not of a reference — failing runs on it would block a task whose
+  evidence of a shape, not of a reference: failing runs on it would block a task whose
   description happens to link a dashboard. The drop stays; an `info` line naming the URL and
   the source is what keeps it from being silent (importing the page turns it into real
   context). It is `info` rather than `warn` for the same reason it is not a refusal: a
   description that links a dashboard is a normal, permanent state of a healthy task, and
-  this re-resolves on every dispatch — a warning would repeat forever with no remedy anyone
+  this re-resolves on every dispatch; a warning would repeat forever with no remedy anyone
   intends to apply, which is how a channel gets tuned out.
 - **A budget that omits an item from a PROMPT states the omission instead.** The
   materialised index is capped at `CONTEXT_BUDGET.maxItems`, and an inline (no-checkout)
   kind's injection at `CONTEXT_BUDGET.inlineBodyTokens`; `renderLinkedContext` says how many
   items are unlisted (they are all on disk) and names the documents an inline prompt had no
   budget left for, because an unmentioned omission reads as "this is the complete set". Both
-  notices are themselves BOUNDED — the inline one names a handful and counts the rest — since
+  notices are themselves BOUNDED (the inline one names a handful and counts the rest) since
   a notice that reports a budget overrun must not be able to cause one.
 
-**The SPA never sends `frameId`.** Planning is target-blind — `plan(record)` takes
+**The SPA never sends `frameId`.** Planning is target-blind: `plan(record)` takes
 only the document, and its prompt asks for a whole architecture (top-level frames →
-modules → tasks) — so the `frameId` path can only flatten the planned frames into
+modules → tasks), so the `frameId` path can only flatten the planned frames into
 the target, discarding the frame titles, types and descriptions the preview renders.
 That makes the spawn produce something other than what the user approved, so the
 affordance is board-level only. Scoping a spawn to one service is a target-aware
@@ -198,7 +198,7 @@ target-aware write; until that exists, `frameId` is an API-only capability.
 
 The `credentials` bag a source expects is described by its descriptor
 (`GET /document-sources` → `credentialFields`), so the connect UI renders
-generically — no per-source form is hard-coded in the frontend.
+generically, no per-source form is hard-coded in the frontend.
 
 ## Layout
 

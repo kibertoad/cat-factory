@@ -14,7 +14,7 @@ consume through the kernel `AppCaches` port, implemented on
   the facade injects a `notificationPairFactory` (built from layered-loader's
   `createGroupNotificationPair` over dedicated ioredis clients, gated on `REDIS_URL`);
   a write on one node then broadcasts the invalidated key/group so every peer drops its
-  in-memory entry. Only keys/groups travel on the wire — never values. Absent the
+  in-memory entry. Only keys/groups travel on the wire, never values. Absent the
   factory (single replica, local mode, tests) the loaders are bare in-memory with zero
   extra dependency.
 - **Invalidate after commit, at every write site.** The consuming service calls
@@ -23,7 +23,7 @@ consume through the kernel `AppCaches` port, implemented on
 - **Staleness probes for git-backed caches.** A profile with `ttlLeftBeforeRefreshInMsecs`
   turns on preemptive in-memory refresh (layered-loader ≥ 14.5.3): an entry hit inside the
   window runs the caller's per-read `isStillCurrent` probe (a sha/hash compare, strictly
-  cheaper than the load) in the background — TTL bump when the source hasn't moved, full
+  cheaper than the load) in the background: TTL bump when the source hasn't moved, full
   background reload otherwise. DB-backed invalidation-driven caches leave the window unset:
   a DB read as a probe saves nothing over the DB read as the load.
 - **Deep imports keep ioredis out of every runtime but Node.** layered-loader's root
@@ -35,9 +35,9 @@ consume through the kernel `AppCaches` port, implemented on
 
 A Worker isolate has no cross-isolate invalidation bus and no Redis, so a TTL'd
 in-isolate cache over **mutable cross-instance state** would serve stale data after a
-write processed by another isolate — a correctness bug, not an optimization. The
+write processed by another isolate: a correctness bug, not an optimization. The
 Worker therefore wires the isolate-safe profile: caches of mutable state are
-configured **pass-through** (`enabled: false` — every read runs its load), and only
+configured **pass-through** (`enabled: false`; every read runs its load), and only
 caches of immutable or self-verifying entries (sha-pinned repo reads, static
 catalogs) get real TTLs. Distributed invalidation is a
 genuine Node-only concern, not a facade-parity gap: the Worker's cross-instance state
@@ -48,7 +48,7 @@ per-isolate staleness bug actually surfaces.
 Worker: its entries are external Confluence/Notion/GitHub/… page content re-validated
 by the source's cheap version probe (`ttlLeftBeforeRefreshInMsecs` + `isStillCurrent`),
 so a peer isolate's cached body self-heals within the refresh window without an
-invalidation bus — its staleness is bounded by the probe, exactly like a sha-pinned
+invalidation bus: its staleness is bounded by the probe, exactly like a sha-pinned
 read. Only `fragmentCatalog`, which mirrors our own mutable D1 rows, passes through.
 
 ## Named caches

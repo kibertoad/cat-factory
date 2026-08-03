@@ -5,14 +5,14 @@
 Eliminate a cluster of everyday interaction papercuts in the SPA (`@cat-factory/app`,
 `frontend/app`). Three surfaced from a review of the frontend, all confirmed against code:
 
-1. **Destructive actions fire instantly, no confirmation** — deleting a task/service/module,
+1. **Destructive actions fire instantly, no confirmation**: deleting a task/service/module,
    a pipeline, a merge/model preset, or a dependency edge mutates immediately (optimistic
    rollback exists, but there is no "are you sure?").
-2. **Actions succeed silently** — starting a run, acting on/dismissing a notification, saving
+2. **Actions succeed silently**: starting a run, acting on/dismissing a notification, saving
    settings, copying a container id/url give no feedback.
-3. **Keyboard support stops at ⌘K** — no Escape to deselect, no Delete to remove a selected
+3. **Keyboard support stops at ⌘K**, no Escape to deselect, no Delete to remove a selected
    block, no discoverable cheatsheet.
-4. **Empty states are hand-coded and missing** — no reusable primitive; several surfaces
+4. **Empty states are hand-coded and missing**, no reusable primitive; several surfaces
    render blank.
 
 Delivered as a **two-PR initiative** because the items have a real dependency edge, not just
@@ -30,9 +30,9 @@ Once PR 1 lands, reuse these rather than reinventing:
 'destructive', title, description })` and bail on `false` **before** any mutation. One
   always-mounted dialog + a module-level singleton queue; dismiss (backdrop/Escape) resolves
   `false`.
-- **Shared block deletion**: `frontend/app/app/composables/useBlockDeletion.ts` — the single
+- **Shared block deletion**: `frontend/app/app/composables/useBlockDeletion.ts`; the single
   confirm-gated block delete used by both the inspector button and the keyboard shortcut.
-- **Empty surfaces**: `frontend/app/app/components/common/EmptyState.vue` —
+- **Empty surfaces**: `frontend/app/app/components/common/EmptyState.vue`;
   `<EmptyState :icon :title :description>` with an optional action slot.
 
 Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`), `UButton`,
@@ -40,7 +40,7 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
 
 ## Status checklist
 
-### PR 1 — Primitives + destructive safety + empty states
+### PR 1: Primitives + destructive safety + empty states
 
 | Unit                                                                                                                                                    | Status | PR   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
@@ -53,24 +53,24 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
 | Confirm: delete model preset (`ModelConfigurationPanel`)                                                                                                | done   | PR 1 |
 | Confirm: remove dependency edge (`TaskDependencies`)                                                                                                    | done   | PR 1 |
 | `EmptyState.vue`                                                                                                                                        | done   | PR 1 |
-| EmptyState: context pickers, dependencies, execution history (preset panels skipped — a default preset always exists, so the empty case is unreachable) | done   | PR 1 |
+| EmptyState: context pickers, dependencies, execution history (preset panels skipped; a default preset always exists, so the empty case is unreachable) | done   | PR 1 |
 | `data-testid`s for e2e (confirm-dialog/accept/cancel, empty-state, inspector-delete)                                                                    | done   | PR 1 |
 | i18n keys (8 locales) + patch changeset                                                                                                                 | done   | PR 1 |
 
-### PR 2 — Feedback toasts + keyboard shortcuts + help
+### PR 2: Feedback toasts + keyboard shortcuts + help
 
 | Unit                                                                                                                                             | Status | PR   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ---- |
 | Toast: run started (`TaskCard`)                                                                                                                  | done   | PR 2 |
 | Toast: notification acted/dismissed (`NotificationsInbox`)                                                                                       | done   | PR 2 |
-| Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped — inline auto-save, a toast per field-change is noise) | done   | PR 2 |
+| Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped; inline auto-save, a toast per field-change is noise) | done   | PR 2 |
 | Copyable container id/url + toast (`StepContainerStatus`)                                                                                        | done   | PR 2 |
 | `useKeyboardShortcuts.ts` (Escape / Delete / ?)                                                                                                  | done   | PR 2 |
 | `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                                                                                             | done   | PR 2 |
 | Command-bar "Keyboard shortcuts" entry                                                                                                           | done   | PR 2 |
 | i18n keys (8 locales) + patch changeset                                                                                                          | done   | PR 2 |
 
-### Review follow-up — complete the destructive-confirm coverage + hardening
+### Review follow-up: complete the destructive-confirm coverage + hardening
 
 Review found the confirm gate covered board blocks/presets/pipelines/dependency edges but
 **not** several equally-destructive actions, plus a few sharp edges. Addressed on this same
@@ -86,12 +86,12 @@ branch (same two changesets):
 | Confirm: delete board (`BoardSwitcher`)                                        | done   |
 | Confirm: disconnect Slack (`SlackPanel`) / GitHub (`GitHubPanel`)              | done   |
 | Copy toast only on real success; error toast on failed/unsupported clipboard   | done   |
-| Drop `Backspace` from the delete shortcut (`Delete`-only) — back-nav collision | done   |
+| Drop `Backspace` from the delete shortcut (`Delete`-only); back-nav collision | done   |
 | `?` toggles the cheatsheet closed (was trapped open by the modal guard)        | done   |
 | Confirm dialog: primary button `autofocus` so Enter confirms                   | done   |
 | `KeyboardShortcutsHelp`: drop deprecated `navigator.platform`                  | done   |
 
-### Follow-up iteration 2 — destructive-confirm coverage for settings/connection surfaces
+### Follow-up iteration 2: destructive-confirm coverage for settings/connection surfaces
 
 A fresh sweep of the SPA (after PR #620 merged) found the confirm gate covered the board +
 preset + integration-toolbar surfaces, but **18 equally-destructive actions on the
@@ -101,7 +101,7 @@ Landed as one follow-up PR on top of the merged initiative, adding a **new reusa
 primitive** rather than one-off gates.
 
 New reference primitive (reuse this for any non-block destructive action):
-`frontend/app/app/composables/useConfirmAction.ts` — `const { confirmAction, toastDone } =
+`frontend/app/app/composables/useConfirmAction.ts`; `const { confirmAction, toastDone } =
 useConfirmAction()`; `await confirmAction(shape, name)` gates (returns `false` on
 cancel/dismiss), `toastDone(shape, name)` toasts on success. `shape` ∈
 `disconnect | remove | revoke | clear | destroy`; copy is generic
@@ -120,30 +120,30 @@ invite email, the arch/type name), or a feature noun key (`humanTest.envNoun`).
 | Confirm + toast: destroy human-test env (`HumanTestWindow`)                                 | done   |
 | Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                   | done   |
 | Confirm + toast: remove reference architecture (`BootstrapModal`)                           | done   |
-| Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal` — toast kept)   | done   |
-| Confirm: remove provider connection (`ProviderConnectionTab` — toast kept)                  | done   |
-| Confirm: remove kube handler / override / custom (`InfraHandlersConfigurator` — toast kept) | done   |
-| Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings` — toast kept)       | done   |
+| Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal`; toast kept)   | done   |
+| Confirm: remove provider connection (`ProviderConnectionTab`; toast kept)                  | done   |
+| Confirm: remove kube handler / override / custom (`InfraHandlersConfigurator`; toast kept) | done   |
+| Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings`; toast kept)       | done   |
 | i18n keys (8 locales) + patch changeset                                                     | done   |
 
-Empty-state (category C) surfaced no genuine new gaps this sweep — the remaining empty
+Empty-state (category C) surfaced no genuine new gaps this sweep: the remaining empty
 renders are compact inline placeholders or full-page states with CTAs, both intentional.
 
 ## Conventions & gotchas (carried between iterations)
 
 - **`UModal` already traps focus + closes on Escape + renders a backdrop.** Never add
-  `useFocusTrap` or a manual Escape bind on a UModal surface — it double-binds and fights the
+  `useFocusTrap` or a manual Escape bind on a UModal surface: it double-binds and fights the
   modal. `useFocusTrap.ts` is for non-UModal surfaces only.
 - **The confirm singleton must resolve `false`** on backdrop/Escape/route-change dismiss and
-  when superseded by a newer `confirm()` call — otherwise the awaiting promise hangs forever.
-- **Delete-while-typing guard is mandatory** — the global Delete handler must bail when the
+  when superseded by a newer `confirm()` call: otherwise the awaiting promise hangs forever.
+- **Delete-while-typing guard is mandatory**: the global Delete handler must bail when the
   event target is an `<input>`, `<textarea>`, `[contenteditable]`, or inside one. Bind only
   `Delete`, **not** `Backspace`: `Backspace` collides with browser "navigate back" muscle
   memory and would delete the selected block from anywhere on the board.
-- **Escape-vs-modal guard** — the global Escape (deselect) handler must bail when a modal is
+- **Escape-vs-modal guard**: the global Escape (deselect) handler must bail when a modal is
   open. Use a DOM check (`document.querySelector('[role="dialog"]')`, every modal is a
   `UModal`) rather than enumerating the ~25 `*Open` flags in `stores/ui.ts`.
-- **Only toast on confirmed success** — e.g. `TaskCard.run()` toasts only when
+- **Only toast on confirmed success**, e.g. `TaskCard.run()` toasts only when
   `execution.start()` returns `true`; don't duplicate toasts a store already emits (the
   `execution.start` failure path and `AgentStopButton` already toast).
 - **Confirmation is strictly before the optimistic mutation**, so `board.ts`'s
@@ -152,12 +152,12 @@ renders are compact inline placeholders or full-page states with CTAs, both inte
   per-component, to avoid N handlers firing N deletions.
 - **Non-block destructive actions go through `useConfirmAction`, board blocks through
   `useBlockDeletion`.** Don't hand-roll a `confirm({...})` + toast at a settings/connection
-  call site — pick the `disconnect/remove/revoke/clear/destroy` shape and pass a `name`. Only
+  call site: pick the `disconnect/remove/revoke/clear/destroy` shape and pass a `name`. Only
   call `toastDone(...)` **after** the mutation resolves (so a thrown/failed mutation doesn't
   toast success); leave the existing error toast in the `catch`. Where the surface already
   toasted success (task/doc source, provider connection, infra handlers, deployment clears),
-  add only the confirm gate — don't double-toast.
-- **`name` prefers a real value over a generic noun** — a brand (`'Slack'`), the invite email,
+  add only the confirm gate: don't double-toast.
+- **`name` prefers a real value over a generic noun**: a brand (`'Slack'`), the invite email,
   the arch/type display name. Add a feature-namespace noun key (`humanTest.envNoun`,
   `settings.infrastructure.handler.kubeNoun`) only when the target has no natural display name.
 - **i18n**: straight quotes, no em-dashes; `@key` descriptions only for genuinely ambiguous

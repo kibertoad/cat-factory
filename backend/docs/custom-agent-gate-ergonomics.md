@@ -13,10 +13,10 @@ The canonical worked example exercising everything below is
 Four rough edges made authoring a custom agent/gate harder than it should be:
 
 1. **Provider wiring boilerplate + an unsafe `!`.** Every gate's data source was a module
-   global trio — `let provider; wireFoo(); getFoo()` — re-authored in each package, and the
+   global trio (`let provider; wireFoo(); getFoo()`) re-authored in each package, and the
    gate read it with a non-null assertion (`getFoo()!`) after a separate `wired()` check.
 2. **Hand-written coercers.** A structured agent declared a free-string `output.shapeHint`
-   _and_ a lenient `coerce(value: unknown)` that never throws — duplicated, unrelated to each
+   _and_ a lenient `coerce(value: unknown)` that never throws: duplicated, unrelated to each
    other, in every package. The repo already standardises on valibot everywhere else.
 3. **No boot-time validation.** A typo'd gate `helperKind`, an unknown `resultView`, or a
    pipeline naming a non-existent kind surfaced mid-run (a failed dispatch) or silently (a
@@ -29,7 +29,7 @@ Four rough edges made authoring a custom agent/gate harder than it should be:
 
 A provider is identified by a typed `ProviderToken<T>` defined once and exported next to its
 interface. The deployment wires an impl at startup; the gate reads it back through its
-`GateContext` — no module global, and `requireProvider` is a real guard, not a `!`.
+`GateContext`, no module global, and `requireProvider` is a real guard, not a `!`.
 
 The provider registry is the app-owned kernel `ProviderRegistry` the facade injects (via
 `CoreDependencies.providerRegistry` → the gate machine's `GateContext`). A deployment's `wireX`
@@ -54,7 +54,7 @@ gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
 ```
 
 `requireProvider` throwing inside `probe` is sound because `wired()` (= `ctx.isProviderWired(token)`)
-gates whether the engine probes at all — the "checked `wired`, then asserted `!`" race is gone.
+gates whether the engine probes at all: the "checked `wired`, then asserted `!`" race is gone.
 The built-in `@cat-factory/gates` suite dogfoods this (its `wireCiStatusProvider` etc. take the
 registry as their first arg and wire onto that instance), so a fresh registry per build starts
 empty and nothing leaks between builds.
@@ -89,7 +89,7 @@ Pass `{ shapeHint }` to override the auto-derived hint for an unusual shape.
 
 **Why agents, not kernel:** kernel cannot depend on valibot (it imports only `contracts` + `ai`).
 Kernel's `AgentStepSpec.output` keeps its plain-string shape; only the derived spec crosses into
-it — the schema/parser stays in the agents registration layer.
+it: the schema/parser stays in the agents registration layer.
 
 ## Boot-time registration validation
 
@@ -101,7 +101,7 @@ all `register*` imports + provider wiring, before serving.
 | ------------------------------------------------------------------------------------------------------ | -------------------- |
 | gate `helperKind` resolves to a registered container kind or a built-in helper                         | error                |
 | `presentation.resultView` is a known `RESULT_VIEW_IDS` id                                              | error                |
-| pipeline `agentKinds` are known (only when `knownAgentKinds` is supplied — no built-in catalog exists) | error                |
+| pipeline `agentKinds` are known (only when `knownAgentKinds` is supplied, no built-in catalog exists) | error                |
 | `postOps` declared without structured output                                                           | warn (`onWarn` sink) |
 
 Wired symmetrically: the Worker validates on its first `fetch` (the once-guard keeps it off the
@@ -115,10 +115,10 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
 
   | surface             | read-only guardrail | final-answer-in-reply |
   | ------------------- | ------------------- | --------------------- |
-  | `inline`            | –                   | ✓                     |
+  | `inline`            | ✗                   | ✓                     |
   | `container-explore` | ✓                   | ✓                     |
-  | `container-coding`  | –                   | –                     |
-  | no agent step       | –                   | –                     |
+  | `container-coding`  | ✗                   | ✗                     |
+  | no agent step       | ✗                   | ✗                     |
 
   (Built-in read-only kinds keep their `isReadOnlyAgentKind` path; built-ins get final-answer
   from their own track prompts, so it's only added to _registered_ kinds here.)
@@ -139,8 +139,8 @@ The gates package depends only on kernel + contracts, never on orchestration.
 ## Authoring checklist
 
 1. Define a valibot schema → `defineStructuredOutput` for any structured kind.
-2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`
-   — the surface drives the prompt directives and the container requirement; `presentation.resultView`
+2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`:
+   the surface drives the prompt directives and the container requirement; `presentation.resultView`
    (if set) must be a `RESULT_VIEW_IDS` id.
 3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
    The `helperKind` must be a registered container kind (or a built-in helper).

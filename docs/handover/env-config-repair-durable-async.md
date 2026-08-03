@@ -1,4 +1,4 @@
-# Handover — make the env-config repair agent durable & asynchronous (PR #424 follow-up)
+# Handover: make the env-config repair agent durable & asynchronous (PR #424 follow-up)
 
 **Status:** design complete, foundation written (preserved under
 [`./env-config-repair/reference/`](./env-config-repair/reference/)), NOT yet wired/landed.
@@ -10,20 +10,20 @@ covers the larger architectural change (review finding **#1**) that was deferred
 PR #424 wired the environment-provider config-repair agent (PR #416 increment 2). It dispatches a
 coding agent that fixes a provider's config file in place and pushes it back, then re-validates.
 The problem (review finding #1): the repair is **awaited synchronously inside the
-`bootstrapRepo` HTTP handler** — `ContainerEnvConfigRepairer.repair()` runs a poll loop of
+`bootstrapRepo` HTTP handler**; `ContainerEnvConfigRepairer.repair()` runs a poll loop of
 `maxPolls=240 × 5s ≈ 20 minutes` inside one `fetch` request
 (`EnvironmentController` → `EnvironmentConnectionService.bootstrapRepo` → `dispatchConfigRepair`).
 
 That diverges from the platform's gold-standard async+durable+observable pattern (see CLAUDE.md
 "Execution flow" / "Repo bootstrap flow") and **cannot survive on the Cloudflare Worker facade**,
 whose requests can't block for 20 minutes. The fix: drive the repair **durably and
-asynchronously, exactly like the "bootstrap repo" flow** — dispatch + return immediately, drive
+asynchronously, exactly like the "bootstrap repo" flow**; dispatch + return immediately, drive
 the poll loop with a durable runner (Cloudflare Workflows ⇄ Node pg-boss), re-validate on
 completion, and push progress/outcome to the UI via events.
 
 ## Decision
 
-Mirror the **bootstrap repo** flow precisely. Key simplifications vs. bootstrap (it's leaner —
+Mirror the **bootstrap repo** flow precisely. Key simplifications vs. bootstrap (it's leaner,
 no board frame, no service/mount, no repo projection, no reference architectures):
 
 - **Reuse the unified `agent_runs` table** with a new `kind='env-config-repair'`. **No DB
@@ -32,10 +32,10 @@ no board frame, no service/mount, no repo projection, no reference architectures
 - **Reuse the existing cron sweeper** (`sweepStuckRuns`, kind-spanning via
   `AgentRunRepository.listStale`/`getRef`); just add routing for the new kind in each runtime's
   `redrive`/`finalizeOrphan`.
-- The repair run has **no board block** — surfaced only on the infrastructure-providers window
+- The repair run has **no board block**: surfaced only on the infrastructure-providers window
   that triggered it (NOT the board).
 
-## What was already built (foundation — preserved, not yet in the tree)
+## What was already built (foundation: preserved, not yet in the tree)
 
 These were written, then set aside (the partial tree wouldn't build on its own). Re-apply them as
 the starting point. Exact contents are under [`./env-config-repair/reference/`](./env-config-repair/reference/):
@@ -63,7 +63,7 @@ Contracts, kernel ports, the orchestration service, and the reworked server repa
 orchestration service + `EnvConfigRepairPollResult` from `backend/packages/orchestration/src/index.ts`
 (mirror how `BootstrapService`/`BootstrapPollResult` are exported).
 
-### 2. Integrations — `EnvironmentConnectionService` (`backend/packages/integrations/.../EnvironmentConnectionService.ts`)
+### 2. Integrations: `EnvironmentConnectionService` (`backend/packages/integrations/.../EnvironmentConnectionService.ts`)
 
 - Change the `dispatchConfigRepair?` seam return type from `Promise<void>` to
   `Promise<{ jobId: string }>` (it now **starts** the durable run and returns its id; it does NOT
@@ -76,12 +76,12 @@ orchestration service + `EnvConfigRepairPollResult` from `backend/packages/orche
   - Call `dispatchConfigRepair(...)` (non-blocking) → `repairJobId`. Do **not** re-validate inline.
   - Return `{ ok: false, committed, branch: writeBranch, usedAgent: true, repairJobId, issues }`
     (repair is now pending; `ok` is resolved later by the repair run's re-validation).
-  - **Fix finding #3 naturally:** there's no longer an in-request await that can throw a 500 — a
+  - **Fix finding #3 naturally:** there's no longer an in-request await that can throw a 500: a
     dispatch failure is recorded on the repair-job row by `EnvConfigRepairService.start`.
 - Add a public `revalidate(workspaceId, { owner, repo, gitRef }): Promise<RepoValidationResult>`
   that re-derives manifest + decrypted secrets + config (`optionalManifest`/`resolveSecrets`/
   `stringifyProviderConfig`) and runs `runProviderValidate`. This is the callback
-  `EnvConfigRepairService.pollJob` invokes on success (orchestration → integrations; no cycle —
+  `EnvConfigRepairService.pollJob` invokes on success (orchestration → integrations; no cycle:
   both are built in `createEnvironmentsModule`).
 - Update `EnvironmentConnectionService.test.ts`: the agent-fallback cases now assert
   `usedAgent:true` + `repairJobId` set + `ok:false` (pending). Re-validation is covered by the
@@ -138,7 +138,7 @@ Clone the bootstrap analogues:
   `envConfigRepair.service` (stop is supported; retry can re-`start` from the failed job's
   owner/repo/branch, or omit retry in v1 and document it).
 
-### 7. Frontend (`frontend/app/`) — `@cat-factory/app`
+### 7. Frontend (`frontend/app/`): `@cat-factory/app`
 
 - `app/stores/envConfigRepair.ts` (small): `hydrate(snapshot.envConfigRepairJobs)` + `upsert(job)`,
   keyed by id.
@@ -164,15 +164,15 @@ describe the durable-async shape, and add `@cat-factory/app` if the frontend lan
 
 ## Gotchas / design notes
 
-- **No migration needed** — `agent_runs` is kind-scoped. Don't add one.
+- **No migration needed**: `agent_runs` is kind-scoped. Don't add one.
 - **Re-validation lives in `EnvironmentConnectionService`** (decrypted secrets + manifest), invoked
-  by `EnvConfigRepairService.pollJob` via an injected callback — keeps orchestration from importing
+  by `EnvConfigRepairService.pollJob` via an injected callback: keeps orchestration from importing
   the integration internals and avoids a cycle.
 - **Finding #2** (PR-mode branch) is folded into step 2 (the dispatch must target the PR branch).
 - **Finding #3** (throw → 500 / skipped log) disappears: the request no longer awaits the run.
 - **Finding #5** (non-proxyable `coder` model throws mid-run): with async, the throw happens in
   `EnvConfigRepairService.start` and is recorded on the job row (kind `preflight`/`dispatch`),
-  surfaced on the infra window — no longer a 500. Optionally also gate it out at facade wiring
+  surfaced on the infra window, no longer a 500. Optionally also gate it out at facade wiring
   (skip wiring + log) so a misconfigured deployment is "no fallback" rather than a failing run.
 - **Keep the runtimes symmetric** (CLAUDE.md): the new Workflow binding (CF) ⇄ pg-boss queue/worker
   (Node) ⇄ local-inherits must all land together, with the conformance assertion, in ONE change.

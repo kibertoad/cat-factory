@@ -6,9 +6,9 @@ introduced the named-step pipeline authoring the extensible `gate` field builds 
 ## Goal & rationale
 
 A pipeline step's human gate is a bare boolean on the wire (`Pipeline.gates: boolean[]`). With the
-named-step seed authoring now in place (`definePipeline` — a step is `{ kind, gate: true }`), the
-`gate` field is the natural seam to let a **custom gate carry its OWN config fields** — a threshold,
-a watch window, an approver set — instead of hard-coding every gate's knobs in the engine. "Ambient"
+named-step seed authoring now in place (`definePipeline`: a step is `{ kind, gate: true }`), the
+`gate` field is the natural seam to let a **custom gate carry its OWN config fields** (a threshold,
+a watch window, an approver set) instead of hard-coding every gate's knobs in the engine. "Ambient"
 = a gate registered via `registerGate` declares its config shape, and the authoring form + the
 runtime + the frontend all derive from that registration rather than each hard-coding the fields.
 
@@ -31,7 +31,7 @@ flow to the gate at runtime.
 ## Why it's not in the deployer PR
 
 The wire contract is boolean-only today, so "new fields at runtime" is a cross-cutting contract +
-registry change, not a seed-authoring tweak — deliberately kept out of the focused deployer PR
+registry change, not a seed-authoring tweak: deliberately kept out of the focused deployer PR
 (decision: separate follow-up initiative).
 
 ## Sketch (to be refined)

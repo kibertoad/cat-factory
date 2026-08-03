@@ -1,6 +1,6 @@
 # Initiative: global search & deep-linkable routing
 
-**Status:** planned (tracker only — no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** planned (tracker only, no slices landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -12,10 +12,10 @@ The SPA is a dense single-canvas app with exactly **two pages** (`pages/index.vu
 
 - **No global search.** Every "search" today is a local picker/filter (repo picker, issue
   picker, task-add). There is no way to find a task, service, run, document, or
-  notification across the board(s) by text — on a board with hundreds of blocks this is a
+  notification across the board(s) by text: on a board with hundreds of blocks this is a
   daily-use gap.
 - **No URL identity for anything.** A task, run, or board position cannot be linked,
-  bookmarked, or shared. Slack/in-app notifications (and future email — see the
+  bookmarked, or shared. Slack/in-app notifications (and future email: see the
   `email-notification-channel` initiative) cannot deep-link back to the thing they are
   about; "look at this run" means describing where to click.
 
@@ -26,24 +26,24 @@ notifications and the palette alike.
 ## Target pattern
 
 1. **Search endpoint**: `GET /workspaces/:ws/search?q=` in `@cat-factory/server`, backed by
-   a `SearchRepository`-shaped kernel port — one SQL query per entity class (blocks,
+   a `SearchRepository`-shaped kernel port; one SQL query per entity class (blocks,
    executions/agent runs, notifications, documents) using `LIKE`/prefix matching first
    (D1 and Postgres both handle this without extensions; FTS5 / `tsvector` are a later
    optimisation slice, not the pilot). Results are small typed projections
-   `{ type, id, workspaceId, title, snippet, status }` — never raw entities. Both runtimes
+   `{ type, id, workspaceId, title, snippet, status }`, never raw entities. Both runtimes
    implement it + conformance assertion.
 2. **Command palette**: a `SearchPalette.vue` opened via Cmd-K / a toolbar affordance,
    debounced query → grouped results → selecting one dispatches through the existing
    `stores/ui.ts` step/window dispatch (`dispatchStepView` / `openStepDetail` are the
    seams) and pans the board to the block.
-3. **Deep links**: encode the _navigational_ UI state in the URL — `?ws=<id>&block=<id>&run=<id>&view=<resultViewId>`
+3. **Deep links**: encode the _navigational_ UI state in the URL; `?ws=<id>&block=<id>&run=<id>&view=<resultViewId>`
    (query params on the single page; no new pages, no SSR implications with `ssr: false`).
    On boot, after the workspace snapshot + WS `connected` gate settles, replay the params
    through the same ui-store dispatch. State→URL sync is one watcher (`router.replace`, no
    history spam).
 4. **Producers**: notification rows and the notifications inbox render deep links;
    `SlackNotificationChannel` message blocks carry the URL (needs the deployment's public
-   frontend base URL — a config value, not a hardcoded host).
+   frontend base URL; a config value, not a hardcoded host).
 
 ## Prioritized checklist
 
@@ -67,7 +67,7 @@ notifications and the palette alike.
   read; when the `workspace-rbac` initiative lands, results must flow through the same
   effective-role resolution (a `viewer` sees what the board shows them, nothing more).
 - **No N+1 assembly**: each entity class is ONE query; do not enrich results with per-row
-  point-reads — the projection carries what the palette renders.
-- **Palette copy is i18n'd** (result-type labels are enum-keyed — use the exhaustive
+  point-reads; the projection carries what the palette renders.
+- **Palette copy is i18n'd** (result-type labels are enum-keyed: use the exhaustive
   `Record` tier-2 guard for type→label lookups).
-- URL params are _navigational_ state only — never auth material, never raw entity data.
+- URL params are _navigational_ state only, never auth material, never raw entity data.

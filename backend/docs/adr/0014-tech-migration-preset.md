@@ -6,8 +6,8 @@
 
 ## Context
 
-A technological migration — swapping a database engine, upgrading a framework across a
-major version, bumping a language runtime, replacing a load-bearing library — is one of
+A technological migration (swapping a database engine, upgrading a framework across a
+major version, bumping a language runtime, replacing a load-bearing library) is one of
 the highest-risk initiative shapes the product can run: the change is wide, mostly
 mechanical, and catastrophic when observable behaviour drifts. What makes a migration
 safe is not the code change itself but the discipline around it: know the blast zone
@@ -15,7 +15,7 @@ safe is not the code change itself but the discipline around it: know the blast 
 tests before the swap, decide the degree of backwards compatibility deliberately, and
 finish by actually removing the old path. That discipline is invariant across
 migrations; only the from/to technologies and scope vary, and those are enumerable as a
-form — which is exactly what an **initiative preset** can encode.
+form, which is exactly what an **initiative preset** can encode.
 
 Estimating a migration's impact across an entire codebase by human eye is a
 near-impossible task, but an exhaustive sweep is exactly what an agent is good at. The
@@ -36,18 +36,18 @@ goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's
   `ValidationError`) a missing required phase or a disallowed extra one. No preset id is
   ever branched on in the engine; `preset_generic` declares no template and stays
   byte-for-byte unchanged.
-- `preset_tech_migration` uses that capability to mandate 5 required phases —
-  blast-zone, coverage, transition-design, delivery, verify-decommission — each with a
+- `preset_tech_migration` uses that capability to mandate 5 required phases
+(  blast-zone, coverage, transition-design, delivery, verify-decommission) each with a
   committed Markdown artifact under a preset-configured `migrationDocsDir`.
 - The coverage-to-delivery control point is an **LLM-authored, human-revised confidence
   case**: a gated document item sweeps the codebase and produces a per-touchpoint
   coverage map (named covering tests, gaps/waivers, risk mitigations, safety nets). The
-  human's job is to audit and challenge that argument — reject hand-waving, demand
-  evidence — rather than perform the sweep themselves.
+  human's job is to audit and challenge that argument (reject hand-waving, demand
+  evidence) rather than perform the sweep themselves.
 - The preset introduces **zero new agent kinds**: artifact phases reuse the existing
   document pipeline, coding phases reuse the existing coding pipelines selected by the
   policy's estimate rules. All migration-specific behaviour is descriptor data,
-  `seedPlan` decoration, and prompt additions — never new capability.
+  `seedPlan` decoration, and prompt additions, never new capability.
 - The validation pilot (a purpose-built synthetic MSSQL→PostgreSQL fixture repo run as a
   productized end-to-end trial) was **dropped**: the preset's platform validation is an
   in-CI, fake-driven end-to-end test extending the existing preset-baseline harness;
@@ -65,11 +65,11 @@ goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's
   evidence-backed case and having a human challenge its grounding is a much higher-yield
   division of labour, and keeps the migration human-in-the-loop by design.
 - **No new agent kinds keeps the surface small.** The preset's specialness lives
-  entirely in plan shape, prompts, and fragments — capability the engine already has is
+  entirely in plan shape, prompts, and fragments: capability the engine already has is
   reused, not duplicated.
 - **A synthetic fixture pilot doesn't pay for itself as platform code.** A bespoke
   throwaway target application is project-specific, never runs in the product's own CI,
-  and its only consumer would have been a one-time manual run — so real-repository
+  and its only consumer would have been a one-time manual run, so real-repository
   validation was chosen over building and maintaining a synthetic acceptance fixture.
 
 ## Alternatives considered
@@ -89,11 +89,11 @@ goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's
 
 ## Consequences
 
-- A future preset gets phase-shape enforcement for free by declaring a `phaseTemplate` —
+- A future preset gets phase-shape enforcement for free by declaring a `phaseTemplate`:
   no new engine capability needed.
 - The migration preset ships with no synthetic acceptance fixture; there is no
   in-repo, automated proof that it survives the classic MSSQL→PostgreSQL behaviour traps
-  (collation-dependent ordering, `datetime` rounding, identity leakage, etc.) — that
+  (collation-dependent ordering, `datetime` rounding, identity leakage, etc.): that
   confidence is obtained only by running the preset against real migrations, outside CI.
 - Several design questions (waiver granularity under a "pragmatic" coverage bar, whether
   `compatPosture` should become a required field, per-phase concurrency defaults) are

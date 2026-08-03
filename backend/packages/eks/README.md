@@ -1,6 +1,6 @@
 # @cat-factory/eks
 
-Opt-in AWS **EKS** backends for cat-factory — a runner backend (per-run agent pods) and an
+Opt-in AWS **EKS** backends for cat-factory: a runner backend (per-run agent pods) and an
 ephemeral-environment backend (per-PR namespaces), both on an Amazon EKS cluster.
 
 ## Why this is a thin package
@@ -9,7 +9,7 @@ An EKS cluster's API server **is** a standard Kubernetes API server, so this pac
 the entire native Kubernetes transport/provider** from `@cat-factory/integrations`
 (`KubernetesRunnerTransport`, `KubernetesEnvironmentProvider`, `KubernetesApiClient`) verbatim.
 The only EKS-specific piece is **authentication**: EKS doesn't use a static ServiceAccount
-bearer token — it expects a short-lived IAM token (a SigV4-presigned STS `GetCallerIdentity`
+bearer token; it expects a short-lived IAM token (a SigV4-presigned STS `GetCallerIdentity`
 URL, prefixed `k8s-aws-v1.`, the exact token `aws eks get-token` produces). That token is
 minted here with WebCrypto (`eks-auth.logic.ts`), so the package carries **no runtime AWS SDK
 dependency** and is runtime-neutral. It's injected through the async token seam
@@ -28,7 +28,7 @@ registries.environmentBackendRegistry.register(eksEnvironmentBackend)
 ```
 
 A workspace then connects an `eks` runner/environment backend with an `EksRunnerConfig` /
-`EksProvisionConfig` (the Kubernetes config — apiserver endpoint, CA, namespace, image — plus
+`EksProvisionConfig` (the Kubernetes config of apiserver endpoint, CA, namespace, and image, plus
 `region` + `clusterName`), and the AWS credentials (`awsAccessKeyId` / `awsSecretAccessKey` /
 optional `awsSessionToken`) in the write-only secret bundle.
 
@@ -37,7 +37,7 @@ Both facades register the backends by reference (`backend/runtimes/node/src/cont
 with the native `kubernetes` backend they extend.
 
 > **Runtime reach.** A real EKS cluster's apiserver presents a **private CA**, which only a
-> runtime that can pin a custom CA (Node/local, via `undici`) can verify — the SAME constraint a
+> runtime that can pin a custom CA (Node/local, via `undici`) can verify: the SAME constraint a
 > private-CA `kubernetes` connection already carries. The Worker registers the `eks` kind for
 > symmetry, but a connection to such a cluster is rejected up front at registration when the
 > runtime can't honor the custom CA (`customTlsSupported: false`), so it fails loudly rather than
@@ -47,16 +47,15 @@ with the native `kubernetes` backend they extend.
 
 The **runner** backend is a first-class UI citizen: it self-describes its connect form via the
 `RunnerBackendProvider.form` descriptor, so the SPA renders it generically (region / cluster /
-credentials + the shared apiserver fields) with **no** EKS-specific frontend code — the same
+credentials + the shared apiserver fields) with **no** EKS-specific frontend code, the same
 descriptor-driven path the built-in Kubernetes runner backend now uses.
 
 The **environment** backend is functional when resolved by kind, but is not yet surfaced as its
 own first-class environment _engine_ in the SPA infra-handler selector (the connect flow would
 lower to `{ kind: 'eks' }` rather than `{ kind: 'kubernetes' }`). That needs a dedicated
-`InfraEngine('eks')` threaded through the contract engine union + `handlerConfigToBackendConfig`
-
-- the per-provision-type SPA forms — tracked in
-  [`docs/initiatives/descriptor-driven-infra-forms.md`](../../../docs/initiatives/descriptor-driven-infra-forms.md).
+`InfraEngine('eks')` threaded through the contract engine union + `handlerConfigToBackendConfig` +
+the per-provision-type SPA forms; tracked in
+[`docs/initiatives/descriptor-driven-infra-forms.md`](../../../docs/initiatives/descriptor-driven-infra-forms.md).
 
 ## Tests
 
@@ -89,4 +88,4 @@ pnpm --filter @cat-factory/eks run test:integration
 
 The `stsHost` override (`EKS_IT_STS_HOST` → the config's `stsHost`) points the presigned STS
 `GetCallerIdentity` URL at floci instead of real AWS. See `src/test-support/eks-cluster.ts` for the
-full env list and for exactly what floci does — and does not — cover at the auth layer.
+full env list and for exactly what floci does, and does not, cover at the auth layer.

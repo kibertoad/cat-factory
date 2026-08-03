@@ -7,14 +7,14 @@
 
 Two changes to how a catalog model resolves to a route:
 
-1. **Bedrock becomes a selectable flavour, enabled per model** — today Bedrock is reachable
+1. **Bedrock becomes a selectable flavour, enabled per model**: today Bedrock is reachable
    only as a deployment-wide routing default, so a user cannot pin a task to it.
 2. **The order routes are preferred in becomes a per-preset choice**, edited in the model
    preset editor, instead of a constant compiled into `effectiveVariant`.
 
 ## Why
 
-`BEDROCK_MODELS` is **already a per-model allow-list** — the operator enumerates exactly the
+`BEDROCK_MODELS` is **already a per-model allow-list**: the operator enumerates exactly the
 ids their account can call in their Region. Nothing consumes that list except a
 throw-on-mismatch guard in `@cat-factory/provider-bedrock`. The capability set is sitting
 there unused.
@@ -22,12 +22,12 @@ there unused.
 The sharper argument is that the account model policy already ships
 `trustedProviders: ['bedrock']`, whose whole purpose is to let an otherwise-blocked family
 through **on a residency-guaranteed route**. With no selectable Bedrock flavour that
-exemption is only reachable by repointing the entire deployment's routing default — so the
+exemption is only reachable by repointing the entire deployment's routing default, so the
 feature is half-wired today, which is exactly what `CLAUDE.md` says not to leave behind.
 
 Preference has to be per-preset rather than per-deployment because it is a per-workload
 choice: the same workspace legitimately wants a compliance preset pinned to Bedrock and an
-everyday preset riding a flat-rate subscription. **No new env variables** — the knob is the
+everyday preset riding a flat-rate subscription. **No new env variables**: the knob is the
 preset row.
 
 ## Target design
@@ -60,7 +60,7 @@ resells them). Cloudflare stays last as the always-available floor.
 ### A preference REORDERS, never filters
 
 Flavours a preset omits are appended in default order and tried last. A preset naming three
-flavours must not make a model whose only route is the fourth unresolvable — it should just
+flavours must not make a model whose only route is the fourth unresolvable; it should merely
 be less preferred. The write boundary refuses duplicates (ambiguous to read back in the
 editor) but accepts partial lists.
 
@@ -79,7 +79,7 @@ resolveBedrockModelId('anthropic.claude-opus-4-8', caps) // 'eu.anthropic.claude
 That is what lets ONE catalog be correct in every Region, and it is why enablement is
 naturally per model: an id absent from the list is a model this account cannot call.
 
-Note Bedrock **lags the vendors' own APIs** — its newest Anthropic model is Opus 4.8, not the
+Bedrock **lags the vendors' own APIs**: its newest Anthropic model is Opus 4.8, not the
 Opus 5 the subscription flavour runs. Bedrock refs are therefore their own catalog entries or
 their own `ModelRef`s, never assumed equal to the direct flavour's model.
 
@@ -102,7 +102,7 @@ picker displayed. `ProviderCapabilities` gains `bedrockModels?: Set<string>` and
       `RunAdmission` and `resolveEffectiveRef` re-verified (see the warning above).
 - [ ] Catalog: `bedrock` flavours on the entries Bedrock actually serves (Claude Opus 4.8,
       Sonnet, `openai.gpt-5.5`/`gpt-5.4`, `openai.gpt-oss-*`, Llama, Nova).
-- [ ] Persistence, **both runtimes**: `provider_preference` on `model_presets` — a D1
+- [ ] Persistence, **both runtimes**: `provider_preference` on `model_presets`, a D1
       migration ⇄ Drizzle schema + `pnpm db:generate` + mappers + repos. Stored as a JSON
       array; NULL ⇒ default.
 - [ ] Capability wiring, **both runtimes**: `BEDROCK_MODELS` → `caps.bedrockModels`;
@@ -111,12 +111,12 @@ picker displayed. `ProviderCapabilities` gains `bedrockModels?: Set<string>` and
 - [ ] `server`: `ModelRouter` / `ContainerAgentExecutor` resolve the preference from the
       preset in force, once per dispatch (same rule as the prompt override).
 - [ ] Frontend: preference editor in `ModelConfigurationPanel.vue` (ordered list, reset to
-      default), the flavour badge in the picker, **and `en.json` + all 9 other locales** —
+      default), the flavour badge in the picker, **and `en.json` + all 9 other locales**;
       the parity gate is change-coupled, and a verbatim English value is a bug.
 - [ ] Conformance: a `defineConformanceSuite` assertion that a preset's stored preference
       round-trips and changes which flavour a model resolves to on BOTH runtimes.
 - [ ] Docs: `backend/docs/model-support.md` §2 (flavour table, precedence), §8 (replace the
-      "Bedrock contributes nothing to the picker, by design" paragraph added in #1602 — it
+      "Bedrock contributes nothing to the picker, by design" paragraph added in #1602; it
       documents the state this initiative removes).
 
 ## Gotchas found while scoping

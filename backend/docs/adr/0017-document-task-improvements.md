@@ -19,26 +19,26 @@ initiative was gap-closing on top of that track rather than a green-field build.
 
 Land five workstreams, each extending an existing seam rather than adding a parallel mechanism:
 
-- **WS1 — Templates & exemplars**: a per-`DocKind` Markdown template registry
+- **WS1 (Templates & exemplars)**: a per-`DocKind` Markdown template registry
   (`docTemplateFor`, built-in fallback + a `registerDocTemplate` override), with a
   workspace-linked override: a `role` (`template`/`exemplar`) tag on the existing
   workspace/`DocKind`-scoped document link, reusing the `documents` integration's existing
   provider/link/read path (GitHub, Confluence, Notion, …) with no new fetch machinery. The
   template's required sections are the single source of truth for both the authoring prompts and
   the WS4 quality gate.
-- **WS2 — Universal style fragments**: two new fragments (`style.anti-llmisms`,
+- **WS2 (Universal style fragments)**: two new fragments (`style.anti-llmisms`,
   `style.concise-actionable`), folded into doc prompts via a new `doc-aware` trait that extends
   the existing `code-aware` fragment-folding mechanism rather than adding a parallel path;
   default-on for document tasks; the `doc-reviewer` companion receives the same fragment bodies
   as review criteria.
-- **WS3 — Per-type fields**: a single `DOC_KIND_FIELDS` descriptor drives both the task-creation
+- **WS3 (Per-type fields)**: a single `DOC_KIND_FIELDS` descriptor drives both the task-creation
   form's conditional inputs and the authoring-prompt brief fold, as sparse optional fields on
   the existing `taskTypeFields` bag (no migration).
-- **WS4 — Quality gate**: a `doc-quality` gate, authored through the public `registerGate` seam,
+- **WS4 (Quality gate)**: a `doc-quality` gate, authored through the public `registerGate` seam,
   running deterministic checkout-free checks via `RepoFiles` (target file exists, required
   sections present, links resolve, heading hierarchy sane, no leftover template placeholders),
   inserted into `pl_document`/`pl_document_quick` before the merge tail.
-- **WS5 — Interactive review**: a dedicated `doc-interviewer` step, mirroring the initiative
+- **WS5 (Interactive review)**: a dedicated `doc-interviewer` step, mirroring the initiative
   interviewer's parked decision-wait loop (ask → human answers → iterate → proceed, capped at 4
   rounds), replacing the outline step's binary approve/revise human gate in `pl_document`. Its
   transcript lives in a new `doc_interview_sessions` table; the converged brief feeds

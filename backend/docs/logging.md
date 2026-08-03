@@ -1,7 +1,7 @@
 # Logging
 
 How the platform emits structured logs, and the patterns that keep them useful. The gap analysis
-that motivated this — and the remaining slices — live in
+that motivated this, and the remaining slices, live in
 [`docs/initiatives/observability-logging-gaps.md`](../../docs/initiatives/observability-logging-gaps.md).
 
 ## The shape
@@ -18,7 +18,7 @@ interface Logger {
 }
 ```
 
-Message first, fields second — the same shape `@cat-factory/executor-harness` declares for its
+Message first, fields second: the same shape `@cat-factory/executor-harness` declares for its
 zero-dependency logger, so one calling convention covers the backend and the container payload.
 It is a **port**, injected like `Clock`/`IdGenerator`, which is what lets `orchestration`,
 `integrations`, `agents` and `kernel` log at all: they must not import a runtime facade, and
@@ -43,16 +43,13 @@ wrong layer.
 | A domain service (orchestration / integrations / agents)     | A `logger?: Logger` dependency, normalised once in the constructor: `this.log = deps.logger ?? noopLogger`. `createCore` always injects the facade's real instance, so `noopLogger` only ever applies to a test or a harness. |
 | A shared controller / runtime helper (`@cat-factory/server`) | `import { logger } from '../observability/logger.js'`                                                                                                                                                                         |
 | A facade (`runtimes/*`)                                      | `import { logger } from '@cat-factory/server'`, or `container.logger` when you want the same instance the domain services got.                                                                                                |
-| A test                                                       | `createRecordingLogger()` from kernel — a `Logger` that records `{ level, msg, fields }` into `.lines` instead of emitting.                                                                                                   |
+| A test                                                       | `createRecordingLogger()` from kernel: a `Logger` that records `{ level, msg, fields }` into `.lines` instead of emitting.                                                                                                   |
 
 **`CoreDependencies.logger` is REQUIRED**, so a facade that forgets to wire it fails to typecheck.
 That is not incidental strictness: it was optional first, and the Worker's dependency literal
-simply had no `logger` key — every domain service on the deployed runtime silently fell back to
+simply had no `logger` key; every domain service on the deployed runtime silently fell back to
 `noopLogger`, and nothing anywhere said so. A test or harness that does not care passes
 `noopLogger` explicitly, which costs one line and cannot happen by accident.
-
-Individual services still declare `logger?: Logger` in their own dependency interfaces, so one can
-be constructed standalone in a unit test; `createCore` always passes the real instance.
 
 ## Levels
 
@@ -66,7 +63,7 @@ be constructed standalone in a unit test; `createCore` always passes the real in
 `LOG_LEVEL` sets the threshold: `process.env.LOG_LEVEL` on Node/local (applied in `start` /
 `startLocal` before anything else, so a boot failure is logged at the operator's chosen level),
 and a `[vars]` entry on the Worker (applied at the top of `fetch`/`scheduled`/`queue`, since a
-fresh isolate can start on any of them). An unrecognised value falls back to `info` — an operator
+fresh isolate can start on any of them). An unrecognised value falls back to `info`: an operator
 typo must never silence a deployment.
 
 The threshold is checked in the adapter, not on the pino instance, because pino children snapshot
@@ -81,7 +78,7 @@ A line nobody can tie to a run is nearly worthless. Bind the ids at the top of t
 const log = (opts.log ?? noopLogger).child({ workspaceId, executionId })
 ```
 
-…rather than re-spreading `{ workspaceId, executionId }` at each call site — which is how a deeply
+…rather than re-spreading `{ workspaceId, executionId }` at each call site, which is how a deeply
 nested emit (the poll-failure warnings inside `driveExecution`'s `pollUntil`) ends up with no ids
 at all. The standard keys are `requestId`, `workspaceId`, `executionId`, `blockId`, `jobId`, plus a
 `scope` / `sweep` / `cron` / `runner` tag naming the subsystem.
@@ -90,7 +87,7 @@ Three seams bind those ids for you, so most code inherits correlation rather tha
 
 ### The request (`mountRequestLogging`)
 
-Both facades mount it FIRST — before CORS, before the per-request container — so nothing that can
+Both facades mount it FIRST (before CORS, before the per-request container) so nothing that can
 produce a response escapes it. It adopts a safe, bounded `X-Request-Id` from the caller or mints
 one, echoes it on the response, puts it in **every error envelope**, and binds
 `{ requestId, method, path }` onto a request-scoped child logger. Reach that logger from a
@@ -99,7 +96,7 @@ isn't mounted, so no call site branches.
 
 One line per request: `info` on success, `warn` on a 4xx (with the `errorCode` `handleError`
 mapped, when the refusal came through a thrown `DomainError`), `error` on a 5xx. `/health` and
-`/ready` drop to `debug` when they succeed — an orchestrator probes them every few seconds, and a
+`/ready` drop to `debug` when they succeed: an orchestrator probes them every few seconds, and a
 per-poll line is exactly what the level table above says `info` is not for. The LLM proxy is
 deliberately NOT quieted despite being the highest-volume route (one request per model call): a
 probe fires when nothing is happening, whereas every proxy line marks real billable work and joins
@@ -107,7 +104,7 @@ to an `llm_call_metrics` row. Quiet the idle chatter, never the work.
 
 Only the **pathname** is logged, never the raw URL: a query string routinely carries a token (the
 WebSocket `?ticket=`, an OAuth `?code=`), and this value lands in every line for the request. For
-the same reason a client-supplied id is refused unless it is short and matches `[\w\-=]+` — it is
+the same reason a client-supplied id is refused unless it is short and matches `[\w\-=]+`: it is
 attacker-controlled text going straight into a log stream.
 
 `durationMs` is a coarse "was this slow" signal, not a latency measurement. On workerd `Date.now()`
@@ -116,15 +113,15 @@ to the last I/O boundary; and for a STREAMED response it covers time-to-headers,
 resolves when the handler returns the `Response`, not when its body finishes.
 
 The **misconfiguration fallback** mounts it too. The Worker inherits it (it serves the fallback from
-inside `createApp`), but Node/local swap in the whole `createMisconfiguredApp` — so it mounts the
+inside `createApp`), but Node/local swap in the whole `createMisconfiguredApp`, so it mounts the
 middleware itself, or the one deployment shape someone is actively debugging would be the only one
 with no ids and no request lines.
 
 ### The container (`containerJobLog`)
 
 The workflow↔container seam was the platform's blindest: the durable driver knows a run as
-`executionId`, the harness knew it only as `jobId`, and `ContainerAgentExecutor` — the thing that
-joins them — logged nothing at all. It now emits one line per lifecycle transition (dispatched /
+`executionId`, the harness knew it only as `jobId`, and `ContainerAgentExecutor` (the thing that
+joins them) logged nothing at all. It now emits one line per lifecycle transition (dispatched /
 dispatch-failed / poll-failed / running at `debug` / settled) with
 `{ workspaceId, executionId, jobId, agentKind }` bound, and the same two ids ride the **job body**
 so the harness binds them onto its own per-job child logger beside `jobId`. A container line and a
@@ -157,7 +154,7 @@ It runs `fn`, swallows any rejection **or synchronous throw**, logs one `warn` n
 operation with the cause attached, and returns `undefined`. It never rejects.
 
 - Use it when the failure genuinely doesn't change what the caller does.
-- Do **not** use it when the failure should change the caller's behaviour — that wants a real
+- Do **not** use it when the failure should change the caller's behaviour: that wants a real
   `try`/`catch` with a domain decision.
 - Where a bespoke `catch` is right (you need a fallback value, or a different level), still bind
   the cause with `describeError(error)` rather than discarding it.
@@ -171,11 +168,11 @@ rarely what identifies the failure. Pass one explicitly at a site that needs it.
 
 `scripts/check-silent-catch.mjs` (CI's `repo-guards` job) fails on `.catch(() => {})` anywhere in
 `backend/packages` or `backend/runtimes` non-test source. It is a script rather than a lint rule
-only because oxlint ships no `no-restricted-syntax` — the same reason `check-file-size.mjs` exists
+only because oxlint ships no `no-restricted-syntax`: the same reason `check-file-size.mjs` exists
 beside `max-lines`.
 
 **Every spelling of an empty handler counts**, not just the canonical one: arrow or `function`,
-typed param or not, and — the one worth knowing about — a body holding nothing but a comment.
+typed param or not, and (the one worth knowing about) a body holding nothing but a comment.
 `.catch(() => { /* ignored */ })` is caught, because otherwise the escape hatch below is optional
 in practice: an author can document a swallow inline and never state a reason. What the guard
 cannot see is an empty NAMED handler (`.catch(noop)`); whether a function is empty is not a
@@ -183,14 +180,14 @@ question a text scan can answer, and guessing would make the guard unpredictable
 
 The detection lives in `scripts/silent-catch.mjs` with fixtures in `silent-catch.test.mjs`
 (`node --test 'scripts/*.test.mjs'`, also a CI step). It works by MASKING every comment and string
-literal before matching, rather than matching first and asking "was that a comment?" afterwards —
+literal before matching, rather than matching first and asking "was that a comment?" afterwards:
 the earlier heuristic version read the `//` in a URL as the start of a comment, so
 `fetch('https://…').catch(() => {})` switched the guard off on the very line it was meant to catch.
 If you change the detector, add the case to those fixtures: a guard that regresses silently is
 worse than no guard, because it reports green either way.
 
-Not every silent drop is a bug. When the failure genuinely needs no report — the classic case is a
-rejection some other path has already observed and reported — keep the idiom and say why on the
+Not every silent drop is a bug. When the failure genuinely needs no report (the classic case is a
+rejection some other path has already observed and reported) keep the idiom and say why on the
 line(s) above it:
 
 ```ts
@@ -204,7 +201,7 @@ skim past. Two areas are deliberately out of scope and tracked as their own slic
 [`observability-logging-gaps.md`](../../docs/initiatives/observability-logging-gaps.md): the
 executor/deploy harnesses (a source change there bumps the published runner image, so all harness
 work batches together) and the SPA (it has no logger to report through until client-side error
-reporting lands). A bare `catch {}` isn't checked yet either — there are ~110 in scope, most of them
+reporting lands). A bare `catch {}` isn't checked yet either: there are ~110 in scope, most of them
 documented deliberate swallows.
 
 ## Secrets
@@ -213,7 +210,7 @@ documented deliberate swallows.
 `redactSecrets` at the emit site.** `describeError` does this for you. Nothing else does.
 
 Never log an `Authorization` header, a raw query string, a request body, or a decrypted
-credential — not even at `debug`. `debug` is a level an operator turns on in production.
+credential, not even at `debug`. `debug` is a level an operator turns on in production.
 
 ## Observability must never break agent work
 
@@ -242,7 +239,7 @@ this.log.warn('merge classification failed; recording an unclassified row', {
 })
 ```
 
-- The message is a fixed string — no interpolated ids, so it groups. Everything variable is a
+- The message is a fixed string, no interpolated ids, so it groups. Everything variable is a
   field.
 - It says what happened AND what the system did about it.
 - The fields answer the first question an operator will ask ("which board, which PR, did we at
@@ -251,14 +248,14 @@ this.log.warn('merge classification failed; recording an unclassified row', {
 ### Field names to avoid
 
 `msg`, `level` and `time` are the envelope's own keys (see [Output format](#output-format)), so a
-field bag carrying one of them collides with the line's own structure rather than adding to it —
+field bag carrying one of them collides with the line's own structure rather than adding to it:
 silently, since nothing rejects it. Name yours something else (`detail`, `severityHint`,
 `observedAt`).
 
 Prefer `...describeError(error)` over hand-rolling an error field. Besides the scrubbing, it keeps
 one shape (`err` + `errKind`) across every line in the platform, and it avoids the specific trap of
 passing a raw `Error` object: the Worker bundles pino's browser build, which `JSON.stringify`s an
-`Error` to `{}` — so the cause vanishes on exactly the runtime you cannot attach a debugger to.
+`Error` to `{}`, so the cause vanishes on exactly the runtime you cannot attach a debugger to.
 
 ## Testing that something logged
 
@@ -279,13 +276,13 @@ so you can assert correlation ids without threading the child back out.
 pino's own JSON object, verbatim, on both runtimes: numeric `level`, epoch `time`, `msg`, then the
 bound and call-site fields. The Worker bundles pino's browser build (workerd has no worker
 threads), whose per-level `write` hands the already-serialised object to the matching `console`
-method — so a Worker line and a Node line parse identically and only the console routing differs.
+method, so a Worker line and a Node line parse identically and only the console routing differs.
 Cloudflare captures it via `wrangler tail` / Logpush; a Node process writes it to stdout.
 
 ## Logging is half of it: count the event too
 
 A log line answers "what happened to THIS run". It cannot answer "is this happening more than it
-was" — and that second question is the one an operator asks during an incident. A deployment where
+was", and that second question is the one an operator asks during an incident. A deployment where
 every container is being evicted produces a steady trickle of individual `warn` lines and no signal
 at all that a rate changed.
 
@@ -309,7 +306,7 @@ Three rules bind a new increment site, and they are the reason the two are not o
   correctly across however many flushers there are.
 - **An un-wired counter is indistinguishable from an event that never happened.** That is why
   `CoreDependencies.operationalMetrics` and `SweeperOptions.metrics` are REQUIRED rather than
-  optional — the same call, for the same reason, as `CoreDependencies.logger`. A caller with
+  optional: the same call, for the same reason, as `CoreDependencies.logger`. A caller with
   nothing to export passes `noopOperationalMetrics` explicitly.
 
 Adding a signal means adding a member to the closed `OperationalCounter` / `OperationalGauge`

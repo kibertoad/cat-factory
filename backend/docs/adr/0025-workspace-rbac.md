@@ -9,14 +9,14 @@
 Access control stopped at the **account** tier. `AccountRole` (`admin | developer | product`,
 combinable) governed what a member could do, and account membership implicitly granted visibility
 into **every** workspace the account owned. There was no `WorkspaceRole`, no workspace-membership
-table, and no way to scope a board to a team — a real adoption blocker for any org where separate
+table, and no way to scope a board to a team: a real adoption blocker for any org where separate
 teams (or external contractors) share one account but must not see each other's boards, budgets, or
 agent runs. Enforcement was also role-shaped rather than permission-shaped: the only check that
 existed was `AccountService.requireAdmin`, hand-called per controller.
 
 We wanted an optional **workspace-membership** layer below the account tier, expressed through a
 small **permission catalog** rather than scattered role comparisons, with enforcement in ONE shared
-place — and with zero behaviour change for every existing deployment (back-compat is a non-goal, but
+place, and with zero behaviour change for every existing deployment (back-compat is a non-goal, but
 the migration path should still be "flip a board to restricted", not "migrate all data").
 
 ## Decision
@@ -40,7 +40,7 @@ catalog and enforced in exactly three shared seams.
   (lattice `viewer < member < admin`, effective = max of applicable grants): legacy boards
   (`accountId === null`) stay owner-only-`admin`; non-account-members are always denied (account
   membership is a prerequisite, so stale member rows are inert); account `admin` ⇒ workspace `admin`
-  (the escape hatch — no lock-out state is reachable); `accessMode: 'account'` gives
+  (the escape hatch: no lock-out state is reachable); `accessMode: 'account'` gives
   developers/product `member` with a member row as an **upgrade-only overlay** (a `viewer` row is
   ignored, keeping account-mode byte-compatible); `accessMode: 'restricted'` ⇒ the member row's
   role, no row ⇒ denied (404).
@@ -50,11 +50,11 @@ added_by_user_id)`, PK `(workspace_id, user_id)`, `user`-indexed; `workspaces.ac
 NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration). Mirrored across
   both runtimes (D1 `0052_workspace_rbac.sql` ⇄ Drizzle) behind a batch-shaped
   `WorkspaceMemberRepository` (`get`, `listByWorkspace`, `listWorkspaceIdsForUser`, the chunked-`IN`
-  `getRolesForUserInWorkspaces`, `upsert`, `remove`, `removeByAccountMembership`) — never a
+  `getRolesForUserInWorkspaces`, `upsert`, `remove`, `removeByAccountMembership`); never a
   per-member point-read loop. `WorkspaceRepository` gained `accessRowOf` (one narrow hot-path read),
   `setAccessMode`, and `linkAccount` (legacy-board auto-heal).
 
-- **Three enforcement seams — never re-derived per controller.**
+- **Three enforcement seams, never re-derived per controller.**
   1. **Resolution + the 404 hide** in `mountAuthGate` (`server/src/http/authGate.ts`): every
      `/workspaces/:ws/*` request calls the single `loadWorkspaceAccess` (through the
      `workspaceAccess` AppCaches slice), publishes `{role, permissions}` on `c.get('workspaceAccess')`,
@@ -76,7 +76,7 @@ perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403
   routes through the `workspaceAccess` AppCaches slice (group = workspace id, key = user id, negative
   outcomes cached as values). `DEFAULT_APP_CACHES_PROFILE` enabled (TTL 60s, freshness backstop
   only); `ISOLATE_SAFE_APP_CACHES_PROFILE` **disabled** (our own mutable D1 state, no cross-isolate
-  bus — the `repoProjection` class). Invalidation is the coherence story: roster/access-mode/delete
+  bus; the `repoProjection` class). Invalidation is the coherence story: roster/access-mode/delete
   writes `invalidateGroup(workspaceId)`; account-tier membership writes (`addMember`/`setMemberRoles`/
   invitation accept) `invalidateAll()` via a narrow `onAccountMembershipChanged` callback.
 
@@ -88,7 +88,7 @@ perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403
   account members; creator auto-enroll seeds an admin row). Side doors resolved explicitly:
   `/me/environment-handlers/:ws` calls `loadWorkspaceAccess` itself (mounted outside the gate) and
   requires `runs.execute`; the WS ticket gained an audit-only `userId`; `public_api_keys` gained
-  provenance-only `created_by_user_id` (mint under `secrets.manage`, no re-resolution — a service
+  provenance-only `created_by_user_id` (mint under `secrets.manage`, no re-resolution; a service
   credential outlives its minter's access).
 
 - **Frontend.** The snapshot carries optional `access: {role, permissions}` (attached from the
@@ -110,23 +110,23 @@ perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403
   silently drifts.
 - **`board.write` vs `runs.execute` split even though both resolve to `member`.** Public-API keys /
   machine principals want run execution without board mutation, and a post-1.0 custom-role model will
-  want the split — the cost of carrying it now is one string.
+  want the split; the cost of carrying it now is one string.
 - **Roles single-valued (unlike the account tier's CSV).** Workspace roles are a strict hierarchy; a
   set adds no expressive power (`{viewer, admin}` ≡ `admin`) and complicates the max-lattice math and
   the UI. Account roles stay combinable because `product` is orthogonal routing metadata, not a rank.
 - **Account membership is a prerequisite, never a grantor across accounts.** Rule 2 fails a stale
   member row closed, and `listVisible`'s membership branch is ANDed with the caller's account ids so
   lists and resolution agree. Account `admin` ⇒ workspace `admin` makes lock-out unreachable, so no
-  last-admin protection is needed (self-demotion/removal — "leave" — is permitted).
+  last-admin protection is needed (self-demotion/removal, "leave", is permitted).
 - **404 for invisibility, 403 for insufficiency.** A denied board returns the exact existing
   not-found shape (a different body leaks existence); a resolved-but-insufficient caller gets 403,
-  because they already see the workspace so only capability — not existence — is revealed. The account
+  because they already see the workspace so only capability, not existence, is revealed. The account
   tier's `requireAdmin` 409 is a legacy shape deliberately not copied.
 - **The Worker keeps the slice pass-through.** A Worker isolate has no cross-isolate invalidation bus,
   so a TTL'd cache of mutable D1 state would serve stale access after another isolate's write; the
   isolate-safe profile disables the slice and resolution reads live every request.
 - **Conformance/e2e MUST run auth-enabled.** Dev-open resolves no access object and allows everything
-  by design, so an auth-disabled harness passes every RBAC assertion vacuously — the harnesses run
+  by design, so an auth-disabled harness passes every RBAC assertion vacuously; the harnesses run
   the RBAC suite with `AUTH_SESSION_SECRET` set and drive the gate as real signed users.
 
 ## Consequences
@@ -152,10 +152,10 @@ perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403
 
 - Custom / user-defined roles and per-permission grants (the catalog is shaped so they can be added
   without re-splitting).
-- Cross-account workspace sharing (grants to users outside the owning account — a sharing feature with
+- Cross-account workspace sharing (grants to users outside the owning account, a sharing feature with
   different trust maths).
 - An account-tier `AccountPermission` catalog, realigning `requireAdmin`'s 409 to a 403
-  `ForbiddenError`, and a frontend `useAccountAccess()` — folding the account tier in now would triple
+  `ForbiddenError`, and a frontend `useAccountAccess()`: folding the account tier in now would triple
   the blast radius for zero user-visible gain. `AccountRole` answers "what can you do to the tenant";
   `WorkspaceRole` answers "what can you do inside one board"; they meet at exactly two seams owned by
   `resolveWorkspaceAccess`.

@@ -5,7 +5,7 @@
 An agent kind's output-token ceiling was a DEPLOYMENT-only fact: a number in each runtime's
 routing builder (`AGENT_ROUTING`, overridable per kind through `AGENT_MODELS` /
 `AGENT_MAX_OUTPUT_TOKENS`). That is the wrong owner for it. For the kinds whose whole deliverable
-IS one reply — a research brief, an outline, a review verdict — the ceiling bounds the ARTIFACT
+IS one reply (a research brief, an outline, a review verdict) the ceiling bounds the ARTIFACT
 rather than guarding against a runaway, and how long that artifact needs to be is a property of
 the work the workspace is doing, not of the deployment.
 
@@ -38,7 +38,7 @@ Two seams carried the work with no new machinery:
 - **Per-step is free.** `StepOptions` (see [`pipeline-step-options.md`](./pipeline-step-options.md))
   is one JSON column, so the field needed no migration on either runtime, and `ExecutionService`
   already copies the bag onto the runtime step.
-- **Per-workspace copies the prompt-override stack** — `agent_prompt_revisions` is the same shape
+- **Per-workspace copies the prompt-override stack**: `agent_prompt_revisions` is the same shape
   of thing (per-workspace, per-agent-kind, overriding a shipped default, edited in the pipeline
   builder), so the port / repo pair / controller / store / editor placement all follow it.
 
@@ -51,7 +51,7 @@ they can see is wrong and retype. So this store upserts on its primary key, has 
 and `remove` is a real operation.
 
 That asymmetry is the thing most likely to be "fixed" by a future reader into a bug in one
-direction or the other, so it is asserted from both sides — the conformance suite pins that this
+direction or the other, so it is asserted from both sides: the conformance suite pins that this
 store REPLACES on re-upsert, and the prompt suite pins that its own store REFUSES a duplicate.
 
 ## Conventions & gotchas
@@ -59,11 +59,11 @@ store REPLACES on re-upsert, and the prompt suite pins that its own store REFUSE
 - **"Inheriting" is expressed by ABSENCE, never a stored row of nulls.** The service deletes the
   row when the last field is cleared, so there is exactly one representation. A nullable column
   still exists (a future second knob will want it), and both the repo suite and the engine test
-  pin that a stored `null` reads as inherit rather than as a zero-token budget — which would make
+  pin that a stored `null` reads as inherit rather than as a zero-token budget, which would make
   every reply come back empty.
 - **The update route is a PATCH.** An omitted field keeps its stored value so a second knob can be
   added without a read-modify-write race against this one; an explicit `null` clears.
-- **The ceiling is keyed on the EFFECTIVE dispatched kind**, like the prompt override — a gate's
+- **The ceiling is keyed on the EFFECTIVE dispatched kind**, like the prompt override: a gate's
   helper (`ci-fixer`, the fork proposer) gets its own budget rather than inheriting the hosting
   step's.
 - **`get` is on the RUN path**, so it is allow-listed in `REMOTE_PERSISTENCE_METHODS`. An
@@ -71,7 +71,7 @@ store REPLACES on re-upsert, and the prompt suite pins that its own store REFUSE
   rather than merely dimming a panel.
 - **The cap is ADVISORY on the subscription-CLI inline path.** The harness documents this at
   `InlineJob.maxOutputTokens` ("the one-shot CLIs don't all honour it"), so a value set here
-  neither raises nor constrains an ambient `claude`/`codex` inline run — it bites on the metered
+  neither raises nor constrains an ambient `claude`/`codex` inline run: it bites on the metered
   provider path. This is stated at every tier's contract, because a knob that silently does
   nothing on one deployment shape is worse than an absent one.
 - **The SPA never guesses the deployment default.** It is env-resolved per kind, so the per-step
@@ -79,7 +79,7 @@ store REPLACES on re-upsert, and the prompt suite pins that its own store REFUSE
   otherwise, rather than printing a number that would be wrong wherever an operator tuned it.
 - **Both controls are OVERRIDE fields**, so they follow the interface-mode rule: gated on
   `showOverrideField`, hidden in basic mode only while unset, and revealed as soon as a value
-  exists — or a basic-mode user runs on a budget a teammate pinned and can neither see nor clear it.
+  exists, or a basic-mode user runs on a budget a teammate pinned and can neither see nor clear it.
 
 ## Status
 
@@ -89,7 +89,7 @@ allow-list + engine resolution + controller + both builder surfaces + conformanc
 Follow-ups deliberately NOT in scope:
 
 - **Temperature (and any further generation knob) on the same store.** The row and the PATCH shape
-  were built for it, but adding one now would be speculative — the ceiling had a concrete failure
+  were built for it, but adding one now would be speculative: the ceiling had a concrete failure
   to fix and temperature does not.
 - **Sharing the per-kind default numbers between the two runtime routing builders.** They
   duplicate the budgets today and have already drifted (the Worker carries a `coderDefault` Node

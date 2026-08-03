@@ -8,10 +8,10 @@ try to land malicious code, what actually stands between that decision and your 
 The answer is a chain of controls, and they are not all the same kind of thing. Each layer below is
 labelled as one of:
 
-- **mechanism** — enforced by code or by the VCS host; holds even against a fully adversarial agent
+- **mechanism**: enforced by code or by the VCS host; holds even against a fully adversarial agent
   process;
-- **configuration** — enforced only if the operator sets it; the platform ships a default;
-- **judgment** — an LLM's assessment; assumed to be defeatable by prompt injection, and therefore
+- **configuration**: enforced only if the operator sets it; the platform ships a default;
+- **judgment**: an LLM's assessment; assumed to be defeatable by prompt injection, and therefore
   never the last line of defence for anything that matters.
 
 Audience: operators deciding how much to trust autonomous runs, and contributors changing anything
@@ -24,7 +24,7 @@ plumbing), [ADR 0025](./adr/0025-workspace-rbac.md) (who may trigger runs at all
 
 Assume the worst case: an agent whose instructions have been fully subverted by text it read, or
 whose tool calls carry hallucinated arguments. Concretely, assume the agent process inside the
-executor container is **adversarial** — it will run any shell command its tools allow, and its
+executor container is **adversarial**: it will run any shell command its tools allow, and its
 prompt-level restrictions (its instructions, `allowedTools`, "read-only" role descriptions) have
 already failed. The question is what it can still reach.
 
@@ -38,23 +38,23 @@ agent edits files in a per-run checkout
   → harness commits + pushes to ONE backend-chosen work branch     (mechanism)
   → harness opens a PR via the VCS API                             (mechanism)
   → CI gate reads the host's real check runs                       (mechanism + your CI)
-  → merger agent returns a JSON risk assessment — nothing else     (judgment)
+  → merger agent returns a JSON risk assessment - nothing else     (judgment)
   → engine compares assessment to the merge preset and merges,
     or routes to a human                                           (mechanism + configuration)
   → the host performs the merge, under branch protection           (configuration, host-side)
 ```
 
 That is the path an agent's DECISIONS travel. A run that has taken the credential itself (Layer 2's
-stated limit) does not travel it at all — it reaches the host directly, where only branch protection
+stated limit) does not travel it at all: it reaches the host directly, where only branch protection
 is left. Keep the two cases apart when reading what follows: every label below describes the pipeline
 case unless it says otherwise.
 
 The layers, in order of where they bite:
 
-## Layer 1 — the agent never composes git commands (mechanism)
+## Layer 1: the agent never composes git commands (mechanism)
 
-The agent's tool loop only edits files in the checkout. Every git operation — clone, branch,
-commit, push — is executed by the **harness**, not the agent, via `execFile('git', [...])` with a
+The agent's tool loop only edits files in the checkout. Every git operation (clone, branch,
+commit, push) is executed by the **harness**, not the agent, via `execFile('git', [...])` with a
 fixed argv and no shell (`backend/internal/executor-harness/src/git.ts`). The push is exactly
 `git push -u origin <branch>` (`pushBranch`), and the branch name comes off the **job body composed
 by the backend at dispatch** (`job.pushBranch ?? job.newBranch ?? job.branch`), never from model
@@ -63,16 +63,16 @@ branch, a refspec, or a flag.
 
 Where a model-authored string legitimately must become a git or shell argument (the declared test
 paths in the bugfix reproduction proof, tracker board slugs), it is validated for **git magic, not
-just path traversal** — `isSafeTestPath` rejects wildcards and `:(...)` pathspec magic, and a
+just path traversal**: `isSafeTestPath` rejects wildcards and `:(...)` pathspec magic, and a
 refused input is reported as an omission, never silently dropped
 (`backend/internal/executor-harness/src/reproduction-proof.ts`).
 
-## Layer 2 — the credential is not in the agent's environment (mechanism, with a stated limit)
+## Layer 2: the credential is not in the agent's environment (mechanism, with a stated limit)
 
 The push token never appears in a remote URL, in git argv, or in the harness's `process.env`. Git
 authenticates through a `GIT_ASKPASS` helper reading `GIT_ASKPASS_TOKEN`, which is set **only on the
 env of each git child process the harness itself spawns** (`authEnv` in `git.ts`). The agent CLI is
-spawned with the harness's inherited env plus explicit per-job extras — the token is not among them.
+spawned with the harness's inherited env plus explicit per-job extras: the token is not among them.
 An injected agent that runs `git push` from its own shell finds a remote with no credential and
 `GIT_TERMINAL_PROMPT=0`, so the push fails instead of prompting.
 
@@ -83,15 +83,15 @@ casual and accidental exfiltration; the **container is the trust boundary**, and
 is worth is bounded by Layer 3, not by this one.
 
 This layer is at its weakest in **local native mode** (`LOCAL_NATIVE_AGENTS`): there is no container
-at all — the agent runs as your own user on your own machine, so the process boundary above is only
+at all; the agent runs as your own user on your own machine, so the process boundary above is only
 whatever sandboxing the agent CLI itself applies. See item 5 of the operator hardening checklist.
 
 What does still hold there is the **env allow-list** (`backend/runtimes/local/src/childEnv.ts`).
 Spawned with a plain `...process.env`, a native child would inherit the ORCHESTRATOR's whole
-environment — `DATABASE_URL`, `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, `GITHUB_PAT`, provider API
-keys — and hand it to a prompt-injectable agent subprocess that has shell access. So native children
+environment (`DATABASE_URL`, `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, `GITHUB_PAT`, provider API
+keys) and hand it to a prompt-injectable agent subprocess that has shell access. So native children
 get an allow-list PROJECTION instead: `PATH`/`HOME`/locale/temp/proxy/TLS-trust vars and the ambient
-CLIs' own config homes, nothing else. **That list is a security boundary, not ergonomics** — adding a
+CLIs' own config homes, nothing else. **That list is a security boundary, not ergonomics**: adding a
 secret-bearing name to `EXACT_ALLOW`/`PREFIX_ALLOW` hands it to every native agent run. The
 deploy-harness transport opts out deliberately (`envMode: 'inherit'`, because kubectl/helm need
 ambient cloud env), which is exactly why that transport is not for untrusted input either.
@@ -131,7 +131,7 @@ clean and shipped the deployment's master sealing key to a third party. So:
   sealed store or a secret manager. A deployment installing third-party agent packages, and a
   mothership-mode node, are the two cases that should set it.
 
-## Layer 3 — what the token can reach (mechanism)
+## Layer 3: what the token can reach (mechanism)
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:
 
@@ -145,41 +145,41 @@ This is the hard bound on a _fully_ compromised run. What the token is varies by
 Wherever the per-user secret store is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has
 stored a personal GitHub PAT (`github_pat`, sealed, opt-in per user) uses THAT token instead of the
 deployment's own: the container push/clone mint checks it first (`container-executor-deps.ts`, both
-facades), and so does the engine's own GitHub client via `PatPreferringAppRegistry` — which covers
+facades), and so does the engine's own GitHub client via `PatPreferringAppRegistry`, which covers
 the CI gate, mergeability, and the real merge call. The deployment credential is the fallback, not
 the default.
 
 **`allowInitiatorPat` (per workspace, on by default) is the enforced control over that.** Turned
 off, every run authenticates as the App installation (or, in local mode, the deployment's own
-token) and the initiator's PAT is never even decrypted — so the blast radius goes back to being a
+token) and the initiator's PAT is never even decrypted, so the blast radius goes back to being a
 property of how the operator scoped the deployment rather than of who pressed start. It is a
 **mechanism**, not advice: all three mint sites route through the one
 `createResolveRunInitiatorToken` decision, and an unreadable settings row **fails closed** to the
 App token with the cause logged. What it does NOT touch is a member's own token acting on their
-own behalf in the UI (browsing their PAT-reachable repos in the picker) — that is them reading
+own behalf in the UI (browsing their PAT-reachable repos in the picker): that is them reading
 their own account, not the platform writing to someone else's.
 
 The purpose is attribution: pushes and PRs come from the human who started the run rather than from
 the bot. The security consequence is that **the bound is then the PAT's scope, not the
-installation's** — and a classic-scope personal PAT is broader than any installation, reaching
+installation's**, and a classic-scope personal PAT is broader than any installation, reaching
 repositories the platform was never installed on. So the blast radius of a compromised run is a
 property of the run's INITIATOR, not only of how the operator scoped the deployment. Treat "who may
 start runs" (ADR 0025) and "what PATs those members store" as one question.
 
 GitLab connections (any deployment shape) authenticate with a **per-workspace PAT**, stored sealed by
-the deployment `SecretCipher` and unsealed server-side per use — like the local-mode row, its scope
+the deployment `SecretCipher` and unsealed server-side per use: like the local-mode row, its scope
 and lifetime are whatever the human granted the PAT, so the fine-grained-PAT advice below applies.
 
 Consequences to internalize:
 
 - Worst case for a compromised container run is **pushes to repos the credential already covers, for
-  as long as it lives** — under an hour for an App token; indefinitely, and possibly far wider, for a
+  as long as it lives**: under an hour for an App token; indefinitely, and possibly far wider, for a
   personal PAT. App tokens buy no lateral movement to other installations or accounts and leave
   nothing to steal at rest (never persisted); a stored PAT is at rest by definition, sealed, and is
   only as narrow as the member made it.
 - The credential carries `Contents: write` **for the whole repo**, and GitHub App tokens cannot be
   branch-scoped. So _nothing platform-side_ stops a stolen token from pushing directly to an
-  unprotected default branch — nor from **merging an open PR through the host's merge API**, which
+  unprotected default branch, nor from **merging an open PR through the host's merge API**, which
   needs no more permission than the push already had. **Branch protection on the host is the control
   for both, and it is yours to configure** (see the checklist). This is also why Layer 4 below is
   conditional on Layer 2 rather than a defence in its own right.
@@ -191,17 +191,17 @@ Known gap, candidate hardening: the standard engine dispatch uses the **unscoped
 token, even though the repo-scoped mint mechanism already exists (the mothership delegation path
 uses it). Narrowing the job token to the run's actual repos (primary + peers + references) would
 shrink the worst case of Layer 2's stated limit from "the installation" to "the repos this run was
-about". Until then, the practical mitigation is installation scope itself — see the checklist. Note
+about". Until then, the practical mitigation is installation scope itself: see the checklist. Note
 that such a narrowing would not bound an initiator PAT, which the platform does not mint and cannot
 scope; `allowInitiatorPat: false` is what bounds that, by declining to use it at all.
 
-## Layer 4 — no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
+## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
-Pushing a malicious commit to a `work` branch is, by design, _allowed_ — that is what a PR is for.
+Pushing a malicious commit to a `work` branch is, by design, _allowed_: that is what a PR is for.
 The enforcement here is that nothing an agent **decides** or **returns** can merge it.
 
 Read the scope of that claim precisely, because it is the layer most easily over-read. This layer
-constrains the agent's OUTPUT — the text and scores it returns, and the pipeline that consumes them.
+constrains the agent's OUTPUT: the text and scores it returns, and the pipeline that consumes them.
 It does not constrain a container process that has **taken the credential** in the sense of Layer 2's
 stated limit: that process can call the host's merge API directly and never touch this pipeline at
 all. So Layer 4 is a real mechanism against a subverted agent making a bad _decision_, and no defence
@@ -214,7 +214,7 @@ With that scoping, the pipeline properties are:
   rationale). It makes no commits and calls no merge API. The real merge is executed by the engine
   (`MergeResolver` / `finalizeMerge` in `@cat-factory/orchestration`), server-side, with the server's
   credential, on a code path the container cannot reach or influence except through those scores.
-  Note that the merger container is _not_ credential-free: it is a container agent kind that clones
+  The merger container is _not_ credential-free: it is a container agent kind that clones
   the PR head to read the diff, so its job carries the same clone/push token as any other dispatch
   (`CONTAINER_AGENT_KINDS`). What it lacks is a way to make the ENGINE merge; what a stolen token
   could still do is the Layer 2/3 story above, not this one.
@@ -226,7 +226,7 @@ With that scoping, the pipeline properties are:
   built-in): `autoMergeEnabled: false` routes _every_ PR to a human `merge_review` regardless of
   scores, and per-class `classRules` put floors under the model's opinion (e.g. "schema-class
   changes always get a human"). A class rule can never override `autoMergeEnabled: false`.
-- The **CI gate** reads the host's real check runs — your CI is a mechanism here, to exactly the
+- The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint
   but never cancel one the pipeline author placed (`assertValidGating` refuses a step carrying both
@@ -235,23 +235,23 @@ With that scoping, the pipeline properties are:
 
 The **judgment** component is the merger's scores themselves: the model reads the diff, and the
 diff is attacker-influenced text. An injected diff can try to talk its own risk score down. That is
-precisely why the ceilings and class floors exist and why they key on the _computed_ class — but it
+precisely why the ceilings and class floors exist and why they key on the _computed_ class, but it
 also means the shipped default posture is worth stating plainly:
 
 > **Default posture ("Balanced" preset):** auto-merge is ON, with ceilings
 > `complexity ≤ 0.5, risk ≤ 0.4, impact ≤ 0.5` and **no per-class floors**. Out of the box, a
 > source- or schema-class change that a (possibly manipulated) merger scores under those ceilings
-> merges without a human — subject to your CI and your branch protection. If that is not acceptable
+> merges without a human, subject to your CI and your branch protection. If that is not acceptable
 > for a repo, pin the `Manual review only` preset or add class floors. This is a one-line
 > configuration, not a code change.
 
-## Layer 5 — agent text is untrusted on every rendered surface (mechanism)
+## Layer 5: agent text is untrusted on every rendered surface (mechanism)
 
 Everything the agent writes that reaches a parsed surface is treated as hostile:
 
 - PR bodies, descriptions and the verification report are scrubbed with `redactSecrets` **at
   compose time** (before truncation), capped, and passed through `hostMarkdown`, which neutralizes
-  the host's auto-link triggers — so injected output cannot smuggle a `Closes #N` that deletes an
+  the host's auto-link triggers, so injected output cannot smuggle a `Closes #N` that deletes an
   issue on merge, break out of a fence to overwrite the machine-read report block, or echo a
   credential a subprocess error leaked into it.
 - Captured command output shown back to a model is fenced with a fence sized longer than any
@@ -259,15 +259,15 @@ Everything the agent writes that reaches a parsed surface is treated as hostile:
   as instructions.
 - Published review findings (`createReview`, on both providers) are a rendered surface too, and one
   that is **not** yet scrubbed: a finding's body is posted to the host verbatim. The exposure is
-  bounded relative to a PR body — a host auto-links `#123`/`@name` in a comment, but only a
-  DESCRIPTION or commit message can carry a closing keyword that acts on merge — and the findings a
+  bounded relative to a PR body: a host auto-links `#123`/`@name` in a comment, but only a
+  DESCRIPTION or commit message can carry a closing keyword that acts on merge, and the findings a
   human selected in the review window are the only ones posted. It is listed here because "not a
   boundary" has to be written down to stay a decision rather than an oversight; folding these
   through `hostMarkdown` is the obvious next step and belongs on whichever half moves first, since
   the GitHub and GitLab posters must not diverge on it.
 - Inbound tracker-comment commands are explicit first-token commands only, behind identity,
   data-not-instructions, and iteration-budget guards, and route through the same service methods
-  the UI calls — there is no parallel webhook-driven mutation path into the engine.
+  the UI calls: there is no parallel webhook-driven mutation path into the engine.
 
 ## What is deliberately NOT a security boundary
 
@@ -281,7 +281,7 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **The absence of a secret in the prompt.** Injected `.cat-context/` files and job bodies carry
   non-secret projections by design (`context.toolServers` never carries credential values; tool
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
-  agent can read, assume it can also try to exfiltrate through text it writes — which is why
+  agent can read, assume it can also try to exfiltrate through text it writes, which is why
   Layer 5 scrubs at every exit.
 
 ## Operator hardening checklist
@@ -291,17 +291,17 @@ is possible at all:
 
 1. **Protect the default branch of every repo the installation covers** (required). Require PRs,
    forbid direct pushes, require your CI checks. This is the _only_ control over a stolen
-   `Contents: write` token — covering both a direct push and a merge-API call — and it lives on the
+   `Contents: write` token (covering both a direct push and a merge-API call) and it lives on the
    host, not in this codebase. The platform never needs to push to a protected default branch
    (bootstrap targets an empty repo; everything else is work branches), so protection costs nothing.
    **The product now tells you where this is missing**: the GitHub settings panel's
    "Default-branch protection" preflight probes each linked repo's default branch on demand
-   (`GET /workspaces/:ws/github/branch-protection`). It reports three states, never two — a repo
-   it could not reach is `unknown`, not "fine" — says so when a branch is protected but the rule
+   (`GET /workspaces/:ws/github/branch-protection`). It reports three states, never two (a repo
+   it could not reach is `unknown`, not "fine"), says so when a branch is protected but the rule
    itself was unreadable (a minimally-scoped App installation cannot read it, and such a rule may
    still permit direct pushes), and states how many repos a probe cap left unchecked. A provider
    that cannot answer at all reports `capability: 'unavailable'` rather than an empty list, which
-   is what today's GitLab connections get. It needs `integrations.manage` — the one READ on that
+   is what today's GitLab connections get. It needs `integrations.manage`: the one READ on that
    controller that does, because it spends the installation's GitHub rate limit, which the CI gate
    and the merger draw on for every run; on the ordinary read tier a viewer could degrade the write
    path by holding down a button. Its fan-out is bounded for the same reason.
@@ -309,14 +309,14 @@ is possible at all:
    auto-merge and add class floors for `source` and `schema`. Remember the shipped default
    auto-merges under Balanced ceilings with no floors.
 3. **Scope the GitHub App installation to only the repos the platform should work on.** The job
-   token is installation-wide, so the installation is the blast radius of a fully compromised run —
+   token is installation-wide, so the installation is the blast radius of a fully compromised run:
    whenever the run is using the App token at all, which item 4 is about. Don't install on "All
    repositories" of an org that also holds crown jewels.
 4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
    would otherwise silently widen every run they start to their own whole account.
 
-   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first —
+   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first,
    but only if this deployment serves the whole org.** A GitHub org owner can, under
    _Settings → Personal access tokens_, deny classic PATs access to the org outright and require
    owner approval for fine-grained tokens (naming the repositories each may touch); SAML/SSO
@@ -326,7 +326,7 @@ is possible at all:
 
    **They are the wrong tool for individual adoption**, which is the case our own controls exist
    for. Someone running cat-factory alone inside an org that has not adopted it has no App
-   installation to inherit and no authority to change org policy — and restricting classic PATs
+   installation to inherit and no authority to change org policy, and restricting classic PATs
    org-wide to constrain one person's agent runs would break every other workflow in the org. A
    personal token is the right credential there, which is why it stays fully supported and why
    the account floor below ships UNSET.
@@ -335,12 +335,12 @@ is possible at all:
    - **Enforced, account-wide**: `allowInitiatorPat: false` in account settings ("Run credential
      policy"). No board in the account may then use an initiator's token. This is the tier a
      workspace admin cannot lift, which matters because the workspace switch below is edited with
-     `settings.manage` — a permission a member elevated on one board holds. Unset by default.
+     `settings.manage`: a permission a member elevated on one board holds. Unset by default.
    - **Enforced, per board**: turn `allowInitiatorPat` off in workspace settings ("Run
      credential"). The board then authenticates as the App installation, at the cost of bot
      attribution. Effective = the account permits AND the board permits.
    - **Visible**: the personal-token form states what a token actually grants the moment it is
-     tested or saved — a classic token carrying `repo` is called out as reaching every repository
+     tested or saved; a classic token carrying `repo` is called out as reaching every repository
      its owner can push to, scopes the platform never uses are flagged, and a token whose scopes
      GitHub did not report is reported as unknown rather than passing as narrow. Advice, not a
      gate: the save still succeeds.
@@ -352,10 +352,10 @@ is possible at all:
    deployment's own).
 
 5. **Treat local native mode (`LOCAL_NATIVE_AGENTS`) as trusted-input only.** No container means the
-   process boundary is only the agent CLI's own sandboxing — the env allow-list still strips the
+   process boundary is only the agent CLI's own sandboxing: the env allow-list still strips the
    orchestrator's secrets, but nothing stops a subverted agent from reading your filesystem. Don't
    point native-mode runs at repositories or issues whose content you don't trust.
-6. **Self-hosted runner pools execute jobs with these tokens** — the pool host is inside the trust
+6. **Self-hosted runner pools execute jobs with these tokens**: the pool host is inside the trust
    boundary. Run pools on infrastructure you'd trust with the installation token itself
    (`runner-pool-integration.md`, ADR 0026 for the warm-pool isolation hazard).
 7. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
@@ -371,26 +371,26 @@ is possible at all:
   with no PAT equivalent. What changed is that an account or a workspace can now decline to use it
   at all (`allowInitiatorPat`, an enforced mechanism at both tiers) and that its breadth is stated
   when a member tests or saves it. What has NOT changed: with the switch on, a member's classic
-  token is exactly as wide as they made it, and the breadth report is advice at save time — it does
+  token is exactly as wide as they made it, and the breadth report is advice at save time; it does
   not refuse the save, and it re-reads nothing later, so a token whose scopes are widened on GitHub
   afterwards is not re-flagged.
 
   **The structural fix is a GitHub App USER-TO-SERVER token, and it is not built.** "Cannot narrow
   it" is a property of the stored-PAT design, not a law: a user-to-server token obtained through
   the App's OAuth flow is bounded by the INTERSECTION of the installation's scope and the user's
-  own access, and is short-lived. That is attribution — pushes and PRs from the human who started
-  the run — with the operator's installation scoping still the real bound, which is exactly the
+  own access, and is short-lived. That is attribution (pushes and PRs from the human who started
+  the run) with the operator's installation scoping still the real bound, which is exactly the
   property this whole section works around. `auth/GitHubOAuth.ts` already implements that flow,
   wired for LOGIN only (`scope: 'read:user'`, token read for identity and discarded), so what is
   missing is the run-path plumbing (consent per user, refresh, and a fallback for a repo the App
   is not installed on) rather than the client.
 
   It would not replace stored PATs. An individual adopter inside a non-adopting org has no App
-  installation to obtain such a token against, so the PAT path stays — the two are for different
+  installation to obtain such a token against, so the PAT path stays: the two are for different
   deployments, and `allowInitiatorPat` remains how an operator chooses between them.
 
 - **The branch-protection preflight is on demand and reports on the DEFAULT branch only.** It
-  tells an operator where item 1 is missing, which is what nothing in-product used to do — but it
+  tells an operator where item 1 is missing, which is what nothing in-product used to do, but it
   is a check someone has to run, not a gate: no run is refused, and no notification is raised, for
   a repo whose default branch is unprotected. A release branch with its own weaker rule is out of
   its scope, and on a provider that cannot report protection (GitLab today) it answers
@@ -402,8 +402,8 @@ is possible at all:
   the computed-class floors and ceilings. Deployments that want defence-in-depth here should use
   class floors (configuration, available today) rather than waiting for prompt-level fixes.
 
-If you change anything on the write path — token minting or credential PRECEDENCE, the push, the
-merge decision, a rendered surface, or the native-child env allow-list — this document is part of the
+If you change anything on the write path (token minting or credential PRECEDENCE, the push, the
+merge decision, a rendered surface, or the native-child env allow-list) this document is part of the
 change: keep the layer descriptions and the gap list truthful, in both directions. "In both
 directions" is not a formality: this document has already been wrong by over-claiming a boundary
 (Layer 4 read as unconditional) and by under-claiming one (the native env allow-list going

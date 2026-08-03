@@ -1,4 +1,4 @@
-# Localization (i18n) — status & plan
+# Localization (i18n): status & plan
 
 This document tracks the **app-wide internationalization migration** of the
 `@cat-factory/app` Nuxt layer: moving every hard-coded user-facing string into
@@ -7,7 +7,7 @@ This document tracks the **app-wide internationalization migration** of the
 It is a **living status doc**. For the authoritative _how-to_ (catalog layout, the
 add-a-string workflow, key conventions, plural/date/number rules, translator
 descriptions, and the CI drift guards) see the **Internationalization (i18n)**
-section of [`CLAUDE.md`](../CLAUDE.md) — this file does not duplicate those rules,
+section of [`CLAUDE.md`](../CLAUDE.md): this file does not duplicate those rules,
 it only records **what is done and what is left**.
 
 ## TL;DR
@@ -58,7 +58,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   step metadata/run-meta cards, restart control, and the model-activity /
   provided-context observability panels.
 - **Phase 3 (layout + auth, #398):** the auth screens (login / signup / forgot,
-  reset-password, the auth gate, the user menu), and the layout surfaces — the
+  reset-password, the auth gate, the user menu), and the layout surfaces: the
   account-level deployment / fragment / team settings, the AI-providers / GitHub-PAT
   / provider-config / spend-warning banners, the board switcher, the command bar
   (command labels + search keywords), the integrations hub (status, groups, per-item
@@ -107,7 +107,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   decision prompts), the pipeline-health advisory (invalid / outdated sections, reseed /
   delete actions), the agent palette (hint + custom bucket), the shared iteration-cap prompt
   (the three default choice labels), and the gate result window (CI / conflicts / human-review
-  variants — subtitles, the rolled-up display status, failing-check list, approval progress,
+  variants: subtitles, the rolled-up display status, failing-check list, approval progress,
   the request-a-fix box, attempt timeline, and the sidebar state/budget/footer). New keys
   under `pipeline.*`, `palette.*` and `gates.*` in all five bundled locales (166 leaf keys,
   full parity); count readouts use plural forms (3-form for pl/uk) with the count selector,
@@ -119,7 +119,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   `usePipelineHealth` problem messages stay English for now (they mirror backend validation
   and are out of the component scope; their unit test asserts on `type`, not text).
 
-- **Phase 8 (agent windows, this PR):** the ten dedicated agent result/decision windows —
+- **Phase 8 (agent windows, this PR):** the ten dedicated agent result/decision windows:
   the requirements-review window (the answer/dismiss → incorporate → re-review/redo →
   proceed loop, "Iteration N / M", the exceeded 3-choice prompt via the shared
   `IterationCapPrompt`), the clarity and brainstorm review loops (intro emphasis via
@@ -143,14 +143,14 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   experiment-matrix builder with cell-count plurals, the results grid + experiment/run
   status enums, the prompt fork/version editor, the fixtures list with kind/origin enums
   and expectation-count plurals, the unavailable/error notices via `<i18n-t>` code slots,
-  and every toast), the prompt-fragment library (the manager's four tabs — resolved
+  and every toast), the prompt-fragment library (the manager's four tabs: resolved
   catalog with a fragment-count plural, hand-authored, document-backed and repo-source
-  fragments, every placeholder + toast — plus the board-scope panel shell), the Kaizen
+  fragments, every placeholder + toast: plus the board-scope panel shell), the Kaizen
   screen (verified-combos + grading-history tables, status enums, grade readouts) and its
   per-step grading card, the recurrence editor (weekday abbreviations, hour-window
   toggle, timezone), the ephemeral-environment status panel (status enum + expiry via
   `d(...)`), the provisioning-logs drawer (operation/outcome enums, timestamps), and the
-  media surfaces — the actual-vs-reference comparator (mode labels, alt text, upload
+  media surfaces: the actual-vs-reference comparator (mode labels, alt text, upload
   hints) and the screenshot lightbox (toolbar titles, counter, zoom percentage via
   `n(..., 'percent')`). New keys under `bootstrap.*`, `sandbox.*`, `fragments.*`,
   `kaizen.*`, `recurring.*`, `environments.*`, `provisioning.*` and `media.*` in all five
@@ -160,20 +160,20 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   convention. `agentKindMeta`/`STATUS_META`-sourced labels rendered in these surfaces
   stay deferred to phase X.
 
-The four board/panels components with **no** user-facing text — `AgentChip`,
-`TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost` — need no
+The four board/panels components with **no** user-facing text (`AgentChip`,
+`TaskDependencyEdges`, `DependencyConnectOverlay`, `StepResultViewHost`) need no
 migration and are intentionally skipped.
 
 ### Remaining (by area)
 
 **Cross-cutting** (phase X)
 
-- `app/utils/catalog.ts` — the shared `STATUS_META`, `agentKindMeta`, `blockTypeMeta`,
+- `app/utils/catalog.ts`: the shared `STATUS_META`, `agentKindMeta`, `blockTypeMeta`,
   `MODULE_META` label/description tables are rendered across many components but are
   still raw English. Several already-migrated components fall back to these (e.g. a
   task card's generic status label). Localizing them (an enum→key lookup, tier-2
   guarded) removes the last raw strings from the board/inspector surfaces.
-- `app/pages/index.vue`, `app/pages/reset-password.vue` — page-level copy.
+- `app/pages/index.vue`, `app/pages/reset-password.vue`: page-level copy.
 
 ## Per-phase checklist
 
