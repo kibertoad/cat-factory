@@ -21,7 +21,8 @@ that had not caught up.
 New: `capability_credentials` (D1 + Postgres), `CapabilityCredentialsService`,
 `createWorkspaceToolSecretResolver` / `composeToolSecretResolvers`, and a `secrets.manage`-gated
 `/workspaces/:workspaceId/capability-credentials` surface that lists which credentials the
-deployment's registered capabilities DECLARE alongside which this workspace has stored.
+deployment's registered capabilities DECLARE alongside which this workspace has stored. Deleting a
+board reclaims its stored credentials with the rest of its workspace-scoped rows.
 
 No behaviour change for an existing deployment: the environment resolver is composed BEHIND the
 store per key, so a workspace that has stored nothing resolves exactly as before. The SPA panel is
