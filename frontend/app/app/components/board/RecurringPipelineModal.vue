@@ -58,6 +58,18 @@ const intakeGithubRepo = ref('')
  */
 const intakeBoardId = ref('')
 
+/**
+ * Opt in to driving THIS schedule from tracker webhooks, for a pipeline that has no `bug-intake`
+ * step. Enabling it also switches the schedule to on-demand, because the two are inseparable: a
+ * cadence tick carries no triggering ticket, and the server refuses that combination.
+ */
+const trackerTrigger = ref(false)
+
+function setTrackerTrigger(on: boolean): void {
+  trackerTrigger.value = on
+  if (on) onDemand.value = true
+}
+
 /** Whether the picked source is one this build ships (and so has a vendor-specific board field). */
 const intakeSourceIsBuiltin = computed(
   () =>
@@ -113,6 +125,23 @@ const isBugIntake = computed(() => {
     (kind, i) => kind === 'bug-intake' && pipeline.enabled?.[i] !== false,
   )
 })
+/**
+ * Whether the intake section is shown, and in which DISPATCH mode — both DERIVED from the picked
+ * pipeline rather than chosen, because the two modes are not interchangeable:
+ *
+ *  - a `bug-intake` pipeline pulls its own work from the board, so a pushed event can only mean
+ *    "drain the queue now" (`queue`);
+ *  - any other pipeline has no step that picks work, so a pushed event can only mean "run THIS
+ *    ticket" (`per-ticket`).
+ *
+ * Deriving it makes the combination the server refuses (`per-ticket` on a `bug-intake` pipeline)
+ * unrepresentable here, instead of offering it and reporting a validation error afterwards.
+ */
+const showIntake = computed(() => isBugIntake.value || trackerTrigger.value)
+const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
+  isBugIntake.value ? 'queue' : 'per-ticket',
+)
+
 // Sources that can back intake right now (connected / App-installed AND enabled).
 const intakeSources = computed(() => tasks.offeredSources)
 
@@ -135,6 +164,7 @@ watch(open, (isOpen) => {
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
   intakeBoardId.value = ''
+  trackerTrigger.value = false
   intakeTitleFragment.value = ''
   intakeLabels.value = ''
   intakeIssueType.value = ''
@@ -164,6 +194,7 @@ const { requestClose } = useUnsavedGuard({
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
     intakeBoardId: intakeBoardId.value.trim(),
+    trackerTrigger: trackerTrigger.value,
     intakeTitleFragment: intakeTitleFragment.value.trim(),
     intakeLabels: intakeLabels.value.trim(),
     intakeIssueType: intakeIssueType.value.trim(),
@@ -173,7 +204,7 @@ const { requestClose } = useUnsavedGuard({
 
 // The board field required for the picked source must be filled before a bug-intake schedule saves.
 const intakeReady = computed(() => {
-  if (!isBugIntake.value) return true
+  if (!showIntake.value) return true
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
@@ -215,6 +246,9 @@ function buildIssueIntake(): IssueIntakeConfig {
     ...(source === 'github' && intakeInProgressLabel.value.trim()
       ? { inProgressLabel: intakeInProgressLabel.value.trim() }
       : {}),
+    // Sent only when it differs from the default, so an ordinary bug-intake schedule's stored
+    // config is byte-for-byte what it was before the mode existed.
+    ...(intakeDispatch.value === 'per-ticket' ? { dispatch: 'per-ticket' as const } : {}),
   }
 }
 
@@ -250,7 +284,7 @@ async function add() {
       onDemand: onDemand.value,
       ...(onDemand.value ? {} : { recurrence: recurrence.value }),
       ...(description.value.trim() ? { description: description.value.trim() } : {}),
-      ...(isBugIntake.value ? { issueIntake: buildIssueIntake() } : {}),
+      ...(showIntake.value ? { issueIntake: buildIssueIntake() } : {}),
     })
     ui.closeAddRecurring()
   } catch (e) {
@@ -379,7 +413,29 @@ async function add() {
           </UFormField>
         </div>
 
-        <div v-if="isBugIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
+        <!--
+          A pipeline with no `bug-intake` step has no step that picks work, so tracker intake is an
+          OPT-IN here: turning it on makes a matching webhook event run that ticket as its own task.
+          A `bug-intake` pipeline needs no toggle — it cannot run without intake config at all.
+        -->
+        <div v-if="!isBugIntake" class="flex items-start gap-2">
+          <USwitch
+            :model-value="trackerTrigger"
+            size="sm"
+            class="mt-0.5"
+            @update:model-value="setTrackerTrigger"
+          />
+          <div>
+            <p class="text-xs font-medium text-slate-200">
+              {{ t('board.recurring.trackerTrigger') }}
+            </p>
+            <p class="text-[11px] text-slate-500">
+              {{ t('board.recurring.trackerTriggerHint') }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="showIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ t('board.recurring.intake') }}
           </p>
@@ -443,6 +499,13 @@ async function add() {
           </UFormField>
 
           <template v-if="intakeSource">
+            <p class="text-[11px] text-slate-500">
+              {{
+                intakeDispatch === 'per-ticket'
+                  ? t('board.recurring.intakeDispatchPerTicketHint')
+                  : t('board.recurring.intakeDispatchQueueHint')
+              }}
+            </p>
             <UFormField :label="t('board.recurring.intakeTitleFragment')">
               <UInput
                 v-model="intakeTitleFragment"

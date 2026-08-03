@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, RequirementReview, SourceTask } from '@cat-factory/kernel'
+import type { Block, RequirementReview, SourceTask, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type { ConformanceApp, ConformanceHarness } from '../harness.js'
 import { signFakeTrackerDelivery } from '../fakeTrackerWebhook.js'
 
@@ -375,6 +375,154 @@ export function defineTrackerWebhookConformance(harness: ConformanceHarness): vo
         ref: 'PROJ-78',
       })
       expect(imported.status).toBe(201)
+    })
+  })
+
+  registerPerTicketDispatchTests(harness)
+}
+
+/**
+ * PER-TICKET dispatch: the second mode a pushed issue event can take (D8) — the ticket itself
+ * becomes a task and a run, rather than firing a schedule that drains the board.
+ *
+ * Registered from the suite above; split out purely to keep each function within the per-function
+ * line budget, exactly as the document-source tests are in `integration-sources.ts`.
+ */
+function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
+  describe('tracker webhooks (per-ticket dispatch)', () => {
+    it('dispatches a PER-TICKET trigger as its own task+run, and a redelivery exactly once', async () => {
+      // The second dispatch mode: a matching issue event materialises THAT ticket as its own task
+      // and starts the schedule's pipeline on it, instead of firing a schedule whose `bug-intake`
+      // step drains the board oldest-first. This is how a ticket a human already triaged enters
+      // the platform from the tracker it was filed in.
+      const app = harness.makeApp()
+      const { call } = app
+      const snapshot = await app.createWorkspace({ seed: true })
+      const ws = snapshot.workspace.id
+
+      const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+        type: 'service',
+        position: { x: 0, y: 0 },
+      })
+      await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+        credentials: {
+          baseUrl: 'https://acme.atlassian.net',
+          accountEmail: 'd@a.io',
+          apiToken: 't',
+        },
+      })
+
+      // A plain pipeline with NO `bug-intake` step: per-ticket dispatch has already chosen the
+      // ticket, so an intake step would go and pick a different one (and is refused at save).
+      const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
+        name: 'Feature intake',
+        agentKinds: ['architect'],
+      })
+      expect(pipeline.status).toBe(201)
+
+      const schedule = await call<{ id: string }>('POST', `/workspaces/${ws}/recurring-pipelines`, {
+        frameId: frame.body.id,
+        pipelineId: pipeline.body.id,
+        name: 'Tracker triggers',
+        // On-demand is REQUIRED for per-ticket: a cadence tick has no triggering ticket.
+        onDemand: true,
+        issueIntake: {
+          source: 'jira',
+          board: { jiraProjectKey: 'PROJ' },
+          predicates: { labels: ['accepted'] },
+          dispatch: 'per-ticket',
+        },
+      })
+      expect(schedule.status).toBe(201)
+
+      const minted = await call<{ secret: string }>(
+        'POST',
+        `/workspaces/${ws}/task-sources/jira/webhook`,
+        {},
+      )
+      const secret = minted.body.secret
+      const externalId = 'PROJ-501'
+      const event = {
+        kind: 'issue',
+        source: 'jira',
+        externalId,
+        action: 'created',
+        title: 'Add bulk export',
+        labels: ['accepted'],
+        issueType: null,
+        url: null,
+      }
+
+      const delivered = await deliver(app, ws, secret, event)
+      expect(delivered.status).toBe(202)
+
+      // The ticket is now a task of its own under the frame, linked to the issue and running —
+      // none of which the queue mode would produce (it reuses the schedule's one block).
+      const tasks = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+      const row = tasks.body.find((t) => t.externalId === externalId)
+      expect(row?.linkedBlockId).toBeTruthy()
+
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)
+      const dispatched = snap.body.blocks.find((b) => b.id === row!.linkedBlockId)
+      expect(dispatched?.parentId).toBe(frame.body.id)
+      expect(dispatched?.executionId).toBeTruthy()
+
+      // A REDELIVERY (trackers retry, and an `updated` event follows a `created` one) must not
+      // dispatch the ticket twice. The issue's single `linkedBlockId` is the idempotency: no claim
+      // table, no second block, no second run.
+      const again = await deliver(app, ws, secret, { ...event, action: 'updated' })
+      expect(again.status).toBe(202)
+      const after = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+      expect(after.body.filter((t) => t.externalId === externalId)).toHaveLength(1)
+      const afterSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)
+      const stillOne = afterSnap.body.blocks.find((b) => b.id === row!.linkedBlockId)
+      expect(stillOne?.executionId).toBe(dispatched?.executionId)
+    })
+
+    it('refuses a per-ticket schedule that could also fire on a cadence', async () => {
+      // The rule that keeps the two modes exclusive: without it, a cadence tick (which carries no
+      // ticket) would silently fall back to draining the queue under a config saying `per-ticket`.
+      const app = harness.makeApp()
+      const { call } = app
+      const snapshot = await app.createWorkspace({ seed: true })
+      const ws = snapshot.workspace.id
+      const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+        type: 'service',
+        position: { x: 0, y: 0 },
+      })
+      await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+        credentials: {
+          baseUrl: 'https://acme.atlassian.net',
+          accountEmail: 'd@a.io',
+          apiToken: 't',
+        },
+      })
+      const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
+        name: 'Feature intake',
+        agentKinds: ['architect'],
+      })
+
+      const refused = await call('POST', `/workspaces/${ws}/recurring-pipelines`, {
+        frameId: frame.body.id,
+        pipelineId: pipeline.body.id,
+        name: 'Bad trigger',
+        onDemand: false,
+        recurrence: {
+          intervalHours: 24,
+          weekdays: [],
+          windowStartHour: null,
+          windowEndHour: null,
+          timezone: 'UTC',
+        },
+        issueIntake: {
+          source: 'jira',
+          board: { jiraProjectKey: 'PROJ' },
+          predicates: {},
+          dispatch: 'per-ticket',
+        },
+      })
+      expect(refused.status).toBe(422)
+      expect(JSON.stringify(refused.body)).toContain('per_ticket_requires_on_demand')
     })
   })
 }

@@ -78,6 +78,26 @@ export const issueIntakeConfigSchema = v.object({
    * has no native workflow status). Absent ⇒ `in-progress`.
    */
   inProgressLabel: v.optional(intakePredicateStringSchema),
+  /**
+   * What a WEBHOOK-pushed issue event that matches these predicates actually does. Absent ⇒
+   * `queue`, so every existing schedule is unchanged.
+   *
+   *  - **`queue`** fires this schedule, and the run's `bug-intake` step drains the board
+   *    oldest-first. The pushed issue is not necessarily the one picked up: intake is fair
+   *    queueing and the webhook's job is to drain the queue promptly, not to reorder it. This is
+   *    the right shape for a bug backlog, where WHICH bug is worked next is the platform's call.
+   *  - **`per-ticket`** dispatches THAT ticket: it is imported, materialised as its own task
+   *    under the schedule's frame, and started on the schedule's pipeline. This is the shape for
+   *    tickets a human already triaged — a feature request enters the platform from the tracker
+   *    it was filed in rather than through an API call.
+   *
+   * They are different enough to be a mode rather than a knob: `queue` reuses ONE block and
+   * competes for it, while `per-ticket` creates a block per ticket and never queues. A
+   * `per-ticket` config therefore requires `onDemand` (see `assertValidIssueIntake`), because a
+   * CADENCE tick has no triggering ticket and would otherwise silently fall back to draining the
+   * queue — the same rule under a different name.
+   */
+  dispatch: v.optional(v.picklist(['queue', 'per-ticket'])),
 })
 export type IssueIntakeConfig = v.InferOutput<typeof issueIntakeConfigSchema>
 

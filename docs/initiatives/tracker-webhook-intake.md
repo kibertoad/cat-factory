@@ -171,14 +171,71 @@ auto-proceed; there is no decision timeout to hang one off, and inventing one wo
 requirements nobody approved); a reply landing after the park settled gets a "the review has already
 moved on" follow-up rather than a silent drop.
 
-### D7: `taskSourceKindSchema` stays closed (for now)
+### D7: `taskSourceKindSchema` widens to `builtin ∪ <ns>:<name>` (slice 4)
 
-Widening it the way `taskTypeSchema` was widened (deployment-registered kinds) would let a
-deployment ship its own tracker provider: including its own webhook adapter, which this initiative
-makes a first-class provider capability. That is a genuinely separable slice: it touches the
-contracts union, the SPA's per-kind presentation records, and the connect-descriptor plumbing, none
-of which this work needs. **Worth its own slice; deliberately not done here.** Nothing added here
-assumes the union is closed except the (already existing) per-kind switches.
+Closed at first, on the grounds that widening was separable. It was, and slice 4 did it the way
+`taskTypeSchema` was widened: a union of the shipped picklist and `namespacedIdSchema`, so a
+deployment registers its own provider (webhook adapter included) on the app-owned
+`TaskSourceRegistry` and every registry-reading surface serves it.
+
+Three properties carried the decision:
+
+- **The built-ins keep their BARE ids**, so no persisted `source` column, stored connection or
+  imported issue row changed. The widening needed no migration because it added no encoding.
+- **A bare non-built-in id still fails validation.** `servicenow` is a typo; `acme:servicenow` is a
+  registration. Keeping the namespace mandatory is what tells them apart, so widening did not turn
+  every misspelled `:source` segment into a plausible-looking miss.
+- **The schema is the GRAMMAR, never the authority on what exists.** A namespaced id passes the
+  schema and is then resolved on the registry, which is what refuses an unregistered one. The two
+  failures stay distinct because they have different fixes.
+
+The one place the old closed union was load-bearing beyond a type was
+`IssueIntakeQuery.board`: three vendor-named string fields with a fall-through default. A
+registered source would have had its board id delivered to `githubRepo` and failed as "no matching
+issues". It gains an opaque `boardId` leg, and the default is now keyed on the source being a
+BUILT-IN rather than on it being un-matched.
+
+### D8: Per-ticket dispatch is a MODE on the intake config, not a second entity (slice 5)
+
+D3 settled that a pushed event fires the schedule and the `bug-intake` step decides what to work.
+That is right for a bug BACKLOG and wrong for a ticket a human already triaged: a feature request
+filed in Jira could only enter the platform through an API call, because the queue mode's whole
+point is that the platform picks what is next.
+
+**Decision.** `issueIntake.dispatch` selects between the two, absent ⇒ `queue` (so every existing
+schedule is unchanged). `per-ticket` imports the pushed ticket, materialises it as its own task
+under the schedule's frame, and starts the schedule's pipeline on it.
+
+It is a mode on the existing config rather than a new `tracker_triggers` entity because a schedule
+already IS "a workspace-scoped, frame-anchored, pipeline-bound, predicate-carrying, enable-able
+rule", and `onDemand` already models the one thing a trigger lacks: a cadence. A parallel entity
+would have duplicated all of that plus its repository on both runtimes, its controller, its RBAC
+mount and its SPA surface, to express one extra field. `issue_intake` is a JSON column on both
+runtimes, so the mode needed no migration either.
+
+What the modes do NOT share is the reason they stay exclusive rather than becoming a knob:
+
+- **`queue` reuses ONE block and competes for it; `per-ticket` creates a block per ticket and never
+  queues.** A cadence tick carries no triggering ticket, so a per-ticket schedule that could also
+  fire on cadence would silently fall back to draining the queue: the `queue` behaviour under a
+  config saying `per-ticket`. Hence `per-ticket` REQUIRES `onDemand`, which removes the fallback
+  rather than documenting it.
+- **A `bug-intake` step and per-ticket dispatch are two ways to pick work, and a pipeline may use
+  only one.** The pushed ticket is already the work, so an intake step would search the board and
+  adopt a DIFFERENT issue onto the block created for this one. Refused at save; and `origin:
+'manual'` at start makes `assertPipelineLaunchable` refuse it again at run time, because a
+  per-ticket run IS a one-off task run.
+- **Idempotency is the issue's existing single `linkedBlockId`**, not a new claim table. A
+  redelivery (or the `updated` event that follows a `created` one) finds the issue already linked
+  and is read as "already dispatched". The link already guarantees what a claim would have bought.
+- **The unattended-fire guard is the same one `fire` applies**, checked against the CREATED block
+  rather than the schedule's reused one. A refusal still leaves the ticket on the board as a task a
+  human can start, with the reason recorded in the run history rather than a task that mysteriously
+  never ran.
+
+The SPA DERIVES the mode from the pipeline instead of offering it: a `bug-intake` pipeline can only
+mean `queue`, anything else can only mean `per-ticket`. That makes the refused combination
+unrepresentable in the form rather than reported after a save.
 
 ## Slices
 
@@ -187,7 +244,8 @@ assumes the union is closed except the (already existing) per-kind switches.
 | 1   | Tracker event ingestion (provider webhook capability, receiver, queue seam | 🟡 this | this PR |
 | 2   | Event-driven intake) qualifying issue events fire the matching schedule    | 🟡 this | this PR |
 | 3   | Issue-comment answers to a parked review: grammar, ingest claim, follow-up | 🟡 this | this PR |
-| 4   | Deployment-registered tracker kinds (`taskSourceKindSchema` widening)      | ⬜ todo |         |
+| 4   | Deployment-registered tracker kinds (`taskSourceKindSchema` widening)      | ✅ done | #1628   |
+| 5   | Per-ticket dispatch: a pushed ticket runs as its own task                  | ✅ done | #1628   |
 
 ### Slice 1 checklist
 
@@ -206,6 +264,24 @@ assumes the union is closed except the (already existing) per-kind switches.
 | 2.1 | `issueEventMatchesIntake` pure predicate                                  | ✅ done |
 | 2.2 | `RecurringPipelineService.triggerForIssueEvent` (fires, never re-imports) | ✅ done |
 | 2.3 | Conformance: a qualifying event fires; a non-qualifying one does not      | ✅ done |
+
+### Slice 4 checklist
+
+| #   | Item                                                                             | Status  |
+| --- | -------------------------------------------------------------------------------- | ------- |
+| 4.1 | `taskSourceKindSchema` widened to `builtin picklist ∪ <ns>:<name>`               | ✅ done |
+| 4.2 | Grammar guard in contracts; the REGISTRY stays the authority on what exists      | ✅ done |
+| 4.3 | Opaque `board.boardId` leg, so a registered board id cannot land on `githubRepo` | ✅ done |
+| 4.4 | Conformance: a registered source connects/imports/round-trips; typo vs unknown   | ✅ done |
+
+### Slice 5 checklist
+
+| #   | Item                                                                           | Status  |
+| --- | ------------------------------------------------------------------------------ | ------- |
+| 5.1 | `issueIntake.dispatch` (`queue` \| `per-ticket`), absent ⇒ `queue`             | ✅ done |
+| 5.2 | `assertValidIssueIntake` pure rules + unit tests                               | ✅ done |
+| 5.3 | `firePerTicket`: adopt → guard individual-usage → start, `origin: 'manual'`    | ✅ done |
+| 5.4 | Conformance: dispatch creates task+run; redelivery once; cadence combo refused | ✅ done |
 
 ### Slice 3 checklist
 
@@ -227,8 +303,10 @@ assumes the union is closed except the (already existing) per-kind switches.
   ( a surface the SPA cannot cover) so a panel saves half a round trip. Worth adding when a
   human-facing deployment asks; the read route already returns everything a panel would render
   (`supported` / `configured` / `deliveryPath` / `replyAllow`).
-- **`taskSourceKindSchema` stays closed**: see D7. Widening it for deployment-registered trackers
-  is slice 4 and worth its own change.
+- **No `taskType` on a per-ticket config.** The created task inherits the board's default type,
+  exactly as the SPA's own "create task from issue" does, and the schedule's `pipelineId` already
+  carries the behavioural half. A configurable type would have been a contract field with no
+  surface able to set it.
 - **No reply path for the CLARITY gate.** Its questions carry no stable ids, so a comment could not
   name one and the parser would have to guess, which the grammar exists to avoid. The clarity echo
   stays an echo; only the id-addressed requirements findings are answerable from a ticket.
