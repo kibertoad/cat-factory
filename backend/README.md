@@ -497,6 +497,15 @@ PUT    /workspaces/:ws/runner-pool/connection/secrets        rotate the secret b
 DELETE /workspaces/:ws/runner-pool/connection                unregister
 ```
 
+The routes above are the session-authed surface the SPA drives. There is also a
+**key-authenticated public API** under `/api/v1` for external systems (tasks,
+runs, SSE streams, parked decisions, notifications, usage, plus a signed
+outbound webhook), with keys minted per workspace under
+`/workspaces/:ws/public-api-keys`. Setup guide + full endpoint reference:
+[`docs/public-api.md`](./docs/public-api.md); generated OpenAPI spec:
+[`../docs/openapi.json`](../docs/openapi.json); design record:
+[ADR 0030](./docs/adr/0030-public-api-surface.md).
+
 ## Develop & test
 
 ```bash
@@ -564,11 +573,11 @@ ports that define the backends) changes; an unrelated PR skips it.
 
 This package is a **library**; it carries no production config. Deployment is
 driven from the example **deployment** package
-[`deploy/backend`](../../deploy/backend), which re-exports this library's handler
+[`deploy/backend`](../deploy/backend), which re-exports this library's handler
 and holds the `wrangler.toml`, the per-deployment `[vars]`, and the secrets. The
 end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in the
 [top-level README → Deployment](../README.md#deployment) and
-[`deploy/backend/README.md`](../../deploy/backend/README.md). **This section is the
+[`deploy/backend/README.md`](../deploy/backend/README.md). **This section is the
 configuration reference**: what every var/secret does and how to turn each opt-in
 feature on. The canonical, fully-commented list of bindings + vars is the typed
 `Env` in [`runtimes/cloudflare/src/infrastructure/env.ts`](./runtimes/cloudflare/src/infrastructure/env.ts).
