@@ -245,6 +245,44 @@ export const agentFailureSchema = v.object({
 export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
 
 /**
+ * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
+ * schema, not just `kind`/`message`: the SPA re-validates the whole workspace snapshot
+ * against {@link agentFailureSchema} (both the `failure` field and the `failureHistory`
+ * array), so a structurally-incomplete record — a kind outside the picklist, OR a known
+ * kind missing `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire
+ * snapshot decode if surfaced.
+ */
+export function isUsableAgentFailure(value: unknown): value is AgentFailure {
+  return v.is(agentFailureSchema, value)
+}
+
+/**
+ * The stored `agent_runs.failure` TEXT column → a usable failure, tolerating a null column,
+ * an empty string and a malformed blob alike (all three mean "no structured failure
+ * recorded"). Dropping an unusable record keeps the run readable — its `status`/`error`
+ * still describe what happened — and, for the history, means a retry can't make a bad
+ * record permanent.
+ *
+ * Shared rather than reimplemented per caller because EVERY run kind's repositories on
+ * BOTH runtimes read this one column (execution, bootstrap, env-config-repair), and four
+ * hand-rolled parsers had already drifted to a weaker `typeof kind === 'string'` check —
+ * so one contract change left some stores surfacing a record the others dropped. It lives
+ * here, beside the schema it validates against, rather than in a persistence layer,
+ * because the runtimes' repositories must not have to reach into `@cat-factory/server` for
+ * it (kernel deliberately carries no valibot dependency).
+ */
+export function parseStoredAgentFailure(raw: string | null | undefined): AgentFailure | null {
+  if (!raw) return null
+  try {
+    const decoded: unknown = JSON.parse(raw)
+    return isUsableAgentFailure(decoded) ? decoded : null
+  } catch {
+    // A blob we cannot read is not a failure record: read it exactly as an absent column.
+    return null
+  }
+}
+
+/**
  * A SUCCESSFUL step attempt whose output a restart later superseded — the positive
  * complement of {@link agentFailureSchema}. When a run is restarted from a step, that
  * step and every later one are reset and their `output` dropped; the ones that had

@@ -1,12 +1,11 @@
 import type {
-  AgentFailure,
   EnvConfigRepairJobRecord,
   EnvConfigRepairJobRecordPatch,
   EnvConfigRepairJobRepository,
   RepoValidationIssue,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
-import { isKnownAgentFailureKind } from '@cat-factory/server'
+import { parseStoredAgentFailure } from '@cat-factory/contracts'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { agentRuns } from '../db/schema.js'
@@ -26,19 +25,6 @@ interface EnvConfigRepairDetail {
   issues: RepoValidationIssue[]
   /** The original bootstrap form inputs, kept so a retry re-dispatches the same prompt. */
   inputs: Record<string, string> | null
-}
-
-function parseFailure(raw: string | null): AgentFailure | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as AgentFailure
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 /** Coerce a parsed `inputs` value to a string→string record, tolerating null/garbage. */
@@ -81,7 +67,7 @@ function rowToRecord(row: typeof agentRuns.$inferSelect): EnvConfigRepairJobReco
     inputs: detail.inputs,
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
-    failure: parseFailure(row.failure ?? null),
+    failure: parseStoredAgentFailure(row.failure),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
