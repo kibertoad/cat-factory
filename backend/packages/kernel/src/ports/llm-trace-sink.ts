@@ -86,6 +86,54 @@ export interface LlmToolSpanContext {
   agentKind: string
 }
 
+/**
+ * A settled run's ROOT span: the ancestor every generation and tool span of that run hangs
+ * under. Emitted ONCE, when the run reaches a terminal state, because that is the first
+ * moment its boundaries are known — the ordinary OpenTelemetry shape, where a parent always
+ * ends (and therefore exports) after its children.
+ */
+export interface LlmRunSpan {
+  workspaceId: string | null
+  executionId: string
+  /** The pipeline that ran, used to name the span. */
+  pipelineName: string
+  /** Epoch ms the run was created. */
+  startedAt: number
+  /** Epoch ms the run settled. */
+  endedAt: number
+  /** Whether the run reached `done` rather than `failed`. */
+  ok: boolean
+  /** A short failure message when {@link ok} is false, else null. */
+  errorMessage: string | null
+}
+
+/**
+ * One `(run, agent kind)` slice of a settled run: the parent of that kind's generations and
+ * tool spans.
+ *
+ * The grain is the agent KIND rather than the step index, because it is the finest grain a
+ * generation can NAME — {@link LlmGenerationEvent} carries `agentKind` and no step ordinal, so
+ * a per-step parent would be unaddressable from the very spans meant to hang under it. It is
+ * also the grain the rest of the LLM telemetry already buckets by (the prompt-chain key and the
+ * `(agentKind, phase)` rollup). A pipeline running two steps of one kind therefore folds into
+ * one span, which says so via {@link stepCount} rather than leaving a reader to assume one.
+ */
+export interface LlmStepSpan {
+  workspaceId: string | null
+  executionId: string
+  agentKind: string
+  /** Epoch ms the earliest folded step started. */
+  startedAt: number
+  /** Epoch ms the latest folded step finished (the run's settle time for one still open). */
+  endedAt: number
+  /** How many pipeline steps of this kind folded into the span (≥ 1). */
+  stepCount: number
+  /** False when any folded step failed. */
+  ok: boolean
+  /** A short failure message when {@link ok} is false, else null. */
+  errorMessage: string | null
+}
+
 export interface LlmTraceSink {
   /** Emit one completed LLM call as a generation under its run's trace. */
   recordGeneration(event: LlmGenerationEvent): Promise<void> | void
@@ -94,6 +142,17 @@ export interface LlmTraceSink {
    * Optional: a sink that only cares about generations can omit it.
    */
   recordToolSpans?(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> | void
+  /**
+   * Emit a settled run's root span together with its per-agent-kind step spans: the PARENTS
+   * of everything else this run emitted. One method rather than two, because the two are only
+   * meaningful together — a step span with no root is as broken as a generation with no step.
+   *
+   * Optional: only a sink whose ONLY grouping primitive is span parentage needs it. The
+   * Langfuse sink deliberately omits it: a Langfuse trace is a first-class object its
+   * generations already attach to by id, so synthesising parent observations there would add
+   * a second grouping story for no gain.
+   */
+  recordRunSpans?(run: LlmRunSpan, steps: LlmStepSpan[]): Promise<void> | void
   /**
    * Flush any buffered telemetry (best-effort). Implemented by sinks that batch before
    * export (e.g. the OpenTelemetry SDK exporter); a fetch-per-call sink that already
@@ -163,6 +222,16 @@ export class CompositeTraceSink implements LlmTraceSink {
       this.sinks.map((sink) =>
         this.isolate(sink, 'recordToolSpans', async () => {
           await sink.recordToolSpans?.(context, spans)
+        }),
+      ),
+    )
+  }
+
+  async recordRunSpans(run: LlmRunSpan, steps: LlmStepSpan[]): Promise<void> {
+    await Promise.all(
+      this.sinks.map((sink) =>
+        this.isolate(sink, 'recordRunSpans', async () => {
+          await sink.recordRunSpans?.(run, steps)
         }),
       ),
     )

@@ -20,9 +20,10 @@ import type {
   WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { LlmMetricsExport } from '@cat-factory/contracts'
+import type { ExecutionInstance, LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
 import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
+import { buildRunTraceSpans } from './runTraceSpans.logic.js'
 
 export interface LlmObservabilityServiceDependencies {
   llmCallMetricRepository: LlmCallMetricRepository
@@ -309,6 +310,31 @@ export class LlmObservabilityService {
         ),
       )
     }
+  }
+
+  /**
+   * Close a settled run's external trace by emitting the PARENTS its generations and tool
+   * spans have been naming all along: the run's root span and one span per agent kind that
+   * ran. Called from the engine's single terminal hook, so a run reaching `done`/`failed` by
+   * any of its four routes lands here exactly the same way.
+   *
+   * Best-effort and never throwing, like every other fan-out from this service: a trace whose
+   * root is missing is a degraded trace, and must never be a failed run. A sink that groups by
+   * something other than span parentage (Langfuse) simply omits the method and nothing here
+   * changes for it.
+   */
+  async recordRunTrace(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    settledAt: number,
+  ): Promise<void> {
+    const traceSink = this.traceSink
+    if (!traceSink?.recordRunSpans) return
+    const spans = buildRunTraceSpans(workspaceId, instance, settledAt)
+    if (!spans) return
+    await runBestEffort(this.log, 'traceSink.recordRunSpans', () =>
+      Promise.resolve(traceSink.recordRunSpans?.(spans.run, spans.steps)),
+    )
   }
 
   /**

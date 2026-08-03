@@ -1403,9 +1403,15 @@ array, never a new call site.** Every sink is opt-in on a FULL config, **never t
 and honours `LLM_RECORD_PROMPTS` (usage and timing still export; bodies don't). The OTel package is the one
 place the runtimes deliberately differ in TRANSPORT, not behaviour (workerd can't run the official SDK),
 sharing `src/mapping.ts` pinned equal by `conformity.test.ts`, so span names, attributes and metric names
-change in the mapping layer. Deployment-level metrics are the dual, swept per account and opt-in on top of
-the base exporter:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+change in the mapping layer. **A run's spans are a HIERARCHY (`run → agent kind → generations + tool
+calls`) built from DERIVED ids, never shared state**: every parent id is a pure function of the run, so a
+stateless per-call emission names a parent it has never seen and a durable replay re-derives the identical
+tree instead of a duplicate one. The parents are emitted ONCE at settlement, from the same terminal hook
+the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`), for the same
+reason: a run reaches `done` from four sites. The step level's grain is the agent KIND because that is the
+finest thing a generation event can NAME; a folded slice states its `step_count` rather than passing two
+steps off as one. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
+exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model
 

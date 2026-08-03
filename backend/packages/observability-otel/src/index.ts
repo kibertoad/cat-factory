@@ -1,5 +1,7 @@
 import type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
@@ -15,8 +17,9 @@ import {
   TOKEN_UNIT,
   mapGeneration,
   mapGenerationMetrics,
+  mapRunSpan,
+  mapStepSpan,
   mapToolSpan,
-  randomSpanId,
   toUnixNano,
 } from './mapping.js'
 import { type KeyValue, keyValues, postOtlp } from './otlp.js'
@@ -38,9 +41,8 @@ import { type KeyValue, keyValues, postOtlp } from './otlp.js'
 
 /** OTLP `AggregationTemporality.DELTA` (proto enum value). */
 const TEMPORALITY_DELTA = 1
-/** OTLP span kind CLIENT / INTERNAL (proto enum values). */
-const SPAN_KIND_CLIENT = 3
-const SPAN_KIND_INTERNAL = 1
+/** OTLP span-kind proto enum values, per the neutral kind the mapping layer decides. */
+const SPAN_KIND: Record<MappedSpan['kind'], number> = { internal: 1, client: 3 }
 /** OTLP status codes: UNSET / ERROR. */
 const STATUS_UNSET = 0
 const STATUS_ERROR = 2
@@ -60,12 +62,13 @@ export interface OtelSinkConfig {
 
 // ---- OTLP/JSON encoding helpers -------------------------------------------
 
-function encodeSpan(span: MappedSpan, kind: number): Record<string, unknown> {
+function encodeSpan(span: MappedSpan): Record<string, unknown> {
   return {
     traceId: span.traceId,
-    spanId: randomSpanId(),
+    spanId: span.spanId,
+    ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}),
     name: span.name,
-    kind,
+    kind: SPAN_KIND[span.kind],
     startTimeUnixNano: toUnixNano(span.startTimeMs),
     endTimeUnixNano: toUnixNano(span.endTimeMs),
     attributes: keyValues(span.attributes),
@@ -106,19 +109,25 @@ export class OtelTraceSink implements LlmTraceSink {
     const span = mapGeneration(event)
     const metrics = mapGenerationMetrics(event)
     // Traces and metrics go to distinct OTLP endpoints (two POSTs), each best-effort.
-    await Promise.all([this.sendSpans([span], SPAN_KIND_CLIENT), this.sendMetrics(metrics)])
+    await Promise.all([this.sendSpans([span]), this.sendMetrics(metrics)])
   }
 
   async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
     // Tool spans are only meaningful as children of a run's trace.
     if (!context.executionId || spans.length === 0) return
-    await this.sendSpans(
-      spans.map((span) => mapToolSpan(context, span)),
-      SPAN_KIND_INTERNAL,
-    )
+    await this.sendSpans(spans.map((span) => mapToolSpan(context, span)))
   }
 
-  private async sendSpans(spans: MappedSpan[], kind: number): Promise<void> {
+  /**
+   * The settled run's root + step spans, in ONE POST: they are the parents the run's already
+   * exported generations and tool spans named, so splitting them across requests would let a
+   * partial failure leave a trace whose steps point at a root that never arrives.
+   */
+  async recordRunSpans(run: LlmRunSpan, steps: LlmStepSpan[]): Promise<void> {
+    await this.sendSpans([mapRunSpan(run), ...steps.map(mapStepSpan)])
+  }
+
+  private async sendSpans(spans: MappedSpan[]): Promise<void> {
     const payload = {
       resourceSpans: [
         {
@@ -126,7 +135,7 @@ export class OtelTraceSink implements LlmTraceSink {
           scopeSpans: [
             {
               scope: { name: SCOPE_NAME },
-              spans: spans.map((span) => encodeSpan(span, kind)),
+              spans: spans.map(encodeSpan),
             },
           ],
         },

@@ -9,12 +9,45 @@ inline calls (requirements review, document planner, fragment selector, inline a
 is exported to any **OTLP/HTTP** backend (Grafana Tempo/Mimir, Honeycomb, Datadog OTLP,
 Jaeger, an OpenTelemetry Collector, …) as:
 
-- **a trace span per generation**, plus a span per container tool call, all grouped under a
-  shared per-run trace id (they are sibling spans sharing the trace, not parent/child:
-  generations and tool calls arrive as independent, stateless emissions); and
+- **a trace span per generation**, plus a span per container tool call, arranged into a
+  per-run **hierarchy** (`run → agent kind → generations + tool calls`); and
 - **metrics**: a `gen_ai.client.token.usage` counter (input/output) and a
   `gen_ai.client.operation.duration` histogram: following the OpenTelemetry GenAI
   semantic conventions.
+
+## Span hierarchy
+
+A run's spans form a tree, not a flat set of siblings sharing a trace id:
+
+```
+run Bugfix                        (root; the whole execution, INTERNAL)
+└── invoke_agent coder            (one per agent KIND that ran, INTERNAL)
+    ├── chat claude-sonnet-4-5    (one per LLM call, CLIENT)
+    ├── execute_tool edit_file    (one per container tool call, INTERNAL)
+    └── execute_tool run_command
+```
+
+Nothing is buffered to build it. **Every parent id is a pure function of the run id**
+(`deriveRunSpanId` / `deriveStepSpanId` in `src/mapping.ts`), so a generation recorded by the
+LLM proxy on one isolate and a tool span drained by the engine on another both name the same
+parent without either having seen it, and a durable replay re-derives the identical tree
+rather than a duplicate one. The parents themselves are emitted **once, when the run settles**
+(`LlmTraceSink.recordRunSpans`, driven from the engine's single terminal hook), which is when
+its boundaries are first known. Children therefore export before their parent: the ordinary
+OpenTelemetry ordering, where a parent outlives what it contains, just over a longer span of
+time than usual.
+
+Two consequences worth knowing:
+
+- **The step level's grain is `(run, agent kind)`, not `(run, step index)`**, because the agent
+  kind is the finest thing an `LlmGenerationEvent` can name — a per-step parent would be
+  unaddressable from the very spans meant to hang under it. It is also the grain the rest of the
+  LLM telemetry buckets by (the prompt-chain key, the `(agentKind, phase)` rollup). A pipeline
+  running two `coder` steps folds them into one span carrying `cat_factory.step_count: 2`, so a
+  reader is told about the fold rather than seeing one long step.
+- **A standalone inline call stays a root.** Requirements review, the doc planner and the
+  fragment selector run outside any execution, so they have no run to hang under and no parent
+  is claimed — rather than pointing at one that will never be emitted.
 
 ## Two transports, one behaviour
 
@@ -68,6 +101,60 @@ const sink = createNodeOtelSink({ endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPO
 Wired into a facade via its container's `buildTraceSink(config)`; absent config (no
 `OTEL_ENABLED=true` + endpoint) ⇒ the sink is never built and there is no external
 emission or behaviour change.
+
+## GenAI semantic-convention coverage
+
+The OpenTelemetry GenAI semantic conventions are still **experimental**, so this section states
+exactly what is claimed rather than leaving a reader to diff the emitted attributes against a
+moving spec. `src/mapping.ts`'s `ATTR` object and this table are edited together.
+
+**Emitted, per the convention:**
+
+| Attribute / signal                 | Where                     | Notes                                                        |
+| ---------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| `gen_ai.operation.name`            | generation / tool / step  | `chat` / `execute_tool` / `invoke_agent`                     |
+| `gen_ai.system`                    | generation span + metrics | the provider (`anthropic`, `openai`, `workers-ai`, …)        |
+| `gen_ai.request.model`             | generation span + metrics | the model asked for                                          |
+| `gen_ai.usage.input_tokens`        | generation span           | FRESH input only; the cache classes are separate (see below) |
+| `gen_ai.usage.output_tokens`       | generation span           |                                                              |
+| `gen_ai.response.finish_reasons`   | generation span           | a one-element list; omitted when upstream reported none      |
+| `gen_ai.agent.name`                | step span                 | the agent kind                                               |
+| `gen_ai.tool.name`                 | tool span                 |                                                              |
+| `gen_ai.client.token.usage`        | counter, `{token}`, DELTA | split by `gen_ai.token.type`                                 |
+| `gen_ai.client.operation.duration` | histogram, `s`, DELTA     |                                                              |
+| span name `{operation} {model}`    | generation span           | e.g. `chat claude-sonnet-4-5`                                |
+
+**Extended beyond the convention**, because the convention has no equivalent and the fact is
+load-bearing here:
+
+| Attribute                                               | Why it exists                                                                       |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `gen_ai.usage.cache_read_input_tokens`                  | The convention lumps input into one count. These are priced ~0.1x and ~1.25–2x      |
+| `gen_ai.usage.cache_creation_input_tokens`              | base input, so summing them hides whether a loop rides a warm cache or rewrites it. |
+| `gen_ai.token.type` values `cache_read` / `cache_write` | The same split on the counter's dimension.                                          |
+| `cat_factory.workspace_id`                              | Tenant scope. Spans only — unbounded, so never a metric dimension.                  |
+| `cat_factory.execution_id`                              | The run. Searchable, since the trace id is a hash of it rather than the id itself.  |
+| `cat_factory.agent_kind`                                | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
+| `cat_factory.pipeline` / `cat_factory.step_count`       | The run span's pipeline, and the step span's fold size.                             |
+
+**Deliberately NOT emitted**, each for a reason rather than an oversight:
+
+- **`gen_ai.request.*` sampling parameters** (`temperature`, `top_p`, `max_tokens`, …). The event
+  that reaches this package carries none of them: the proxied path records what the upstream
+  returned, and the subscription harnesses lift metrics off a CLI's event stream, which never
+  reports the ceiling it applied. Emitting defaults would state a request nobody made.
+- **`gen_ai.response.model` / `gen_ai.response.id`.** A single `model` field rides the event, and
+  it is the model the provider says SERVED the call where the transport reports one. Emitting it
+  as both request and response would fabricate agreement between two facts we only have one of.
+- **`gen_ai.conversation.id`.** `cat_factory.execution_id` already scopes it, and the run is the
+  unit the rest of the platform threads a conversation by.
+- **The log-based `gen_ai.client.inference.operation.details` event.** Prompt and completion
+  bodies ride the older span events `gen_ai.content.prompt` / `gen_ai.content.completion`, which
+  every OTLP backend in the compatibility list above renders today. They are emitted only when
+  `LLM_RECORD_PROMPTS` is on; an empty body is omitted rather than sent blank.
+- **`gen_ai.operation.name` on the RUN span.** A pipeline run is orchestration: it spends most of
+  its wall clock waiting on CI and on humans. Claiming a GenAI operation for it would put that
+  wait onto an operator's GenAI dashboards.
 
 ## Platform-operator metrics (deployment health)
 

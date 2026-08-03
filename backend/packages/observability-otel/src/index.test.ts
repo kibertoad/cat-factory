@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createRecordingLogger, type LlmGenerationEvent } from '@cat-factory/kernel'
+import {
+  createRecordingLogger,
+  type LlmGenerationEvent,
+  type LlmRunSpan,
+  type LlmStepSpan,
+} from '@cat-factory/kernel'
 import { OtelTraceSink } from './index.js'
+import { deriveRunSpanId, deriveStepSpanId } from './mapping.js'
 
 // The fetch exporter POSTs OTLP/JSON to the collector over its injectable `fetchImpl`
 // (defaulting to the global `fetch`). We inject a capturing stub rather than intercept the
@@ -79,10 +85,13 @@ function attrMap(kvs: KeyValue[]): Record<string, unknown> {
   return out
 }
 
-function firstSpan(body: Record<string, unknown>): Record<string, unknown> {
+function spansOf(body: Record<string, unknown>): Record<string, unknown>[] {
   const rs = (body.resourceSpans as Record<string, unknown>[])[0]!
   const ss = (rs.scopeSpans as Record<string, unknown>[])[0]!
-  return (ss.spans as Record<string, unknown>[])[0]!
+  return ss.spans as Record<string, unknown>[]
+}
+function firstSpan(body: Record<string, unknown>): Record<string, unknown> {
+  return spansOf(body)[0]!
 }
 function resourceServiceName(body: Record<string, unknown>): unknown {
   const rs = (body.resourceSpans as Record<string, unknown>[])[0]!
@@ -110,13 +119,18 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
 
     expect(resourceServiceName(traceCall!.body)).toBe('cat-factory-test')
     const span = firstSpan(traceCall!.body)
-    expect(span.name).toBe('coder')
+    // The convention's `{operation} {request model}` span name; the agent kind names the STEP
+    // span one level up and still rides here as an attribute.
+    expect(span.name).toBe('chat gpt-4o-mini')
     expect((span.traceId as string).length).toBe(32)
     expect((span.spanId as string).length).toBe(16)
+    // Parented onto its agent kind's step span, derived from the run — not a sibling.
+    expect(span.parentSpanId).toBe(deriveStepSpanId('exec1', 'coder'))
     expect(span.startTimeUnixNano).toBe('1000000000')
     expect(span.endTimeUnixNano).toBe('1500000000')
     const spanAttrs = attrMap(span.attributes as KeyValue[])
     expect(spanAttrs['gen_ai.system']).toBe('openai')
+    expect(spanAttrs['gen_ai.operation.name']).toBe('chat')
     expect(spanAttrs['gen_ai.request.model']).toBe('gpt-4o-mini')
     expect(spanAttrs['gen_ai.usage.input_tokens']).toBe(100)
     expect(spanAttrs['gen_ai.usage.output_tokens']).toBe(40)
@@ -194,6 +208,9 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     expect((span.status as { code: number; message: string }).code).toBe(2) // ERROR
     expect((span.status as { message: string }).message).toBe('boom')
     expect((span.traceId as string).length).toBe(32)
+    // No run ⇒ no step span to hang under, so the call stays a ROOT rather than pointing at a
+    // parent that will never be emitted.
+    expect(span.parentSpanId).toBeUndefined()
   })
 
   it('groups a run under one deterministic trace id across calls', async () => {
@@ -222,14 +239,77 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
 
     const traceCalls = tracesOf(calls)
     expect(traceCalls).toHaveLength(1)
-    const spans = (
-      (traceCalls[0]!.body.resourceSpans as Record<string, unknown>[])[0]!.scopeSpans as Record<
-        string,
-        unknown
-      >[]
-    )[0]!.spans as Record<string, unknown>[]
-    expect(spans.map((s) => s.name)).toEqual(['edit_file', 'run_command'])
+    const spans = spansOf(traceCalls[0]!.body)
+    expect(spans.map((s) => s.name)).toEqual(['execute_tool edit_file', 'execute_tool run_command'])
     expect((spans[1]!.status as { code: number }).code).toBe(2) // ERROR
+    // Tool calls hang under the SAME step span the agent kind's generations do, so a step's
+    // model calls and its tool calls interleave in one waterfall.
+    for (const span of spans) {
+      expect(span.parentSpanId).toBe(deriveStepSpanId('exec1', 'coder'))
+      expect(attrMap(span.attributes as KeyValue[])['gen_ai.operation.name']).toBe('execute_tool')
+    }
+  })
+
+  it('emits the settled run root + step spans the children already named as parents', async () => {
+    const { fetchImpl, calls } = capturingFetch()
+    const sink = new OtelTraceSink({ endpoint: COLLECTOR, fetchImpl })
+
+    // A generation exports FIRST, hours before the run settles — the ordinary OTel ordering.
+    await sink.recordGeneration(baseEvent())
+
+    const run: LlmRunSpan = {
+      workspaceId: 'ws1',
+      executionId: 'exec1',
+      pipelineName: 'Bugfix',
+      startedAt: 500,
+      endedAt: 9_000,
+      ok: false,
+      errorMessage: 'ci_failed',
+    }
+    const steps: LlmStepSpan[] = [
+      {
+        workspaceId: 'ws1',
+        executionId: 'exec1',
+        agentKind: 'coder',
+        startedAt: 900,
+        endedAt: 4_000,
+        stepCount: 2,
+        ok: true,
+        errorMessage: null,
+      },
+    ]
+    await sink.recordRunSpans(run, steps)
+
+    // ONE POST: a step span whose root landed in a separately-failing request would leave the
+    // trace as broken as no parents at all.
+    const runCall = tracesOf(calls).at(-1)!
+    const spans = spansOf(runCall.body)
+    expect(spans).toHaveLength(2)
+
+    const [rootSpan, stepSpan] = spans as [Record<string, unknown>, Record<string, unknown>]
+    expect(rootSpan.name).toBe('run Bugfix')
+    expect(rootSpan.spanId).toBe(deriveRunSpanId('exec1'))
+    expect(rootSpan.parentSpanId).toBeUndefined()
+    expect((rootSpan.status as { code: number; message: string }).code).toBe(2) // ERROR
+    expect((rootSpan.status as { message: string }).message).toBe('ci_failed')
+    // A run is orchestration, not a model call: no GenAI operation is claimed for it.
+    expect(attrMap(rootSpan.attributes as KeyValue[])['gen_ai.operation.name']).toBeUndefined()
+
+    expect(stepSpan.name).toBe('invoke_agent coder')
+    expect(stepSpan.spanId).toBe(deriveStepSpanId('exec1', 'coder'))
+    expect(stepSpan.parentSpanId).toBe(rootSpan.spanId)
+    const stepAttrs = attrMap(stepSpan.attributes as KeyValue[])
+    expect(stepAttrs['gen_ai.operation.name']).toBe('invoke_agent')
+    expect(stepAttrs['gen_ai.agent.name']).toBe('coder')
+    // The fold is STATED, so a two-step slice isn't read as one long step.
+    expect(stepAttrs['cat_factory.step_count']).toBe(2)
+
+    // The whole hierarchy is one trace, and the generation emitted earlier already pointed at
+    // the step span this request finally supplies.
+    const generationSpan = firstSpan(tracesOf(calls)[0]!.body)
+    expect(generationSpan.parentSpanId).toBe(stepSpan.spanId)
+    expect(generationSpan.traceId).toBe(rootSpan.traceId)
+    expect(stepSpan.traceId).toBe(rootSpan.traceId)
   })
 
   it('never throws when the OTLP endpoint fails', async () => {

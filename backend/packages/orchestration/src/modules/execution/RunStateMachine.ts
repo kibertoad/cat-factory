@@ -293,6 +293,16 @@ export class RunStateMachine {
         // Swallow — grading is an observability concern and must never break a run.
       }
     }
+    // Close the run's EXTERNAL trace by emitting the parents its generations and tool spans
+    // have been naming since the run started: the root span and one per agent kind. Here,
+    // beside the other terminal hooks, for the same reason the lifecycle edge is — a run
+    // reaches `done` from four sites and a fifth added later would silently emit nothing.
+    // A durable replay re-emits the identical spans (every id is DERIVED from the run, not
+    // minted), so at-least-once delivery costs a rewrite of the same tree rather than a
+    // duplicate one, and no claim table is needed to make that true.
+    if (instance.status === 'done' || instance.status === 'failed') {
+      await this.llmObservability?.recordRunTrace(workspaceId, instance, this.clock.now())
+    }
     // When a run reaches a terminal state, delete its per-run personal-credential
     // activation immediately (individual-usage subscriptions) so the system-encrypted
     // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or

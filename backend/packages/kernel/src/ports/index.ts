@@ -154,6 +154,8 @@ export type {
 } from './agent-search-queries.js'
 export type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
@@ -33,14 +35,44 @@ const EVENT: LlmGenerationEvent = {
 }
 const CTX: LlmToolSpanContext = { workspaceId: 'ws1', executionId: 'exec1', agentKind: 'coder' }
 const SPANS: LlmToolSpan[] = [{ tool: 't', startedAt: 1, endedAt: 2, ok: true }]
+const RUN: LlmRunSpan = {
+  workspaceId: 'ws1',
+  executionId: 'exec1',
+  pipelineName: 'Bugfix',
+  startedAt: 1,
+  endedAt: 9,
+  ok: true,
+  errorMessage: null,
+}
+const STEPS: LlmStepSpan[] = [
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec1',
+    agentKind: 'coder',
+    startedAt: 1,
+    endedAt: 5,
+    stepCount: 1,
+    ok: true,
+    errorMessage: null,
+  },
+]
 
 function fakeSink(): LlmTraceSink & {
   gen: ReturnType<typeof vi.fn>
   tools: ReturnType<typeof vi.fn>
+  runSpans: ReturnType<typeof vi.fn>
 } {
   const gen = vi.fn()
   const tools = vi.fn()
-  return { recordGeneration: gen, recordToolSpans: tools, gen, tools }
+  const runSpans = vi.fn()
+  return {
+    recordGeneration: gen,
+    recordToolSpans: tools,
+    recordRunSpans: runSpans,
+    gen,
+    tools,
+    runSpans,
+  }
 }
 
 describe('composeTraceSinks', () => {
@@ -117,10 +149,24 @@ describe('CompositeTraceSink', () => {
     expect(logger.lines.some((l) => l.msg.includes('trace sink export dropped'))).toBe(true)
   })
 
-  it('tolerates a sink without recordToolSpans', async () => {
+  it("fans the settled run's parent spans out to every sink", async () => {
+    const a = fakeSink()
+    const b = fakeSink()
+    const composite = new CompositeTraceSink([a, b])
+
+    await composite.recordRunSpans(RUN, STEPS)
+
+    expect(a.runSpans).toHaveBeenCalledWith(RUN, STEPS)
+    expect(b.runSpans).toHaveBeenCalledWith(RUN, STEPS)
+  })
+
+  it('tolerates a sink without recordToolSpans or recordRunSpans', async () => {
+    // Langfuse implements neither shape of parenting — its trace object already groups the
+    // run — so the composite must treat both as absent rather than as a failure.
     const genOnly: LlmTraceSink = { recordGeneration: vi.fn() }
     const composite = new CompositeTraceSink([genOnly])
     await expect(composite.recordToolSpans(CTX, SPANS)).resolves.toBeUndefined()
+    await expect(composite.recordRunSpans(RUN, STEPS)).resolves.toBeUndefined()
   })
 
   it('fans forceFlush/shutdown out to sinks that implement them, isolating failures', async () => {

@@ -9,6 +9,17 @@ conformant by a shared mapping layer. **See [README.md](./README.md).**
 SDK). Shared mapping: `src/mapping.ts` (the single source of truth both transports use);
 shared OTLP/JSON encode + POST helpers: `src/otlp.ts`.
 
+Two things in `src/mapping.ts` bind changes here:
+
+- **The span hierarchy is built from DERIVED ids, never shared state.** `deriveRunSpanId` /
+  `deriveStepSpanId` are pure functions of the run, which is what lets a stateless per-call
+  emission name a parent emitted hours later (at run settlement, via `recordRunSpans`). A new
+  span type picks its parent by deriving one, and a transport must emit `MappedSpan.spanId`
+  verbatim rather than minting its own — an SDK-generated id for a parent orphans every child.
+- **`ATTR` and the README's GenAI semantic-convention coverage table are edited together.**
+  The convention is experimental, so what we cover, extend and deliberately omit is documented
+  rather than inferred.
+
 Also exports the **platform-operator metrics** exporter (`src/platform.ts`,
 `createPlatformMetricsOtelExporter`): a fetch-based OTLP GAUGE publisher for the
 deployment-level run-health aggregates (the dual of the per-call LLM sink). Fetch-on-both

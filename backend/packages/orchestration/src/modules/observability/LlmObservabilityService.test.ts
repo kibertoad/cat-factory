@@ -9,8 +9,11 @@ import type {
   LlmGenerationEvent,
   LlmCallMetricPage,
   LlmPromptChainTip,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmTraceSink,
 } from '@cat-factory/kernel'
+import type { ExecutionInstance } from '@cat-factory/contracts'
 import type { HarnessCallMetric, InlineLlmCall } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
@@ -336,6 +339,64 @@ describe('LlmObservabilityService trace-sink fan-out', () => {
 
     await expect(service.record(input())).resolves.toBeUndefined()
     expect(repo.recorded).toHaveLength(1)
+  })
+})
+
+describe('LlmObservabilityService.recordRunTrace', () => {
+  const settledRun = {
+    id: 'exec',
+    blockId: 'blk',
+    pipelineId: 'pl_bugfix',
+    pipelineName: 'Bugfix',
+    currentStep: 1,
+    status: 'done',
+    createdAt: 1_000,
+    steps: [
+      { agentKind: 'coder', state: 'done', progress: 1, startedAt: 1_100, finishedAt: 2_000 },
+    ],
+  } as unknown as ExecutionInstance
+
+  function service(traceSink: LlmTraceSink) {
+    return new LlmObservabilityService({
+      llmCallMetricRepository: new MemoryRepo(),
+      idGenerator,
+      clock,
+      traceSink,
+    })
+  }
+
+  it('emits the settled run root + step spans', async () => {
+    const calls: { run: LlmRunSpan; steps: LlmStepSpan[] }[] = []
+    await service({
+      recordGeneration() {},
+      recordRunSpans(run, steps) {
+        calls.push({ run, steps })
+      },
+    }).recordRunTrace('ws_1', settledRun, 5_000)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.run.executionId).toBe('exec')
+    expect(calls[0]!.run.endedAt).toBe(5_000)
+    expect(calls[0]!.steps.map((s) => s.agentKind)).toEqual(['coder'])
+  })
+
+  it('is a no-op for a sink that groups by something other than span parentage', async () => {
+    // Langfuse omits the method: its trace is a first-class object generations attach to by id,
+    // so there are no parents to synthesise. That must cost nothing, not throw.
+    await expect(
+      service({ recordGeneration() {} }).recordRunTrace('ws_1', settledRun, 5_000),
+    ).resolves.toBeUndefined()
+  })
+
+  it('never propagates a sink failure into the settling run', async () => {
+    await expect(
+      service({
+        recordGeneration() {},
+        recordRunSpans() {
+          throw new Error('collector down')
+        },
+      }).recordRunTrace('ws_1', settledRun, 5_000),
+    ).resolves.toBeUndefined()
   })
 })
 
