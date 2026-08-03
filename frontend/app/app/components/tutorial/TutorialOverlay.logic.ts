@@ -71,6 +71,32 @@ export function resolveSkip(
   return index + 1 < total ? { kind: 'move', index: index + 1 } : { kind: 'complete' }
 }
 
+/**
+ * Vue Flow's per-node wrapper, which carries the node id in `data-id`. The board is a
+ * TRANSFORM-panned canvas rather than a scroll container, so an anchor inside one of these is
+ * revealed by moving the camera (`fitView({ nodes })`), where every other anchor is revealed
+ * by `scrollIntoView`. Asking the DOM which of the two an element is beats keying off the
+ * step's target id, since the same id (`task-card`) is a canvas node on the board and a plain
+ * list row in a panel.
+ */
+export const BOARD_NODE_SELECTOR = '.vue-flow__node'
+
+/** The part of an element the reveal path needs: ancestry, and that ancestor's node id. */
+interface RevealNode {
+  closest(selector: string): { getAttribute(name: string): string | null } | null
+}
+
+/**
+ * The board-canvas node id owning this element, or null when the element is not on the canvas
+ * (so the caller scrolls it into view instead). An empty `data-id` counts as absent: Vue Flow
+ * would match nothing, and a `fitView` over an unknown id silently does nothing at all — which
+ * would look exactly like a reveal that ran.
+ */
+export function boardNodeIdFor(el: RevealNode | null): string | null {
+  const id = el?.closest(BOARD_NODE_SELECTOR)?.getAttribute('data-id') ?? null
+  return id !== null && id.length > 0 ? id : null
+}
+
 /** The part of a clicked node this check needs: CSS-selector ancestry. */
 interface ClickedNode {
   closest(selector: string): unknown

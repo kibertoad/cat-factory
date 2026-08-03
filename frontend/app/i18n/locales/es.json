@@ -6115,6 +6115,7 @@
       "intro": "Los recorridos guiados te muestran la aplicación directamente en esta pantalla: resaltan los controles reales y te dicen dónde hacer clic.",
       "start": "Empezar",
       "restart": "Repetir",
+      "resume": "Reanudar",
       "completed": "Completado",
       "decline": "No, gracias",
       "later": "Quizás más tarde",
@@ -6127,6 +6128,7 @@
       "done": "Finalizar",
       "progress": "Paso {current} de {total}",
       "ariaLabel": "Paso del tutorial",
+      "announcement": "Paso {current} de {total}. {title}. {body}",
       "abridged": "Se omitió 1 paso: ese control no forma parte de este tablero. | Se omitieron {count} pasos: esos controles no forman parte de este tablero.",
       "searching": "Buscando el control resaltado...",
       "clickHint": "Haz clic en el control resaltado para continuar"

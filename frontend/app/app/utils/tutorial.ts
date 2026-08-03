@@ -115,8 +115,37 @@ export interface TutorialTour {
 /** How long the overlay polls for a step's anchor before auto-skipping the step. */
 export const DEFAULT_TARGET_WAIT_MS = 4000
 
-/** How often the overlay re-queries / re-measures its anchor (canvas pans, panels open). */
+/**
+ * How often the overlay re-queries the DOM while it is still HUNTING for a step's anchor.
+ * Fast on purpose — the anchor can appear at any moment (a modal mounting, a live event
+ * landing a card) and every tick spent waiting is time the user stares at a "looking for
+ * it" note — and bounded on purpose, by the step's own {@link DEFAULT_TARGET_WAIT_MS}-ish
+ * budget, after which the step is skipped and the hunt stops.
+ */
 export const TARGET_TRACK_INTERVAL_MS = 150
+
+/**
+ * How often the overlay re-queries once it HAS an anchor.
+ *
+ * Anchored tracking is event-driven (scroll, resize, element resize, canvas pan/zoom), so
+ * this interval is only the backstop for movement nothing reports — and it is the tick that
+ * runs for the whole length of a tour, where the hunting one above is bounded by a step's
+ * wait budget. It also re-RESOLVES the selector rather than re-measuring the cached element,
+ * which is what lets a step re-anchor when the control it names is replaced underneath it.
+ */
+export const TARGET_IDLE_INTERVAL_MS = 400
+
+/**
+ * How much of an anchor has to be on screen before the overlay leaves the viewport alone.
+ *
+ * Measured against `min(anchorArea, viewportArea)`, not against the anchor's own area, because
+ * the catalog points at controls of wildly different sizes: `add-task-submit` is a button that
+ * must be almost wholly visible to be pointed at, while `board-canvas` and `sidebar` are bigger
+ * than the viewport and can NEVER clear a fraction of their own area. Taking the smaller of the
+ * two means "mostly visible" for a small control and "filling a good part of the screen" for a
+ * large one, which is the same judgement in both cases.
+ */
+export const MIN_VISIBLE_RATIO = 0.5
 
 /** Deterministic tour-list order: `order`, then `id`. */
 export function sortTours(tours: readonly TutorialTour[]): TutorialTour[] {
@@ -154,6 +183,43 @@ export interface TutorialRect {
   left: number
   width: number
   height: number
+}
+
+/**
+ * How much of `rect` lies inside the viewport, in square pixels. Zero when they don't overlap
+ * at all, which is the case that matters: an anchor scrolled or panned off screen.
+ */
+export function visibleArea(
+  rect: TutorialRect,
+  viewport: { width: number; height: number },
+): number {
+  const overlapWidth = Math.min(rect.left + rect.width, viewport.width) - Math.max(rect.left, 0)
+  const overlapHeight = Math.min(rect.top + rect.height, viewport.height) - Math.max(rect.top, 0)
+  return Math.max(0, overlapWidth) * Math.max(0, overlapHeight)
+}
+
+/**
+ * Does the overlay have to bring this anchor into view before the step can read correctly?
+ *
+ * The runtime accepts any element with layout boxes, and an element scrolled out of a panel or
+ * panned off the board canvas still HAS them — so without this check the highlight ring is
+ * drawn at off-screen coordinates while `computeCoachMarkLayout` clamps the tooltip to a
+ * viewport edge, leaving the user reading "click this" beside nothing at all. It bites the
+ * most-travelled steps hardest: the two `task-card` steps anchor whichever card is first in
+ * the DOM, which on a populated board is the one least likely to be the one on screen.
+ *
+ * Pure, so the threshold is pinned by unit tests rather than eyeballed against a real board.
+ * A zero-area anchor never needs revealing: there is no position to bring anywhere, and
+ * treating it as off-screen would make every degenerate rect trigger a canvas pan.
+ */
+export function needsReveal(
+  rect: TutorialRect,
+  viewport: { width: number; height: number },
+): boolean {
+  const area = rect.width * rect.height
+  if (area <= 0) return false
+  const required = MIN_VISIBLE_RATIO * Math.min(area, viewport.width * viewport.height)
+  return visibleArea(rect, viewport) < required
 }
 
 export interface CoachMarkLayout {

@@ -6115,6 +6115,7 @@
       "intro": "Les visites guidées vous montrent l'application directement à l'écran : elles mettent en évidence les vrais contrôles et vous indiquent où cliquer.",
       "start": "Commencer",
       "restart": "Refaire",
+      "resume": "Reprendre",
       "completed": "Terminée",
       "decline": "Non merci",
       "later": "Peut-être plus tard",
@@ -6127,6 +6128,7 @@
       "done": "Terminer",
       "progress": "Étape {current} sur {total}",
       "ariaLabel": "Étape du tutoriel",
+      "announcement": "Étape {current} sur {total}. {title}. {body}",
       "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
       "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer"

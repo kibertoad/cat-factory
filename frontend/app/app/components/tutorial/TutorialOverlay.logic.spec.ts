@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  boardNodeIdFor,
   isSafeTargetId,
   isTargetClickAdvance,
   resolveSkip,
@@ -160,5 +161,33 @@ describe('unexpectedlySkippedSteps', () => {
 
   it('is empty for a tour that skipped nothing', () => {
     expect(unexpectedlySkippedSteps(new Set(), [plain, branch])).toEqual([])
+  })
+})
+
+describe('boardNodeIdFor', () => {
+  /** A stand-in for the DOM ancestry lookup: `closest` hits when the selector is the one
+   * Vue Flow wraps its nodes in, and the hit carries whatever `data-id` we hand it. */
+  const el = (nodeId: string | null) => ({
+    closest: (selector: string) =>
+      selector === '.vue-flow__node' && nodeId !== null
+        ? { getAttribute: (name: string) => (name === 'data-id' ? nodeId : null) }
+        : null,
+  })
+
+  it('reports the node id for an anchor on the board canvas', () => {
+    expect(boardNodeIdFor(el('block-42'))).toBe('block-42')
+  })
+
+  it('reports none for an anchor outside the canvas, so the caller scrolls it instead', () => {
+    // A panel row, a modal button, the sidebar: an ordinary scroll container, where a camera
+    // move would do nothing and `scrollIntoView` is the right mechanism.
+    expect(boardNodeIdFor(el(null))).toBeNull()
+    expect(boardNodeIdFor(null)).toBeNull()
+  })
+
+  it('treats an empty data-id as absent', () => {
+    // `fitView` over an unknown id silently does nothing, which would look exactly like a
+    // reveal that ran — and the step would sit pointing off screen with its budget ticking.
+    expect(boardNodeIdFor(el(''))).toBeNull()
   })
 })

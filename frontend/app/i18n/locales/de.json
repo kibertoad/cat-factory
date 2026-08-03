@@ -6127,6 +6127,7 @@
       "intro": "Geführte Touren zeigen dir die App direkt auf diesem Bildschirm: Sie heben die echten Bedienelemente hervor und sagen dir, was du anklicken sollst.",
       "start": "Starten",
       "restart": "Wiederholen",
+      "resume": "Fortsetzen",
       "completed": "Abgeschlossen",
       "decline": "Nein danke",
       "later": "Vielleicht später",
@@ -6139,6 +6140,7 @@
       "done": "Fertig",
       "progress": "Schritt {current} von {total}",
       "ariaLabel": "Tutorial-Schritt",
+      "announcement": "Schritt {current} von {total}. {title}. {body}",
       "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
       "searching": "Suche das hervorgehobene Element...",
       "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren"
