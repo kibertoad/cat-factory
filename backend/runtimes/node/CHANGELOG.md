@@ -1,5 +1,98 @@
 # @cat-factory/node-server
 
+## 0.152.0
+
+### Minor Changes
+
+- f31c644: Serve the foundational-service catalog's `builtin` tier over the mothership machine API. A
+  mothership deployment is two processes, so a code-registered estate had to be registered on both
+  entry points and the copies matched only while both ran the same build — with a local node one
+  build behind being the normal case, and the skew silent (a run's catalog simply omits a service,
+  which reads like an Architect judging it irrelevant).
+
+  The tier is now read through the kernel `FoundationalBuiltinSource` port: the in-process registry by
+  default, `GET /internal/foundational-services` (+ the batched
+  `POST /internal/foundational-services/contracts`) on a mothership-mode node, which no longer consults
+  its own registry and warns at boot naming any ids it ignores. The remote read throws rather than
+  answering with an empty tier — on the 404 from a mothership older than the node, and on a 200 whose
+  payload it cannot read — and the injected context files STATE that outage rather than being omitted
+  (`FoundationalCatalogRead` / `FoundationalIndexRead` gain an `unavailable` variant), so a best-effort
+  dispatch cannot turn the throw back into "no shared services are registered".
+
+  Compatibility break (pre-1.0, no shim): `FoundationalServiceCatalogService` takes `builtins`
+  (a `FoundationalBuiltinSource`) in place of `registry`; wrap a registry with
+  `registryBuiltinSource(registry)`. `CoreDependencies.foundationalServiceRegistry` and the facade
+  options are unchanged.
+
+### Patch Changes
+
+- 4ac6960: Bump both runner images and take the dependency majors that are actually safe.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.85.0, `@cat-factory/deploy-harness` 0.2.9, with the three pinned tags synced):
+
+  - Executor: Pi `0.82.1 → 0.83.0`, Codex `0.145.0 → 0.146.0`, and the two lockstep Pi extensions `rpiv-todo`/`rpiv-web-tools` `2.1.0 → 2.3.1`. Claude Code stays at `2.1.220` — already the latest.
+  - Deploy: `kubectl v1.36.2 → v1.36.3`, `helm v4.2.2 → v4.2.3` (`kustomize v5.8.1` is already the latest). `backend/docs/local-kubernetes-setup-windows.md` mirrors these pins and moves with them.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest, plus the in-range `@types/node`/`hono` refresh the harnesses sat out of the previous sweep. With the executor harness now bumped, `hono` moves to `^4.12.33` across the whole workspace rather than being held back by the single-version constraint.
+
+  **Dependency majors** — taken: `markdown-it@14 → 15` (it now ships its own types, so `@types/markdown-it` is dropped; the instance type is a separate export from the constructor, which is the one call site that changed), `ioredis@5 → 6` (the optional multi-node Redis propagator + cache-invalidation bus), and `layered-loader@14 → 16`.
+
+  The layered-loader bump also **retires the deep-import workaround**. Keeping `ioredis` out of the Worker's module graph used to require importing `layered-loader/dist/lib/*.js` directly, because the package root eagerly re-exported its Redis surface; 15 then added an `exports` map that closed that hatch without offering a replacement. 16 states the boundary itself, so `@cat-factory/caching` imports the Redis-free `layered-loader/core` and only the Node facade's `REDIS_URL`-gated dynamic import reaches `layered-loader/redis`. **Never import the package root from `@cat-factory/caching` — it still carries both halves.** 16 also demotes `ioredis` to an optional peer (`^6`, pairing with the bump above) resolved lazily and only when a caller passes connection options instead of a client, which we never do.
+
+  Not taken: `typescript@6 → 7` for the frontend, because `vue-tsc` still loads `typescript/lib/tsc`, which the TS 7 Go port no longer exports — the frontend stays on 6 until vue-tsc supports it.
+
+- 4ac6960: Refresh the dependency tree — direct and transitive — to the latest versions that satisfy the `minimumReleaseAge` supply-chain gate, staying within each dependency's compatible major.
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.37 → ^7.0.47`, `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.2x → ^4.0.27`, `@ai-sdk/openai-compatible@^3.0.14 → ^3.0.20`, `@ai-sdk/provider@^4.0.3 → ^4.0.4`, `@ai-sdk/amazon-bedrock@^5.0.32 → ^5.0.40`.
+  - **Runtime deps**: `pg-boss@^12.26.3 → ^12.26.4`, `@aws-sdk/client-s3@^3.1095.0 → ^3.1101.0`, `@nuxtjs/i18n@^10.5.0 → ^10.6.0`, `@vueuse/core@^14.3.0 → ^14.4.0`.
+  - **Tooling**: `wrangler@^4.114.0 → ^4.118.0`, `@cloudflare/workers-types@^5.20260726.1 → ^5.20260801.1`, `oxlint@^1.75.0 → ^1.76.0`, `oxfmt@^0.60.0 → ^0.61.0`, `knip@^6.29.0 → ^6.31.0`, `turbo@^2.10.7 → ^2.10.8`, `vue-tsc@^3.3.8 → ^3.3.9`, `@playwright/test@^1.62.0 → ^1.62.1`, `@types/node@^26.1.1 → ^26.1.2`, `@types/pg@^8.20.0 → ^8.20.3`.
+
+  No `minimumReleaseAgeExclude` entries were added: every bump above already satisfies the gate. The `@cat-factory/executor-harness` and `@cat-factory/deploy-harness` deps are deliberately untouched, since they feed the published runner images and bumping them is a separate image-bumping change. `hono`'s declared range therefore stays at `^4.12.32` (sherif requires one version workspace-wide, and the harness declares it) while the lockfile still resolves 4.12.33 within that range.
+
+- 874d684: Remove the two expired persistence repairs and collapse the four run-failure parsers onto one.
+
+  The pre-#94 numeric user-id repair and the removed-failure-kind repair both carried a 2026-07-15
+  removal date that has passed, so `createdBy` and `initiatedBy` now read straight through and a
+  persisted failure is validated once, against the full wire schema.
+
+  Dropping `isKnownAgentFailureKind` left the bootstrap and env-config-repair repositories — two per
+  runtime — hand-rolling a weaker `typeof o.kind === 'string'` check than the execution mapper's, so
+  they now share one `parseStoredAgentFailure`, exported from `@cat-factory/contracts` beside the
+  schema it validates against (the runtimes' repositories no longer reach into
+  `@cat-factory/server` for it, and kernel deliberately carries no valibot dependency). A
+  structurally-incomplete failure record that those four stores previously surfaced (and that would
+  fail the SPA's snapshot re-validation) is dropped consistently on both runtimes.
+
+  Rows still holding a pre-#94 numeric id now surface it as-is instead of being repaired to null. A
+  deployment that still carries such rows sees the whole board fail to load with "Can't reach the
+  backend" — the SPA rejects the workspace snapshot — which points nowhere near the cause, so the
+  remedy is worth stating: null the stale ids once
+  (`UPDATE blocks SET created_by = NULL WHERE created_by ~ '^[0-9]+$'`, and the same for
+  `initiatedBy` inside the `agent_runs.detail` JSON). They identify no `usr_*` user, so nothing real
+  is lost.
+
+- Updated dependencies [f31c644]
+- Updated dependencies [4ac6960]
+- Updated dependencies [4ac6960]
+- Updated dependencies [874d684]
+  - @cat-factory/kernel@0.212.0
+  - @cat-factory/agents@0.104.0
+  - @cat-factory/orchestration@0.184.0
+  - @cat-factory/server@0.192.0
+  - @cat-factory/caching@0.12.9
+  - @cat-factory/consensus@0.13.22
+  - @cat-factory/eks@0.1.196
+  - @cat-factory/integrations@0.116.1
+  - @cat-factory/provider-bedrock@0.7.347
+  - @cat-factory/provider-cloudflare@0.7.348
+  - @cat-factory/provider-s3@0.2.267
+  - @cat-factory/contracts@0.210.1
+  - @cat-factory/gates@0.8.42
+  - @cat-factory/gitlab@0.15.1
+  - @cat-factory/observability-langfuse@0.9.39
+  - @cat-factory/observability-otel@0.4.39
+  - @cat-factory/spend@0.12.143
+  - @cat-factory/prompt-fragments@0.15.35
+
 ## 0.151.2
 
 ### Patch Changes

@@ -1,5 +1,53 @@
 # @cat-factory/local-server
 
+## 0.95.0
+
+### Minor Changes
+
+- f31c644: Serve the foundational-service catalog's `builtin` tier over the mothership machine API. A
+  mothership deployment is two processes, so a code-registered estate had to be registered on both
+  entry points and the copies matched only while both ran the same build — with a local node one
+  build behind being the normal case, and the skew silent (a run's catalog simply omits a service,
+  which reads like an Architect judging it irrelevant).
+
+  The tier is now read through the kernel `FoundationalBuiltinSource` port: the in-process registry by
+  default, `GET /internal/foundational-services` (+ the batched
+  `POST /internal/foundational-services/contracts`) on a mothership-mode node, which no longer consults
+  its own registry and warns at boot naming any ids it ignores. The remote read throws rather than
+  answering with an empty tier — on the 404 from a mothership older than the node, and on a 200 whose
+  payload it cannot read — and the injected context files STATE that outage rather than being omitted
+  (`FoundationalCatalogRead` / `FoundationalIndexRead` gain an `unavailable` variant), so a best-effort
+  dispatch cannot turn the throw back into "no shared services are registered".
+
+  Compatibility break (pre-1.0, no shim): `FoundationalServiceCatalogService` takes `builtins`
+  (a `FoundationalBuiltinSource`) in place of `registry`; wrap a registry with
+  `registryBuiltinSource(registry)`. `CoreDependencies.foundationalServiceRegistry` and the facade
+  options are unchanged.
+
+### Patch Changes
+
+- 4ac6960: Refresh the dependency tree — direct and transitive — to the latest versions that satisfy the `minimumReleaseAge` supply-chain gate, staying within each dependency's compatible major.
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.37 → ^7.0.47`, `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.2x → ^4.0.27`, `@ai-sdk/openai-compatible@^3.0.14 → ^3.0.20`, `@ai-sdk/provider@^4.0.3 → ^4.0.4`, `@ai-sdk/amazon-bedrock@^5.0.32 → ^5.0.40`.
+  - **Runtime deps**: `pg-boss@^12.26.3 → ^12.26.4`, `@aws-sdk/client-s3@^3.1095.0 → ^3.1101.0`, `@nuxtjs/i18n@^10.5.0 → ^10.6.0`, `@vueuse/core@^14.3.0 → ^14.4.0`.
+  - **Tooling**: `wrangler@^4.114.0 → ^4.118.0`, `@cloudflare/workers-types@^5.20260726.1 → ^5.20260801.1`, `oxlint@^1.75.0 → ^1.76.0`, `oxfmt@^0.60.0 → ^0.61.0`, `knip@^6.29.0 → ^6.31.0`, `turbo@^2.10.7 → ^2.10.8`, `vue-tsc@^3.3.8 → ^3.3.9`, `@playwright/test@^1.62.0 → ^1.62.1`, `@types/node@^26.1.1 → ^26.1.2`, `@types/pg@^8.20.0 → ^8.20.3`.
+
+  No `minimumReleaseAgeExclude` entries were added: every bump above already satisfies the gate. The `@cat-factory/executor-harness` and `@cat-factory/deploy-harness` deps are deliberately untouched, since they feed the published runner images and bumping them is a separate image-bumping change. `hono`'s declared range therefore stays at `^4.12.32` (sherif requires one version workspace-wide, and the harness declares it) while the lockfile still resolves 4.12.33 within that range.
+
+- Updated dependencies [f31c644]
+- Updated dependencies [4ac6960]
+- Updated dependencies [4ac6960]
+- Updated dependencies [874d684]
+  - @cat-factory/kernel@0.212.0
+  - @cat-factory/agents@0.104.0
+  - @cat-factory/orchestration@0.184.0
+  - @cat-factory/server@0.192.0
+  - @cat-factory/node-server@0.152.0
+  - @cat-factory/executor-harness@1.86.0
+  - @cat-factory/integrations@0.116.1
+  - @cat-factory/contracts@0.210.1
+  - @cat-factory/gitlab@0.15.1
+
 ## 0.94.2
 
 ### Patch Changes
