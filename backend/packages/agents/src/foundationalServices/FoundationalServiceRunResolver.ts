@@ -1,6 +1,6 @@
 import type { BinaryOutputConfig, FoundationalServiceSelection } from '@cat-factory/contracts'
 import type {
-  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   FoundationalCatalogView,
   InjectedContextFile,
   ResolvedBinaryGeneratorSelection,
@@ -128,7 +128,7 @@ export class FoundationalServiceRunResolver {
   async binaryOutputContextFilesFor(
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
-    generatorRegistry?: BinaryGeneratorRegistry,
+    generatorSource?: BinaryGeneratorSource,
   ): Promise<InjectedContextFile[]> {
     if (!config) {
       return [
@@ -143,11 +143,20 @@ export class FoundationalServiceRunResolver {
         },
       ]
     }
-    // The GENERATIVE half comes from the deployment's code registry rather than the workspace
+    // The GENERATIVE half comes from the deployment's own integrations rather than the workspace
     // catalog, so it is resolved here in the same pass: one brief has to describe both, and a
     // step whose integrations resolved but whose storage did not (or the reverse) is exactly the
     // partial state the file must state rather than omit.
-    const generators = resolveBinaryGeneratorSelection(config, generatorRegistry?.views() ?? [])
+    //
+    // On a mothership-mode node the source is REMOTE and this read can throw. It is deliberately
+    // not caught here: the caller's best-effort wrapper is what turns an unreachable set into an
+    // ABSENT brief, which the trait guidance already defines as "do not attempt any upload;
+    // report it". Catching it here could only produce a brief asserting the step has no
+    // integrations — a statement about the deployment that this read did not establish.
+    const generators = resolveBinaryGeneratorSelection(
+      config,
+      generatorSource ? await generatorSource.views() : [],
+    )
     const catalog = await this.catalogFor(workspaceId)
     const byId = new Map(catalog.map((service) => [service.id, service]))
     const storage = byId.get(config.storageServiceId) ?? null
@@ -173,7 +182,7 @@ export class FoundationalServiceRunResolver {
           generators,
         }),
       },
-      ...generatorContractFiles(generators, generatorRegistry),
+      ...(await generatorContractFiles(generators, generatorSource)),
     ]
     for (const service of involved) {
       const contracts = (documents.get(service.id) ?? []).map((doc) => ({
@@ -212,15 +221,20 @@ export class FoundationalServiceRunResolver {
  * An integration with no registered contract gets no file: the brief already states that case
  * (endpoint + notes are the whole interface), and an empty document would read as an API that
  * declares no operations.
+ *
+ * ONE batched read for the whole selection, not a lookup per selected id: the source can be the
+ * mothership's `/internal/binary-generators/contracts`, where a per-id loop is the N+1 the port's
+ * batch signature exists to prevent. In-process it is the same `Map` lookups either way.
  */
-function generatorContractFiles(
+async function generatorContractFiles(
   generators: ResolvedBinaryGeneratorSelection,
-  registry: BinaryGeneratorRegistry | undefined,
-): InjectedContextFile[] {
-  if (!registry) return []
+  source: BinaryGeneratorSource | undefined,
+): Promise<InjectedContextFile[]> {
+  if (!source) return []
+  const documents = await source.documentsFor(generators.selected.map((g) => g.id))
   const files: InjectedContextFile[] = []
   for (const generator of generators.selected) {
-    const contracts = registry.documentsFor(generator.id).map((doc) => ({
+    const contracts = (documents.get(generator.id) ?? []).map((doc) => ({
       contractId: doc.contractId,
       format: doc.format,
       title: doc.title,

@@ -31,14 +31,9 @@ import {
   applyInfraReachability,
   recordedUnreachableAreas,
   resolveWorkspaceAccess,
+  runBestEffort,
 } from '@cat-factory/kernel'
-import type {
-  AccountRole,
-  BinaryGeneratorRegistry,
-  ModelRef,
-  TaskTypeRegistry,
-  WorkspaceRole,
-} from '@cat-factory/kernel'
+import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -183,28 +178,47 @@ function snapshotCustomTaskTypes(registry: TaskTypeRegistry): CustomTaskType[] |
 
 /**
  * The deployment's GENERATIVE BINARY INTEGRATIONS as the snapshot carries them, for the pipeline
- * builder's binary-output step picker. Read off the app-owned registry the container carries —
- * static, identical for every workspace and both facades, exactly like {@link snapshotCustomTaskTypes}.
+ * builder's binary-output step picker. Static, identical for every workspace and both facades,
+ * exactly like {@link snapshotCustomTaskTypes}.
+ *
+ * Read through the resolved SOURCE, not the container's own registry, and that is the whole point
+ * of the read being here rather than inline: the picker is what SELECTS a `generatorIds` entry and
+ * run admission is what resolves it, so the two must be looking at one set. On a mothership-mode
+ * node the set is the mothership's, and a picker fed from this node's registry would offer ids
+ * admission rejects (or, once a deployment stops double-registering, offer nothing at all while
+ * runs resolve fine) — the same drift the source exists to remove, just moved one surface along.
  *
  * Projects IDENTITY ONLY. The view also holds each integration's credential declaration, endpoint
  * and contract summaries, and none of them may cross to a workspace VIEWER: the credential's key
  * name discloses the deployment's environment for no benefit (the picker never uses it), and the
  * endpoint and contracts are the AGENT's interface, delivered as injected context at dispatch.
  *
- * Returns undefined when the deployment registers none — the default, since the platform ships no
- * integrations — so the field is simply absent on the stock product.
+ * Three outcomes, and the third is why this returns a pair rather than a list. `undefined` means
+ * the deployment registers none — the default, since the platform ships no integrations — so the
+ * field is simply absent on the stock product. A list means these are the registered ones. And
+ * `unavailable` means the set could not be READ: it must not render as the first, because a picker
+ * silently offering nothing invites someone to conclude the deployment has no integrations and go
+ * looking in the wrong build. It never throws — an unreachable mothership must not take the whole
+ * board load down over a picker on one step type.
  */
-function snapshotBinaryGenerators(
-  registry: BinaryGeneratorRegistry,
-): RegisteredBinaryGenerator[] | undefined {
-  const generators = registry.views().map((view) => ({
+async function snapshotBinaryGenerators(
+  container: ServerContainer,
+): Promise<{ generators?: RegisteredBinaryGenerator[]; unavailable?: true }> {
+  const views = await runBestEffort(
+    container.logger,
+    'snapshot.binaryGenerators',
+    () => container.binaryGenerators.views(),
+    {},
+  )
+  if (!views) return { unavailable: true }
+  const generators = views.map((view) => ({
     id: view.id,
     name: view.name,
     summary: view.summary,
     modalities: view.modalities,
     ...(view.mediaTypes.length > 0 ? { mediaTypes: view.mediaTypes } : {}),
   }))
-  return generators.length > 0 ? generators : undefined
+  return generators.length > 0 ? { generators } : {}
 }
 
 /**
@@ -219,23 +233,39 @@ function snapshotBinaryGenerators(
  *
  * Each member is `undefined` rather than empty when its registry holds nothing, so the field is
  * absent on the wire for the stock product and the SPA's `?? []` fallbacks are what answer.
+ *
+ * ASYNC because one of the five is no longer necessarily in-process: the generative integrations
+ * are read through a source a mothership-mode node points at the mothership. The other four stay
+ * synchronous reads inside it — an agent kind carries FUNCTIONS, so it could not cross a wire even
+ * if we wanted it to, and nothing has asked the rest to.
  */
-function snapshotRegistryProjections(container: ServerContainer): {
+async function snapshotRegistryProjections(container: ServerContainer): Promise<{
   customAgentKinds: CustomAgentKind[] | undefined
   agentKindVariants: AgentKindVariant[] | undefined
   customTaskTypes: CustomTaskType[] | undefined
   binaryGenerators: RegisteredBinaryGenerator[] | undefined
-  initiativePresets: InitiativePresetDescriptor[]
-} {
+  /** Set only when the set could not be READ — never alongside `binaryGenerators`. */
+  binaryGeneratorsUnavailable: true | undefined
+  initiativePresets: InitiativePresetDescriptor[] | undefined
+}> {
+  const binaryGenerators = await snapshotBinaryGenerators(container)
   return {
     customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
     agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
     customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry),
-    binaryGenerators: snapshotBinaryGenerators(container.binaryGeneratorRegistry),
+    binaryGenerators: binaryGenerators.generators,
+    binaryGeneratorsUnavailable: binaryGenerators.unavailable,
     // The registered initiative presets (built-in generic + any a deployment mixed in), driving
-    // the initiative create picker and which planning pipeline "Run planning" starts.
-    initiativePresets: container.initiativePresetRegistry.descriptors(),
+    // the initiative create picker and which planning pipeline "Run planning" starts. Emptiness
+    // is folded to `undefined` HERE rather than at each handler, so every member of this bag
+    // obeys one rule and a handler can spread the whole thing through `definedFields`.
+    initiativePresets: definedIfPresent(container.initiativePresetRegistry.descriptors()),
   }
+}
+
+/** A list, or undefined when it is empty — the absent-on-the-wire convention, applied once. */
+function definedIfPresent<T>(list: T[]): T[] | undefined {
+  return list.length > 0 ? list : undefined
 }
 
 /**
@@ -562,19 +592,16 @@ export function workspaceController(): Hono<AppEnv> {
     // account/user tier status + editable settings), because the SPA hydrates its stores
     // directly from this create response — omitting them would leave a freshly-created
     // workspace with no operator caps / tier meters until a separate snapshot refresh.
-    const [spend, infraSetup, budgetTiers, skills] = await Promise.all([
+    // In the SAME wave as the rest, not awaited after it: on a mothership-mode node one of these
+    // projections crosses the machine API, and serialising that round trip behind the batch adds
+    // its latency to every workspace create for nothing.
+    const [spend, infraSetup, budgetTiers, skills, registryProjections] = await Promise.all([
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
       snapshotSkills(container, accountId),
+      snapshotRegistryProjections(container),
     ])
-    const {
-      customAgentKinds,
-      agentKindVariants,
-      customTaskTypes,
-      binaryGenerators,
-      initiativePresets,
-    } = snapshotRegistryProjections(container)
     // The creator's resolved access. The gate doesn't run for the id-less create route, so resolve
     // it here (the creator is auto-enrolled admin, so this is always an admin grant when signed in).
     const resolved = user
@@ -592,12 +619,11 @@ export function workspaceController(): Hono<AppEnv> {
         ...(access ? { access } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
-        ...(customAgentKinds ? { customAgentKinds } : {}),
-        ...(agentKindVariants ? { agentKindVariants } : {}),
-        ...(customTaskTypes ? { customTaskTypes } : {}),
-        ...(binaryGenerators ? { binaryGenerators } : {}),
-        ...(initiativePresets.length ? { initiativePresets } : {}),
-        ...(skills ? { skills } : {}),
+        // Every app-owned registry projection in one spread: each member is already `undefined`
+        // when it has nothing to say, so adding the next registry is a line in the helper and
+        // nothing here — which is what that helper promised and what the per-field ladder kept
+        // taking back.
+        ...definedFields({ ...registryProjections, skills }),
         ...snapshotBackendKinds(container),
         infraSetup,
       },
@@ -614,6 +640,15 @@ export function workspaceController(): Hono<AppEnv> {
     // Every ingredient below is an independent read keyed by the workspace id (only the
     // service catalog chains on the owning account), so they run concurrently: the
     // board-load latency is the slowest read, not the sum of ~15 sequential round-trips.
+    //
+    // The registry projections join that wave rather than following it. They are in-process on
+    // every deployment but one — a mothership-mode node reads its generative integrations over
+    // the machine API — and a board load is the hottest path this handler has, so awaiting them
+    // afterwards put a whole round trip on the end of every refresh for nothing.
+    const [slices, registryProjections] = await Promise.all([
+      loadSnapshotSlices(container, workspaceId, budgetAccountId),
+      snapshotRegistryProjections(container),
+    ])
     const {
       snapshot,
       spend,
@@ -635,14 +670,7 @@ export function workspaceController(): Hono<AppEnv> {
       infraSetup,
       repoProjections,
       skills,
-    } = await loadSnapshotSlices(container, workspaceId, budgetAccountId)
-    const {
-      customAgentKinds,
-      agentKindVariants,
-      customTaskTypes,
-      binaryGenerators,
-      initiativePresets,
-    } = snapshotRegistryProjections(container)
+    } = slices
 
     // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
     // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so
@@ -714,11 +742,7 @@ export function workspaceController(): Hono<AppEnv> {
           settings,
           mounts,
           serviceCatalog: redacted.services,
-          customAgentKinds,
-          agentKindVariants,
-          customTaskTypes,
-          binaryGenerators,
-          initiativePresets: initiativePresets.length ? initiativePresets : undefined,
+          ...registryProjections,
           skills,
         }),
       },

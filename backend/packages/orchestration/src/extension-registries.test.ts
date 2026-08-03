@@ -842,6 +842,22 @@ describe('generative binary integration registry validation', () => {
     expect(problemsFor([{ ...valid, mediaTypes: ['application/x-newfangled'] }])).toEqual([])
   })
 
+  it('accepts EITHER 3D content type against a container that could hold both', () => {
+    // Contradiction is an empty INTERSECTION, not an absent member. A `.glb` is one asset or a
+    // whole scene and the container does not record which, so requiring every consistent member
+    // would refuse a scene generator for declaring the only format it can emit.
+    for (const modalities of [['3d-model'], ['3d-scene'], ['3d-model', '3d-scene']] as const) {
+      expect(
+        problemsFor([{ ...valid, modalities: [...modalities], mediaTypes: ['model/gltf-binary'] }]),
+      ).toEqual([])
+    }
+    // …and a genuine contradiction is still one.
+    expect(
+      problemsFor([{ ...valid, modalities: ['audio'], mediaTypes: ['model/gltf-binary'] }])[0]
+        ?.code,
+    ).toBe('binary_generator_modality_mismatch')
+  })
+
   it('reports a malformed definition ONCE rather than restating it as several', () => {
     expect(
       problemsFor([{ ...valid, id: 'Retro Diffusion', endpoint: 'http://api.example.com' }]),

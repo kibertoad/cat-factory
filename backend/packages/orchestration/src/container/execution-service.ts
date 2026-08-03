@@ -100,7 +100,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // The deployment's generative binary integrations — what a binary-generating step PRODUCES
     // with, as the catalog above is where the product GOES. In-process composition data, so it is
     // threaded unconditionally (empty by default) rather than gated on a configured module.
-    binaryGeneratorRegistry: runtime.binaryGeneratorRegistry,
+    binaryGeneratorSource: runtime.binaryGenerators,
     // Canonicalise a URL pasted into a block description to the document's stable
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the

@@ -8,6 +8,7 @@ import {
   HttpMachineNotificationClient,
   HttpMachineTelemetryClient,
   HttpMachineTelemetryReadClient,
+  HttpBinaryGeneratorSource,
   HttpFoundationalBuiltinSource,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
@@ -123,6 +124,16 @@ export interface MothershipComposition {
    * backend/docs/adr/0031-foundational-services.md.
    */
   foundationalBuiltins: HttpFoundationalBuiltinSource
+  /**
+   * The deployment's GENERATIVE BINARY INTEGRATIONS, read from the MOTHERSHIP over
+   * `GET /internal/binary-generators` (+ the batched `POST .../contracts`) rather than from this
+   * node's own `BinaryGeneratorRegistry`. Same story as the estate above with a louder symptom:
+   * the pipeline builder's picker is fed by the MOTHERSHIP's registry, so a node resolving its
+   * own copy refuses a step somebody configured through the product itself — reporting
+   * `unknown_generator` against a configuration that is correct, with the half-wired deployment
+   * invisible in the message. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  binaryGenerators: HttpBinaryGeneratorSource
   /**
    * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
    * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
@@ -240,6 +251,11 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // build can only hold a second copy of it, so the node does not consult its own registry at all
   // (see the boot warning in `server.ts` when one is nonetheless registered).
   const foundationalBuiltins = new HttpFoundationalBuiltinSource({ baseUrl, token: machineToken })
+  // The deployment's generative integrations, on the same base URL + per-request token and for
+  // the same reason: what a run resolves a step's `generatorIds` against has to be the set the
+  // builder offered them from, and this node's own build can only hold a second copy of it (see
+  // the boot warning in `server.ts` when one is nonetheless registered).
+  const binaryGenerators = new HttpBinaryGeneratorSource({ baseUrl, token: machineToken })
   // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
   // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
   // publishes nor subscribes (its own SPA still gets every locally produced event).
@@ -284,6 +300,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     repos,
     githubTokenSource,
     foundationalBuiltins,
+    binaryGenerators,
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,

@@ -3744,16 +3744,25 @@
       "binaryOutputContextMissing": "Questi servizi di contesto non sono più nel catalogo: {ids}",
       "binaryOutputUnavailable": "Il catalogo dei servizi fondamentali non è raggiungibile, quindi qui non si può ancora scegliere nulla.",
       "binaryOutputGenerators": "Genera con",
+      "binaryOutputGeneratorsUnavailable": "Non è stato possibile leggere le integrazioni generative di questa installazione, quindi qui non si può ancora scegliere nulla. È un problema di connessione, non una registrazione mancante.",
       "binaryOutputGeneratorsPlaceholder": "Nessuna integrazione selezionata",
       "binaryOutputModalities": "Deve fornire",
       "binaryOutputModalitiesPlaceholder": "Nessun requisito",
+      "binaryOutputMediaTypes": "Formati esatti",
+      "binaryOutputMediaTypesPlaceholder": "Nessun requisito di formato",
+      "binaryOutputDeclaredFormats": "Le integrazioni selezionate dichiarano: {formats}",
+      "binaryOutputMediaTypeUncovered": "Nessuna integrazione selezionata emette {formats}, che questo passaggio deve fornire. Scegline una che lo faccia oppure rimuovi il requisito.",
+      "binaryOutputMediaTypeUnverifiable": "Nessuna integrazione selezionata dichiara {formats}, ma una di esse non dichiara alcun formato, quindi non è stato possibile verificarlo. Il passaggio parte comunque; verifica nell’API dell’integrazione che possa emetterlo.",
+      "binaryOutputMediaTypeUnusable": "Non salvato, perché questi non sono tipi di media: {entries}. Scrivi ciascuno come type/subtype.",
       "binaryOutputGeneratorMissing": "Questa installazione non registra queste integrazioni generative: {ids}. Si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "binaryOutputModalityUncovered": "Nessuna integrazione selezionata produce {modalities}, che questo passaggio deve fornire.",
+      "binaryOutputModalityRetired": "{modality} (non più disponibile: riseleziona i tipi di contenuto di questo passaggio)",
       "binaryOutputModality": {
         "image": "Immagini",
         "audio": "Audio",
         "video": "Video",
-        "3d": "Modelli 3D",
+        "3d-model": "Modelli 3D",
+        "3d-scene": "Scene 3D",
         "document": "Documenti"
       }
     },
@@ -4411,6 +4420,7 @@
     "target": "Servizio di archiviazione",
     "targetNone": "Non registrato per questo passo",
     "contextServices": "Contesto della generazione",
+    "mediaTypes": "Formati richiesti",
     "misdirectedBadge": "Altro servizio",
     "unknownBadge": "Fuori catalogo",
     "storedCount": "{outcome}, 1 artefatto | {outcome}, {count} artefatti",
@@ -4442,10 +4452,12 @@
     "warning": {
       "unknownServices": "Ha indicato un servizio che il catalogo non contiene: {ids}. La voce viene conservata come dichiarata; verifica l'identificativo nel catalogo della board. | Ha indicato servizi che il catalogo non contiene: {ids}. Le voci vengono conservate come dichiarate; verifica gli identificativi nel catalogo della board.",
       "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
+      "undeliveredMediaTypes": "Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quel formato. | Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quei formati.",
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
       "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco.",
-      "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro."
+      "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
+      "generatorsUnverified": "Non è stato possibile leggere le integrazioni generative di questa installazione alla chiusura del passaggio, quindi le integrazioni indicate sotto non sono state verificate. Le voci sono conservate come dichiarate."
     },
     "unknownGeneratorBadge": "Non registrata"
   },
@@ -4907,6 +4919,12 @@
         "internal": "Si è verificato un errore sul server. Riprova e, se continua, condividi i dettagli con l'operatore del deployment.",
         "network": "Non è stato possibile raggiungere il server. Controlla la connessione, poi riprova.",
         "unexpected": "Il server ha restituito una risposta inattesa. Riprova e, se continua, condividi i dettagli con l'operatore del deployment."
+      }
+    },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
       }
     },
     "action": {

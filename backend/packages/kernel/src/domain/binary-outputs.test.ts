@@ -113,6 +113,48 @@ describe('parseBinaryOutputDeclaration', () => {
     })
   })
 
+  it('withholds the generative verdict — and only that — when the set could not be read', () => {
+    // The third state of one question. An empty `generators` set is a real answer ("this
+    // deployment registers none"), so every claimed id is an invention; `generatorsUnverified`
+    // is "nobody could look", where the same accusation would be fabricated. What must NOT be
+    // withheld is everything else: the artifacts are recorded and the STORAGE verdict still
+    // resolves against the workspace catalog, which this says nothing about.
+    const report = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([
+          { service: 'asset-store', location: 'a.png', generator: 'retro-diffusion' },
+          { service: 'shadow-cdn', location: 'b.png', generator: 'ghost' },
+        ]),
+      ),
+      { services: ['asset-store'], generatorsUnverified: true },
+    )
+    expect(report.stored).toHaveLength(2)
+    expect(report.generatorsUnverified).toBe(true)
+    expect(report.unknownGenerators).toEqual([])
+    // Computed exactly as it would have been: the catalog half was never in doubt.
+    expect(report.unknownServices).toEqual(['shadow-cdn'])
+  })
+
+  it('carries the unverified flag onto the EARLY returns too', () => {
+    // `undeclared` and `parseFailed` return before any id is examined, but the fact is about the
+    // deployment rather than about the reply. Letting it appear and disappear with the shape of
+    // what the agent wrote would make two settlements incomparable.
+    const known = { services: ['asset-store'], generatorsUnverified: true }
+    expect(parseBinaryOutputDeclaration('all done', known).generatorsUnverified).toBe(true)
+    expect(parseBinaryOutputDeclaration(declaration('none'), known).generatorsUnverified).toBe(true)
+    expect(parseBinaryOutputDeclaration(declaration('not json'), known).generatorsUnverified).toBe(
+      true,
+    )
+  })
+
+  it('leaves the flag ABSENT when the set was read, so an unset field is a real verdict', () => {
+    const report = parseBinaryOutputDeclaration(
+      declaration(JSON.stringify([{ service: 'asset-store', location: 'a.png' }])),
+      known,
+    )
+    expect(report.generatorsUnverified).toBeUndefined()
+  })
+
   it('tolerates a single bare object, because models write one when they stored one', () => {
     const report = parseBinaryOutputDeclaration(
       declaration('{"service": "asset-store", "location": "a.png"}'),

@@ -84,7 +84,7 @@ Metrics (`cat_factory.platform.*`, all gauges: the OTel backend trends the serie
 | Metric                                  | Unit    | Split dimension             |
 | --------------------------------------- | ------- | --------------------------- |
 | `cat_factory.platform.runs`             | `{run}` | `cat_factory.run_status`    |
-| `cat_factory.platform.run_success_rate` | `1`     | —                          |
+| `cat_factory.platform.run_success_rate` | `1`     | —                         |
 | `cat_factory.platform.run_failures`     | `{run}` | `cat_factory.failure_kind`  |
 | `cat_factory.platform.live_runs`        | `{run}` | `cat_factory.run_state`     |
 | `cat_factory.platform.run_duration`     | `s`     | `cat_factory.duration_stat` |

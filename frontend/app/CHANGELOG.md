@@ -1,5 +1,61 @@
 # @cat-factory/app
 
+## 0.207.0
+
+### Minor Changes
+
+- 4c26c01: Split the `3d` binary modality into `3d-model` and `3d-scene`, and let a binary-output step require exact FORMATS, not only content types — checked at admission, in the brief, and against what the run delivered.
+
+  **Breaking, deliberately: `BinaryModality` no longer has a `3d` member.** A deployment registering a 3D integration re-declares it as `3d-model`, `3d-scene`, or both; the boot validator names an unusable one, so the break is loud rather than silent. A step whose `binaryOutput.modalities` said `3d` is refused at save until re-picked — which is the honest outcome, since the whole point is that the old value did not say which of the two the step needed.
+
+  A retired member is RENDERED as one, on both surfaces that put a modality into words. `3d` is persisted state, so it outlives the union it came from and reaches exactly the modality-uncovered refusal whose job is to name what a human must re-pick — where an exhaustive lookup with no runtime arm gave `undefined` in the backend's prose and a `TypeError` in the pipeline builder, taking down the very surface the fix is made on. Both now name the value as retired and say to re-pick, and both keep their compile-time exhaustiveness: kernel's `describeModality` routes its `default` through a `never`-typed helper, so adding a member without a case still fails the build.
+
+  A deliverable is described on three axes, and a fact belongs to the axis that can carry it: the KIND (`modalities` — decides which generator may serve the step), the FORMAT (`mediaTypes` — providers differ, importers are exact), and everything else (the prompt). `image` earns no split on either of the first two: a step that must have a PNG says so in `mediaTypes`, and a sprite differs from a backdrop by prompt alone. An asset and a scene are the one case where neither lower axis can help — they are the same modality by the old vocabulary AND the same format, because GLB, FBX, USDZ and `.blend` each carry either one object or a whole scene graph. With no media type meaning "a scene", a step that must deliver a level could be admitted against a prop generator with nothing able to notice. Splitting the modality is the only axis left, which is exactly the bar a new member has to clear.
+
+  Consequently the classifier answers a LIST. `modalitiesOfMediaType` returns both 3D members for every 3D container, since that is the true statement about a `.glb`, and each consumer says what it does with an ambiguous answer: boot validation passes when the sets INTERSECT (requiring every member would refuse a scene generator for declaring the only format it can emit), while a settled artifact classifies only when the answer is unambiguous (`modalityOfMediaType`, retained for that) — a guess about a file that already exists is worse than an absence, and the step's own declaration is the only thing that ever knew which was being made.
+
+  `stepOptions.binaryOutput.modalities` is the right grain for `image` — PNG versus WebP is a genre question and belongs in a prompt — and the wrong one for 3D, where the container IS the compatibility contract. GLB, USDZ and FBX are all one modality and none substitutes for another: a Godot importer takes the first, a RealityKit pipeline the second, an art pipeline the third. A step whose mesh must load in the game could therefore be admitted against an integration that cannot emit a loadable container, with the failure arriving at the end of a paid run as an asset nobody can open — which reads as a bad generation rather than as a selection nothing checked. `binaryOutput.mediaTypes` closes that at the level where the wrong answer is a file the consumer silently cannot use.
+
+  Every declared entry is REQUIRED, not any-of. A step delivering a GLB for the engine and an FBX an artist can open in Blender declares both and both are checked. An "any of these will do" reading was rejected because the agent is what names the container on the vendor call, and a requirement that leaves it a choice hands that decision to the party with the least basis for making it.
+
+  A format is never translated into a modality, in either direction. `modalityOfMediaType` recognises only the formats the platform happens to know, so inference would make the strength of a requirement depend on our vocabulary — a step spelled with a brand-new container would silently lose the coarse check its neighbour keeps. Matching is exact after ONE shared reduction: both declarations come through `mediaTypeSchema`, and a settled artifact's `contentType` (the model's own prose) goes through the newly exported `normalizeMediaType`, never a second lowercasing. No synonyms are mapped, deliberately — a matcher that accepted a near-neighbour would admit a GLB where an OBJ was required.
+
+  The coverage rule has THREE outcomes rather than two, and the third is what keeps this honest. A generator declaring no `mediaTypes` has said "only my modality is known" — a documented state, not an empty answer — so a requirement it cannot be judged against is UNVERIFIABLE (`binaryFormatCoverage`): the run is ADMITTED and the gap is stated instead, to the agent in its brief and to whoever composes the step in the picker. Refusing there would punish the honest declaration and break every integration that has not pinned its formats down; calling it covered would be the mirror mistake, a clean bill of health nobody issued on the surface that decides whether a run may start. It is the admission-side twin of `generatorsUnverified`. With nothing selected there is nobody to be silent, so a format requirement is uncovered outright and refuses under a new `media_type_uncovered` issue.
+
+  The brief states the required formats as exact strings to request and refuses substitution in words, because the agent is the party that chooses `target_formats`; the report surface adds the one judgement admission could not make, comparing what was required against the content types the run actually declared (`undeliveredMediaTypes`), derived in code and only where there are artifacts to compare against. The picker takes the requirement as free text with the selection's declared formats offered as a hint — a control offering only what the selection declares could never express the requirement whose violation this exists to catch.
+
+  Also: `application/x-blender` now classifies as 3D, alongside the OBJ and STL legacy types, since a `.blend` file is what a 3D deliverable looks like when the consumer is an artist rather than an engine. And `HttpBinaryGeneratorSource` now holds a served view to carrying `mediaTypes`, because it is a field admission DECIDES on: an absent one would reach the coverage rule as a crash instead of the one `UnavailableError` every route to "we do not know what is registered" ends at.
+
+### Patch Changes
+
+- Updated dependencies [4c26c01]
+  - @cat-factory/contracts@0.214.0
+
+## 0.206.0
+
+### Minor Changes
+
+- 924c6f9: Let a mothership-mode node read the deployment's generative binary integrations from the mothership instead of from its own build.
+
+  `BinaryGeneratorRegistry` shipped registry-only, which meant a mothership deployment — two processes — had to register its integrations on both entry points, with the copies matching only while both ran the same build. A local node one build behind is the normal state of running one, and the resulting failure was both loud and misattributed: the pipeline builder's picker is fed from the workspace snapshot the mothership serves, so a human selects an integration from the product's own picker and every run of that step is then refused by the node with `unknown_generator` — naming a step configuration that is correct, with the half-wired deployment invisible in the message.
+
+  The new kernel `BinaryGeneratorSource` port (`views()` + batched `documentsFor(ids)`) mirrors `FoundationalBuiltinSource` file for file: `GET /internal/binary-generators` (+ `POST .../contracts`) is machine-token gated, mounted on both facades, and reads this process's OWN registry; `HttpBinaryGeneratorSource` throws on every unreadable outcome — a transport error, a refusal, the 404 of a mothership older than the node — rather than answering with an empty set. A mothership-mode node injects it and no longer consults its own registry for a run, warning at boot naming any ids it will ignore; the registry is still boot-validated and is what the route serves when the process is itself a mothership.
+
+  The disposition differs from the estate's in the one place that matters. Those integrations gate ADMISSION, not just prompt enrichment, so an unreachable source is re-thrown as a 503-shaped, retryable `binary_generators_unreachable` and never softened to an empty set — which would refuse correctly configured steps as `unknown_generator` for the duration of an outage. That refusal carries translated copy of its own: user-reachable 503 reasons now live in a `UNAVAILABLE_REASONS` union with an exhaustive `Record` in the SPA, because the status class's generic wording ("this deployment has not configured the capability") is the same misattribution one layer up.
+
+  The best-effort readers keep their own dispositions. The dispatch brief injects nothing, which the trait guidance already defines as "do not attempt any upload; report it". The settled-step read-back records the artifacts and the storage-side verdict — both resolve against the workspace catalog, which an unreachable mothership says nothing about — and marks only the generative judgement withheld, via a new `BinaryOutputReport.generatorsUnverified` rendered as its own warning line. An empty `unknownGenerators` means "every claimed id checked out", so the two may not be spelled alike.
+
+  Within one dispatch the two halves of a selection share ONE `views()` read (`memoizeBinaryGeneratorViews`), scoped to that read wave and discarded with it — one round trip instead of two, with no staleness window to reason about. The workspace snapshot's projection joins the board-load read wave rather than following it, for the same reason.
+
+  The workspace snapshot's picker projection reads the same source, because routing only the engine would have moved the drift to the surface that OFFERS the id rather than removing it. It carries a new `binaryGeneratorsUnavailable` flag for the state a list cannot express: an empty picker is a claim about the deployment's build, and acting on it during an outage sends someone to the wrong repository. The SPA renders that as its own message and disables the selector rather than reporting the selection as invalid.
+
+  Version floor: a node on this release needs a mothership new enough to serve the route. An older one answers 404, which surfaces as an outage rather than as a deployment that registers nothing.
+
+### Patch Changes
+
+- Updated dependencies [924c6f9]
+  - @cat-factory/contracts@0.213.0
+
 ## 0.205.0
 
 ### Minor Changes

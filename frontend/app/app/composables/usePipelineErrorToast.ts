@@ -25,8 +25,8 @@
  */
 
 import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/bespokeConflicts'
-import type { ApiErrorCode, ConflictReason } from '@cat-factory/contracts'
-import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
+import type { ApiErrorCode, ConflictReason, UnavailableReason } from '@cat-factory/contracts'
+import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
 interface ConflictDetails {
@@ -286,6 +286,28 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
 }
 
 /**
+ * Translated description per REASON, for the non-conflict failures whose status class alone would
+ * describe them wrongly. Checked before {@link GENERIC_DESCRIPTION_KEYS} and falling through to
+ * it for every reason not listed, so this stays a short list of exceptions rather than a second
+ * vocabulary to keep in sync.
+ *
+ * It exists because the generic 503 copy has to commit to something, and what it commits to is
+ * "this deployment has not configured the capability this action needs". That is right for the
+ * common 503 (a module nobody wired) and exactly wrong for an outage: it tells an operator their
+ * build is missing a registration when the truth is that a set could not be read right now. On a
+ * mothership-mode node that is the misattribution this whole seam exists to remove, reappearing
+ * one layer up — with the honest wording demoted to untranslated detail behind a disclosure. So
+ * the reasons in {@link UNAVAILABLE_REASONS} carry their own copy, and the exhaustive `Record`
+ * over that union is the drift guard: a new user-reachable 503 reason fails this typecheck until
+ * it has wording.
+ */
+const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
+  binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
+  foundational_builtins_unreachable:
+    'errors.unavailable.description.foundational_builtins_unreachable',
+}
+
+/**
  * The request never reached a server that answered in our envelope shape — offline, DNS, a dropped
  * connection, CORS. Distinct from {@link UNEXPECTED_DESCRIPTION_KEY} on purpose: this one's remedy
  * is on the USER's side (check the connection), which is the opposite of "the server is broken".
@@ -326,7 +348,13 @@ export function describeGenericFailure(error: unknown): GenericFailure {
   // don't know must resolve to `undefined`, which is exactly what the alias's index signature
   // says and what a cast would have hidden. The narrow Record above stays the drift guard.
   const byCode: Readonly<Record<string, string | undefined>> = GENERIC_DESCRIPTION_KEYS
-  const mapped = envelope?.code ? byCode[envelope.code] : undefined
+  // A REASON that has its own copy wins over the status class's, through the same widened-alias
+  // read and for the same reason: a `reason` this build doesn't know must resolve to `undefined`
+  // and fall through, never narrow the wire string to the union by casting.
+  const byReason: Readonly<Record<string, string | undefined>> = UNAVAILABLE_DESCRIPTION_KEYS
+  const reason = apiErrorReason(error)
+  const mapped =
+    (reason ? byReason[reason] : undefined) ?? (envelope?.code ? byCode[envelope.code] : undefined)
   // No envelope at all AND no status ⇒ nothing answered; with a status, something did.
   const unrecognised =
     !envelope && apiErrorStatus(error) === undefined

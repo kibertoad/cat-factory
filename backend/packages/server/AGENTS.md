@@ -108,7 +108,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   mothership's copy instead of an empty panel). Each pairs a mothership-side controller +
   `ServerContainer` seam with the client half a mothership-mode node consumes: except the two
   telemetry endpoints, which need no seam: both go through the mothership's own `repositories`
-  registry.
+  registry. Two more carry CODE-REGISTERED org state rather than rows, and pair a controller with
+  a client half the node injects as a kernel SOURCE port instead of a container seam:
+  `modules/foundationalServices/FoundationalBuiltinsController.ts` +
+  `persistence/foundationalBuiltins.ts` (the catalog's `builtin` tier) and
+  `modules/binaryGenerators/BinaryGeneratorsController.ts` + `persistence/binaryGenerators.ts`
+  (the generative binary integrations). Both READ this process's own registry and THROW rather
+  than answering empty: see each file's header for why the two dispositions then differ.
 - `github/FetchGitHubClient.ts`: the GitHub client. Its siblings implement the engine-facing
   VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
   deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,

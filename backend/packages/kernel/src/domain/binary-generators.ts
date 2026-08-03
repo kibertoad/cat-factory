@@ -71,6 +71,16 @@ export type BinaryGeneratorSelectionIssue =
    * select one that makes this kind of thing (or to stop claiming the step delivers it).
    */
   | { problem: 'modality_uncovered'; modality: BinaryModality }
+  /**
+   * A concrete FORMAT the step declares it must deliver that no selected integration says it can
+   * emit. One notch finer than the modality above and refused for the same reason: a mesh in a
+   * container the consuming engine cannot import is not a thinner deliverable, it is an unusable
+   * one, and nothing downstream can tell the difference.
+   *
+   * Only ever raised against integrations that DECLARED their formats — see
+   * {@link binaryFormatCoverage} for the third state, which is not an issue.
+   */
+  | { problem: 'media_type_uncovered'; mediaType: string }
 
 /** A step's selection, resolved against the registry's views. */
 export interface ResolvedBinaryGeneratorSelection {
@@ -101,6 +111,48 @@ export function resolveBinaryGeneratorSelection(
 }
 
 /**
+ * How a step's declared FORMATS stand against what its selected integrations say they emit.
+ *
+ * THREE outcomes, not two, and the third is the whole reason this is its own function. A
+ * generator declaring no `mediaTypes` is an explicit, documented state — "only the coarse
+ * modality is known" — so a requirement it cannot be judged against is UNVERIFIABLE, not
+ * uncovered. Refusing there would punish the honest declaration and break every integration that
+ * has not pinned its formats down; calling it covered would be the mirror mistake, a clean bill
+ * of health nobody issued, on the surface that decides whether the run may start. So the run is
+ * admitted and the gap is STATED — to the agent in its brief, and to whoever composes the step —
+ * which is the same disposition `generatorsUnverified` takes on the settlement side.
+ *
+ * Pure and shared by admission, the brief and the SPA's mirror, so none of them can hold a
+ * different opinion about the same selection.
+ */
+export interface BinaryFormatCoverage {
+  /** Declared formats no selected integration emits, judged against integrations that DECLARED
+   *  theirs. These refuse the run. */
+  uncovered: string[]
+  /** Declared formats nothing selected claims, where at least one selected integration declares
+   *  no formats at all — so the requirement MIGHT be met and nothing here may say otherwise. */
+  unverifiable: string[]
+}
+
+export function binaryFormatCoverage(
+  required: readonly string[],
+  selected: readonly Pick<BinaryGeneratorView, 'mediaTypes'>[],
+): BinaryFormatCoverage {
+  const emitted = new Set(selected.flatMap((generator) => generator.mediaTypes))
+  // An EMPTY selection declares nothing and hides nothing: with no integration to be silent, a
+  // format requirement is uncovered outright, exactly as a modality requirement already is.
+  const undeclared = selected.some((generator) => generator.mediaTypes.length === 0)
+  const uncovered: string[] = []
+  const unverifiable: string[] = []
+  for (const mediaType of required) {
+    if (emitted.has(mediaType)) continue
+    if (undeclared) unverifiable.push(mediaType)
+    else uncovered.push(mediaType)
+  }
+  return { uncovered, unverifiable }
+}
+
+/**
  * Validate a step's generative selection against the RESOLVED registry: every selected id must
  * be registered, and every content type the step declares it delivers must be produced by at
  * least one of them.
@@ -126,10 +178,28 @@ export function binaryGeneratorSelectionIssues(
   for (const modality of config?.modalities ?? []) {
     if (!covered.has(modality)) issues.push({ problem: 'modality_uncovered', modality })
   }
+  // Only the UNCOVERED half refuses. An unverifiable format is reported to the agent by the brief
+  // and to the composer by the picker, and admitting it is the point: see `binaryFormatCoverage`.
+  for (const mediaType of binaryFormatCoverage(config?.mediaTypes ?? [], selected).uncovered) {
+    issues.push({ problem: 'media_type_uncovered', mediaType })
+  }
   return issues
 }
 
-/** The content type in words, for a message a human reads. */
+/**
+ * The content type in words, for a message a human reads.
+ *
+ * The `default` is not dead code, and it is not a widened type either. `BinaryModality` is a
+ * CLOSED vocabulary that is nonetheless PERSISTED on a step, so a member retired from the union
+ * goes on existing in saved pipelines: `3d` did exactly that when it split. Such a value reaches
+ * here through the modality-uncovered refusal it is guaranteed to raise — which is to say the one
+ * message whose whole job is to name what a human must re-pick — so falling off the end of the
+ * switch would render it `undefined` and turn the loud break into a nonsense sentence.
+ *
+ * {@link describeRetiredModality} takes `never`, so this keeps BOTH properties at once: adding a
+ * member without a case still fails the typecheck (the argument is no longer `never`), while a
+ * value the union never had is still described honestly at runtime.
+ */
 export function describeModality(modality: BinaryModality): string {
   switch (modality) {
     case 'image':
@@ -138,11 +208,27 @@ export function describeModality(modality: BinaryModality): string {
       return 'audio (music, speech or sound)'
     case 'video':
       return 'video'
-    case '3d':
-      return '3D models'
+    case '3d-model':
+      return '3D models (one asset each)'
+    case '3d-scene':
+      return '3D scenes (several assets composed together)'
     case 'document':
       return 'documents'
+    default:
+      return describeRetiredModality(modality)
   }
+}
+
+/**
+ * A stored content type this build no longer defines, named as the retired value it is.
+ *
+ * Deliberately NOT mapped onto a current member — nothing here knows which one was meant, and
+ * that unknowability is the whole reason a split retires the old name rather than aliasing it.
+ * Saying so is the honest answer and the actionable one: it sends the reader to re-pick the step
+ * rather than to a selection with nothing wrong with it.
+ */
+function describeRetiredModality(modality: never): string {
+  return `'${String(modality)}' (a content type this deployment no longer defines — the step must be re-picked)`
 }
 
 /**
@@ -157,11 +243,15 @@ export function describeBinaryGeneratorSelectionIssues(
   agentKind: string,
   issues: readonly BinaryGeneratorSelectionIssue[],
 ): string {
-  const clauses = issues.map((issue) =>
-    issue.problem === 'unknown_generator'
-      ? `'${issue.generatorId}' is not a generative integration this deployment registers`
-      : `no selected integration produces ${describeModality(issue.modality)}, which this step declares it delivers`,
-  )
+  const clauses = issues.map((issue) => {
+    if (issue.problem === 'unknown_generator') {
+      return `'${issue.generatorId}' is not a generative integration this deployment registers`
+    }
+    if (issue.problem === 'media_type_uncovered') {
+      return `no selected integration emits '${issue.mediaType}', which this step declares it delivers — the integrations it selects declare the formats they emit, and this is not one of them`
+    }
+    return `no selected integration produces ${describeModality(issue.modality)}, which this step declares it delivers`
+  })
   const problems = clauses.length === 1 ? clauses[0] : clauses.map((c) => `\n  - ${c}`).join('')
   return (
     `Step '${agentKind}' generates binary outputs, but its generative selection does not resolve: ${problems}` +
@@ -185,6 +275,8 @@ export function renderBinaryGeneratorSection(input: {
   selection: ResolvedBinaryGeneratorSelection
   /** The content types the step declares it must deliver (`stepOptions.binaryOutput.modalities`). */
   requestedModalities: BinaryModality[]
+  /** The concrete formats it must deliver (`stepOptions.binaryOutput.mediaTypes`). */
+  requestedMediaTypes?: string[]
 }): string[] {
   const { selected, unresolvedIds } = input.selection
   const lines: string[] = ['## Generation', '']
@@ -223,19 +315,64 @@ export function renderBinaryGeneratorSection(input: {
       '',
     )
   }
-  const covered = new Set(selected.flatMap((generator) => generator.modalities))
-  const uncovered = input.requestedModalities.filter((modality) => !covered.has(modality))
-  if (input.requestedModalities.length > 0) {
-    lines.push(
-      `This step is expected to deliver: ${input.requestedModalities.map(describeModality).join(', ')}.`,
-    )
+  lines.push(
+    ...requirementLines(input.requestedModalities, input.requestedMediaTypes ?? [], selected),
+  )
+  return lines
+}
+
+/**
+ * What this step OWES, and what nothing selected can be shown to deliver.
+ *
+ * The format half is the half the agent can act on: it is the party that names the container on
+ * the vendor call (`target_formats` and its equivalents), and a generator asked for nothing in
+ * particular returns whatever it defaults to. So the required formats are stated as EXACT strings
+ * to request, and substitution is refused in words — a step that must deliver FBX is not served
+ * by a GLB, however much the file "is" the same mesh.
+ *
+ * The unverifiable case is stated as its own sentence rather than folded into either the plain
+ * requirement or the uncovered warning. Told nothing, an agent proceeds as if the format were
+ * confirmed available; told "no integration produces it", it reports a gap that may not exist and
+ * skips work it could have done. Neither is what "this integration did not say" means.
+ */
+function requirementLines(
+  modalities: BinaryModality[],
+  mediaTypes: string[],
+  selected: BinaryGeneratorView[],
+): string[] {
+  if (modalities.length === 0 && mediaTypes.length === 0) return []
+  const lines: string[] = []
+  if (modalities.length > 0) {
+    lines.push(`This step is expected to deliver: ${modalities.map(describeModality).join(', ')}.`)
+    const covered = new Set(selected.flatMap((generator) => generator.modalities))
+    const uncovered = modalities.filter((modality) => !covered.has(modality))
     if (uncovered.length > 0) {
       lines.push(
         `No available integration produces ${uncovered.map(describeModality).join(', ')}. Do not attempt to produce ${uncovered.length === 1 ? 'it' : 'them'} another way — deliver the rest and report this gap by name.`,
       )
     }
-    lines.push('')
   }
+  if (mediaTypes.length > 0) {
+    const list = mediaTypes.map((mediaType) => `\`${mediaType}\``).join(', ')
+    // The formats can be the ONLY requirement a step states, so the sentence carries its own
+    // subject when the modality line above it did not run.
+    const subject = modalities.length > 0 ? 'It' : 'This step'
+    lines.push(
+      `${subject} must deliver ${mediaTypes.length === 1 ? 'this exact format' : 'each of these exact formats'}: ${list}. Ask the integration for ${mediaTypes.length === 1 ? 'it' : 'them'} by name where its API lets you choose an output format, and do not substitute another container — the consumer of these files accepts ${mediaTypes.length === 1 ? 'this one' : 'these'} and not a near equivalent. Report the media type you stored for each artifact.`,
+    )
+    const { uncovered, unverifiable } = binaryFormatCoverage(mediaTypes, selected)
+    if (uncovered.length > 0) {
+      lines.push(
+        `No available integration declares that it emits ${uncovered.map((m) => `\`${m}\``).join(', ')}. Do not substitute another format — deliver the rest and report this gap by name.`,
+      )
+    }
+    if (unverifiable.length > 0) {
+      lines.push(
+        `${unverifiable.map((m) => `\`${m}\``).join(', ')} ${unverifiable.length === 1 ? 'is' : 'are'} not among the formats any selected integration declares, and at least one of them declares no formats at all — so whether it can emit ${unverifiable.length === 1 ? 'this' : 'these'} is unknown rather than settled either way. Check its API contract before generating, and if it cannot, report that instead of storing a different format.`,
+      )
+    }
+  }
+  lines.push('')
   return lines
 }
 

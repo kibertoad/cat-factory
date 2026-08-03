@@ -497,6 +497,12 @@
         "unexpected": "Sunucu beklenmeyen bir yanıt döndürdü. Yeniden dene; sorun sürerse ayrıntıları dağıtım yöneticisiyle paylaş."
       }
     },
+    "unavailable": {
+      "description": {
+        "binary_generators_unreachable": "Bu dağıtımın üretken entegrasyonları şu anda okunamadı, bu yüzden çalıştırma başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+      }
+    },
     "action": {
       "retryFailed": "Yeniden deneme başarısız oldu",
       "startFailed": "Başlatılamadı",
@@ -4108,16 +4114,25 @@
       "binaryOutputContextMissing": "Bu bağlam hizmetleri artık katalogda yok: {ids}",
       "binaryOutputUnavailable": "Temel hizmetler katalogu erişilemez durumda, bu yüzden burada henüz bir şey seçilemiyor.",
       "binaryOutputGenerators": "Şununla üret",
+      "binaryOutputGeneratorsUnavailable": "Bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden burada henüz bir seçim yapılamıyor. Bu bir bağlantı sorunudur, eksik bir kayıt değil.",
       "binaryOutputGeneratorsPlaceholder": "Entegrasyon seçilmedi",
       "binaryOutputModalities": "Teslim etmeli",
       "binaryOutputModalitiesPlaceholder": "Gereksinim yok",
+      "binaryOutputMediaTypes": "Kesin biçimler",
+      "binaryOutputMediaTypesPlaceholder": "Biçim gereksinimi yok",
+      "binaryOutputDeclaredFormats": "Seçili entegrasyonların bildirdiği biçimler: {formats}",
+      "binaryOutputMediaTypeUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {formats} biçimini üretmiyor. Üretebilen birini seçin ya da gereksinimi kaldırın.",
+      "binaryOutputMediaTypeUnverifiable": "Seçili entegrasyonların hiçbiri {formats} bildirmiyor, ancak içlerinden biri hiç biçim bildirmiyor; bu yüzden denetlenemedi. Adım yine de başlar; entegrasyonun API’sinden bunu üretebildiğini doğrulayın.",
+      "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
+      "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {
         "image": "Görseller",
         "audio": "Ses",
         "video": "Video",
-        "3d": "3B modeller",
+        "3d-model": "3B modeller",
+        "3d-scene": "3B sahneler",
         "document": "Belgeler"
       }
     },
@@ -5386,6 +5401,7 @@
     "target": "Depolama hizmeti",
     "targetNone": "Bu adım için kaydedilmedi",
     "contextServices": "Üretim bağlamı",
+    "mediaTypes": "Gerekli biçimler",
     "misdirectedBadge": "Başka hizmet",
     "unknownBadge": "Katalogda yok",
     "storedCount": "{outcome}, 1 ürün | {outcome}, {count} ürün",
@@ -5417,10 +5433,12 @@
     "warning": {
       "unknownServices": "Katalogda bulunmayan bir hizmet adı verdi: {ids}. Kayıt bildirildiği gibi saklanır; kimliği pano kataloguyla karşılaştır. | Katalogda bulunmayan hizmet adları verdi: {ids}. Kayıtları bildirildiği gibi saklanır; kimlikleri pano kataloguyla karşılaştır.",
       "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
+      "undeliveredMediaTypes": "Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimi bildirmiyor. | Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimleri bildirmiyor.",
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
       "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor.",
-      "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir."
+      "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
+      "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
     "unknownGeneratorBadge": "Kayıtlı değil"
   },

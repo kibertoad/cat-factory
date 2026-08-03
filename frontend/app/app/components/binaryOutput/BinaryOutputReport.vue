@@ -88,6 +88,16 @@ const state = computed(() => {
         <dt class="text-slate-500">{{ t('binaryOutput.contextServices') }}</dt>
         <dd class="min-w-0 font-mono text-slate-400">{{ view.contextServices.join(', ') }}</dd>
       </template>
+      <!-- The formats the step REQUIRED, beside where they were meant to go. Rendered whenever
+           the step stated any, including on a run that delivered them: the requirement is what
+           makes the content types below it readable, and a reader checking whether a mesh will
+           load needs to see what was asked for even when nothing went wrong. -->
+      <template v-if="view.mediaTypes.length">
+        <dt class="text-slate-500">{{ t('binaryOutput.mediaTypes') }}</dt>
+        <dd class="min-w-0 font-mono text-slate-400" data-testid="binary-output-media-types">
+          {{ view.mediaTypes.join(', ') }}
+        </dd>
+      </template>
     </dl>
 
     <!-- The artifacts. `location` is the service's OWN addressing — an object key, a path, a
@@ -191,6 +201,29 @@ const state = computed(() => {
               count: view.unknownDeclaredGenerators.length,
             },
             view.unknownDeclaredGenerators.length,
+          )
+        }}
+      </li>
+      <!-- The third state of the same question, and the reason it is not the line above with an
+           empty list: an empty `unknownDeclaredGenerators` otherwise means every claimed id
+           checked out. Someone reading this panel to decide whether these artifacts are real
+           must not be handed a clean bill of health nobody issued. -->
+      <li v-if="view.generatorsUnverified" data-testid="binary-output-generators-unverified">
+        {{ t('binaryOutput.warning.generatorsUnverified') }}
+      </li>
+      <!-- The one judgement this panel can make that admission could not: admission checked what
+           the selected integrations CAN emit, this checks what came back. Derived in code from
+           the step's own two records — the requirement and the reported content types — never
+           read off the agent's prose. -->
+      <li v-if="view.undeliveredMediaTypes.length" data-testid="binary-output-undelivered-formats">
+        {{
+          t(
+            'binaryOutput.warning.undeliveredMediaTypes',
+            {
+              formats: view.undeliveredMediaTypes.join(', '),
+              count: view.undeliveredMediaTypes.length,
+            },
+            view.undeliveredMediaTypes.length,
           )
         }}
       </li>

@@ -50,7 +50,7 @@ call, no engine, no harness change.
 | Worked example (stack-deploy provider) + unit tests                                                                       | done   | (this PR) |
 | Cross-runtime conformance assertion (detect endpoint)                                                                     | done   | (this PR) |
 | Docs (per-service-provisioning, kernel AGENTS)                                                                            | done   | (this PR) |
-| **Slice 2; SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —        |
+| **Slice 2; SPA:** prefill `customConfigSeed` + render `detectedManifestTypeCandidates` picker in `ServiceTestConfig.vue` | todo   | —       |
 
 ## Conventions & gotchas
 

@@ -7,7 +7,7 @@
 
 > ## ✅ MERGE GATE: MET (the functional repository surface has landed)
 >
-> The [Phase 3: Functional repository surface](#phase-3--functional-repository-surface-the-merge-gate)
+> The [Phase 3: Functional repository surface](#phase-3-functional-repository-surface-the-merge-gate)
 > merge gate is **satisfied**. A no-Postgres mothership-mode `buildLocalContainer` **loads a board**
 > and **drives a run to a persisted terminal state** over the real `/internal/persistence` RPC:
 > asserted end-to-end by `backend/runtimes/local/test/mothership-integration.spec.ts` (a real
@@ -350,6 +350,35 @@
   **The general rule this sets:** state a deployment registers in CODE and a RUN resolves is org
   state in mothership mode too. It rides its own `/internal/*` read, never a second registration on
   the node, whose build is by construction the one that can be stale.
+
+**Code-registered ORG state: the generative binary integrations**
+
+- **`GET /internal/binary-generators`** (+ the batched `POST .../contracts`): the second
+  application of the rule above, and the one that shows it was a rule rather than a one-off. The
+  `BinaryGeneratorRegistry` shipped registry-only and a downstream deployment hit the drift on its
+  first integration. Everything about the transport mirrors the tier above (machine-token pin, no
+  account scope, its own endpoint rather than a persistence hole, reads this process's OWN registry
+  so a satellite cannot answer for a satellite, throws on every unreadable outcome including an
+  older mothership's 404).
+
+  **Two things are genuinely different, and both are about the failure being LOUD rather than
+  quiet.** First, the symptom: the pipeline builder's picker is fed from the workspace snapshot the
+  MOTHERSHIP serves, so a mothership-only registration has a human select an id from the product's
+  own picker and then watch every run of that step refused by the node with `unknown_generator`;
+  a message naming a configuration that is correct. Second, the disposition: this set gates
+  ADMISSION, not just enrichment, so an unreachable source cannot be softened to an empty one (that
+  IS the false `unknown_generator`) and cannot be admitted through either (a paid run with no brief
+  and no credential). It is re-thrown as `binary_generators_unreachable`: 503-shaped, retryable,
+  and deliberately not the configuration reason. The best-effort READERS (the dispatch brief, the
+  declaration read-back) keep their own dispositions, because each already defines its own absence.
+
+  **The picker had to move with it.** The snapshot projection reads the same source and carries
+  `binaryGeneratorsUnavailable`, because routing only the engine would have relocated the drift to
+  the surface that OFFERS the id: a node that stopped double-registering would show an empty picker
+  while its runs resolved fine, and an empty picker is a claim about the deployment's BUILD.
+
+  **Version floor:** a node on the new `local-server` needs a mothership new enough to answer the
+  route. An older one answers 404, which surfaces as an outage rather than as an empty set.
 
 **Notification delivery delegation (PR 4, first half)**
 

@@ -44,15 +44,15 @@ Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 | ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | ------- |
 | SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ✅ done | #1207   |
 | SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ✅ done | #1358   |
-| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —      |
-| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —      |
-| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —      |
+| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —     |
+| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —     |
+| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —     |
 | SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ✅ done | round-1 |
 | SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ✅ done | #1358   |
-| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —      |
+| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —     |
 | SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ✅ done | #1358   |
 | SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ✅ done | #1358   |
-| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —      |
+| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —     |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
 

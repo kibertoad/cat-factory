@@ -144,7 +144,7 @@ why).
 
 A run parked on a human decision waits **forever**; there is no timeout to design against. If your
 integration starts runs that can park, it must either answer them (a `decide` key, the
-[decisions surface](#parked-decisions-apiv1runsrunid-decisions)) or free them:
+[decisions surface](#parked-decisions-apiv1runsruniddecisions)) or free them:
 `POST /api/v1/jobs/:id/cancel` (initiative jobs) and `POST /api/v1/tasks/:id/stop` (board tasks)
 both clear a park at the cost of the run's work. This matters doubly because the decision surface
 does not yet answer every park type the engine has; the

@@ -328,6 +328,12 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // drifting behind (see `HttpFoundationalBuiltinSource`). `startLocal` warns at boot if
           // this node registered an estate anyway, because that registration now does nothing.
           foundationalBuiltinSource: mothership.foundationalBuiltins,
+          // …and the deployment's GENERATIVE INTEGRATIONS, for the same reason one registry
+          // along. What this node's own registry holds is what its BUILD registers; what the
+          // pipeline builder offered — and therefore what a saved step's `generatorIds` mean —
+          // is what the MOTHERSHIP registers. `startLocal` warns at boot if this node registered
+          // integrations anyway, because that registration no longer decides any run.
+          binaryGeneratorSource: mothership.binaryGenerators,
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

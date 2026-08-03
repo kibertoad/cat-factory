@@ -147,15 +147,103 @@ The members are MODALITIES, not genres: music, speech and sound effects are all 
 what differs between them is the prompt while what differs between audio and video is the whole
 integration. A deployment telling a music generator from a speech generator says so in
 `mediaTypes` and the description. `mediaTypes` are validated against the declared modalities at
-BOOT: a recognised media type contradicting them is an error, an unrecognised one is not (the
-classifier is not a registry of every format that exists).
+BOOT: a media type CONTRADICTING them is an error, an unrecognised one is not (the classifier is
+not a registry of every format that exists).
+
+#### Why 3D is two members and image is one
+
+`3d-model` (one asset: a prop, a character, a part) and `3d-scene` (several assets composed, with
+a hierarchy and typically transforms, materials, cameras or lights) are separate members, and the
+asymmetry with `image` is the interesting part rather than an inconsistency.
+
+Three axes describe a deliverable, and the rule is that each fact lives on the axis that can
+actually carry it:
+
+| Fact                        | Where it lives | Why                                                |
+| --------------------------- | -------------- | -------------------------------------------------- |
+| What KIND of thing this is  | `modalities`   | Decides which generator may serve the step         |
+| What FORMAT it arrives in   | `mediaTypes`   | Providers differ; the consumer's importer is exact |
+| What it depicts / its style | the prompt     | Nothing declares it and nothing could check it     |
+
+A PNG and a JPEG are one modality with two formats, which is exactly what the second axis is for:
+`image` does not split, because a step that must have a PNG says `mediaTypes: ['image/png']` and
+admission checks it. A sprite and a background are one modality and one format, distinguished by
+the prompt. **An asset and a scene are the one case where neither of the lower axes can help**:
+they are the same modality by the old vocabulary AND the same format, because GLB, FBX, USDZ and
+`.blend` each carry either one object or a whole scene graph. There is no media type for "a scene",
+so a step that must deliver a level could be admitted against a prop generator with nothing
+anywhere able to notice: the same failure the format check was added for, one level up. Splitting
+the modality is the only axis left, which is precisely the bar a new member has to clear.
+
+That is also why the classifier answers a LIST. `modalitiesOfMediaType` returns BOTH 3D members for
+every 3D container, because that is the true statement about a `.glb`, and each consumer says what
+it does with a multi-member answer: the boot check passes when the sets INTERSECT (requiring every
+member would refuse a scene generator for declaring the only format it can emit), and a settled
+artifact's classification declines entirely (`modalityOfMediaType` answers null unless the answer is
+unambiguous); a guess about something that already exists is worse than an absence, and the step's
+own declaration is the only thing that ever knew which of the two was being made.
+
+### A step may also require exact FORMATS, and 3D is why
+
+`stepOptions.binaryOutput.mediaTypes` sits one notch under `modalities`: the concrete containers a
+step must deliver. It exists because the modality grain is exactly right for `image` and exactly
+wrong for 3D. PNG versus WebP is a genre question that belongs in a prompt, but GLB, USDZ and FBX
+are all one modality and none substitutes for another (a Godot importer takes the first, a
+RealityKit pipeline the second, an art pipeline the third) so a step whose mesh must load in the
+game could be admitted against an integration that cannot emit a loadable container, with the
+failure arriving at the end of a paid run as an asset nobody can open. `video` and `document` sit
+in between; `audio` genuinely does not need it.
+
+This axis is also what BOUNDS the one above it. `3d-model` and `3d-scene` are two modalities
+because no container tells them apart; `image` is one because a container tells PNG from JPEG. So a
+distinction a format can carry is stated here, and only a distinction no format can carry earns a
+modality member.
+
+Four rules, each of which is the reason a plausible alternative was rejected:
+
+- **Every entry is required, not any one of them.** A step delivering a GLB for the engine AND an
+  FBX an artist can open in Blender declares both, and both are checked. An "any of these will do"
+  reading was rejected because the agent is the party that names the container on the vendor call:
+  a requirement that leaves it a choice hands that decision to the party with the least basis for
+  making it. Declare the format you need, not the set you would accept.
+- **A format is never translated into a modality.** `modalityOfMediaType` recognises only the
+  formats the platform happens to know, so inferring one here would make the strength of a
+  requirement depend on our vocabulary: a step spelled with a brand-new container would silently
+  lose the coarse check its neighbour keeps. The two lists are independent statements and both are
+  enforced as written.
+- **Matching is EXACT, after ONE shared reduction.** Both declarations come through
+  `mediaTypeSchema`; a settled artifact's `contentType` is the model's own prose and goes through
+  `normalizeMediaType`: the same function, imported, never a second lowercasing. No synonyms are
+  mapped: `model/obj` and `application/x-tgif` are the same file and stay different values, because
+  a matcher that quietly accepted a near-neighbour would admit a GLB where an OBJ was required,
+  which is the failure the requirement exists to prevent.
+- **THREE outcomes, not two.** A generator declaring no `mediaTypes` has said "only my modality is
+  known" (a documented state, not an empty answer) so a requirement it cannot be judged against
+  is UNVERIFIABLE (`binaryFormatCoverage`), the run is admitted, and the gap is stated in the brief
+  and the picker. Refusing there would punish the honest declaration; calling it covered would be
+  the mirror mistake, a clean bill of health nobody issued on the surface that decides whether the
+  run may start. It is the same disposition `generatorsUnverified` takes on the settlement side.
+  With NOTHING selected there is nobody to be silent, so a format requirement is uncovered outright.
+
+Asset-versus-scene is deliberately NOT one of these: the container carries no such distinction, so
+it is a MODALITY (`3d-model` / `3d-scene`, above) and the format axis stays about the container
+alone. What an artifact DEPICTS remains a prompt fact, observable at the grain the report already
+records: separate assets arrive as separate entries with their own `entity`.
+
+One thing sits outside the schema on purpose. **What an integration CONSUMES** stays in `guidance`: a chain between two registered integrations
+(one's image feeding the other's image-to-3D path) is a fact about a PAIR, and the load-bearing
+half of it (how the handoff travels, an inline body versus a URL the vendor fetches from its own
+network) is exactly the part a modality-grained field could not carry. A structured field whose
+only actionable use needs an unstructured one beside it reads as a machine-checkable capability the
+platform never checks.
 
 ### Refusal, again in two layers, but against two different registries
 
 `binaryGeneratorSelectionIssues` is checked at admission alongside the storage-side one, and
 refuses under its OWN reason, `binary_output_generator_invalid`: `unknown_generator` (an id this
-build does not register) or `modality_uncovered` (a content type the step declares that nothing
-selected produces). Keeping it apart from `binary_output_service_invalid` is not tidiness: a
+build does not register), `modality_uncovered` (a content type the step declares that nothing
+selected produces) or `media_type_uncovered` (a format nothing that DECLARED its formats emits).
+Keeping it apart from `binary_output_service_invalid` is not tidiness: a
 storage id is fixed in the workspace catalog by whoever runs the board, an integration id is fixed
 in the deployment's own build, and one reason would send half the readers to the wrong place. It
 also runs with NO catalog seam wired, since the registry needs no I/O.
@@ -208,11 +296,109 @@ rides the step (`binaryOutputs`), and every read goes through the existing
 `FoundationalServiceCatalogService` methods (already conformance-covered and already in the
 `remote` RPC bucket) so both facades and mothership mode are correct by construction.
 
-The generative half is stronger still: the registry is in-process composition data with no
-repository behind it, so there is no method to route, nothing to allow-list, and a mothership-mode
-node reads the SAME definitions its own build carries. (That is also its one limitation: unlike
-the catalog's `builtin` tier, an integration a node's build does not have is simply not there,
-which is correct, since the node is where the agent's job body is assembled.)
+The generative half looked stronger still, and that reading was wrong. The registry is in-process
+composition data with no repository behind it, so there is no method to route and nothing to
+allow-list, but "a mothership-mode node reads the SAME definitions its own build carries" is only
+true while both processes ship the same build, which is the exact assumption the foundational
+`builtin` tier had already been fixed for. A local node one build behind is the NORMAL state of a
+mothership deployment.
+
+It is also the case CLAUDE.md's own rule names: **state a deployment registers in CODE and a RUN
+resolves is org state**, and it rides its own `/internal/*` read rather than a second copy. This
+registry shipped in violation of that rule, and a downstream deployment (stefka) hit it on its
+first generative integration.
+
+The symptom is louder than the estate's and worse targeted. The pipeline builder's picker is fed
+from the WORKSPACE SNAPSHOT, which the mothership serves; run admission resolves the same ids on
+the node. Register on the mothership alone and a human picks an integration from the product's own
+picker, and every run of that step is refused with `unknown_generator`: a message that names the
+step's configuration when the step's configuration is correct, leaving the half-wired deployment
+invisible and the operator editing something with nothing wrong with it. Register on the node
+alone and runs work while the step is unreachable through the builder. Registering on both is what
+the shape forced, and nothing detected the skew.
+
+So the set crosses the machine API, mirroring the estate file for file:
+
+- **`BinaryGeneratorSource`** (`kernel/src/ports/binary-generators.ts`): `views()` +
+  batched `documentsFor(ids)`, the two projections the registry already exposes, so a remote
+  implementation is a transport and never a second view of the data.
+- **`GET /internal/binary-generators`** + `POST .../contracts`, machine-token gated, no account
+  scope (one deployment-wide set with no owner), reading this process's OWN registry so a
+  satellite cannot answer for a satellite. Mounted on both facades; never 503s, because a
+  deployment that registers none is legitimately empty.
+- **`HttpBinaryGeneratorSource`**, which THROWS on every route to "we do not know the set":
+  transport error, refusal, the 404 of a mothership older than the node, an unreadable 200.
+- A mothership-mode node injects it as `binaryGeneratorSource` and does not consult its own
+  registry for any run; `startLocal` warns at boot naming any locally registered ids it will
+  ignore. The registry is still read for BOOT VALIDATION (the same code the mothership boots, and
+  a laptop is the cheapest place to learn a definition is malformed) and to SERVE the route when
+  this process is itself a mothership.
+
+### The disposition, which is where this stops being a copy of the estate
+
+The estate is ENRICHMENT: `resolveFoundationalContext` catches the throw and renders the outage
+into the injected context file. The generative set is also an ADMISSION input, and there both
+obvious dispositions are wrong. Softening to an empty set refuses every generator-selecting step
+with `unknown_generator` for the duration of an outage: the misattribution above, now caused by
+us. Admitting anyway dispatches a run with no brief and no credential, so the agent discovers at
+the end of a paid run that it had nothing to generate with.
+
+The answer is the third one: **fail admission with the outage's own code.** The `UnavailableError`
+is re-thrown rather than re-mapped, so the caller gets a 503-shaped, retryable refusal carrying
+`binary_generators_unreachable`, never `binary_output_generator_invalid`. It is the "absent ≠
+zero" rule applied for the first time to a DECISION surface rather than an enrichment one.
+
+The two BEST-EFFORT readers keep their own dispositions, and both are safe because each already
+defines its own absence: the dispatch brief injects nothing, which the trait guidance already
+reads as "the platform could not provide storage; do not attempt any upload; report it", and the
+declaration read-back records what it CAN and says the rest was unverified.
+
+That second one is worth stating precisely, because the obvious reading of "do not file an
+unchecked id as invented" is to write no report at all, and that is wrong in the other
+direction. A settled step's report is the evidence a human reads to decide whether the run's
+artifacts are real, and the generative question is one line of it: the artifacts themselves and
+the whole STORAGE verdict resolve against the workspace catalog, which an unreachable mothership
+says nothing about. Dropping them would lose a completed generation's record over a question
+nobody asked. So `BinaryOutputReport` carries `generatorsUnverified` as its own field, never an
+empty `unknownGenerators`, which otherwise means "every claimed id checked out", and the SPA
+renders it as its own warning line, counted by `binaryOutputHasWarnings` so a collapsed section
+cannot present an unchecked report as a clean one. It is the same three-state split as the
+picker's, at the other end of the run.
+
+Nothing named a run start's REFUSAL, though, and the generic 503 copy the SPA falls back to says
+"this deployment has not configured the capability this action needs", which is the exact
+misattribution this whole feature removes, reappearing one layer up and in ten languages, with
+the honest wording demoted to untranslated detail behind a disclosure. So user-reachable 503
+reasons get their own translated copy, keyed off a `UNAVAILABLE_REASONS` union in
+`@cat-factory/contracts` and an exhaustive `Record` in `usePipelineErrorToast`: the
+`CONFLICT_REASONS` pattern, applied to the status class that needed it next.
+
+### The picker is part of the fix, not a follow-up
+
+Routing only admission and the dispatch would have moved the drift one surface along rather than
+removing it: `snapshotBinaryGenerators` fed the picker from the container's own registry, so a
+node that stopped double-registering would offer an empty picker while its runs resolved fine. The
+snapshot projection therefore reads the SAME source, and carries `binaryGeneratorsUnavailable` for
+the state a list cannot express: an empty picker is a claim about the deployment's BUILD, and
+acting on it during an outage sends someone to the wrong repository. It never throws: a picker on
+one step type must not take a board load down.
+
+### Version floor
+
+Closing this creates the same floor the estate's did: a node on the new `local-server` needs a
+mothership new enough to answer the route, and an older one answers 404, which the client
+reports as an outage rather than as an empty set, so the failure is legible rather than silent.
+
+### What deliberately did NOT cross
+
+The other four registry projections in the snapshot (`customAgentKinds`, `agentKindVariants`,
+`customTaskTypes`, `initiativePresets`) stay per-process. An agent kind and an initiative preset
+carry FUNCTIONS (`systemPrompt`, `userPrompt`, `detect`), so serializing one would mean inventing a
+reduced wire form that is a second source of truth about what it DOES: the copy-drift this change
+removes. `CustomTaskType` is, contrary to the proposal's claim that this was "the second and last"
+transportable registry, pure data and could cross; it has not been asked to, and the trigger when
+it is should be the same one as here (someone hitting the drift on a real deployment) not
+symmetry for its own sake.
 
 ## How credentials reach the agent
 
@@ -312,6 +498,18 @@ counterpart here rather than a follow-up: the report's `unknownGenerators` and e
 register is the generative `unknownDeclaredServices`, and dropping it would re-open exactly the
 silent-loss hole that field exists to close), and the picker offers `generatorIds` + `modalities`
 with `binaryOutputPickIssues` mirroring `binary_output_generator_invalid` inline.
+
+The FORMAT requirement reaches both surfaces too, and asymmetrically on purpose. In the picker it
+is free TEXT, not a pick from the selection: the whole reason a step states a format is that the
+selected integrations might not cover it, so a control offering only what they declare could never
+express the requirement whose violation this feature exists to catch; what the selection declares
+is offered as a hint beside it, and an entry that is not a `type/subtype` is named rather than
+silently dropped. Its unverifiable line is styled apart from every refusal above it, because the
+step starts. On the REPORT the surface makes the one judgement admission could not: admission
+checked what the selected integrations CAN emit, and `undeliveredMediaTypes` checks what the run
+came back with; derived in code from the step's own two records, never read off the agent's prose,
+and computed only where there are artifacts to compare against (with none, the state line already
+says nothing was recorded, and a second sentence would state one fact as if it were two).
 
 The picker's generative half needed one thing the other two did not: the integrations live in the
 deployment's CODE, so there is no catalog read to filter. They ride the workspace snapshot as
