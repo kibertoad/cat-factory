@@ -1,5 +1,75 @@
 # @cat-factory/app
 
+## 0.202.0
+
+### Minor Changes
+
+- b05b8ff: Make a tutorial tour point at controls the user can actually see, reach by keyboard, and come
+  back to — and drift-guard the anchors it points at.
+
+  The tour runtime accepted any anchor with layout boxes, which an element scrolled out of a panel
+  or panned off the board still has: the highlight ring was drawn at off-screen coordinates while
+  the tooltip clamped to a viewport edge, so the user read "click this" beside nothing. Both
+  `task-card` steps hit it routinely, since they anchor whichever card is first in the DOM.
+  `needsReveal` now decides against `min(anchorArea, viewportArea)` — so a control bigger than the
+  viewport is judged on how much of the screen it fills — and the reveal picks its mechanism from
+  the container the DOM reports, moving the Vue Flow camera for a canvas node (clamped to the
+  current zoom) and scrolling everything else.
+
+  Tracking is event-driven once an anchor is held; only the hunt for a not-yet-mounted one polls
+  fast, bounded by the step's own wait budget. The backstop tick still re-resolves the selector, so
+  a step re-anchors when its control is replaced underneath it. Re-measures are coalesced to one
+  per frame, since capture-phase scroll fires for every container on the page and each measure
+  reads layout before writing it.
+
+  Accessibility: focus moves onto the card when a tour starts and on every Next/Back (it is
+  teleported to the end of `body`, so a keyboard user previously had to tab the whole page), but
+  never on a click-to-advance step, where the app is opening a modal that owns focus — that choice
+  is a tested predicate rather than an inline condition, because a call site that forgets it fails
+  silently. Step changes are announced through a dedicated `role="status"` region, because a dialog
+  whose contents are replaced wholesale is not reliably announced; the region outlives the steps
+  and its text lands a tick after the node, so the first step is announced rather than arriving
+  pre-populated and unread. Ring and spinner motion sit behind `motion-safe:`, and a reveal is
+  instant under `prefers-reduced-motion`. Deliberately still not a focus trap: half the catalog
+  asks the user to operate the real control behind the card.
+
+  Esc and Skip now leave a session-scoped resume point, so breaking off a tour no longer costs the
+  whole walkthrough; the prompt offers Resume in place of Start.
+
+  Finally, a spec pins every built-in step's anchor against the ids this layer actually renders.
+  Nothing else in the build checked them — a renamed `data-testid` passed typecheck, lint and the
+  full e2e suite — and because those steps carry no `when`, the miss counted as an unexpected skip
+  and put a permanent, false "you missed N steps" notice on the tour for every user who took it.
+
+## 0.201.1
+
+### Patch Changes
+
+- 4ac6960: Bump both runner images and take the dependency majors that are actually safe.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.85.0, `@cat-factory/deploy-harness` 0.2.9, with the three pinned tags synced):
+
+  - Executor: Pi `0.82.1 → 0.83.0`, Codex `0.145.0 → 0.146.0`, and the two lockstep Pi extensions `rpiv-todo`/`rpiv-web-tools` `2.1.0 → 2.3.1`. Claude Code stays at `2.1.220` — already the latest.
+  - Deploy: `kubectl v1.36.2 → v1.36.3`, `helm v4.2.2 → v4.2.3` (`kustomize v5.8.1` is already the latest). `backend/docs/local-kubernetes-setup-windows.md` mirrors these pins and moves with them.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest, plus the in-range `@types/node`/`hono` refresh the harnesses sat out of the previous sweep. With the executor harness now bumped, `hono` moves to `^4.12.33` across the whole workspace rather than being held back by the single-version constraint.
+
+  **Dependency majors** — taken: `markdown-it@14 → 15` (it now ships its own types, so `@types/markdown-it` is dropped; the instance type is a separate export from the constructor, which is the one call site that changed), `ioredis@5 → 6` (the optional multi-node Redis propagator + cache-invalidation bus), and `layered-loader@14 → 16`.
+
+  The layered-loader bump also **retires the deep-import workaround**. Keeping `ioredis` out of the Worker's module graph used to require importing `layered-loader/dist/lib/*.js` directly, because the package root eagerly re-exported its Redis surface; 15 then added an `exports` map that closed that hatch without offering a replacement. 16 states the boundary itself, so `@cat-factory/caching` imports the Redis-free `layered-loader/core` and only the Node facade's `REDIS_URL`-gated dynamic import reaches `layered-loader/redis`. **Never import the package root from `@cat-factory/caching` — it still carries both halves.** 16 also demotes `ioredis` to an optional peer (`^6`, pairing with the bump above) resolved lazily and only when a caller passes connection options instead of a client, which we never do.
+
+  Not taken: `typescript@6 → 7` for the frontend, because `vue-tsc` still loads `typescript/lib/tsc`, which the TS 7 Go port no longer exports — the frontend stays on 6 until vue-tsc supports it.
+
+- 4ac6960: Refresh the dependency tree — direct and transitive — to the latest versions that satisfy the `minimumReleaseAge` supply-chain gate, staying within each dependency's compatible major.
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.37 → ^7.0.47`, `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.2x → ^4.0.27`, `@ai-sdk/openai-compatible@^3.0.14 → ^3.0.20`, `@ai-sdk/provider@^4.0.3 → ^4.0.4`, `@ai-sdk/amazon-bedrock@^5.0.32 → ^5.0.40`.
+  - **Runtime deps**: `pg-boss@^12.26.3 → ^12.26.4`, `@aws-sdk/client-s3@^3.1095.0 → ^3.1101.0`, `@nuxtjs/i18n@^10.5.0 → ^10.6.0`, `@vueuse/core@^14.3.0 → ^14.4.0`.
+  - **Tooling**: `wrangler@^4.114.0 → ^4.118.0`, `@cloudflare/workers-types@^5.20260726.1 → ^5.20260801.1`, `oxlint@^1.75.0 → ^1.76.0`, `oxfmt@^0.60.0 → ^0.61.0`, `knip@^6.29.0 → ^6.31.0`, `turbo@^2.10.7 → ^2.10.8`, `vue-tsc@^3.3.8 → ^3.3.9`, `@playwright/test@^1.62.0 → ^1.62.1`, `@types/node@^26.1.1 → ^26.1.2`, `@types/pg@^8.20.0 → ^8.20.3`.
+
+  No `minimumReleaseAgeExclude` entries were added: every bump above already satisfies the gate. The `@cat-factory/executor-harness` and `@cat-factory/deploy-harness` deps are deliberately untouched, since they feed the published runner images and bumping them is a separate image-bumping change. `hono`'s declared range therefore stays at `^4.12.32` (sherif requires one version workspace-wide, and the harness declares it) while the lockfile still resolves 4.12.33 within that range.
+
+- Updated dependencies [874d684]
+  - @cat-factory/contracts@0.210.1
+
 ## 0.201.0
 
 ### Minor Changes

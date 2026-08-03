@@ -211,6 +211,10 @@ export {
   type LlmObservabilityServiceDependencies,
   type RecordLlmCallInput,
   type HarnessCallsRecordInput,
+  // Exported for the same reason `MAX_AGENT_CONTEXT_TOTAL_CHARS` below is: a transport that moves
+  // whole rows has to size its own limits against what capture can store, and deriving them from
+  // the one ceiling beats a second copy that drifts (see `MAX_TELEMETRY_READ_CHARS`).
+  MAX_BODY_CHARS,
   makeHarnessCallRecorder,
   makeInlineCallRecorder,
 } from './modules/observability/LlmObservabilityService.js'

@@ -258,11 +258,79 @@ several anchors (`task-card`, `task-resolve`, `run-step`) render once per board 
 ring can only sit on one of them, so requiring the click to land on that one left a user who
 clicked the card the copy asked for with no way forward — such a step renders no Next.
 
+**An anchor that is on the page but off SCREEN is revealed before it is pointed at.** An
+element scrolled out of a panel or panned off the board still HAS layout boxes, so it passes
+the visibility check — and the ring was drawn at off-screen coordinates while the tooltip
+clamped to a viewport edge, leaving the user reading "click this" beside nothing. The two
+`task-card` steps hit this hardest, since they anchor whichever card is first in the DOM.
+`needsReveal` (in `utils/tutorial.ts`, unit-tested) decides, measuring against
+`min(anchorArea, viewportArea)` so a control bigger than the viewport — `board-canvas`,
+`sidebar` — is judged on how much of the SCREEN it fills rather than on a fraction of its own
+area it could never clear. The mechanism then depends on the container: the board is a
+transform-panned Vue Flow canvas, where `scrollIntoView` does nothing and the camera has to
+move instead (clamped to the current zoom, or fitting one button would throw away the user's
+view of their board), and everything else is an ordinary scroll. `boardNodeIdFor` asks the
+DOM which it is, rather than keying off the target id — the same id is a canvas node on the
+board and a plain row in a panel. A reveal is attempted at most once per step, because both
+mechanisms are animations longer than a tracking tick.
+
+**Tracking is event-driven once an anchor is held**: only the hunt for a not-yet-mounted
+anchor polls fast, and it is bounded by the step's wait budget. Movement arrives from scroll
+(capture phase, so every scroll container counts), window resize, a `ResizeObserver` on the
+anchor, and the board camera — with a slow backstop tick that also RE-RESOLVES the selector,
+which is what lets a step re-anchor when its control is replaced underneath it. Every one of
+those re-measures is coalesced into one per animation frame, because `measure()` reads layout
+and then writes it, and capture-phase scroll fires for every container many times a frame.
+
+**Accessibility.** The card is a non-modal `dialog` and deliberately not a focus trap: half
+the catalog asks the user to operate the real control behind it. Focus moves onto the card
+when the tour starts and on every Next/Back — without that a keyboard user has to tab the
+whole page, since the overlay is teleported to the end of `body` — but never on a
+`target-click` advance, where the app is opening a modal that rightly autofocuses its own
+first field and the NEXT step is usually the one telling the user to type in it. That is a
+decision, so it is `shouldFocusCard` in the logic module with a test on it, not an `if` at
+the call site — it was an inline one, and a call site that forgot it is exactly how the card
+came to steal focus from the modal it had just opened.
+
+Step changes are announced through a separate `role="status"` region rather than `aria-live`
+on the card, because the card's entire contents are replaced per step and a wholesale subtree
+swap inside a dialog is not reliably announced. Two things about that region are load-bearing
+and easy to undo by accident: it lives OUTSIDE the overlay's `v-if` and its text lands a tick
+after the node does, because assistive tech announces a CHANGE to a live region and routinely
+says nothing about one that was inserted already populated — which would silently cost the
+first step of every tour. And it is the SOLE announcement: the card carries no
+`aria-describedby`, or the body would be read a second time on every focus move.
+
+Motion is honoured on both sides: `motion-safe:` on the ring transition and the searching
+spinner, and an instant scroll and camera move under `prefers-reduced-motion`.
+
+**Breaking off a tour leaves a resume point.** Esc and Skip are both easy to reach — one by
+accident, one to get the overlay out of the way for a moment — and what they discarded was
+the whole walkthrough. `stopTour()` records where it stopped and the prompt offers Resume
+instead of only Start. Session-only, like the cursor itself: within a session the board is
+still in the state the tour left it in, which is exactly what a DOM-anchored position needs.
+The store validates no index (it knows nothing about which tours exist), so the overlay
+clamps a resume that lands past the end of a script the gates have thinned since — and the
+runtime's own bail-out on an unresolvable tour passes `resumable: false`, or resuming would
+put the user straight back into the same dead overlay. There is ONE slot, and starting a tour
+clears only that tour's own entry: another tour's position is not this action's to discard,
+and it loses the slot soon enough — when this one is broken off past step 0.
+
 The catalog is the `tutorialTours` slot: first-party tours live in
 `modular/tutorial-tours.ts`, and a consumer deployment contributes its own through
 `registerAppModule` — they appear in the launch prompt beside the built-ins, gated per tour
 by its `when(gates)` predicate (the same reactive gates service the nav uses, filtered in
 `navSlotFilter`). Completion is persisted per tour id, so renaming an id resets its state.
+
+**A built-in tour's anchors are drift-guarded** (`tutorial-tours.spec.ts`), because they are
+the one thing about a tour that nothing else in the build checks: a renamed `data-testid`
+passes typecheck, lint and the whole e2e suite, and several anchors have no other consumer at
+all. The failure it prevents is worse than a dead step — those steps carry no `when`, so the
+miss counts as an unexpected skip and every user lands on a permanent "you missed N steps"
+notice, a false claim the tour goes on making in production with nothing red anywhere. The
+guard scans the layer for both ways an id is named: written onto an element, or declared as a
+`testId` field on a data contribution (the whole `nav-*` family reaches the DOM that way). It
+is scoped to the built-in catalog, since a consumer's tours anchor on its own layer.
 
 ## Extending the layer (consumer modules)
 

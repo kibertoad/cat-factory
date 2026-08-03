@@ -6127,6 +6127,7 @@
       "intro": "I tour guidati ti mostrano l’applicazione direttamente sullo schermo: evidenziano i controlli reali e ti dicono dove cliccare.",
       "start": "Inizia",
       "restart": "Ripeti",
+      "resume": "Riprendi",
       "completed": "Completato",
       "decline": "No grazie",
       "later": "Forse più tardi",
@@ -6139,6 +6140,7 @@
       "done": "Fine",
       "progress": "Passaggio {current} di {total}",
       "ariaLabel": "Passaggio del tutorial",
+      "announcement": "Passaggio {current} di {total}. {title}. {body}",
       "abridged": "1 passaggio è stato saltato: quel controllo non fa parte di questa board. | {count} passaggi sono stati saltati: quei controlli non fanno parte di questa board.",
       "searching": "Ricerca del controllo evidenziato...",
       "clickHint": "Clicca sul controllo evidenziato per continuare"

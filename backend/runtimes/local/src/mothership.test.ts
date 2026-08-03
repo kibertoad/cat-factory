@@ -281,6 +281,43 @@ describe('composeMothership', () => {
     }
   })
 
+  it('falls the three run-scoped sinks through to the mothership when local holds nothing', async () => {
+    // The READ-THROUGH half. A mothership-mode SPA shows the whole org's board, so most runs a
+    // developer opens were driven somewhere else entirely and have no local rows at all; a run
+    // this node DID drive loses its rows to the local prune. Both used to render as an empty
+    // panel indistinguishable from a run that spent nothing.
+    const seen: { url: string; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url, body: JSON.parse(String(init.body)) as unknown })
+      return new Response(JSON.stringify({ ok: true, value: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const { repos, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 't' }),
+    )
+    try {
+      expect(await repos.agentSearchQueryRepository.listByExecution('ws_1', 'exec_far')).toEqual([])
+      // It went to the DEDICATED read endpoint, not through the persistence proxy — the local-first
+      // bucket must never appear in the persistence registry, whose repositories resolve WHOLE
+      // (writes included).
+      expect(seen[0]!.url).toBe('https://m.test/internal/telemetry/read')
+      expect(seen[0]!.body).toMatchObject({
+        workspaceId: 'ws_1',
+        repo: 'agentSearchQueryRepository',
+        method: 'listPage',
+      })
+      // The two sinks that are deliberately never ingested have nothing upstream to read through
+      // to, so they stay local-only and cost no round trip.
+      const before = seen.length
+      expect(await repos.provisioningLogRepository.list('ws_1')).toEqual([])
+      expect(seen).toHaveLength(before)
+    } finally {
+      close()
+    }
+  })
+
   it('re-throws a DomainError envelope from the mothership (control flow preserved)', async () => {
     vi.stubGlobal(
       'fetch',

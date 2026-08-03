@@ -206,6 +206,24 @@ export {
   HttpMachineTelemetryClient,
   MachineTokenUnavailableError,
 } from './telemetry/machineTelemetry.js'
+export {
+  MAX_TELEMETRY_READ_CHARS,
+  MAX_TELEMETRY_READ_ROW_CHARS,
+  TELEMETRY_READ_METHODS,
+  TELEMETRY_READ_PAGE_SIZES,
+  TELEMETRY_READ_TOO_LARGE_CODE,
+  type HttpMachineTelemetryReadClientOptions,
+  type MachineTelemetryReadClient,
+  type TelemetryReadBound,
+  type TelemetryReadRepository,
+  type TelemetryReadRequest,
+  type TelemetryReadResponse,
+  type TelemetryReadResults,
+  HttpMachineTelemetryReadClient,
+  MachineTokenUnavailableForReadError,
+  TelemetryReadTooLargeError,
+  telemetryReadBodyCap,
+} from './telemetry/machineTelemetryRead.js'
 export { mountAuthGate } from './http/authGate.js'
 export {
   REQUEST_ID_HEADER,

@@ -242,12 +242,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `recordMany` is the batch append the mothership performs FOR a node, behind the dedicated
   // `POST /internal/telemetry/ingest` endpoint — not something a node invokes through the generic
   // persistence RPC. Allow-listing it would re-admit exactly the per-row remote write the local-
-  // first bucket exists to prevent, so it is classified with the rest of the sink.
+  // first bucket exists to prevent, so it is classified with the rest of the sink. `listRunPage`
+  // is the same story in the READ direction: it is served to a node by the dedicated
+  // `POST /internal/telemetry/read`, whose own closed table bounds it. Naming it here would put
+  // the whole repository on the remote registry, writes included.
   llmCallMetricRepository: {
     record: 'telemetry',
     recordMany: 'telemetry',
     latestChainTip: 'telemetry',
     listByExecution: 'telemetry',
+    listRunPage: 'telemetry',
     summarizeByExecution: 'telemetry',
     listPage: 'telemetry',
     get: 'telemetry',
@@ -257,6 +261,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     record: 'telemetry',
     recordMany: 'telemetry',
     listByExecution: 'telemetry',
+    listRunPage: 'telemetry',
     listIndex: 'telemetry',
     get: 'telemetry',
     countByExecution: 'telemetry',

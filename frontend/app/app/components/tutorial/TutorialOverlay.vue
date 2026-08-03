@@ -1,33 +1,53 @@
 <script setup lang="ts">
+import { usePreferredReducedMotion } from '@vueuse/core'
 import {
   computeCoachMarkLayout,
   DEFAULT_TARGET_WAIT_MS,
+  needsReveal,
+  TARGET_IDLE_INTERVAL_MS,
   TARGET_TRACK_INTERVAL_MS,
 } from '~/utils/tutorial'
 import type { CoachMarkLayout, TutorialRect, TutorialStep, TutorialTour } from '~/utils/tutorial'
 import {
+  boardNodeIdFor,
   isTargetClickAdvance,
   resolveSkip,
+  shouldFocusCard,
   stepTargetSelectors,
   unexpectedlySkippedSteps,
   waitBudgetMs,
 } from './TutorialOverlay.logic'
-import type { TutorialDirection } from './TutorialOverlay.logic'
+import type { TutorialAdvanceCause, TutorialDirection } from './TutorialOverlay.logic'
 
 // The one shared tour runtime: resolves the running tour from the `tutorialTours` slot,
 // anchors a highlight ring + tooltip to the current step's `data-testid`, and advances
 // on Next or on a real click on the highlighted control. Mounted (from `pages/index.vue`)
 // only while `tutorial.touring`, so all the DOM tracking below exists only mid-tour.
 //
-// Anchor tracking is a poll, not a one-shot query: board controls move (canvas pan/zoom,
-// panels opening) and appear asynchronously (a step can point INTO the modal the previous
-// step's click opens), so every tick re-queries and re-measures. A target that never
-// appears within the step's wait SKIPS the step — controls are RBAC/tier/deployment
-// dependent, and a tour is a set of opportunities, not a fixed script. Everything that
-// DECIDES rather than measures lives in `TutorialOverlay.logic.ts`, which is unit-tested.
+// Anchor tracking is not a one-shot query: board controls move (canvas pan/zoom, panels
+// opening) and appear asynchronously (a step can point INTO the modal the previous step's
+// click opens). So the runtime HUNTS for a not-yet-mounted anchor on a fast poll bounded by
+// the step's wait budget, and then TRACKS the one it found off events (scroll, resize,
+// element resize, board camera) with a slow backstop tick behind them. A target that never
+// appears within the wait SKIPS the step — controls are RBAC/tier/deployment dependent, and
+// a tour is a set of opportunities, not a fixed script.
+//
+// An anchor that is on the page but off SCREEN is revealed before it is pointed at, by
+// whichever mechanism its container understands: the board is a transform-panned canvas
+// (move the camera), everything else is an ordinary scroll container (`scrollIntoView`).
+//
+// Everything that DECIDES rather than measures lives in `TutorialOverlay.logic.ts`, and the
+// geometry in `utils/tutorial.ts`; both are unit-tested, the SFC is not.
 const { t } = useI18n()
 const tutorial = useTutorialStore()
 const { tours } = useTutorialTours()
+const { fitView, viewport } = useBoardFlow()
+// Reduced motion is honoured in BOTH directions here: the CSS below drops the ring's transition
+// and the searching spinner behind `motion-safe:`, and this drives the JS half — an instant
+// scroll and an instant camera move, since a reveal is involuntary motion the user did not ask
+// for and is exactly what the preference is about.
+const reducedMotion = usePreferredReducedMotion()
+const motionMs = computed(() => (reducedMotion.value === 'reduce' ? 0 : 250))
 
 /**
  * The running tour's script, resolved ONCE from the slot when the tour starts and then HELD
@@ -58,18 +78,40 @@ const step = computed<TutorialStep | null>(() => tour.value?.steps[tutorial.step
 const total = computed(() => tour.value?.steps.length ?? 0)
 const isLast = computed(() => tour.value !== null && tutorial.stepIndex >= total.value - 1)
 
-// The tour could not be resolved when it started (a stale persisted id, or a tour this board
-// is not offered at all) or the cursor ran past the end: end it instead of rendering a dead
-// overlay. Since the script is held, this can no longer fire because a gate flipped mid-tour.
+// The tour could not be resolved when it started (a stale persisted id, or a tour this board is
+// not offered at all): end it instead of rendering a dead overlay, and do NOT leave a resume
+// point behind — it is a position in a script that could not be loaded, so offering it again
+// would put the user straight back here. Since the script is held, this can no longer fire
+// because a gate flipped mid-tour.
+//
+// A resolvable tour whose CURSOR is out of range is a different fact with a different fix: it
+// means a resume landed past the end of a script the gates have thinned since. Rewind to the
+// start rather than ending, or breaking off a tour would cost the user the tour itself.
 watch(
   () => [tour.value, step.value] as const,
   ([tr, st]) => {
-    if (tutorial.touring && (!tr || !st)) tutorial.stopTour()
+    if (!tutorial.touring) return
+    if (!tr) tutorial.stopTour({ resumable: false })
+    else if (!st) tutorial.setStepIndex(0)
   },
   { immediate: true },
 )
 
 const targetRect = ref<TutorialRect | null>(null)
+/**
+ * The resolved anchor, held between ticks. Event-driven re-measures (scroll, resize, canvas
+ * pan) reuse it rather than re-running the selector, and the slow backstop tick re-resolves —
+ * so a step still re-anchors when its control is replaced underneath it, without paying for a
+ * document query several times a second for the whole length of the tour.
+ */
+const anchorEl = ref<HTMLElement | null>(null)
+/**
+ * The step index whose anchor has already been brought into view. A reveal is attempted at
+ * most ONCE per step: `fitView` and `scrollIntoView` are animations that take longer than a
+ * tracking tick, so re-deciding each tick would re-issue the move against a viewport still
+ * mid-flight and fight the user the moment they panned away deliberately.
+ */
+const revealedForStep = ref<number | null>(null)
 const cardEl = ref<HTMLElement | null>(null)
 const layout = ref<CoachMarkLayout>({ top: -9999, left: -9999, placement: 'center' })
 
@@ -92,21 +134,71 @@ const unexpectedSkips = computed(() =>
 )
 const abridged = computed(() => unexpectedSkips.value.length > 0)
 
-const viewport = () => ({ width: window.innerWidth, height: window.innerHeight })
+/**
+ * The browser viewport. Named apart from Vue Flow's `viewport` (the board CAMERA) above —
+ * and not `screen`, which would shadow the DOM global of that name for the whole component.
+ */
+const screenSize = () => ({ width: window.innerWidth, height: window.innerHeight })
 /** The tooltip's own size, or a sensible guess before it has rendered once. */
 const cardSize = () => ({
   width: cardEl.value?.offsetWidth ?? 320,
   height: cardEl.value?.offsetHeight ?? 180,
 })
 
+/** Is this element still in the document and still rendering a box? */
+function isUsable(el: HTMLElement | null): el is HTMLElement {
+  // `getClientRects().length` distinguishes a mounted-but-hidden control (display:none
+  // drawer item) from a visible one; pointing at an invisible control helps nobody.
+  return el !== null && el.isConnected && el.getClientRects().length > 0
+}
+
 function queryTarget(s: TutorialStep): HTMLElement | null {
   for (const selector of stepTargetSelectors(s)) {
     const el = document.querySelector<HTMLElement>(selector)
-    // `getClientRects().length` distinguishes a mounted-but-hidden control (display:none
-    // drawer item) from a visible one; pointing at an invisible control helps nobody.
-    if (el && el.getClientRects().length > 0) return el
+    if (isUsable(el)) return el
   }
   return null
+}
+
+/**
+ * The anchor for this step. Reuses the held element unless `requery` is set or it has gone
+ * stale (unmounted, or hidden) — the two cases where it no longer describes anything on screen.
+ */
+function resolveAnchor(s: TutorialStep, requery: boolean): HTMLElement | null {
+  if (!requery && isUsable(anchorEl.value)) return anchorEl.value
+  anchorEl.value = queryTarget(s)
+  return anchorEl.value
+}
+
+/**
+ * Bring an off-screen anchor into view, by whichever mechanism its container understands.
+ *
+ * The board is a transform-panned Vue Flow canvas, so a card that is off screen is not
+ * SCROLLED away and `scrollIntoView` on it does nothing at all; the camera has to move
+ * instead. Everything else — a panel's scroll container, a long modal body, the sidebar —
+ * is an ordinary scroll and `scrollIntoView` is exactly right.
+ *
+ * The camera move is clamped to the CURRENT zoom (`fitView` would otherwise zoom to fit a
+ * single small node, throwing away the user's own view of their board to point at a button).
+ */
+function revealAnchor(el: HTMLElement) {
+  const nodeId = boardNodeIdFor(el)
+  if (nodeId !== null) {
+    const zoom = viewport.value.zoom
+    fitView({
+      nodes: [nodeId],
+      padding: 0.3,
+      minZoom: zoom,
+      maxZoom: zoom,
+      duration: motionMs.value,
+    })
+    return
+  }
+  el.scrollIntoView({
+    behavior: motionMs.value === 0 ? 'auto' : 'smooth',
+    block: 'center',
+    inline: 'center',
+  })
 }
 
 /** Give up on a step whose anchor never appeared, continuing the user's own direction. */
@@ -117,28 +209,44 @@ function skipMissingStep(s: TutorialStep) {
   else tutorial.setStepIndex(outcome.index)
 }
 
-function measure() {
+function measure(options?: { requery?: boolean }) {
   const s = step.value
   if (!s) return
   if (!s.target) {
     targetRect.value = null
   } else {
-    const el = queryTarget(s)
+    const el = resolveAnchor(s, options?.requery === true)
     if (!el) {
       targetRect.value = null
       // Centered while searching: the card must not sit at the PREVIOUS step's anchor —
       // nor at its off-screen initial position — pointing at nothing.
-      layout.value = computeCoachMarkLayout(null, cardSize(), viewport())
+      layout.value = computeCoachMarkLayout(null, cardSize(), screenSize())
       if (performance.now() >= searchDeadline.value) skipMissingStep(s)
       return
     }
     const r = el.getBoundingClientRect()
-    targetRect.value = { top: r.top, left: r.left, width: r.width, height: r.height }
+    const rect = { top: r.top, left: r.left, width: r.width, height: r.height }
+    // Reveal BEFORE publishing the rect, so the ring and tooltip are placed from the
+    // post-move position on the next tick rather than flashing at the off-screen one.
+    if (revealedForStep.value !== tutorial.stepIndex && needsReveal(rect, screenSize())) {
+      revealedForStep.value = tutorial.stepIndex
+      revealAnchor(el)
+      // Centre the card for the same reason the searching branch above does, and it is the
+      // same failure: returning without touching `layout` would render THIS step's copy at
+      // the PREVIOUS step's coordinates, pointing at a control the user has already left.
+      // Usually one frame, since the move emits scroll/camera events that re-enter here —
+      // but a reveal that moves nothing (a `fitView` over a node the canvas has dropped)
+      // emits none at all, and then it is the whole backstop tick.
+      layout.value = computeCoachMarkLayout(null, cardSize(), screenSize())
+      return
+    }
+    revealedForStep.value = tutorial.stepIndex
+    targetRect.value = rect
   }
   layout.value = computeCoachMarkLayout(
     s.target ? targetRect.value : null,
     cardSize(),
-    viewport(),
+    screenSize(),
     s.placement,
   )
 }
@@ -149,19 +257,42 @@ function measure() {
 watch(step, async (s) => {
   searchDeadline.value = performance.now() + (s ? waitBudgetMs(s) : DEFAULT_TARGET_WAIT_MS)
   targetRect.value = null
+  anchorEl.value = null
+  revealedForStep.value = null
   await nextTick()
-  measure()
+  measure({ requery: true })
 })
 
-function advance() {
+/**
+ * Put focus on the tooltip so the tour's own controls are one Tab away. WHETHER to do that is
+ * `shouldFocusCard`'s call, in the logic module, so it is pinned by a test — this function is
+ * only the DOM half. `preventScroll` because the card is already placed.
+ */
+async function focusCard(cause: TutorialAdvanceCause) {
+  if (!shouldFocusCard(cause)) return
+  await nextTick()
+  cardEl.value?.focus({ preventScroll: true })
+}
+
+/**
+ * Move the cursor forward. The cause is REQUIRED rather than defaulted: it decides whether
+ * focus moves, and a new call site inheriting a default silently is exactly how a
+ * `target-click` advance came to steal focus from the modal it had just opened.
+ */
+function advance(cause: TutorialAdvanceCause) {
   direction.value = 'forward'
-  if (isLast.value) tutorial.completeTour()
-  else tutorial.setStepIndex(tutorial.stepIndex + 1)
+  if (isLast.value) {
+    tutorial.completeTour()
+    return
+  }
+  tutorial.setStepIndex(tutorial.stepIndex + 1)
+  void focusCard(cause)
 }
 
 function back() {
   direction.value = 'back'
   tutorial.setStepIndex(tutorial.stepIndex - 1)
+  void focusCard('nav-control')
 }
 
 // "Now click this" steps: watch real clicks (capture phase, so a stopPropagation inside a
@@ -169,30 +300,129 @@ function back() {
 // the real handler open its modal/submit its form before the tour moves its anchor.
 function onDocumentClick(event: MouseEvent) {
   if (isTargetClickAdvance(step.value, event.target)) {
-    window.setTimeout(advance, 0)
+    window.setTimeout(() => advance('target-click'), 0)
   }
 }
 
-/** Esc ends the tour, matching every other dismissible surface in the app. */
+/**
+ * Esc ends the tour, matching every other dismissible surface in the app — and, like Skip,
+ * leaves a resume point, because it is by far the easiest key to hit by accident and the
+ * position it discards is the entire walkthrough.
+ */
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') tutorial.stopTour()
 }
 
-let trackTimer: ReturnType<typeof setInterval> | undefined
+/**
+ * What a screen reader should be told about the current step.
+ *
+ * A dedicated `role="status"` region rather than `aria-live` on the card itself: the card is a
+ * `dialog` whose entire contents are replaced per step, and assistive tech does not reliably
+ * announce a wholesale subtree replacement inside a dialog. One key with placeholders, not
+ * concatenated fragments, per the i18n rules.
+ *
+ * This is also the SOLE announcement of the step — the card carries no `aria-describedby`,
+ * which would have the body read a second time on every focus move.
+ */
+const announcementText = computed(() =>
+  step.value
+    ? t('tutorial.overlay.announcement', {
+        current: tutorial.stepIndex + 1,
+        total: total.value,
+        title: t(step.value.titleKey),
+        body: t(step.value.bodyKey, step.value.bodyParams ?? {}),
+      })
+    : '',
+)
+
+/**
+ * What the live region actually holds, lagging {@link announcementText} by a tick.
+ *
+ * Assistive tech announces a CHANGE to a live region, and routinely says nothing at all about
+ * one that was INSERTED already populated — the same unreliability that moved this out of the
+ * card in the first place. The overlay mounts with a step already resolved, so a region bound
+ * straight to the text above would arrive full and go unread, silently costing the first step
+ * of every tour. Publishing a tick later guarantees the empty region is in the DOM first, so
+ * the text is always a change to an existing node.
+ */
+const announcement = ref('')
+watch(
+  announcementText,
+  async (text) => {
+    await nextTick()
+    announcement.value = text
+  },
+  { immediate: true },
+)
+
+// Anchor tracking is EVENT-DRIVEN once an anchor is held, with a slow backstop tick behind it;
+// only the hunt for a not-yet-mounted anchor polls fast, and that is bounded by the step's own
+// wait budget. The events below are the ways a control that is already on screen can move:
+// something scrolled (capture phase, so it catches every scroll container, not just the
+// window), the window resized, the control itself resized, or the board camera panned/zoomed.
+/**
+ * Re-measure from the held anchor — the cheap path every motion event takes — coalesced to at
+ * most once per frame.
+ *
+ * `measure()` READS layout (`getBoundingClientRect`, the card's offset size) and then WRITES
+ * it (the ring and tooltip styles), so running it per event thrashes layout. Capture-phase
+ * scroll is the one that makes this bite: it fires for every scroll container on the page and
+ * many times a frame under a momentum scroll, where the poll it replaced ran every 150 ms. A
+ * frame is also the most the user can see, so nothing is lost by waiting for one.
+ */
+let frameHandle = 0
+function remeasure() {
+  if (typeof requestAnimationFrame === 'undefined') {
+    measure()
+    return
+  }
+  if (frameHandle !== 0) return
+  frameHandle = requestAnimationFrame(() => {
+    frameHandle = 0
+    measure()
+  })
+}
+
+let trackTimer: ReturnType<typeof setTimeout> | undefined
+/** Re-resolve the selector on a cadence set by whether we currently HAVE an anchor. */
+function scheduleTrack() {
+  const delay = targetRect.value ? TARGET_IDLE_INTERVAL_MS : TARGET_TRACK_INTERVAL_MS
+  trackTimer = setTimeout(() => {
+    measure({ requery: true })
+    scheduleTrack()
+  }, delay)
+}
+
+/** Follows the held anchor's own size changes (a card growing as its run progresses). */
+const anchorResize =
+  typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => remeasure())
+watch(anchorEl, (el) => {
+  anchorResize?.disconnect()
+  if (el) anchorResize?.observe(el)
+})
+
+// The board camera: a pan or zoom moves every canvas anchor without any scroll event at all.
+watch(() => [viewport.value.x, viewport.value.y, viewport.value.zoom], remeasure)
+
 onMounted(() => {
   const s = step.value
   searchDeadline.value = performance.now() + (s ? waitBudgetMs(s) : DEFAULT_TARGET_WAIT_MS)
   document.addEventListener('click', onDocumentClick, true)
   document.addEventListener('keydown', onKeydown)
-  window.addEventListener('resize', measure)
-  trackTimer = setInterval(measure, TARGET_TRACK_INTERVAL_MS)
-  measure()
+  document.addEventListener('scroll', remeasure, { capture: true, passive: true })
+  window.addEventListener('resize', remeasure)
+  scheduleTrack()
+  measure({ requery: true })
+  void focusCard('tour-start')
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick, true)
   document.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('resize', measure)
-  if (trackTimer !== undefined) clearInterval(trackTimer)
+  document.removeEventListener('scroll', remeasure, true)
+  window.removeEventListener('resize', remeasure)
+  anchorResize?.disconnect()
+  if (trackTimer !== undefined) clearTimeout(trackTimer)
+  if (frameHandle !== 0) cancelAnimationFrame(frameHandle)
 })
 </script>
 
@@ -200,10 +430,20 @@ onUnmounted(() => {
   <!-- Teleported so board/panel stacking contexts can't clip the marks; z-[70] sits above
        the app's modals (z-50s), since steps legitimately point INTO an open modal. -->
   <Teleport to="body">
+    <!-- The step-change announcement. Visually hidden, and outside BOTH the dialog and the
+         `v-if` below, so the live region is a stable node whose TEXT changes for the whole
+         life of the overlay — never a subtree replaced wholesale, and never one inserted with
+         its content already in place. Assistive tech announces neither of those reliably. The
+         text itself also lands a tick after the node does; see `announcement`. -->
+    <div class="sr-only" role="status" aria-live="polite" data-testid="tutorial-announcement">
+      {{ announcement }}
+    </div>
     <div v-if="step" data-testid="tutorial-overlay">
+      <!-- `motion-safe:` on the ring's transition: it slides between controls on every step,
+           which is exactly the involuntary movement `prefers-reduced-motion` is about. -->
       <div
         v-if="targetRect"
-        class="ring-primary-400 outline-primary-400/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 transition-all duration-150"
+        class="ring-primary-400 outline-primary-400/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 motion-safe:transition-all motion-safe:duration-150"
         :style="{
           top: `${targetRect.top - 4}px`,
           left: `${targetRect.left - 4}px`,
@@ -217,12 +457,19 @@ onUnmounted(() => {
            layer, which sets `body { pointer-events: none }` (leaving this card inert) and
            dismisses on a document-level pointerdown outside its own content (so a press on
            this card would close the user's half-filled form instead of pressing a button). -->
+      <!-- `tabindex="-1"` so `focusCard()` can put focus here when the tour starts and on every
+           Next/Back — without it a keyboard user has to tab the whole page to reach Next, since
+           this is teleported to the end of `body`. No `aria-modal`: a coach mark is NOT modal,
+           and half the catalog asks the user to operate the real control behind it. No
+           `aria-describedby` on the body either: the live region above already reads the body
+           as part of a complete announcement, and pointing at it here would have every focus
+           move read it a second time. -->
       <div
         ref="cardEl"
         role="dialog"
-        aria-live="polite"
+        tabindex="-1"
         :aria-label="t('tutorial.overlay.ariaLabel')"
-        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl"
+        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         :style="{ top: `${layout.top}px`, left: `${layout.left}px` }"
         data-testid="tutorial-tooltip"
         @pointerdown.stop
@@ -236,13 +483,15 @@ onUnmounted(() => {
         <!-- `bodyParams` carries the fixed proper nouns a step names (a repository slug),
              which live in the catalog's `{named}` placeholders rather than in nine
              translations of the same literal. Absent for most steps. -->
-        <p class="text-sm text-slate-300">{{ t(step.bodyKey, step.bodyParams ?? {}) }}</p>
+        <p class="text-sm text-slate-300">
+          {{ t(step.bodyKey, step.bodyParams ?? {}) }}
+        </p>
         <p
           v-if="searching"
           class="mt-2 flex items-center gap-1.5 text-xs text-slate-400"
           data-testid="tutorial-searching"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin" />
+          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 motion-safe:animate-spin" />
           {{ t('tutorial.overlay.searching') }}
         </p>
         <p
@@ -295,7 +544,7 @@ onUnmounted(() => {
               size="xs"
               color="primary"
               data-testid="tutorial-next"
-              @click="advance()"
+              @click="advance('nav-control')"
             >
               {{ isLast ? t('tutorial.overlay.done') : t('tutorial.overlay.next') }}
             </UButton>

@@ -18,6 +18,22 @@ const open = computed({
 // Only an unanswered prompt offers the persistent "No thanks"; once a decision exists this
 // is just a picker, and the only dismissal left is a plain close.
 const undecided = computed(() => tutorial.decision === null)
+
+// A tour broken off mid-way (Esc, or Skip to get the overlay out of the way) offers to RESUME
+// where it stopped rather than only to start over. Session-scoped, so this is only ever offered
+// while the board is still in the state the tour left it in — see the store.
+const isResumable = (tourId: string) => tutorial.interruptedAt(tourId) !== null
+
+function launch(tourId: string) {
+  if (isResumable(tourId)) tutorial.resumeTour(tourId)
+  else tutorial.startTour(tourId)
+}
+
+/** Resume beats Completed: a tour taken again and broken off is offered where it stopped. */
+function launchLabel(tourId: string): string {
+  if (isResumable(tourId)) return t('tutorial.prompt.resume')
+  return tutorial.isCompleted(tourId) ? t('tutorial.prompt.restart') : t('tutorial.prompt.start')
+}
 </script>
 
 <template>
@@ -57,15 +73,11 @@ const undecided = computed(() => tutorial.decision === null)
             <UButton
               size="sm"
               color="primary"
-              :variant="tutorial.isCompleted(tour.id) ? 'soft' : 'solid'"
+              :variant="tutorial.isCompleted(tour.id) && !isResumable(tour.id) ? 'soft' : 'solid'"
               :data-testid="`tutorial-start-${tour.id}`"
-              @click="tutorial.startTour(tour.id)"
+              @click="launch(tour.id)"
             >
-              {{
-                tutorial.isCompleted(tour.id)
-                  ? t('tutorial.prompt.restart')
-                  : t('tutorial.prompt.start')
-              }}
+              {{ launchLabel(tour.id) }}
             </UButton>
           </li>
         </ul>

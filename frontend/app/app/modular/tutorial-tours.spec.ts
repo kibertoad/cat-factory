@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import en from '../../i18n/locales/en.json'
 import { TUTORIAL_TOURS, tutorialToursModule } from '~/modular/tutorial-tours'
@@ -51,6 +53,72 @@ function lookupKey(key: string): unknown {
     .reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en)
 }
 
+/**
+ * The layer's srcDir. Anchored on the package directory rather than on `import.meta.url`,
+ * which under the happy-dom test environment is not a `file:` URL at all.
+ */
+const SRC_DIR = join(process.cwd(), 'app')
+
+/**
+ * The two ways this layer names a test id, both of which a tour may legitimately anchor on.
+ *
+ *  - written straight onto an element, in either quoting style, including the bound form
+ *    (`:data-testid="'foo'"`);
+ *  - declared as a `testId` field on a DATA contribution — the nav catalog's items carry one
+ *    and `SideBar.vue` renders it as `:data-testid="item.testId"`, which is how the whole
+ *    `nav-*` family (`nav-add-from-repo` among them) reaches the DOM.
+ *
+ * A template literal (`` `tutorial-start-${id}` ``) matches neither, which is correct: that is
+ * not an id, it is a family of them, and no built-in step anchors on one.
+ */
+const ID_PATTERNS = [
+  /data-testid\s*=\s*(?:"([^"]*)"|'([^']*)')/g,
+  /\btestId\s*:\s*(?:'([^']*)'|"([^"]*)")/g,
+]
+
+/**
+ * Every `.vue`/`.ts` file the layer SHIPS. Test sources are excluded in both spellings: an id
+ * that exists only in a spec or a fixture is not rendered by anything, so counting one would
+ * let the guard pass on a tour anchored to a control that no longer exists.
+ */
+function walk(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return walk(path)
+    return /\.(vue|ts)$/.test(entry.name) && !/\.(spec|test)\.ts$/.test(entry.name) ? [path] : []
+  })
+}
+
+/** Every anchor the built-in catalog declares, labelled with the step that declares it. */
+function declaredAnchors(): { label: string; id: string }[] {
+  const out: { label: string; id: string }[] = []
+  for (const tour of TUTORIAL_TOURS) {
+    for (const s of tour.steps) {
+      for (const id of [s.target, ...(s.altTargets ?? [])]) {
+        if (id !== undefined) out.push({ label: `${tour.id}/${s.id}: ${id}`, id })
+      }
+    }
+  }
+  return out
+}
+
+/** Every static test id this layer actually renders. */
+function renderedTestIds(): Set<string> {
+  const ids = new Set<string>()
+  for (const file of walk(SRC_DIR)) {
+    // The catalog itself declares the ids under test; counting it would make this vacuous.
+    if (file.endsWith(join('modular', 'tutorial-tours.ts'))) continue
+    const source = readFileSync(file, 'utf8')
+    for (const pattern of ID_PATTERNS) {
+      for (const match of source.matchAll(pattern)) {
+        const raw = (match[1] ?? match[2] ?? '').trim().replace(/^['"]|['"]$/g, '')
+        if (isSafeTargetId(raw)) ids.add(raw)
+      }
+    }
+  }
+  return ids
+}
+
 describe('the built-in tutorial tour catalog', () => {
   it('has unique tour ids and unique step ids within each tour', () => {
     const tourIds = TUTORIAL_TOURS.map((t) => t.id)
@@ -92,17 +160,36 @@ describe('the built-in tutorial tour catalog', () => {
   })
 
   it('names plain data-testid values as targets, never selectors', () => {
-    for (const tour of TUTORIAL_TOURS) {
-      for (const s of tour.steps) {
-        for (const target of [s.target, ...(s.altTargets ?? [])]) {
-          if (target === undefined) continue
-          // Asserted through the runtime's OWN guard, not a copy of its regex: the overlay
-          // drops an id this rejects, so a built-in tour that tripped it would silently
-          // lose the step rather than fail here.
-          expect(isSafeTargetId(target), `${tour.id}/${s.id}: ${target}`).toBe(true)
-        }
-      }
+    for (const anchor of declaredAnchors()) {
+      // Asserted through the runtime's OWN guard, not a copy of its regex: the overlay
+      // drops an id this rejects, so a built-in tour that tripped it would silently
+      // lose the step rather than fail here.
+      expect(isSafeTargetId(anchor.id), anchor.label).toBe(true)
     }
+  })
+
+  it('anchors every step on a data-testid this layer actually renders', () => {
+    // The drift guard. A tour's anchors are the ONE thing about it that nothing else in the
+    // build checks: a renamed `data-testid` passes typecheck, lint and the whole e2e suite,
+    // and five of the ids below (`nav-add-from-repo`, `add-service-repo-search`,
+    // `add-service-submit`, `pipeline-picker-trigger`, `inspector-merge-pr`) have no other
+    // consumer at all — the tour is the only thing that names them.
+    //
+    // The failure it prevents is worse than a dead step. None of those steps carries a `when`,
+    // so `unexpectedlySkippedSteps` counts the miss and EVERY user who takes that tour lands on
+    // a permanent "you missed N steps" notice: the tour would go on making a false claim about
+    // itself, in production, with nothing red anywhere.
+    //
+    // Scoped to the built-in catalog on purpose — a consumer deployment's tours anchor on
+    // controls that live in ITS layer, which this repo cannot see and must not fail over.
+    const rendered = renderedTestIds()
+    // Guard the guard: a scan that silently matched nothing would pass every assertion below.
+    expect(rendered.size).toBeGreaterThan(100)
+
+    const missing = declaredAnchors()
+      .filter((anchor) => !rendered.has(anchor.id))
+      .map((anchor) => anchor.label)
+    expect(missing).toEqual([])
   })
 
   it('is contributed to the tutorialTours slot by the module', () => {

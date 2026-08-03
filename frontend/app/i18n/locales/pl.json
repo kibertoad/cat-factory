@@ -6115,6 +6115,7 @@
       "intro": "Interaktywne przewodniki pokazują aplikację bezpośrednio na tym ekranie: podświetlają prawdziwe elementy interfejsu i mówią, co kliknąć.",
       "start": "Rozpocznij",
       "restart": "Powtórz",
+      "resume": "Wznów",
       "completed": "Ukończono",
       "decline": "Nie, dziękuję",
       "later": "Może później",
@@ -6127,6 +6128,7 @@
       "done": "Zakończ",
       "progress": "Krok {current} z {total}",
       "ariaLabel": "Krok samouczka",
+      "announcement": "Krok {current} z {total}. {title}. {body}",
       "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
       "searching": "Szukanie podświetlonego elementu...",
       "clickHint": "Kliknij podświetlony element, aby kontynuować"
