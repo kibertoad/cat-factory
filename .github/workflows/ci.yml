@@ -1278,7 +1278,15 @@ jobs:
       - name: Test the Go SDK
         working-directory: sdk/go
         run: |
-          gofmt -l . | tee /dev/stderr | (! read)
+          # `gofmt -l` lists what it WOULD reformat and exits 0 either way, so the emptiness of
+          # its output is the assertion. Generated Go is emitted already-formatted (the emitter
+          # reproduces gofmt's column alignment rather than shelling out to it), so a hit here
+          # means the emitter drifted from what gofmt does.
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would reformat: $unformatted"
+            exit 1
+          fi
           go vet ./...
           go test ./...
 
