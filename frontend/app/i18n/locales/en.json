@@ -4208,7 +4208,17 @@
       "consensusGroupsActive": "This step runs the selected group. Deselect every group to configure participants here instead.",
       "consensusGroupAlways": "always",
       "variantLabel": "Prompt variant",
-      "variantShipped": "Shipped prompt"
+      "variantShipped": "Shipped prompt",
+      "binaryOutputStorage": "Store through",
+      "binaryOutputContext": "Generation context",
+      "binaryOutputPlaceholder": "Pick a storage service",
+      "binaryOutputContextPlaceholder": "Optional: services that scope the generation",
+      "binaryOutputNeedsPick": "A step that generates binary outputs has no storage service selected. Pick one before saving.",
+      "binaryOutputNoStorage": "No service in this board's catalog declares the {capability} capability. Register one, or add the capability to the service you meant, under foundational services.",
+      "binaryOutputMissing": "This storage service is no longer in the catalog; pick another.",
+      "binaryOutputNotStorage": "This service no longer declares the {capability} capability, so runs will be refused; pick another.",
+      "binaryOutputContextMissing": "These context services are no longer in the catalog: {ids}",
+      "binaryOutputUnavailable": "The foundational services catalog is unreachable, so nothing can be picked here yet."
     },
     "progress": {
       "status": {
@@ -5590,6 +5600,43 @@
       "checkSourceFailed": "Could not check the repo",
       "sourceUnlinked": "Repo unlinked",
       "unlinkSourceFailed": "Could not unlink the repo"
+    }
+  },
+  "binaryOutput": {
+    "heading": "Binary outputs",
+    "target": "Storage service",
+    "targetNone": "None recorded on this step",
+    "contextServices": "Generation context",
+    "misdirectedBadge": "Other service",
+    "unknownBadge": "Not in catalog",
+    "storedCount": "{outcome}, 1 artifact | {outcome}, {count} artifacts",
+    "state": {
+      "configured": {
+        "summary": "Nothing recorded yet",
+        "detail": "This step is set up to store binary outputs, but it has not reported any yet. It is still running, or it ended before it reported."
+      },
+      "undeclared": {
+        "summary": "Nothing declared",
+        "detail": "This step finished without declaring what it stored. It may or may not have stored something; either way, nothing was recorded."
+      },
+      "parseFailed": {
+        "summary": "Declaration unreadable",
+        "detail": "This step ended with a declaration the platform could not read, so nothing was recorded. Anything it stored is missing from the list below."
+      },
+      "declaredNone": {
+        "summary": "Stored nothing",
+        "detail": "The agent reported that it stored no binary artifacts. That is a valid outcome, not a failure."
+      },
+      "stored": {
+        "summary": "Stored"
+      }
+    },
+    "warning": {
+      "unknownServices": "Named a service the catalog does not contain: {ids}. The entry is kept as claimed; check the id against the workspace catalog. | Named services the catalog does not contain: {ids}. Their entries are kept as claimed; check the ids against the workspace catalog.",
+      "targetUnknown": "The catalog no longer contains this step's own storage service ({ids}), so nothing below could be checked against it. Register it again, or point the step at another service.",
+      "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
+      "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
+      "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed."
     }
   },
   "sandbox": {

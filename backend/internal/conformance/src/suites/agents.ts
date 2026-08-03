@@ -471,6 +471,69 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       const exec = executions.find((e) => e.blockId === 'task_login')
       expect(exec?.steps[0]?.skillVersions).toBeUndefined()
     })
+
+    // The `binary-output` trait is the one trait with a UI consequence: a step of such a kind
+    // is REFUSED at pipeline save and at run start without a `stepOptions.binaryOutput`
+    // selection, so the pipeline builder has to know which kinds need the picker. Nothing else
+    // in the snapshot carries the trait vocabulary, so this asserts the boolean projection
+    // reaches the HTTP snapshot — and that it is asked of the REGISTRY, so a trait ASSIGNED to
+    // an already-registered kind projects exactly like a declared one. Without it the builder
+    // either offers the picker on every step or lets a generator step save into a refusal.
+    it('projects the binary-output trait onto the snapshot’s custom-kind palette', async () => {
+      const agentKindRegistry = defaultAgentKindRegistry()
+      agentKindRegistry.register({
+        kind: 'conformance-imager',
+        systemPrompt: 'You generate images.',
+        agent: { surface: 'container-explore' },
+        traits: ['binary-output'],
+        presentation: {
+          label: 'Conformance Imager',
+          icon: 'i-lucide-image',
+          color: '#a855f7',
+          description: 'Generates product imagery.',
+          category: 'build',
+        },
+      })
+      // Registered WITHOUT the trait, then assigned it — the path a deployment takes to opt an
+      // existing kind in, and the one a `def.traits` read would miss.
+      agentKindRegistry.register({
+        kind: 'conformance-assigned-imager',
+        systemPrompt: 'You also generate images.',
+        agent: { surface: 'container-explore' },
+        presentation: {
+          label: 'Conformance Assigned Imager',
+          icon: 'i-lucide-image',
+          color: '#a855f7',
+          description: 'Generates product imagery too.',
+          category: 'build',
+        },
+      })
+      agentKindRegistry.assignTraits('conformance-assigned-imager', ['binary-output'])
+      agentKindRegistry.register({
+        kind: 'conformance-auditor',
+        systemPrompt: 'You audit the service for compliance.',
+        agent: { surface: 'container-explore' },
+        presentation: {
+          label: 'Conformance Auditor',
+          icon: 'i-lucide-shield-check',
+          color: '#10b981',
+          description: 'Audits the service for compliance.',
+          category: 'review',
+        },
+      })
+
+      const app = harness.makeApp({}, { agentKindRegistry })
+      const { workspace } = await app.createWorkspace()
+      const snap = await app.call<{
+        customAgentKinds?: { kind: string; binaryOutput?: boolean }[]
+      }>('GET', `/workspaces/${workspace.id}`)
+      const byKind = new Map((snap.body.customAgentKinds ?? []).map((k) => [k.kind, k]))
+      expect(byKind.get('conformance-imager')?.binaryOutput).toBe(true)
+      expect(byKind.get('conformance-assigned-imager')?.binaryOutput).toBe(true)
+      // A kind WITHOUT the trait carries no flag at all — the stock product's shape, so the
+      // builder's gate reads false rather than "the field is missing, better show it anyway".
+      expect(byKind.get('conformance-auditor')?.binaryOutput).toBeUndefined()
+    })
   })
 
   // B3 (observability-logging-gaps.md): a run that dies on a THROWN error must carry that

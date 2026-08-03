@@ -4081,7 +4081,17 @@
       "consensusGroupsActive": "Ten krok uruchamia wybraną grupę. Odznacz wszystkie grupy, aby skonfigurować uczestników tutaj.",
       "consensusGroupAlways": "zawsze",
       "variantLabel": "Wariant promptu",
-      "variantShipped": "Prompt wbudowany"
+      "variantShipped": "Prompt wbudowany",
+      "binaryOutputStorage": "Zapisuj przez",
+      "binaryOutputContext": "Kontekst generowania",
+      "binaryOutputPlaceholder": "Wybierz usługę przechowywania",
+      "binaryOutputContextPlaceholder": "Opcjonalnie: usługi wyznaczające zakres generowania",
+      "binaryOutputNeedsPick": "Krok generujący wyjścia binarne nie ma wybranej usługi przechowywania. Wybierz ją przed zapisaniem.",
+      "binaryOutputNoStorage": "Żadna usługa w katalogu tej tablicy nie deklaruje możliwości {capability}. Zarejestruj taką usługę albo dodaj tę możliwość właściwej usłudze w usługach podstawowych.",
+      "binaryOutputMissing": "Tej usługi przechowywania nie ma już w katalogu; wybierz inną.",
+      "binaryOutputNotStorage": "Ta usługa nie deklaruje już możliwości {capability}, więc uruchomienia będą odrzucane; wybierz inną.",
+      "binaryOutputContextMissing": "Tych usług kontekstu nie ma już w katalogu: {ids}",
+      "binaryOutputUnavailable": "Katalog usług podstawowych jest nieosiągalny, więc nic nie da się tu jeszcze wybrać."
     },
     "progress": {
       "status": {
@@ -5341,6 +5351,43 @@
       "checkSourceFailed": "Nie udało się sprawdzić repozytorium",
       "sourceUnlinked": "Repozytorium odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć repozytorium"
+    }
+  },
+  "binaryOutput": {
+    "heading": "Wyjścia binarne",
+    "target": "Usługa przechowywania",
+    "targetNone": "Nie zapisano dla tego kroku",
+    "contextServices": "Kontekst generowania",
+    "misdirectedBadge": "Inna usługa",
+    "unknownBadge": "Spoza katalogu",
+    "storedCount": "{outcome}, 1 artefakt | {outcome}, {count} artefakty | {outcome}, {count} artefaktów",
+    "state": {
+      "configured": {
+        "summary": "Nic jeszcze nie zapisano",
+        "detail": "Ten krok jest skonfigurowany do przechowywania wyjść binarnych, ale jeszcze żadnego nie zgłosił. Nadal trwa albo zakończył się, zanim zdążył zgłosić."
+      },
+      "undeclared": {
+        "summary": "Brak deklaracji",
+        "detail": "Ten krok zakończył się bez zadeklarowania, co zapisał. Mógł coś zapisać albo nie; tak czy inaczej nic nie zostało odnotowane."
+      },
+      "parseFailed": {
+        "summary": "Deklaracja nieczytelna",
+        "detail": "Ten krok zakończył się deklaracją, której platforma nie potrafiła odczytać, więc nic nie zostało odnotowane. Tego, co zapisał, brakuje na liście poniżej."
+      },
+      "declaredNone": {
+        "summary": "Nic nie zapisano",
+        "detail": "Agent zgłosił, że nie zapisał żadnych artefaktów binarnych. To prawidłowy wynik, nie błąd."
+      },
+      "stored": {
+        "summary": "Zapisano"
+      }
+    },
+    "warning": {
+      "unknownServices": "Wskazał usługę, której nie ma w katalogu: {ids}. Wpis zachowano w zadeklarowanej postaci; sprawdź identyfikator w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy.",
+      "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({ids}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
+      "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
+      "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
+      "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście."
     }
   },
   "sandbox": {

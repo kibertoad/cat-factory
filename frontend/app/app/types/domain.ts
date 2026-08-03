@@ -131,6 +131,15 @@ export interface AgentArchetype {
    * hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
    */
   resultView?: string
+  /**
+   * The kind carries the `binary-output` trait: its deliverable is binary artifacts stored
+   * through a foundational service, so a step of this kind REQUIRES a `stepOptions.binaryOutput`
+   * selection and is refused at pipeline save and at run start without one. Projected onto the
+   * snapshot as `CustomAgentKind.binaryOutput` — the only trait with a UI consequence, and the
+   * only way the builder can know which steps must offer the storage picker. Absent ⇒ false,
+   * which is every built-in kind.
+   */
+  binaryOutput?: boolean
 }
 
 /**

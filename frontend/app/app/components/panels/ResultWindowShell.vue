@@ -25,6 +25,12 @@ import { useModalBehavior } from '@modular-vue/core'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
 import StepValidationReport from '~/components/panels/StepValidationReport.vue'
+import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
+import {
+  BINARY_OUTPUT_STATE_KEYS,
+  binaryOutputHasWarnings,
+  binaryOutputView,
+} from '~/utils/binaryOutput'
 import { effortBand, effortHint } from '~/utils/effort'
 import {
   RESULT_WINDOW_WIDTH_CLASS,
@@ -140,6 +146,52 @@ watch(
   },
   { immediate: true },
 )
+/**
+ * The step's BINARY-OUTPUT record — the third universal trailing section, and here for the same
+ * reason as the two above: it is a by-product recorded on the STEP, not the deliverable of any
+ * one window, so no window may be able to opt out of it.
+ *
+ * The alternative — a dedicated `binary-outputs` result view a generator kind declares — cannot
+ * cover the record's own scope. The engine writes this report whenever the step's kind carries
+ * the trait OR the step carries a selection (`stepMayDeclareBinaryOutputs`, the deliberate UNION),
+ * precisely so a trait-carrying kind dispatched under an OVERRIDING kind still has its artifacts
+ * recorded. A kind-declared view is by construction blind to that case: the step's own kind
+ * declares a different window, and the artifacts exist with nowhere showing them. Resolving off
+ * the active step instead makes the surface follow the record rather than the catalog — and it
+ * leaves a generator free to declare a result view for its OWN output, which is what a generator
+ * that produces prose AND artifacts actually wants.
+ *
+ * Absent for every stock step (no report, no selection) and the section disappears, exactly as
+ * the two above do. That absence is the honest "this step had no binary-output story" — the
+ * distinct states that ARE a story (declared nothing / never declared / unreadable) all render.
+ */
+const binaryOutputs = computed(() => binaryOutputView(activeStep.value))
+const binaryOutputsOpen = ref(false)
+// A record carrying losses (unknown ids, dropped entries, a truncated list, an artifact that
+// went somewhere else) opens expanded — collapsed, it would read exactly like a clean one.
+watch(
+  binaryOutputs,
+  (view) => {
+    if (view && binaryOutputHasWarnings(view)) binaryOutputsOpen.value = true
+  },
+  { immediate: true },
+)
+
+/**
+ * The collapsed row's line: the OUTCOME, plus the artifact count only when there are artifacts.
+ * Deliberately not "N artifacts" for every state — four of the five have none, and a `0` there
+ * would render "declared nothing", "never declared" and "unreadable declaration" identically,
+ * which is the exact conflation the report's bookkeeping exists to prevent.
+ */
+const binaryOutputSummary = computed(() => {
+  const view = binaryOutputs.value
+  if (!view) return ''
+  const outcome = t(BINARY_OUTPUT_STATE_KEYS[view.state].summary)
+  return view.state === 'stored'
+    ? t('binaryOutput.storedCount', { outcome, count: view.rows.length }, view.rows.length)
+    : outcome
+})
+
 // Collapsed by default — the windows own the vertical space, and the row already carries the
 // difficulty plus the gist of what held the agent back.
 const effortOpen = ref(false)
@@ -302,6 +354,40 @@ const panelClass = computed(() => [
           </button>
           <div v-if="validationOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
             <StepValidationReport :report="validationReport" />
+          </div>
+        </section>
+
+        <!-- Shared trailing section: what this step's agent declared it stored through a
+             foundational storage service (see `binaryOutputs` above for why it lives here and
+             not in a window). The collapsed row states the OUTCOME, never a count — four of
+             the five outcomes have no artifacts to count, and "0" is the one thing they must
+             not all read as. -->
+        <section
+          v-if="binaryOutputs"
+          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          data-testid="result-window-binary-outputs"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            :aria-expanded="binaryOutputsOpen"
+            data-testid="result-window-binary-outputs-toggle"
+            @click="binaryOutputsOpen = !binaryOutputsOpen"
+          >
+            <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              {{ t('binaryOutput.heading') }}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+              {{ binaryOutputSummary }}
+            </span>
+            <UIcon
+              :name="binaryOutputsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+            />
+          </button>
+          <div v-if="binaryOutputsOpen && activeStep" class="max-h-72 overflow-y-auto px-5 pb-3">
+            <BinaryOutputReport :step="activeStep" />
           </div>
         </section>
       </div>

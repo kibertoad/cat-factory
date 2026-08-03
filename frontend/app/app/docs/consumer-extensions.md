@@ -238,7 +238,7 @@ below). Compose these:
 
 | Building block                | Reference it as                           | What it gives you                                                                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ResultWindowShell`           | `#components` → `PanelsResultWindowShell` | The shared modal chrome for a result window — backdrop, header (icon/title/subtitle), a `#header-extras` slot, close button, and the modal _behaviour_ (focus-trap + return, body-scroll lock, shared-stack Escape via `useModalBehavior`). Pass `stepRef` to surface the shared "restart from here" control.                                                                                                    |
+| `ResultWindowShell`           | `#components` → `PanelsResultWindowShell` | The shared modal chrome for a result window — backdrop, header (icon/title/subtitle), a `#header-extras` slot, close button, and the modal _behaviour_ (focus-trap + return, body-scroll lock, shared-stack Escape via `useModalBehavior`). Pass `stepRef` to surface the shared "restart from here" control. It also renders the universal per-step trailing sections (agent effort, pre-PR validation, binary outputs) off the ACTIVE step, so your window inherits them and must not re-render them itself. |
 | `StepRunMeta`                 | `#components` → `PanelsStepRunMeta`       | **The shared run-details metadata block** every agent window reuses: step position, live duration, model, run id, and the LLM model-activity rollup. Drop it into your window's sidebar — never reinvent run metadata.                                                                                                                                                                                           |
 | `MarkdownProse`               | `#components` → `CommonMarkdownProse`     | Render an agent's prose output as markdown.                                                                                                                                                                                                                                                                                                                                                                      |
 | `CopyButton`                  | `#components` → `CommonCopyButton`        | The shared copy-to-clipboard affordance.                                                                                                                                                                                                                                                                                                                                                                         |
@@ -269,6 +269,19 @@ below). Compose these:
 > auto-imported across layers by Nuxt's separate imports mechanism, so those need no import.
 > Hardening these building blocks into an explicitly exported, location-independent public
 > surface is slice G of the initiative.
+
+### Don't render step state the shell already owns
+
+Some state the engine records on a step is deliberately NOT a result view's job, because the
+record's scope is wider than any one kind: the agent's effort self-assessment, the pre-PR
+validation report, and — for a `binary-output` generator — the artifacts it declared it stored
+(`step.binaryOutputs`). `ResultWindowShell` resolves the active step itself and renders each as a
+collapsible trailing section, and the generic step-detail panel renders the same components for a
+step whose kind declares no window at all.
+
+So a generator kind should declare a result view for its OWN output (or none), and leave the
+artifact list alone — you get it either way, on every entry point, with no id to register. A
+window that renders it again just shows it twice.
 
 The example `AcmeSecurityReport.vue` window is a full demonstration: it imports
 `ResultWindowShell` + `StepRunMeta` + `MarkdownProse` from `#components`, composes them with

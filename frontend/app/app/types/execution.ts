@@ -77,6 +77,11 @@ export type {
   RalphStepState,
   RalphAttempt,
   RalphVerdict,
+  // The binary-output trio: the step's SELECTION (`stepOptions.binaryOutput`), the report the
+  // engine parsed off the agent's declaration (`step.binaryOutputs`), and one declared artifact.
+  BinaryOutputArtifact,
+  BinaryOutputConfig,
+  BinaryOutputReport,
   TesterStepState,
   HumanTestEnvironment,
   RunEnvironment,
