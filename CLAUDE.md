@@ -635,7 +635,10 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 - `node scripts/check-component-imports.mjs` — requires every layer component used in a Vue
   template to be imported by path (a bare tag renders nothing, silently). See
   [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
-- `node --test 'scripts/*.test.mjs'` runs both guards' own fixtures (CI runs all three).
+- `node scripts/check-reserved-env-keys.mjs` — requires every variable documented in
+  `docs/environment-variables.md` to be RESERVED, so it cannot be named as a capability credential
+  and resolved into an agent process.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.
@@ -1144,11 +1147,24 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   `assignToolServers`. **Skills resolve in the ENGINE**; **tool servers resolve in the container
   EXECUTOR**, because what is servable depends on the resolved HARNESS and the facade-wired credential
   resolver, neither of which the runtime-neutral engine knows.
-- **A tool-server credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
+- **A capability credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
   port, so a server needs no table and no UI. The VALUE rides the job body only; `context.toolServers` is
-  the non-secret projection the prompt and telemetry see. The default env resolver is a TRUST BOUNDARY — a
-  definition names both the key it wants and the endpoint it reaches — so a deployment installing
-  third-party agent packages passes `{ allowKeys }`.
+  the non-secret projection the prompt and telemetry see. Two rules bind every declaration, and they are
+  a FLOOR plus a BOUND rather than one setting. **The floor: a credential may NEVER name a variable the
+  platform reads** (`isReservedPlatformEnvKey`, case-insensitively — `process.env` lookup is
+  case-insensitive on Windows). A definition names both the key it wants and the endpoint it reaches, so
+  `{ key: 'ENCRYPTION_KEY' }` was a registration that booted clean and shipped the deployment's master
+  sealing key to a third party. Refused at DECLARATION (the generative-integration schema; boot
+  validation for a tool server) and again at DISPATCH, because a mothership-mode node boot-validates
+  nothing it resolves — and refused at the CALL SITE rather than inside the env resolver, so it binds a
+  deployment's own resolver too. It needs no configuration and cannot be widened; a new platform variable
+  is covered by its prefix family, with `check-reserved-env-keys.mjs` as the drift guard. **The bound:
+  everything outside the platform's own configuration** is a developer's own tooling, and only the
+  deployment knows what an integration may see — `{ allowKeys }`, which a deployment installing
+  third-party agent packages (or a mothership-mode node) sets through its facade's
+  `createToolSecretResolver` factory. That factory is also how a deployment swaps in a per-workspace
+  sealed store; the port had no facade seam at all until it existed, which made it an env read with
+  extra types.
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.

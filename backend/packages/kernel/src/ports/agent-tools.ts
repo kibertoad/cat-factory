@@ -27,12 +27,19 @@ export type ToolSecretSubject =
  * in `@cat-factory/server`), which reads each declared key off the deployment's own configured
  * environment — so a tool server or a generative integration works with no new storage, no table
  * and no UI. A deployment that needs PER-WORKSPACE credentials implements this port instead
- * (reading its own sealed store); nothing else in the dispatch path changes.
+ * (reading its own sealed store) and passes it to its facade's `createToolSecretResolver` option
+ * (`startLocal` / `start` / `createWorker`); nothing else in the dispatch path changes, which is
+ * the whole reason the resolver is a port rather than an env read at the call site.
  *
  * Contract: it is called ONCE per dispatch per subject, must never throw (an unresolvable key is
  * simply absent from the returned record — the caller decides whether that drops the capability),
  * and the values it returns are written STRAIGHT into a dedicated job-body field. They never touch
  * `AgentRunContext`, a prompt, or the telemetry snapshot.
+ *
+ * A RESERVED key never reaches an implementation. The two call sites (tool servers, generative
+ * integrations) drop a key naming a platform configuration variable BEFORE asking — so the floor
+ * holds for a custom resolver too, and an implementation never has to know the rule. See
+ * `isReservedPlatformEnvKey` in `@cat-factory/contracts`.
  */
 export interface ToolSecretResolver {
   resolve(input: {

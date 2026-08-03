@@ -410,10 +410,16 @@ function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
   // `ContainerAgentExecutor` (what is servable depends on the resolved harness and the
   // facade-wired credential resolver), and the conformance harness replaces exactly that
   // component with `FakeAgentExecutor` — so a case here would assert the fake, not the runtimes.
-  // Their coverage is `packages/server/src/agents/toolServers.test.ts` (resolution + the secret
-  // boundary) plus the harness's own suites. What IS runtime-specific about them — the facades
-  // wiring a `ToolSecretResolver` at all — is symmetric by construction: both call the same
-  // `createEnvToolSecretResolver`.
+  // Their coverage is `packages/server/src/agents/toolServers.test.ts` (resolution, the secret
+  // boundary, and the reserved-platform-key floor) plus the harness's own suites.
+  //
+  // What IS runtime-specific about them — the facades wiring a `ToolSecretResolver` — used to be
+  // symmetric by construction, because both hard-coded `createEnvToolSecretResolver`. It no longer
+  // is: each facade now takes a `createToolSecretResolver` factory and falls back to that default,
+  // so the parity claim is about THREADING an optional field through four links, which a typecheck
+  // cannot make and a behavioural test here would still be asserting the fake. It is pinned per
+  // facade instead, by the paired structural guards
+  // `runtimes/{node,cloudflare}/test/tool-secret-seam.coverage.*`.
 }
 
 /**

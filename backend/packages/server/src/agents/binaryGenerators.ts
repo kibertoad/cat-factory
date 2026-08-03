@@ -5,6 +5,7 @@ import type {
   ToolSecretResolver,
 } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
+import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // GENERATIVE BINARY INTEGRATIONS for one container dispatch: take the integrations the ENGINE
@@ -88,6 +89,21 @@ async function resolveOne(
   generator: ResolvedBinaryGenerator,
   key: string,
 ): Promise<string | undefined> {
+  // The platform's own configuration variables are never resolvable as an integration credential,
+  // and the check is HERE rather than inside the env-backed default resolver so it holds whatever
+  // a facade wired. Boot validation refuses such a declaration through the credential schema, but
+  // a MOTHERSHIP-MODE node boot-validates none of the definitions it resolves: they arrive per
+  // dispatch over `/internal/binary-generators`, chosen by a process that is not this one, and
+  // the environment they would be read from is a developer's own laptop.
+  if (isReservedPlatformEnvKey(key)) {
+    // Reported at WARN, not at the `debug` an optional missing key gets: this is never a
+    // deployment's stated normal, and its fix is a declaration rather than a variable to set.
+    input.logger?.warn(
+      'binary-generator declares a reserved credential key; the agent is told the integration is unavailable',
+      { binaryGeneratorId: generator.id, credentialKey: key, detail: reservedEnvKeyMessage(key) },
+    )
+    return undefined
+  }
   const resolved = await runBestEffort(
     input.logger ?? noopLogger,
     'resolve binary-generator credential',

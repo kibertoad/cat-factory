@@ -96,6 +96,41 @@ secret-bearing name to `EXACT_ALLOW`/`PREFIX_ALLOW` hands it to every native age
 deploy-harness transport opts out deliberately (`envMode: 'inherit'`, because kubectl/helm need
 ambient cloud env), which is exactly why that transport is not for untrusted input either.
 
+### The second path between those two environments: a capability CREDENTIAL
+
+`childEnv.ts` states the invariant on the path where the platform's environment and an agent's
+process meet by INHERITANCE. There is one other path, and it is a deliberate one: a tool server or
+a generative binary integration declares the credential it needs BY NAME, and the facade-wired
+`ToolSecretResolver` — by default `createEnvToolSecretResolver`, reading the deployment's own
+environment — resolves it onto the job body, from where the harness injects it into that one job's
+agent process.
+
+That mechanism is what makes an integration work with no new table, store or UI, and it is worth
+keeping. What it must not do is carry the platform's OWN configuration across. A definition is
+composition-root data that names both the key it wants AND the endpoint that key is sent to, so
+`{ key: 'ENCRYPTION_KEY', usage: 'Authorization: Bearer <value>' }` was a registration that booted
+clean and shipped the deployment's master sealing key to a third party. So:
+
+- **A capability credential may not name a variable the platform reads**
+  (`isReservedPlatformEnvKey`, `backend/packages/contracts/src/reserved-env-keys.ts`) — the same
+  exact-names-plus-prefix-families shape `childEnv.ts` uses, and case-insensitive for the same
+  reason (`process.env` lookup is case-insensitive on Windows). Refused where the declaration is
+  made (the generative-integration credential schema; boot validation for a tool server) AND at
+  dispatch, because a **mothership-mode node boot-validates none of the definitions it resolves**:
+  they arrive per dispatch over `/internal/binary-generators`, authored by a process one build
+  ahead of it, against an environment that is a developer's own laptop. `ENCRYPTION_KEY` and
+  `HARNESS_SHARED_SECRET` are the keys to the boundary BETWEEN those two processes, held by the
+  side meant to keep them; that is what the floor protects, with no configuration.
+- **The dispatch-time check sits at the CALL SITE, not inside the env resolver**, so it holds for
+  a deployment's own `ToolSecretResolver` too — which is the one that could genuinely have a value
+  stored under such a name.
+- **Everything outside the platform's own configuration is the deployment's call**, because only
+  it knows which of a developer's variables (`AWS_PROFILE`, a personal token) an integration may
+  see. That bound is `EnvToolSecretResolverOptions.allowKeys`, reachable through every facade's
+  `createToolSecretResolver` option — the same seam a deployment uses to swap in a per-workspace
+  sealed store or a secret manager. A deployment installing third-party agent packages, and a
+  mothership-mode node, are the two cases that should set it.
+
 ## Layer 3 — what the token can reach (mechanism)
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:

@@ -5,6 +5,28 @@ grouped by purpose and annotated with the deployment modes each applies to. For 
 narrative on how config is loaded per runtime, see the facade sections in
 [`CLAUDE.md`](../CLAUDE.md) and the example `.env` files under `deploy/*`.
 
+## These names are RESERVED
+
+Every variable in this reference belongs to the platform, and none of them can be named as a
+capability credential. A tool server (MCP) or a generative binary integration declares the
+credential it needs by NAME, and the default resolver reads that name off this same environment
+before the value is injected into an agent process — so a declaration of `ENCRYPTION_KEY` would
+hand a prompt-injectable agent the key every stored credential is sealed with. Such a declaration
+is refused at boot and again at dispatch; give an integration a variable of its own
+(`ACME_IMAGE_API_KEY`) and set it beside these.
+
+The rule is enforced by `isReservedPlatformEnvKey`
+(`backend/packages/contracts/src/reserved-env-keys.ts`), which reserves the platform's prefix
+families (`AUTH_`, `GITHUB_`, `LOCAL_`, …) plus the remaining exact names, case-insensitively —
+`process.env` lookup is case-insensitive on Windows. `scripts/check-reserved-env-keys.mjs` fails CI
+when a variable documented below is not covered, so **adding a row here is also how the reserved
+set stays current**.
+
+The model-provider keys are reserved too. That looks like over-reach and is not: `OPENAI_API_KEY`
+is billable and exfiltratable, and an integration that wants to call OpenAI on the deployment's
+account should say so in its own variable rather than silently inherit the one the model router
+spends.
+
 ## Deployment modes
 
 The same `@cat-factory/server` app ships to several targets. "Mode" is which facade

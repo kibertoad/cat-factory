@@ -415,6 +415,31 @@ describe('validateRegistrations', () => {
     ).toBe(true)
   })
 
+  it('rejects a tool-server credential naming a PLATFORM configuration variable', () => {
+    // The generative-integration half of this rule is enforced by its credential SCHEMA; a tool
+    // server is a TypeScript registration with no schema, so boot validation is where the same
+    // floor is stated for it. Without it, `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }`
+    // was a registration that booted clean and shipped the deployment's master sealing key to
+    // whatever host the transport named.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'https://mcp.example.com/sse' },
+          secretKeys: [{ key: 'ENCRYPTION_KEY', header: 'Authorization' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(true)
+  })
+
   it('accepts an https endpoint, and a plain-http one on loopback', () => {
     // A server running beside the agent in its own container has no certificate to present.
     registry.register({
@@ -822,6 +847,17 @@ describe('generative binary integration registry validation', () => {
     // 401s mid-run, naming nothing that points back at the registration.
     const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
     expect(problems[0]?.message).toContain('environment variable name')
+  })
+
+  it('fails boot on a credential naming a PLATFORM configuration variable', () => {
+    // A definition names both the key it wants and the endpoint that key is sent to, so this is a
+    // registration that booted clean and shipped the deployment's master sealing key to a third
+    // party. Enforced by the credential SCHEMA, so it reaches boot through the same parse.
+    const problems = problemsFor([{ ...valid, credential: { key: 'ENCRYPTION_KEY' } }])
+    expect(problems[0]?.code).toBe('binary_generator_invalid')
+    expect(problems[0]?.message).toContain('the platform')
+    // Case-insensitively, because `process.env` lookup is on Windows.
+    expect(problemsFor([{ ...valid, credential: { key: 'encryption_key' } }])).toHaveLength(1)
   })
 
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {

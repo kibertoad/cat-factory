@@ -12,6 +12,7 @@ import {
   type VcsIdentityRegistry,
   type WorkRunner,
   type ProviderRegistry,
+  type ToolSecretResolver,
 } from '@cat-factory/kernel'
 import {
   createTierInstallationResolvers,
@@ -1277,7 +1278,11 @@ function workerInfrastructureCapabilities(
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+  opts: {
+    cloudflareModelsEnabled?: boolean
+    gateProviders?: GateProviderOverrides
+    createToolSecretResolver?: (env: Env) => ToolSecretResolver
+  } = {},
 ): Container {
   const config = loadConfig(env)
   config.infrastructure = workerInfrastructureCapabilities(config)
@@ -1417,6 +1422,10 @@ export function buildContainer(
     caches,
     overrides,
     gateProviders: opts.gateProviders,
+    // The deployment's own capability-credential resolver, built from THIS request's `env` — a
+    // Worker binding (D1, a Secrets Store) is only reachable that way, which is why the option is
+    // a factory rather than an instance. Absent ⇒ the executor builds the env-backed default.
+    executorToolSecrets: opts.createToolSecretResolver?.(env),
     registries: {
       environmentBackendRegistry,
       runnerBackendRegistry,

@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 import { uploadApiContractSchema } from './foundational-services.js'
+import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from './reserved-env-keys.js'
 
 // ---------------------------------------------------------------------------
 // Wire vocabulary for GENERATIVE BINARY INTEGRATIONS — the third-party (or in-house) APIs a
@@ -45,6 +46,13 @@ export const binaryGeneratorCredentialSchema = v.object({
    * VARIABLE the agent reads it from, so it must be a valid POSIX variable name — a generator
    * declaring `x-rd-token` would resolve fine and then be dropped by the harness's env
    * validation, which is a silent "the integration just 401s" at run time.
+   *
+   * It may NOT name a variable the platform's own configuration owns
+   * ({@link isReservedPlatformEnvKey}). The resolver reads the key off the deployment's
+   * environment and the value is injected into an agent process, so an integration declaring
+   * `ENCRYPTION_KEY` would hand a prompt-injectable agent the deployment's master sealing key.
+   * Refused here so a deployment learns at boot, and again at dispatch — a mothership-mode node
+   * boot-validates none of the definitions it resolves.
    */
   key: v.pipe(
     v.string(),
@@ -52,6 +60,10 @@ export const binaryGeneratorCredentialSchema = v.object({
     v.minLength(1),
     v.maxLength(128),
     v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
+    v.check(
+      (key) => !isReservedPlatformEnvKey(key),
+      (issue) => reservedEnvKeyMessage(String(issue.input)),
+    ),
   ),
   /**
    * How the integration expects the credential to be presented (`X-RD-Token: <value>`,

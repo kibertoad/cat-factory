@@ -183,4 +183,39 @@ describe('resolveBinaryGeneratorSecrets', () => {
       await resolveBinaryGeneratorSecrets({ context: context([retro]), workspaceId: 'ws1' }),
     ).toEqual([])
   })
+
+  // The platform's own configuration variables are not resolvable as an integration credential.
+  // The check is HERE rather than inside the env-backed default resolver so it holds whatever a
+  // facade wired — and a MOTHERSHIP-MODE node needs exactly that, since it boot-validates none of
+  // the definitions it resolves: they arrive per dispatch from the mothership, and the environment
+  // their keys name is a developer's own laptop.
+  it('refuses a reserved platform key without asking the resolver, and says so at WARN', async () => {
+    const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master-key' })
+    const logger = createRecordingLogger()
+    const secrets = await resolveBinaryGeneratorSecrets({
+      context: context([{ ...retro, credentialKey: 'ENCRYPTION_KEY' }]),
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver,
+      logger,
+    })
+    expect(secrets).toEqual([])
+    expect(subjects).toEqual([])
+    // WARN, not the `debug` an optional missing key gets: this is never a deployment's stated
+    // normal, and its fix is a declaration rather than a variable to set.
+    const warned = logger.lines.filter((line) => line.level === 'warn')
+    expect(warned).toHaveLength(1)
+    expect(warned[0]?.fields?.credentialKey).toBe('ENCRYPTION_KEY')
+  })
+
+  it('matches a reserved key case-insensitively, because `process.env` does on Windows', async () => {
+    const { resolver, subjects } = recordingResolver({ harness_shared_secret: 'shh' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([{ ...retro, credentialKey: 'harness_shared_secret' }]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+  })
 })

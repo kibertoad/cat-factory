@@ -9,6 +9,8 @@ import {
   registerCoreControllers,
 } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { ToolSecretResolver } from '@cat-factory/kernel'
+import type { Env } from './infrastructure/env'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import {
@@ -28,6 +30,22 @@ export interface CreateAppOptions {
   cloudflareModelsEnabled?: boolean
   /** Explicit gate providers wired on every per-request build — used by tests. */
   gateProviders?: GateProviderOverrides
+  /**
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+   * server's (MCP) and a generative binary integration's alike. Called on every per-request
+   * container build with that request's `env`, and defaulting to
+   * `createEnvToolSecretResolver(env)`.
+   *
+   * A FACTORY because the Worker has no ambient environment: a deployment reading its own sealed
+   * per-workspace store, or the Cloudflare Secrets Store, reaches it through a BINDING on `env`.
+   * The same shape as the Node/local facades' option, so a deployment writes one thing:
+   *
+   *     createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })
+   *
+   * This is what `ToolSecretResolver` is a port FOR. `overrides` cannot serve it — its nearest
+   * `CoreDependencies` field is the whole `agentExecutor`.
+   */
+  createToolSecretResolver?: (env: Env) => ToolSecretResolver
 }
 
 // The Worker builds its container per request, so a persistent misconfiguration would throw on
@@ -98,6 +116,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
         buildContainer(c.env, options.overrides, {
           cloudflareModelsEnabled: options.cloudflareModelsEnabled,
           gateProviders: options.gateProviders,
+          createToolSecretResolver: options.createToolSecretResolver,
         }),
       )
     } catch (err) {

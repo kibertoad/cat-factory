@@ -25,7 +25,9 @@ import {
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
   isNamespacedId,
+  isReservedPlatformEnvKey,
   modalitiesOfMediaType,
+  reservedEnvKeyMessage,
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
 } from '@cat-factory/contracts'
@@ -499,6 +501,13 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
  * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
  *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
  *   it here only moves the failure to a place with no registration to point at;
+ * - a credential naming a PLATFORM CONFIGURATION VARIABLE is an ERROR, and it is the sharpest of
+ *   these: a definition names both the key it wants and the endpoint that key is sent to, so
+ *   `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` is a registration that boots clean and
+ *   ships the deployment's master sealing key to a third party. The generative-integration half
+ *   of the same rule is enforced by its credential SCHEMA (there is no schema here — a tool
+ *   server is a TypeScript registration), and dispatch refuses both again for the mothership
+ *   case;
  * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
  *   into, so they can never take effect. A warning rather than an error because a deployment may
  *   deliberately declare them ahead of moving the kind onto a container surface.
@@ -525,6 +534,16 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
           `Tool server "${server.id}" (on agent kind "${kind}") has an invalid id. It ` +
           `becomes part of the tool names the CLI exposes (mcp__<id>__<tool>) and a Codex ` +
           `config key, so it must match [a-z0-9][a-z0-9_-]*.`,
+      })
+    }
+    for (const secret of server.secretKeys ?? []) {
+      if (!isReservedPlatformEnvKey(secret.key)) continue
+      problems.push({
+        severity: 'error',
+        code: 'reserved_credential_key',
+        message:
+          `Tool server "${server.id}" (on agent kind "${kind}") declares credential ` +
+          `${reservedEnvKeyMessage(secret.key)}`,
       })
     }
     if (server.transport.kind === 'http' && !isAllowedMcpHttpUrl(server.transport.url)) {

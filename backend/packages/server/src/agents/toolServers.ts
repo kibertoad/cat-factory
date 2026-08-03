@@ -10,6 +10,7 @@ import type {
   UnavailableToolServer,
 } from '@cat-factory/kernel'
 import { mcpServerSupportsHarness, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
@@ -117,8 +118,8 @@ export async function resolveToolServers(
       continue
     }
     const secrets = await resolveSecrets(input, definition)
-    if (!secrets) {
-      unavailableToolServers.push({ id: definition.id, label, reason: 'missing_secret' })
+    if (!secrets.ok) {
+      unavailableToolServers.push({ id: definition.id, label, reason: secrets.reason })
       continue
     }
     toolServers.push({
@@ -128,7 +129,7 @@ export async function resolveToolServers(
       ...(definition.allowedTools?.length ? { tools: definition.allowedTools } : {}),
       transport: definition.transport.kind,
     })
-    mcpServers.push(buildJobSpec(definition, secrets))
+    mcpServers.push(buildJobSpec(definition, secrets.values))
   }
   return { toolServers, unavailableToolServers, mcpServers }
 }
@@ -160,38 +161,63 @@ function reportUnknown(input: ResolveToolServersInput, unknown: readonly string[
   }
 }
 
+/** Either the resolved credential map, or the reason the server must be dropped. */
+type SecretResolution =
+  | { ok: true; values: Record<string, string> }
+  | { ok: false; reason: 'missing_secret' | 'reserved_secret' }
+
 /**
- * Resolve a server's declared credentials. Returns `null` when a REQUIRED secret is missing —
- * the caller then drops the server, because handing an agent a tool whose first call will 401 is
- * worse than telling it the tool is absent. A server with no declared secrets resolves trivially
- * (an empty record) without consulting the resolver at all.
+ * Resolve a server's declared credentials. Returns a REASON instead of a map when a REQUIRED
+ * secret cannot be supplied — the caller then drops the server, because handing an agent a tool
+ * whose first call will 401 is worse than telling it the tool is absent. A server with no
+ * declared secrets resolves trivially (an empty record) without consulting the resolver at all.
+ *
+ * A key naming a platform configuration variable is dropped BEFORE the resolver is asked, and
+ * that ordering is the point: the floor must hold whatever a facade wired, so it cannot live
+ * inside the env-backed default. Boot validation already refused such a declaration, but a
+ * mothership-mode node boot-validates nothing it resolves — the definitions arrive per dispatch
+ * from a process one build ahead of it.
  */
 async function resolveSecrets(
   input: ResolveToolServersInput,
   definition: McpServerDefinition,
-): Promise<Record<string, string> | null> {
-  const keys = definition.secretKeys ?? []
-  if (!keys.length) return {}
+): Promise<SecretResolution> {
+  const declared = definition.secretKeys ?? []
+  if (!declared.length) return { ok: true, values: {} }
+  const reserved = declared.filter((key) => isReservedPlatformEnvKey(key.key))
+  for (const key of reserved) {
+    input.logger?.warn('tool server declares a reserved credential key; refusing to resolve it', {
+      toolServerId: definition.id,
+      credentialKey: key.key,
+      detail: reservedEnvKeyMessage(key.key),
+    })
+    // A reserved REQUIRED key drops the server under its own reason. An optional one only costs
+    // that key, exactly as an optional key that did not resolve does — the disposition follows
+    // the DECLARATION, so this rule adds no second way for a server to disappear.
+    if (key.required !== false) return { ok: false, reason: 'reserved_secret' }
+  }
+  const keys = reserved.length ? declared.filter((key) => !reserved.includes(key)) : declared
   const resolver = input.resolveToolSecrets
-  const resolved = resolver
-    ? ((await runBestEffort(
-        input.logger ?? noopLogger,
-        'resolve tool-server credentials',
-        () =>
-          resolver.resolve({
-            workspaceId: input.workspaceId,
-            ...(input.blockId ? { blockId: input.blockId } : {}),
-            subject: { kind: 'tool-server', id: definition.id },
-            keys,
-          }),
-        { toolServerId: definition.id },
-      )) ?? {})
-    : {}
+  const resolved =
+    resolver && keys.length
+      ? ((await runBestEffort(
+          input.logger ?? noopLogger,
+          'resolve tool-server credentials',
+          () =>
+            resolver.resolve({
+              workspaceId: input.workspaceId,
+              ...(input.blockId ? { blockId: input.blockId } : {}),
+              subject: { kind: 'tool-server', id: definition.id },
+              keys,
+            }),
+          { toolServerId: definition.id },
+        )) ?? {})
+      : {}
   for (const key of keys) {
     // `required` defaults to TRUE: a credential a server bothered to declare is one it needs.
-    if (key.required !== false && !resolved[key.key]) return null
+    if (key.required !== false && !resolved[key.key]) return { ok: false, reason: 'missing_secret' }
   }
-  return resolved
+  return { ok: true, values: resolved }
 }
 
 /**
@@ -270,9 +296,10 @@ function headerSecrets(
 
 export interface EnvToolSecretResolverOptions {
   /**
-   * Restrict which environment keys a tool server may read. Omitted ⇒ any key resolves.
+   * Restrict which environment keys a capability credential may read. Omitted ⇒ any key that is
+   * not RESERVED resolves (see below).
    *
-   * TRUST BOUNDARY. A tool-server definition is composition-root data, and it names BOTH the
+   * TRUST BOUNDARY. A capability definition is composition-root data, and it names BOTH the
    * credential it wants and the endpoint it talks to — so a definition can pair any key this
    * resolver will hand out with a transport that ships it somewhere. On Node that grants nothing
    * new (code running in the process can already read `process.env` directly), but on the Worker
@@ -280,25 +307,31 @@ export interface EnvToolSecretResolverOptions {
    * see only what it was passed can now ask for any binding by name.
    *
    * That is fine for a deployment whose agent packages are all its own. Set this when it is not —
-   * an installed third-party agent package is exactly the case the option exists for.
+   * an installed third-party agent package is exactly the case the option exists for, as is a
+   * MOTHERSHIP-MODE node, whose generative-integration definitions arrive over
+   * `/internal/binary-generators` and so name their keys from a process that is not this one,
+   * against an environment that is a developer's own laptop.
    *
-   * **A MOTHERSHIP-MODE node is the third case, and it breaks the "grants nothing new on Node"
-   * reasoning above.** A generative integration's definition now reaches such a node over
-   * `/internal/binary-generators`, so the key name is chosen by the MOTHERSHIP rather than by
-   * code this process runs, and the value it names is read from a developer's own laptop
-   * environment. That is not a new grant in the adversarial sense — a mothership already supplies
-   * the pipelines, prompts and repo targets of every run the node executes, so it can reach that
-   * environment through any agent it dispatches — but it does turn a mis-declared key into a
-   * developer's own token silently riding a job body. A node that wants a mis-declaration to fail
-   * loudly instead sets this.
+   * **This is the operator-stated bound, ON TOP of a platform-stated floor that needs no
+   * configuration.** A key naming a variable the platform's own config owns
+   * (`isReservedPlatformEnvKey`) is dropped by the dispatch call sites before this resolver is
+   * ever asked, so `ENCRYPTION_KEY` and `HARNESS_SHARED_SECRET` are unreachable whether or not
+   * this option is set — and setting it cannot widen that. What this adds is the narrower
+   * boundary: everything OUTSIDE the platform's own configuration is a developer's own tooling
+   * (`AWS_PROFILE`, a personal token), and only the operator knows which of those an integration
+   * may see.
    *
    * It gates EVERY subject this resolver serves, not only tool servers: a generative binary
    * integration's credential (`BinaryGeneratorRegistry`) is resolved through the same port and is
-   * held to the same list. So a `MCP_…`-prefixed convention is no longer sufficient on its own —
-   * an allow-list that names only MCP keys silently resolves nothing for a registered image or
-   * music generator, and the failure surfaces as the agent reporting the integration unavailable
-   * rather than as anything pointing back here. List a prefix per subject family (`MCP_…`,
-   * `GEN_…`), or the exact keys the registrations declare.
+   * held to the same list. So a `MCP_…`-prefixed convention is not sufficient on its own — an
+   * allow-list that names only MCP keys silently resolves nothing for a registered image or music
+   * generator, and the failure surfaces as the agent reporting the integration unavailable rather
+   * than as anything pointing back here. List a prefix per subject family (`MCP_…`, `GEN_…`), or
+   * the exact keys the registrations declare.
+   *
+   * Reachable from every facade: `startLocal` / `start` / `createWorker` take a
+   * `createToolSecretResolver` factory, so wiring the narrower bound is
+   * `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })`.
    */
   allowKeys?: Iterable<string>
 }

@@ -92,6 +92,12 @@ export interface McpSecretRef {
    * The secret's key. For a `stdio` server it becomes an environment variable of the server
    * process; for an `http` server the resolved value is sent as the {@link McpSecretRef.header}
    * request header (shaped by {@link McpSecretRef.headerTemplate}).
+   *
+   * It may NOT name a variable the platform's own configuration owns (`isReservedPlatformEnvKey`
+   * in `@cat-factory/contracts`) — the default resolver reads the key straight off the
+   * deployment's environment, and a definition names both the key it wants AND the endpoint that
+   * key is sent to. Boot validation refuses one, and dispatch refuses it again for the mothership
+   * case, where the definition was authored by a process that is not this one.
    */
   key: string
   /**
@@ -179,7 +185,13 @@ export interface ResolvedToolServer {
 export interface UnavailableToolServer {
   id: string
   label: string
-  reason: 'harness_unsupported' | 'missing_secret'
+  /**
+   * `reserved_secret` is kept apart from `missing_secret` because the two need OPPOSITE fixes and
+   * a single value would send an operator to the wrong one: a missing secret is a variable to set,
+   * while a reserved one is a DECLARATION to change — the server named a variable the platform's
+   * own configuration owns, and setting it is exactly what must not help.
+   */
+  reason: 'harness_unsupported' | 'missing_secret' | 'reserved_secret'
 }
 
 /** The harnesses whose CLI speaks MCP. Pi has no MCP client, so it is deliberately absent. */
