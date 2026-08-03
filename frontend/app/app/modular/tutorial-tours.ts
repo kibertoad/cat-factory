@@ -31,11 +31,19 @@ import type { TutorialRequirement, TutorialTour } from '~/utils/tutorial'
  *    anonymous predicate: the catalogue lists every tour this deployment ships and has to say
  *    what a user must do before one it is holding back becomes available.
  *
- * Together the tours below walk the delivery loop end to end — get a repo onto the board,
- * put a task on it, run it, answer it when it asks, read the result and merge it — with each
- * later tour requiring the state the previous one produces, so the launch prompt only ever
- * offers what this board can actually demonstrate, and the catalogue turns the rest into a
- * to-do list rather than an absence.
+ * The catalog is in two halves, and the split is what keeps the launch prompt answerable:
+ *
+ *  - The DELIVERY LOOP, end to end — get a repo onto the board, put a task on it, run it, answer
+ *    it when it asks, read the result and merge it — each tour requiring the state the previous
+ *    one produces, so the prompt only ever offers what this board can actually demonstrate and
+ *    the catalogue turns the rest into a to-do list rather than an absence.
+ *  - The PLATFORM behind it (`offeredAtLaunch: false`) — the engine the agents run on, the
+ *    pipelines that sequence them, the standards they read, the systems they talk to. Each is
+ *    gated on a PERMISSION rather than on board state, so every one is startable on a brand-new
+ *    board; offered at launch they would bury the two tours a first-time user can act on. They
+ *    are reference material someone goes and gets from the catalogue when the question comes up,
+ *    which is why each covers ONE surface and ends there rather than touring the sidebar: these
+ *    surfaces open as modals, so a step after one cannot reach another sidebar entry anyway.
  */
 
 /**
@@ -89,6 +97,28 @@ export const TUTORIAL_REQUIREMENTS = {
     id: 'finished-run',
     labelKey: 'tutorial.requirements.finishedRun',
     met: (gates) => gates.boardHasFinishedRun,
+  },
+  // The platform half's requirements. Each mirrors, exactly, the `gate` of the sidebar entry the
+  // tour clicks (`nav-model-providers` / `nav-integrations`, `nav-fragments`). A requirement
+  // WEAKER than the gate of the control a step points at offers the tour to a user who has no
+  // such control: it then hunts for the anchor, skips every step behind it, and reports itself
+  // abridged — which is the state this mechanism exists to prevent. They are permissions and
+  // deployment wiring rather than board state, which is why those tours are startable on a board
+  // with nothing on it, and therefore why they are kept out of the launch offer.
+  integrationsManage: {
+    id: 'integrations-manage',
+    labelKey: 'tutorial.requirements.integrationsManage',
+    met: (gates) => gates.canManageIntegrations,
+  },
+  settingsManage: {
+    id: 'settings-manage',
+    labelKey: 'tutorial.requirements.settingsManage',
+    met: (gates) => gates.canManageSettings,
+  },
+  library: {
+    id: 'library',
+    labelKey: 'tutorial.requirements.library',
+    met: (gates) => gates.libraryAvailable,
   },
 } as const satisfies Record<string, TutorialRequirement>
 
@@ -457,6 +487,192 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         id: 'finish',
         titleKey: 'tutorial.tours.reviewMerge.steps.finish.title',
         bodyKey: 'tutorial.tours.reviewMerge.steps.finish.body',
+      },
+    ],
+  },
+  // ---------------------------------------------------------------------------------------
+  // The platform half. Ordered after the whole delivery loop so the catalogue reads in the
+  // order someone meets these things: learn the loop, then the machinery under it.
+  // ---------------------------------------------------------------------------------------
+  {
+    id: 'wire-models',
+    order: 60,
+    icon: 'i-lucide-plug-zap',
+    titleKey: 'tutorial.tours.wireModels.title',
+    descriptionKey: 'tutorial.tours.wireModels.description',
+    // The one connection a deployment cannot live without: every pipeline step is a model call,
+    // so with no provider the whole product is inert. It is nonetheless catalogue-only, because a
+    // deployment with nothing wired already gets its own first-launch nudge (the provider
+    // onboarding advisory, which the launch prompt stands down for) — this is for the person who
+    // meets the question later, or who wants to know where the answer lives.
+    offeredAtLaunch: false,
+    requires: [TUTORIAL_REQUIREMENTS.integrationsManage],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.wireModels.steps.intro.title',
+        bodyKey: 'tutorial.tours.wireModels.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-model-providers',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.wireModels.steps.open.title',
+        bodyKey: 'tutorial.tours.wireModels.steps.open.body',
+      },
+      {
+        id: 'hub',
+        target: 'model-providers-hub',
+        // Inside the modal the previous click opens.
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.wireModels.steps.hub.title',
+        bodyKey: 'tutorial.tours.wireModels.steps.hub.body',
+      },
+      {
+        // Deliberately prose rather than a step pointing at Model configuration: that entry is a
+        // sibling in the same sidebar section, and by now the hub modal is open over it, so a
+        // step anchored there would spend its wait budget on a control the user cannot reach.
+        id: 'finish',
+        titleKey: 'tutorial.tours.wireModels.steps.finish.title',
+        bodyKey: 'tutorial.tours.wireModels.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'design-pipeline',
+    order: 70,
+    icon: 'i-lucide-workflow',
+    titleKey: 'tutorial.tours.designPipeline.title',
+    descriptionKey: 'tutorial.tours.designPipeline.description',
+    // `run-task` teaches picking a pipeline; nothing teaches that the sequence is yours to
+    // change. A user who never finds the builder treats the built-in catalog as the product's
+    // fixed shape and works around it in task descriptions instead.
+    offeredAtLaunch: false,
+    requires: [TUTORIAL_REQUIREMENTS.boardWrite],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.designPipeline.steps.intro.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-build-pipeline',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.designPipeline.steps.open.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.open.body',
+      },
+      {
+        id: 'palette',
+        target: 'pipeline-builder-palette',
+        // Inside the slideover the previous click opens.
+        waitForTargetMs: 8000,
+        placement: 'right',
+        titleKey: 'tutorial.tours.designPipeline.steps.palette.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.palette.body',
+      },
+      {
+        id: 'chain',
+        target: 'pipeline-builder-draft',
+        placement: 'right',
+        titleKey: 'tutorial.tours.designPipeline.steps.chain.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.chain.body',
+      },
+      {
+        // NOT `target-click`, and not for `run-task`'s budget reason: Save is DISABLED until the
+        // draft holds a step, and a click-to-advance step on a control that cannot be clicked
+        // strands the tour — the tooltip drops its Next button, so there is no way forward.
+        id: 'save',
+        target: 'pipeline-builder-save',
+        placement: 'top',
+        titleKey: 'tutorial.tours.designPipeline.steps.save.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.save.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.designPipeline.steps.finish.title',
+        bodyKey: 'tutorial.tours.designPipeline.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'agent-standards',
+    order: 80,
+    icon: 'i-lucide-book-marked',
+    titleKey: 'tutorial.tours.agentStandards.title',
+    descriptionKey: 'tutorial.tours.agentStandards.description',
+    // How you steer output without restating your conventions in every task description, which
+    // is what people do instead when they never find this.
+    offeredAtLaunch: false,
+    requires: [TUTORIAL_REQUIREMENTS.library, TUTORIAL_REQUIREMENTS.settingsManage],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.agentStandards.steps.intro.title',
+        bodyKey: 'tutorial.tours.agentStandards.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-fragments',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.agentStandards.steps.open.title',
+        bodyKey: 'tutorial.tours.agentStandards.steps.open.body',
+      },
+      {
+        id: 'library',
+        target: 'fragment-library',
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.agentStandards.steps.library.title',
+        bodyKey: 'tutorial.tours.agentStandards.steps.library.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.agentStandards.steps.finish.title',
+        bodyKey: 'tutorial.tours.agentStandards.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'connect-systems',
+    order: 90,
+    icon: 'i-lucide-blocks',
+    titleKey: 'tutorial.tours.connectSystems.title',
+    descriptionKey: 'tutorial.tours.connectSystems.description',
+    // Each integration changes what a run can SEE or SAY, and none of them announces itself:
+    // a board with no tracker linked simply never mentions that issues could arrive on their own.
+    offeredAtLaunch: false,
+    requires: [TUTORIAL_REQUIREMENTS.integrationsManage],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.connectSystems.steps.intro.title',
+        bodyKey: 'tutorial.tours.connectSystems.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-integrations',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.connectSystems.steps.open.title',
+        bodyKey: 'tutorial.tours.connectSystems.steps.open.body',
+      },
+      {
+        id: 'hub',
+        target: 'integrations-hub',
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.connectSystems.steps.hub.title',
+        bodyKey: 'tutorial.tours.connectSystems.steps.hub.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.connectSystems.steps.finish.title',
+        bodyKey: 'tutorial.tours.connectSystems.steps.finish.body',
       },
     ],
   },

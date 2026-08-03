@@ -6216,7 +6216,10 @@
       "service": "Un servicio en el tablero",
       "task": "Una tarea en el tablero",
       "waitingAnswer": "Una ejecución esperando tu respuesta",
-      "finishedRun": "Una ejecución terminada correctamente"
+      "finishedRun": "Una ejecución terminada correctamente",
+      "integrationsManage": "Permiso para gestionar integraciones",
+      "settingsManage": "Permiso para gestionar los ajustes del espacio de trabajo",
+      "library": "La biblioteca de fragmentos de contexto habilitada en este despliegue"
     },
     "overlay": {
       "next": "Siguiente",
@@ -6408,6 +6411,102 @@
           "finish": {
             "title": "Entregado",
             "body": "El trabajo fusionado marca la tarea como hecha en el tablero. Ese es el ciclo completo: planificar, ejecutar, responder, revisar y fusionar."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Conectar un proveedor de modelos",
+        "description": "Apunta el espacio de trabajo a los motores con los que funcionan tus agentes.",
+        "steps": {
+          "intro": {
+            "title": "Los agentes necesitan un motor",
+            "body": "Cada paso de cada pipeline es una llamada a un modelo, así que nada funciona hasta que este espacio de trabajo alcance un proveedor. Este recorrido te muestra dónde vive esa conexión."
+          },
+          "open": {
+            "title": "Proveedores de modelos",
+            "body": "Esto abre el hub de proveedores: todos los motores que este despliegue puede conectar, con los ya configurados marcados como conectados."
+          },
+          "hub": {
+            "title": "Elige cómo conectarte",
+            "body": "Una clave de pasarela desbloquea un catálogo amplio de una sola vez. Una clave de proveedor, un plan personal o un ejecutor de modelos en tu propia máquina sirven igual de bien, y puedes tener varios a la vez."
+          },
+          "finish": {
+            "title": "Luego elige por agente",
+            "body": "La configuración del modelo, en la misma sección de la barra lateral, decide qué modelo usa cada tipo de agente. Los pasos baratos pueden ir en modelos baratos y los difíciles en tu mejor modelo, sin editar ningún pipeline."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Diseñar un pipeline",
+        "description": "Ensambla los agentes que entregan una tarea y guárdalo para cualquier tarea.",
+        "steps": {
+          "intro": {
+            "title": "La secuencia es tuya",
+            "body": "Un pipeline es el conjunto ordenado de agentes que convierte una tarea en una pull request fusionada. Los que vienen incluidos cubren la mayor parte del trabajo, y este recorrido abre el constructor donde puedes dar forma al tuyo."
+          },
+          "open": {
+            "title": "Crear un pipeline",
+            "body": "El constructor se abre junto al tablero, así el trabajo sigue a la vista mientras das forma al flujo."
+          },
+          "palette": {
+            "title": "La paleta de agentes",
+            "body": "Aquí están todos los tipos de agente que trae este despliegue, desde los que planifican el trabajo hasta los que lo revisan, lo prueban y lo fusionan. Haz clic en uno para añadirlo como paso."
+          },
+          "chain": {
+            "title": "La cadena que estás montando",
+            "body": "Los pasos se ejecutan de arriba abajo, y cada fila tiene sus propios interruptores: añadir el revisor que devuelve un paso cuando puntúa demasiado bajo, exigir tu aprobación antes de que arranque el siguiente, o ejecutar un paso como un panel de varios modelos."
+          },
+          "save": {
+            "title": "Guárdalo",
+            "body": "Un pipeline guardado se suma a la biblioteca de esta ventana y se ofrece allí donde una tarea elige uno. Nómbralo por el trabajo que hace y no por los agentes que contiene, porque ese nombre es todo lo que verás al elegir después."
+          },
+          "finish": {
+            "title": "Listo para ejecutar",
+            "body": "Clonar uno incluido es la vía más rápida: copia el más parecido, cambia un paso y guárdalo con tu propio nombre. Nada de lo que guardes surte efecto hasta que una tarea se arranque con él."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Fijar los estándares que siguen los agentes",
+        "description": "Cuida las pautas que todo agente lee antes de tocar tu código.",
+        "steps": {
+          "intro": {
+            "title": "Estándares, no instrucciones",
+            "body": "Los fragmentos de contexto son las reglas de la casa: convenciones, criterios de revisión y buenas prácticas que se insertan en el prompt de un agente en cada ejecución. Cuidarlos es la forma de dirigir el resultado en lugar de repetir las mismas reglas en cada tarea."
+          },
+          "open": {
+            "title": "Fragmentos de contexto",
+            "body": "Esto abre la biblioteca de este tablero."
+          },
+          "library": {
+            "title": "Un catálogo unificado",
+            "body": "El catálogo incluido, los fragmentos de tu cuenta y los de este tablero se unen en una sola lista, y gana el nivel más cercano. Puedes escribir uno aquí, importar un documento o enlazar una carpeta de un repositorio para que los archivos que ya mantienes sigan siendo la fuente de verdad."
+          },
+          "finish": {
+            "title": "Dónde acaban",
+            "body": "Un servicio o una tarea puede restringir qué fragmentos reciben sus agentes, y los valores por defecto de todo el tablero están en los ajustes del espacio de trabajo. Los agentes que escriben código reciben un resumen condensado de cada fragmento, para que un estándar largo no desplace a la propia tarea."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Conectar los sistemas que ya usas",
+        "description": "Gestores de incidencias, documentos, chat y monitores, y qué aporta cada uno a una ejecución.",
+        "steps": {
+          "intro": {
+            "title": "Las ejecuciones pueden llegar más lejos",
+            "body": "Las incidencias pueden venir de tu gestor de tareas, los requisitos de tus documentos, las notificaciones al chat de tu equipo y la salud de una release de tus monitores. Cada conexión es opcional, y cada una cambia lo que una ejecución puede ver o decir."
+          },
+          "open": {
+            "title": "El hub de integraciones",
+            "body": "Una lista de todos los sistemas externos que este espacio de trabajo puede enlazar, con lo que ya está conectado marcado."
+          },
+          "hub": {
+            "title": "Conecta lo que necesites",
+            "body": "El control de código va primero, porque los pipelines necesitan código sobre el que trabajar. El resto puede esperar a que surja la necesidad: un gestor de incidencias del que importar tareas, una fuente de documentos para el contexto de requisitos, chat para las notificaciones, monitores para vigilar una release después de publicarla."
+          },
+          "finish": {
+            "title": "Tuyo o del espacio de trabajo",
+            "body": "Algunas entradas son tuyas y no del tablero, como un token de acceso personal o un plan, y solo se usan en las ejecuciones que arrancas tú. El hub marca cuál es cuál, y Mi configuración reúne las que son tuyas."
           }
         }
       }

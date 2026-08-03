@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import { createSharedComposables } from '@modular-vue/vue'
-import { resolveTourCatalogue } from '~/utils/tutorial'
+import { isLaunchOffer, resolveTourCatalogue } from '~/utils/tutorial'
 import type { TutorialCatalogueEntry, TutorialTour } from '~/utils/tutorial'
 import type { AppDeps } from '~/modular/registry'
 import type { AppSlots } from '~/modular/nav-contributions'
@@ -21,10 +21,13 @@ const { useOptional } = createSharedComposables<AppDeps>()
 /**
  * The tutorial catalog as this board sees it, resolved ONCE for every surface that reads it.
  *
- * Two views over one resolution, and the difference between them is the point:
+ * Three views over one resolution, and the differences between them are the point:
  *
- *  - `tours` — what can be started right now. The launch prompt offers these, and the overlay
- *    resolves a running tour from them, exactly as when this gating lived in `navSlotFilter`.
+ *  - `tours` — what can be started right now. The overlay resolves a running tour from these,
+ *    exactly as when this gating lived in `navSlotFilter`.
+ *  - `offered` — the subset the launch prompt asks about: startable AND part of the first-run
+ *    arc (see `TutorialTour.offeredAtLaunch`). The prompt is one answerable question, so it
+ *    stays the delivery loop even as the catalog grows to cover the platform surfaces.
  *  - `catalogue` — EVERY tour this deployment ships, each carrying why it is or isn't
  *    available. The catalogue surface needs the unavailable ones: a list that quietly omits
  *    four of six tours is indistinguishable from a deployment that ships two, and the user it
@@ -42,5 +45,6 @@ export function useTutorialTours() {
   const tours = computed<TutorialTour[]>(() =>
     catalogue.value.filter((entry) => entry.availability === 'ready').map((entry) => entry.tour),
   )
-  return { tours, catalogue }
+  const offered = computed<TutorialTour[]>(() => tours.value.filter(isLaunchOffer))
+  return { tours, offered, catalogue }
 }

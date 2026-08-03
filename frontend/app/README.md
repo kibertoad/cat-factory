@@ -196,6 +196,18 @@ the prompt a short answerable one rather than a browsing surface. Start / Resume
 Back-to-the-tour is decided ONCE for both (`useTutorialLaunch` over the pure `tourState` +
 `launchActionFor`), or the same button would mean different things on two screens.
 
+**Which is why a tour can be catalogue-only** (`offeredAtLaunch: false`, read through the pure
+`isLaunchOffer`; `useTutorialTours` exposes `offered` for the prompt beside `tours` for the
+overlay). The catalog covers the PLATFORM as well as the delivery loop — the engine, the pipeline
+builder, the standards library, the integrations — and those tours gate on a PERMISSION rather
+than on board state, so every one of them is startable on a brand-new board. Offered unfiltered
+they would put six walkthroughs in front of someone whose board has neither a repository nor a
+task, burying the two they can act on. The default is OFFERED, so a consumer deployment's tour
+appears beside the built-ins with nothing to declare, and a tour cannot fall out of the offer by
+omission. It thins an offer, never the library: an un-offered tour is listed, startable, counted
+in the progress line and one footer button away, and `requires` remains the only thing that can
+hold a tour back — which is always reported.
+
 **The catalogue lists the tours it CANNOT start, and says what would unlock each.** That is the
 reason a tour's preconditions are declared (`TutorialRequirement`: an id, a copy key, and the
 gate predicate) rather than being an anonymous `when(gates)`. A predicate can only answer "no",
@@ -287,13 +299,21 @@ repository slug (`SAMPLE_REPO` in `modular/tutorial-tours.ts`) passes it as a `{
 interpolation, so it is written once in code rather than translated into ten catalogs that
 each drift on their own — the same split components make for inline placeholders.
 
-The built-ins walk the delivery loop end to end, each gated on the state the previous one
-leaves behind, so the launch prompt only ever offers what this board can demonstrate: board
-basics, add a repository (`add-service`), create a task (`first-task`), run it (`run-task`),
-answer it when it parks (`answer-park`), review and merge the result (`review-merge`). One
-deliberate asymmetry: `run-task` points at Start without click-to-advance, because starting a
-run spends real model budget and nobody should discover they agreed to that by following a
-tutorial.
+The built-ins come in two halves. The DELIVERY LOOP, end to end, each tour gated on the state the
+previous one leaves behind, so the launch prompt only ever offers what this board can demonstrate:
+board basics, add a repository (`add-service`), create a task (`first-task`), run it (`run-task`),
+answer it when it parks (`answer-park`), review and merge the result (`review-merge`). Then the
+PLATFORM behind it, catalogue-only: connect an engine (`wire-models`), assemble a flow
+(`design-pipeline`), curate the standards agents read (`agent-standards`), link the systems a run
+talks to (`connect-systems`). Each of those covers ONE surface and ends there, because the surface
+opens as a modal over the sidebar it was reached from, so a later step could not click another
+sidebar entry anyway — and each declares exactly the permission that renders the entry it clicks,
+since a weaker requirement offers a tour to someone with no such control and it then reports itself
+abridged. Two deliberate asymmetries about click-to-advance: `run-task` points at Start without it,
+because starting a run spends real model budget and nobody should discover they agreed to that by
+following a tutorial; `design-pipeline` points at Save without it, because Save is DISABLED until
+the draft holds a step, and a click-to-advance step whose control cannot be clicked has no Next
+button either, so it strands the tour.
 
 Two runtime constraints worth knowing before changing the overlay: it must keep
 `pointer-events-auto` and swallow `pointerdown`, because Nuxt UI modals are reka-ui

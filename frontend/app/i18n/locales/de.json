@@ -6228,7 +6228,10 @@
       "service": "Ein Service auf dem Board",
       "task": "Eine Aufgabe auf dem Board",
       "waitingAnswer": "Ein Lauf, der auf deine Antwort wartet",
-      "finishedRun": "Ein erfolgreich abgeschlossener Lauf"
+      "finishedRun": "Ein erfolgreich abgeschlossener Lauf",
+      "integrationsManage": "Berechtigung, Integrationen zu verwalten",
+      "settingsManage": "Berechtigung, Workspace-Einstellungen zu verwalten",
+      "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek"
     },
     "overlay": {
       "next": "Weiter",
@@ -6420,6 +6423,102 @@
           "finish": {
             "title": "Ausgeliefert",
             "body": "Gemergte Arbeit markiert die Aufgabe auf dem Board als erledigt. Das ist der ganze Kreislauf: planen, ausführen, antworten, prüfen, mergen."
+          }
+        }
+      },
+      "wireModels": {
+        "title": "Einen Modellanbieter verbinden",
+        "description": "Richte den Workspace auf die Engines aus, mit denen deine Agenten laufen.",
+        "steps": {
+          "intro": {
+            "title": "Agenten brauchen eine Engine",
+            "body": "Jeder Schritt jeder Pipeline ist ein Modellaufruf, also läuft nichts, solange dieser Workspace keinen Anbieter erreicht. Diese Tour zeigt, wo diese Verbindung liegt."
+          },
+          "open": {
+            "title": "Modellanbieter",
+            "body": "Das öffnet den Anbieter-Hub: jede Engine, die dieses Deployment verbinden kann, wobei die bereits eingerichteten als verbunden markiert sind."
+          },
+          "hub": {
+            "title": "Wähle, wie du verbindest",
+            "body": "Ein Gateway-Schlüssel schaltet auf einmal einen großen Katalog frei. Ein Anbieterschlüssel, ein persönlicher Plan oder ein Modell-Runner auf deinem eigenen Rechner funktionieren genauso gut, und du kannst mehrere gleichzeitig haben."
+          },
+          "finish": {
+            "title": "Danach pro Agent wählen",
+            "body": "Die Modellkonfiguration im selben Bereich der Seitenleiste legt fest, welches Modell jede Agentenart nutzt. Günstige Schritte können auf günstigen Modellen laufen und die schweren auf deinem besten, ohne eine einzige Pipeline zu ändern."
+          }
+        }
+      },
+      "designPipeline": {
+        "title": "Eine Pipeline entwerfen",
+        "description": "Stelle die Agenten zusammen, die eine Aufgabe liefern, und speichere sie für jede Aufgabe.",
+        "steps": {
+          "intro": {
+            "title": "Die Abfolge liegt bei dir",
+            "body": "Eine Pipeline ist die geordnete Reihe von Agenten, die aus einer Aufgabe einen gemergten Pull Request macht. Die eingebauten decken die meiste Arbeit ab, und diese Tour öffnet den Builder, in dem du deine eigene formen kannst."
+          },
+          "open": {
+            "title": "Eine Pipeline erstellen",
+            "body": "Der Builder öffnet sich neben dem Board, damit die Arbeit im Blick bleibt, während du den Ablauf formst."
+          },
+          "palette": {
+            "title": "Die Agentenpalette",
+            "body": "Hier stehen alle Agentenarten, die dieses Deployment mitbringt, von denen, die die Arbeit planen, bis zu denen, die sie prüfen, testen und mergen. Klicke eine an, um sie als Schritt anzuhängen."
+          },
+          "chain": {
+            "title": "Die Kette, die du baust",
+            "body": "Schritte laufen von oben nach unten, und jede Zeile hat ihre eigenen Schalter: den Reviewer anhängen, der einen Schritt bei zu niedriger Bewertung zurückschickt, deine Freigabe verlangen, bevor der nächste startet, oder einen Schritt als Panel aus mehreren Modellen laufen lassen."
+          },
+          "save": {
+            "title": "Speichern",
+            "body": "Eine gespeicherte Pipeline landet in der Bibliothek in diesem Fenster und wird überall angeboten, wo eine Aufgabe eine auswählt. Benenne sie nach der Arbeit, die sie erledigt, nicht nach den Agenten darin, denn dieser Name ist alles, was du später siehst."
+          },
+          "finish": {
+            "title": "Bereit zum Ausführen",
+            "body": "Eine eingebaute zu klonen ist der schnellste Start: kopiere die passendste, ändere einen Schritt, speichere sie unter eigenem Namen. Nichts, was du speicherst, wird wirksam, bevor eine Aufgabe damit gestartet wird."
+          }
+        }
+      },
+      "agentStandards": {
+        "title": "Die Standards festlegen, denen Agenten folgen",
+        "description": "Pflege die Richtlinien, die jeder Agent liest, bevor er deinen Code anfasst.",
+        "steps": {
+          "intro": {
+            "title": "Standards, keine Anweisungen",
+            "body": "Kontextfragmente sind die Hausregeln: Konventionen, Review-Kriterien und Best Practices, die bei jedem Lauf in den Prompt eines Agenten eingefügt werden. Sie hier zu pflegen ist der Weg, das Ergebnis zu steuern, statt dieselben Regeln in jeder Aufgabe zu wiederholen."
+          },
+          "open": {
+            "title": "Kontextfragmente",
+            "body": "Das öffnet die Bibliothek für dieses Board."
+          },
+          "library": {
+            "title": "Ein zusammengeführter Katalog",
+            "body": "Der eingebaute Katalog, die Fragmente deines Accounts und die dieses Boards werden zu einer Liste zusammengeführt, wobei die nähere Ebene gewinnt. Du kannst hier eines schreiben, ein Dokument importieren oder einen Repository-Ordner verknüpfen, damit Dateien, die du schon pflegst, die Quelle der Wahrheit bleiben."
+          },
+          "finish": {
+            "title": "Wo sie landen",
+            "body": "Ein Service oder eine Aufgabe kann einschränken, welche Fragmente ihre Agenten bekommen, und die boardweiten Vorgaben stehen in den Workspace-Einstellungen. Agenten, die Code schreiben, erhalten eine verdichtete Kurzfassung jedes Fragments, damit ein langer Standard die Aufgabe selbst nicht verdrängt."
+          }
+        }
+      },
+      "connectSystems": {
+        "title": "Die Systeme verbinden, die du schon nutzt",
+        "description": "Tracker, Dokumente, Chat und Monitoring, und was jedes davon einem Lauf hinzufügt.",
+        "steps": {
+          "intro": {
+            "title": "Läufe können weiter reichen",
+            "body": "Tickets können aus deinem Tracker kommen, Anforderungen aus deinen Dokumenten, Benachrichtigungen in den Chat deines Teams und Release-Gesundheit aus deinem Monitoring. Jede Verbindung ist optional, und jede verändert, was ein Lauf sehen oder sagen kann."
+          },
+          "open": {
+            "title": "Der Integrations-Hub",
+            "body": "Eine Liste aller externen Systeme, die dieser Workspace anbinden kann, wobei alles Verbundene markiert ist."
+          },
+          "hub": {
+            "title": "Verbinde, was du brauchst",
+            "body": "Die Quellcodeverwaltung kommt zuerst, denn Pipelines brauchen Code, an dem sie arbeiten. Der Rest kann warten, bis die Frage aufkommt: ein Tracker, aus dem Tickets geholt werden, eine Dokumentquelle für Anforderungskontext, Chat für Benachrichtigungen, Monitoring, um ein Release nach dem Ausliefern zu beobachten."
+          },
+          "finish": {
+            "title": "Deins oder das des Workspace",
+            "body": "Manche Einträge gehören dir und nicht dem Board, etwa ein persönliches Zugriffstoken oder ein persönlicher Plan, und werden nur für Läufe genutzt, die du startest. Der Hub markiert, was was ist, und Meine Einrichtung sammelt das, was dir gehört."
           }
         }
       }
