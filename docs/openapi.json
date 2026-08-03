@@ -1548,6 +1548,7 @@
   "paths": {
     "/api/v1/debug/agent-context/{snapshotId}": {
       "get": {
+        "description": "The complete context one dispatch was PROVIDED: system and user prompts, the folded standards fragments, and the injected `.cat-context/*` files an agent reads through tools (which therefore appear in no proxy telemetry). Windowed by `bodyOffset`/`bodyChars`.",
         "operationId": "getDebugAgentContext",
         "parameters": [
           {
@@ -1857,14 +1858,15 @@
             "description": "Server error"
           }
         },
-        "summary": "getDebugAgentContext",
+        "summary": "Get one agent-context snapshot",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/llm-calls/{callId}": {
       "get": {
+        "description": "One recorded model call with its budgeted prompt delta, response and reasoning. `bodyOffset`/`bodyChars` window the bodies, so an arbitrarily long transcript is readable in bounded pages.",
         "operationId": "getDebugLlmCall",
         "parameters": [
           {
@@ -2349,14 +2351,15 @@
             "description": "Server error"
           }
         },
-        "summary": "getDebugLlmCall",
+        "summary": "Get one LLM call",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs": {
       "get": {
+        "description": "The triage entry point: the workspace’s runs, newest first and keyset-paginated, with an optional status and `since` filter.",
         "operationId": "listDebugRuns",
         "parameters": [
           {
@@ -2629,14 +2632,15 @@
             "description": "Server error"
           }
         },
-        "summary": "listDebugRuns",
+        "summary": "List the workspace's runs",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs/{runId}": {
       "get": {
+        "description": "One run’s diagnostic overview: its steps, which telemetry sinks this deployment retains (and how much each holds), the LLM cost/latency rollups, and the derived signals worth looking at first.",
         "operationId": "getDebugRun",
         "parameters": [
           {
@@ -3499,14 +3503,15 @@
             "description": "Server error"
           }
         },
-        "summary": "getDebugRun",
+        "summary": "Get a run's diagnostic map",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs/{runId}/agent-context": {
       "get": {
+        "description": "Every dispatch whose provided context was captured, with SIZES only (no bodies) so the list stays bounded. Read one in full through the snapshot endpoint.",
         "operationId": "listDebugAgentContext",
         "parameters": [
           {
@@ -3661,14 +3666,15 @@
             "description": "Server error"
           }
         },
-        "summary": "listDebugAgentContext",
+        "summary": "List a run's agent-context dispatches",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs/{runId}/llm-calls": {
       "get": {
+        "description": "The model calls a run made, keyset-paginated and filterable by agent kind, phase, outcome or a substring of the bodies. Bodies are returned only when `bodyChars` asks for them.",
         "operationId": "listDebugLlmCalls",
         "parameters": [
           {
@@ -4227,14 +4233,15 @@
             "description": "Server error"
           }
         },
-        "summary": "listDebugLlmCalls",
+        "summary": "List a run's LLM calls",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs/{runId}/logs": {
       "get": {
+        "description": "The run’s provisioning event log — how its environment, runner pool and containers came up, or why they did not.",
         "operationId": "listDebugLogs",
         "parameters": [
           {
@@ -4432,14 +4439,15 @@
             "description": "Server error"
           }
         },
-        "summary": "listDebugLogs",
+        "summary": "List a run's infrastructure log",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
     "/api/v1/debug/runs/{runId}/search-queries": {
       "get": {
+        "description": "The web searches the run’s agents actually performed, keyset-paginated. Retained only when the deployment records agent context.",
         "operationId": "listDebugSearchQueries",
         "parameters": [
           {
@@ -4573,9 +4581,9 @@
             "description": "Server error"
           }
         },
-        "summary": "listDebugSearchQueries",
+        "summary": "List a run's web searches",
         "tags": [
-          "Public API"
+          "Debug"
         ]
       }
     },
@@ -4633,6 +4641,7 @@
     },
     "/api/v1/jobs": {
       "get": {
+        "description": "List the headless initiative runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
         "operationId": "listPublicJobs",
         "parameters": [
           {
@@ -4734,9 +4743,9 @@
             "description": "Server error"
           }
         },
-        "summary": "listPublicJobs",
+        "summary": "List the workspace's initiative jobs",
         "tags": [
-          "Public API"
+          "Initiatives"
         ]
       }
     },
@@ -5190,6 +5199,7 @@
     },
     "/api/v1/runs/{runId}/decisions/judge/resolve": {
       "post": {
+        "description": "Settle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.",
         "operationId": "resolvePublicRunJudge",
         "parameters": [
           {
@@ -5267,9 +5277,9 @@
             "description": "Server error"
           }
         },
-        "summary": "resolvePublicRunJudge",
+        "summary": "Resolve a parked judge verdict",
         "tags": [
-          "Public API"
+          "Decisions"
         ]
       }
     },
@@ -5834,6 +5844,7 @@
     },
     "/api/v1/tasks/{taskId}": {
       "delete": {
+        "description": "Delete a task and its run history. Destructive, so it sits at the top of the scope ladder: requires an `admin`-scoped key.",
         "operationId": "deletePublicTask",
         "parameters": [
           {
@@ -5870,9 +5881,9 @@
             "description": "Server error"
           }
         },
-        "summary": "deletePublicTask",
+        "summary": "Delete a task",
         "tags": [
-          "Public API"
+          "Tasks"
         ]
       },
       "get": {
@@ -6302,6 +6313,10 @@
   ],
   "tags": [
     {
+      "description": "A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.",
+      "name": "Debug"
+    },
+    {
       "description": "A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.",
       "name": "Decisions"
     },
@@ -6316,9 +6331,6 @@
     {
       "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",
       "name": "Pipelines"
-    },
-    {
-      "name": "Public API"
     },
     {
       "description": "The workspace’s board services.",

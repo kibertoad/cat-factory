@@ -1,0 +1,229 @@
+name: SDK release
+
+# Publishes the three NON-npm public-API SDK clients — Python (PyPI), Go (a module tag) and Java
+# (Maven Central) — and does so ONLY when that SDK's own declared version has actually changed.
+#
+# The TypeScript SDK is deliberately absent: it is `@cat-factory/sdk`, an ordinary member of the
+# pnpm workspace, so changesets already versions and publishes it in `release.yml` alongside every
+# other library. Adding a second publisher for it would mean two things racing to push the same
+# npm tag.
+#
+# ---------------------------------------------------------------------------------------------
+# The gate: a VERSION CHANGE, not a file change.
+# ---------------------------------------------------------------------------------------------
+# Every job below computes its SDK's declared version at this commit and at the previous one, and
+# publishes only when the two differ. That is the correct gate for three reasons a path filter is
+# not:
+#
+#  - Re-running a workflow must be SAFE. A path filter fires again on a re-run or a revert and
+#    tries to publish a version that is already on the registry — PyPI and Maven Central both
+#    reject a duplicate outright, so the run goes red for a reason that is not a problem.
+#  - Most SDK changes must NOT publish. A README edit, a smoketest fix, or a regenerated client
+#    that happens to be byte-identical are all `sdk/**` changes that should ship nothing.
+#  - The version bump is the AUTHOR'S INTENT, stated in the diff. Publishing keys off a
+#    deliberate edit to a manifest rather than off a heuristic about which files "look like" a
+#    release.
+#
+# Consequence worth knowing: bumping a version and merging IS the release action. There is no
+# separate "publish" button, and nothing publishes until a human edits the version.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/**'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Publish even when the version did not change (use only to recover a failed run)'
+        type: boolean
+        default: false
+
+# Never run two publishes for the same SDK at once.
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # Compute, once, which SDKs changed version at this commit. Each publish job gates on its own
+  # flag, so a commit that bumps only Python does not drag Go and Java through a no-op release.
+  versions:
+    name: Detect version bumps
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      python: ${{ steps.detect.outputs.python }}
+      go: ${{ steps.detect.outputs.go }}
+      java: ${{ steps.detect.outputs.java }}
+      goVersion: ${{ steps.detect.outputs.goVersion }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Two commits: this one and its parent, which is all the comparison needs.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - id: detect
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          # Read a manifest's version at a given git revision. A file that does not exist at the
+          # parent commit (a newly added SDK) yields an empty string, which correctly compares as
+          # "changed".
+          at_rev() {
+            git show "$1:$2" 2>/dev/null || true
+          }
+
+          py_now=$(sed -n 's/^version = "\(.*\)"/\1/p' sdk/python/pyproject.toml | head -1)
+          py_prev=$(at_rev HEAD~1 sdk/python/pyproject.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+
+          # The Go module carries no version of its own — the git TAG is the version — so it
+          # tracks the TypeScript SDK's manifest, which is what keeps the family moving together.
+          # `check:sdk` enforces that the constant in client.go agrees with it.
+          go_now=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' sdk/typescript/package.json | head -1)
+          go_prev=$(at_rev HEAD~1 sdk/typescript/package.json | sed -n 's/.*"version": "\(.*\)".*/\1/p' | head -1)
+
+          java_now=$(sed -n '0,/<\/version>/s/.*<version>\(.*\)<\/version>.*/\1/p' sdk/java/pom.xml | head -1)
+          java_prev=$(at_rev HEAD~1 sdk/java/pom.xml | sed -n '0,/<\/version>/s/.*<version>\(.*\)<\/version>.*/\1/p' | head -1)
+
+          changed() {
+            if [ "$FORCE" = "true" ] || [ "$1" != "$2" ]; then echo true; else echo false; fi
+          }
+
+          {
+            echo "python=$(changed "$py_now" "$py_prev")"
+            echo "go=$(changed "$go_now" "$go_prev")"
+            echo "java=$(changed "$java_now" "$java_prev")"
+            echo "goVersion=$go_now"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "python: $py_prev -> $py_now"
+          echo "go:     $go_prev -> $go_now"
+          echo "java:   $java_prev -> $java_now"
+
+  publish-python:
+    name: Publish cat-factory-sdk (PyPI)
+    needs: versions
+    if: ${{ needs.versions.outputs.python == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # PyPI trusted publishing (OIDC) — no long-lived token, matching how release.yml
+      # authenticates to npm. Configure the trusted publisher on pypi.org to point at this
+      # workflow.
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Build the distribution
+        working-directory: sdk/python
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: sdk/python/dist
+
+  publish-java:
+    name: Publish ai.catfactory:cat-factory-sdk (Maven Central)
+    needs: versions
+    if: ${{ needs.versions.outputs.java == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Cached HERE but deliberately not in ci.yml's smoketest job, and the difference is the
+          # dependency set: that job needs three jars, while `-P release deploy` pulls the gpg,
+          # javadoc, source and central-publishing plugins, so a warm cache genuinely pays.
+          cache: maven
+          # The key's input is NAMED rather than globbed. Left unset, setup-java walks
+          # `**/pom.xml` from the repository root — the unbounded restore that cost the smoketest
+          # job its entire timeout budget once (see the note on its setup steps). This checkout
+          # has no `node_modules` to descend, but there is exactly one pom either way and a key
+          # computable in one stat cannot regress into that.
+          cache-dependency-path: sdk/java/pom.xml
+          # Writes a settings.xml wiring these to the `central` server id.
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      # Maven Central requires sources + javadoc jars and a GPG signature on every artifact; the
+      # first two are attached by plugins already declared in the pom, the signature by the
+      # profile activated here.
+      - name: Deploy
+        working-directory: sdk/java
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -B -P release deploy
+
+  # A Go module is published by TAGGING it: `go get` resolves
+  # `github.com/kibertoad/cat-factory/sdk/go@vX.Y.Z` from a tag named `sdk/go/vX.Y.Z` (the
+  # subdirectory prefix is required for a module that is not at the repository root — without it
+  # the proxy looks for a root module and finds none). There is no registry upload.
+  publish-go:
+    name: Tag the Go module
+    needs: versions
+    if: ${{ needs.versions.outputs.go == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the tag
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # This job's whole purpose is pushing a tag, so it legitimately keeps credentials.
+          persist-credentials: true # zizmor: ignore[artipacked]
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.23'
+          cache-dependency-path: sdk/go/go.mod
+
+      # Never tag a module that does not build: a Go tag is immutable in the module proxy's cache
+      # the moment anyone fetches it, so a broken one cannot be replaced — only superseded.
+      - name: Verify the module builds
+        working-directory: sdk/go
+        run: |
+          go vet ./...
+          go build ./...
+
+      - name: Tag
+        env:
+          VERSION: ${{ needs.versions.outputs.goVersion }}
+        run: |
+          set -euo pipefail
+          TAG="sdk/go/v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists — nothing to publish."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "cat-factory Go SDK v${VERSION}"
+          git push origin "$TAG"

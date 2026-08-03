@@ -261,6 +261,36 @@ const controlServer = createServer((req, res) => {
       .catch((err) => fail(res, 400, err))
     return
   }
+  // Seed an ACCOUNT-BACKED board and return its ids. Used by the cross-SDK smoketest
+  // (`@cat-factory/sdk-smoketest`), which needs to mint public-API keys — an account-scoped
+  // feature that is refused for the account-less board an anonymous `POST /workspaces` creates,
+  // and `POST /accounts` requires a signed-in user, so there is no anonymous REST path to one.
+  // Deliberately its OWN route rather than reusing `/rbac-seed`: that one also restricts the
+  // board and enrols a viewer, and a smoketest quietly inheriting an access mode it never asked
+  // for is the kind of coupling that only surfaces as a baffling 404 much later.
+  if (req.method === 'POST' && req.url === '/account-workspace-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer) {
+          res.writeHead(503).end('account-workspace seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw || '{}') as { tag?: string; seed?: boolean }
+        const tag = body.tag ?? `sdk-${Date.now()}`
+        const probe = makeOnboardingProbe(rbacContainer)
+        const { accountId, ownerUserId } = await probe.makeOrgOwner(tag)
+        const snapshot = await rbacContainer.workspaceService.create(
+          { name: `SDK smoketest ${tag}`, seed: body.seed ?? true },
+          ownerUserId,
+          accountId,
+        )
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ workspaceId: snapshot.workspace.id, accountId, ownerUserId }))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
   // Seed a restricted-board RBAC scenario + mint the principals' sessions (see
   // `seedRbacScenario`). Returns the board id + a Bearer token per principal, which the RBAC
   // spec injects into the SPA to drive the board as an authenticated viewer vs admin.

@@ -44,6 +44,7 @@ jobs:
       cliSupervise: ${{ steps.filter.outputs.cliSupervise }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
+      sdk: ${{ steps.filter.outputs.sdk }}
       # Coarse test-lane gating (computed in the `scope` step below):
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
       #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
@@ -144,6 +145,32 @@ jobs:
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
+            # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
+            # SDK clients against it, so it runs when EITHER side of that contract moves: the
+            # SDKs themselves, the generator that writes them, the published spec, the Valibot
+            # contracts the spec is generated FROM, or the controllers that serve `/api/v1`. That
+            # last pair is the point — an SDK is only correct relative to the surface it talks to,
+            # and a controller change that breaks a client would otherwise be caught by nothing
+            # until an integration hit it in production.
+            sdk:
+              - 'sdk/**'
+              - 'scripts/sdk/**'
+              - 'scripts/generate-sdks.mjs'
+              - 'scripts/check-sdks.mjs'
+              - 'docs/openapi.json'
+              - 'backend/packages/contracts/src/public-api.ts'
+              - 'backend/packages/contracts/src/public-api-keys.ts'
+              - 'backend/packages/contracts/src/debug-api.ts'
+              - 'backend/packages/contracts/src/routes/public-api.ts'
+              - 'backend/packages/contracts/src/routes/public-decisions.ts'
+              - 'backend/packages/contracts/src/routes/debug-api.ts'
+              - 'backend/packages/server/src/modules/publicApi/**'
+              - 'backend/internal/sdk-smoketest/**'
+              # The harness boots the e2e test server, so a change to that wiring changes what the
+              # SDKs are smoketested against.
+              - 'backend/internal/e2e/src/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # Root build / dependency / CI inputs that can change the outcome of ANY suite:
             # the lockfile, the workspace + root package manifests, the shared tsconfigs, the
             # Turbo task graph, and this workflow (or the composite actions it calls). Any of
@@ -449,6 +476,15 @@ jobs:
       # without running `pnpm gen:openapi`. Needs the contracts dist built above.
       - name: Check OpenAPI spec is up to date
         run: pnpm check:openapi
+
+      # SDK drift guard: regenerate all four public-API clients (TypeScript / Python / Go / Java)
+      # from the committed spec and diff them against what is in the tree, plus a version-skew
+      # check across each SDK's manifest and the constant its transport stamps into `User-Agent`.
+      # Runs HERE rather than in `repo-guards` because it reads docs/openapi.json, which the
+      # step above has just proven current — checking the SDKs against a stale spec would report
+      # them clean while both were wrong. Pure node once the spec exists.
+      - name: Check SDK clients are up to date
+        run: pnpm check:sdk
 
       # Unused files / exports / dependencies across the workspace. The knip.json config is
       # scoped to pass today (see its comments for deliberate ignores); tightening the
@@ -1128,7 +1164,7 @@ jobs:
   # now (see their job comments above), so their result does not gate this required status.
   test-gate:
     name: Test
-    needs: [changes, test-worker, test-units, test-db, test-k8s]
+    needs: [changes, test-worker, test-units, test-db, test-k8s, sdk-smoketest]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1148,13 +1184,18 @@ jobs:
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
           K8S: ${{ needs.test-k8s.result }}
+          # The cross-SDK smoketest. It is the ONLY check that can see the four clients
+          # disagree, so it gates like any other lane rather than being advisory — a client
+          # that decodes a field differently or maps a refusal to the wrong class must not be
+          # mergeable. Skipped (no `sdk` changes) counts as a pass exactly like the rest.
+          SDK: ${{ needs.sdk-smoketest.result }}
         run: |
-          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S | sdk: $SDK"
           if [ "$CHANGES" != 'success' ]; then
             echo "::error::change detection did not succeed; refusing to pass the test gate"
             exit 1
           fi
-          for lane in "$WORKER" "$UNITS" "$DB" "$K8S"; do
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S" "$SDK"; do
             case "$lane" in
               success | skipped) ;;
               *)
@@ -1164,6 +1205,116 @@ jobs:
             esac
           done
           echo "All required test lanes passed or were skipped with no relevant changes."
+
+  # The cross-SDK smoketest: boot a REAL Node backend (real Postgres, real pg-boss, only the
+  # LLM/agent side faked) and drive the SAME scenario through all four public-API SDK clients —
+  # TypeScript, Python, Go and Java — then compare their observation reports field by field.
+  #
+  # It exists because the four clients are generated from one spec and are supposed to be
+  # interchangeable, and nothing else in CI can see them disagree. A per-SDK unit test can only
+  # assert that a client matches what ITS author expected; the parity comparison catches one
+  # language decoding a field differently, mapping a refusal to the wrong error class, dropping a
+  # null, or paginating one page short — including the case where nobody had written down what
+  # the right answer was. (It earned its keep immediately: the Java client's default HTTP/2 sent
+  # an h2c upgrade on cleartext connections that the Node facade answered with a 404 on every
+  # call, which the three other SDKs' agreement is exactly what made obvious.)
+  #
+  # Gated on the `sdk` filter, so it runs when either side of the contract moves — the clients and
+  # their generator, or the `/api/v1` contracts and controllers they talk to.
+  sdk-smoketest:
+    name: SDK smoketest (4 languages)
+    needs: changes
+    if: ${{ needs.changes.outputs.sdk == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
+      # Every toolchain below is installed on purpose, so a MISSING one is a broken workflow
+      # rather than a developer's laptop — and the harness must fail rather than quietly shrink
+      # the matrix to whatever happened to be present. A silent skip is indistinguishable from a
+      # pass, and "the Go SDK is fine" is the wrong thing to conclude from "Go was not installed".
+      SDK_SMOKETEST_REQUIRE_ALL: 'true'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Same background-Postgres pair the DB and e2e lanes use, so its startup hides behind the
+      # toolchain setup and the build below.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # NO dependency caching on either of these, deliberately. The Go SDK has zero dependencies
+      # and the Java SDK has three, so a cache saves ~30s of small downloads — while the cache
+      # RESTORE itself is unbounded work this job cannot supervise: `cache: maven` once spent 14
+      # minutes deciding there was no cache to restore, which ate the job's whole timeout and
+      # reported as a cancellation with no failing step to point at. Downloading is the cheaper
+      # and far more predictable half of that trade.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.23'
+          cache: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Build libraries
+        run: pnpm build
+
+      # The SDKs must be regenerable from the committed spec before they are smoketested: a
+      # smoketest that passed against hand-edited clients would prove nothing about what
+      # `pnpm gen:sdk` produces, which is what actually ships.
+      - name: Check SDK clients are up to date
+        run: pnpm check:sdk
+
+      # Each SDK's own unit tests, before the smoketest that needs a database. They cover the
+      # HAND-WRITTEN half — above all the four independent SSE readers, whose framing bugs (a read
+      # boundary mid-record, a terminal frame arriving as the socket closes) surface in production
+      # as a run that silently appears to stall and which the smoketest structurally cannot
+      # provoke. The TypeScript ones run in the ordinary `test-units` lane.
+      - name: Test the Go SDK
+        working-directory: sdk/go
+        run: |
+          # `gofmt -l` lists what it WOULD reformat and exits 0 either way, so the emptiness of
+          # its output is the assertion. Generated Go is emitted already-formatted (the emitter
+          # reproduces gofmt's column alignment rather than shelling out to it), so a hit here
+          # means the emitter drifted from what gofmt does.
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would reformat: $unformatted"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+
+      - name: Test the Java SDK
+        working-directory: sdk/java
+        run: mvn -B test
+
+      - name: Test the Python SDK
+        working-directory: sdk/python
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest tests -q
+
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      - name: Run the cross-SDK smoketest
+        run: pnpm --filter @cat-factory/sdk-smoketest run smoketest
 
   acceptance:
     name: Container acceptance (Docker)

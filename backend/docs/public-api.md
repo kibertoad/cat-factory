@@ -17,6 +17,9 @@ This is the **how-to and reference**. Its siblings each own a different slice:
   `read` scope), for walking a run's telemetry from outside the browser.
 - [`public-api-additions.md`](../../docs/initiatives/public-api-additions.md) — the live tracker of
   what the decision surface **cannot** answer yet. Read it before building on parked decisions.
+- [`sdk/README.md`](../../sdk/README.md) — the **official SDK clients** (TypeScript, Python, Go,
+  Java+Kotlin), generated from the spec below. Reach for one before hand-rolling HTTP: see
+  [Client SDKs](#client-sdks).
 
 ## Setup
 
@@ -188,6 +191,29 @@ curl -s -H "$AUTH" "$BASE/api/v1/usage"
 The headless-initiative flow is the same shape one level up: `POST /api/v1/initiatives` with
 `{ pipelineId, input }` returns `202 { jobId, links: { self, events } }`; poll `GET /jobs/:id` or
 stream `GET /jobs/:id/events`. Initiative runs are **inline-only** — nothing is pushed to GitHub.
+
+## Client SDKs
+
+Official clients ship for four languages, so most integrations should not be writing HTTP by hand:
+
+| Language      | Install                                                    |
+| ------------- | ---------------------------------------------------------- |
+| TypeScript    | `npm install @cat-factory/sdk`                             |
+| Python        | `pip install cat-factory-sdk`                              |
+| Go            | `go get github.com/kibertoad/cat-factory/sdk/go@latest`    |
+| Java / Kotlin | `ai.catfactory:cat-factory-sdk` (one artifact serves both) |
+
+Their models and operation methods are **generated from [`docs/openapi.json`](../../docs/openapi.json)**
+— which is itself generated from the Valibot route contracts — so a client cannot drift from the
+surface documented below. They also implement the conventions on this page for you: keyset
+auto-pagination, SSE framing, bounded retries on idempotent requests only, and an error type per
+status class with the machine-readable `code` exposed verbatim.
+
+Details, the design rules the four share, and the Java/Kotlin story:
+[`sdk/README.md`](../../sdk/README.md).
+
+Everything below still applies — the SDKs are a typed skin over exactly these endpoints, and the
+error codes, scopes and paging rules are the same whichever you use.
 
 ## Reference
 

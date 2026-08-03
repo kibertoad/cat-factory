@@ -1,0 +1,75 @@
+# `@cat-factory/sdk-smoketest`
+
+The **cross-SDK smoketest**: boots a real Node backend, then drives the same scenario through all
+four public-API SDK clients ([`sdk/`](../../../sdk)) and compares their observation reports field
+by field.
+
+```sh
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
+  pnpm --filter @cat-factory/sdk-smoketest run smoketest
+
+# while iterating on one client:
+DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=go
+```
+
+## What it is for
+
+**The comparison, not the individual runs.** A per-SDK test can only assert that a client matches
+what its own author expected. Four reports compared against each other catch the class of bug this
+SDK family is most exposed to — one language decoding a field differently, mapping a refusal to
+the wrong error class, dropping a null, or paginating one page short — because those show up as a
+DISAGREEMENT even when nobody wrote down what the right answer was.
+
+It earned that immediately: the Java client's default HTTP/2 was sending an h2c upgrade on
+cleartext connections that the Node facade answered with a **404 on every call**. Three other
+SDKs agreeing is what made it obvious that the fault was in the client, not the deployment.
+
+## How it runs
+
+1. **Boot** the REAL Node facade by spawning `@cat-factory/e2e`'s `testServer.ts` — the same
+   shared Hono app, real Postgres, real pg-boss, with only the LLM/agent side faked. Reusing the
+   e2e server rather than composing a second wiring is deliberate: a smoketest against a bespoke
+   composition would prove the SDKs work against _that_, and the wiring is the likeliest thing to
+   drift.
+2. **Seed**, per SDK, a FRESH account-backed workspace over the test control channel, plus an
+   `admin` key (the scenario deletes a task) and a `read` key (so it can observe a typed
+   `insufficient_scope` refusal). Fresh per SDK because a shared workspace would make each
+   client's observations depend on what the previous ones left behind.
+3. **Run** each SDK's `smoketest/` program with `CAT_FACTORY_BASE_URL`, `CAT_FACTORY_API_KEY`,
+   `CAT_FACTORY_READ_KEY` and `CAT_FACTORY_SMOKETEST_OUT`. Each writes a JSON report.
+4. **Compare** the reports (`src/parity.ts`).
+
+## The scenario
+
+List services and pipelines → create, edit and read a task → page it one item at a time, both
+manually and auto-paged → read usage and notifications → provoke a **404**, a **401** and a
+**403 `insufficient_scope`** → start the task → read its SSE stream → read the run projection →
+stop it → delete it and confirm it is gone.
+
+Each SDK's program is told to **OBSERVE and RECORD, never assert**: an assertion fails one client
+in isolation, where a recorded observation is comparable across four.
+
+## The comparison
+
+Three kinds of problem, and all of them are reported (not just the first — divergences usually
+share one root cause and reading them together is what shows it):
+
+- **`expectation`** — an absolute claim every SDK must satisfy (`notFoundStatus` is 404,
+  `forbiddenCode` is `insufficient_scope`, `pagedHasDuplicates` is false). Catches all four being
+  wrong the same way, which a purely comparative check cannot see.
+- **`disagreement`** — the SDKs observed different values for the same thing.
+- **`missing`** — some SDKs recorded an observation and others did not.
+
+A small `ENVIRONMENTAL` allow-list covers observations that may legitimately differ (how far a
+run had progressed when each client looked). Every entry there is a place a real divergence would
+go unreported, so the bar for adding one is "these two SDKs cannot be expected to observe the same
+value" — never "these numbers move around".
+
+## Notes
+
+- A missing language toolchain is **skipped loudly**, and in CI (`SDK_SMOKETEST_REQUIRE_ALL`) it
+  fails: a silent skip is indistinguishable from a pass.
+- Fewer than two reports is not a parity check, and the run says so rather than reporting the
+  vacuous "0 disagreements".
+- `E2E_DECISION_ON_STEPS` is cleared: the e2e suite defaults it so every run parks once on a
+  human decision, which would park the smoketest's run before it produced any progress.

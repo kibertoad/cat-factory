@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>ai.catfactory</groupId>
+  <artifactId>cat-factory-sdk</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>cat-factory SDK</name>
+  <description>
+    Java and Kotlin client for the cat-factory public API (/api/v1): typed models and resource
+    clients generated from the published OpenAPI spec, over a hand-written java.net.http transport
+    with bearer auth, bounded retries, keyset auto-pagination and an SSE reader for the run
+    streams. One artifact serves both languages — the model and resource packages are JSpecify
+    @NullMarked, so Kotlin sees real nullability rather than platform types.
+  </description>
+  <url>https://github.com/kibertoad/cat-factory</url>
+
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>cat-factory</name>
+      <url>https://github.com/kibertoad/cat-factory</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <url>https://github.com/kibertoad/cat-factory</url>
+    <connection>scm:git:https://github.com/kibertoad/cat-factory.git</connection>
+  </scm>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jackson.version>2.22.1</jackson.version>
+    <jspecify.version>1.0.1</jspecify.version>
+    <junit.version>6.1.2</junit.version>
+  </properties>
+
+  <dependencies>
+    <!--
+      Jackson is the SDK's ONLY runtime dependency. The HTTP stack is java.net.http from the JDK,
+      because a client library's dependencies become every consumer's dependencies.
+    -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+      <!--
+        Deliberately the 2.x line, not Jackson 3 (`tools.jackson`, currently 3.2.x). Jackson 3 is
+        stable and would work here, but 2.x is what is already on essentially every consumer's
+        classpath, and an SDK's job is to be cheap to adopt rather than to be first. Revisit when
+        3.x is the common default.
+      -->
+    </dependency>
+
+    <!--
+      JSpecify is annotations-only and has no runtime behaviour, but it is `compile` scope
+      DELIBERATELY rather than `provided`: Kotlin reads the annotations off the CLASSPATH to infer
+      nullability, so a consumer that did not also declare JSpecify would silently fall back to
+      platform types — losing the single most valuable thing this artifact does for Kotlin.
+    -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>${jspecify.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <compilerArgs>
+            <!-- Keep parameter names in the bytecode, so a Kotlin caller sees meaningful names. -->
+            <arg>-parameters</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.6</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals><goal>jar-no-fork</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.11.2</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals><goal>jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      Activated by `mvn -P release deploy` in .github/workflows/sdk-release.yml. Kept in a
+      profile, not the default build, so an ordinary `mvn install` on a developer's machine does
+      not demand a GPG key it has no reason to need.
+    -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals><goal>sign</goal></goals>
+                <configuration>
+                  <!-- No TTY on a runner, so the passphrase arrives on stdin. -->
+                  <gpgArguments>
+                    <arg>--pinentry-mode</arg>
+                    <arg>loopback</arg>
+                  </gpgArguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.9.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <!-- Publish automatically once Central's validation passes, rather than leaving the
+                   deployment sitting in the portal waiting for someone to press a button. -->
+              <autoPublish>true</autoPublish>
+              <waitUntil>published</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>
