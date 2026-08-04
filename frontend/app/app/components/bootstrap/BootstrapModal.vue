@@ -5,9 +5,13 @@
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
 import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
-// Explicit import (see GitHubPanel): the auto-import name for github/GitHubConnect
-// doesn't match the `<GitHubConnect>` tag, so bind it directly.
-import GitHubConnect from '~/components/github/GitHubConnect.vue'
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
+import {
+  appInstallationManageUrl,
+  githubNewRepoUrl,
+  VCS_PROVIDER_LABELS,
+  VCS_PROVIDER_NEW_REPO_URLS,
+} from '~/utils/vcs'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -137,35 +141,44 @@ watch(
   { immediate: true },
 )
 
-// A bootstrap run pushes into a GitHub repo, so the workspace must be connected
-// first (the backend pre-flights the same and 409s otherwise). When the
-// integration is on but unconnected, surface the discover-and-link prompt inline
-// and block launch until it's bound.
-const needsGitHub = computed(() => github.available === true && !github.connected)
+// A bootstrap run pushes into a repo on the connected host, so the workspace must be
+// connected first (the backend pre-flights the same and 409s otherwise). When the
+// integration is on but unconnected, surface the connect prompt inline and block launch
+// until it's bound.
+const needsConnection = computed(() => github.available === true && !github.connected)
 
-// The account the repo must live under — the connected installation's account. The
-// run pushes into an existing repo here (cat-factory doesn't create it: a GitHub App
-// can't create repos under a personal account, and we'd rather not hold the broad
-// Administration permission). The repo must be empty or hold only a prepopulated
-// README/.gitignore/license — the push force-overwrites that boilerplate. The
-// convenience link opens GitHub's new-repo page prefilled so the user can create it
-// in one click.
+// The host this modal is about: the connected one, or the only one the deployment could
+// connect while nothing is bound. Null where it offers several and none is connected, which
+// is what the create-repo affordance below keys off — there is no page to open for a host we
+// cannot name, and `provider`'s own default would send a GitLab deployment to github.com.
+const hostProvider = computed(() => github.surfaceProvider)
+const providerLabel = computed(() =>
+  hostProvider.value ? VCS_PROVIDER_LABELS[hostProvider.value] : '',
+)
+
+// The account the repo must live under — the connected account. The run pushes into an
+// existing repo here (cat-factory doesn't create it: a GitHub App can't create repos under a
+// personal account, and we'd rather not hold the broad Administration permission). The repo
+// must be empty or hold only a prepopulated README/.gitignore/license — the push
+// force-overwrites that boilerplate. The convenience link opens the host's new-repo page,
+// prefilled where the host's form accepts one (GitHub's does, GitLab's does not).
 const repoOwner = computed(() => github.connection?.accountLogin ?? '')
 const createRepoUrl = computed(() => {
-  const params = new URLSearchParams()
-  if (repoOwner.value) params.set('owner', repoOwner.value)
-  const name = repoName.value.trim()
-  if (name) params.set('name', name)
-  const desc = description.value.trim()
-  if (desc) params.set('description', desc)
-  params.set('visibility', isPrivate.value ? 'private' : 'public')
-  return `https://github.com/new?${params.toString()}`
+  if (hostProvider.value === null) return undefined
+  return hostProvider.value === 'github'
+    ? githubNewRepoUrl({
+        owner: repoOwner.value,
+        name: repoName.value.trim(),
+        description: description.value.trim(),
+        private: isPrivate.value,
+      })
+    : VCS_PROVIDER_NEW_REPO_URLS[hostProvider.value]
 })
 
 const creatingRepo = ref(false)
 
 // The "create repository" button behaves differently per tier. Restricted orgs
-// (the default) open GitHub's new-repo page prefilled — cat-factory needs no
+// (the default) open the host's new-repo page — cat-factory needs no
 // repo-creation permission. Privileged orgs (the connection reports
 // `canCreateRepos`) create it programmatically via the backend, with no page.
 async function openCreateRepo() {
@@ -173,7 +186,9 @@ async function openCreateRepo() {
   if (!name || repoNameError.value) return
 
   if (!github.canCreateRepos) {
-    window.open(createRepoUrl.value, '_blank', 'noopener')
+    // The button is hidden without a resolved host, so there is always a URL here; the guard
+    // keeps that a local fact rather than an assumption about the template.
+    if (createRepoUrl.value) window.open(createRepoUrl.value, '_blank', 'noopener')
     return
   }
 
@@ -207,20 +222,15 @@ async function openCreateRepo() {
 // "not accessible to the GitHub App". Link straight to the connected
 // installation's settings page, where the user adds the repo to its access list
 // in one click — no install/connect round-trip (the workspace is already bound).
-const manageInstallUrl = computed(() => {
-  const conn = github.connection
-  if (!conn) return undefined
-  return conn.targetType === 'Organization'
-    ? `https://github.com/organizations/${conn.accountLogin}/settings/installations/${conn.installationId}`
-    : `https://github.com/settings/installations/${conn.installationId}`
-})
+// Absent on a PAT connection, which grants no per-installation access (see `~/utils/vcs`).
+const manageInstallUrl = computed(() => appInstallationManageUrl(github.connection))
 
 function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
 
 const canLaunch = computed(() => {
-  if (needsGitHub.value) return false
+  if (needsConnection.value) return false
   if (!repoName.value.trim() || repoNameError.value) return false
   return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
 })
@@ -424,18 +434,19 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           {{ github.canCreateRepos ? t('bootstrap.intro.canCreate') : t('bootstrap.intro.manual') }}
         </p>
 
-        <!-- not connected: a run needs GitHub, so discover & link before launching -->
+        <!-- not connected: a run pushes to the host, so connect before launching. Offer
+             whichever methods the deployment serves, never just the GitHub App. -->
         <div
-          v-if="needsGitHub"
+          v-if="needsConnection"
           class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
         >
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              {{ t('bootstrap.github.prompt') }}
+              {{ t('vcs.bootstrap.connectPrompt') }}
             </p>
           </div>
-          <GitHubConnect />
+          <VcsConnectSurfaces />
         </div>
 
         <!-- launch -->
@@ -484,7 +495,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                   :placeholder="t('bootstrap.targetRepo.namePlaceholder')"
                   class="w-full"
                 />
+                <!-- Creating the repo for the user needs no host name; sending them to the
+                     host's own form needs one, so that variant waits until a host is
+                     resolved rather than guessing which page to open. -->
                 <UButton
+                  v-if="github.canCreateRepos || createRepoUrl"
                   color="neutral"
                   variant="subtle"
                   :icon="github.canCreateRepos ? 'i-lucide-plus' : 'i-lucide-external-link'"
@@ -493,14 +508,14 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                   :title="
                     github.canCreateRepos
                       ? t('bootstrap.createRepo.titleNow')
-                      : t('bootstrap.createRepo.titleGitHub')
+                      : t('vcs.bootstrap.createRepoTitle', { provider: providerLabel })
                   "
                   @click="openCreateRepo"
                 >
                   {{
                     github.canCreateRepos
                       ? t('bootstrap.createRepo.now')
-                      : t('bootstrap.createRepo.onGitHub')
+                      : t('vcs.bootstrap.createRepoOn', { provider: providerLabel })
                   }}
                 </UButton>
               </div>

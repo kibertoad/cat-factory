@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { vcsProviderSchema } from './routes/auth.js'
+import { vcsConnectMethodSchema } from './routes/vcs.js'
 
 // ---------------------------------------------------------------------------
 // GitHub integration wire contracts. These describe the *projected* GitHub data
@@ -151,7 +152,7 @@ export const githubCheckRunSchema = v.object({
 })
 export type GitHubCheckRun = v.InferOutput<typeof githubCheckRunSchema>
 
-/** A workspace's GitHub App installation, as exposed to clients (no token). */
+/** A workspace's VCS connection (an App installation or a pasted PAT), as exposed to clients. */
 export const githubConnectionSchema = v.object({
   installationId: v.number(),
   accountLogin: v.string(),
@@ -162,6 +163,16 @@ export const githubConnectionSchema = v.object({
    * copy/icons on it. Absent on backends predating the column ⇒ treated as `'github'`.
    */
   provider: v.optional(vcsProviderSchema),
+  /**
+   * HOW the workspace authenticates: a GitHub-App installation (`app`) or a pasted personal
+   * access token (`pat`). Required, and stated by whichever connect service built the record
+   * rather than inferred from {@link provider}: an App-only affordance (the installation
+   * settings page, the repo-access grant) exists for `app` alone, and a provider test would
+   * mis-serve the moment a second provider gains a PAT connect (or GitHub gains one). A
+   * client seeing no value must treat the connection as NOT an App one: hiding a link is
+   * recoverable, offering one that 404s on the user's host is not.
+   */
+  method: vcsConnectMethodSchema,
   /**
    * Whether cat-factory can create repositories under this account itself — true
    * only for accounts served by the privileged App tier (ADR 0005). When false,

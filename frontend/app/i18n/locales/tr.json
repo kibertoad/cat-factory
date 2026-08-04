@@ -3749,16 +3749,11 @@
     },
     "addService": {
       "title": "Bir depodan servis ekle",
-      "intro": "Pano servisi olarak eklenecek mevcut bir GitHub deposu seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",
-      "connectFirst": "Önce bu çalışma alanını GitHub'a bağlayın. App'in zaten kurulu olduğu bir kurulumu bağlayın veya kurun.",
       "repository": "Depo",
-      "repositoryHint": "GitHub App'in erişebildiği depolar. Sizinkini göremiyor musunuz? Aşağıdan App'e erişim verin, sonra yenileyin.",
-      "noReposAvailable": "Henüz kullanılabilir depo yok. Aşağıdan App'e bir depoya erişim verin, sonra yenileyin.",
       "searchPlaceholder": "Depoları sahip veya ada göre arayın…",
       "searchMinChars": "Aramak için en az {min} karakter yazın. | Aramak için en az {min} karakter yazın.",
       "noMatches": "{query} için depo bulunamadı.",
       "clearSelection": "Seçimi temizle",
-      "showingCount": "{total} depodan {shown} tanesi gösteriliyor.",
       "repoLabel": {
         "private": " (özel)",
         "monorepo": " · monorepo",
@@ -3775,7 +3770,6 @@
       "addedConfigure": "{title} eklendi, yapılandırın",
       "grantAccess": "App'e bir depoya erişim ver",
       "grantAccessTitle": "App'e bir depoya erişim vermek için kurulum ayarlarını açın",
-      "refreshList": "Listeyi yenile",
       "done": "Tamam",
       "donePendingHint": "Önce seçtiğiniz servisleri ekleyin ya da seçimi temizleyin; aksi halde bu seçimler atılır.",
       "add": "Servis ekle",
@@ -5688,9 +5682,6 @@
       "canCreate": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; bu hesap için depoyu sizin yerinize de oluşturabilir.",
       "manual": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; depoyu siz oluşturursunuz (aşağıdan tek tıkla), bu yüzden depo oluşturma izni gerektirmez."
     },
-    "github": {
-      "prompt": "Başlatmadan önce bu çalışma alanını GitHub'a bağlayın; bir çalıştırma bir depoya gönderim yapar. App'in zaten kurulu olduğu bir kurulumu bağlayın veya kurun."
-    },
     "section": {
       "newRepo": "Yeni depo"
     },
@@ -5719,9 +5710,7 @@
     },
     "createRepo": {
       "now": "Depo oluştur",
-      "onGitHub": "GitHub'da oluştur",
-      "titleNow": "Depoyu şimdi oluştur",
-      "titleGitHub": "GitHub'ın yeni depo sayfasını önceden doldurulmuş olarak açın"
+      "titleNow": "Depoyu şimdi oluştur"
     },
     "grantAccess": {
       "label": "App'e bu depoya erişim verin",
@@ -6326,6 +6315,18 @@
       "title": "cat-factory'yi {provider}'a bağla",
       "titleAny": "cat-factory'yi depolarınıza bağlayın",
       "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
+    },
+    "addService": {
+      "intro": "Pano servisi olarak eklenecek mevcut bir {provider} deposu seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",
+      "introAny": "Pano servisi olarak eklenecek mevcut bir depo seçin. Bootstrap yok: depo olduğu gibi yeni bir servis çerçevesine bağlanır ve üzerinde çalıştırdığınız görevler o depoyu hedefler.",
+      "connectFirst": "Önce bu çalışma alanını bir depo sağlayıcısına bağlayın, ardından eklemek istediğiniz depoyu seçin.",
+      "repositoryHintApp": "GitHub App'in erişebildiği depolar. Sizinkini göremiyor musunuz? Aşağıdan App'e erişim verin, sonra yeniden arayın.",
+      "repositoryHintToken": "{provider} belirtecinizin erişebildiği depolar. Sizinkini göremiyor musunuz? Belirtecin kapsamını ve projeye erişiminizi kontrol edin, sonra yeniden arayın."
+    },
+    "bootstrap": {
+      "connectPrompt": "Başlatmadan önce bu çalışma alanını bir depo sağlayıcısına bağlayın; bir çalıştırma bir depoya gönderim yapar.",
+      "createRepoOn": "{provider}'da oluştur",
+      "createRepoTitle": "{provider} yeni depo sayfasını aç"
     },
     "branchProtection": {
       "heading": "Varsayılan dal koruması",

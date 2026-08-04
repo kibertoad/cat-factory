@@ -3737,16 +3737,11 @@
     },
     "addService": {
       "title": "Añadir un servicio desde un repositorio",
-      "intro": "Elige un repositorio de GitHub existente para añadirlo como servicio del tablero. Sin arranque inicial: el repositorio se vincula tal cual a un nuevo marco de servicio, y las tareas que ejecutes en él apuntan a ese repositorio.",
-      "connectFirst": "Conecta primero este espacio de trabajo con GitHub. Vincula una instalación en la que la App ya esté, o instálala.",
       "repository": "Repositorio",
-      "repositoryHint": "Repositorios a los que la GitHub App puede acceder. ¿No ves el tuyo? Concede acceso a la App abajo y luego actualiza.",
-      "noReposAvailable": "Aún no hay repositorios disponibles. Concede acceso a la App a uno abajo y luego actualiza.",
       "searchPlaceholder": "Busca repositorios por propietario o nombre…",
       "searchMinChars": "Escribe al menos {min} carácter para buscar. | Escribe al menos {min} caracteres para buscar.",
       "noMatches": "No se encontraron repositorios para {query}.",
       "clearSelection": "Borrar selección",
-      "showingCount": "Mostrando {shown} de {total} repositorios.",
       "repoLabel": {
         "private": " (privado)",
         "monorepo": " · monorepo",
@@ -3763,7 +3758,6 @@
       "addedConfigure": "{title} añadido, configúralo",
       "grantAccess": "Conceder a la App acceso a un repositorio",
       "grantAccessTitle": "Abrir la configuración de instalación de la App para concederle acceso a un repositorio",
-      "refreshList": "Actualizar lista",
       "done": "Listo",
       "donePendingHint": "Añade primero los servicios seleccionados o borra la selección; de lo contrario, esas elecciones se descartan.",
       "add": "Añadir servicio",
@@ -5676,9 +5670,6 @@
       "canCreate": "Crea un repositorio de GitHub vacío y deja que un agente inicializador lo poble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; en esta cuenta también puede crear el repositorio por ti.",
       "manual": "Crea un repositorio de GitHub vacío y deja que un agente inicializador lo poble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; tú creas el repositorio (con un clic más abajo), por lo que no necesita permiso para crear repositorios."
     },
-    "github": {
-      "prompt": "Conecta este espacio de trabajo a GitHub antes de inicializar; una ejecución hace push a un repositorio. Vincula una instalación en la que la App ya esté, o instálala."
-    },
     "section": {
       "newRepo": "Nuevo repositorio"
     },
@@ -5707,9 +5698,7 @@
     },
     "createRepo": {
       "now": "Crear repositorio",
-      "onGitHub": "Crear en GitHub",
-      "titleNow": "Crear el repositorio ahora",
-      "titleGitHub": "Abrir la página de nuevo repositorio de GitHub, rellenada"
+      "titleNow": "Crear el repositorio ahora"
     },
     "grantAccess": {
       "label": "Conceder a la App acceso a este repositorio",
@@ -6314,6 +6303,18 @@
       "title": "Conecta cat-factory con {provider}",
       "titleAny": "Conecta cat-factory con tus repositorios",
       "intro": "cat-factory funciona abriendo solicitudes de incorporación de cambios en tus repositorios. Conecta tu proveedor de repositorios para continuar."
+    },
+    "addService": {
+      "intro": "Elige un repositorio de {provider} existente para añadirlo como servicio del tablero. Sin arranque inicial: el repositorio se vincula tal cual a un nuevo marco de servicio, y las tareas que ejecutes en él apuntan a ese repositorio.",
+      "introAny": "Elige un repositorio existente para añadirlo como servicio del tablero. Sin arranque inicial: el repositorio se vincula tal cual a un nuevo marco de servicio, y las tareas que ejecutes en él apuntan a ese repositorio.",
+      "connectFirst": "Conecta primero este espacio de trabajo con un host de repositorios y luego elige un repositorio para añadir.",
+      "repositoryHintApp": "Repositorios a los que la GitHub App puede acceder. ¿No ves el tuyo? Concede acceso a la App abajo y vuelve a buscar.",
+      "repositoryHintToken": "Repositorios a los que puede acceder tu token de {provider}. ¿No ves el tuyo? Comprueba el alcance del token y tu acceso al proyecto, y vuelve a buscar."
+    },
+    "bootstrap": {
+      "connectPrompt": "Conecta este espacio de trabajo con un host de repositorios antes de inicializar; una ejecución hace push a un repositorio.",
+      "createRepoOn": "Crear en {provider}",
+      "createRepoTitle": "Abrir la página de nuevo repositorio de {provider}"
     },
     "branchProtection": {
       "heading": "Protección de la rama predeterminada",

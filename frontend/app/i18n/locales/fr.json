@@ -3737,16 +3737,11 @@
     },
     "addService": {
       "title": "Ajouter un service depuis un dépôt",
-      "intro": "Choisissez un dépôt GitHub existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
-      "connectFirst": "Connectez d'abord cet espace de travail à GitHub. Liez une installation sur laquelle l'App est déjà, ou installez-la.",
       "repository": "Dépôt",
-      "repositoryHint": "Dépôts auxquels la GitHub App peut accéder. Vous ne voyez pas le vôtre ? Accordez l'accès à l'App ci-dessous, puis actualisez.",
-      "noReposAvailable": "Aucun dépôt disponible pour le moment. Accordez l'accès de l'App à l'un d'eux ci-dessous, puis actualisez.",
       "searchPlaceholder": "Rechercher des dépôts par propriétaire ou nom…",
       "searchMinChars": "Saisissez au moins {min} caractère pour rechercher. | Saisissez au moins {min} caractères pour rechercher.",
       "noMatches": "Aucun dépôt trouvé pour {query}.",
       "clearSelection": "Effacer la sélection",
-      "showingCount": "Affichage de {shown} dépôts sur {total}.",
       "repoLabel": {
         "private": " (privé)",
         "monorepo": " · monorepo",
@@ -3763,7 +3758,6 @@
       "addedConfigure": "{title} ajouté, configurez-le",
       "grantAccess": "Accorder à l'App l'accès à un dépôt",
       "grantAccessTitle": "Ouvrir les paramètres d'installation de l'App pour lui accorder l'accès à un dépôt",
-      "refreshList": "Actualiser la liste",
       "done": "Terminé",
       "donePendingHint": "Ajoutez d'abord les services sélectionnés ou effacez la sélection, sinon ces choix seront perdus.",
       "add": "Ajouter le service",
@@ -5676,9 +5670,6 @@
       "canCreate": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; pour ce compte, il peut aussi créer le dépôt à votre place.",
       "manual": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; vous créez le dépôt (en un clic ci-dessous), il n'a donc besoin d'aucune autorisation de création de dépôt."
     },
-    "github": {
-      "prompt": "Connectez cet espace de travail à GitHub avant l'initialisation ; une exécution pousse dans un dépôt. Liez une installation sur laquelle l'App est déjà présente, ou installez-la."
-    },
     "section": {
       "newRepo": "Nouveau dépôt"
     },
@@ -5707,9 +5698,7 @@
     },
     "createRepo": {
       "now": "Créer le dépôt",
-      "onGitHub": "Créer sur GitHub",
-      "titleNow": "Créer le dépôt maintenant",
-      "titleGitHub": "Ouvrir la page de nouveau dépôt de GitHub, préremplie"
+      "titleNow": "Créer le dépôt maintenant"
     },
     "grantAccess": {
       "label": "Accorder à l'App l'accès à ce dépôt",
@@ -6314,6 +6303,18 @@
       "title": "Connecter cat-factory à {provider}",
       "titleAny": "Connecter cat-factory à vos dépôts",
       "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer."
+    },
+    "addService": {
+      "intro": "Choisissez un dépôt {provider} existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
+      "introAny": "Choisissez un dépôt existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
+      "connectFirst": "Connectez d'abord cet espace de travail à un hébergeur de dépôts, puis choisissez un dépôt à ajouter.",
+      "repositoryHintApp": "Dépôts auxquels la GitHub App peut accéder. Vous ne voyez pas le vôtre ? Accordez l'accès à l'App ci-dessous, puis relancez la recherche.",
+      "repositoryHintToken": "Dépôts accessibles à votre jeton {provider}. Vous ne voyez pas le vôtre ? Vérifiez la portée du jeton et votre accès au projet, puis relancez la recherche."
+    },
+    "bootstrap": {
+      "connectPrompt": "Connectez cet espace de travail à un hébergeur de dépôts avant l'initialisation ; une exécution pousse dans un dépôt.",
+      "createRepoOn": "Créer sur {provider}",
+      "createRepoTitle": "Ouvrir la page de nouveau dépôt de {provider}"
     },
     "branchProtection": {
       "heading": "Protection de la branche par défaut",

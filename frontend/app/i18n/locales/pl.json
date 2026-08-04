@@ -3737,16 +3737,11 @@
     },
     "addService": {
       "title": "Dodaj usługę z repozytorium",
-      "intro": "Wybierz istniejące repozytorium GitHub, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
-      "connectFirst": "Najpierw połącz ten obszar roboczy z GitHub. Powiąż instalację, w której aplikacja już jest, albo ją zainstaluj.",
       "repository": "Repozytorium",
-      "repositoryHint": "Repozytoria, do których aplikacja GitHub ma dostęp. Nie widzisz swojego? Przyznaj aplikacji dostęp poniżej, a następnie odśwież.",
-      "noReposAvailable": "Brak dostępnych repozytoriów. Przyznaj aplikacji dostęp do jednego poniżej, a następnie odśwież.",
       "searchPlaceholder": "Szukaj repozytoriów według właściciela lub nazwy…",
       "searchMinChars": "Wpisz co najmniej {min} znak, aby wyszukać. | Wpisz co najmniej {min} znaki, aby wyszukać. | Wpisz co najmniej {min} znaków, aby wyszukać.",
       "noMatches": "Nie znaleziono repozytoriów dla {query}.",
       "clearSelection": "Wyczyść wybór",
-      "showingCount": "Wyświetlanie {shown} z {total} repozytoriów.",
       "repoLabel": {
         "private": " (prywatne)",
         "monorepo": " · monorepo",
@@ -3763,7 +3758,6 @@
       "addedConfigure": "Dodano {title}, skonfiguruj",
       "grantAccess": "Przyznaj aplikacji dostęp do repozytorium",
       "grantAccessTitle": "Otwórz ustawienia instalacji aplikacji, aby przyznać jej dostęp do repozytorium",
-      "refreshList": "Odśwież listę",
       "done": "Gotowe",
       "donePendingHint": "Najpierw dodaj wybrane usługi albo wyczyść zaznaczenie — w przeciwnym razie te wybory zostaną odrzucone.",
       "add": "Dodaj usługę",
@@ -5676,9 +5670,6 @@
       "canCreate": "Utwórz puste repozytorium GitHub, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; dla tego konta może też utworzyć repozytorium za Ciebie.",
       "manual": "Utwórz puste repozytorium GitHub, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; repozytorium tworzysz Ty (jednym kliknięciem poniżej), więc nie potrzebuje uprawnienia do tworzenia repozytoriów."
     },
-    "github": {
-      "prompt": "Połącz tę przestrzeń roboczą z GitHubem przed inicjacją; uruchomienie wypycha do repozytorium. Połącz instalację, w której App już jest, albo ją zainstaluj."
-    },
     "section": {
       "newRepo": "Nowe repozytorium"
     },
@@ -5707,9 +5698,7 @@
     },
     "createRepo": {
       "now": "Utwórz repozytorium",
-      "onGitHub": "Utwórz na GitHubie",
-      "titleNow": "Utwórz repozytorium teraz",
-      "titleGitHub": "Otwórz stronę nowego repozytorium GitHub, wypełnioną wstępnie"
+      "titleNow": "Utwórz repozytorium teraz"
     },
     "grantAccess": {
       "label": "Przyznaj App dostęp do tego repozytorium",
@@ -6314,6 +6303,18 @@
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
       "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+    },
+    "addService": {
+      "intro": "Wybierz istniejące repozytorium {provider}, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
+      "introAny": "Wybierz istniejące repozytorium, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
+      "connectFirst": "Najpierw połącz ten obszar roboczy z hostem repozytoriów, a potem wybierz repozytorium do dodania.",
+      "repositoryHintApp": "Repozytoria, do których aplikacja GitHub ma dostęp. Nie widzisz swojego? Przyznaj aplikacji dostęp poniżej, a następnie wyszukaj ponownie.",
+      "repositoryHintToken": "Repozytoria, do których ma dostęp Twój token {provider}. Nie widzisz swojego? Sprawdź zakres tokena i swój dostęp do projektu, a następnie wyszukaj ponownie."
+    },
+    "bootstrap": {
+      "connectPrompt": "Połącz tę przestrzeń roboczą z hostem repozytoriów przed inicjacją; uruchomienie wypycha do repozytorium.",
+      "createRepoOn": "Utwórz w serwisie {provider}",
+      "createRepoTitle": "Otwórz stronę nowego repozytorium w serwisie {provider}"
     },
     "branchProtection": {
       "heading": "Ochrona gałęzi domyślnej",

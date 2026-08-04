@@ -15,6 +15,7 @@ function connection(overrides: Partial<GitHubConnection> = {}): GitHubConnection
     targetType: 'User',
     connectedAt: 1,
     provider: 'github',
+    method: 'app',
     canCreateRepos: false,
     canManageWorkflows: true,
     ...overrides,
@@ -56,6 +57,33 @@ describe('github store — VCS connect capability', () => {
     expect(github.canConnectGitLabPat).toBe(true)
     // A single-provider deployment names its provider, so the connect copy never says "choose".
     expect(github.soleConnectProvider).toBe('gitlab')
+    // …and the repo-facing surfaces name it too, BEFORE anything is connected. `provider`
+    // answers "what is connected" and so defaults to github; a surface reading that one is how
+    // "Pick an existing GitHub repository" ends up on a GitLab-only deployment.
+    expect(github.provider).toBe('github')
+    expect(github.surfaceProvider).toBe('gitlab')
+  })
+
+  it('names the connected provider once bound, whatever the deployment could connect', async () => {
+    stubApi({
+      getGitHubConnection: vi
+        .fn()
+        .mockResolvedValue({ connection: connection({ provider: 'gitlab', method: 'pat' }) }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({
+        options: [
+          { provider: 'github', method: 'app' },
+          { provider: 'gitlab', method: 'pat' },
+        ] satisfies VcsConnectOption[],
+      }),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+
+    // Several connectable, so there is no sole provider — but one IS connected, and that is
+    // what every repo-facing surface is about.
+    expect(github.soleConnectProvider).toBeNull()
+    expect(github.surfaceProvider).toBe('gitlab')
   })
 
   it('reports no connect surface when the capability read fails, without hiding the integration', async () => {
@@ -91,6 +119,9 @@ describe('github store — VCS connect capability', () => {
     expect(github.canConnectGitHubApp).toBe(true)
     expect(github.canConnectGitLabPat).toBe(true)
     expect(github.soleConnectProvider).toBeNull()
+    // Nothing connected and several on offer: naming one would be a guess, so the surfaces
+    // fall back to their neutral copy rather than picking a brand.
+    expect(github.surfaceProvider).toBeNull()
   })
 
   it('connects GitLab with a trimmed PAT and loads the projection', async () => {

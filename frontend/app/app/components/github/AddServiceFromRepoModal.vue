@@ -1,10 +1,11 @@
 <script setup lang="ts">
-// Add a board service backed by an EXISTING GitHub repository — no bootstrap
-// run. Unlike the bootstrap modal (which creates a repo and has an agent adapt
-// it in a container), this just links a repo the App can access to a fresh,
-// `ready` service frame. The workspace need not track the repo yet: the backend
-// links + syncs it on import. If the App can't see the wanted repo, the user
-// grants it access from here, then searches for it again.
+// Add a board service backed by an EXISTING repository — no bootstrap run. Unlike the
+// bootstrap modal (which creates a repo and has an agent adapt it in a container), this
+// just links a repo the workspace's connection can reach to a fresh, `ready` service
+// frame. The workspace need not track the repo yet: the backend links + syncs it on
+// import. On a GitHub App connection, a repo the App can't see yet is granted from here
+// and searched for again; a PAT connection has no such page (see `~/utils/vcs`), so what
+// is listed follows the token's own access.
 //
 // MONOREPO support: a repo flagged a monorepo can back SEVERAL services, each
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
@@ -12,11 +13,12 @@
 // parent folder, in one pass — then adds them all at once. Directories that
 // already back a service on this board are shown but not selectable.
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
-import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
+import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
 
@@ -64,7 +66,16 @@ watch(
 )
 
 // The integration is on but this workspace isn't bound yet — connect first.
-const needsGitHub = computed(() => github.available === true && !github.connected)
+const needsConnection = computed(() => github.available === true && !github.connected)
+
+// Brand name of whatever the workspace connected, for the hint that names it. Only read where
+// a connection exists (the hints below the picker), so `provider` is the right question there.
+const providerLabel = computed(() => VCS_PROVIDER_LABELS[github.provider])
+
+// The intro renders BEFORE a connection may exist, so it asks `surfaceProvider` instead and
+// stays neutral where the deployment offers several and none is bound: naming one would be a
+// guess, and `provider`'s own default would name GitHub on a GitLab-only deployment.
+const introProvider = computed(() => github.surfaceProvider)
 
 // Repos whose service is ALREADY mounted on THIS board can't be added again — adding here would
 // be a no-op. A repo whose service lives on ANOTHER board in the org stays addable: adding it
@@ -201,15 +212,10 @@ function clearSelection() {
   resetSelection()
 }
 
-// The App's installation settings page — where the user grants it access to a
-// repo it can't see yet (mirrors the bootstrap modal's "grant access" link).
-const manageInstallUrl = computed(() => {
-  const conn = github.connection
-  if (!conn) return undefined
-  return conn.targetType === 'Organization'
-    ? `https://github.com/organizations/${conn.accountLogin}/settings/installations/${conn.installationId}`
-    : `https://github.com/settings/installations/${conn.installationId}`
-})
+// The App's installation settings page — where the user grants it access to a repo it can't
+// see yet (mirrors the bootstrap modal's "grant access" link). Absent on a PAT connection,
+// which has no installation to manage, so the affordance and its hint both drop out.
+const manageInstallUrl = computed(() => appInstallationManageUrl(github.connection))
 
 function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
@@ -242,14 +248,14 @@ watch(
 // multi-selects directories and adds them together via `addServices`.
 const canAdd = computed(
   () =>
-    !needsGitHub.value &&
+    !needsConnection.value &&
     selectedRepoId.value !== undefined &&
     !isMonorepo.value &&
     !configuredBlockId.value,
 )
 const canAddServices = computed(
   () =>
-    !needsGitHub.value &&
+    !needsConnection.value &&
     selectedRepoId.value !== undefined &&
     isMonorepo.value &&
     selectedDirectories.value.length > 0,
@@ -357,27 +363,36 @@ function done() {
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-slate-400">
-          {{ t('github.addService.intro') }}
+          {{
+            introProvider
+              ? t('vcs.addService.intro', { provider: VCS_PROVIDER_LABELS[introProvider] })
+              : t('vcs.addService.introAny')
+          }}
         </p>
 
-        <!-- not connected: linking a repo needs the App bound to this workspace -->
+        <!-- not connected: linking a repo needs a connection bound to this workspace, so
+             offer whichever connect methods the deployment serves (never just the App) -->
         <div
-          v-if="needsGitHub"
+          v-if="needsConnection"
           class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
         >
           <div class="flex items-start gap-2">
             <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p class="text-sm text-amber-200/90">
-              {{ t('github.addService.connectFirst') }}
+              {{ t('vcs.addService.connectFirst') }}
             </p>
           </div>
-          <GitHubConnect />
+          <VcsConnectSurfaces />
         </div>
 
         <template v-else>
           <UFormField
             :label="t('github.addService.repository')"
-            :description="t('github.addService.repositoryHint')"
+            :description="
+              manageInstallUrl
+                ? t('vcs.addService.repositoryHintApp')
+                : t('vcs.addService.repositoryHintToken', { provider: providerLabel })
+            "
             required
           >
             <!-- The wrapper, not the UInputMenu itself, carries the anchor: a tutorial tour
@@ -521,9 +536,10 @@ function done() {
             <ServiceFragments :block="configuredBlock" default-open />
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- App connections only: a pasted token has no installation whose repo access
+               could be edited, so there is no page to send the user to. -->
+          <div v-if="manageInstallUrl" class="flex flex-wrap items-center gap-2">
             <UButton
-              v-if="manageInstallUrl"
               color="neutral"
               variant="subtle"
               size="sm"

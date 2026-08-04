@@ -92,6 +92,10 @@ describe('VcsPatConnectionService', () => {
     const expectedId = await syntheticInstallationId('ws-1')
     expect(connection.installationId).toBe(expectedId)
     expect(connection.provider).toBe('gitlab')
+    // A pasted token, stated as such: the SPA drops every GitHub-App affordance (the
+    // installation settings page, the repo-access grant) on a `pat` connection, and it must
+    // not have to infer that from the provider.
+    expect(connection.method).toBe('pat')
     expect(connection.accountLogin).toBe('octocat')
     expect(connection.connectedAt).toBe(1000)
 
