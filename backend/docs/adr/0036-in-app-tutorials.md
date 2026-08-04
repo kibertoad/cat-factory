@@ -1,4 +1,4 @@
-# ADR 0033: In-app tutorial tours; a course the product brings to the user
+# ADR 0036: In-app tutorial tours; a course the product brings to the user
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-04

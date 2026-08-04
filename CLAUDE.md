@@ -10,7 +10,10 @@ initiatives: `docs/initiatives/`.
 
 **This file holds the cross-cutting RULES plus an index of the runtime flows.** Keep it to what applies
 across features: a rule already enforced by a typecheck, a CI guard, or a linked doc does not need
-restating here, and flow-specific detail belongs in that flow's doc.
+restating here, and flow-specific detail belongs in that flow's doc. **A flow-index entry is what the
+flow is, the single deadliest trap, and the link: a handful of lines, never a restated doc.** New detail
+for an indexed flow goes into its doc in the same PR, not here. `scripts/check-file-size.mjs` ratchets
+this file's size, so growth here must displace something.
 
 ## Governing principle: clean design over quick solutions
 
@@ -34,7 +37,8 @@ When your change pushes a file or function over budget, extract the concern your
 cohesive collaborator taking a small deps object of bound callbacks, leaving a thin delegate behind (the
 model: the `RunDispatcher` controller extractions, `FetchGitHubClient` → `reviewPosting.ts`). A budget
 number may only change in your PR when a split made it smaller. If you believe a split is impossible,
-STOP and say so rather than bumping silently.
+STOP and say so rather than bumping silently. The same ratchet covers THIS file: shrink it by moving
+detail to the flow docs, never by raising the budget.
 
 ## Compatibility: the public API is STABLE; everything internal is not
 
@@ -44,7 +48,7 @@ The externally consumed surface is: `/api/v1` (paths, request/response shapes, e
 and `details.reason` vocabularies, SSE event names, scope semantics), the four SDK clients under
 `sdk/`, and the outbound webhook delivery contract. External integrations and published SDK
 releases build on it, so a change there is held to a different bar than the rest of the repo
-(design record: [ADR 0032](./backend/docs/adr/0032-public-api-stability.md)):
+(design record: [ADR 0034](./backend/docs/adr/0034-public-api-stability.md)):
 
 - **Additive changes are the normal mode**: a new endpoint, a new optional field, a new enum
   value, a new error code. The SDKs tolerate unknown values by design, so additions ship freely;
@@ -121,7 +125,8 @@ approach.
 **When the committed scope completes, convert the tracker into a numbered ADR under `backend/docs/adr/`
 (`NNNN-slug.md`, next free number) and `git rm` the tracker in the same PR.** Keep Context / Decision /
 Rationale / Consequences; drop the checklists. Header shape: `# ADR NNNN: <title>` plus a `Status` /
-`Date` / `Context layer` bullet block.
+`Date` / `Context layer` bullet block. Check the number against ALL existing files first: two ADRs
+landing from parallel branches have collided on one number three times.
 
 ## Writing style: no em-dashes, no LLM-tell prose
 
@@ -182,47 +187,27 @@ Mothership mode ([`mothership-mode.md`](./docs/initiatives/mothership-mode.md)) 
 shape: the local node runs the engine with **no main database**, reaching every org/durable repository
 over the `/internal/persistence` machine RPC. A feature that works only against a direct `db` handle is
 **incomplete**, exactly as a Cloudflare-only feature is, and the failure is silent: an un-routed method
-fails on a developer's laptop at runtime, sometimes as a dead panel, sometimes (on a hot path such as the
-real-time fan-out) as a rejected engine publish that kills the run.
+fails on a developer's laptop at runtime.
 
-**A new repository method picks one of four buckets IN THE SAME PR.** There is no fifth outcome ("it
-doesn't apply to mothership mode" is not one), and `pending` is a _migration_ state, not a landing pad
-for new work. The tracker holds each bucket's implementation pattern:
-
-- **`remote`** (the default for org/durable state): allow-list it in `REMOTE_PERSISTENCE_METHODS`
-  (`packages/server/src/persistence/rpc-allowlist.ts`) with a correct scope rule, plus a round-trip AND a
-  cross-account-refusal test in `packages/server/test/persistenceRpc.spec.ts`. If no existing rule binds
-  your arguments, add a rule; never widen an existing one to fit.
-- **`local-sqlite`** (a per-user/per-deployment credential or local-runner knob): implement the
-  `node:sqlite` repo and thread the `NodeContainerOptions` override, so the feature is ON rather than
-  silently off for lack of a `db`.
-- **`telemetry`** (append-heavy, hot-path, short-retention run observability): implement it in the local
-  facade's `sqlite/telemetryStore.ts`, name it in `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (this TYPES the
-  composition, so omitting it fails to compile), and prune it in `telemetryRetention.ts`. Do NOT also
-  allow-list it. The test for whether state belongs here rather than `remote` is what READS it: the spend
-  ledger has this write profile but its rollups gate org budgets, so it is `remote`.
-- **`excluded`** (admin-gated, a sweeper, or otherwise mothership-internal): say so in the drift guard's
-  classification map, with the reason.
-
-Also: **a new service reading a repo off `options.db` must route through `pickRepoSource`** or it is a
-`TypeError` the moment the node boots without Postgres; **a new cross-cutting concern is its own
-`/internal/*` endpoint** on BOTH facades behind the machine-token audience pin and account scope, never a
-new hole in the persistence proxy; and **a new secret must state which key seals it**: a repo returning
-its credential SEALED can go remote, one that decrypts INSIDE the repo cannot, because the mothership's
-`ENCRYPTION_KEY` never reaches a laptop.
+**A new repository method picks one of four buckets IN THE SAME PR**: `remote` (the default for
+org/durable state: allow-list + scope rule + round-trip and cross-account-refusal tests),
+`local-sqlite` (a per-user/per-deployment credential or local-runner knob), `telemetry` (append-heavy,
+hot-path run observability the node also READS locally), or `excluded` (named in the drift guard's
+classification map, with the reason). There is no fifth outcome ("it doesn't apply to mothership mode"
+is not one), and `pending` is a _migration_ state, not a landing pad for new work. The tracker holds
+each bucket's implementation pattern, the `pickRepoSource` rule for services reading off `options.db`,
+the `/internal/*` rule for new cross-cutting concerns, and the sealed-secret rule (a repo that decrypts
+INSIDE the repo cannot go remote, because the mothership's `ENCRYPTION_KEY` never reaches a laptop).
 
 **State a deployment registers in CODE and a RUN resolves is org state too**: the fifth thing that must
 pick a route, and the one with no repository method to give it away. A mothership deployment is TWO
-processes, so "the deployment registers it on both entry points" is not a design: the copies match only
-while both run the same build, and a node one build behind is the NORMAL state of running one. It rides
-its OWN `/internal/*` read from the mothership (the foundational-services `builtin` tier is the model),
-the node does not consult its own copy, and the read THROWS rather than answering empty: an empty
-catalog and an unreachable mothership are the same value and opposite facts, and only one of them may
-reach an agent. Never MERGE the two: a stale local copy winning by id is the same drift with a mechanism
-that looks deliberate. **And a throw is only half the fix: the BEST-EFFORT seam that catches it must
-STATE the outage in what it injects, never fall through to nothing.** An omitted context file reads to
-an agent exactly like the empty answer the throw refused to give, so the "absent ≠ zero" rule binds the
-catch site as much as the read.
+processes, and a node one build behind is the NORMAL state of running one, so "the deployment registers
+it on both entry points" is not a design. It rides its OWN `/internal/*` read from the mothership (the
+foundational-services `builtin` tier is the model), the node does not consult its own copy, and the read
+THROWS rather than answering empty: an empty catalog and an unreachable mothership are the same value
+and opposite facts. Never MERGE the two. **And a throw is only half the fix: the BEST-EFFORT seam that
+catches it must STATE the outage in what it injects, never fall through to nothing**, or an omitted
+context file reads to an agent exactly like the empty answer the throw refused to give.
 
 ## No N+1 repository access
 
@@ -304,15 +289,13 @@ sibling of `logger`.
   only the ABSENCE of a data point states the first one honestly. Same rule as "absent ≠ zero"
   above: where a runtime genuinely cannot read a gauge (Cloudflare Queues expose no backlog to
   their consumer), it emits no series rather than a 0.
-
-**A background sweep reports its pass through ONE call**, on both facades: Node's `startSweeper`
-takes `SweeperOptions.health`, the Worker's crons go through `SweepTick.run`, and both land on
-`SweepHealthTracker.recordFailure`, which emits the `sweep.failed` RATE and the `sweep_degraded`
-STREAK together. They were two calls at each site once and the facades promptly drifted into
-tracking disjoint sets of sweepers. A new sweep on either runtime goes through its facade's
-helper, never a bare `metrics.increment('sweep.failed', …)`, which is half a report. On the
-Worker, `SweepTick` also orders the tick's metrics flush AFTER its passes settle, because the
-collector is per isolate and a cron's counters are otherwise exported by nobody.
+- **A background sweep reports its pass through ONE call** on both facades (Node's `startSweeper`
+  takes `SweeperOptions.health`; the Worker's crons go through `SweepTick.run`), landing on
+  `SweepHealthTracker.recordFailure`, which emits the `sweep.failed` RATE and the `sweep_degraded`
+  STREAK together; as two calls per site the facades drifted into tracking disjoint sweeper sets.
+  A bare `metrics.increment('sweep.failed', …)` is half a report. On the Worker, `SweepTick` also
+  orders the tick's metrics flush AFTER its passes settle, because the collector is per isolate
+  and a cron's counters are otherwise exported by nobody.
 
 ## A controller REFUSES by throwing a `DomainError`, never by building an envelope
 
@@ -348,6 +331,10 @@ carry `details.reason`, the machine-readable code the SPA maps to translated cop
   `{ ok: false }` shape their machine clients parse).
 - **A test driving a controller through a bare `new Hono()` must mount `app.onError(handleError)`**, or
   every refusal reads as a 500.
+- **A user-reachable 503 `reason` owes TRANSLATED copy** (`UNAVAILABLE_REASONS`, an exhaustive `Record`
+  in `usePipelineErrorToast`, the `CONFLICT_REASONS` pattern): the status class's generic wording commits
+  to "this deployment has not configured the capability", which is right for an unwired module and is the
+  misattribution itself for an outage.
 
 ## Caching goes through the app cache seam, never a homebrew Map
 
@@ -479,70 +466,28 @@ GitLab deployments.
 
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
-Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which
-also serves Kotlin; there is deliberately no second Kotlin SDK). The chain is **contracts →
-`docs/openapi.json` → `sdk/*`** with no hand-editing at any link: `pnpm gen:sdk` renders the
-committed spec, and `pnpm check:sdk` fails CI on drift AND on version skew between a manifest and
-the constant its transport stamps into `User-Agent`. Design + the Java/Kotlin trade:
-[`sdk/README.md`](./sdk/README.md).
+Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
+serves Kotlin), plus `sdk/mcp`, an MCP facade projecting the same operations as tools over the
+TypeScript client. The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
+any link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
+skew. Design, the shared client invariants, and the Java/Kotlin trade: [`sdk/README.md`](./sdk/README.md).
+Two rules bite from outside that tree:
 
-- **Only MODELS and OPERATIONS are generated; each transport is HAND-WRITTEN** beside them. That
-  split is what keeps a contract change from rewriting behaviour and a behaviour fix from having
-  to be re-applied across 38 operations x 4 languages. Never edit a file whose header says
-  GENERATED; change the contracts or the emitter.
-- **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its
-  resource group and method. Generation FAILS without one, so a new endpoint cannot ship as an
-  un-callable hole in four clients, and the method name is a chosen, reviewed API rather than a
-  spec-internal `operationId` leaking into four published surfaces.
-- **The four honour the same invariants, each in its own idiom, and every one is about being
-  HONEST rather than convenient**: absent is not null (collapsing them turns "leave this alone"
-  into "clear it"); an unknown enum value or field never raises, because the surface is additive
-  forever and a strict client makes every additive server release an outage for whoever has not
-  upgraded; the error CLASS comes from the HTTP status while `code` is passed through verbatim
-  (it carries surface-specific values, so no SDK narrows it to an enum or keeps a second copy of
-  the vocabulary); only idempotent requests are retried, because a duplicated `start` costs real
-  LLM work; a stream is never auto-reconnected, since only the caller knows what it already
-  acted on; and **the client deadline bounds the RESPONSE, never a stream**: the deployment sends
-  no SSE heartbeat and a parked run waits for a human indefinitely, so a deadline left running over
-  the body cuts off exactly the healthy runs a caller wanted to watch.
-- **`backend/internal/sdk-smoketest` is the only check that can see the four clients DISAGREE.**
-  It boots the real Node backend and drives ONE scenario through all four, comparing their
-  observation reports, so each per-SDK program OBSERVES AND RECORDS rather than asserting, and a
-  scenario step added to one must be added to all four with the same observation keys (a key some
-  SDKs record and others do not is reported as a failure, not silently skipped). CI runs it when
-  either side of the contract moves.
-- **Publishing is gated on a VERSION CHANGE, not a file change** (`.github/workflows/sdk-release.yml`),
-  so a README edit or a no-op regeneration ships nothing and a re-run cannot try to republish what
-  the registry already has. The TypeScript SDK is exempt: it is an ordinary workspace package
-  changesets already releases, and a second publisher would race it.
+- **Never edit a file whose header says GENERATED**; change the contracts or the emitter. Only models
+  and operations are generated; each transport is hand-written beside them.
+- **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its resource
+  group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole
+  in four clients. The same entry becomes an MCP tool with no second decision, except a STREAMING
+  endpoint, which must be named in `MCP_OMITTED_OPERATIONS` with the reason (generation fails on an
+  unclassified one). `backend/internal/sdk-smoketest` is the only check that can see the four clients
+  DISAGREE; a scenario step added to one must be added to all four.
 
 ## Migrations
 
-### Resolving conflicting Drizzle migrations (post-merge)
-
-Node's Postgres migrations (`backend/runtimes/node/drizzle/`) use drizzle-kit 1.x snapshot v8: a
-content-addressed DAG (each `snapshot.json` has an `id` and a `prevIds` array), not a linear journal.
-`src/db/schema.ts` is the source of truth and `pnpm db:generate` diffs it; `migrate()` applies folders in
-timestamp order, so `prevIds` affects only the consistency analysis. A merge keeps both branches' folders
-with no textual conflict, but the later branch's `prevIds` still points at the pre-merge tip, so
-`db:check` fails with "Non-commutative migrations detected". (D1 has no such DAG; duplicate numeric
-prefixes are fine.)
-
-Do NOT hand-merge snapshot JSON or rerun `db:generate` (a table move triggers an interactive rename
-prompt that can't run in a non-TTY shell). Instead:
-
-1. Resolve conflicts in `src/db/schema.ts` first, keeping BOTH branches' columns.
-2. From `backend/runtimes/node`, run
-   `node scripts/rebase-migration-snapshot.mjs <later-migration-folder>`, which rewrites that snapshot's
-   `ddl` from the merged schema and re-points `prevIds` at every other migration's leaf,
-   non-interactively. It does not touch `migration.sql`.
-3. Check `migration.sql` still encodes the delta to the merged schema.
-4. Verify with `pnpm db:check`. Keep the symmetric D1 migration in step.
-
-### Migration safety: boot drift-guard, recovery, self-healing FKs
-
 Node boots by running `migrate()` BEFORE `boss.start()` (sequential, so a migration failure is the clean
-top-level rejection).
+top-level rejection). Resolving CONFLICTING Drizzle migrations after a merge has its own non-obvious
+recipe (`rebase-migration-snapshot.mjs`, never a `db:generate` rerun):
+[`backend/runtimes/node/AGENTS.md`](./backend/runtimes/node/AGENTS.md).
 
 - **Ledger↔schema drift.** The drizzle ledger lives in its own `drizzle` schema, so a hand
   `DROP SCHEMA public CASCADE` wipes the data while the ledger still claims everything is applied.
@@ -565,57 +510,29 @@ the `postgres` maintenance DB for the admin connection.
 
 The backend is runtime-neutral by construction: the domain and HTTP layer know nothing about Cloudflare or
 Node, and each facade supplies only its differentiators behind the shared kernel ports and the
-`container.gateways` seam.
+`container.gateways` seam. Each facade's internals (real-time transport, durable execution, container
+adapters) live in its own `AGENTS.md`.
 
 - **Cloudflare Worker** (`runtimes/cloudflare` = `@cat-factory/worker`): D1, Workflows for durable
   execution, Durable Objects for real-time and per-run Containers, queues/cron, the `workers-ai` binding.
-- **Node** (`runtimes/node`): Postgres via Drizzle, **pg-boss** for durable execution (`PgBossWorkRunner`
-  enqueues `execution.advance`; `driveExecution` runs the same advance/poll loop with plain sleeps;
-  `signalDecision` re-enqueues a parked run). Real-time is a per-workspace `NodeRealtimeHub` plus
-  `attachRealtime`, serving the SAME raw-WebSocket + `?ticket=` protocol via a `ws` server on the HTTP
-  `upgrade` event (`@hono/node-server` can't upgrade from a Hono `Response`, and the SPA speaks raw
-  WebSocket). **Multi-node** rides a layered propagator behind a narrow `LocalEventSink` seam: Redis
-  pub/sub today, another adapter on the same port tomorrow; with no bus the layer is exactly the bare hub.
-  The Worker needs none of this (its `WorkspaceEventsHub` DO is globally addressed, so propagation is
-  inherent; a genuine Node-only concern, not a parity gap). Container steps dispatch to a workspace's
-  self-hosted runner pool, which runs the same harness image and therefore serves EVERY dispatch kind with
-  no opt-in allow-list; unconfigured, the composite serves inline kinds and fails container kinds loudly.
+- **Node** (`runtimes/node`): Postgres via Drizzle, pg-boss for durable execution, a per-workspace
+  `NodeRealtimeHub` serving the same raw-WebSocket + `?ticket=` protocol, multi-node propagation behind
+  the `LocalEventSink` seam, and container dispatch to a workspace's self-hosted runner pool. Details:
+  [`backend/runtimes/node/AGENTS.md`](./backend/runtimes/node/AGENTS.md).
 - **Local** (`runtimes/local`): the Node facade with per-run local containers
-  (`LocalContainerRunnerTransport` over a `ContainerRuntimeAdapter` selected by `LOCAL_CONTAINER_RUNTIME`)
-  and GitHub reached via a PAT: both the push token and a PAT-backed `FetchGitHubClient` wiring the CI
-  gate + merge providers, so a local pipeline gates on real Actions CI and merges for real.
-- **Model provisioning** is composed per facade from `CompositeModelProvider`. Unconfigured providers
-  aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. **Locally-run
-  models** (Ollama / LM Studio / llama.cpp / vLLM / custom OpenAI-compatible) are per-user endpoints
-  appended to `GET /models` with NO API key; the base URL is forwarded server-side, so it is constrained to
+  (`LocalContainerRunnerTransport` over a `ContainerRuntimeAdapter` selected by
+  `LOCAL_CONTAINER_RUNTIME`) and GitHub reached via a PAT, so a local pipeline gates on real Actions CI
+  and merges for real. The adapter contracts that bite (`endpoint()` on an exited container, the
+  post-mortem, `localDind`): [`backend/runtimes/local/AGENTS.md`](./backend/runtimes/local/AGENTS.md).
+- **Model provisioning** is composed per facade from `CompositeModelProvider`; unconfigured providers
+  aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. Locally-run
+  models are per-user endpoints with NO API key, forwarded server-side, so the base URL is constrained to
   a loopback-only allow-list (`localRunnerUrlError`) at the write boundary, the test probe and every
-  run-time redirect hop. Private-LAN hosts are the `LOCAL_MODELS_ALLOW_LAN=true` operator opt-in
-  (single-tenant local mode defaults it on); on a shared deployment the LAN grant is an internal-network
-  SSRF surface.
-- **`deploy/preview`** carries the per-PR TEST environments for THIS repo (board wiring:
-  [`docs/dogfooding.md`](./docs/dogfooding.md)). Three constraints bite when editing: the compose file must
-  stay free of `include:` / cross-file `extends` / `privileged` and of bind mounts / `env_file` (so it
-  stays runnable by hand); the SPA there is built with an EMPTY `apiBase`, because a preview's host port is
-  only assigned at `up` time and same-origin is the only workable topology; and the workflow's per-PR
-  resource NAMES are a contract with `cloudflareEnvironmentConfigSchema`'s two name templates: rename in
-  one place, rename in both.
-
-### Local container adapters
-
-`LocalContainerRunnerTransport` starts the executor-harness image per run and re-attaches later steps to
-it, keyed by the per-step `RunnerJobRef.jobId`. Docker/Podman/OrbStack/Colima share the Docker-CLI
-adapter; Apple `container` has its own. Two contracts bite:
-
-- **`endpoint()` must map an EXITED container to `undefined`** (so `resolve()` reads it as absent and
-  `dispatchPerRun` re-creates it) while still THROWING for a fault against a live one. A runtime that
-  can't tell the two apart (Apple) takes the `undefined` half.
-- **A container dying mid-run needs a post-mortem** (`exitState()` + a scrubbed `logs()` tail) onto the
-  failed view's `detail`, since `release()` removes it as the run settles. A re-dispatch removes it too, so
-  the FIRST death's post-mortem is retained on `PipelineStep.firstEvictionDetail`.
-
-Each adapter exposes a `localDind` capability threaded into `ExecutionService` as
-`localTestInfraSupported`, so a runtime that can't nest containers refuses a local-infra Tester run at
-start.
+  run-time redirect hop; `LOCAL_MODELS_ALLOW_LAN=true` is the operator opt-in, an internal-network SSRF
+  surface on a shared deployment. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
+- **`deploy/preview`** carries the per-PR TEST environments for THIS repo. Board wiring AND the three
+  editing constraints (no `include:`/bind mounts/`env_file`, the empty `apiBase`, the per-PR name
+  templates): [`docs/dogfooding.md`](./docs/dogfooding.md).
 
 ## Dependencies, releases, new packages
 
@@ -639,34 +556,11 @@ Installs reject any registry package published inside the ~24h cutoff. The allow
 Versioning is changesets (root `pnpm changeset` / `ci:publish`). **Always add a changeset for a change to
 a versioned package**; empty changeset for docs/CI/test-only. CI enforces this.
 
-**Any change to what goes into the runner image** (harness `src/**`, `Dockerfile`, `tsconfig.json`, the
-pinned `PI_*` args) MUST bump `@cat-factory/executor-harness`'s version AND the matching tag in
-`deploy/backend/package.json`, `deploy/backend/wrangler.toml`, and `RECOMMENDED_HARNESS_IMAGE` in
-`backend/runtimes/local/src/harnessImage.ts`; then `pnpm image:publish` + `pnpm deploy` from
-`deploy/backend`. The deployment serves the Cloudflare managed-registry image, not GHCR, so the GHCR
-auto-publish does not roll it out. **Reusing a tag does NOT deploy** (`wrangler deploy` diffs by tag
-string), leaving new containers on stale code; the symptom is `Container dispatch failed (HTTP 404)`.
-Only a fresh immutable tag forces the rollout.
-
-The release PR re-syncs the pins automatically, so don't hand-fix a red release PR. Consequence: the
-released tag may differ from the one the feature PR published; content is identical, but the
-managed-registry image for the released tag is only built at the next `image:publish` + `deploy`.
-`pnpm sync:image-tags` reconciles by hand; `scripts/check-runner-image-tag.mjs` is the CI guard.
-
-### Adding a new published package
-
-A folder is not wired up by existing (two packages once published as empty shells because a bare
-`pnpm publish` skipped the build and `dist/` is gitignored).
-
-- **Full publish contract in `package.json`**, copied from `packages/gates`: `"files": ["dist"]`,
-  `main`/`types`/`exports` at `./dist`, `publishConfig.access: "public"`, a `build` script, and a mandatory
-  **`"prepublishOnly": "pnpm run build"`** hook.
-- **Register it in `backend/tsconfig.build.json`** `references`. A package reachable only transitively
-  drops out the moment that reference goes away.
-- **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
-- **Check knip knows about a dynamically-imported dependency** (`ignoreDependencies` in `knip.jsonc`).
-
-Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the package dir.
+**Any change to what goes into the runner image bumps `@cat-factory/executor-harness` AND the pinned
+tag everywhere it appears, then publishes and deploys a FRESH immutable tag: reusing a tag does NOT
+deploy** (`wrangler deploy` diffs by tag string; the symptom is `Container dispatch failed (HTTP 404)`).
+The full rollout recipe, the release-PR re-sync behaviour, and the new-published-package checklist (a
+folder is not wired up by existing): [`docs/releases.md`](./docs/releases.md).
 
 ### Run the CI guard scripts locally before committing
 
@@ -760,77 +654,49 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   against a provider and only escalates to a helper container agent (`ci-fixer` / `conflict-resolver` /
   `on-call`) on a negative verdict; skip-unless-needed is the whole point. ONE generic machine drives every
   gate (`evaluateGate` / `dispatchGateHelper` / `pollGate`, parking on `awaiting_gate`); a
-  `GateDefinition` supplies only `wired()`, `probe()` (pass/pending/fail), `helperKind` and `onExhausted`,
-  and live state is `step.gate`. **Adding a gate is a new registry entry, never another
-  `evaluateX`/`pollX`/`awaiting_x` triple**; ergonomics:
-  [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md). The built-ins ship
-  as `@cat-factory/gates` through the same public seam a deployment uses, and `defaultGateRegistry()` is
-  EMPTY, so a container built with no injected registry installs them itself. Pure gate logic lives in
-  kernel (`domain/gate-logic.ts`) so a gate package never depends on orchestration.
-  **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never reverts),
-  settling the gate without re-probing.
+  `GateDefinition` supplies only `wired()`, `probe()`, `helperKind` and `onExhausted`, and live state is
+  `step.gate`. **Adding a gate is a new registry entry, never another `evaluateX`/`pollX`/`awaiting_x`
+  triple**; ergonomics:
+  [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md). Pure gate logic
+  lives in kernel (`domain/gate-logic.ts`); `defaultGateRegistry()` is EMPTY and the built-ins
+  (`@cat-factory/gates`) install themselves through the same public seam a deployment uses.
+  **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
+  reverts), settling the gate without re-probing.
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
 - **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
   threshold, disposing: advance / park / bounce the producing step with findings as `rework` / fail.
-  **Adding a judge is a new registry entry**; one driver (`JudgeStepController.evaluate`) owns the state
-  machine and a `JudgeDefinition` supplies rubric, `parseVerdict`, `threshold`/`attemptBudget`, `onFail`,
-  `bounceTargets`. State rides `step.judge` (no side table, so runtime-symmetric) and survives
-  `resetStepForRerun`, or a bounce would erase the verdict it loops on. A failing verdict never silently
-  advances: a spent budget or no bounce target degrades to a park. A judge is NOT a gate (no cheap
-  precheck, no pending state, always costs a model call) and NOT a `StepCompletionResolver` (which can't
-  park or loop). Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+  **Adding a judge is a new registry entry** (`JudgeDefinition`; one driver,
+  `JudgeStepController.evaluate`, owns the state machine). State rides `step.judge` and survives
+  `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
+  precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
+  Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
-  rather than the minimal public `ResolverContext`. The public step-resolver seam is scoped to light
-  follow-up; `ownsTerminalStatus` is built-in-only.
+  rather than the minimal public `ResolverContext`.
 
 **A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
 (`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
-`task-estimator`'s scores fall below its thresholds, and that is what lets ONE pipeline cover a range
-that would otherwise need several near-identical presets (see
-[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md)). Three rules bind it:
-
-- **Gatability is a per-kind CAPABILITY, declared, and OFF by default**: `isGatableKind`
-  (`agents/kinds/gatable.ts`), a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
-  override, since built-in kinds are not registry entries. Gate a kind whose output later steps read as
-  CONTEXT; never one some other mechanism reads STRUCTURALLY. `merger` is the sharpest case: its mere
-  presence in `instance.steps` is what makes a committing kind deliver via a PR (`runOpensPr`), so a
-  skipped merger opens a PR nothing merges. `deployer` provisions what its consumer reads,
-  `conflicts`/`ci` are the guards, `bug-intake` is the run's subject. **A new kind whose absence would
-  break rather than merely thin a run must stay unlisted**, and the default already does that for you.
-- **A skipped producer CASCADES onto its companion** (`producerWasSkipped`), evaluated at the
-  companion's own turn off the persisted `step.skipped`, because a lookahead would not survive a
-  durable replay. Without it a companion grades whichever step happened to precede it, sounding confident
-  about the wrong artifact. So a companion needs no gate of its own to track its producer, and giving
-  it a duplicate threshold is a second copy to keep in sync.
-- **A step may not carry both `gates[i]` and enabled `gating`** (`assertValidGating`). The estimate may
-  ADD a human checkpoint (that is what gating a `human-review` step on risk does) but never cancel an
-  approval pause the author asked for, or a model's own triage decides nobody needs to look. Policy
-  floors belong on the merge preset's `classRules`, keyed on the COMPUTED change class rather than the
-  model's opinion.
-
-The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
-`runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing to
-fold in.
+`task-estimator`'s scores fall below its thresholds; that is what lets ONE pipeline cover a range that
+would otherwise need several near-identical presets. The three binding rules (gatability is a declared
+per-kind capability, OFF by default, and structural kinds like `merger` stay unlisted; a skipped
+producer CASCADES onto its companion via the persisted `step.skipped`; a step may not carry both
+`gates[i]` and enabled `gating`, because an estimate may ADD a human checkpoint but never cancel one):
+[`pipeline-catalog-collapse.md`](./docs/initiatives/pipeline-catalog-collapse.md). The same
+precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits `runIncorporationCycle` so
+the rework + re-review LLM calls are skipped when the human left nothing to fold in.
 
 ## Pipeline flows
 
 An INDEX: what each flow is, plus the trap a change would hit. The linked doc is the authority; new flow
-detail belongs there, not here. The cross-cutting rules these flows established are stated once above
-(concurrency/idempotency, untrusted text, degrade loudly, harness rules).
+detail belongs there, not here, and an entry stays a handful of lines. The cross-cutting rules these
+flows established are stated once above (concurrency/idempotency, untrusted text, degrade loudly,
+harness rules).
 
-**Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation (`seedPipelines()`,
-`kernel/src/domain/seed.ts`), so code and rows drift. `reseed` inserts a new one and adopts an updated one
-(bump its `version`; that increment is the whole drift signal); `remove` deletes a withdrawn one; all
-three key off the CATALOG, never the stored row. **Retiring a built-in is TWO edits and doing only the
-first is a silent no-op**: delete the definition AND name it in `buildRetiredPipelines()`. The tombstone
-is what flips an existing row from read-only to removable, and it must be a POSITIVE assertion: "absent
-from the catalog" also describes a deployment's own pipelines whenever their package isn't wired. Never
-add a filter to `seedPipelines()`. A deployment retires its own via
-`PipelineRegistry.retire(id, { replacedBy })`, cannot retire a built-in, and `replacedBy` is an ID
-resolved against the stored row AND the catalog, never prose. Deleting a pipeline a recurring SCHEDULE
-points at is refused 409, paused included.
+**Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
+against the CATALOG, never the stored row. Trap: retiring a built-in is TWO edits (delete the definition
+AND name it in `buildRetiredPipelines()`); doing only the first is a silent no-op. Doc:
+[`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and
@@ -843,406 +709,129 @@ The map stops at modules and tasks are authored by people, so `reconcileBlueprin
 missing, refreshes descriptions, and **NEVER deletes or touches authored tasks**.
 
 **In-repo spec implementation state**: `requirementItem.state` (`aspirational` ⇄ `established`) keeps an
-agreed-but-unbuilt requirement out of build prompts as standing behaviour. A FIELD, never a `spec/`
-sub-folder. `specPromotionPostOp` is the ONE author, keyed on the tester kinds' verdicts: only `met`
-promotes, and **it NEVER demotes**: a run whose blast radius never touched a behaviour would otherwise
-strip it. `coerceRequirement` defaults a garbled state to `aspirational`, so a model cannot promote by
-assertion. Design and the withdrawn alternative:
+agreed-but-unbuilt requirement out of build prompts. Trap: `specPromotionPostOp` is the ONE author and
+it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`, so a model cannot
+promote by assertion. Doc:
 [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
-**Pre-token input gate**: the run's last chance to refuse work for FREE. Before the first agent step
-is dispatched (`InputGateController`, hooked in `stepInstance` at `currentStep === 0`), kernel's pure
-`evaluateInputGate` reduces the task's own authored fields and parks the run when there is
-structurally nothing to act on. The check never judges quality or infers intent, which is what the
-requirements reviewer is for; every BLOCKING finding names an input no model could have acted on
-either, which is what lets the gate default to on. Three rules bind it: it runs at STEP 0 and at most
-ONCE per run (the verdict on `instance.inputGate` is the replay guard, and past the first dispatch a
-park would cost an interruption and save nothing); `off` records NO findings while `passed` records an
-empty list, because "nobody looked" and "we looked and found nothing" are different facts (an unwired
-or unreadable settings seam therefore records `off`, never the default mode); and the park rides
-`step.approval`, so `assertNotIterativeGate` refuses a generic approve off the INSTANCE (approving it
-would mark the run's first working step done and skip the work) and the SPA routes it through
-`dedicatedParkView`, which REQUIRES the run. `recheck` RE-EVALUATES rather than trusting the caller
-and keeps the SAME decision id when it still fails; `proceed` records `overridden`, never `passed`,
-and keeps the waived findings. `not_applicable` covers every block whose description is not authored
-TASK input: a non-`task` LEVEL (a frame, module, epic or initiative ANCHOR stands for an entity whose
-real input is elsewhere) plus the `recurring` type. A platform-CREATED task with a real brief is not
-exempt: it is an ordinary board task, and what it needs is an answer path without a browser. That is
-the other half: the gate is the one park that turns on the shape of the TASK rather than the
-PIPELINE, so `parkSurfacesOf` cannot see it and a `write` key could start a run parked with nothing
-able to answer it. `publicRunParkSurfaces` composes it into public admission (its `inputGateBlocks`
-argument is REQUIRED, so a new start surface must answer the question) and
-`POST /api/v1/runs/:runId/decisions/input-gate/resolve` is what makes it answerable. Doc:
+**Pre-token input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
+before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
+Traps: it is not a cheap reviewer (it never scores prose or infers intent, and every BLOCKING finding
+names an input no model could have acted on either); the park rides `step.approval`, so a generic
+approve would mark the run's first working step done (refused in `assertNotIterativeGate`, checked off
+the INSTANCE); `off` records NO findings where `passed` records an empty list, so an unwired or
+unreadable settings seam records `off` rather than the default mode. Doc:
 [`pre-token-input-gate.md`](./docs/initiatives/pre-token-input-gate.md).
 
-**Requirements review**: the FIRST step of the default pipelines, handled inline in the engine
-(`RequirementReviewService`, orchestration `modules/requirements/`, table `requirement_reviews`). The
-reviewer raises severity-tagged findings, the run parks, and the dedicated window drives an iterative
-loop: answer/dismiss → an incorporation companion folds the answers into ONE document → re-review
-converges (`incorporated`), continues (`ready`), or hits the cap (`exceeded`, where the human picks
-extra-round / proceed / stop-reset). Findings at or below `maxRequirementConcernAllowed` auto-pass; cap
-and tolerance live on the merge preset. Pass-through when the reviewer model isn't wired.
+**Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
+(review → answer → incorporate → re-review) that settles the PRODUCT layer only. Traps: a parked run
+waits indefinitely by design (never add a timeout); the reviewer must be TOLD what system the work is
+about, and a derived subject never displaces the requester's words. Doc:
+[`requirements-review.md`](./backend/docs/requirements-review.md).
 
-- **This stage settles the PRODUCT / BUSINESS layer ONLY**: the technical layer belongs to the later
-  `architect` and `researcher` steps, which have the repo and `tech-spec/` in hand. A technical finding
-  here asks a product owner something they cannot answer and buries the questions only they can. The
-  boundary is ONE shared `PRODUCT_SCOPE_BOUNDARY` block folded into all THREE prompts of the flow
-  (`prompts/requirements.ts`) plus the user prompts in `requirements.logic.ts`, because it only holds if
-  every agent honours it. Editing any of them means bumping its number in `kinds/versions.ts`.
-- **Headless callers drive the SAME loop** over `/api/v1/runs/:runId/decisions`, on the `decide` rung of
-  the scope ladder (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits for
-  a human indefinitely by design.** The backstops are the workspace in-flight cap and
-  `POST /api/v1/jobs/:id/cancel`.
-- **An inline reviewer has no checkout, so the platform must TELL it what system the work is about.** The
-  context carries the owning service (+ its `spec/overview.md` intent), and an unresolved one is stated as
-  `NOT STATED` rather than omitted: a bare title identifies no software, and an omission reads like a
-  task whose product is obvious, so the model invents one and the next incorporation makes the invention
-  authoritative. The `NO_ASSUMED_PRODUCT` directive on every prompt in the flow is the other half; the
-  renderer is shared (`modules/review/product-context.ts`) because the rule only holds if the reviewer,
-  the dialogue and the incorporation editor all honour it.
-- **A derived subject NEVER displaces the requester's words.** An incorporated document, a brainstormed
-  direction and a clarified bug report are all rendered ABOVE the original description, which stays in the
-  prompt labelled as the original request. Substituting it was how one pass's drift became permanent: the
-  derived text is authoritative on the next pass, so nothing downstream could still see what was asked for.
-- **The Writer's provider-hosted web search is WITHHELD when the system is unidentified**
-  (`productIsIdentified`), because a model-composed query about a guessed product comes back with real
-  sources about unrelated software: an invention that now reads as researched. Its `groundedIn`
-  provenance (`standard` / `project-spec` / `web` / `general-practice`) is reported per suggestion, and an
-  unreported level stays NULL rather than defaulting.
-- **These kinds run as bare inline `generateText` calls**, so they bypass `systemPromptFor` and take their
-  prompts from `INLINE_ENGINE_SYSTEM_PROMPTS` as `{ role, directives }` pairs, composed per call through
-  `IterativeReviewService.systemPromptFor` so a **per-workspace prompt override applies to the role half
-  only**. Adding an inline engine kind means adding it there, SPLIT: one added with its directives inside
-  `role` runs fine and fails only later, as a workspace that edited it loses its JSON output contract.
+**Inbound tracker webhooks**: HMAC over the RAW body before any parse, ack 202, hand off through
+`gateways.trackerWebhook`; unconfigured FAILS CLOSED. Traps: push never replaces the `bug-intake`
+reconciliation sweep; ticket-comment replies route through the SAME service methods the SPA calls; the
+per-ticket match is a VERDICT (`unconfirmed` fires `queue` and withholds `per-ticket`), never a boolean.
+Doc: [ADR 0032](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
-**Inbound tracker webhooks**: verify HMAC over the RAW body BEFORE any parse, ack 202, hand off through
-`gateways.trackerWebhook`; the provider owns verify + parse. The workspace rides the PATH and the
-per-connection secret authenticates (scanning every workspace's connections would be a deployment-wide
-N+1 on an unauthenticated POST); the secret lives in the sealed credential bag, so **no new table**, and
-an unconfigured one **FAILS CLOSED**. Push never replaces the `bug-intake` reconciliation sweep, and a
-qualifying issue event FIRES that schedule rather than re-implementing intake. Ticket-comment replies take
-explicit first-token commands only and route through the SAME service methods the SPA calls (**never a
-parallel mutation path into the engine**), behind three guards on reply text (identity,
-data-not-instructions, the iteration budget). A schedule may instead dispatch **per ticket**, running the
-pushed ticket as its own task; that mode REQUIRES on-demand and refuses a `bug-intake` pipeline, because
-each combination would otherwise work a different ticket than the one pushed. **The match is a VERDICT,
-never a boolean**: a predicate the delivery cannot answer is `unconfirmed`, which `queue` fires on (its
-run's vendor search re-checks everything) and `per-ticket` withholds on and LOGS, since nothing downstream
-would catch a wrong dispatch and no cadence sweep will retry it. Doc:
-[`0032-tracker-webhook-intake.md`](./backend/docs/adr/0032-tracker-webhook-intake.md).
-
-**Bug hunt**: scan a tracker board's open + UNASSIGNED bugs, rate impact against complexity, adopt one
-onto `pl_bugfix`. **Persists NOTHING**, so runtime symmetry is by construction. **One vendor call per scan
-is a hard requirement**; a caller-supplied board scope is quoted or shape-validated (`assertBoardSlug`)
-before it reaches a vendor query; and the rating takes `isOverBudget`, being the platform's first billable
-call that no run start gates; **any future un-run-scoped LLM call owes the same guard**. Doc:
-[`bug-hunt.md`](./backend/docs/bug-hunt.md).
+**Bug hunt**: scan a tracker board's open unassigned bugs, rate impact against complexity, adopt one onto
+`pl_bugfix`; persists NOTHING. Traps: one vendor call per scan is a hard requirement, and the rating
+takes `isOverBudget`, being the platform's first billable call no run start gates; any future
+un-run-scoped LLM call owes the same guard. Doc: [`bug-hunt.md`](./backend/docs/bug-hunt.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
-implementations and parks for a human. A container job can't pause mid-run, so the park sits BETWEEN two
-dispatches on the same step: a read-only `fork-proposer` helper, the `fork-proposal` interceptor (falling
-through on `single_path` / <2 usable forks), then a CAS-recorded choice folded into the `build` prompt as a
-binding directive. Rides `step.forkDecision`; primary repo only. Doc:
+implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't
+pause mid-run). Rides `step.forkDecision`; primary repo only. Doc:
 [ADR 0022](./backend/docs/adr/0022-coder-fork-decision.md).
 
-**Dependency prepopulation**: one declared install command run before the agent's first turn. Shares the
-`validation_configs` row but rides the BASE job body rather than only a PR-opening dispatch, and **that
-threading difference IS the feature**. **NEVER a gate**: a check is a VERDICT about the work, an install is
-SETUP, so every failure becomes a prompt NOTE and the run continues. One `prepopulateDependencies` seam,
-pinned structurally by `dependency-install.coverage.test.ts`; what it materialises is git-excluded by
-DIFFING untracked paths either side, never by naming well-known directories. Doc:
+**Dependency prepopulation**: one declared install command run before the agent's first turn. Trap:
+NEVER a gate; an install is SETUP, so every failure becomes a prompt NOTE and the run continues. Doc:
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
-**Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared
-capabilities an org already runs, each with a description and its API contracts (OpenAPI 3.x /
-`@toad-contracts/core` / `@lokalise/api-contract`), registered in a deployment's CODE on the
-app-owned `FoundationalServiceRegistry`, uploaded directly, or synced from a linked repo through the
-SAME `repoSourceSync` engine the fragment + skill libraries use. **The code-registered `builtin` tier
-holds no rows** (the merge reads the registry), so a deployment's estate is present from a
-workspace's first request and cannot drift from its definitions, and boot validation holds each one
-to the same schema and document checks the write boundary applies. **A contract set is validated as
-a SET** (at least one document per declared format references that library), because a contract
-module is a module GRAPH and only its entry point names the library. **The catalog and the CONTRACTS are two
-separate reads and two separate tables, and that split IS the feature**: a `foundational-catalog`
-kind (the architect) is folded identity + capability tags + indexed operation NAMES with no document
-bodies, while a `foundational-contracts` kind (the researcher, the coder) gets the full documents for
-exactly the ids the design DECLARED in its machine-read fenced block. Both arrive as injected
-`.cat-context/` files, so the container, inline and consensus paths need no new prompt field. Three
-downstream states are kept apart because each needs a different reaction: no declaration at all
-("nothing was checked"), an empty one ("no shared service applies") and an id the catalog does not
-know (named, with "do not guess at its API"). A FOURTH state is the operation list itself: empty
-means "declares nothing" for a format we parse and "nobody looked" for one we do not, so
-`operationsAreIndexable` (contracts) is the ONE place that distinction lives and every renderer
-branches on it. A contract MODULE is read statically and reports its own coverage: the
-`defineApiContract(` anchor count is the declaration count, so whatever the extractor could not read
-rides `omittedOperations` rather than passing as a complete list. **Routing is by TRAIT, never a
-kind-id list**, so a deployment's own design/implementer kinds opt in by declaring one. A tier opts
-OUT of what it INHERITS (a board of its account's, either of a deployment builtin) through a
-suppression sub-resource mounted at BOTH scopes, never a delete: a delete drops that tier's own
-registration and its documents, where a suppression destroys nothing, which is why RESTORING one
-hard-deletes the tombstone rather than clearing its `deletedAt` (that would revive an EMPTY override
-that wins the merge), and why the suppression LIST is its own read (a suppressed id is by
-construction absent from the merged catalog, so nothing else could offer the way back). Doc:
+**Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities
+an org already runs, injected as `.cat-context/` files. Traps: the catalog and the CONTRACTS are two
+separate reads and that split IS the feature; the code-registered `builtin` tier holds no rows; "no
+declaration", "empty declaration" and "unknown id" are three states needing different reactions, with
+`operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
-**Binary-output steps**: a kind carrying the `binary-output` trait (a deployment's image
-generator; no built-in carries it) generates BINARY artifacts and stores them through a
-foundational service its step SELECTS from that same catalog (`stepOptions.binaryOutput`: a
-`asset-storage`-capability-tagged storage service + context services that scope the generation),
-never through the platform's artifact store, which holds run evidence rather than deliverables.
-The join is the step's own config, not a design's declaration, so presence is refused structurally
-at save + start and resolution re-validates against the catalog at every admission; the injected
-`binary-output/` brief states every gap (an ABSENT brief itself means "do not upload; report"),
-and what the agent declares it stored lands on `PipelineStep.binaryOutputs` with every loss
-bookkept. **The trait is the ONE trait projected onto the wire** (`CustomAgentKind.binaryOutput`,
-a boolean beside `container`, asked of the REGISTRY so an ASSIGNED trait projects too), because it
-is the one with a UI consequence: the builder's picker must know which steps are refused without a
-selection. The SPA reads the report as a step-resolved SECTION, not a declared result view; see
-the placement rule under Frontend extension seams.
+**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through
+a foundational service its step SELECTS, never the platform's artifact store; what MAKES them is the
+separate `BinaryGeneratorRegistry`, read only through `BinaryGeneratorSource` (mothership rule). Traps:
+content type is a CLOSED vocabulary and a modality stops deciding at the SECOND producer of it (the
+platform states overlaps, ranks nothing); an unreachable source is a 503 refusal, never an empty set;
+the credential VALUE never reaches a prompt. Doc:
+[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
-**What MAKES those artifacts is its own registry**, and keeping it out of the foundational catalog
-is the point: the catalog is what a DESIGN is expected to consume, and a metered vendor API that
-makes pictures is an instrument a step is pointed at, not something to build on.
-`BinaryGeneratorRegistry` (kernel, app-owned like every other) takes a deployment's image / music /
-video integrations in CODE (identity, the CONTENT TYPES it produces, its `mediaTypes`, endpoint,
-API contracts in the same `uploadApiContract` vocabulary, and a credential declared BY NAME), and a
-step selects from it (`binaryOutput.generatorIds`) plus the content types it must DELIVER
-(`binaryOutput.modalities`). Three rules bind it: **content type is a CLOSED vocabulary**
-(`image | audio | video | 3d-model | 3d-scene | document`), because a free-form tag makes `images`
-and `image` two things that look identical and silently fail to match, and it is what the brief
-groups by so an image generator is never asked for music. **A new member must clear the bar 3D
-cleared.** A deliverable is described on three axes: the KIND (`modalities`, which decides which
-generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
-else (the PROMPT); a member is earned only when neither lower axis can carry the distinction.
-**A modality stops deciding at the SECOND producer of it, and no definition field may take over.**
-Two image APIs on one step are both admissible and exactly one is right, so a discriminator with an
-admission rule (`style`, `resolutionRange`, `intendedUse`) would refuse correctly-configured steps:
-those axes do not PARTITION the deliverable the way `modalities` and `mediaTypes` do, so there is no
-`covered`/`uncovered` to compute. The choice belongs to `generatorIds`, then to the step's own
-prompt (the `consumes` ruling one level up: a fact about a COMBINATION or a CHOICE is never a fact
-about one definition). The platform's whole contribution is `binaryModalityOverlaps`, which STATES
-which content types have two producers and RANKS NOTHING, to the agent in its brief and to the human
-in the picker, refusing nothing and warning at no registry.
-`image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
-scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
-the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST (both 3D members
-for every 3D container, which is the true statement), the boot check passes on INTERSECTION, and a
-settled artifact classifies only when the answer is unambiguous (`modalityOfMediaType`), because a
-guess about an existing file is worse than an absence, with **`binaryOutput.mediaTypes` one notch under it**
-for the deliverables where the CONTAINER is the requirement (GLB, USDZ and FBX are all one modality
-and none substitutes for another), each entry required rather than any-of, never inferred from or into
-a modality, matched EXACTLY through the one `normalizeMediaType`, and carrying a THIRD outcome
-beside covered/uncovered: a generator declaring no formats has said "only my modality is known", so
-the requirement is UNVERIFIABLE, the run is ADMITTED, and the gap is stated in the brief and the
-picker (`binaryFormatCoverage`), the admission-side twin of `generatorsUnverified`; **an uncovered
-content type is refused at admission** under its own `binary_output_generator_invalid` reason, kept
-apart from the storage-side refusal because one is fixed in the workspace catalog and the other in
-the deployment's build; and the
-**credential VALUE never reaches a prompt**: the engine puts the non-secret projection on
-`AgentRunContext.binaryGenerators`, the container executor resolves it through the SAME
-`ToolSecretResolver` port a tool server uses (with a discriminated `subject`, so a generator and a
-tool server of one id cannot collide), and it rides the job body's `generatorSecrets` into that ONE
-job's agent env. An unresolved key is not a failed dispatch: the brief already tells the agent an
-unset variable means the platform could not provide it, and to report rather than call.
-
-**The registry is READ through `BinaryGeneratorSource`, never directly**, because it is exactly
-the "registers in CODE, resolves in a RUN" state the mothership rule above covers: it shipped in
-violation of that rule and a downstream deployment hit it. A mothership-mode node reads
-`GET /internal/binary-generators` (+ batched `POST .../contracts`) and does not consult its own
-registry for any run; the registry stays the subject of BOOT VALIDATION and what that route
-SERVES when this process is the mothership. **Every reader routes through the source, the workspace
-snapshot's picker projection included**: routing only the engine moves the drift to the surface
-that OFFERS the id rather than removing it. And the disposition differs from the estate's because
-this one gates ADMISSION: an unreachable source is re-thrown as `binary_generators_unreachable`
-(503, retryable), never softened to an empty set, which would refuse a correctly configured step
-as `unknown_generator`; the first application of "absent ≠ zero" to a decision surface rather
-than an enrichment one. **A user-reachable 503 reason owes TRANSLATED copy** (`UNAVAILABLE_REASONS`
-
-- an exhaustive `Record` in `usePipelineErrorToast`, the `CONFLICT_REASONS` pattern): the status
-  class's generic wording commits to "this deployment has not configured the capability", which is
-  right for an unwired module and is the misattribution itself for an outage. And the settled step's
-  read-back RECORDS what it could check and flags what it could not (`generatorsUnverified`, never an
-  empty `unknownGenerators`): withholding the one unanswerable judgement is right, dropping the
-  artifacts and the storage verdict beside it is the same mistake mirrored. Doc:
-  [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
-
-**Compose layers**: a service's `StackRecipe` and a `SharedStack` each name an ORDERED list of
-`ComposeFileRef` layers: a bare in-repo path, or an explicit `inline` / `repo` source read
-checkout-free through the workspace's VCS connection. That is what lets a deployment declare infra
-dependencies IN CODE (`seedSharedStacks`) rather than through a form. **The project directory anchors
-on the first `path` layer, NEVER the first layer**: compose resolves every layer's relative build
-contexts, binds and `env_file`s against `--project-directory`, so prepending an `inline` layer must
-not move that anchor to the checkout root; the host-escape `baseDepth` derives from the SAME
-directory, so a foreign layer's own nesting can never widen what the guard tolerates in the primary
-checkout. Placement is PURE and shared (kernel `domain/compose-sources.ts`), resolution is ONE seam
-(`planComposeLayers`), and a materialized layer's path is keyed by POSITION so same-basename layers
-can't collide. **`SharedStack.cloneUrl` is nullable and what forces one is reading a COMMITTED file**
-(`composeBringUpNeedsRepo`), refused at the WRITE boundary on the MERGED entity because
-`composeFiles` and `cloneUrl` patch independently. **Seeds are idempotent by NAME, never
-overwritten**, so an operator's later edit survives every boot. Doc:
+**Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
+(in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
+project directory anchors on the first `path` layer, NEVER the first layer; seeds are idempotent by
+NAME, never overwritten. Doc:
 [`stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
 
-**Pre-PR validation**: per-frame install/lint/test/build commands run after the agent settles and before
-the PR opens; red re-enters the agent loop with the captured output and only a green checkout opens a PR.
-**Autodetection SUGGESTS, it never writes**, and an opinionated gate (`cargo fmt --check`, `-D warnings`)
-is suggested only when its config file is checked in. Threaded onto the job body, so it works on all three
-transports; the loop lives in the harness, generic off the body with no `switch(agentKind)`. Unconfigured
-is byte-for-byte the old behaviour. Doc:
-[`pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
+**Pre-PR validation**: per-frame install/lint/test/build commands after the agent settles; only a green
+checkout opens a PR. Traps: autodetection SUGGESTS, it never writes; unconfigured is byte-for-byte the
+old behaviour. Doc: [`pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
 
 **Bugfix reproduction proof**: the declared reproduction command against the pre-fix tree and the PR
-tree; only red-then-green is proof. **SYMMETRY is the safety property and the only defence against a false
-`reproduced`**: identical worktrees, setup command and declared test files, so an environmental defect
-fails BOTH and red-then-red is `inconclusive`. Target **`baseSha`** specifically (the coding clone is
-`--depth 1`, so `HEAD~1` isn't in history) and apply the **declared PATHS only** onto the base worktree, or
-a whole-tree checkout drags the fix across and greens it. A failure REPAIRS, then degrades to
-`inconclusive` with the PR still opening: the opposite disposition from validation, because a red check
-means the WORK is broken while an unproven reproduction means the EVIDENCE is weak. **An absent `final`
-run is NORMAL for `inconclusive`** (a green base already settles the verdict, so the second tree is not
-run) and **the producer's own `note` is rendered VERBATIM** by every reader, never re-derived from
-`base.passed`: only the side that ran the two trees can tell a test that misses the defect from a resumed
-run whose base already carried this step's own work. The verdict reaches a human on three surfaces off the
-one `step.reproduction` (the PR report section, the result-window shell's trailing section, and the
-step-detail card) and **both SPA surfaces are required**, because the proof is recorded on whichever step
-OPENED the PR, which is the view-less `coder` in every built-in pipeline. **`repro-test` is GATABLE but
-shipped UNGATED**: it is the priciest thing a one-line bugfix pays for, but gating it by default would
-change what every existing run costs and drop the evidence wherever a model scored a task low, so it is
-the pipeline author's opt-in and a skipped step is its own `absent` cause in the report (checked FIRST,
-since gating leaves the step in `instance.steps`). Doc:
+tree; only red-then-green is proof. Traps: SYMMETRY between the two trees is the safety property; target
+`baseSha` and apply the declared PATHS only; a failure degrades to `inconclusive` with the PR still
+opening (the opposite disposition from validation); the producer's `note` is rendered VERBATIM. Doc:
 [ADR 0033](./backend/docs/adr/0033-bugfix-reproduction-proof.md).
 
-**Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md`
-(requested **only when `opensPr`**, since an in-place fixer amends a PR whose description it doesn't own)
-and the harness lifts it onto `openPullRequest` scrubbed, capped and git-excluded; absent ⇒ the
-dispatch-time `prBody()` fallback, which marks itself agent-less. The sentinel name is kept in sync agents
-⇄ harness, so changing it means an image bump. `MAX_PR_BODY_CHARS` (15k) plus the report's
-`MAX_SECTION_CHARS` (50k) must stay under the host's 65,536 limit, or the report silently stops
-publishing. **A RESUMED run must refresh the PR it already opened** (`refreshExisting`), but only when the
-text is the agent's own briefing, because refreshing from the fallback would clobber a human's edit.
+**Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md` and the
+harness lifts it onto `openPullRequest`; when the target repo ships a PR template, the briefing IS that
+template, filled in. Traps: the guidance rides EVERY agent pass; the sentinel is read with
+`titleFromHeading: false`; the coverage test classifies every agent-running mode as PR-opening or not.
+Doc: [`pipeline-pr-descriptions.md`](./backend/docs/pipeline-pr-descriptions.md).
 
-- **When the target repo ships a PR TEMPLATE, the briefing IS that template, filled in** (`pr-template.ts`,
-  which owns the discovery rules and the reasoning behind each). Neither host applies a template to an
-  API-created pull request (only to the web form a human opens), so nothing fails to say so, and our PRs
-  are the only ones on the repo missing the structure its reviewers read. The AGENT fills it, in the prompt
-  that already asks for a briefing: the sections are questions only whoever did the work can answer, so
-  stuffing the briefing under the first heading gives the template's shape and none of its meaning.
-- **Three things about it are load-bearing beyond that module.** It rides EVERY agent pass, or a
-  validation/reproduction REPAIR pass (a fresh agent still carrying the description guidance) replaces
-  the filled template with a free-form briefing. The sentinel is then read with **`titleFromHeading:
-false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` rule would retitle the PR
-  after the template's top heading and delete it from the body; a new read site owes the same flag. And
-  `pr-template.coverage.test.ts` CLASSIFIES every agent-running mode as PR-opening or not, because a new
-  PR-opening mode that skips this compiles and passes every behavioural test; it cannot anchor on
-  `openPullRequest(`, which runs in the push phase long after the prompt was composed.
-
-**Consensus panels**: an eligible step can run as a multi-model PANEL instead of a single agent
-(`@cat-factory/consensus`, `CONSENSUS_ENABLED`). REVIEW kinds are the point, and the frontend mirror
-`CONSENSUS_ELIGIBLE_KINDS` is hand-synced; extend both.
-
-- **A panel participant has NO checkout, and every layer preparing for it must know.**
-  `dispatchDeliversCheckout` (`@cat-factory/agents`) is the ONE definition, used by the executor's ROUTING
-  and by the engine as `RepoOpContext.deliversCheckout`, and it is deliberately FAIL-SAFE: being wrong
-  that way hands a container agent an inlined diff it didn't need, while being wrong the other way has a
-  panel reviewing from filenames while sounding confident. A preOp BRANCHES on it rather than assuming a
-  filesystem, naming what it could not inline as unreviewable instead of passing it off as reviewed, and
-  `INLINE_PANEL_SURFACE` is appended LAST so a workspace prompt override cannot drop it.
-- **`userPromptFor` folds `injectedContextFiles` for every INLINE caller** and not the container path, at
-  the wrapper level; it must be the wrapper, because `buildBaseUserPrompt` returns early for a kind that
-  authors its own user prompt, and those are exactly the kinds whose whole input arrives as context files.
-  The fold is budgeted, states what it dropped, and EXCLUDES standards files, which reach an inline caller
-  through the SYSTEM prompt at `standardsVerbosityFor`.
-- **The tier is chosen by the ENGINE at dispatch, never by the executor.** A step declares `participants`
-  inline or `consensus.groupIds` (a SET, not a precedence list, of workspace groups each carrying an
-  estimate bar); `resolveConsensusConfig` reads them in ONE batched `listByIds` and the pure
-  `selectConsensusGroup` picks the most demanding tier the estimate clears, deterministically so a
-  re-driven run re-picks the SAME tier. `applyConsensusGroup` **drops the step's `gating`**: selection IS
-  the gate. That is what keeps the group library OUT of the optional package: the executor only ever
-  receives an already-decided `ConsensusStepConfig`. A gated group MUST name a threshold ("always applies"
-  is `enabled: false`), and deleting a group degrades the step to its remaining tiers rather than rewriting
-  pipelines.
+**Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Traps: a
+panel participant has NO checkout and `dispatchDeliversCheckout` is the one definition every layer asks;
+the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
+[`consensus-panels.md`](./backend/docs/consensus-panels.md).
 
 **Merge lifecycle** turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is
 `done` only when its PR actually merged.
 
-- **`ci` (polling gate)**, auto-inserted second-to-last: reads the PR head's check runs via
-  `CiStatusProvider` and aggregates with `ci.logic.ts`: green/none advances with nothing spun up, pending
-  sleeps `ciPollInterval`, failure dispatches `ci-fixer` up to `ciMaxAttempts` then raises `ci_failed`.
-  **`ci-fixer`** clones the PR head and pushes back onto the SAME branch.
-- **`merger`** (last standard step) clones the PR head, scores the diff and returns ONLY a JSON
-  assessment, making no commits; `resolveMergerStep` compares it to the task's merge threshold preset and
-  either merges for real (block `done`) or raises `merge_review` leaving the block `pr_ready`. A pipeline
-  with no merger raises `pipeline_complete` instead of auto-`done`.
+- **`ci` (polling gate)**, auto-inserted second-to-last: green/none advances with nothing spun up,
+  pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
+  `ciMaxAttempts` then raises `ci_failed`.
+- **`merger`** (last standard step) scores the diff and returns ONLY a JSON assessment;
+  `resolveMergerStep` compares it to the task's merge threshold preset and either merges for real or
+  raises `merge_review`. A pipeline with no merger raises `pipeline_complete` instead of auto-`done`.
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
-- **Who started the run is part of the merge policy.** A preset also carries `classRulesByRole` (the
-  class rules NARROWED by the initiator's workspace role) and `dryRunRoles` (roles whose runs are
-  SANDBOXED: the pipeline opens its PR, nothing merges). Three rules bind anything added here.
-  **Narrowing is subtractive** (`narrowMergeClassRule`, over `always < thresholds < never`), so a role
-  entry can never grant what the base map withholds and is reviewable on its own. **Absent is not a
-  rule**: a role silent on a class, and a run with NO pinned role (a schedule fire, a public-API start,
-  auth-disabled dev), both fall through to the base rules rather than being read as `thresholds` or
-  guessed onto a tier. And **the role and the mode are PINNED at admission**
-  (`ExecutionInstance.initiatedByRole` / `.mode`), never re-resolved: the merge settles on the durable
-  path, which has no request context to resolve a role from and must not let a preset edited mid-run
-  re-govern a run already in flight. A sandbox is refused at BOTH exits — the auto-merge AND `mergePr`,
-  since the review card the first one raises is a merge button. It is SCOPING, not a boundary: it
-  closes the PLATFORM's exits (which is a real escalation to close, because an initiator with no
-  stored PAT merges on the DEPLOYMENT credential), never a hand merge on the host. **A PIN IS ONLY PINNED IF IT
-  PERSISTS**, and that is three hops each of which drops a field SILENTLY: `executionToDetail` and
-  `rowToExecution` are an allow-list rather than a spread, and `buildResumedInstance` carries fields
-  forward by NAME (drop the mode there and `restartFromStep`, which needs no failure, re-mints a
-  sandboxed run as live). A `MergeResolver` unit test hands in an instance built in memory and passes
-  through all three, so **anything a run pins at admission and a settlement path reads owes a
-  run-level conformance case**, not just unit coverage. Starting a run is likewise a decision about
-  ATTRIBUTION with exactly two answers: read the tier through the one `runInitiatorRole(c)` accessor,
-  or be named in `runAdmission.coverage.spec.ts` as deliberately unattributed with a reason. Doc:
+- **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`). Traps:
+  narrowing is subtractive; absent is not a rule; the role and mode are PINNED at admission and a pin is
+  only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
+  starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
+  `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
   [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
-- **Merge track record**: a **best-effort side channel** persisting each decision to
-  `merge_track_records`. Classification is pure backend TS over ONE VCS call, deliberately not in the
-  harness (no image bump); classes rank `docs < test < dependency < config < source < schema` and a mixed
-  diff takes the HIGHEST present, which is what makes a per-class rule safe. An unreadable diff yields
-  `unknown` and **`unknown` never matches a rule**, so a VCS outage can't change policy. Precedence:
-  `autoMergeEnabled: false` > the class rule > the credibility + threshold comparison. Doc:
+- **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
+  the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
+  a VCS outage can't change policy. Doc:
   [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
-- **Notifications** are a human-actionable surface, not a mid-pipeline gate: the canonical row is
-  persisted and pushed in-app behind a `NotificationChannel` port, with `CompositeNotificationChannel` as
-  the seam for other channels. `WebhookNotificationChannel` (per-workspace HTTPS, HMAC-signed with a sealed
-  secret through the SSRF-guarded `safeFetch`) exists because a headless caller has no in-app inbox; being
-  EXTERNAL, it composes into that set on both facades.
-- **A notification is NOT the run's lifecycle**, and the happy path raises none: a pipeline whose `merger`
-  merges its own PR settles with an empty inbox. So the same registered endpoint also carries run-lifecycle
-  events through the kernel `RunLifecycleSink` port (`run.started` / `run.completed` / `run.failed`), built
-  beside the channel by `buildNotificationWebhookSupport` from the SAME row and cipher so a facade cannot
-  wire one and forget the other, and driven through the ONE `signedDelivery.ts` retry/SSRF/signature core:
-  those are properties of the ENDPOINT, not of the payload, and a second copy is a second place to get the
-  SSRF guard wrong. **The started edge rides the ONE hand-off funnel every start path ends with
-  (`handOffLiveRun`) and is exactly once: announced LAST, after the block is committed and the durable
-  runner has the run, because an outbound call must never sit between a claim and the local write it
-  belongs to; the terminal edges hook the emit funnel and are AT-LEAST-ONCE by design**, carrying a
-  `<runId>:<event>` dedupe id, because a run reaches `done` from four sites, and a claim table would buy
-  exactly-once for an effect a receiver collapses with one id comparison. **A receiver dedupes on that
-  id, never on the body**: a replay re-stamps `sentAt`/`occurredAt`, so two deliveries of one transition
-  are not byte-identical. Doc: [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+- **Notifications** are a human-actionable surface behind the `NotificationChannel` port; the same
+  registered webhook endpoint also carries run-lifecycle events through the `RunLifecycleSink` port,
+  built beside the channel by `buildNotificationWebhookSupport` and driven through the ONE
+  `signedDelivery.ts` retry/SSRF/signature core. Traps: the started edge is exactly-once via
+  `handOffLiveRun` (announced LAST, after the claim and the local write); the terminal edges are
+  at-least-once with a `<runId>:<event>` dedupe id a receiver dedupes on, never on the body. Doc:
+  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
-**PR verification report**: the ENGINE, not the agent, keeps a report of captured facts on every run's
-PR, as a managed section of the PR BODY delimited by `<!-- cat-factory:verification-report:start -->` /
-`:end`. The markers ARE the identity, so the write is idempotent with NO persisted state. It is an engine
-HOOK on step settlement (one call in `RunDispatcher.recordStepResult`, positioned AFTER
-`applyTerminalStepResolver` and BEFORE `finalizeBlock`), not a pipeline step, which would need inserting
-into all 15 built-ins, would never exist for deployment-authored ones, and would never be reached by a run
-that fails part-way. Composed from state already in memory (the CI gate's RECORDED verdict, never a
-re-probe that can disagree with what the gate acted on). Best-effort always, with a per-workspace opt-out
-checked BEFORE anything is read. Doc:
+**PR verification report**: the ENGINE keeps a report of captured facts on every run's PR as a managed
+marker-delimited section of the PR body (idempotent, no persisted state). Trap: it is an engine HOOK on
+step settlement, not a pipeline step, and it composes from state already in memory (the CI gate's
+RECORDED verdict, never a re-probe). Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`
-port is vendor-neutral, served by `RegistryReleaseHealthProvider` (per-vendor adapters, today only
-Datadog) which owns connection loading, decryption, config resolution and the verdict reduction; an
-adapter is just the vendor reads, so a second provider is a new registry entry. Credentials live sealed in
-`observability_connections`, never in containers. `on-call` is resolved specially by `resolveOnCallStep`:
-raise `release_regression`, best-effort enrich any open incident (the `IncidentEnrichmentProvider` port
-annotates, never re-alerts, since those systems page off the same signals), finish the gate.
+port is vendor-neutral (per-vendor adapters, today only Datadog); credentials live sealed in
+`observability_connections`, never in containers. `on-call` is resolved by `resolveOnCallStep`: raise
+`release_regression`, best-effort enrich any open incident (the `IncidentEnrichmentProvider` port
+annotates, never re-alerts), finish the gate.
 
 ## Custom agents (manifest-driven extension over `RepoFiles`)
 
@@ -1256,63 +845,21 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS committing a
   targeted subset via the `RepoFiles` port; a per-run, checkout-free HTTP facade, so runtime-symmetric) →
   `agent` → `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing). Registration
-  is by reference on the app-owned registries. `ExecutionService` runs the hooks around dispatch over a
-  `RepoFiles` bound by the facade-wired `resolveRunRepoContext`; unwired means the hooks skip.
-- **Capabilities are `skills` and `toolServers`**, registered on the SAME `AgentKindRegistry` (they are
-  capabilities OF agent kinds, like traits) and attachable to a built-in kind via `assignSkills` /
-  `assignToolServers`. **Skills resolve in the ENGINE**; **tool servers resolve in the container
-  EXECUTOR**, because what is servable depends on the resolved HARNESS and the facade-wired credential
-  resolver, neither of which the runtime-neutral engine knows.
+  is by reference on the app-owned registries; unwired means the hooks skip.
+- **Capabilities are `skills` and `toolServers`**, registered on the SAME `AgentKindRegistry` and
+  attachable to a built-in kind via `assignSkills` / `assignToolServers`. **Skills resolve in the
+  ENGINE**; **tool servers resolve in the container EXECUTOR**, because what is servable depends on the
+  resolved harness and the facade-wired credential resolver.
 - **A capability credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
-  port, so a server needs no table and no UI. The VALUE rides the job body only; `context.toolServers` is
-  the non-secret projection the prompt and telemetry see. **A credential has TWO names and only one of
-  them is a boundary**: the LOOKUP key is what a resolver is asked for, so it can reach the deployment's
-  environment, while `envName` is what the value is INJECTED as in the agent's or the MCP server's
-  process and reads nothing. Every rule below binds the lookup key. (An `http` tool server always had
-  the split, `key` vs `header`; `envName` is that split for the stdio and generator cases.) Two rules
-  bind it, a FLOOR plus a BOUND rather than one setting. **The floor: a credential may NEVER be looked
-  up by a variable the platform reads** (`isReservedPlatformEnvKey`, case-insensitively, since
-  `process.env` lookup is case-insensitive on Windows). A definition names both the key it wants and
-  the endpoint it reaches, so `{ key: 'ENCRYPTION_KEY' }` was a registration that booted clean and
-  shipped the deployment's master sealing key to a third party. Refused at DECLARATION (the
-  generative-integration schema; boot validation for a tool server) and again at DISPATCH, because a
-  mothership-mode node boot-validates nothing it resolves, and refused at the CALL SITE rather than
-  inside the env resolver, so it binds a deployment's own resolver too. It needs no configuration and
-  cannot be widened; a new platform variable is covered by its prefix family, with
-  `check-reserved-env-keys.mjs` as the drift guard. **Holding `envName` to that floor too would break
-  the commonest integrations there are** and is the whole reason the names are separate: the families
-  cover `GITHUB_PERSONAL_ACCESS_TOKEN` / `SLACK_BOT_TOKEN` / `AWS_ACCESS_KEY_ID`, which the platform
-  does not read and a vendor's own SDK does, and no deployment can rename what an SDK looks for. So
-  `envName` carries the narrower `isToolchainEnvName` rule instead (not `PATH` / `NODE_OPTIONS` /
-  `npm_config_*`, which reconfigure a process rather than authenticate a call). **The bound:
-  everything outside the platform's own configuration** is a developer's own tooling, and only the
-  deployment knows what an integration may see: `{ allowKeys }`, which a deployment installing
-  third-party agent packages (or a mothership-mode node) sets through its facade's
-  `createToolSecretResolver` factory. **On the Worker that policy registers PROCESS-WIDE**
-  (`registerToolSecretPolicy`, the `registerModelRegistry` pattern), because a Worker builds a
-  container per entry point and the one that dispatches container agents is the durable driver, so an
-  option held on the app would be accepted and never asked anything. **The VALUE's primary home is the
-  per-workspace capability-credential store**, not the environment: every facade composes it in FRONT
-  of the env resolver PER KEY (a partially-filled workspace must not lose the keys it has not typed
-  yet), so a tenant brings its own vendor account and a workspace storing nothing resolves exactly as
-  before. Its surface is a CHECKLIST projected from the registries, and it keeps three states apart
-  that an empty list would flatten: a stored key nothing declares (`orphaned`), a declaration read that
-  FAILED (`declarationsIncomplete`, which also suppresses the orphan list, or an unreachable
-  mothership reports every generator credential as stale), and a key the environment still answers
-  (`environmentFallback`). **That last one is a TRI-STATE read off the chain the facade COMPOSED, never
-  a default the surface asserts beside it**: `buildToolSecretChain` is the one composition site and it
-  returns the resolver and its description together, so a deployment that declared its chain store-only
-  (`capabilityCredentialEnvironmentFallback: false`, the multi-tenant shape) reports `false` and one
-  that supplied its own resolver reports ABSENT, because that resolver replaced the chain and may read
-  Vault, the environment, or both. Guessing either way is the same mistake mirrored: `true` leaves a
-  credential nothing will resolve, `false` sends an operator hunting for a value that already answers.
-  **The absent line states only that the chain is undescribable HERE and never WHY**, because a facade
-  that wired the store and dropped the flag lands on the same value, and copy blaming a custom resolver
-  makes that wiring bug read as a deliberate configuration. **The chain itself is a REQUIRED dependency
-  of both executor builders**, since the one default they could carry (the deployment environment alone)
-  silently drops the per-workspace store, which is the leak the store exists to prevent: a default is
-  only safe where the safe answer is the convenient one.
-  Doc: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  port; the VALUE rides the job body only, and its primary home is the per-workspace
+  capability-credential store composed in FRONT of the env resolver PER KEY. **A credential has TWO
+  names and only one of them is a boundary**: the LOOKUP key may never be a variable the platform reads
+  (`isReservedPlatformEnvKey`, refused at declaration AND at dispatch AND at the call site), while
+  `envName` carries only the narrower `isToolchainEnvName` rule, because vendors' own SDKs fix what they
+  look for. `{ allowKeys }` is the deployment-set bound for everything else, registered PROCESS-WIDE on
+  the Worker (`registerToolSecretPolicy`). The chain is a REQUIRED dependency of both executor builders,
+  and the fallback description is a tri-state read off what was COMPOSED, never asserted. Full model:
+  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
@@ -1326,250 +873,46 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
 
 ## Per-workspace agent prompt overrides
 
-A workspace can replace any agent kind's system prompt from the pipeline builder and switch back through
-the full history of what it has run.
-
-- **The store is an APPEND-ONLY revision log** (`agent_prompt_revisions`, keyed
-  `(workspace, agent_kind, revision)`) and the HIGHEST revision is live: no update, no delete. Going back
-  to what the product ships appends a revision whose `text` is **NULL**: a real state, distinct from a
-  kind nobody edited, which keeps the workspace tracking the shipped prompt as it is bumped instead of
-  pinning today's wording. **The composite key is the concurrency control**: a second editor's insert
-  COLLIDES and `AgentPromptService` re-reads the head to raise `prompt_revision_conflict`. **Never turn
-  that insert into an upsert**: last-write-wins would silently discard one of two people's prompts.
-- **An override replaces the SHIPPED TRACK PROMPT, never the whole system prompt.**
-  `systemPromptFor(kind, registry, override?)` re-applies the surface directives and trait guidance on
-  top, because those are invariants of how the platform runs a kind rather than editorial content, so the
-  editor shows, and an override supplies, `baseSystemPromptFor`.
-- **An invariant reaches a shipped prompt by TWO routes and only one survives an override.**
-  `applySurfaceDirectives` APPENDS, but a built-in track prompt carries the same rule INLINE. Replace the
-  track prompt and the double-append guard reads "already has it" about a string that no longer exists, so
-  every kind whose deliverable IS its reply silently loses the rule and returns an empty reply the harness
-  fails the run on. `restoreShippedInvariants` closes that by diffing against the fully composed SHIPPED
-  prompt. **A new engine-enforced fragment belongs in `OVERRIDE_PRESERVED_FRAGMENTS`**, or an override can
-  delete it.
-- **The engine resolves the override ONCE per dispatch** onto `AgentRunContext.systemPromptOverride`, so
-  the container, inline and consensus paths cannot disagree about which prompt a step ran under. **A new
-  prompt-assembly site must honour it.** A step records the revision it ran under
-  (`PipelineStep.promptRevision`, absent ⇒ shipped), which Kaizen keys its `(prompt, agent, model)` combo
-  off.
-- **A per-kind GENERATION setting is the sibling store, not another revision log.** The
-  output-token ceiling rides `workspace_agent_settings` (per workspace, per kind, edited in the same
-  editor), resolved by the SAME once-per-dispatch rule onto `AgentRunContext.maxOutputTokens` with a
-  pipeline step's `stepOptions.maxOutputTokens` winning over it. It UPSERTS where the prompt log
-  appends (a scalar someone retypes, not authored text a lost update would destroy), and
-  "inheriting" is the row's ABSENCE, never a stored null. Ceilings are advisory on the
-  subscription-CLI inline path. Doc:
-  [`configurable-agent-output-budgets.md`](./docs/initiatives/configurable-agent-output-budgets.md).
-- **A code-registered VARIANT is the same unit of text, one tier out.**
-  `registerVariant({ id, baseKind, systemPrompt | promptAddition })` (`@cat-factory/agents`) gives a
-  deployment an alternate prompt for an EXISTING kind, selected per step via
-  `stepOptions.agentVariantId`. It is deliberately NOT a kind: a kind id is what every un-migrated
-  `switch(agentKind)` keys off, so a new id would dispatch down the generic path and quietly do the
-  wrong thing, whereas a varied step records the BASE kind and every behavioural decision is
-  unchanged. **A variation needing different BEHAVIOUR is a different kind.** The engine resolves it
-  in the SAME once-per-dispatch place as the workspace override and emits it through the SAME
-  `systemPromptOverride` field, so no executor branches on it and the invariants above hold for it
-  unchanged; the WORKSPACE override wins as the narrower tier, and a `promptAddition` then folds onto
-  the workspace's text rather than the shipped text, which is why an addition, not a replacement, is
-  the default a variant should reach for.
-- **A step is varied by ASKING; what the dispatch DID with the ask is a separate recorded fact.**
-  Because the workspace out-ranks the deployment on the same text, a selected variant routinely
-  reaches the prompt only partly (its addition survives, its replacement does not) or not at all
-  (displaced with no addition, or withdrawn mid-run). So the dispatch pins `step.promptVariant`
-  `{ id, applied, fingerprint? }` beside `promptRevision`, warns on every losing disposition, and
-  **every reader keys off the PIN, never off `stepOptions.agentVariantId`**: a panel or a metric
-  reading the ask reports a variation that never ran, which reads as confirmation rather than as the
-  absence it is. The `fingerprint` covers the text the variant CONTRIBUTED, so Kaizen cannot let a
-  re-worded variant inherit the verified streak its previous wording earned (re-registering an id is
-  a supported way to re-word one), and a variant that contributed nothing stays out of the key
-  entirely.
-- **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`** because `merger` and
-  `on-call` dispatch a bespoke constant instead of their role prompt, bypassing `applySurfaceDirectives`.
-  The role is editable; the directives (the JSON contract the engine parses, on-call's read-only
-  guardrail) are re-appended on top. **Adding another such kind means adding it there, split**: one added
-  with its directives inside `role` compiles and dispatches fine, and fails only later as a workspace that
-  edited it losing its guardrail.
-- **The sandbox shares ONE unit of text with this feature**: a stored sandbox `systemText` and a stored
-  override are both the BASE prompt, composed at RUN time through the same override path production uses,
-  so a candidate is graded on what would actually be sent. Promote is `POST /agent-prompts/:kind/promote`,
-  NOT a sandbox route: it writes the live prompt, so it answers to `settings.manage` rather than the
-  sandbox's `integrations.manage`.
+A workspace can replace any agent kind's system prompt from the pipeline builder; the store is an
+append-only revision log and the engine resolves the override ONCE per dispatch onto
+`AgentRunContext.systemPromptOverride`, which every prompt-assembly site must honour. Traps: an override
+replaces the shipped TRACK prompt, never the whole system prompt; engine-enforced fragments survive only
+through `OVERRIDE_PRESERVED_FRAGMENTS`; `merger`/`on-call` bespoke prompts and the inline engine kinds
+are SPLIT `{ role, directives }` and a new one added un-split fails only after a workspace edits it. The
+full model (revision log, generation-setting sibling store, variant composition, the sandbox):
+[`agent-prompt-overrides.md`](./backend/docs/agent-prompt-overrides.md).
 
 ## Telemetry & agent-context observability
 
-Three sinks live in a dedicated telemetry store, separate from the transactional domain (append-heavy,
-high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare and a `telemetry`
-Postgres schema on Node, all pruned to `LLM_CALL_METRICS_RETENTION_DAYS`. Parity is asserted by
-`defineAgentContextSuite`, and Cloudflare fails fast at build if `TELEMETRY_DB` is unbound. Gaps and the
-plan to close them: [`observability-logging-gaps.md`](./docs/initiatives/observability-logging-gaps.md).
+Three sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`) live in a dedicated
+telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
+Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
+The full model, and the authority for anything recording an LLM call:
+[`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
 
-- **`llm_call_metrics`**: per LLM call. **THREE producers converge on the ONE `LlmObservabilityService`
-  and a new one must too**: the proxy; the subscription harnesses (Claude Code / Codex bypass the proxy, so
-  the harness lifts metrics off each CLI's event stream); and INLINE calls, through the kernel
-  `InlineLlmCallRecorder` port. An inline call SERVED BY a harness CLI is both at once (it reaches the
-  store through the inline port, carrying per-call rows lifted off the CLI's stream), which is why the
-  model owns them and the instrumentation stands down (below), not a fourth producer.
-- **`agent_context_snapshots`**: the complete context an agent was PROVIDED per dispatch, including the
-  full content of injected `.cat-context/*` files, which the agent reads via tools and which therefore
-  never reach proxy telemetry. A redacted allow-list projection, never a token or credential-bearing URL.
-- **`agent_search_queries`**: one row per web search a container agent PERFORMED.
+- **Three producers converge on the ONE `LlmObservabilityService` and a new one must too**: the proxy,
+  the subscription harnesses, and inline calls through the kernel `InlineLlmCallRecorder` port. A model
+  served by a harness CLI files its OWN calls and the middleware around it STANDS DOWN
+  (`reportsOwnLlmCalls`); two producers for one call would double every token in the rollup.
+- **A new inline caller on the run path must build its scope with the run in it**, or its rows are IN
+  the store and absent from every run-scoped read, which reads as a step that spent nothing.
+- **State what a producer does NOT know rather than filling a field with a guess**; the input side is
+  THREE token classes, never a lump (`readInputTokenClasses`); every row is stamped with the PHASE that
+  spent it by whoever OWNS the boundary.
+- **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
+  add a query.
+- **Bodies are double-gated** (`LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, via
+  kernel's `createStoreAgentContextGate`), on every path that captures a model body, external trace
+  fan-out included; a read that throws fails closed.
+- **External trace destinations go through the ONE `LlmTraceSink` port** composed by
+  `composeTraceSinks`, never a second recording path; a run's spans are a hierarchy built from DERIVED
+  ids with extents folded from recorded stamps, and a span name is a bounded class.
 
-Rules that bind new work here:
-
-- **The provider takes EXACTLY ONE exit per inline call.** `record` already fans out to the external trace
-  sink, so a recorded call must NOT also hit the provider's own `traceSink`: that doubles every inline
-  generation on Langfuse/OTel. A facade never assembles the pair by hand: `createInlineInstrumentation`
-  builds both exits from ONE sink instance. Bodies reach the recorder as THUNKS, so a prompts-off
-  deployment never pays to serialise a prompt the gate is about to drop.
-- **The inline instrumentation is a middleware around a RESOLVED model, so it only ever sees what the wrap
-  beneath it returned, and one facade wrap SUBSTITUTES that model.** It shipped innermost, inside
-  `createScopedModelProviderResolver`, where local mode's subscription-inline wrap (which answers a harness
-  ref with its own `CliInlineLanguageModel` instead of delegating) was invisible to it: on the default local
-  shape every inline step on a host `claude`/`codex` login recorded zero calls while the same step on a
-  metered API model recorded fine. **A facade never composes that order by hand**:
-  `wrapResolverWithTelemetry(resolver, instrument, limiter)` (`@cat-factory/server`) owns it, for the same
-  reason `createInlineInstrumentation` owns the exit pair: the wrong order still typechecks and still records
-  every non-substituted call, so nothing fails until it is the deployment you don't test on. The limiter
-  stays outermost, so a queue wait is never counted as generation time.
-- **A model served by a harness CLI files its OWN calls, and the middleware around it STANDS DOWN.** One
-  `doGenerate` on `CliInlineLanguageModel` is not one model call (the CLI runs a whole tool loop behind it,
-  routinely 16+ calls over eight minutes), so the middleware could only ever report it as ONE lumped row,
-  only once the subprocess exited, and (a rejection carries no usage) as ZEROS whenever the run was killed.
-  The model therefore takes the facade's recorder and files each call the CLI reports, live; the middleware
-  asks `reportsOwnLlmCalls(model)` and returns it unwrapped, because two producers for one call would double
-  every token in the step's rollup. **The model is ASKED, never a facade told**: the instrumentation sits
-  outside the wrap that substitutes the model (it has to; see above), so it cannot know what the inner wrap
-  returned. Each row carries the model the CLI says SERVED that call (`call.model ?? requested`, the same
-  precedence `makeHarnessCallRecorder` applies), because cost is derived per row from `(model, token classes)`
-  and a CLI serves some calls with a cheaper model of its own. **The step-level row carries the SHORTFALL, not
-  a lump**: the terminal cumulative usage minus what the per-call rows accounted for, so a CLI that narrates
-  nothing (`codex exec`) still gets the one row the SDK boundary knows, a fully-narrated step gets none (it
-  would double every token), and a PART-narrated one gets the remainder rather than silently
-  under-reporting, which is what an "aggregate only when nothing was costed" rule did. An uncosted turn is never filed as a
-  zero row, and that rule lives with the model, so it holds for both transports. Only Claude Code's
-  `stream-json` is parsed per call, through the container harness's `createClaudeRunTelemetry`
-  (`@cat-factory/executor-harness/claude-call-aggregator`): the ONE fold, imported rather than
-  re-implemented, because folding per ENVELOPE instead of per `message.id` inflated a measured 1.47M tokens to
-  5.53M and both paths had to learn that once. **That fold reconstructs a transcript in the DRIVER's process,
-  so both of its bounds are load-bearing on the backend**: `MAX_TRANSCRIPT_CHARS` (which states what it
-  stopped retaining) and the `bodies` switch, off when `LLM_RECORD_PROMPTS` is: a body the store will drop
-  must not be assembled, since unlike every other body it is BUILT rather than merely passed as a thunk.
-- **Run attribution falls back to the credential SCOPE, which names the block's LAST run, not necessarily a
-  live one.** A per-call `catFactoryObservability({ executionId })` wins; absent, the wrap threads
-  `scope.executionId`, because most inline sites tag only the workspace and such a row is worse than
-  unrecorded: it is IN the store and absent from every run-scoped read (`listByExecution`, a step's rollup,
-  `/api/v1/debug/runs/*`), which reads as a step that spent nothing. `block.executionId` is NOT cleared when
-  a run settles, so `resolveBlockRunContext` drops the id for a TERMINAL run (keeping the initiator, which
-  the key pool still scopes by): a stale id would report spend against a finished run's rollup, and unlike a
-  null nothing about it looks wrong. Both absent ⇒ null, the honest answer for a genuinely un-run-scoped
-  call. **A NEW inline caller on the run path must build its scope with the run in it**: a call that
-  generates on the run path but resolves its own scope, like a fragment brief, carries the run on its input.
-  The precedence itself is ONE function, `resolveInlineAttribution`, because both inline producers apply it.
-- **State what a producer does NOT know rather than filling a field with a guess**: an inline call has
-  `httpStatus` null, `phase` `''` and `upstreamMs === totalMs`, so the derived overhead is a real 0.
-  `turnIndex` is null for a plain `generateText` (no turn concept) and REAL for a harness-CLI call, whose
-  stream numbered it; `turn_index` is NULLABLE and never 0, or a proxied call would sort to the front of its
-  phase. A harness-CLI row likewise says `durationMs` 0 and `requestMaxTokens` null, because the CLIs expose no
-  per-call timing and apply their own ceiling, so this step's elapsed time or our ignored ask would both be
-  fabrications.
-- **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input with
-  `cacheReadTokens` + `cacheWriteTokens` beside it, priced ~1x / ~0.1x / 1.25-2x base input (a cache WRITE
-  costs more than fresh), so a producer that sums them makes a loop that keeps invalidating its prefix read
-  look exactly like one riding a warm cache. Normalise at the source through the SINGLE
-  `readInputTokenClasses`, which subtracts where the vendor reports an INCLUSIVE prompt count and leaves
-  the already-exclusive field alone where it reports them apart, and **reads the two cache classes
-  INDEPENDENTLY**, because an OpenAI-shaped gateway fronting Anthropic reports both on one payload. A count
-  crossing a wire boundary is read LENIENTLY, since a runner pool runs whatever image its workspace
-  pinned. **On every SPA surface the headline `↑` is the TOTAL of the three, with the classes as the
-  breakdown.** Doc:
-  [`token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
-- **Every row is stamped with the PHASE that spent it, by whoever OWNS the boundary, never reconstructed
-  downstream**: the harness stamps at EMIT time (not drain time), and the Pi path carries it on the proxy
-  URL because Pi has no per-request header to set. `''` is a REAL slice, filed as unattributed rather than
-  guessed at from the agent kind. **The BACKEND declares the phase-tagged route** (`proxyPhasePath` on the
-  job body) and the harness tags only when told: never assume image and backend are a matched set, since a
-  pool pins its own image and an image ahead of its backend would 404 EVERY model call. Doc:
-  [`token-burn-instrumentation.md`](./docs/initiatives/token-burn-instrumentation.md).
-- **The rollup is ONE aggregate at the `(agentKind, phase)` grain** and every coarser view is a pure fold
-  over it (kernel `domain/llm-rollup.ts`), running on EVERY step settlement. **A new consumer folds; it
-  does not add a query.**
-- **Gating**: the snapshot and the search queries require BOTH `LLM_RECORD_PROMPTS` AND the per-workspace
-  `storeAgentContext` (the operator opt-out wins). **That double gate governs every path that captures a
-  model BODY**, the EXTERNAL trace fan-out included, on the proxied AND inline paths. It is ONE shared
-  helper, kernel's `createStoreAgentContextGate`, precisely because the two paths diverged; a read that
-  THROWS fails closed, because an unreadable settings row is not consent. **Any service in front of this
-  store needs its `workspaceSettingsRepository`**, or that gate is OPEN and an opted-out workspace's bodies
-  are retained anyway.
-
-**The DEPLOYMENT-level projections are the exception to that store split, deliberately.**
-`gate_outcomes` (one row per polling gate that reaches a terminal verdict) and
-`platform_run_days` (the daily rollup behind the dashboard's `30d`/`90d` windows) live in the
-MAIN store beside `agent_runs`, are account-scoped through the same `workspaces` sub-select every
-other platform rollup uses, and are pruned by the RETENTION sweep rather than the telemetry one. A
-telemetry-store home would have forced a cross-store join or a workspace-id list threaded through
-every read. Three rules bind anything added beside them.
-
-- **A rollup is REWRITTEN, never appended, and an UPSERT is not a rewrite.** The current day's
-  counts are not final, so each pass recomputes a short trailing window; but the source rows
-  MUTATE (a run goes `running` → `done` with its `created_at` fixed), so a bucket the new pass no
-  longer produces is one `ON CONFLICT DO UPDATE` never touches. The pass therefore DELETEs its
-  window and re-inserts it, both in one transaction so no reader sees the gap. Left as an upsert,
-  every run that happened to be mid-flight at a sweep is counted twice, for as long as retention
-  keeps the orphan.
-- **A rollup's coverage is a fact about the SWEEP, so it cannot be derived from the rolled-up
-  rows.** `dailyRollupWatermark` reads what the pass RECORDED (`platform_rollup_state`, written in
-  the same transaction, deployment-scoped, moving only forward), never `max(day_start)`: an
-  account idle for a fortnight and a wedged sweep share a newest row, and a new account and a
-  rollup that never ran share an absence. Each pair needs the opposite operator response, so a
-  derived number answers a different question than the one being asked and sounds certain doing it.
-- **A projection whose writer REPLAYS derives its row id** from the run
-  (`<runId>:<stepIndex>:<outcome>`) rather than minting one, or one settle becomes two rows and
-  inflates every number the table exists to report.
-
-**A projection the ENGINE writes is `remote` in mothership mode, not `telemetry`.** The local-first
-bucket is for state a node also READS locally; a gate outcome is written on the node and read only
-by the admin-gated dashboard on the mothership, so a `node:sqlite` copy would be a write-only store
-nobody can see. It is allow-listed on the record's own `workspaceId` field. And because an un-wired
-writer reads downstream as "this never happens" rather than as an outage,
-`CoreDependencies.gateOutcomeRepository` is REQUIRED (`noopGateOutcomeRepository` for a caller with
-no store), the same rule as `logger` and `operationalMetrics`.
-Doc: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
-
-**Remote debugging reads** (`/api/v1/debug/*`) expose the same sinks to an external caller (in practice an
-LLM diagnosing a run) under one rule a new endpoint must obey too: **a response's size has to be
-computable BEFORE the request.** So fan-out lists never carry bodies, slicing/filtering/searching happen in
-SQL, every body is a `debugText` reachable at any offset, and keyset cursors ride the `(createdAt, id)`
-COMPOSITE because telemetry is appended in same-millisecond bursts. Scope is `read`, deliberately not
-`admin`. Full model: [`debug-api.md`](./backend/docs/debug-api.md).
-
-**External trace destinations** go through ONE kernel port (`LlmTraceSink`) and never a second recording
-path: two packages implement it and `composeTraceSinks([…])` collapses them into
-`CoreDependencies.llmTraceSink`, so **adding a destination is a new implementation composed into that
-array, never a new call site.** Every sink is opt-in on a FULL config, **never throws into the caller**,
-and honours `LLM_RECORD_PROMPTS` (usage and timing still export; bodies don't). The OTel package is the one
-place the runtimes deliberately differ in TRANSPORT, not behaviour (workerd can't run the official SDK),
-sharing `src/mapping.ts` pinned equal by `conformity.test.ts`, so span names, attributes and metric names
-change in the mapping layer. **A run's spans are a HIERARCHY (`run → agent kind → generations + tool
-calls`) built from DERIVED ids, never shared state**: every parent id is a pure function of the run, so a
-stateless per-call emission names a parent it has never seen. The parents are emitted at settlement, from
-the same terminal hook the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`),
-for the same reason: a run reaches `done` from four sites. That hook fires AGAIN for an already-settled
-run, so **the parents' EXTENT is folded from stamps the run recorded, never read off a clock at emit
-time** (`buildRunTraceSpans`): derived ids alone make a replay re-export the same span ids, and pairing
-those with a duration that moved is a contradiction where a byte-identical duplicate is something a
-backend collapses. The step level's grain is the agent KIND because that is the finest thing a generation
-event can NAME. **A step that dispatched a HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a
-`fork-proposer`) gets a span for that kind too, nested under it**: the helper's telemetry is tagged with
-the HELPER, so without one every row of it names a parent nobody emits. What ran is recorded at dispatch
-on `PipelineStep.dispatches` through the ONE funnel (`recordDispatchAttribution`), never re-derived from
-`agentKind`. **What a span cannot separate it STATES**: the runs here repeat as CYCLES (a fixer loop, a
-Ralph iteration, a bounced step), and the events under a span carry no attempt ordinal to split it by, so
-each step span reports `step_count` AND `attempt_count` rather than passing six rounds off as one. A
-re-run's extent comes from `firstStartedAt`, which survives the reset that re-stamps `startedAt`, or the
-parent would begin after its own earlier children. **A span NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
-counterpart of the bounded-dimension rule: free text like a pipeline name rides an attribute, or a tenant
-mints unbounded series on the operator's backend by renaming things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
-exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the MAIN
+store; their rewrite/watermark/derived-id rules:
+[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md). Remote
+debugging reads (`/api/v1/debug/*`) obey one rule: a response's size is computable BEFORE the request;
+model: [`debug-api.md`](./backend/docs/debug-api.md).
 
 ## Board / service / repo-linkage model
 
@@ -1603,174 +946,61 @@ exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-ope
 ## End-to-end (assembled-product) coverage
 
 Where conformance asserts backend behaviour port-by-port, the Playwright suite (`backend/internal/e2e`)
-covers the assembled product: real Chromium → real SPA → real Node backend (real Postgres, real pg-boss,
-real WebSocket push). Only EXTERNAL deps are faked, so it needs no secrets/Docker/network. Spec-writing
-mechanics and the Specs table: [`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
+covers the assembled product: real Chromium → real SPA → real Node backend, with only EXTERNAL deps
+faked. Spec-writing mechanics and the Specs table:
+[`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
 
 - **What e2e is FOR**: what only the assembled product shows, above all the live WebSocket-pushed UI
-  round-trip. A pure backend side-effect belongs in conformance. Anything needing a real outbound call must
-  be mocked at the backend's OUTBOUND boundary, never in the browser.
+  round-trip. A pure backend side-effect belongs in conformance. Anything needing a real outbound call
+  must be mocked at the backend's OUTBOUND boundary, never in the browser.
 - **Spec shape (mandatory)**: seed/trigger over REST, then assert only on LIVE pushed UI updates. No
   reloads, no fixed sleeps, no canvas drag/zoom; only web-first assertions on the named timeouts in
-  `tests/helpers.ts`.
-- **Selectors are `data-testid`, always.** Covering a flow whose affordance has none means ADDING the test
-  id first (a behaviour-neutral frontend change) plus a patch changeset.
-
-### A flaky e2e test is a BLOCKING bug: investigate and deflake, NEVER retry
-
-**A flaky spec must always be root-caused. A green-on-retry run is NOT a pass.** Playwright enforces this
-(`failOnFlakyTests: true`): first-attempt-fail then retry-pass reports the shard RED on purpose. The retry
-exists ONLY to capture the trace.
-
-- **Do NOT re-run CI hoping for green, bump `retries`, skip the spec, or dismiss it as a boot flake.**
-- **Reproduce, then root-cause.** A flake almost always exposes a REAL race: a live event applied between a
-  snapshot's fetch and its store-commit, a subscribe-after-broadcast gap, a status rendering from a
-  clobbered store. Fix the SOURCE (usually a frontend store reconcile or a `helpers.ts` readiness gate) and
-  add a unit test pinning the race.
-- **Never paper over it in the spec**: no sleep, no bumped timeout, no reload (which hides exactly the
-  live-push bug the suite exists to catch).
-- **The bar for "fixed" is deterministic, not lucky**: a high-count `--repeat-each` pass locally AND the
-  root-cause fix with its regression test in the same change.
-
-### Real-time store coherence: avoid the full-refresh CLOBBER
-
-Most of those flakes are one recurring product bug: a stale full-snapshot refresh clobbering newer live
-state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO event left to
-restore it.
-
-- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced full
-  `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block reaches the
-  browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry the entity and
-  `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that must appear reliably.
-- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one resolving
-  later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not reintroduce an
-  unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced refresh path.
-- **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips `connected`
-  only after it settles (which is why e2e gates on `data-connected`).
-- **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state into the
-  snapshot or reconcile rather than replace.
-- **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store that awaits
-  a mutation and then assigns the returned sub-state onto the cached run (`step.forkDecision`,
-  `step.prReview`, `step.judge`, `step.followUps`) is writing straight past `upsert`'s `rev` check. Where
-  the mutation WAKES THE DRIVER, the driver's next emit routinely beats the HTTP response, so the echo puts
-  the run back; if the run then parks, nothing emits again and the newer state is gone for good (the
-  fork-chat reply that vanished, leaving a "thinking…" bubble spinning). Every echo therefore goes through
-  `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the request and
-  drops the echo if anything advanced it. Never hand-roll the await-then-assign.
-- **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
-  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one wins.
+  `tests/helpers.ts`. Selectors are `data-testid`, always.
+- **A flaky e2e test is a BLOCKING bug: investigate and deflake, NEVER retry.** Playwright enforces this
+  (`failOnFlakyTests: true`); the retry exists ONLY to capture the trace. A flake almost always exposes a
+  REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin
+  it with a unit test. Never paper over it in the spec (no sleep, no bumped timeout, no reload), and the
+  bar for "fixed" is a high-count `--repeat-each` pass plus the root-cause fix in the same change.
+- **Most of those flakes are one product bug: a stale full-snapshot refresh clobbering newer live
+  state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic refreshes, the
+  optimistic-echo trap and `execution.echoAfter`) live in
+  [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber);
+  pin regressions with the store-level unit tests named there.
 
 ## Basic vs advanced interface mode (frontend)
 
-The SPA renders at one of two tiers: `basic` (the shipped default, the everyday surface) and `advanced`
-(everything). Resolution is `NUXT_PUBLIC_UI_MODE` → the user's persisted choice → `basic`, in
-`stores/uiMode.ts`. Full model:
-[`frontend/app/README.md`](./frontend/app/README.md#interface-modes-basic--advanced).
+The SPA renders at one of two tiers: `basic` (the shipped default) and `advanced` (everything), resolved
+in `stores/uiMode.ts`. Full model, including the nav-contribution axis and the tier-scoped authoring
+rules: [`frontend/app/README.md`](./frontend/app/README.md#interface-modes-basic--advanced). The rules
+that bite from outside the SPA:
 
-**A new user-facing surface must decide its tier, and the answer is never "ignore this".**
-
-- **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`. It is a SEPARATE axis
-  from the RBAC `gate` and both must pass; never fold the tier into a `gate` predicate. **The bar is
-  whether the EVERYDAY DELIVERY LOOP needs it** (plan work on a board, run it, review and merge it), not
-  how advanced the surface feels. `nav-contributions.spec.ts` pins the advanced set against a table naming
-  each item's kind AND reason, so a promotion has to write that claim down.
-- **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never disable, and
-  only ever hide an OVERRIDE**: what remains must be exactly the default the hidden field would have shown,
-  so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an input NOTHING
-  else supplies stays in BOTH tiers however advanced it feels.
-- **Gate an override control on `showOverrideField(isAdvanced, ...values)`, NOT on `isAdvanced` alone**
-  (`utils/uiMode.ts`). The hide rule holds only while the override is UNSET, which is guaranteed at
-  CREATION time but never for an EXISTING entity: a block can already carry an override written by a
-  teammate on the advanced tier, by the API, or by this user before switching down. The helper keeps the
-  control whenever any value it edits is set (`false` counts: a tri-state `false` is a choice, not
-  absence), and **it gates SECTIONS as readily as fields**.
-- **A whole AUTHORING affordance may be tier-scoped**, but only when the tier hides the ability to CREATE
-  and never the ability to SEE. Hide a create button whose product is only visible behind that same button
-  and a basic-mode user is acted on by state they cannot find.
-- **Never mark the way BACK as `advanced`.** The `ui-mode` palette entry and the sidebar switcher stay
-  visible in basic mode, or the tier is a one-way door for a user who never finds the switcher.
-- **An e2e spec whose subject is not the tier pins it** with `useAdvancedInterfaceMode(page)` before
-  `openBoard`.
-
-**Agent tiers are a SEPARATE axis.** An agent kind declares `presentation.tier` (`basic` / `intermediate`
-/ `advanced`) and the two surfaces enumerating the whole catalog show the selected tier and everything
-BELOW it. The vocabulary and the cumulative predicate live in `@cat-factory/contracts`. **Never fold this
-into `isAdvanced`**: the interface mode decides which SURFACES exist, the tier decides how much of one
-surface's catalog is LISTED, and the tier control must stay visible in basic mode since it is the only
-route to what it hides. A new BUILT-IN kind declares its tier in `utils/catalog.ts` (`catalog.spec.ts`
-fails otherwise); only a deployment-registered kind may take the `intermediate` default. A tier filter
-over EXISTING settings keeps what is already set, and a narrowed list SAYS how much it is holding back.
+- **A new user-facing surface must decide its tier, and the answer is never "ignore this".** The bar is
+  whether the EVERYDAY DELIVERY LOOP needs it, not how advanced the surface feels.
+- **HIDE, never disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the
+  hidden field would have shown. Gate override controls on `showOverrideField(isAdvanced, ...values)`,
+  NOT on `isAdvanced` alone, because an EXISTING entity can already carry an override.
+- **Never mark the way BACK as `advanced`.**
+- **Agent tiers are a SEPARATE axis** (`presentation.tier`, cumulative, vocabulary in
+  `@cat-factory/contracts`): the interface mode decides which SURFACES exist, the tier decides how much
+  of one surface's catalog is LISTED. A new BUILT-IN kind declares its tier in `utils/catalog.ts`
+  (`catalog.spec.ts` fails otherwise).
 
 ## Internationalization (i18n)
 
-All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. The
-`@cat-factory/app` layer ships the base `en` locale, and a downstream deployment overrides by dropping its
-own files (the per-layer deep-merge is the override seam, consumer wins key by key).
+All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. The full
+authoring how-to (catalog layout, key conventions, component mechanics, translator descriptions, the
+drift guards) is
+[`frontend/app/README.md`](./frontend/app/README.md#internationalization-i18n-authoring); migration
+status: [`docs/localization.md`](./docs/localization.md). What binds beyond the SPA:
 
-- `frontend/app/i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT
-  `app/locales/`).
-- `frontend/app/i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the named
-  `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here so the module can deep-merge
-  across the `extends` chain. Referenced as the BARE filename `vueI18n: 'i18n.config.ts'`, never
-  `layerDir`-anchored.
-- `package.json` `files` MUST include `"i18n"`. Release-blocking.
-
-**Adding a string**: add the key to `en.json` under the feature namespace, resolve with
-`t('feature.area.key')`, and format numbers/dates through `$n`/`$d` (the named formats), never raw `Intl`.
-
-**Key conventions**: one namespace per feature; **leaf keys mirror the enum/code value verbatim** so a
-dynamic lookup is total; **no cross-key concatenation** (a full sentence is ONE key with `{named}`
-placeholders, plurals use the pipe form).
-
-**Component mechanics that bite:**
-
-- `useI18n` is auto-imported; destructure in `<script setup>` and use those fns in the template so the
-  typed-key check sees literal keys. Never `import` it.
-- Plural + interpolation: `t(key, { vendor, count }, count)`, where the THIRD arg is the choice.
-- **Code/format-example placeholders stay INLINE**, not in the catalog; required when they contain
-  `{`/`}` (vue-i18n metacharacters). Only prose placeholders get a key. Same for brand names.
-- **No HTML in message bodies**: drop mid-sentence `<strong>`, or use `<i18n-t>` with slots.
-- For a vendor/enum-keyed set, build an array of STATIC literal `t()` keys, one per member. Reserve the
-  runtime-assembled key + exhaustive `Record` guard for lookups genuinely unknown until runtime.
-- Straight quotes, no em-dashes in new entries.
-
-**Translator descriptions (`@<key>` siblings): default to NONE.** They live only in `en.json` and are notes
-to a translator, never runtime data. Add one ONLY when a competent translator seeing the English and the
-key path could plausibly get it wrong: homograph / part-of-speech ambiguity (`@close`), proper nouns that
-must NOT be translated (`@kaizen`), umbrella strings hiding cases the text doesn't show,
-placeholder/format constraints, or plural-form requirements beyond English's two.
-
-**Backend strings**: the backend does not localize prose. A localizable condition emits a machine-readable
-`error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
-pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
-truth: `ApiErrorCode` (the status class on `error.code`) as well as the per-surface `reason` unions.
-
-**Raw backend prose is DETAIL, never the description.** Even with no `reason` to key off, a failure is
-described from its STATUS CLASS through an exhaustive `Record<ApiErrorCode, …>` of translated copy, and
-the untranslated `message` (plus a validation 400's `issues` and the envelope's `requestId`) is reached
-through a "Show details" disclosure that reveals it in place. So a non-English user is never handed
-English as the primary explanation, and the elaborate operator remedies the backend does write stay one
-click away rather than being dropped. A new failure-presenting surface copies that split.
-
-**Drift guards** (oxlint has no `no-raw-text` rule, so these replace it):
-
-1. **Typed message keys** make a statically written unknown `t('literal.key')` a typecheck failure. This
-   does NOT cover a runtime-assembled key.
-2. For enum→key lookups, guard with an **exhaustive `Record<TheEnum, string>`** keyed off the contracts
-   union, plus a runtime `te()` fallback. Never rely on tier 1 alone for a reason/status-keyed lookup.
-3. `pnpm --filter @cat-factory/app run i18n:check` hard-fails on MISSING keys and reports unused ones as
-   non-blocking warnings (the catalog legitimately seeds keys ahead of use).
-4. **Locale parity**: `i18n-locale-parity.mjs --since origin/<base>` requires a PR that adds, changes, or
-   removes an `en.json` key to make the SAME change in every other locale. It is change-coupling against
-   the merge-base, NOT full key parity.
-
-**Translate for real: NEVER ship an English string as a non-`en` value.** The parity gate checks only that
-the key exists, so it will pass a verbatim English copy, and that copy is a bug. The only values that may
-legitimately match `en` are proper nouns identical across languages (`DeepSeek`, `AWS Bedrock`). If you
-genuinely cannot produce a translation, say so in the PR rather than committing a placeholder that reads
-as done.
-
-Migration is incremental: when you touch a component, lift its visible copy into the catalog.
+- **The backend does not localize prose.** A localizable condition emits a machine-readable
+  `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
+  pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
+  truth. Raw backend prose is DETAIL behind a disclosure, never the primary description.
+- **Locale parity is CI-gated per change** (`i18n-locale-parity.mjs`), and **never ship an English
+  string as a non-`en` value**: the parity gate checks only that the key exists, so a verbatim English
+  copy passes and is a bug. If you genuinely cannot produce a translation, say so in the PR.
+- Migration is incremental: when you touch a component, lift its visible copy into the catalog.
 
 ## Workspace RBAC enforcement
 
@@ -1802,24 +1032,16 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   via constructor injection of one `dependencies` object. Opt-in integrations wire only when configured.
 - **A pure rule BOTH the backend and the SPA must agree about lives in `@cat-factory/contracts`**, never
   restated on each side. The SPA cannot see kernel, so a rule that stays there becomes a hand-written copy
-  the moment a surface has to state the same judgement to a human, and the two then drift into describing
-  one selection two different ways with nothing comparing them (`binaryFormatCoverage` and
-  `binaryModalityOverlaps` are the worked example). What decides is who has to AGREE about the answer, not
-  which package the rule feels like it belongs to. A rule needing kernel's own types stays in kernel; so
-  does the DISPOSITION of its outcomes (which refuses a run, which only warns), being a fact about
-  admission rather than about the thing judged.
-- **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An implementer kind
-  (the `brief-standards` trait) re-sends its whole system prompt on every turn of a long loop, so it folds
-  a fragment's condensed `brief` instead of the full `body`; reviewer/planner kinds keep the full text. Two
-  rules: **`brief` is resolved alongside the body it condenses and NEVER re-looked-up by id** (a
-  workspace/account row may override a built-in id, and re-resolving would fold the built-in's condensed
-  text over the tenant's standard), and **every `composeBlockSystemPrompt` call site threads
-  `standardsVerbosityFor(kind, registry)`**: a new compose site that forgets it silently restores the full
-  bodies. Resolution lives on the RUN path (`resolveBodiesForRun`), never the write path, because a
-  document-backed standard has no write to hook, and staleness is a FINGERPRINT of the condensed body
-  rather than a change feed. **Every failure on that path folds the FULL BODY**, and an over-long
-  generation is REFUSED rather than truncated: a brief optimises how a standard is STATED and may never
-  change what it REQUIRES. Authoring:
+  the moment a surface has to state the same judgement to a human, and the two then drift
+  (`binaryFormatCoverage` and `binaryModalityOverlaps` are the worked example). What decides is who has
+  to AGREE about the answer, not which package the rule feels like it belongs to. A rule needing kernel's
+  own types stays in kernel; so does the DISPOSITION of its outcomes (which refuses a run, which only
+  warns), being a fact about admission rather than about the thing judged.
+- **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An implementer
+  kind folds a fragment's condensed `brief` instead of the full `body`; reviewer/planner kinds keep the
+  full text. Traps: `brief` is resolved alongside the body it condenses and NEVER re-looked-up by id;
+  every `composeBlockSystemPrompt` call site threads `standardsVerbosityFor(kind, registry)`; every
+  failure folds the FULL BODY, and an over-long generation is REFUSED rather than truncated. Authoring:
   [`prompt-fragments/README.md`](./backend/packages/prompt-fragments/README.md); design:
   [`auto-generated-fragment-briefs.md`](./docs/initiatives/auto-generated-fragment-briefs.md).
 - **Final answer must land in the reply, not the reasoning channel.** Any agent whose deliverable IS its
@@ -1830,33 +1052,13 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright,
   business-documenter): they legitimately end with no final text. Editing a versioned prompt means bumping
   its number.
-- **Frontend extension seams**, all contributed through the one `registerAppModule` registry
-  (`app/modular/registry.ts`), the frontend analogue of the backend registries, with the layer's install
-  plugin at `enforce: 'post'` so consumer registration runs first. Adoption is phased:
+- **Frontend extension seams** are all contributed through the one `registerAppModule` registry
+  (`app/modular/registry.ts`), the frontend analogue of the backend registries: result views, inspector
+  panels (`PanelEntry<Block>` in the `inspectorPanels` slot), overlays (`appOverlays` +
+  `useAppOverlays().open`). The placement rule for step-attached state (declared result view vs
+  `ResultWindowShell` section, decided by the RECORD's scope) and the `useResultViewRunMeta` rule live in
+  [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
-  - **Result views**: an agent step opens the generic prose panel UNLESS its archetype declares a
-    `resultView` id (`app/utils/catalog.ts`), which `StepResultViewHost.vue` resolves from the
-    `resultViews` slot. **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the
-    windows**: the shell resolves the step itself rather than via a per-window prop, so a window can't opt
-    out or forget it. **What decides is the RECORD's scope, not how important the record feels**: state the
-    engine writes onto a step under a rule other than "the step's own kind" CANNOT be a declared view,
-    because the declaring kind is by construction absent from part of that rule (`binaryOutputs` is written
-    on the trait-carrying-kind OR carries-a-selection UNION, so a trait-carrying kind dispatched under an
-    OVERRIDING kind records artifacts against a step whose kind declares some other window, and nothing
-    shows them). Such state is a shell SECTION beside effort / pre-PR validation, plus the same component
-    in `AgentStepDetail.vue`, which the shell is not involved in. Three things come free: a deployment
-    registers nothing, a kind keeps its own result view for its OWN output, and the run-meta hazard below
-    cannot arise: a section inherits the step its host window is already about.
-    **A step-backed window's run details come from `useResultViewRunMeta(viewId, …)`**,
-    never hand-derived off `useResultView`'s `stepIndex`: a window opened OFF-PATH carries a block id and
-    NO step index, so reading `stepIndex` alone blanks the model, the run id and the token telemetry on
-    exactly the entry point people use.
-  - **Inspector panels**: a subject-keyed panel group, not a `v-if` monolith. Each sub-panel is a
-    `PanelEntry<Block>` (`{ id, component, when(block), order }`) in the `inspectorPanels` slot, rendered
-    by `<PanelsOutlet>`, so a consumer contributes its own with no `InspectorPanel.vue` edits.
-  - **Overlays**: contributed to the `appOverlays` slot and opened via
-    `useAppOverlays().open(id, subject?)`, with a single `<AppOverlayHost>` mounting the entry matching
-    `ui.activeOverlay`. Duplicate ids fail fast at boot; a dangling open degrades to nothing.
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
 - **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw

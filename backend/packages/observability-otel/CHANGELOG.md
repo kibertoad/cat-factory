@@ -1,5 +1,13 @@
 # @cat-factory/observability-otel
 
+## 0.8.3
+
+### Patch Changes
+
+- Updated dependencies [437a0c6]
+  - @cat-factory/contracts@0.227.0
+  - @cat-factory/kernel@0.228.1
+
 ## 0.8.2
 
 ### Patch Changes
@@ -20,7 +28,7 @@
 
 ### Minor Changes
 
-- 3605630: Finish the in-app-tutorial initiative (now [ADR 0033](backend/docs/adr/0033-in-app-tutorials.md)):
+- 3605630: Finish the in-app-tutorial initiative (now [ADR 0036](backend/docs/adr/0036-in-app-tutorials.md)):
   make the walkthroughs reach the user who needs one, and measure whether they do.
 
   The catalogue already made every tour REACHABLE; nothing brought one up. Starting any tour saves the

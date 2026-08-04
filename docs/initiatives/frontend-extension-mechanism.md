@@ -523,3 +523,20 @@ slot → host → `useAppOverlays` → dogfood → e2e.
 - **`enforce: 'post'` stays load-bearing**: consumer registration must happen in
   plugin-setup of a default/`pre` plugin; document this in every consumer-facing
   example, because a consumer `enforce: 'post'` plugin silently registers too late.
+- **What decides between a declared result view and a shell section is the RECORD's scope, not
+  how important the record feels.** State the engine writes onto a step under a rule other than
+  "the step's own kind" CANNOT be a declared view, because the declaring kind is by construction
+  absent from part of that rule (`binaryOutputs` is written on the trait-carrying-kind OR
+  carries-a-selection UNION, so a trait-carrying kind dispatched under an OVERRIDING kind records
+  artifacts against a step whose kind declares some other window, and nothing shows them). Such
+  state is a `ResultWindowShell.vue` SECTION beside effort / pre-PR validation, plus the same
+  component in `AgentStepDetail.vue`, which the shell is not involved in. Three things come free:
+  a deployment registers nothing, a kind keeps its own result view for its OWN output, and the
+  run-meta hazard below cannot arise, because a section inherits the step its host window is
+  already about. Anything EVERY window must show goes in the shell, never in the windows: the
+  shell resolves the step itself rather than via a per-window prop, so a window can't opt out or
+  forget it.
+- **A step-backed window's run details come from `useResultViewRunMeta(viewId, …)`**, never
+  hand-derived off `useResultView`'s `stepIndex`: a window opened OFF-PATH carries a block id and
+  NO step index, so reading `stepIndex` alone blanks the model, the run id and the token
+  telemetry on exactly the entry point people use.

@@ -101,6 +101,15 @@ export interface FakeAgentOptions {
    * when no preset reached the run.
    */
   echoPreset?: boolean
+  /**
+   * When set, the (generic-kind) agent echoes the per-case PARAMETERS a custom-typed task was
+   * invoked with as `[params]label|key=value;key=value[/params]`, so a test can assert the engine
+   * resolved a REUSABLE OPERATION's create-form values onto the run context under the registered
+   * descriptor's labels. Empty `[params][/params]` when the run collected none. The prompt
+   * rendering itself is unit-tested; what needs asserting on every runtime is that the sparse
+   * `custom` bag survives the persistence round-trip and reaches dispatch.
+   */
+  echoTaskParams?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -498,8 +507,16 @@ export class FakeAgentExecutor implements AgentExecutor {
     const presetSuffix = this.options.echoPreset
       ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
       : ''
+    const params = context.customTaskType
+    const paramsSuffix = this.options.echoTaskParams
+      ? ` [params]${
+          params
+            ? `${params.label}|${params.fields.map((f) => `${f.label ?? f.key}=${f.value}`).join(';')}`
+            : ''
+        }[/params]`
+      : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${briefSuffix}${presetSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${briefSuffix}${presetSuffix}${paramsSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       ...this.usageFields(),

@@ -152,7 +152,7 @@ does not yet answer every park type the engine has; the
 
 ### Versioning & stability
 
-**The public API is stable** ([ADR 0032](./adr/0032-public-api-stability.md)): `/api/v1`, the SDK
+**The public API is stable** ([ADR 0034](./adr/0034-public-api-stability.md)): `/api/v1`, the SDK
 clients, and the webhook delivery contract do not change incompatibly. What that commits to:
 
 - **Changes are additive**: new endpoints, new optional fields, new enum values, new error codes.

@@ -179,7 +179,7 @@ routes on and an empty title is honest about what could be read.
 ## Consequences
 
 - **`/api/v1` is additive forever.** _Superseded by
-  [ADR 0032](./0032-public-api-stability.md):_ the "be deliberate, flag it prominently" posture
+  [ADR 0034](./0034-public-api-stability.md):_ the "be deliberate, flag it prominently" posture
   became a hard stability commitment (additive freely; anything else needs an incremental
   migration path plus a version change), adopted together with the final pre-stability breaking
   polish (the `/jobs` path unification, `publicTask.runId`, the board-start scope rule).
@@ -213,7 +213,7 @@ routes on and an empty title is honest about what could be read.
   [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md)**: the public
   decision surface answers three park types (requirements review, fork, judge) while the engine has
   more, and both start paths admit (for a `decide`-scope key; since
-  [ADR 0032](./0032-public-api-stability.md) the board start applies the same parking rule as
+  [ADR 0034](./0034-public-api-stability.md) the board start applies the same parking rule as
   `POST /jobs`) a run that can park on one of the others. That tracker ranks the additions, and
   records what was considered and rejected.
 - **An incomplete surface must not ADVERTISE what it cannot do.** The `pipeline_requires_decide_scope`

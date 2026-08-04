@@ -18,8 +18,14 @@ transport + the GitHub token/client seams differ.
   Docker/Podman/OrbStack/Colima; a separate Apple `container` adapter), selected by
   `LOCAL_CONTAINER_RUNTIME`. Two contracts an adapter is easy to get wrong: `endpoint()`
   resolves an EXITED container to `undefined` (that is what lets the transport remove and
-  re-create it) yet still throws for a fault against a LIVE one, and `exitState()` reports how
-  a stopped container ended so a mid-run death leaves a post-mortem behind.
+  re-create it via `dispatchPerRun`) yet still throws for a fault against a LIVE one (a runtime
+  that can't tell the two apart, Apple, takes the `undefined` half), and `exitState()` reports
+  how a stopped container ended so a mid-run death leaves a post-mortem (plus a scrubbed `logs()`
+  tail) onto the failed view's `detail`, since `release()` removes it as the run settles. A
+  re-dispatch removes it too, so the FIRST death's post-mortem is retained on
+  `PipelineStep.firstEvictionDetail`. Each adapter also exposes a `localDind` capability threaded
+  into `ExecutionService` as `localTestInfraSupported`, so a runtime that can't nest containers
+  refuses a local-infra Tester run at start.
 - `github.ts`, `link-repo.ts` / `linkRepo.ts`, `installations.ts`: the PAT-backed GitHub
   client (`createLocalGitHubClient`) + the repo-projection seeding (`linkRepo`).
 - `container.ts`: threads the transport + GitHub seams into Node's `buildNodeContainer`.

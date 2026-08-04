@@ -43,9 +43,45 @@ transport, and Node model provisioning.
   `container-account-deps.ts` (per-account settings + binary-artifact storage +
   observability/incident gate wiring), `container-realtime-deps.ts` (event publisher +
   notification channel + consensus wrap), and `container-content-library-deps.ts`.
-- `execution/`: pg-boss durable execution (`pgBossRunner`, `drive`).
+- `execution/`: pg-boss durable execution (`PgBossWorkRunner` enqueues `execution.advance`;
+  `driveExecution` runs the same advance/poll loop with plain sleeps; `signalDecision` re-enqueues
+  a parked run).
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts`: Node gateway
   - model + transport wiring and the retention sweep.
 
-**See also:** `CLAUDE.md` → "Multi-runtime facades", "Resolving conflicting Drizzle migrations
-(post-merge)".
+## Real-time & multi-node
+
+Real-time is a per-workspace `NodeRealtimeHub` plus `attachRealtime`, serving the SAME
+raw-WebSocket + `?ticket=` protocol via a `ws` server on the HTTP `upgrade` event
+(`@hono/node-server` can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket).
+**Multi-node** rides a layered propagator behind a narrow `LocalEventSink` seam: Redis pub/sub
+today, another adapter on the same port tomorrow; with no bus the layer is exactly the bare hub.
+The Worker needs none of this (its `WorkspaceEventsHub` DO is globally addressed, so propagation
+is inherent; a genuine Node-only concern, not a parity gap).
+
+Container steps dispatch to a workspace's self-hosted runner pool, which runs the same harness
+image and therefore serves EVERY dispatch kind with no opt-in allow-list; unconfigured, the
+composite serves inline kinds and fails container kinds loudly.
+
+## Resolving conflicting Drizzle migrations (post-merge)
+
+Node's Postgres migrations (`drizzle/`) use drizzle-kit 1.x snapshot v8: a content-addressed DAG
+(each `snapshot.json` has an `id` and a `prevIds` array), not a linear journal. `src/db/schema.ts`
+is the source of truth and `pnpm db:generate` diffs it; `migrate()` applies folders in timestamp
+order, so `prevIds` affects only the consistency analysis. A merge keeps both branches' folders
+with no textual conflict, but the later branch's `prevIds` still points at the pre-merge tip, so
+`db:check` fails with "Non-commutative migrations detected". (D1 has no such DAG; duplicate
+numeric prefixes are fine.)
+
+Do NOT hand-merge snapshot JSON or rerun `db:generate` (a table move triggers an interactive
+rename prompt that can't run in a non-TTY shell). Instead:
+
+1. Resolve conflicts in `src/db/schema.ts` first, keeping BOTH branches' columns.
+2. From `backend/runtimes/node`, run
+   `node scripts/rebase-migration-snapshot.mjs <later-migration-folder>`, which rewrites that
+   snapshot's `ddl` from the merged schema and re-points `prevIds` at every other migration's
+   leaf, non-interactively. It does not touch `migration.sql`.
+3. Check `migration.sql` still encodes the delta to the merged schema.
+4. Verify with `pnpm db:check`. Keep the symmetric D1 migration in step.
+
+**See also:** `CLAUDE.md` → "Multi-runtime facades", "Migrations".

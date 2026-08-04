@@ -1,5 +1,12 @@
 # @cat-factory/kernel
 
+## 0.228.1
+
+### Patch Changes
+
+- Updated dependencies [437a0c6]
+  - @cat-factory/contracts@0.227.0
+
 ## 0.228.0
 
 ### Minor Changes
@@ -190,7 +197,7 @@
   start-run button. Both are already writable over `/workspaces/:ws/risk-policies` and the start
   endpoint respectively, so the capability is reachable today through the API.
 
-- 3605630: Finish the in-app-tutorial initiative (now [ADR 0033](backend/docs/adr/0033-in-app-tutorials.md)):
+- 3605630: Finish the in-app-tutorial initiative (now [ADR 0036](backend/docs/adr/0036-in-app-tutorials.md)):
   make the walkthroughs reach the user who needs one, and measure whether they do.
 
   The catalogue already made every tour REACHABLE; nothing brought one up. Starting any tour saves the

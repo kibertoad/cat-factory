@@ -123,7 +123,12 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   belongs to, STATING an unresolved one) and `IterativeReviewService.systemPromptFor`, which composes
   each kind's `{ role, directives }` pair so a per-workspace prompt override replaces the role only.
   See CLAUDE.md → "Requirements review".
-- `validation/`: request validation.
+- `validation/`: request validation, plus `validateRegistrations.ts`, the BOOT check over a
+  deployment's registered extensions (kinds, gates, pipelines, task types, generators). Its
+  severities are the design: an unresolvable pipeline id is an `error` because the created task
+  would silently fall back to the positional default, while a task type's unresolvable
+  `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
+  merges per workspace at run time and boot structurally cannot see one.
 
 Two top-level helpers sit beside `modules/` because every INLINE LLM caller shares them, and both
 are about resolving ONE thing consistently rather than about any one feature:

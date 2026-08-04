@@ -29,6 +29,7 @@ import type {
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
+import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
@@ -513,6 +514,20 @@ export interface AgentRunContext {
    * claim is rendered either way.
    */
   ownService?: OwnServiceContext
+  /**
+   * The per-case PARAMETERS a custom-typed task was invoked with: the create form's collected
+   * values joined with the registered descriptor's labels (see {@link describeCustomTaskType}).
+   * This is what turns a registered task type into a REUSABLE OPERATION: an org registers
+   * "introduce an API" with a small form, and the entity / operations / auth answers reach the
+   * agents that act on them. Without it the bag rode `block.taskTypeFields` and reached zero
+   * prompts, so the whole per-case brief was invisible to every agent in the pipeline.
+   *
+   * Resolved ONCE per dispatch, beside the prompt override and the output budget, so the
+   * container, inline and consensus paths cannot disagree about what the operation was asked for.
+   * Absent whenever the block collected no custom values, which is every run of a built-in type,
+   * so every existing prompt is byte-identical.
+   */
+  customTaskType?: CustomTaskTypeContext
   /**
    * The SENSITIVE test credentials configured for this run's service frame — as non-secret
    * REFERENCES only (each key + its description), NEVER the values. Resolved by the engine

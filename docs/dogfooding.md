@@ -170,6 +170,16 @@ preview Worker's secrets) if you specifically want to test agent behaviour end t
   preview Cloudflare account and GitHub App separate from production; see the security note in
   [`deploy/preview/README.md`](../deploy/preview/README.md).
 
+## Editing `deploy/preview`: three constraints that bite
+
+- **The compose file must stay free of `include:` / cross-file `extends` / `privileged` and of
+  bind mounts / `env_file`**, so it stays runnable by hand.
+- **The SPA there is built with an EMPTY `apiBase`**, because a preview's host port is only
+  assigned at `up` time and same-origin is the only workable topology.
+- **The workflow's per-PR resource NAMES are a contract with
+  `cloudflareEnvironmentConfigSchema`'s two name templates**: rename in one place, rename in
+  both.
+
 ## Related
 
 - [`deploy/preview/README.md`](../deploy/preview/README.md): the stacks, and the options weighed.

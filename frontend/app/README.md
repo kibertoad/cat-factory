@@ -18,6 +18,9 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
 - [In-app tutorial tours](#in-app-tutorial-tours)
+- [Real-time store coherence](#real-time-store-coherence-avoid-the-full-refresh-clobber)
+- [Internationalization (i18n) authoring](#internationalization-i18n-authoring)
+- [Extending the layer (consumer modules)](#extending-the-layer-consumer-modules)
 - [Key UI surfaces](#key-ui-surfaces)
 - [Develop & test](#develop--test)
 
@@ -329,7 +332,7 @@ is SUPPRESSED rather than unmounted, because it holds the running tour's resolve
 remount would re-resolve it against gates that may have flipped since the tour started.
 
 The decisions behind this surface, and why each alternative was rejected, are recorded in
-[ADR 0033](../../backend/docs/adr/0033-in-app-tutorials.md). This section is the authority on how
+[ADR 0036](../../backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
 the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
@@ -510,6 +513,111 @@ notice, a false claim the tour goes on making in production with nothing red any
 guard scans the layer for both ways an id is named: written onto an element, or declared as a
 `testId` field on a data contribution (the whole `nav-*` family reaches the DOM that way). It
 is scoped to the built-in catalog, since a consumer's tours anchor on its own layer.
+
+## Real-time store coherence: avoid the full-refresh CLOBBER
+
+The recurring product bug behind most e2e flakes: a stale full-snapshot refresh clobbering newer
+live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
+event left to restore it.
+
+- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced
+  full `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block
+  reaches the browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry
+  the entity and `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that
+  must appear reliably.
+- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
+  resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
+  reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
+  refresh path.
+- **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips
+  `connected` only after it settles (which is why e2e gates on `data-connected`).
+- **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state
+  into the snapshot or reconcile rather than replace.
+- **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store
+  that awaits a mutation and then assigns the returned sub-state onto the cached run
+  (`step.forkDecision`, `step.prReview`, `step.judge`, `step.followUps`) is writing straight past
+  `upsert`'s `rev` check. Where the mutation WAKES THE DRIVER, the driver's next emit routinely
+  beats the HTTP response, so the echo puts the run back; if the run then parks, nothing emits
+  again and the newer state is gone for good (the fork-chat reply that vanished, leaving a
+  "thinking…" bubble spinning). Every echo therefore goes through
+  `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the
+  request and drops the echo if anything advanced it. Never hand-roll the await-then-assign.
+- **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
+  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one
+  wins.
+
+## Internationalization (i18n) authoring
+
+All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. This
+layer ships the base `en` locale, and a downstream deployment overrides by dropping its own files
+(the per-layer deep-merge is the override seam, consumer wins key by key). Migration status:
+[`docs/localization.md`](../../docs/localization.md).
+
+- `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
+- `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the named
+  `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here so the module can
+  deep-merge across the `extends` chain. Referenced as the BARE filename
+  `vueI18n: 'i18n.config.ts'`, never `layerDir`-anchored.
+- `package.json` `files` MUST include `"i18n"`. Release-blocking.
+
+**Adding a string**: add the key to `en.json` under the feature namespace, resolve with
+`t('feature.area.key')`, and format numbers/dates through `$n`/`$d` (the named formats), never
+raw `Intl`.
+
+**Key conventions**: one namespace per feature; **leaf keys mirror the enum/code value verbatim**
+so a dynamic lookup is total; **no cross-key concatenation** (a full sentence is ONE key with
+`{named}` placeholders, plurals use the pipe form).
+
+**Component mechanics that bite:**
+
+- `useI18n` is auto-imported; destructure in `<script setup>` and use those fns in the template
+  so the typed-key check sees literal keys. Never `import` it.
+- Plural + interpolation: `t(key, { vendor, count }, count)`, where the THIRD arg is the choice.
+- **Code/format-example placeholders stay INLINE**, not in the catalog; required when they
+  contain `{`/`}` (vue-i18n metacharacters). Only prose placeholders get a key. Same for brand
+  names.
+- **No HTML in message bodies**: drop mid-sentence `<strong>`, or use `<i18n-t>` with slots.
+- For a vendor/enum-keyed set, build an array of STATIC literal `t()` keys, one per member.
+  Reserve the runtime-assembled key + exhaustive `Record` guard for lookups genuinely unknown
+  until runtime.
+- Straight quotes, no em-dashes in new entries.
+
+**Translator descriptions (`@<key>` siblings): default to NONE.** They live only in `en.json` and
+are notes to a translator, never runtime data. Add one ONLY when a competent translator seeing
+the English and the key path could plausibly get it wrong: homograph / part-of-speech ambiguity
+(`@close`), proper nouns that must NOT be translated (`@kaizen`), umbrella strings hiding cases
+the text doesn't show, placeholder/format constraints, or plural-form requirements beyond
+English's two.
+
+**Presenting a backend failure**: raw backend prose is DETAIL, never the description. Even with
+no `reason` to key off, a failure is described from its STATUS CLASS through an exhaustive
+`Record<ApiErrorCode, …>` of translated copy, and the untranslated `message` (plus a validation
+400's `issues` and the envelope's `requestId`) is reached through a "Show details" disclosure
+that reveals it in place. So a non-English user is never handed English as the primary
+explanation, and the elaborate operator remedies the backend does write stay one click away
+rather than being dropped. A new failure-presenting surface copies that split (the
+`usePipelineErrorToast.ts` pattern; the wire vocabulary comes from `@cat-factory/contracts`).
+
+**Drift guards** (oxlint has no `no-raw-text` rule, so these replace it):
+
+1. **Typed message keys** make a statically written unknown `t('literal.key')` a typecheck
+   failure. This does NOT cover a runtime-assembled key.
+2. For enum→key lookups, guard with an **exhaustive `Record<TheEnum, string>`** keyed off the
+   contracts union, plus a runtime `te()` fallback. Never rely on tier 1 alone for a
+   reason/status-keyed lookup.
+3. `pnpm --filter @cat-factory/app run i18n:check` hard-fails on MISSING keys and reports unused
+   ones as non-blocking warnings (the catalog legitimately seeds keys ahead of use).
+4. **Locale parity**: `i18n-locale-parity.mjs --since origin/<base>` requires a PR that adds,
+   changes, or removes an `en.json` key to make the SAME change in every other locale. It is
+   change-coupling against the merge-base, NOT full key parity.
+
+**Translate for real: NEVER ship an English string as a non-`en` value.** The parity gate checks
+only that the key exists, so it will pass a verbatim English copy, and that copy is a bug. The
+only values that may legitimately match `en` are proper nouns identical across languages
+(`DeepSeek`, `AWS Bedrock`). If you genuinely cannot produce a translation, say so in the PR
+rather than committing a placeholder that reads as done.
+
+Migration is incremental: when you touch a component, lift its visible copy into the catalog.
 
 ## Extending the layer (consumer modules)
 

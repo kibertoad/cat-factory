@@ -299,3 +299,27 @@ turned out to be two different modelling problems:
   unrelated concerns.
 - Alert copy is notification copy: machine-readable `reason` codes on the wire, i18n
   mapping in the SPA (the `usePipelineErrorToast` pattern).
+
+## The deployment-level projections: rules for anything added beside them
+
+`gate_outcomes` and `platform_run_days` live in the MAIN store beside `agent_runs`, account-scoped
+through the same `workspaces` sub-select every other platform rollup uses, and pruned by the
+RETENTION sweep rather than the telemetry one (the placement rationale and the full narrative are
+in "What slices 4b, 6 and 7 shipped" above). Three rules bind anything added beside them:
+
+- **A rollup is REWRITTEN, never appended, and an UPSERT is not a rewrite**: the pass DELETEs its
+  trailing window and re-inserts it in one transaction (see slice 7's notes for the
+  double-counting failure an upsert produces).
+- **A rollup's coverage is a fact about the SWEEP**: `dailyRollupWatermark` reads what the pass
+  RECORDED (`platform_rollup_state`), never `max(day_start)`, which reads a quiet account as a
+  lagging sweep and a new account as a rollup that never ran.
+- **A projection whose writer REPLAYS derives its row id** from the run
+  (`<runId>:<stepIndex>:<outcome>`) rather than minting one, or one settle becomes two rows.
+
+**A projection the ENGINE writes is `remote` in mothership mode, not `telemetry`.** The
+local-first bucket is for state a node also READS locally; a gate outcome is written on the node
+and read only by the admin-gated dashboard on the mothership, so a `node:sqlite` copy would be a
+write-only store nobody can see. It is allow-listed on the record's own `workspaceId` field. And
+because an un-wired writer reads downstream as "this never happens" rather than as an outage,
+`CoreDependencies.gateOutcomeRepository` is REQUIRED (`noopGateOutcomeRepository` for a caller
+with no store), the same rule as `logger` and `operationalMetrics`.

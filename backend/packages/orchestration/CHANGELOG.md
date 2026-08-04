@@ -1,5 +1,20 @@
 # @cat-factory/orchestration
 
+## 0.195.3
+
+### Patch Changes
+
+- Updated dependencies [437a0c6]
+  - @cat-factory/contracts@0.227.0
+  - @cat-factory/integrations@0.123.1
+  - @cat-factory/agents@0.108.3
+  - @cat-factory/kernel@0.228.1
+  - @cat-factory/prompt-fragments@0.15.52
+  - @cat-factory/sandbox@0.11.46
+  - @cat-factory/spend@0.14.3
+  - @cat-factory/workspaces@0.21.39
+  - @cat-factory/caching@0.14.5
+
 ## 0.195.2
 
 ### Patch Changes
@@ -152,7 +167,7 @@
   start-run button. Both are already writable over `/workspaces/:ws/risk-policies` and the start
   endpoint respectively, so the capability is reachable today through the API.
 
-- 3605630: Finish the in-app-tutorial initiative (now [ADR 0033](backend/docs/adr/0033-in-app-tutorials.md)):
+- 3605630: Finish the in-app-tutorial initiative (now [ADR 0036](backend/docs/adr/0036-in-app-tutorials.md)):
   make the walkthroughs reach the user who needs one, and measure whether they do.
 
   The catalogue already made every tour REACHABLE; nothing brought one up. Starting any tour saves the

@@ -67,6 +67,10 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
   return new ExecutionService({
     ...dependencies,
     agentKindRegistry: runtime.agentKindRegistry,
+    // From the RESOLVED runtime, not `injected`: a facade may leave it unset and
+    // `resolveCoreRuntime` supplies the empty default, so the engine and the board service (which
+    // seeds a type's default fragments) read the SAME registry instance.
+    taskTypeRegistry: runtime.taskTypeRegistry,
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,
     judgeAssessor,

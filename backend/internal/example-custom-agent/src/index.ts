@@ -16,6 +16,7 @@ import type {
   RepoOp,
   StepCompletionResolver,
   StepResolverRegistry,
+  TaskTypeRegistry,
 } from '@cat-factory/kernel'
 import {
   INITIATIVE_ANALYST_AGENT_KIND,
@@ -39,9 +40,9 @@ import * as v from 'valibot'
 // the `AgentKindRegistry` instance it injects into the facade build, then passing that same
 // instance in:
 //
-//   const registry = defaultAgentKindRegistry()
-//   registerExampleCustomAgents(registry)        // registers the kinds + pipeline + gate
-//   start({ agentKindRegistry: registry })        // (or buildContainer / startLocal)
+//   const agentKindRegistry = defaultAgentKindRegistry()
+//   registerExampleCustomAgents({ agentKindRegistry, ...theOtherRegistries })
+//   start({ agentKindRegistry, ...theOtherRegistries })   // (or buildContainer / startLocal)
 //
 // See `backend/docs/custom-agents.md` for the full model.
 // ---------------------------------------------------------------------------
@@ -63,6 +64,19 @@ export {
   detectStackDeployProvider,
   registerExampleStackDeployProvider,
 } from './stack-deploy.js'
+
+// The REUSABLE OPERATION example: a custom task type bundling a per-case form, standing-context
+// fragments and its own canned pipeline (docs/initiatives/reusable-operations.md).
+import { registerIntroduceApiOperation } from './introduce-api.js'
+export {
+  INTRODUCE_API_FRAGMENT_IDS,
+  INTRODUCE_API_PIPELINE_ID,
+  INTRODUCE_API_TASK_TYPE,
+  INTRODUCE_API_TASK_TYPE_DEFINITION,
+  ORG_ARCHITECT_API_VARIANT_ID,
+  ORG_CODER_API_VARIANT_ID,
+  registerIntroduceApiOperation,
+} from './introduce-api.js'
 
 // ---------------------------------------------------------------------------
 // A WORKED EXAMPLE of agent CAPABILITIES: a bundled skill and a tool server (MCP).
@@ -875,24 +889,43 @@ export function registerOrgResearchPreset(
 }
 
 /**
+ * The app-owned registries a deployment's composition root hands this package. ONE object rather
+ * than a positional list: the set grows with each seam the example demonstrates, and a caller
+ * silently transposing two same-typed registries would register everything in the wrong place.
+ */
+export interface ExampleRegistries {
+  agentKindRegistry: AgentKindRegistry
+  initiativePresetRegistry: InitiativePresetRegistry
+  gateRegistry: GateRegistry
+  stepResolverRegistry: StepResolverRegistry
+  pipelineRegistry: PipelineRegistry
+  judgeRegistry: JudgeRegistry
+  taskTypeRegistry: TaskTypeRegistry
+}
+
+/**
  * Register the example kinds on the app-owned {@link AgentKindRegistry} the composition root
  * injects, and the `preset_org_audit` + `preset_org_research` initiative presets on the app-owned
  * {@link InitiativePresetRegistry}, plus the pipelines that chain the kinds (`pl_org_audit`,
  * `pl_org_research`, `pl_org_apply`) + the example `license-check` gate + the auditor-summary /
  * research-verdict step resolvers on the app-owned {@link GateRegistry} /
  * {@link StepResolverRegistry} + the app-owned {@link PipelineRegistry} the composition root
- * injects. Idempotent (registries replace by id/kind). Called explicitly from a facade/test —
- * there is no module-load side effect any more, since the agent-kind / preset / gate /
- * step-resolver / pipeline registries are all app-owned instances.
+ * injects, and the `org:introduce-api` REUSABLE OPERATION on the app-owned
+ * {@link TaskTypeRegistry} (see `./introduce-api.ts`). Idempotent (registries replace by id/kind).
+ * Called explicitly from a facade/test: there is no module-load side effect any more, since the
+ * agent-kind / preset / gate / step-resolver / pipeline / task-type registries are all app-owned
+ * instances.
  */
-export function registerExampleCustomAgents(
-  registry: AgentKindRegistry,
-  initiativePresetRegistry: InitiativePresetRegistry,
-  gateRegistry: GateRegistry,
-  stepResolverRegistry: StepResolverRegistry,
-  pipelineRegistry: PipelineRegistry,
-  judgeRegistry: JudgeRegistry,
-): void {
+export function registerExampleCustomAgents(registries: ExampleRegistries): void {
+  const {
+    agentKindRegistry: registry,
+    initiativePresetRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    pipelineRegistry,
+    judgeRegistry,
+    taskTypeRegistry,
+  } = registries
   // Capability definitions FIRST: a kind referencing an id registered later would be reported as
   // an unresolved reference by the boot-time `validateRegistrations` check.
   registry.registerSkill(securityReviewSkill)
@@ -992,4 +1025,7 @@ export function registerExampleCustomAgents(
   })
   stepResolverRegistry.register(auditorSummaryResolver.kind, () => auditorSummaryResolver)
   stepResolverRegistry.register(researchVerdictResolver.kind, () => researchVerdictResolver)
+  // The REUSABLE OPERATION: a canned unit of work invoked again and again with per-case form
+  // input, bundling its standing context and its own pipeline onto a custom task type.
+  registerIntroduceApiOperation(registry, pipelineRegistry, taskTypeRegistry)
 }

@@ -355,6 +355,49 @@ export function initiativePresetSection(context: AgentRunContext): string {
 }
 
 /**
+ * Render the custom task type's collected PARAMETERS: the per-case brief a reusable operation was
+ * invoked with ("expose CRUD for entity Order", "auth: service-to-service"). The engine resolves
+ * the projection once per dispatch ({@link AgentRunContext.customTaskType}); this only formats it,
+ * so the container, inline and consensus paths render one thing.
+ *
+ * APPENDED after the block-context template rather than prepended: the requester's own title and
+ * description stay the primary statement of what is wanted, and the parameters qualify it. Empty
+ * string on every run that collected none (each built-in type, and a custom type with no fields),
+ * so every existing prompt is byte-for-byte unchanged.
+ *
+ * A field whose descriptor is gone renders under its raw key. The projection is
+ * value-authoritative, and this must not second-guess it by hiding what it could not label.
+ *
+ * A MULTI-LINE value (a `textarea` field: the example operation's "anything else the design must
+ * honour") continues as an indented block under its label rather than inline, or its second line
+ * leaves the bullet list and its last one runs into the closing guidance below, reading as part of
+ * the platform's own instruction rather than as something the requester typed.
+ */
+export function customTaskTypeSection(context: AgentRunContext): string {
+  const custom = context.customTaskType
+  if (!custom?.fields.length) return ''
+  const lines = ['', `## Task parameters (${custom.label})`, '']
+  for (const field of custom.fields) {
+    const label = field.label ?? field.key
+    // Split on either ending: a browser posts a textarea's newlines as CRLF, and a stray `\r` left
+    // mid-prompt is a character the model has to read past on every turn.
+    const valueLines = field.value.split(/\r?\n/)
+    if (valueLines.length === 1) {
+      lines.push(`- ${label}: ${valueLines[0]}`)
+      continue
+    }
+    lines.push(`- ${label}:`)
+    for (const line of valueLines) lines.push(`  ${line}`)
+  }
+  lines.push(
+    '',
+    'These are the values this task was created with. Treat them as the specifics of what to ' +
+      'deliver; they qualify the title and description above rather than replacing them.',
+  )
+  return lines.join('\n')
+}
+
+/**
  * Directory in the agent's checkout where the harness materialises the full text of
  * each linked-context item (requirements / RFCs / PRDs / tracker issues), so a
  * container agent can read what it needs on demand rather than carrying every body in
@@ -550,6 +593,9 @@ export function renderStandardUserPrompt(
     // What system this work belongs to, BEFORE the linked context and the environment: it frames
     // everything that follows, and it is the section that states its own absence.
     ownServiceSection(context) +
+    // The operation's per-case parameters, right after the block context they qualify and before
+    // the linked context. Empty (so byte-identical) on every run of a built-in task type.
+    customTaskTypeSection(context) +
     linkedContextSection(context, opts) +
     environmentSection(context) +
     involvedServicesSection(context) +

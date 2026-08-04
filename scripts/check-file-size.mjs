@@ -203,6 +203,15 @@ const LEGACY_ALLOWANCES = new Map([
   ['backend/packages/server/src/github/FetchGitHubClient.ts', 1356],
 ])
 
+/**
+ * Ratcheted ceilings for PROSE files with a documented tendency to regrow. CLAUDE.md's own
+ * charter says flow-specific detail belongs in each flow's doc, and the file still regrew from
+ * ~700 to ~1,850 lines between hand audits; this entry turns that regrowth into a CI failure.
+ * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
+ * raising the number, and lower the allowance in the same PR when a cleanup lands a win.
+ */
+const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1100]])
+
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and
 // the largest files there are GENERATED (`models_gen.go` alone is past the default), where the
@@ -281,6 +290,24 @@ for (const root of SCAN_ROOTS) {
 for (const rel of LEGACY_ALLOWANCES.keys()) {
   if (!seenLegacy.has(rel)) {
     failures.push(`${rel}: legacy allowance entry is stale (file not found) — remove it`)
+  }
+}
+
+// Prose ratchet: same shrink-only contract as the source allowances above.
+for (const [rel, allowance] of DOC_ALLOWANCES) {
+  let lines
+  try {
+    lines = readFileSync(join(repoRoot, rel), 'utf8').split('\n').length
+  } catch {
+    failures.push(`${rel}: doc allowance entry is stale (file not found); remove it`)
+    continue
+  }
+  if (lines > allowance) {
+    failures.push(
+      `${rel}: ${lines} lines exceeds its budget of ${allowance} (a ratcheted doc allowance; ` +
+        "move flow detail into the linked flow docs, per the file's own charter, instead of " +
+        'growing it)',
+    )
   }
 }
 
