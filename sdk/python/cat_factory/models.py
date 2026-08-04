@@ -46,6 +46,83 @@ def _encode(value: Any) -> Any:
 
 
 @dataclass(frozen=True, slots=True)
+class CreatedPublicApiKey:
+    """`CreatedPublicApiKey`, as carried on the wire."""
+
+    key: PublicApiKey
+    secret: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CreatedPublicApiKey":
+        """Decode a `CreatedPublicApiKey` from its JSON object."""
+        known = {"key", "secret"}
+        return cls(
+            key=PublicApiKey.from_dict(data.get("key")),
+            secret=data.get("secret"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["key"] = _encode(self.key)
+        out["secret"] = self.secret
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class CreateHeadlessPublicApiKey:
+    """`CreateHeadlessPublicApiKey`, as carried on the wire."""
+
+    label: str
+    #: May be absent entirely.
+    scope: CreateHeadlessPublicApiKeyScope | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CreateHeadlessPublicApiKey":
+        """Decode a `CreateHeadlessPublicApiKey` from its JSON object."""
+        known = {"label", "scope"}
+        return cls(
+            label=data.get("label"),
+            scope=None if data.get("scope") is None else _enum(CreateHeadlessPublicApiKeyScope, data.get("scope")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["label"] = self.label
+        if self.scope is not None:
+            out["scope"] = _encode(self.scope)
+        return out
+
+
+class CreateHeadlessPublicApiKeyScope(StrEnum):
+    """The `CreateHeadlessPublicApiKeyScope` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    READ = "read"
+    WRITE = "write"
+    DECIDE = "decide"
+
+
+@dataclass(frozen=True, slots=True)
 class CreatePublicJob:
     """`CreatePublicJob`, as carried on the wire."""
 
@@ -77,83 +154,6 @@ class CreatePublicJob:
         out["pipelineId"] = self.pipeline_id
         if self.title is not None:
             out["title"] = self.title
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class CreatePublicKeyRequest:
-    """`CreatePublicKeyRequest`, as carried on the wire."""
-
-    label: str
-    #: May be absent entirely.
-    scope: CreatePublicKeyRequestScope | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicKeyRequest":
-        """Decode a `CreatePublicKeyRequest` from its JSON object."""
-        known = {"label", "scope"}
-        return cls(
-            label=data.get("label"),
-            scope=None if data.get("scope") is None else _enum(CreatePublicKeyRequestScope, data.get("scope")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["label"] = self.label
-        if self.scope is not None:
-            out["scope"] = _encode(self.scope)
-        return out
-
-
-class CreatePublicKeyRequestScope(StrEnum):
-    """The `CreatePublicKeyRequestScope` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    READ = "read"
-    WRITE = "write"
-    DECIDE = "decide"
-
-
-@dataclass(frozen=True, slots=True)
-class CreatePublicKeyResponse:
-    """`CreatePublicKeyResponse`, as carried on the wire."""
-
-    key: ListPublicKeysResponseKey
-    secret: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicKeyResponse":
-        """Decode a `CreatePublicKeyResponse` from its JSON object."""
-        known = {"key", "secret"}
-        return cls(
-            key=ListPublicKeysResponseKey.from_dict(data.get("key")),
-            secret=data.get("secret"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["key"] = _encode(self.key)
-        out["secret"] = self.secret
         return out
 
 
@@ -2119,107 +2119,6 @@ class ListPublicJobsResponse:
         out["jobs"] = [_encode(item) for item in self.jobs]
         out["nextCursor"] = self.next_cursor
         return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicKeysResponse:
-    """`ListPublicKeysResponse`, as carried on the wire."""
-
-    keys: list[ListPublicKeysResponseKey]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicKeysResponse":
-        """Decode a `ListPublicKeysResponse` from its JSON object."""
-        known = {"keys"}
-        return cls(
-            keys=[ListPublicKeysResponseKey.from_dict(item) for item in data.get("keys") or []],
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["keys"] = [_encode(item) for item in self.keys]
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicKeysResponseKey:
-    """`ListPublicKeysResponseKey`, as carried on the wire."""
-
-    account_id: str
-    created_at: float
-    id: str
-    label: str
-    scope: ListPublicKeysResponseKeyScope
-    workspace_id: str
-    #: Always present; ``None`` when the server has no value for it.
-    created_by_key_id: str | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    created_by_user_id: str | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    last_used_at: float | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    revoked_at: float | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicKeysResponseKey":
-        """Decode a `ListPublicKeysResponseKey` from its JSON object."""
-        known = {"accountId", "createdAt", "id", "label", "scope", "workspaceId", "createdByKeyId", "createdByUserId", "lastUsedAt", "revokedAt"}
-        return cls(
-            account_id=data.get("accountId"),
-            created_at=data.get("createdAt"),
-            id=data.get("id"),
-            label=data.get("label"),
-            scope=_enum(ListPublicKeysResponseKeyScope, data.get("scope")),
-            workspace_id=data.get("workspaceId"),
-            created_by_key_id=data.get("createdByKeyId"),
-            created_by_user_id=data.get("createdByUserId"),
-            last_used_at=data.get("lastUsedAt"),
-            revoked_at=data.get("revokedAt"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["accountId"] = self.account_id
-        out["createdAt"] = self.created_at
-        out["id"] = self.id
-        out["label"] = self.label
-        out["scope"] = _encode(self.scope)
-        out["workspaceId"] = self.workspace_id
-        out["createdByKeyId"] = self.created_by_key_id
-        out["createdByUserId"] = self.created_by_user_id
-        out["lastUsedAt"] = self.last_used_at
-        out["revokedAt"] = self.revoked_at
-        return out
-
-
-class ListPublicKeysResponseKeyScope(StrEnum):
-    """The `ListPublicKeysResponseKeyScope` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    READ = "read"
-    WRITE = "write"
-    DECIDE = "decide"
-    ADMIN = "admin"
 
 
 class LlmCallOutcome(StrEnum):
@@ -4396,6 +4295,107 @@ class PublicAgentDecision:
         out["question"] = self.question
         out["stepKind"] = self.step_kind
         return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicApiKey:
+    """`PublicApiKey`, as carried on the wire."""
+
+    account_id: str
+    created_at: float
+    id: str
+    label: str
+    scope: PublicApiKeyScope
+    workspace_id: str
+    #: Always present; ``None`` when the server has no value for it.
+    created_by_key_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    created_by_user_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    last_used_at: float | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    revoked_at: float | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicApiKey":
+        """Decode a `PublicApiKey` from its JSON object."""
+        known = {"accountId", "createdAt", "id", "label", "scope", "workspaceId", "createdByKeyId", "createdByUserId", "lastUsedAt", "revokedAt"}
+        return cls(
+            account_id=data.get("accountId"),
+            created_at=data.get("createdAt"),
+            id=data.get("id"),
+            label=data.get("label"),
+            scope=_enum(PublicApiKeyScope, data.get("scope")),
+            workspace_id=data.get("workspaceId"),
+            created_by_key_id=data.get("createdByKeyId"),
+            created_by_user_id=data.get("createdByUserId"),
+            last_used_at=data.get("lastUsedAt"),
+            revoked_at=data.get("revokedAt"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["accountId"] = self.account_id
+        out["createdAt"] = self.created_at
+        out["id"] = self.id
+        out["label"] = self.label
+        out["scope"] = _encode(self.scope)
+        out["workspaceId"] = self.workspace_id
+        out["createdByKeyId"] = self.created_by_key_id
+        out["createdByUserId"] = self.created_by_user_id
+        out["lastUsedAt"] = self.last_used_at
+        out["revokedAt"] = self.revoked_at
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicApiKeyList:
+    """`PublicApiKeyList`, as carried on the wire."""
+
+    keys: list[PublicApiKey]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicApiKeyList":
+        """Decode a `PublicApiKeyList` from its JSON object."""
+        known = {"keys"}
+        return cls(
+            keys=[PublicApiKey.from_dict(item) for item in data.get("keys") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["keys"] = [_encode(item) for item in self.keys]
+        return out
+
+
+class PublicApiKeyScope(StrEnum):
+    """The `PublicApiKeyScope` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    READ = "read"
+    WRITE = "write"
+    DECIDE = "decide"
+    ADMIN = "admin"
 
 
 @dataclass(frozen=True, slots=True)

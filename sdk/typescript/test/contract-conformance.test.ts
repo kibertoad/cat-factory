@@ -228,6 +228,22 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicRequestGateFixSchema>
 >()
 
+// Public-API KEYS: the provisioning surface's own resource. `PublicApiKey` is shared with the
+// session-authed key panel, so this pairing also pins that the two surfaces describe one key.
+expectMutuallyAssignable<sdk.PublicApiKey, v.InferOutput<typeof contracts.publicApiKeySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicApiKeyList,
+  v.InferOutput<typeof contracts.publicApiKeyListResultSchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreatedPublicApiKey,
+  v.InferOutput<typeof contracts.createdPublicApiKeySchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreateHeadlessPublicApiKey,
+  v.InferOutput<typeof contracts.createHeadlessPublicApiKeySchema>
+>()
+
 // Run EVIDENCE. The verification report is the one DTO here the SDK did not gain a new shape for:
 // it is the ENGINE's own report type, served verbatim, so this pairing is what proves the wire
 // shape a consumer parses is the one the engine composes rather than a re-typed copy of it.
@@ -361,6 +377,10 @@ const ASSERTED_COMPONENTS = [
   'PublicHumanTestDecision',
   'PublicVisualConfirmDecision',
   'PublicRequestGateFix',
+  'PublicApiKey',
+  'PublicApiKeyList',
+  'CreatedPublicApiKey',
+  'CreateHeadlessPublicApiKey',
   'PublicRunArtifact',
   'PublicRunArtifactList',
   'PrVerificationReport',

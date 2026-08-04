@@ -1,6 +1,27 @@
 {
   "components": {
     "schemas": {
+      "CreateHeadlessPublicApiKey": {
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "read",
+              "write",
+              "decide"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
       "CreatePublicJob": {
         "properties": {
           "input": {
@@ -66,6 +87,21 @@
         },
         "required": [
           "title"
+        ],
+        "type": "object"
+      },
+      "CreatedPublicApiKey": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/PublicApiKey"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "secret"
         ],
         "type": "object"
       },
@@ -2122,6 +2158,101 @@
           "stepKind",
           "question",
           "options"
+        ],
+        "type": "object"
+      },
+      "PublicApiKey": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdByKeyId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdByUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "enum": [
+              "read",
+              "write",
+              "decide",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "workspaceId",
+          "label",
+          "scope",
+          "createdByUserId",
+          "createdByKeyId",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt"
+        ],
+        "type": "object"
+      },
+      "PublicApiKeyList": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/PublicApiKey"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
         ],
         "type": "object"
       },
@@ -7875,96 +8006,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "keys": {
-                      "items": {
-                        "properties": {
-                          "accountId": {
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "number"
-                          },
-                          "createdByKeyId": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "createdByUserId": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "lastUsedAt": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "revokedAt": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "scope": {
-                            "enum": [
-                              "read",
-                              "write",
-                              "decide",
-                              "admin"
-                            ],
-                            "type": "string"
-                          },
-                          "workspaceId": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "accountId",
-                          "workspaceId",
-                          "label",
-                          "scope",
-                          "createdByUserId",
-                          "createdByKeyId",
-                          "createdAt",
-                          "lastUsedAt",
-                          "revokedAt"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": [
-                    "keys"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/PublicApiKeyList"
                 }
               }
             },
@@ -8003,25 +8045,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "label": {
-                    "maxLength": 120,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "scope": {
-                    "enum": [
-                      "read",
-                      "write",
-                      "decide"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "label"
-                ],
-                "type": "object"
+                "$ref": "#/components/schemas/CreateHeadlessPublicApiKey"
               }
             }
           },
@@ -8032,97 +8056,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "key": {
-                      "properties": {
-                        "accountId": {
-                          "type": "string"
-                        },
-                        "createdAt": {
-                          "type": "number"
-                        },
-                        "createdByKeyId": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "createdByUserId": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "lastUsedAt": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "revokedAt": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "scope": {
-                          "enum": [
-                            "read",
-                            "write",
-                            "decide",
-                            "admin"
-                          ],
-                          "type": "string"
-                        },
-                        "workspaceId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "accountId",
-                        "workspaceId",
-                        "label",
-                        "scope",
-                        "createdByUserId",
-                        "createdByKeyId",
-                        "createdAt",
-                        "lastUsedAt",
-                        "revokedAt"
-                      ],
-                      "type": "object"
-                    },
-                    "secret": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "key",
-                    "secret"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreatedPublicApiKey"
                 }
               }
             },

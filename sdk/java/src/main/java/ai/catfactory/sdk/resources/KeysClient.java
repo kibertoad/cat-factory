@@ -32,8 +32,8 @@ public final class KeysClient {
      * chain one link long. Requires an `admin`-scope key.
      * {@code POST /api/v1/keys} (operation {@code createPublicKey}).
      */
-    public CreatePublicKeyResponse create(CreatePublicKeyRequest body) {
-        return transport.request("POST", "/api/v1/keys", body, Map.of(), new TypeReference<CreatePublicKeyResponse>() {});
+    public CreatedPublicApiKey create(CreateHeadlessPublicApiKey body) {
+        return transport.request("POST", "/api/v1/keys", body, Map.of(), new TypeReference<CreatedPublicApiKey>() {});
     }
 
     /**
@@ -43,8 +43,8 @@ public final class KeysClient {
      * `createdByUserId` names the person who minted one in the app.
      * {@code GET /api/v1/keys} (operation {@code listPublicKeys}).
      */
-    public ListPublicKeysResponse list() {
-        return transport.request("GET", "/api/v1/keys", null, Map.of(), new TypeReference<ListPublicKeysResponse>() {});
+    public PublicApiKeyList list() {
+        return transport.request("GET", "/api/v1/keys", null, Map.of(), new TypeReference<PublicApiKeyList>() {});
     }
 
     /**

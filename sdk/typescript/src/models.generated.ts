@@ -8,6 +8,22 @@
 // said nothing" are different facts, and a caller that cannot tell them apart cannot report
 // either one honestly.
 
+export interface CreatedPublicApiKey {
+  key: PublicApiKey
+  secret: string
+}
+
+export interface CreateHeadlessPublicApiKey {
+  /** Length 1..120. */
+  label: string
+  scope?: CreateHeadlessPublicApiKeyScope
+}
+
+export type CreateHeadlessPublicApiKeyScope = 'read' | 'write' | 'decide'
+
+/** Every `CreateHeadlessPublicApiKeyScope` value, for exhaustive handling and runtime validation. */
+export const CREATE_HEADLESS_PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'write', 'decide'] as const
+
 export interface CreatePublicJob {
   /** Length 1..50000. */
   input: string
@@ -15,22 +31,6 @@ export interface CreatePublicJob {
   pipelineId: string
   /** Length 0..200. */
   title?: string
-}
-
-export interface CreatePublicKeyRequest {
-  /** Length 1..120. */
-  label: string
-  scope?: CreatePublicKeyRequestScope
-}
-
-export type CreatePublicKeyRequestScope = 'read' | 'write' | 'decide'
-
-/** Every `CreatePublicKeyRequestScope` value, for exhaustive handling and runtime validation. */
-export const CREATE_PUBLIC_KEY_REQUEST_SCOPE_VALUES = ['read', 'write', 'decide'] as const
-
-export interface CreatePublicKeyResponse {
-  key: ListPublicKeysResponseKey
-  secret: string
 }
 
 export interface CreatePublicTask {
@@ -513,32 +513,6 @@ export interface ListPublicJobsResponse {
   /** Always present; `null` when the server has no value for it. */
   nextCursor: string | null
 }
-
-export interface ListPublicKeysResponse {
-  keys: ListPublicKeysResponseKey[]
-}
-
-export interface ListPublicKeysResponseKey {
-  accountId: string
-  createdAt: number
-  /** Always present; `null` when the server has no value for it. */
-  createdByKeyId: string | null
-  /** Always present; `null` when the server has no value for it. */
-  createdByUserId: string | null
-  id: string
-  label: string
-  /** Always present; `null` when the server has no value for it. */
-  lastUsedAt: number | null
-  /** Always present; `null` when the server has no value for it. */
-  revokedAt: number | null
-  scope: ListPublicKeysResponseKeyScope
-  workspaceId: string
-}
-
-export type ListPublicKeysResponseKeyScope = 'read' | 'write' | 'decide' | 'admin'
-
-/** Every `ListPublicKeysResponseKeyScope` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_KEYS_RESPONSE_KEY_SCOPE_VALUES = ['read', 'write', 'decide', 'admin'] as const
 
 export type LlmCallOutcome = 'ok' | 'warning' | 'error'
 
@@ -1054,6 +1028,32 @@ export interface PublicAgentDecision {
   question: string
   stepKind: string
 }
+
+export interface PublicApiKey {
+  accountId: string
+  createdAt: number
+  /** Always present; `null` when the server has no value for it. */
+  createdByKeyId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  createdByUserId: string | null
+  id: string
+  label: string
+  /** Always present; `null` when the server has no value for it. */
+  lastUsedAt: number | null
+  /** Always present; `null` when the server has no value for it. */
+  revokedAt: number | null
+  scope: PublicApiKeyScope
+  workspaceId: string
+}
+
+export interface PublicApiKeyList {
+  keys: PublicApiKey[]
+}
+
+export type PublicApiKeyScope = 'read' | 'write' | 'decide' | 'admin'
+
+/** Every `PublicApiKeyScope` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'write', 'decide', 'admin'] as const
 
 export interface PublicApprovalGateDecision {
   approvalId: string

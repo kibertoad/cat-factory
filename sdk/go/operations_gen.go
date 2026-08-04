@@ -1908,13 +1908,13 @@ type KeysService struct {
 // here: a key provisioned over the API can never itself provision, which keeps the chain one link
 // long. Requires an `admin`-scope key.
 // POST /api/v1/keys (operation createPublicKey).
-func (s *KeysService) Create(ctx context.Context, body CreatePublicKeyRequest) (*CreatePublicKeyResponse, error) {
+func (s *KeysService) Create(ctx context.Context, body CreateHeadlessPublicApiKey) (*CreatedPublicApiKey, error) {
 	req := requestSpec{
 		Method: "POST",
 		Path:   "/api/v1/keys",
 		Body:   body,
 	}
-	var out CreatePublicKeyResponse
+	var out CreatedPublicApiKey
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -1926,12 +1926,12 @@ func (s *KeysService) Create(ctx context.Context, body CreatePublicKeyRequest) (
 // readable back. `createdByKeyId` names the key that provisioned a key headlessly;
 // `createdByUserId` names the person who minted one in the app.
 // GET /api/v1/keys (operation listPublicKeys).
-func (s *KeysService) List(ctx context.Context) (*ListPublicKeysResponse, error) {
+func (s *KeysService) List(ctx context.Context) (*PublicApiKeyList, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   "/api/v1/keys",
 	}
-	var out ListPublicKeysResponse
+	var out PublicApiKeyList
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

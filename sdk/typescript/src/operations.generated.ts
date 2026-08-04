@@ -10,10 +10,10 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  CreateHeadlessPublicApiKey,
   CreatePublicJob,
-  CreatePublicKeyRequest,
-  CreatePublicKeyResponse,
   CreatePublicTask,
+  CreatedPublicApiKey,
   DebugAgentContextSnapshot,
   DebugLlmCall,
   DebugRunOverview,
@@ -27,11 +27,11 @@ import type {
   ListDebugToolCallsOrder,
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
-  ListPublicKeysResponse,
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
   PrVerificationReport,
+  PublicApiKeyList,
   PublicApproveStep,
   PublicChallengePrReviewFinding,
   PublicChooseFork,
@@ -1321,8 +1321,8 @@ export class KeysResource {
    * Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE — store it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.
    * `POST /api/v1/keys` — operation `createPublicKey`.
    */
-  create(body: CreatePublicKeyRequest, options: RequestOptions = {}): Promise<CreatePublicKeyResponse> {
-    return this.#transport.request<CreatePublicKeyResponse>({
+  create(body: CreateHeadlessPublicApiKey, options: RequestOptions = {}): Promise<CreatedPublicApiKey> {
+    return this.#transport.request<CreatedPublicApiKey>({
       method: 'POST',
       path: `/api/v1/keys`,
       body,
@@ -1335,8 +1335,8 @@ export class KeysResource {
    * The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.
    * `GET /api/v1/keys` — operation `listPublicKeys`.
    */
-  list(options: RequestOptions = {}): Promise<ListPublicKeysResponse> {
-    return this.#transport.request<ListPublicKeysResponse>({
+  list(options: RequestOptions = {}): Promise<PublicApiKeyList> {
+    return this.#transport.request<PublicApiKeyList>({
       method: 'GET',
       path: `/api/v1/keys`,
       options,

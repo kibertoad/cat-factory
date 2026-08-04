@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicKeysResponseKey} wire model.
+ * The {@code PublicApiKey} wire model.
  * @param accountId the {@code accountId} field.
  * @param createdAt the {@code createdAt} field.
  * @param createdByKeyId Always present; {@code null} when the server has no value for it.
@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * @param workspaceId the {@code workspaceId} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicKeysResponseKey(
+public record PublicApiKey(
     @JsonProperty("accountId") String accountId,
 
     @JsonProperty("createdAt") Double createdAt,
@@ -42,18 +42,18 @@ public record ListPublicKeysResponseKey(
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("revokedAt") @Nullable Double revokedAt,
 
-    @JsonProperty("scope") ListPublicKeysResponseKeyScope scope,
+    @JsonProperty("scope") PublicApiKeyScope scope,
 
     @JsonProperty("workspaceId") String workspaceId
 ) {
 
-    /** A new builder for {@link ListPublicKeysResponseKey}. */
+    /** A new builder for {@link PublicApiKey}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicKeysResponseKey}.
+     * Fluent builder for {@link PublicApiKey}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -67,7 +67,7 @@ public record ListPublicKeysResponseKey(
         private @Nullable String label;
         private @Nullable Double lastUsedAt;
         private @Nullable Double revokedAt;
-        private @Nullable ListPublicKeysResponseKeyScope scope;
+        private @Nullable PublicApiKeyScope scope;
         private @Nullable String workspaceId;
 
         /** Set {@code accountId}. */
@@ -119,7 +119,7 @@ public record ListPublicKeysResponseKey(
         }
 
         /** Set {@code scope}. */
-        public Builder scope(@Nullable ListPublicKeysResponseKeyScope scope) {
+        public Builder scope(@Nullable PublicApiKeyScope scope) {
             this.scope = scope;
             return this;
         }
@@ -130,9 +130,9 @@ public record ListPublicKeysResponseKey(
             return this;
         }
 
-        /** Build the {@link ListPublicKeysResponseKey}. */
-        public ListPublicKeysResponseKey build() {
-            return new ListPublicKeysResponseKey(accountId, createdAt, createdByKeyId, createdByUserId, id, label, lastUsedAt, revokedAt, scope, workspaceId);
+        /** Build the {@link PublicApiKey}. */
+        public PublicApiKey build() {
+            return new PublicApiKey(accountId, createdAt, createdByKeyId, createdByUserId, id, label, lastUsedAt, revokedAt, scope, workspaceId);
         }
     }
 }

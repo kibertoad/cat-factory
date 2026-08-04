@@ -110,6 +110,14 @@ const COMPONENT_SCHEMAS = {
   // `PrVerificationReportRunStepsItem` is not a name anyone should have to read. Every one of
   // them is an exported schema in `@cat-factory/contracts`, so the names are chosen once here and
   // the shapes cannot drift from what the engine composes.
+  // The key resource, hoisted for the same reason every other DTO here is: un-hoisted, the
+  // provisioning surface ships as `ListPublicKeysResponseKey` and `CreatePublicKeyRequestScope`
+  // in four languages — positional names that also RENUMBER if an operation is added ahead of
+  // them.
+  PublicApiKey: 'publicApiKeySchema',
+  PublicApiKeyList: 'publicApiKeyListResultSchema',
+  CreatedPublicApiKey: 'createdPublicApiKeySchema',
+  CreateHeadlessPublicApiKey: 'createHeadlessPublicApiKeySchema',
   PublicRunArtifact: 'publicRunArtifactSchema',
   PublicRunArtifactList: 'publicRunArtifactListSchema',
   PrVerificationReport: 'prVerificationReportSchema',

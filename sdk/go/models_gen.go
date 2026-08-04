@@ -11,40 +11,40 @@ package catfactory
 
 import "encoding/json"
 
+// CreatedPublicApiKey is the `CreatedPublicApiKey` wire model.
+type CreatedPublicApiKey struct {
+	Key    PublicApiKey `json:"key"`
+	Secret string       `json:"secret"`
+}
+
+// CreateHeadlessPublicApiKey is the `CreateHeadlessPublicApiKey` wire model.
+type CreateHeadlessPublicApiKey struct {
+	Label string `json:"label"`
+	// Scope may be absent entirely.
+	Scope *CreateHeadlessPublicApiKeyScope `json:"scope,omitempty"`
+}
+
+// CreateHeadlessPublicApiKeyScope is the `CreateHeadlessPublicApiKeyScope` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type CreateHeadlessPublicApiKeyScope string
+
+const (
+	CreateHeadlessPublicApiKeyScopeRead   CreateHeadlessPublicApiKeyScope = "read"
+	CreateHeadlessPublicApiKeyScopeWrite  CreateHeadlessPublicApiKeyScope = "write"
+	CreateHeadlessPublicApiKeyScopeDecide CreateHeadlessPublicApiKeyScope = "decide"
+)
+
+// CreateHeadlessPublicApiKeyScopeValues lists every CreateHeadlessPublicApiKeyScope this SDK release knows.
+var CreateHeadlessPublicApiKeyScopeValues = []CreateHeadlessPublicApiKeyScope{CreateHeadlessPublicApiKeyScopeRead, CreateHeadlessPublicApiKeyScopeWrite, CreateHeadlessPublicApiKeyScopeDecide}
+
 // CreatePublicJob is the `CreatePublicJob` wire model.
 type CreatePublicJob struct {
 	Input      string `json:"input"`
 	PipelineID string `json:"pipelineId"`
 	// Title may be absent entirely.
 	Title *string `json:"title,omitempty"`
-}
-
-// CreatePublicKeyRequest is the `CreatePublicKeyRequest` wire model.
-type CreatePublicKeyRequest struct {
-	Label string `json:"label"`
-	// Scope may be absent entirely.
-	Scope *CreatePublicKeyRequestScope `json:"scope,omitempty"`
-}
-
-// CreatePublicKeyRequestScope is the `CreatePublicKeyRequestScope` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type CreatePublicKeyRequestScope string
-
-const (
-	CreatePublicKeyRequestScopeRead   CreatePublicKeyRequestScope = "read"
-	CreatePublicKeyRequestScopeWrite  CreatePublicKeyRequestScope = "write"
-	CreatePublicKeyRequestScopeDecide CreatePublicKeyRequestScope = "decide"
-)
-
-// CreatePublicKeyRequestScopeValues lists every CreatePublicKeyRequestScope this SDK release knows.
-var CreatePublicKeyRequestScopeValues = []CreatePublicKeyRequestScope{CreatePublicKeyRequestScopeRead, CreatePublicKeyRequestScopeWrite, CreatePublicKeyRequestScopeDecide}
-
-// CreatePublicKeyResponse is the `CreatePublicKeyResponse` wire model.
-type CreatePublicKeyResponse struct {
-	Key    ListPublicKeysResponseKey `json:"key"`
-	Secret string                    `json:"secret"`
 }
 
 // CreatePublicTask is the `CreatePublicTask` wire model.
@@ -700,45 +700,6 @@ type ListPublicJobsResponse struct {
 	// NextCursor always present; nil when the server has no value for it.
 	NextCursor *string `json:"nextCursor"`
 }
-
-// ListPublicKeysResponse is the `ListPublicKeysResponse` wire model.
-type ListPublicKeysResponse struct {
-	Keys []ListPublicKeysResponseKey `json:"keys"`
-}
-
-// ListPublicKeysResponseKey is the `ListPublicKeysResponseKey` wire model.
-type ListPublicKeysResponseKey struct {
-	AccountID string  `json:"accountId"`
-	CreatedAt float64 `json:"createdAt"`
-	// CreatedByKeyID always present; nil when the server has no value for it.
-	CreatedByKeyID *string `json:"createdByKeyId"`
-	// CreatedByUserID always present; nil when the server has no value for it.
-	CreatedByUserID *string `json:"createdByUserId"`
-	ID              string  `json:"id"`
-	Label           string  `json:"label"`
-	// LastUsedAt always present; nil when the server has no value for it.
-	LastUsedAt *float64 `json:"lastUsedAt"`
-	// RevokedAt always present; nil when the server has no value for it.
-	RevokedAt   *float64                       `json:"revokedAt"`
-	Scope       ListPublicKeysResponseKeyScope `json:"scope"`
-	WorkspaceID string                         `json:"workspaceId"`
-}
-
-// ListPublicKeysResponseKeyScope is the `ListPublicKeysResponseKeyScope` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicKeysResponseKeyScope string
-
-const (
-	ListPublicKeysResponseKeyScopeRead   ListPublicKeysResponseKeyScope = "read"
-	ListPublicKeysResponseKeyScopeWrite  ListPublicKeysResponseKeyScope = "write"
-	ListPublicKeysResponseKeyScopeDecide ListPublicKeysResponseKeyScope = "decide"
-	ListPublicKeysResponseKeyScopeAdmin  ListPublicKeysResponseKeyScope = "admin"
-)
-
-// ListPublicKeysResponseKeyScopeValues lists every ListPublicKeysResponseKeyScope this SDK release knows.
-var ListPublicKeysResponseKeyScopeValues = []ListPublicKeysResponseKeyScope{ListPublicKeysResponseKeyScopeRead, ListPublicKeysResponseKeyScopeWrite, ListPublicKeysResponseKeyScopeDecide, ListPublicKeysResponseKeyScopeAdmin}
 
 // LlmCallOutcome is the `LlmCallOutcome` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must
@@ -1686,6 +1647,45 @@ type PublicAgentDecision struct {
 	Question   string   `json:"question"`
 	StepKind   string   `json:"stepKind"`
 }
+
+// PublicApiKey is the `PublicApiKey` wire model.
+type PublicApiKey struct {
+	AccountID string  `json:"accountId"`
+	CreatedAt float64 `json:"createdAt"`
+	// CreatedByKeyID always present; nil when the server has no value for it.
+	CreatedByKeyID *string `json:"createdByKeyId"`
+	// CreatedByUserID always present; nil when the server has no value for it.
+	CreatedByUserID *string `json:"createdByUserId"`
+	ID              string  `json:"id"`
+	Label           string  `json:"label"`
+	// LastUsedAt always present; nil when the server has no value for it.
+	LastUsedAt *float64 `json:"lastUsedAt"`
+	// RevokedAt always present; nil when the server has no value for it.
+	RevokedAt   *float64          `json:"revokedAt"`
+	Scope       PublicApiKeyScope `json:"scope"`
+	WorkspaceID string            `json:"workspaceId"`
+}
+
+// PublicApiKeyList is the `PublicApiKeyList` wire model.
+type PublicApiKeyList struct {
+	Keys []PublicApiKey `json:"keys"`
+}
+
+// PublicApiKeyScope is the `PublicApiKeyScope` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicApiKeyScope string
+
+const (
+	PublicApiKeyScopeRead   PublicApiKeyScope = "read"
+	PublicApiKeyScopeWrite  PublicApiKeyScope = "write"
+	PublicApiKeyScopeDecide PublicApiKeyScope = "decide"
+	PublicApiKeyScopeAdmin  PublicApiKeyScope = "admin"
+)
+
+// PublicApiKeyScopeValues lists every PublicApiKeyScope this SDK release knows.
+var PublicApiKeyScopeValues = []PublicApiKeyScope{PublicApiKeyScopeRead, PublicApiKeyScopeWrite, PublicApiKeyScopeDecide, PublicApiKeyScopeAdmin}
 
 // PublicApprovalGateDecision is the `PublicApprovalGateDecision` wire model.
 type PublicApprovalGateDecision struct {

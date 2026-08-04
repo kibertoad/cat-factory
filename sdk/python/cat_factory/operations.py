@@ -18,10 +18,10 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    CreateHeadlessPublicApiKey,
     CreatePublicJob,
-    CreatePublicKeyRequest,
-    CreatePublicKeyResponse,
     CreatePublicTask,
+    CreatedPublicApiKey,
     DebugAgentContextSnapshot,
     DebugLlmCall,
     DebugRunOverview,
@@ -35,11 +35,11 @@ from .models import (
     ListDebugToolCallsOrder,
     ListDebugToolCallsResponse,
     ListPublicJobsResponse,
-    ListPublicKeysResponse,
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
     PrVerificationReport,
+    PublicApiKeyList,
     PublicApproveStep,
     PublicChallengePrReviewFinding,
     PublicChooseFork,
@@ -1420,7 +1420,7 @@ class KeysResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def create(self, body: CreatePublicKeyRequest, timeout: float | None = None) -> CreatePublicKeyResponse:
+    def create(self, body: CreateHeadlessPublicApiKey, timeout: float | None = None) -> CreatedPublicApiKey:
         """Provision an API key
         Mint a key for the calling key’s own workspace and return its raw secret EXACTLY
         ONCE — store it now, it is not recoverable. Omitting `scope` mints a `write` key.
@@ -1435,9 +1435,9 @@ class KeysResource:
             query=None,
             timeout=timeout,
         )
-        return CreatePublicKeyResponse.from_dict(raw)
+        return CreatedPublicApiKey.from_dict(raw)
 
-    def list(self, timeout: float | None = None) -> ListPublicKeysResponse:
+    def list(self, timeout: float | None = None) -> PublicApiKeyList:
         """List the workspace's API keys
         The live (non-revoked) keys for the calling key’s workspace, metadata only — a
         secret is never readable back. `createdByKeyId` names the key that provisioned a key
@@ -1450,7 +1450,7 @@ class KeysResource:
             query=None,
             timeout=timeout,
         )
-        return ListPublicKeysResponse.from_dict(raw)
+        return PublicApiKeyList.from_dict(raw)
 
     def revoke(self, key_id: str, timeout: float | None = None) -> None:
         """Revoke an API key

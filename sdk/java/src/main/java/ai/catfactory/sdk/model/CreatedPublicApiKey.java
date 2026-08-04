@@ -8,34 +8,34 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code CreatePublicKeyResponse} wire model.
+ * The {@code CreatedPublicApiKey} wire model.
  * @param key the {@code key} field.
  * @param secret the {@code secret} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record CreatePublicKeyResponse(
-    @JsonProperty("key") ListPublicKeysResponseKey key,
+public record CreatedPublicApiKey(
+    @JsonProperty("key") PublicApiKey key,
 
     @JsonProperty("secret") String secret
 ) {
 
-    /** A new builder for {@link CreatePublicKeyResponse}. */
+    /** A new builder for {@link CreatedPublicApiKey}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link CreatePublicKeyResponse}.
+     * Fluent builder for {@link CreatedPublicApiKey}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable ListPublicKeysResponseKey key;
+        private @Nullable PublicApiKey key;
         private @Nullable String secret;
 
         /** Set {@code key}. */
-        public Builder key(@Nullable ListPublicKeysResponseKey key) {
+        public Builder key(@Nullable PublicApiKey key) {
             this.key = key;
             return this;
         }
@@ -46,9 +46,9 @@ public record CreatePublicKeyResponse(
             return this;
         }
 
-        /** Build the {@link CreatePublicKeyResponse}. */
-        public CreatePublicKeyResponse build() {
-            return new CreatePublicKeyResponse(key, secret);
+        /** Build the {@link CreatedPublicApiKey}. */
+        public CreatedPublicApiKey build() {
+            return new CreatedPublicApiKey(key, secret);
         }
     }
 }

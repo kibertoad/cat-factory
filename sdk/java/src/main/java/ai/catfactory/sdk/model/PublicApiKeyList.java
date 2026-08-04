@@ -9,37 +9,37 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicKeysResponse} wire model.
+ * The {@code PublicApiKeyList} wire model.
  * @param keys the {@code keys} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicKeysResponse(
-    @JsonProperty("keys") List<ListPublicKeysResponseKey> keys
+public record PublicApiKeyList(
+    @JsonProperty("keys") List<PublicApiKey> keys
 ) {
 
-    /** A new builder for {@link ListPublicKeysResponse}. */
+    /** A new builder for {@link PublicApiKeyList}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicKeysResponse}.
+     * Fluent builder for {@link PublicApiKeyList}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable List<ListPublicKeysResponseKey> keys;
+        private @Nullable List<PublicApiKey> keys;
 
         /** Set {@code keys}. */
-        public Builder keys(@Nullable List<ListPublicKeysResponseKey> keys) {
+        public Builder keys(@Nullable List<PublicApiKey> keys) {
             this.keys = keys;
             return this;
         }
 
-        /** Build the {@link ListPublicKeysResponse}. */
-        public ListPublicKeysResponse build() {
-            return new ListPublicKeysResponse(keys);
+        /** Build the {@link PublicApiKeyList}. */
+        public PublicApiKeyList build() {
+            return new PublicApiKeyList(keys);
         }
     }
 }
