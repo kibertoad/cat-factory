@@ -19,6 +19,16 @@
 //     deliberate: edit this file in the same PR, so the growth is visible in review instead of
 //     silent. Prefer extracting a collaborator (the RunDispatcher controllers are the model).
 //
+// How this relates to oxlint's `max-lines`, now that the ratchet has landed them on one number:
+//   - The DEFAULT is READ FROM `.oxlintrc.json` rather than restated here, so the two guards
+//     cannot drift apart. Lowering the rule tightens this guard in the same commit.
+//   - oxlint is therefore the HARD ceiling and this guard is the per-file RATCHET on top of it.
+//     An allowance ABOVE the ceiling is unreachable (oxlint fails the file first), so declaring
+//     one is refused below rather than left to fail confusingly in the other guard.
+//   - The two do NOT cover the same files: this guard skips test paths (see `isTestPath`),
+//     oxlint's `max-lines` does not. `.oxlintrc.json`'s `overrides` block relaxes only
+//     `max-lines-per-function` for tests, so a TEST file's sole size ceiling is the oxlint one.
+//
 // Usage:  node scripts/check-file-size.mjs
 // Exit 0 = every file is within budget; exit 1 = a file exceeds it (or a legacy entry is stale).
 
@@ -28,8 +38,27 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** The soft per-file budget for regular source files. */
-const DEFAULT_MAX_LINES = 1500
+/**
+ * The soft per-file budget, read from oxlint's `max-lines` rule so ONE number governs both size
+ * guards. A missing or malformed rule THROWS rather than falling back to a literal: a silent
+ * fallback is precisely the drift this read exists to prevent, and a guard that quietly grades
+ * against a stale number reads exactly like one that passed.
+ */
+const DEFAULT_MAX_LINES = readOxlintMaxLines()
+
+function readOxlintMaxLines() {
+  const configPath = join(repoRoot, '.oxlintrc.json')
+  const rule = JSON.parse(readFileSync(configPath, 'utf8'))?.rules?.['max-lines']
+  const max = Array.isArray(rule) ? rule[1]?.max : undefined
+  if (typeof max !== 'number' || !Number.isInteger(max) || max <= 0) {
+    throw new Error(
+      `.oxlintrc.json: expected rules['max-lines'] to be ["error", { "max": <positive integer> }], ` +
+        `got ${JSON.stringify(rule)}. This guard derives its default budget from that rule; ` +
+        `fix the rule rather than hard-coding a number here.`,
+    )
+  }
+  return max
+}
 
 /**
  * Ratcheted ceilings for the files that predate this guard (their size when it landed,
@@ -56,7 +85,7 @@ const LEGACY_ALLOWANCES = new Map([
   // (The `max-lines` step-2 slice then split out the DISPATCH side of a step
   // (`AgentDispatchController.ts`, the other side of the park from the two poll controllers) and
   // shed the deps declaration block to `RunDispatcherDependencies.ts`, so it fits the DEFAULT
-  // budget — which oxlint's `max-lines` now enforces at the same 1500 — and its allowance is gone.)
+  // budget (which oxlint's `max-lines` now enforces at the same number), so its allowance is gone.)
   // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
   // its own module (re-exported, so no call site changed) when the PR-verification-report hook
   // needed headroom — ratcheted DOWN to lock the win in.
@@ -76,7 +105,7 @@ const LEGACY_ALLOWANCES = new Map([
   // `retry`/`restartFrom` (plus `resumePaused`/`cancel`/`stopRun`/`teardownForBlockTree`) on
   // `RunLifecycleController`, and the iteration-cap resolution both rework gates park for on
   // `IterationCapController`. The engine keeps the per-step machine and now fits the DEFAULT
-  // budget — which oxlint's `max-lines` now enforces at the same 1500 — so its allowance is gone.
+  // budget (which oxlint's `max-lines` now enforces at the same number), so its allowance is gone.
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -134,7 +163,7 @@ const LEGACY_ALLOWANCES = new Map([
   // direct-provider keys, the personal subscriptions + per-run activations, the per-user local
   // endpoints, the gateway-model catalog and the quota-cycle windows they accumulate into) then
   // moved to `db/tables/model-credentials.ts` the same way, so the schema fits the DEFAULT budget
-  // — which oxlint's `max-lines` now enforces at the same 1500 — and its allowance is gone.
+  // (which oxlint's `max-lines` now enforces at the same number), and its allowance is gone.
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan
@@ -207,6 +236,19 @@ function* sourceFiles(dirAbs) {
 
 const failures = []
 const seenLegacy = new Set()
+
+// An allowance above oxlint's ceiling can never be reached: oxlint fails the file first, so the
+// entry would grant headroom that does not exist while this guard reported success. Refuse it
+// here, where the fix is, instead of leaving a contradiction for the other guard to report.
+for (const [rel, allowance] of LEGACY_ALLOWANCES) {
+  if (allowance > DEFAULT_MAX_LINES) {
+    failures.push(
+      `${rel}: allowance ${allowance} exceeds oxlint's max-lines ceiling of ${DEFAULT_MAX_LINES}, ` +
+        'so it is unreachable (oxlint fails the file first). Split the file, or raise the ' +
+        'ceiling in .oxlintrc.json first.',
+    )
+  }
+}
 
 for (const root of SCAN_ROOTS) {
   const rootAbs = join(repoRoot, root)

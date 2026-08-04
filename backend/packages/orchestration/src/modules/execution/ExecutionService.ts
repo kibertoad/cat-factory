@@ -15,7 +15,6 @@ import type {
   PipelineStep,
   PullRequestMerger,
   StepReviewComment,
-  SubscriptionActivationRepository,
   IssueWritebackProvider,
   Logger,
 } from '@cat-factory/kernel'
@@ -222,7 +221,8 @@ export class ExecutionService {
    * their drops without a null-check. `noopLogger` when a facade wired none.
    */
   private readonly log: Logger
-  private readonly subscriptionActivations?: SubscriptionActivationRepository
+  // No `subscriptionActivations` field: its only reader is the run-lifecycle surface, which now
+  // takes the repository straight off the deps object (see {@link RunLifecycleController}).
   private readonly pokeInitiativeLoop?: (
     workspaceId: string,
     initiativeBlockId: string,
@@ -446,7 +446,6 @@ export class ExecutionService {
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
     this.log = logger ?? noopLogger
-    this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.stepDecisions = new StepDecisionController({

@@ -21,3 +21,8 @@ changed:
   over a new shared `provision-detect.contract.ts`.
 - The Node schema's outbound model-provider credential tables move to
   `db/tables/model-credentials.ts`, re-exported.
+
+The extractions also stranded four private fields whose only readers moved out
+(`RunDispatcher`'s `resolveRunRepoContext` / `resolveProviderCapabilities` / `modelIdIsMetered`
+and `ExecutionService`'s `subscriptionActivations`). They were assigned and never read, which no
+typecheck reports, so they are deleted rather than left as write-only state.

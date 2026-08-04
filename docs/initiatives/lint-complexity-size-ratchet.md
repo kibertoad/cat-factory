@@ -492,13 +492,32 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
   `max-lines` / `max-lines-per-function` offenders and are legitimately large table-driven
   suites: prefer an `overrides` looser ceiling for test globs over contorting them (decide
   by `max-lines-per-function` step 2).
-- **`max-lines` overlaps `check-file-size.mjs`.** They are complementary, not redundant: the
-  custom guard carries per-file ratcheted allowances for named legacy files; oxlint's
-  `max-lines` is one flat global number, now at the guard's own 1500 default, so the two agree.
-  Consequence, since the fourteenth pass: **an allowance ABOVE 1500 is now unreachable** (oxlint
-  would fail the file first), so a legacy entry only earns its keep by being TIGHTER than the
-  default. Four entries were deleted rather than lowered when their files fit the default; that
-  removal is the guard's own documented convention, not a weakening.
+- **`max-lines` overlaps `check-file-size.mjs`.** They are complementary, not redundant: oxlint's
+  `max-lines` is one flat global HARD ceiling; the custom guard is the per-file RATCHET on top of
+  it, carrying tighter allowances for named legacy files. Since the fourteenth pass they land on
+  one number, and the guard **reads that number out of `.oxlintrc.json`** rather than restating it,
+  so lowering the rule tightens the guard in the same commit and neither can drift. A missing or
+  malformed rule THROWS there instead of falling back to a literal: a silent fallback is the exact
+  drift the read exists to prevent. Consequence: **an allowance ABOVE the ceiling is unreachable**
+  (oxlint fails the file first), so the guard now refuses one by name rather than passing while
+  the other guard fails. A legacy entry earns its keep only by being TIGHTER than the default;
+  four were deleted rather than lowered when their files fit it, which is the guard's own
+  documented convention, not a weakening.
+- **The two size guards do NOT cover the same files, and only one covers tests.**
+  `check-file-size.mjs` skips test paths; oxlint's `max-lines` does not, because the `overrides`
+  block relaxes only `max-lines-per-function` for test globs. So a TEST file's sole size ceiling is
+  the oxlint one, and tightening that rule tightens tests along with product code. It has room at
+  the fourteenth pass (the largest test is `initiative.logic.test.ts` at 1409), but a slice that
+  reads the guard's test exemption as "tests are unbounded" will size the next step wrong.
+- **`max-lines` is COMPLETE, and its floor now sits on the most expensive file to split.** The
+  post-pass floor is 1497, three lines under the ceiling, and it is
+  `internal/executor-harness/src/coding-agent.ts`. Per the harness bullet above, a source change
+  there republishes the runner image, so the next person to add four lines to that file owes a
+  version bump, `pnpm sync:image-tags` and an image publish for what reads like a one-line edit,
+  with no warning until CI. Splitting it was deliberately left out of the fourteenth pass: an
+  image bump inside a lint-ratchet PR mixes a deployable artifact into a behaviour-neutral
+  refactor and makes the whole thing un-reviewable. Do it as its own change, with the image bump
+  as the point rather than a side effect.
 - **A split that only just clears the ceiling has not cleared it.** `oxfmt` runs whole-tree at the
   end of a slice and moves line counts either way (an import list it can now collapse, a call it
   now wraps). Land each file with real margin and re-measure AFTER formatting: the fourteenth pass

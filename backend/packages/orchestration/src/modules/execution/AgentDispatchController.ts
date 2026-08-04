@@ -216,7 +216,7 @@ export class AgentDispatchController {
    * one block (not a per-step history) keeps the record small. `executionBackend` is left for the
    * first poll to fill (the transport reports it). Never carries a token/secret.
    */
-  recordDispatchDiagnostics(
+  private recordDispatchDiagnostics(
     instance: ExecutionInstance,
     context: AgentRunContext,
     handle: AgentJobHandle,

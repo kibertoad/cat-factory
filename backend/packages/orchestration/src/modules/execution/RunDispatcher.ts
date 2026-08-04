@@ -23,11 +23,9 @@ import type {
   Logger,
   PipelineStep,
   PrReviewStepState,
-  ProviderCapabilities,
   ProviderRegistry,
   ResolveJudgeInput,
   ResolvePrReviewInput,
-  ResolveRunRepoContext,
   RunInitiatorScope,
   StepCompletionResolver,
   StepResolverRegistry,
@@ -165,17 +163,14 @@ export class RunDispatcher {
   private readonly notificationService?: NotificationService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly initiativeService?: InitiativeService
-  private readonly resolveRunRepoContext?: ResolveRunRepoContext
-  private readonly resolveProviderCapabilities?: (
-    workspaceId: string,
-    initiatedBy?: string | null,
-    modelPresetId?: string,
-  ) => Promise<ProviderCapabilities>
   private readonly resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
   ) => Promise<ResolvedRiskPolicy>
-  private readonly modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
+  // `resolveRunRepoContext` / `resolveProviderCapabilities` / `modelIdIsMetered` are NOT held
+  // here: their only readers moved to {@link AgentDispatchController}, which takes them straight
+  // off the deps object. A field kept "for symmetry" would be write-only state that no
+  // typecheck flags (TypeScript does not report an assigned-but-unread private member).
 
   /**
    * The deterministic `deployer` step family (the multi-frame provision fan-out, the async
@@ -273,10 +268,7 @@ export class RunDispatcher {
     this.notificationService = deps.notificationService
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
-    this.resolveRunRepoContext = deps.resolveRunRepoContext
-    this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.resolveRiskPolicy = deps.resolveRiskPolicy
-    this.modelIdIsMetered = deps.modelIdIsMetered
     this.deployer = new DeployerStepController({
       blockRepository: deps.blockRepository,
       contextBuilder: deps.contextBuilder,
