@@ -975,5 +975,68 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
       const badReseed = await call('POST', `${base}/${custom.body.id}/reseed`)
       expect(badReseed.status).toBe(422)
     })
+
+    it('round-trips a route preference and changes which route a model resolves to', async () => {
+      // Cloudflare AI ON plus a configured Qwen key, so `qwen` has TWO usable routes and the
+      // order is the only thing that decides between them.
+      const { call, createWorkspace } = harness.makeApp(undefined, {
+        cloudflareModelsEnabled: true,
+      })
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+      const base = `/workspaces/${wsId}/model-presets`
+      const models = `/workspaces/${wsId}/models`
+      await call('POST', `/workspaces/${wsId}/api-keys`, {
+        provider: 'qwen',
+        label: 'team',
+        key: 'qwen-api-key-secret',
+      })
+
+      // Default order: a model's own provider API beats the Cloudflare floor.
+      const routeOf = async () =>
+        (await call<{ id: string; flavor: string }[]>('GET', models)).body.find(
+          (m) => m.id === 'qwen',
+        )?.flavor
+      expect(await routeOf()).toBe('direct')
+
+      // A preset stating no preference persists NULL, not an empty order.
+      const seeded = await call<ModelPreset[]>('GET', base)
+      const defaultId = seeded.body.find((p) => p.isDefault)!.id
+      expect(seeded.body.every((p) => p.providerPreference === undefined)).toBe(true)
+
+      // Name only `cloudflare`: the routes it OMITS are appended in default order, so this is a
+      // reorder and not a filter — `qwen` now resolves to Cloudflare while staying selectable.
+      const patched = await call<ModelPreset>('PATCH', `${base}/${defaultId}`, {
+        providerPreference: ['cloudflare'],
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.providerPreference).toEqual(['cloudflare'])
+      expect(
+        (await call<ModelPreset[]>('GET', base)).body.find((p) => p.id === defaultId)
+          ?.providerPreference,
+      ).toEqual(['cloudflare'])
+      expect(await routeOf()).toBe('cloudflare')
+
+      // A model whose ONLY route the preference omitted still resolves (reorder, never filter).
+      const catalog = await call<{ id: string; flavor: string; available: boolean }[]>(
+        'GET',
+        models,
+      )
+      const kimi = catalog.body.find((m) => m.id === 'kimi-k2.7')!
+      expect(kimi.available).toBe(true)
+
+      // A repeated route is ambiguous to read back, so the write boundary refuses it.
+      const dupe = await call('PATCH', `${base}/${defaultId}`, {
+        providerPreference: ['bedrock', 'bedrock'],
+      })
+      expect(dupe.status).toBe(400)
+
+      // An EMPTY list is how the editor resets to the default order — stored as absent, not `[]`.
+      const reset = await call<ModelPreset>('PATCH', `${base}/${defaultId}`, {
+        providerPreference: [],
+      })
+      expect(reset.body.providerPreference).toBeUndefined()
+      expect(await routeOf()).toBe('direct')
+    })
   })
 }

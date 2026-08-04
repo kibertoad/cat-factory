@@ -17,7 +17,7 @@ import { InitiativeService } from '../modules/initiative/InitiativeService.js'
 import { InitiativeInterviewService } from '../modules/initiative/InitiativeInterviewService.js'
 import type { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
 import type { InitiativeRunHarvest } from '../modules/initiative/initiative.logic.js'
-import { resolvePresetModelForKind } from '../modules/modelPresets/ModelPresetService.js'
+import { inlineModelResolutionDeps } from './inline-model-deps.js'
 import { resolveBlockRunContext } from './blockRunContext.js'
 import {
   createBrainstormModule,
@@ -90,18 +90,9 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     initiativePresetRegistry,
     modelProviderResolver: dependencies.modelProviderResolver,
     modelProvider: dependencies.modelProvider,
-    modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
-    resolveBlockModel: dependencies.requirementReviewResolveModel,
-    ...(dependencies.inlineHarnessRef ? { runsInline: dependencies.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            dependencies.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(dependencies),
     resolveRunContext: resolveBlockRunContext(dependencies),
     // The initiative's attached requirements / RFCs / issues. Wired from the same repositories and
     // URL canonicaliser `AgentContextBuilder` reads, so the interviewer sees exactly what the

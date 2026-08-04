@@ -1,6 +1,6 @@
-import { FakeAgentExecutor } from '@cat-factory/conformance'
+import { FakeAgentExecutor, FakeTaskSourceProvider } from '@cat-factory/conformance'
 import { describe, expect, it } from 'vitest'
-import { makeApp } from '../helpers'
+import { makeApp, tasksDeps } from '../helpers'
 
 // The public external API (`/api/v1`) over the real Hono app + real local D1, inside workerd:
 // issue a key, run a public inline "initiative" pipeline headlessly, retrieve the DB-persisted
@@ -103,6 +103,7 @@ interface Task {
   taskId: string
   serviceId: string
   title: string
+  description: string
   taskType: string
   status: string
   runId: string | null
@@ -279,5 +280,155 @@ describe('public API — basic board workloads (services + tasks)', () => {
     const got = await app.call<Task>('GET', `/api/v1/tasks/${taskId}`, undefined, auth)
     expect(got.status).toBe(200)
     expect(got.body.taskId).toBe(taskId)
+  })
+})
+
+// Ticket-linked creation: a headless intake NAMES the tracker ticket its task comes from instead
+// of pasting the issue into `description`. What that buys is the projection + link the app's own
+// create-from-issue produces: the thing writeback posts questions onto and dedupe keys off. So
+// these assert the link is really established, that a second file of the same ticket is refused
+// with the id of the task that holds it, and that a ticket the platform cannot resolve leaves the
+// board untouched rather than half-succeeding into an unlinked task.
+
+describe('public API: creating a task FROM a tracker ticket', () => {
+  const jiraCreds = {
+    baseUrl: 'https://acme.atlassian.net',
+    accountEmail: 'dev@acme.io',
+    apiToken: 'secret-token',
+  }
+
+  /** An org workspace with a connected fake Jira, a key, and an empty service frame. */
+  async function setup() {
+    const jira = new FakeTaskSourceProvider('jira', {
+      'PROJ-1': { title: 'Photos 404 for renamed cats', labels: ['bug'] },
+    })
+    const app = makeApp(new FakeAgentExecutor(), tasksDeps({ providers: [jira] }))
+    const workspaceId = (await app.createOrgWorkspace({ seed: true })).workspace.id
+    const auth = await mintKey(app, workspaceId)
+    expect(
+      (
+        await app.call('POST', `/workspaces/${workspaceId}/task-sources/jira/connect`, {
+          credentials: jiraCreds,
+        })
+      ).status,
+    ).toBe(201)
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'service',
+      position: { x: 120, y: 120 },
+    })
+    return { app, auth, workspaceId, serviceId: frame.body.id, jira }
+  }
+
+  /** The workspace's imported issues and what each is linked to, per the session surface. */
+  async function issueLinks(app: Awaited<ReturnType<typeof setup>>['app'], workspaceId: string) {
+    const res = await app.call<{ externalId: string; linkedBlockId: string | null }[]>(
+      'GET',
+      `/workspaces/${workspaceId}/tasks`,
+    )
+    expect(res.status).toBe(200)
+    return res.body.map(({ externalId, linkedBlockId }) => ({ externalId, linkedBlockId }))
+  }
+
+  it('imports the ticket, links it to the new task, and keeps the caller its own framing', async () => {
+    const { app, auth, workspaceId, serviceId, jira } = await setup()
+
+    const created = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      {
+        title: 'Fix cat photo 404s',
+        description: 'Reported by support.',
+        taskType: 'bug',
+        // Deliberately not the canonical form: the caller's ref goes through the PROVIDER's own
+        // `parseRef` (which canonicalises, and for the real Jira also accepts a browse URL), so an
+        // integration can forward whichever form its webhook carried.
+        ticket: { source: 'jira', ref: 'proj-1' },
+      },
+      auth,
+    )
+    expect(created.status).toBe(201)
+    expect(created.body.taskType).toBe('bug')
+    // The description is the CALLER's, never overwritten with the issue body: the ticket reaches
+    // agents through the link (re-read live), not by being flattened into the task.
+    expect(created.body.description).toBe('Reported by support.')
+
+    // The issue was fetched through the stored connection and is now linked to the new task:
+    // this link is what the writeback + reply loop and the intake sweep resolve against.
+    expect(jira.calls.map((c) => c.externalId)).toEqual(['PROJ-1'])
+    expect(jira.calls[0]!.credentials.apiToken).toBe(jiraCreds.apiToken)
+    expect(await issueLinks(app, workspaceId)).toEqual([
+      { externalId: 'PROJ-1', linkedBlockId: created.body.taskId },
+    ])
+  })
+
+  it('refuses a ticket already linked, naming the task that holds it', async () => {
+    const { app, auth, serviceId } = await setup()
+    const body = { title: 'Fix cat photo 404s', ticket: { source: 'jira', ref: 'PROJ-1' } }
+
+    const first = await app.call<Task>('POST', `/api/v1/services/${serviceId}/tasks`, body, auth)
+    expect(first.status).toBe(201)
+
+    // The redelivery case: an integration that resends the same ticket learns which task already
+    // covers it rather than filing a duplicate the platform could never tell apart.
+    const again = await app.call<{ error: { code: string; details: Record<string, unknown> } }>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      body,
+      auth,
+    )
+    expect(again.status).toBe(409)
+    expect(again.body.error.code).toBe('conflict')
+    expect(again.body.error.details).toMatchObject({
+      reason: 'ticket_already_linked',
+      taskId: first.body.taskId,
+    })
+
+    // And no second task was created for it.
+    const list = await app.call<{ tasks: Task[] }>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks`,
+      undefined,
+      auth,
+    )
+    expect(list.body.tasks.map((t) => t.taskId)).toEqual([first.body.taskId])
+  })
+
+  it('refuses an unknown service WITHOUT calling the tracker', async () => {
+    // Resolving a ticket is an outbound call to the workspace's own Jira, so the deterministic
+    // half of the create's validation runs in front of it: a bad `serviceId` is answered by the
+    // 404 it could have had for free rather than after a live third-party fetch.
+    const { app, auth, jira } = await setup()
+    const refused = await app.call(
+      'POST',
+      '/api/v1/services/blk_nonexistent/tasks',
+      { title: 'Fix cat photo 404s', ticket: { source: 'jira', ref: 'PROJ-1' } },
+      auth,
+    )
+    expect(refused.status).toBe(404)
+    expect(jira.calls).toEqual([])
+  })
+
+  it('leaves the board untouched when the ticket cannot be resolved', async () => {
+    const { app, auth, workspaceId, serviceId } = await setup()
+
+    // `linear` is a grammatically valid source this deployment does not serve. The refusal has to
+    // land BEFORE the block is created: the other order leaves a task the caller believes carries
+    // its ticket, running on the title alone with no error to react to.
+    const refused = await app.call(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      { title: 'Fix cat photo 404s', ticket: { source: 'linear', ref: 'ENG-9' } },
+      auth,
+    )
+    expect(refused.status).toBe(422)
+
+    const list = await app.call<{ tasks: Task[] }>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks`,
+      undefined,
+      auth,
+    )
+    expect(list.body.tasks).toEqual([])
+    expect(await issueLinks(app, workspaceId)).toEqual([])
   })
 })

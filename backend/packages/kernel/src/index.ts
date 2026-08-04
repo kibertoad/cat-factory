@@ -98,6 +98,7 @@ export {
   MODEL_CATALOG,
   MODEL_FLAVORS,
   DEFAULT_PROVIDER_PREFERENCE,
+  orderedProviderPreference,
   resolveBedrockModelId,
   SUBSCRIPTION_VENDORS,
   ALL_SUBSCRIPTION_VENDORS,

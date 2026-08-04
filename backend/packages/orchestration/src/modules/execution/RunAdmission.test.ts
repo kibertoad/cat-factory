@@ -466,3 +466,45 @@ describe('RunAdmission — generative integration selection', () => {
     })
   })
 })
+
+// The START-GUARD half of how a preset's route order reaches a run. The dispatch half rides
+// `AgentRunContext.providerPreference`; this half rides the capability set the guard resolves, and
+// wiring only one is silent either way — a run ADMITTED against a route it never takes, or every
+// dispatch quietly on the deployment's default order.
+describe('RunAdmission — the capability set is resolved under the block’s preset', () => {
+  function capabilityAdmission() {
+    const resolveProviderCapabilities = vi.fn(async () => ({
+      directProviders: new Set<string>(),
+      subscriptionVendors: new Set<string>(),
+      cloudflareEnabled: true,
+    }))
+    const deps = {
+      workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
+      blockRepository: { listByWorkspace: vi.fn(async () => []) },
+      executionRepository: { listLive: vi.fn(async () => []) },
+      contextBuilder: {
+        resolveServiceFrame: vi.fn(async () => null),
+        resolveServiceConfig: vi.fn(async () => null),
+        resolveFrontendConfig: vi.fn(async () => null),
+      },
+      agentKindRegistry: registry,
+      spend: { isOverBudget: vi.fn(async () => false) },
+      binaryGeneratorSource: registryBinaryGeneratorSource(generatorRegistry()),
+      resolveProviderCapabilities,
+    } as unknown as RunAdmissionDeps
+    return { admission: new RunAdmission(deps), resolveProviderCapabilities }
+  }
+
+  it('passes the block’s SELECTED preset id, so the guard walks the dispatch order', async () => {
+    const { admission: guard, resolveProviderCapabilities } = capabilityAdmission()
+    const pinned = { ...block, modelPresetId: 'mdp_compliance' } as unknown as Block
+    await guard.assertRunnable('ws', pinned, { agentKinds: ['coder'], stepOptions: [null] }, 'u1')
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', 'u1', 'mdp_compliance')
+  })
+
+  it('passes undefined when the block selects none (⇒ the workspace default preset)', async () => {
+    const { admission: guard, resolveProviderCapabilities } = capabilityAdmission()
+    await guard.assertRunnable('ws', block, { agentKinds: ['coder'], stepOptions: [null] }, 'u1')
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', 'u1', undefined)
+  })
+})

@@ -11,6 +11,7 @@ import {
   defaultJudgeRegistry,
   defaultStepResolverRegistry,
   resolvePresetModelForKind,
+  resolvePresetProviderPreference,
 } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -217,11 +218,32 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
   // kinds. The built-in default preset points every agent kind at Kimi K2.7.
+  // Both go through the shared `modelPreset` cache slice: the preset row is slow-moving admin
+  // config that the run path resolves on every dispatch, every inline call and every start guard.
+  const modelPresetCache = options.caches?.modelPreset
   const resolveWorkspaceModelDefault = (
     workspaceId: string,
     agentKind: string,
     modelPresetId?: string,
-  ) => resolvePresetModelForKind(repos.modelPresetRepository, workspaceId, agentKind, modelPresetId)
+  ) =>
+    resolvePresetModelForKind(
+      repos.modelPresetRepository,
+      workspaceId,
+      agentKind,
+      modelPresetId,
+      modelPresetCache,
+    )
+
+  // Its sibling: the ORDER that preset prefers a model's routes in. Read from the same repo (and,
+  // inside the helper, the same row) so a preset cannot pick the model on one surface and the
+  // route order on another.
+  const resolvePresetPreference = (workspaceId: string, modelPresetId?: string) =>
+    resolvePresetProviderPreference(
+      repos.modelPresetRepository,
+      workspaceId,
+      modelPresetId,
+      modelPresetCache,
+    )
 
   return {
     env,
@@ -235,8 +257,12 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
     registries,
     gitlabEngineClient,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference: resolvePresetPreference,
   }
 }
 
 /** The app-owned registry set {@link resolveNodeAppRegistries} produces. */
 export type NodeAppRegistriesResult = ReturnType<typeof resolveNodeAppRegistries>
+
+/** Everything {@link resolveNodeContainerFoundation} hands the composition root. */
+export type NodeContainerFoundation = ReturnType<typeof resolveNodeContainerFoundation>
