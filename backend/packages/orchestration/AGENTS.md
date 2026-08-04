@@ -35,7 +35,7 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `review-kinds.ts` (the requirements/clarity/brainstorm `ReviewKind` factories),
   `stepPreamble.ts` (the FIXED four pre-dispatch checks every step clears, in the order money
   is at stake: spend gate, decision park, input gate, estimate gating) + `InputGateController`
-  (the **pre-token input gate**: evaluate at step 0 over kernel's pure check, park, and the
+  (the **pre-dispatch input gate**: evaluate at step 0 over kernel's pure check, park, and the
   `recheck` / `proceed` resolve both the SPA and `/api/v1` drive; `wouldBlock` is the read-only
   form the public API's admission asks before a run exists),
   `StepDecisionController` (the HUMAN decision surface on a parked run; resolve / approve /

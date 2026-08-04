@@ -32,6 +32,13 @@ top-level files are the domain contracts.
   with that surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same:
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
+- `form-fields.ts`: ONE descriptor-driven form vocabulary (field shape, filled-value bag, and the
+  pure visibility / validation / sanitization / prose-rendering rules) behind every surface where a
+  DEPLOYMENT declares a form and the platform collects it: an initiative preset's create form
+  (`initiative-preset.ts`) and a reusable operation's per-case brief on a custom task type
+  (`task-types.ts`). Each surface declares only which input types it admits (a task type excludes
+  `password` by construction). Lives here because the SPA's submit button and the server's create
+  check must agree about every one of those rules.
 - `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding

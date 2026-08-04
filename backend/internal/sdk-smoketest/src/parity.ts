@@ -162,12 +162,16 @@ export function compareReports(reports: SdkReport[]): ParityProblem[] {
  * Go writes an integer count as `3` while a JS `JSON.stringify` of the same value is also `3`, yet
  * Python's float-typed model fields can surface `3.0`. Comparing numbers numerically (rather than
  * by their JSON text) is what keeps that from reading as a behavioural divergence.
+ *
+ * Exported for the MCP phase (`mcp.ts`), which grades one implementation against absolute claims
+ * rather than four against each other, but must call an observation equal on the same terms.
  */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (typeof a === 'number' && typeof b === 'number') return a === b
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function render(value: unknown): string {
+/** How a value appears in a problem line; an ABSENT observation is not the same as a false one. */
+export function render(value: unknown): string {
   return value === undefined ? '(absent)' : JSON.stringify(value)
 }

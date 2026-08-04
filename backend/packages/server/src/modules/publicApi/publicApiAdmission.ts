@@ -56,7 +56,7 @@ export const PARKING_INLINE_KINDS = new Set<string>([
 export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
 
 /**
- * The park surface the PRE-TOKEN INPUT GATE presents. A THIRD kind of thing again, and the
+ * The park surface the PRE-DISPATCH INPUT GATE presents. A THIRD kind of thing again, and the
  * distinction matters more here than the others: the two above are properties of the PIPELINE, so
  * {@link parkSurfacesOf} can read them off the step chain, while this one is a property of the
  * TASK. A run whose pipeline parks nowhere at all still stops here if its task states nothing an

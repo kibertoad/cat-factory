@@ -142,10 +142,10 @@ export const resolvePublicRunJudgeContract = defineApiContract({
   responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
 })
 
-// ---- pre-token input gate ---------------------------------------------------
+// ---- pre-dispatch input gate ---------------------------------------------------
 
 /**
- * Resolve a run parked on the PRE-TOKEN INPUT GATE: `recheck` re-evaluates the task as it now
+ * Resolve a run parked on the PRE-DISPATCH INPUT GATE: `recheck` re-evaluates the task as it now
  * stands, `proceed` waives the findings.
  *
  * The one park that is a property of the TASK rather than the pipeline, so unlike the three above

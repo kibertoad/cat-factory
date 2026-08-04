@@ -914,10 +914,10 @@ class DecisionsResource:
 
     def resolve_input_gate(self, run_id: str, body: PublicResolveInputGate, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a run parked on the task's input check
-        Settle a run the pre-token input gate parked before its first agent step because the
-        task states nothing an agent could act on. `recheck` re-evaluates the task as it now
-        stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not
-        taken on trust) and releases the run only if the blocking findings are gone; a
+        Settle a run the pre-dispatch input gate parked before its first agent step because
+        the task states nothing an agent could act on. `recheck` re-evaluates the task as it
+        now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified,
+        not taken on trust) and releases the run only if the blocking findings are gone; a
         still-blocked verdict comes back as an ordinary 200 with refreshed findings.
         `proceed` waives the findings, which stay on the run as an `overridden` record.
         Requires a `decide`-scope key.

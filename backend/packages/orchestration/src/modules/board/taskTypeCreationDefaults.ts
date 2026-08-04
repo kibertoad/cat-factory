@@ -1,14 +1,19 @@
-import { isNamespacedId } from '@cat-factory/contracts'
-import type { Block, Logger, TaskTypeRegistry } from '@cat-factory/kernel'
-import { defaultPipelineIdForTaskType } from '@cat-factory/kernel'
+import {
+  isNamespacedId,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
+import type { Block, Logger, TaskTypeFields, TaskTypeRegistry } from '@cat-factory/kernel'
+import { defaultPipelineIdForTaskType, ValidationError } from '@cat-factory/kernel'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 // ---------------------------------------------------------------------------
 // What a new task's TYPE implies for the row `BoardService.addTask` writes: the best-practice
-// fragment set it owns from creation, and the pipeline its Run controls default to. Both answers
-// join a deployment-registered descriptor (a REUSABLE OPERATION's bundle,
+// fragment set it owns from creation, the pipeline its Run controls default to, and whether the
+// per-case values it arrived with are the ones its type actually declares. All three answers join a
+// deployment-registered descriptor (a REUSABLE OPERATION's bundle,
 // `docs/initiatives/reusable-operations.md`) with the built-in per-type defaults, which is why they
-// live together rather than inline: it is one lookup against one registry, read twice.
+// live together rather than inline: it is one lookup against one registry, read three times.
 //
 // Extracted from `BoardService` when the standing-context union pushed that file over its size
 // budget. A collaborator over a small deps object, with thin delegates left behind at the call site.
@@ -56,6 +61,29 @@ export interface TaskTypeCreationDefaults {
    * Undefined ⇒ fall through to the run-time picker's positional default.
    */
   pipelineIdFor(taskType: Block['taskType']): string | undefined
+  /**
+   * The per-type field bag to FREEZE on the row: the submitted one with a registered custom type's
+   * `custom` sub-bag checked against its descriptor and reduced to the declared, currently VISIBLE
+   * fields. Throws a `ValidationError` naming every problem, so ONE rule covers the SPA, the
+   * internal API and (from the public-API slice) a headless caller: the create form's `required`
+   * markers and option lists mean nothing if only the form enforces them.
+   *
+   * An ABSENT bag is checked too, against an empty one. A required field is unanswered whether the
+   * caller sent `custom: {}` or sent no `custom` key at all, and the two spellings must refuse
+   * alike or the whole check is opt-in: a headless caller would satisfy an operation's declared
+   * form by omitting it, which is the door this exists to close.
+   *
+   * Three cases pass straight through, each deliberately:
+   * - a BUILT-IN type, whose fields are the schema-typed top-level keys, already validated there;
+   * - a type this process does not REGISTER, because an unregistered namespaced type is a supported
+   *   row (task types are node-local by design, D11) and degrading data must not brick creation;
+   * - a descriptor declaring a `formPanel`, whose bespoke create-form section owns the whole bag
+   *   (the platform cannot read its required semantics, the existing AddTaskModal contract).
+   */
+  validatedFields(
+    taskType: ResolvedTaskType,
+    fields: TaskTypeFields | undefined,
+  ): TaskTypeFields | undefined
 }
 
 /**
@@ -88,6 +116,35 @@ function standingContextFor(
   return []
 }
 
+/**
+ * Validate + sanitize a registered custom type's collected values, per the contract on
+ * {@link TaskTypeCreationDefaults.validatedFields}. A bag that sanitizes to nothing drops the key
+ * rather than freezing an empty object, so a row's `custom` presence keeps meaning "parameters were
+ * collected" (which is what the dispatch-time projection reads it as).
+ */
+function checkCustomFields(
+  taskType: ResolvedTaskType,
+  fields: TaskTypeFields | undefined,
+  registry: TaskTypeRegistry | undefined,
+): TaskTypeFields | undefined {
+  const descriptor = registry?.get(taskType)
+  if (!descriptor || descriptor.formPanel) return fields
+  const declared = descriptor.fields ?? []
+  // An absent bag is an EMPTY one, not an exemption: a required field is unanswered either way.
+  const custom = fields?.custom ?? {}
+  const problems = validateDescriptorFields(declared, custom)
+  if (problems.length > 0) {
+    throw new ValidationError(
+      `The values collected for task type '${taskType}' do not match what it declares: ${problems.join(' ')}`,
+      { reason: 'task_type_fields_invalid', problems },
+    )
+  }
+  const sanitized = sanitizeDescriptorFields(declared, custom)
+  if (Object.keys(sanitized).length > 0) return { ...fields, custom: sanitized }
+  const { custom: _dropped, ...rest } = fields ?? {}
+  return Object.keys(rest).length > 0 ? rest : undefined
+}
+
 export function createTaskTypeCreationDefaults(deps: {
   /** The app-owned registry a deployment registers its custom task types on. */
   taskTypeRegistry?: TaskTypeRegistry
@@ -102,5 +159,7 @@ export function createTaskTypeCreationDefaults(deps: {
       ]),
     ],
     pipelineIdFor: (taskType) => defaultPipelineIdForTaskType(taskType, deps.taskTypeRegistry),
+    validatedFields: (taskType, fields) =>
+      checkCustomFields(taskType, fields, deps.taskTypeRegistry),
   }
 }

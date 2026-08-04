@@ -25,7 +25,7 @@ surface discovered later belongs in this table rather than in a revised number:
 | `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*`       |
 | implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`          |
 | judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`        |
-| pre-token input gate      | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`         |
+| pre-dispatch input gate   | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`         |
 | approval gate             | `step.approval`      | ✅ `/runs/:runId/decisions/approvals/:id/*`      |
 | companion iteration cap   | `step.companion`     | ✅ `…/approvals/:id/resolve-exceeded`            |
 | agent-raised decision     | `step.decision`      | ✅ `/runs/:runId/decisions/questions/:id/answer` |
@@ -53,7 +53,7 @@ loop (answer / continue / proceed) whose value to a headless caller is the same 
 raises. Neither is reachable from `POST /jobs` (both ride container-agent steps), so both are
 board-start-only, which is where A5/A6 already rank.
 
-**The pre-token input gate is the odd row**, and worth reading before adding another: every other
+**The pre-dispatch input gate is the odd row**, and worth reading before adding another: every other
 entry is a park a PIPELINE can carry, so `parkSurfacesOf` sees it in the step chain and admission
 can refuse a `write` key up front. The gate parks on the shape of the TASK, so it holds runs under
 pipelines that park nowhere and was invisible to that enumeration entirely. It is composed in at

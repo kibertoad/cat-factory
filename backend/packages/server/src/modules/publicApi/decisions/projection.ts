@@ -253,7 +253,7 @@ function isLivePrReview(state: PrReviewStepState): boolean {
 }
 
 /**
- * Project the PRE-TOKEN INPUT GATE's verdict for an external caller. The issue CODES are the same
+ * Project the PRE-DISPATCH INPUT GATE's verdict for an external caller. The issue CODES are the same
  * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
  * whoever filed the ticket) rather than parsing our prose.
  */
