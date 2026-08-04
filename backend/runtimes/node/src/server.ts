@@ -52,6 +52,7 @@ import { startNotificationEscalationSweeper } from './notifications.js'
 import { startFoundationalSourceSweeper } from './foundationalServices.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
 import { startInfraReachabilitySweeper } from './infraReachability.js'
+import { startSpendAlertSweeper } from './spendAlerts.js'
 import { buildRealtimePropagator } from './propagator.js'
 import { warnIfRedisUnreachableInBackground } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
@@ -568,6 +569,10 @@ function startBackgroundSweepers(deps: {
   // Probe each workspace's CONFIGURED infrastructure connections and report a dead one as
   // `unreachable` (the Worker uses cron). No-op unless `INFRA_REACHABILITY_WATCH` is opted in.
   const stopInfraReachability = startInfraReachabilitySweeper(container, clock, logger, sweepHealth)
+  // Warn a workspace that its spend is crossing a budget threshold or is projected to overrun,
+  // while there is still time to act (the Worker uses cron). No opt-in flag: a configured budget
+  // is the opt-in, and the sweep no-ops when notifications are unwired.
+  const stopSpendAlerts = startSpendAlertSweeper(container, clock, logger, sweepHealth)
   // Refresh repo-linked foundational-service sources so a merged contract change reaches the
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
@@ -600,6 +605,7 @@ function startBackgroundSweepers(deps: {
     stopPlatformMetrics,
     stopPlatformHealth,
     stopInfraReachability,
+    stopSpendAlerts,
     stopFoundationalSources,
   }
 }
@@ -819,6 +825,7 @@ async function bootServer(
     stopPlatformMetrics,
     stopPlatformHealth,
     stopInfraReachability,
+    stopSpendAlerts,
     stopFoundationalSources,
   } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
 
@@ -853,6 +860,7 @@ async function bootServer(
     stopPlatformMetrics()
     stopPlatformHealth()
     stopInfraReachability()
+    stopSpendAlerts()
     stopFoundationalSources()
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.

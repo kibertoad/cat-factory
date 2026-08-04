@@ -26,8 +26,9 @@ What existed was scattered and none of it composed:
 
 - One admin view over an **account**, with an optional narrowing to a single board, that
   slices the same window every way an operator asks about: **spend by model, by agent kind,
-  by board, by service, by task type**, and **run activity by board, by service, by task
-  type**, plus a **spend trend**.
+  by board, by service, by repository, by task type, by tracker ticket**, and **run activity
+  by board, by service, by task type**, plus a **spend trend**. Repository and ticket are the
+  TCO axes: what an organisation actually budgets against.
 - **Never conflate real money with flat-rate quota usage.** A subscription harness call's
   cost is illustrative (what the same tokens WOULD have cost on the metered API); the spend
   gate excludes it, and so must every number here.
@@ -39,16 +40,18 @@ What existed was scattered and none of it composed:
 
 Every number comes from tables that already exist in the MAIN store on both runtimes:
 
-| Source        | Supplies                                                                                      |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `token_usage` | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp |
-| `agent_runs`  | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                |
-| `blocks`      | a task's `task_type`, and a service frame's `title` (its display name)                        |
-| `services`    | the service → frame-block link                                                                |
-| `workspaces`  | the board's name, and the `account_id` scope sub-select                                       |
+| Source         | Supplies                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `token_usage`  | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp |
+| `agent_runs`   | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                |
+| `blocks`       | a task's `task_type`, and a service frame's `title` (its display name)                        |
+| `services`     | the service → frame-block link, and its `repo_github_id` (the `repo` dimension's key)         |
+| `github_repos` | the repo projection: `owner/name`, the `repo` dimension's label                               |
+| `tasks`        | imported tracker issues and their `linked_block_id` (the `ticket` dimension's key)            |
+| `workspaces`   | the board's name, and the `account_id` scope sub-select                                       |
 
-`token_usage` carries no service or task type (a metered call records the RUN, not the
-board shape), so those two spend dimensions join through `execution_id → agent_runs` and
+`token_usage` carries no service, repo, task type or ticket (a metered call records the RUN,
+not the board shape), so those spend dimensions join through `execution_id → agent_runs` and
 then to the run's service/block. That join is why the port lives in the main store and
 never touches the telemetry database (a physically separate D1 database on Cloudflare).
 
@@ -152,15 +155,38 @@ reports the real `since`, and the panel prints it, so the view always says what 
 
 A RUN carries no single agent kind or model: those are per-step facts, which is precisely
 what the spend breakdowns key on. So `ReportActivityDimension` is `workspace | service |
-taskType` while `ReportSpendDimension` adds `model` and `agentKind`. The contract encodes
-the difference rather than returning empty arrays for combinations that cannot exist.
+taskType` while `ReportSpendDimension` adds `model`, `agentKind`, `repo` and `ticket`. The
+contract encodes the difference rather than returning empty arrays for combinations that
+cannot exist. `repo` and `ticket` could in principle be activity axes too, but a run is
+already counted under the service that owns its repo, so the second population would answer
+the same question twice.
 
-### One request, nine parallel aggregates
+### One request, eleven parallel aggregates
 
-`ReportsService.summarize` issues five spend breakdowns, three activity breakdowns and the
+`ReportsService.summarize` issues seven spend breakdowns, three activity breakdowns and the
 trend in ONE `Promise.all`. They are independent aggregates over indexed columns, not an
-N+1: the alternative (a dimension query param) would make the panel issue the same nine
+N+1: the alternative (a dimension query param) would make the panel issue the same eleven
 requests serially from the browser.
+
+### A dimension that can FAN OUT is pre-aggregated first
+
+`tasks.linked_block_id` carries a plain index, not a unique one: a block can legitimately be
+linked from more than one imported issue (two trackers, or a re-import). Joining `tasks`
+straight into the aggregate would multiply that block's calls, tokens and cost by the number
+of tickets pointing at it, and the breakdown would stop summing to the window's totals. So
+the `ticket` dimension joins a sub-select grouped down to one row per
+`(workspace_id, linked_block_id)`, exactly as `service` does for colliding frame blocks, and
+attributes a multi-linked block to the LOWEST `source:externalId` ref deterministically.
+Splitting the cost across its tickets would be worse: the halves answer no question anyone
+asked. The ticket's TITLE is deliberately not carried out of that sub-select, because a
+second `MIN` over a different column need not come from the same row as the first, and a
+label that names a different ticket than the key is worse than no label. The ref is
+self-describing (`jira:PROJ-412`), so the dimension reports none.
+
+`repo` needs no such guard: `services.id` and `(workspace_id, github_id)` are both primary
+keys, so both of its joins are provably 1:1. Its key comes off the SERVICE (which always
+knows its repo id) and its label off the projection (which the run's workspace may not hold a
+row in), so an unsynced repo loses its name and keeps its money.
 
 ### Labels come from the SQL, not a second round trip
 
@@ -179,7 +205,8 @@ self-describing, so their `label` is null and the SPA renders the key.
 ```
 { window, generatedAt, since, workspaceId, currency,
   totals:   { inputTokens, outputTokens, calls, meteredCost, subscriptionCost },
-  spend:    { byModel, byAgentKind, byWorkspace, byService, byTaskType },   // ReportSpendRow[]
+  spend:    { byModel, byAgentKind, byWorkspace, byService,
+              byRepo, byTaskType, byTicket },                             // ReportSpendRow[]
   activity: { byWorkspace, byService, byTaskType },                        // ReportActivityRow[]
   trend:    { bucketMs, points } }                                         // ReportTrendPoint[]
 ```
@@ -208,8 +235,9 @@ idiom (Tailwind marks, no charting dependency), with two deliberate encodings:
   status is therefore ALSO carried as a number under its bar and named in the legend, so
   identity is never colour alone.
 
-Model and agent kind render unconditionally (they have no activity counterpart); the other
-three share a dimension switch that drives the paired spend + activity cards.
+Model, agent kind, repository and ticket render unconditionally (they have no activity
+counterpart); the other three share a dimension switch that drives the paired spend +
+activity cards.
 
 ## Landed code
 
@@ -226,10 +254,18 @@ three share a dimension switch that drives the paired spend + activity cards.
 
 ## Not done (deliberately)
 
+- **No cap on the `ticket` breakdown, and it is the one dimension that could want one.**
+  Every other dimension's cardinality comes from a catalog (models, agent kinds, an account's
+  boards / services / repos, the task-type picklist) and is naturally bounded; a ticket
+  breakdown's row count grows with ACTIVITY, so a busy account over 90 days can return
+  thousands of rows where the others return tens. It is left uncapped deliberately: a silent
+  `LIMIT` is precisely the "smaller number that reads as complete" this view refuses
+  everywhere else, and capping it honestly means a contract that reports what it dropped.
+  Add that when someone hits the size, not before.
 - **No CSV/JSON export.** The endpoint already returns the whole projection as JSON; an
   export button is a thin SPA addition once someone asks for one.
-- **No per-user spend dimension.** `token_usage.user_id` is denormalized and would make a
-  sixth spend axis trivial, but attributing cost to individuals is a policy decision, not a
+- **No per-user spend dimension.** `token_usage.user_id` is denormalized and would make one
+  more spend axis trivial, but attributing cost to individuals is a policy decision, not a
   reporting one.
 - **No scheduled report delivery.** The notification channel seam exists
   (`CompositeNotificationChannel`); a periodic digest would ride it rather than anything

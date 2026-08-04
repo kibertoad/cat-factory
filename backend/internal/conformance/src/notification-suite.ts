@@ -119,6 +119,48 @@ export function defineNotificationSuite(
       expect((await repo.listOpenByType([], 'platform_health')).size).toBe(0)
     })
 
+    it('lists the LATEST block-less card of a type per workspace including resolved ones', async () => {
+      const repo = makeRepo()
+      const a = ids().ws
+      const empty = ids().ws
+      await repo.upsert(
+        a,
+        notification({ id: `${a}-open`, type: 'budget_threshold', createdAt: 1 }),
+      )
+      // Newer, and DISMISSED. `listOpenByType` must skip it and `listLatestByType` must
+      // return it: for an alert whose condition persists all month, the last card the sweep
+      // WROTE is the notified-state record, and a human tidying their inbox does not un-notify
+      // them. A facade that reused the open-only query here would re-alert every pass.
+      await repo.upsert(
+        a,
+        notification({
+          id: `${a}-dismissed`,
+          type: 'budget_threshold',
+          status: 'dismissed',
+          createdAt: 9,
+          resolvedAt: 9,
+        }),
+      )
+      // Block-scoped and other-type cards stay excluded, exactly as in the open-only read.
+      await repo.upsert(
+        a,
+        notification({
+          id: `${a}-scoped`,
+          type: 'budget_threshold',
+          blockId: 'blk-1',
+          createdAt: 20,
+        }),
+      )
+      await repo.upsert(a, notification({ id: `${a}-other`, type: 'ci_failed', createdAt: 30 }))
+
+      expect((await repo.listLatestByType([a, empty], 'budget_threshold')).get(a)?.id).toBe(
+        `${a}-dismissed`,
+      )
+      expect((await repo.listOpenByType([a], 'budget_threshold')).get(a)?.id).toBe(`${a}-open`)
+      expect((await repo.listLatestByType([a, empty], 'budget_threshold')).has(empty)).toBe(false)
+      expect((await repo.listLatestByType([], 'budget_threshold')).size).toBe(0)
+    })
+
     it('prunes resolved rows past the cutoff, keeping open + fresh-resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()

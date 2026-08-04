@@ -37,6 +37,23 @@ export interface NotificationRepository {
    * Empty input → empty map.
    */
   listOpenByType(workspaceIds: string[], type: NotificationType): Promise<Map<string, Notification>>
+  /**
+   * The batched {@link listOpenByType}, but the newest block-less card of `type` per workspace
+   * REGARDLESS OF STATUS, including one a human already dismissed or acted on.
+   *
+   * That difference is the whole point, and it belongs to alerts whose condition PERSISTS. A
+   * spend threshold, once crossed, stays crossed for the rest of the month, so a sweep that
+   * read only OPEN cards would see nothing the moment someone dismissed theirs and raise a
+   * fresh one on the next pass, every few minutes, for weeks. Reading the last card the sweep
+   * WROTE (not the last one still on the board) is what makes "notify once per crossing"
+   * true across replicas without a second store: the card row IS the notified-state record.
+   *
+   * Empty input → empty map; workspaces with no card of that type are absent.
+   */
+  listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>>
   /** Create or replace a notification (keyed by id). Used for status transitions
    * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>

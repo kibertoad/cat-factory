@@ -84,6 +84,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
   // marks it read (the human raises the budget then resumes from the spend panel).
   budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
+  // Spend crossed an alert threshold, or is projected to overrun the budget before the period
+  // ends. The PROACTIVE sibling of `budget_paused`, so it is amber rather than red: nothing has
+  // stopped yet, which is the entire point of it arriving. "act" just marks it read.
+  budget_threshold: { icon: 'i-lucide-trending-up', color: 'warning' },
   // Stored credentials could not be decrypted (the ENCRYPTION_KEY changed since they were
   // sealed). Not block-scoped; "act" drops the listed stale ciphertexts so they can be re-entered
   // (or restore the previous key to recover them instead).
@@ -117,6 +121,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   initiative: 'layout.notifications.action.initiative',
   platform_health: 'layout.notifications.action.platform_health',
   budget_paused: 'layout.notifications.action.budget_paused',
+  budget_threshold: 'layout.notifications.action.budget_threshold',
   key_drift: 'layout.notifications.action.key_drift',
   infra_unreachable: 'layout.notifications.action.infra_unreachable',
 }

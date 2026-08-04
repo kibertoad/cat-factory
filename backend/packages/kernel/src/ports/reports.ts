@@ -3,7 +3,8 @@ import type { ReportActivityDimension, ReportSpendDimension } from '@cat-factory
 // Cross-cutting usage-analytics port: the rollups behind the Reports view. Where
 // `PlatformMetricsRepository` answers "is the deployment HEALTHY" (outcomes, failure
 // taxonomy, latency), this answers "how is it being USED" — where the spend and the
-// work actually go, sliced by model, agent kind, workspace, service and task type.
+// work actually go, sliced by model, agent kind, workspace, service, repository, task
+// type and tracker ticket.
 //
 // Every method is ONE aggregate query. A breakdown is a single `GROUP BY` over the
 // ledger (`token_usage`) or the run table (`agent_runs`), scoped to an account by the
@@ -12,15 +13,23 @@ import type { ReportActivityDimension, ReportSpendDimension } from '@cat-factory
 // dimension value.
 //
 // Deliberately confined to the MAIN store: `token_usage`, `agent_runs`, `blocks`,
-// `services` and `workspaces` all live there on both runtimes, so a breakdown that
-// resolves a call's service or task type is a join, not a cross-database read. The
-// telemetry store (`llm_call_metrics`) is a physically separate database on
-// Cloudflare and is never joined here.
+// `services`, `github_repos`, `tasks` and `workspaces` all live there on both runtimes,
+// so a breakdown that resolves a call's service, repo, task type or ticket is a join,
+// not a cross-database read. The telemetry store (`llm_call_metrics`) is a physically
+// separate database on Cloudflare and is never joined here.
 //
-// No row cap, on purpose. Every dimension has naturally bounded cardinality — the
-// model catalog, the agent-kind catalog, an account's workspaces, its services, the
-// task-type picklist — so a breakdown cannot grow unbounded, and capping would either
-// silently drop slices or make the folded totals disagree with the rows.
+// No row cap, on purpose. Capping would either silently drop slices or make the folded
+// totals disagree with the rows, so a breakdown returns everything it grouped.
+//
+// For every dimension but one that is free: the model catalog, the agent-kind catalog,
+// an account's workspaces, its services, its repositories and the task-type picklist are
+// all naturally bounded. `ticket` is NOT: its cardinality is the number of distinct
+// tracker issues with spend in the window, which grows with ACTIVITY rather than with a
+// catalog, so a busy account over a 90-day window can return thousands of rows where the
+// others return tens. That is a stated, bounded-by-window cost rather than an unbounded
+// one, and it is the honest shape: a partial ticket list is exactly the "smaller number
+// that reads as complete" this port refuses everywhere else. Capping it properly means a
+// contract that reports what it dropped, not a silent `LIMIT`.
 
 /** Which rows a report aggregates: an account, optionally narrowed to one of its boards. */
 export interface ReportScope {

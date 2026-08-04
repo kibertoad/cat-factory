@@ -1727,6 +1727,8 @@
     "spend": {
       "byModel": "עלות לפי מודל",
       "byAgentKind": "עלות לפי סוג סוכן",
+      "byRepo": "עלות לפי מאגר",
+      "byTicket": "עלות לפי כרטיס",
       "heading": "עלות",
       "empty": "לא נרשם שימוש בטווח הזה.",
       "calls": "קריאה {count} | {count} קריאות",
@@ -2021,6 +2023,7 @@
         "judge_review": "סמן כנקרא",
         "pr_review_ready": "סמן כנקרא",
         "budget_paused": "סמן כנקרא",
+        "budget_threshold": "סמן כנקרא",
         "key_drift": "מחק אישורים מיושנים",
         "merge_tag_request": "לתעד את המאמץ"
       },

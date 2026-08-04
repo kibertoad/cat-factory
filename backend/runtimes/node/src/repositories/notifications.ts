@@ -136,6 +136,33 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return out
   }
 
+  async listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            inArray(notifications.workspace_id, workspaceIds.slice(i, i + 500)),
+            isNull(notifications.block_id),
+            eq(notifications.type, type),
+          ),
+        )
+        // Newest-first, with NO status predicate: a dismissed card is still the last thing the
+        // sweep told this workspace, which is exactly what the caller is asking about.
+        .orderBy(desc(notifications.created_at))
+      for (const row of rows) {
+        if (!out.has(row.workspace_id)) out.set(row.workspace_id, rowToNotification(row))
+      }
+    }
+    return out
+  }
+
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
     const values = {
       workspace_id: workspaceId,

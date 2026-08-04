@@ -2177,6 +2177,7 @@
         "judge_review": "Als gelesen markieren",
         "pr_review_ready": "Als gelesen markieren",
         "budget_paused": "Als gelesen markieren",
+        "budget_threshold": "Als gelesen markieren",
         "key_drift": "Veraltete Zugangsdaten entfernen",
         "merge_tag_request": "Aufwand erfassen"
       },
@@ -3479,6 +3480,8 @@
     "spend": {
       "byModel": "Kosten nach Modell",
       "byAgentKind": "Kosten nach Agententyp",
+      "byRepo": "Kosten nach Repository",
+      "byTicket": "Kosten nach Ticket",
       "heading": "Kosten",
       "empty": "In diesem Zeitraum wurde keine Nutzung erfasst.",
       "calls": "{count} Aufruf | {count} Aufrufe",

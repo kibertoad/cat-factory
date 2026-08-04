@@ -22,11 +22,28 @@ const seed: ReportsSeed = {
       .bind(workspaceId, id, title, taskType)
       .run()
   },
-  async service(id, accountId, frameBlockId) {
+  async service(id, accountId, frameBlockId, repoGithubId) {
     await env.DB.prepare(
-      'INSERT INTO services (id, account_id, frame_block_id, created_at) VALUES (?, ?, ?, 0)',
+      `INSERT INTO services (id, account_id, frame_block_id, repo_github_id, created_at)
+       VALUES (?, ?, ?, ?, 0)`,
     )
-      .bind(id, accountId, frameBlockId)
+      .bind(id, accountId, frameBlockId, repoGithubId ?? null)
+      .run()
+  },
+  async repo(workspaceId, githubId, owner, name) {
+    await env.DB.prepare(
+      `INSERT INTO github_repos (workspace_id, github_id, installation_id, owner, name, synced_at)
+       VALUES (?, ?, 1, ?, ?, 0)`,
+    )
+      .bind(workspaceId, githubId, owner, name)
+      .run()
+  },
+  async ticket(row) {
+    await env.DB.prepare(
+      `INSERT INTO tasks (workspace_id, source, external_id, title, url, linked_block_id, synced_at)
+       VALUES (?, ?, ?, ?, '', ?, 0)`,
+    )
+      .bind(row.workspaceId, row.source, row.externalId, row.title, row.linkedBlockId)
       .run()
   },
   async run(row) {
