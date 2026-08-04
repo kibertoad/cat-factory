@@ -1,7 +1,9 @@
-import type { PlatformAlertWindow } from '@cat-factory/contracts'
+import type { PlatformAlertWindow, PlatformFailureKindRule } from '@cat-factory/contracts'
 import { DEFAULT_PLATFORM_ALERT_THRESHOLDS } from '@cat-factory/orchestration'
 import type { PlatformAlertConfig } from './types.js'
 import { parseNumericEnv } from './numeric.js'
+import { logger } from '../observability/logger.js'
+import { DOCS } from './docs.js'
 
 // Shared, runtime-neutral parser for the platform-health alerting env, so the Worker's
 // `loadConfig` and the Node/local `loadNodeConfig` derive an IDENTICAL `PlatformAlertConfig`
@@ -39,6 +41,80 @@ export interface PlatformAlertEnvInput {
   minStalledPriorRuns?: string
   maxFailureKindShare?: string
   maxSweepFailures?: string
+  /** `PLATFORM_ALERTS_FAILURE_KIND_RATES`, e.g. `evicted=0.05:3,timeout=0.2`. */
+  failureKindRates?: string
+}
+
+/** The env var the per-kind rules come from, named once so the warnings below agree. */
+const FAILURE_KIND_RATES_VAR = 'PLATFORM_ALERTS_FAILURE_KIND_RATES'
+
+/**
+ * Parse the per-kind alert rules from one env string: a comma-separated list of
+ * `kind=share[:minCount]` entries, e.g. `evicted=0.05:3,timeout=0.2`.
+ *
+ * Every rejection is REPORTED and only the offending entry is dropped, rather than the value
+ * being taken as a whole or discarded as a whole. Both alternatives are worse in the same
+ * direction: an operator who typed one rule wrongly is told which, and keeps the rules they
+ * typed correctly, instead of finding out on the night the alert did not page. A rule that
+ * cannot be read is not a rule, so it is never guessed at (a `share` outside (0, 1] is not
+ * clamped into range here, unlike a scalar ceiling: clamping `evicted=50` to 1.0 would invent
+ * "when EVERY failure is an eviction" out of somebody meaning 50%).
+ */
+export function parseFailureKindRules(raw: string | undefined): PlatformFailureKindRule[] {
+  if (raw === undefined || raw.trim() === '') return []
+  const rules: PlatformFailureKindRule[] = []
+  const seen = new Set<string>()
+  const reject = (entry: string, why: string) => {
+    logger.warn(
+      `${FAILURE_KIND_RATES_VAR} entry "${entry}" ${why}, so this rule is ignored. ` +
+        `Expected \`kind=share[:minCount]\` with share in (0, 1], e.g. \`evicted=0.05:3\`. ` +
+        `See ${DOCS.envVars()}.`,
+      { var: FAILURE_KIND_RATES_VAR, entry, docsUrl: DOCS.envVars() },
+    )
+  }
+  for (const entry of raw.split(',')) {
+    const text = entry.trim()
+    if (text === '') continue
+    const eq = text.indexOf('=')
+    if (eq <= 0) {
+      reject(text, 'is not `kind=share`')
+      continue
+    }
+    const kind = text.slice(0, eq).trim()
+    const [shareText, countText, ...extra] = text
+      .slice(eq + 1)
+      .split(':')
+      .map((part) => part.trim())
+    if (kind === '' || extra.length > 0) {
+      reject(text, 'is not `kind=share[:minCount]`')
+      continue
+    }
+    const share = Number(shareText)
+    if (!Number.isFinite(share) || share <= 0 || share > 1) {
+      reject(text, 'does not name a share greater than 0 and at most 1')
+      continue
+    }
+    // Absent means the schema default (1), and is left ABSENT rather than written as 1: the rule
+    // is stored and rendered alongside settings-authored ones, where an unset minimum reads as
+    // inherited. `0` is refused rather than treated as unset, since a rule that fires on zero
+    // occurrences of its kind is not something an operator can have meant.
+    let minCount: number | undefined
+    if (countText !== undefined && countText !== '') {
+      const parsed = Number(countText)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        reject(text, 'does not name a whole minimum count of 1 or more')
+        continue
+      }
+      minCount = parsed
+    }
+    if (seen.has(kind)) {
+      reject(text, `repeats the kind "${kind}", which an earlier entry already covers`)
+      continue
+    }
+    seen.add(kind)
+    rules.push({ kind, maxShare: share, ...(minCount === undefined ? {} : { minCount }) })
+  }
+  return rules
 }
 
 /**
@@ -107,6 +183,11 @@ export function resolvePlatformAlertConfig(env: PlatformAlertEnvInput): Platform
         1,
         nonNeg('PLATFORM_ALERTS_MAX_SWEEP_FAILURES', env.maxSweepFailures, d.maxSweepFailures),
       ),
+      // No fallback to the built-in default, unlike every scalar above, because there is nothing
+      // to fall back to: the shipped default is an empty list, so an unset var and a var whose
+      // every entry was rejected both resolve to "no per-kind rules" — and the rejected one has
+      // already said so, once per entry, rather than resolving quietly.
+      failureKindRules: parseFailureKindRules(env.failureKindRates),
     },
   }
 }

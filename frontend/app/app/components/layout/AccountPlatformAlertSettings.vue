@@ -4,7 +4,10 @@ import type {
   PlatformAlertSettings,
   PlatformAlertThresholdOverrides,
   PlatformAlertWindow,
+  PlatformFailureKindRule,
 } from '~/types/execution'
+import AccountFailureKindRules from '~/components/layout/AccountFailureKindRules.vue'
+import { invalidFailureKindRuleRows } from '~/utils/failureKinds'
 
 // Per-account tuning for the platform-health alert sweep (admin only): the ceilings the
 // deployment's aggregate run health is checked against, and the window they are evaluated over.
@@ -38,9 +41,12 @@ const windowItems = computed(() =>
 )
 
 /**
- * The numeric ceilings, each rendered as one row: the contract key plus the input's step.
+ * The NUMERIC ceilings, each rendered as one row: the contract key plus the input's step.
  * ONE table drives the form, the hydrate and the save, so adding a threshold to the contract
  * is a single entry rather than a form field plus a save branch free to disagree with it.
+ *
+ * `failureKindRules` is deliberately absent from it: it is a LIST, so it has neither a step nor
+ * a blank-means-inherit box, and it is edited by its own component below.
  */
 const THRESHOLDS = [
   { field: 'minRuns', step: 1 },
@@ -83,6 +89,10 @@ const thresholdHints = computed<Record<ThresholdField, string>>(() => ({
 const muted = ref(false)
 const alertWindow = ref<PlatformAlertWindow | ''>('')
 const values = ref<Record<ThresholdField, string>>(blankValues())
+// Undefined is "inherit the deployment's rules"; an EMPTY array is "this account has none".
+// Kept apart for the same reason blank and 0 are above, and here the two are further apart
+// still: one follows the deployment's pager wiring, the other switches it off.
+const failureKindRules = ref<PlatformFailureKindRule[] | undefined>(undefined)
 const saving = ref(false)
 
 function blankValues(): Record<ThresholdField, string> {
@@ -112,6 +122,9 @@ function hydrate() {
   const next = blankValues()
   for (const th of THRESHOLDS) next[th.field] = toDisplay(th.field, stored?.thresholds?.[th.field])
   values.value = next
+  // Copied, not aliased: the editor mutates by replacement, and hydrating from the store's own
+  // objects would let an unsaved edit read back as the account's stored state.
+  failureKindRules.value = stored?.thresholds?.failureKindRules?.map((rule) => ({ ...rule }))
 }
 
 onMounted(async () => {
@@ -159,8 +172,15 @@ function collectThresholds(): PlatformAlertThresholdOverrides {
     const parsed = fromDisplay(th.field, values.value[th.field])
     if (parsed !== undefined) out[th.field] = parsed
   }
+  // Sent whole or omitted whole. An empty list is a real setting and travels as one.
+  if (failureKindRules.value !== undefined) out.failureKindRules = failureKindRules.value
   return out
 }
+
+/** Per-kind rows the backend would refuse, checked against the same helper the editor shows. */
+const invalidRuleRows = computed(() =>
+  failureKindRules.value ? invalidFailureKindRuleRows(failureKindRules.value) : [],
+)
 
 async function save() {
   if (!loaded.value) {
@@ -171,6 +191,18 @@ async function save() {
     toast.add({
       title: t('settings.platformAlerts.invalidNumbers'),
       description: invalidFields.value.join(', '),
+      color: 'error',
+    })
+    return
+  }
+  // Refused here rather than left to the write boundary: the API rejects the WHOLE config blob,
+  // so a bad rule would read to the admin as the model policy beside it failing to save.
+  if (invalidRuleRows.value.length > 0) {
+    toast.add({
+      title: t('settings.platformAlerts.failureKinds.invalidTitle'),
+      description: t('settings.platformAlerts.failureKinds.invalidRows', {
+        rows: invalidRuleRows.value.join(', '),
+      }),
       color: 'error',
     })
     return
@@ -210,12 +242,14 @@ function resetAll() {
   muted.value = false
   alertWindow.value = ''
   values.value = blankValues()
+  failureKindRules.value = undefined
 }
 
 const hasOverrides = computed(
   () =>
     muted.value ||
     alertWindow.value !== '' ||
+    failureKindRules.value !== undefined ||
     THRESHOLDS.some((th) => values.value[th.field].trim() !== ''),
 )
 </script>
@@ -287,6 +321,8 @@ const hasOverrides = computed(
         </div>
       </div>
     </div>
+
+    <AccountFailureKindRules v-model="failureKindRules" />
 
     <!--
       A save REPLACES the whole account config and this sheet edits one key of it, so with the

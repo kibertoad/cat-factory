@@ -19,6 +19,7 @@ public enum NotificationPayloadPlatformAlert {
     BACKLOG_HIGH("backlog_high"),
     THROUGHPUT_STALLED("throughput_stalled"),
     FAILURE_KIND_DOMINANT("failure_kind_dominant"),
+    FAILURE_KIND_RATE_HIGH("failure_kind_rate_high"),
     SWEEP_DEGRADED("sweep_degraded"),
 
     /**

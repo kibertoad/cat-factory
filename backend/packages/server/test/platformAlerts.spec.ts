@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseFailureKindRules,
   parsePlatformObservabilityWindow,
   resolvePlatformAlertConfig,
 } from '../src/config/platformAlerts.js'
@@ -29,6 +30,9 @@ describe('resolvePlatformAlertConfig', () => {
       minStalledPriorRuns: 5,
       maxFailureKindShare: 0.8,
       maxSweepFailures: 3,
+      // No per-kind rules unless an operator names them: which kinds deserve their own ceiling
+      // is a judgement about a deployment, and a shipped default would page on that guess.
+      failureKindRules: [],
     })
   })
 
@@ -54,6 +58,7 @@ describe('resolvePlatformAlertConfig', () => {
       minStalledPriorRuns: 5,
       maxFailureKindShare: 0.8,
       maxSweepFailures: 3,
+      failureKindRules: [],
     })
   })
 
@@ -82,5 +87,57 @@ describe('resolvePlatformAlertConfig', () => {
     expect(cfg.thresholds.minRuns).toBe(5)
     expect(cfg.thresholds.maxFailureRate).toBe(0.5)
     expect(cfg.thresholds.maxP99DurationMs).toBe(60 * 60_000)
+  })
+})
+
+describe('parseFailureKindRules', () => {
+  it('reads `kind=share[:minCount]`, comma-separated', () => {
+    expect(parseFailureKindRules('evicted=0.05:3, timeout=0.2')).toEqual([
+      { kind: 'evicted', maxShare: 0.05, minCount: 3 },
+      // No `minCount` written where none was given: the rule is edited beside settings-authored
+      // ones, where an unset minimum reads as inherited rather than as a typed 1.
+      { kind: 'timeout', maxShare: 0.2 },
+    ])
+  })
+
+  it('is empty when unset or blank, which is the same as having no rules', () => {
+    expect(parseFailureKindRules(undefined)).toEqual([])
+    expect(parseFailureKindRules('  ')).toEqual([])
+  })
+
+  it('drops only the entry it cannot read, keeping the ones it can', () => {
+    // The operator who typed one rule wrongly keeps the rules they typed correctly, and hears
+    // about the one that was dropped (each rejection logs). Taking the value as a whole would
+    // silently disarm a pager they believe is armed.
+    expect(parseFailureKindRules('evicted, timeout=0.2, agent=abc, =0.5, dispatch=0')).toEqual([
+      { kind: 'timeout', maxShare: 0.2 },
+    ])
+  })
+
+  it('refuses a share outside (0, 1] rather than clamping it into range', () => {
+    // Clamping `evicted=50` to 1.0 would invent "when EVERY failure is an eviction" out of
+    // somebody who meant 50%, and arm it.
+    expect(parseFailureKindRules('evicted=50')).toEqual([])
+    expect(parseFailureKindRules('evicted=-0.1')).toEqual([])
+    expect(parseFailureKindRules('evicted=1')).toEqual([{ kind: 'evicted', maxShare: 1 }])
+  })
+
+  it('refuses a minimum count that is not a whole number of 1 or more', () => {
+    expect(parseFailureKindRules('evicted=0.1:0')).toEqual([])
+    expect(parseFailureKindRules('evicted=0.1:1.5')).toEqual([])
+    expect(parseFailureKindRules('evicted=0.1:2')).toEqual([
+      { kind: 'evicted', maxShare: 0.1, minCount: 2 },
+    ])
+  })
+
+  it('keeps the first rule for a kind and reports the repeat', () => {
+    expect(parseFailureKindRules('evicted=0.1,evicted=0.9')).toEqual([
+      { kind: 'evicted', maxShare: 0.1 },
+    ])
+  })
+
+  it('reaches the resolved thresholds', () => {
+    const cfg = resolvePlatformAlertConfig({ enabled: true, failureKindRates: 'evicted=0.05' })
+    expect(cfg.thresholds.failureKindRules).toEqual([{ kind: 'evicted', maxShare: 0.05 }])
   })
 })

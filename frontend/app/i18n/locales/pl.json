@@ -3504,7 +3504,25 @@
         "maxSweepFailures": "Kolejne nieudane przebiegi jednego zadania w tle."
       },
       "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją.",
-      "invalidNumbers": "Te limity nie są liczbami"
+      "invalidNumbers": "Te limity nie są liczbami",
+      "failureKinds": {
+        "label": "Reguły dla poszczególnych rodzajów awarii",
+        "description": "Alarm, gdy jeden rodzaj awarii przekroczy dopuszczony dla niego udział w awariach. Powyższy limit dominującej przyczyny pyta, czy jeden rodzaj przytłacza pozostałe; te reguły pytają, czy wskazany rodzaj przekroczył to, co to wdrożenie z jego strony toleruje.",
+        "overrideLabel": "Ustaw własne reguły tego konta",
+        "overrideHint": "Wyłączone: konto korzysta z reguł skonfigurowanych we wdrożeniu. Włączone: poniższa lista zastępuje je w całości, a pusta lista oznacza brak reguł dla rodzajów awarii.",
+        "empty": "Brak reguł. To konto nie zgłosi alertu dla rodzaju awarii.",
+        "kindLabel": "Rodzaj awarii",
+        "shareLabel": "Udział w awariach (%)",
+        "minCountLabel": "Minimalna liczba awarii",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Ile awarii tego rodzaju musi wystąpić w oknie, zanim reguła zadziała. Bez tego niski udział jest nadwrażliwy: pięć uruchomień z jednym wywłaszczeniem to już 20%.",
+        "addRule": "Dodaj regułę",
+        "removeRule": "Usuń regułę",
+        "duplicateKind": "Każdy rodzaj awarii może mieć najwyżej jedną regułę.",
+        "unknownKind": "{kind} (nierozpoznany)",
+        "invalidTitle": "Tych reguł nie można zapisać",
+        "invalidRows": "Sprawdź reguły {rows}: udział musi być większy niż 0 i najwyżej 100, minimum musi być liczbą całkowitą od 1 w górę, a każdy rodzaj może wystąpić tylko raz."
+      }
     }
   },
   "providers": {

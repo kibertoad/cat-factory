@@ -612,6 +612,16 @@ export type PlatformObservability = v.InferOutput<typeof platformObservabilitySc
  *                           completely different incidents — infrastructure versus the model
  *                           — so the dominant kind is its own signal rather than a detail
  *                           buried in the dashboard.
+ *   - `failure_kind_rate_high` — a NAMED failure kind crossed the ceiling an operator set for
+ *                           that kind specifically (see {@link platformFailureKindRuleSchema}).
+ *                           The dominant condition answers "is one cause swamping everything",
+ *                           which no single ceiling can express for a kind that matters at 5%
+ *                           and one that is routine at 40%: an eviction rate that never
+ *                           approaches dominance is still the substrate failing, while a
+ *                           `rejected` share of the same size is the product working as
+ *                           designed. Which kinds carry a rule, and where each sits, is the
+ *                           operator's judgement, so it is configuration rather than a
+ *                           threshold the platform picks.
  *   - `sweep_degraded`    — a background sweeper has been failing repeatedly. Alerting on the
  *                           WATCHER, because a sweep that stopped running makes every signal
  *                           above stale without making any of them fire.
@@ -622,6 +632,7 @@ export const platformAlertReasonSchema = v.picklist([
   'backlog_high',
   'throughput_stalled',
   'failure_kind_dominant',
+  'failure_kind_rate_high',
   'sweep_degraded',
 ])
 export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema>
@@ -635,6 +646,45 @@ export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema
  */
 export const platformAlertWindowSchema = v.picklist(['1h', '24h', '7d'])
 export type PlatformAlertWindow = v.InferOutput<typeof platformAlertWindowSchema>
+
+/**
+ * One PER-KIND alert rule: "page when `evicted` accounts for more than X% of the window's
+ * failures". The generalisation of `failure_kind_dominant`, which is one ceiling applied to
+ * whichever kind happens to be largest, into a ceiling an operator sets per kind.
+ *
+ * The share is measured against the window's FAILURES, the same denominator the dominant
+ * condition and the dashboard's taxonomy use, so a rule reads off the taxonomy an operator is
+ * already looking at rather than a second, differently-normalised number.
+ *
+ * {@link kind} is a plain string rather than the closed `agentFailureKindSchema` picklist, and
+ * that is deliberate in both directions. Reading: a rule naming a kind that a later release
+ * RETIRES must still parse, because this schema also decodes the stored blob, and a rule
+ * rejected there would take the account's whole settings row down with it (the fallback is the
+ * built-in defaults, so one stale rule would silently discard the model policy beside it).
+ * Matching: the projection's own `kind` is a string for the same reason, so comparing strings is
+ * comparing like with like. What a human is offered when AUTHORING one is the closed vocabulary,
+ * in the settings panel, which is where a typo can still be caught before it is stored.
+ */
+export const platformFailureKindRuleSchema = v.object({
+  /** The `agentFailureKind` this rule watches, e.g. `evicted` (matched against the taxonomy). */
+  kind: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)),
+  /**
+   * Share (0..1] of the window's failures this kind must reach before the rule fires. Excludes
+   * 0 for the same reason {@link platformAlertThresholdOverridesSchema}'s dominant share does: a
+   * ceiling of 0 is satisfied by any distribution, including one where the kind never occurred.
+   */
+  maxShare: v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1)),
+  /**
+   * Failures OF THIS KIND the window must carry before the rule can fire. Absent ⇒ 1.
+   *
+   * The per-rule analogue of `minRuns`, and the reason a low ceiling is usable at all: the point
+   * of a per-kind rule is to sit far below dominance (5% evictions is an incident), and at 5%
+   * the shared minimum-run gate stops protecting anything — a window with the default 5 terminal
+   * runs and a single eviction is already at 20%. This is what says "one is a blip".
+   */
+  minCount: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1_000_000))),
+})
+export type PlatformFailureKindRule = v.InferOutput<typeof platformFailureKindRuleSchema>
 
 /**
  * Operator-tunable ceilings for the platform-health alert sweep. EVERY field is optional and
@@ -676,6 +726,31 @@ export const platformAlertThresholdOverridesSchema = v.object({
   maxFailureKindShare: v.optional(v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1))),
   /** Consecutive failed passes of one sweeper before `sweep_degraded` fires. */
   maxSweepFailures: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000))),
+  /**
+   * Per-kind ceilings driving `failure_kind_rate_high` (see
+   * {@link platformFailureKindRuleSchema}).
+   *
+   * The one field here that is a LIST rather than a scalar, which changes what overriding it
+   * means: a stored list REPLACES the deployment's rules wholesale rather than merging into
+   * them, so an account that wants the deployment's rules plus one of its own restates all of
+   * them. Merging per kind would leave an account unable to DROP a rule it disagrees with, and
+   * silently reinstating a deployment rule an account had removed is the worse of the two
+   * failure modes for a pager. An EMPTY list is therefore a real setting ("no per-kind rules
+   * for this account"), distinct from absent, exactly like the zeros elsewhere in this object.
+   *
+   * Bounded, and unique by kind: two rules on one kind would fire twice for one condition, and
+   * the second is invariably an edit somebody meant to replace the first.
+   */
+  failureKindRules: v.optional(
+    v.pipe(
+      v.array(platformFailureKindRuleSchema),
+      v.maxLength(32),
+      v.check(
+        (rules) => new Set(rules.map((rule) => rule.kind)).size === rules.length,
+        'Each failure kind may carry at most one alert rule.',
+      ),
+    ),
+  ),
 })
 export type PlatformAlertThresholdOverrides = v.InferOutput<
   typeof platformAlertThresholdOverridesSchema
@@ -709,6 +784,15 @@ export const platformAlertSchema = v.object({
   value: v.number(),
   /** The configured threshold it crossed (same unit as {@link value}). */
   threshold: v.number(),
+  /**
+   * The failure kind this alert is about, on a KIND-SCOPED condition (`failure_kind_rate_high`);
+   * absent on every other reason, which are about the deployment as a whole.
+   *
+   * It is part of what the condition SAYS, not a decoration: several rules can fire at once and
+   * they share a reason code, so an alert without it names a rule the reader cannot identify, and
+   * a firing set that swapped `evicted` for `timeout` would look unchanged.
+   */
+  kind: v.optional(v.string()),
 })
 export type PlatformAlert = v.InferOutput<typeof platformAlertSchema>
 

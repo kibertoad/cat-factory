@@ -1161,7 +1161,25 @@
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
       "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
-      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen"
+      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
+      "failureKinds": {
+        "label": "Regeln pro Fehlerart",
+        "description": "Alarm auslösen, wenn eine Fehlerart den Anteil an Fehlschlägen überschreitet, den Sie ihr zugestehen. Die Obergrenze für die dominante Ursache oben fragt, ob eine Art alle anderen überlagert; diese Regeln fragen, ob eine benannte Art über das hinausgeht, was diese Installation von ihr toleriert.",
+        "overrideLabel": "Eigene Regeln pro Fehlerart für dieses Konto festlegen",
+        "overrideHint": "Aus: Das Konto verwendet die Regeln der Installation. Ein: Die Liste unten ersetzt sie vollständig, und eine leere Liste bedeutet gar keine Regeln pro Fehlerart.",
+        "empty": "Keine Regeln. Dieses Konto löst den Alarm pro Fehlerart nicht aus.",
+        "kindLabel": "Fehlerart",
+        "shareLabel": "Anteil an Fehlschlägen (%)",
+        "minCountLabel": "Mindestanzahl Fehlschläge",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Wie viele Fehlschläge dieser Art im Zeitfenster nötig sind, bevor die Regel auslösen kann. Ohne diesen Wert ist ein niedriger Anteil überempfindlich: Fünf Läufe mit einer Verdrängung sind bereits 20 %.",
+        "addRule": "Regel hinzufügen",
+        "removeRule": "Regel entfernen",
+        "duplicateKind": "Jede Fehlerart darf höchstens eine Regel haben.",
+        "unknownKind": "{kind} (unbekannt)",
+        "invalidTitle": "Diese Regeln pro Fehlerart können nicht gespeichert werden",
+        "invalidRows": "Prüfen Sie die Regeln {rows}: Der Anteil muss über 0 und höchstens 100 liegen, eine Mindestanzahl muss eine ganze Zahl ab 1 sein, und jede Art darf nur einmal vorkommen."
+      }
     }
   },
   "inspector": {

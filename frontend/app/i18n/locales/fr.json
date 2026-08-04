@@ -3504,7 +3504,25 @@
         "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
       },
       "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
-      "invalidNumbers": "Ces plafonds ne sont pas des nombres"
+      "invalidNumbers": "Ces plafonds ne sont pas des nombres",
+      "failureKinds": {
+        "label": "Règles par type d'échec",
+        "description": "Alerter quand un type d'échec dépasse la part d'échecs que vous lui accordez. Le plafond de cause dominante ci-dessus demande si un type submerge les autres ; ces règles demandent si un type nommé a dépassé ce que ce déploiement tolère de lui.",
+        "overrideLabel": "Définir les règles par type propres à ce compte",
+        "overrideHint": "Désactivé, le compte utilise les règles configurées par le déploiement. Activé, la liste ci-dessous les remplace entièrement, et une liste vide signifie aucune règle par type.",
+        "empty": "Aucune règle. Ce compte ne déclenchera pas l'alerte par type d'échec.",
+        "kindLabel": "Type d'échec",
+        "shareLabel": "Part des échecs (%)",
+        "minCountLabel": "Échecs minimum",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Combien d'échecs de ce type la fenêtre doit compter avant que la règle puisse se déclencher. Sans cela, une part faible se déclenche pour un rien : cinq exécutions avec une éviction, c'est déjà 20 %.",
+        "addRule": "Ajouter une règle",
+        "removeRule": "Supprimer la règle",
+        "duplicateKind": "Chaque type d'échec ne peut porter qu'une seule règle.",
+        "unknownKind": "{kind} (non reconnu)",
+        "invalidTitle": "Ces règles par type ne peuvent pas être enregistrées",
+        "invalidRows": "Vérifiez les règles {rows} : la part doit être supérieure à 0 et au plus 100, un minimum doit être un entier supérieur ou égal à 1, et chaque type ne peut apparaître qu'une fois."
+      }
     }
   },
   "providers": {

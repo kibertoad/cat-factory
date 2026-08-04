@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import type { AgentFailureKind, PlatformObservabilityWindow } from '~/types/execution'
+import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
+import { FAILURE_KIND_KEYS, isKnownFailureKind } from '~/utils/failureKinds'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -29,25 +30,12 @@ const WINDOWS: { value: PlatformObservabilityWindow; label: string }[] = [
   { value: '90d', label: t('platformObservability.window.ninetyDays') },
 ]
 
-// Exhaustive enum→label map (tier-2 dynamic-key guard): a new AgentFailureKind fails the
-// typecheck here, and an out-of-enum kind falls back to its raw code below.
-const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
-  preflight: 'platformObservability.failureKind.preflight',
-  dispatch: 'platformObservability.failureKind.dispatch',
-  environment: 'platformObservability.failureKind.environment',
-  evicted: 'platformObservability.failureKind.evicted',
-  timeout: 'platformObservability.failureKind.timeout',
-  agent: 'platformObservability.failureKind.agent',
-  job_failed: 'platformObservability.failureKind.job_failed',
-  rejected: 'platformObservability.failureKind.rejected',
-  companion_rejected: 'platformObservability.failureKind.companion_rejected',
-  stalled: 'platformObservability.failureKind.stalled',
-  cancelled: 'platformObservability.failureKind.cancelled',
-  unknown: 'platformObservability.failureKind.unknown',
-}
+// The enum→label map is SHARED with the alert-settings panel (`~/utils/failureKinds`), which
+// offers the same vocabulary as the subject of a per-kind alert rule: one map, so the kind an
+// operator points a page at and the kind this breakdown shows can never be labelled differently.
+// An out-of-enum kind (a retired one on an old row) falls back to its raw code.
 function failureLabel(kind: string): string {
-  const key = FAILURE_KIND_KEYS[kind as AgentFailureKind]
-  return key ? t(key) : kind
+  return isKnownFailureKind(kind) ? t(FAILURE_KIND_KEYS[kind]) : kind
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000

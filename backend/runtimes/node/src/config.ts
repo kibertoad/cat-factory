@@ -770,6 +770,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       minStalledPriorRuns: env.PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS,
       maxFailureKindShare: env.PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE,
       maxSweepFailures: env.PLATFORM_ALERTS_MAX_SWEEP_FAILURES,
+      failureKindRates: env.PLATFORM_ALERTS_FAILURE_KIND_RATES,
     }),
     // Infrastructure-reachability watcher: a periodic sweep probes each workspace's CONFIGURED
     // infrastructure connections and reports a dead one as `unreachable`. Opt-in

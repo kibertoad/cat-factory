@@ -617,6 +617,12 @@ export interface Env {
   PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS?: string
   PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE?: string
   PLATFORM_ALERTS_MAX_SWEEP_FAILURES?: string
+  /**
+   * Per-kind alert rules: `kind=share[:minCount]`, comma-separated (e.g. `evicted=0.05:3`). The
+   * dominant-kind ceiling above asks whether one cause is swamping the rest; these ask whether a
+   * NAMED cause exceeded what this deployment tolerates from it. Unset ⇒ no per-kind rules.
+   */
+  PLATFORM_ALERTS_FAILURE_KIND_RATES?: string
 
   // ---- Infrastructure-reachability watcher (see docs/environment-variables.md) --
   /**
