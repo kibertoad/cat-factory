@@ -333,7 +333,7 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
 }
 
 /**
- * The PRE-TOKEN INPUT GATE, built from the SAME whole dependency object the sibling factories
+ * The PRE-DISPATCH INPUT GATE, built from the SAME whole dependency object the sibling factories
  * above are handed, plus the two collaborators `ExecutionService` builds for itself.
  *
  * It is deliberately not one of the gate windows: it guards the run's FIRST dispatch and has no

@@ -86,7 +86,7 @@ export function createUiResultViews() {
         : step
           ? (park ?? agentKindMeta(step.agentKind).resultView)
           : undefined
-    // The PRE-TOKEN INPUT GATE is the one dedicated park with no window of its own: it is
+    // The PRE-DISPATCH INPUT GATE is the one dedicated park with no window of its own: it is
     // answered by an inline notice, which the generic step detail renders. Routing to the
     // step's usual result view instead would open a window about work that has not run.
     if (park === 'input-gate') {

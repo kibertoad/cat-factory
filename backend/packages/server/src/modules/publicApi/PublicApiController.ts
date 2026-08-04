@@ -285,7 +285,7 @@ async function rollbackInitiativeRun<E extends AppEnv>(
  * surfaces (saying so, rather than promising an answer path that does not exist, for any the
  * decision surface cannot answer yet).
  *
- * `gateInput` is what makes it a RUN-level rather than a pipeline-level question: the pre-token
+ * `gateInput` is what makes it a RUN-level rather than a pipeline-level question: the pre-dispatch
  * input gate parks on the shape of the TASK, so a run under a pipeline that parks nowhere still
  * stops there. The jobs surface passes the shape of the anchor block it is about to create, since
  * the brief becomes that block's description and is exactly what the engine's own check reads a

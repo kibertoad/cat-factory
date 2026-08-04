@@ -28,7 +28,7 @@ import {
 const registry = defaultEnvironmentBackendRegistry()
 
 // The manifest's `providerConfig` bag is the per-workspace config carrier for a NATIVE
-// injected adapter (e.g. Kargo's project). It rides inside the `manifestJson` JSON column
+// injected adapter (e.g. the provider's project). It rides inside the `manifestJson` JSON column
 // verbatim on both runtimes, so these tests pin that it round-trips through register →
 // requireConnection unchanged — proving native adapters get their per-workspace config back.
 
@@ -81,11 +81,11 @@ function makeService(repo: EnvironmentConnectionRepository) {
 }
 
 const baseManifest: EnvironmentManifest = {
-  providerId: 'kargo',
-  label: 'Kargo',
+  providerId: 'acme-envs',
+  label: 'Acme envs',
   baseUrl: 'https://envs.test/api',
   auth: { type: 'none' },
-  provision: { method: 'POST', pathTemplate: '/prenvs' },
+  provision: { method: 'POST', pathTemplate: '/environments' },
   response: {},
 }
 
@@ -141,7 +141,7 @@ describe('EnvironmentConnectionService — providerConfig round-trip', () => {
 // handler and merging the service-owned manifestSource (the "what/where ÷ how" split).
 describe('EnvironmentConnectionService — per-type handlers', () => {
   const composeManifest: EnvironmentManifest = {
-    providerId: 'kargo',
+    providerId: 'acme-envs',
     label: 'Bespoke Envs',
     baseUrl: 'https://envs.test/api',
     auth: { type: 'none' },
@@ -153,14 +153,18 @@ describe('EnvironmentConnectionService — per-type handlers', () => {
     const service = makeService(fakeConnections())
     const view = await service.registerHandler('ws1', {
       provisionType: 'custom',
-      manifestId: 'kargo',
-      config: { engine: 'remote-custom', manifest: composeManifest, acceptsManifestId: 'kargo' },
+      manifestId: 'acme-envs',
+      config: {
+        engine: 'remote-custom',
+        manifest: composeManifest,
+        acceptsManifestId: 'acme-envs',
+      },
       secrets: { TOKEN: 'tok' },
     })
     expect(view.provisionType).toBe('custom')
-    expect(view.manifestId).toBe('kargo')
+    expect(view.manifestId).toBe('acme-envs')
     expect(view.engine).toBe('remote-custom')
-    expect(view.acceptsManifestId).toBe('kargo')
+    expect(view.acceptsManifestId).toBe('acme-envs')
 
     const list = await service.listHandlers('ws1')
     expect(list).toHaveLength(1)
@@ -172,17 +176,21 @@ describe('EnvironmentConnectionService — per-type handlers', () => {
     const service = makeService(fakeConnections())
     await service.registerHandler('ws1', {
       provisionType: 'custom',
-      manifestId: 'kargo',
-      config: { engine: 'remote-custom', manifest: composeManifest, acceptsManifestId: 'kargo' },
+      manifestId: 'acme-envs',
+      config: {
+        engine: 'remote-custom',
+        manifest: composeManifest,
+        acceptsManifestId: 'acme-envs',
+      },
       secrets: { TOKEN: 'tok' },
     })
     const resolved = await service.resolveProviderForType('ws1', {
       type: 'custom',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
     })
     expect(resolved.engine).toBe('remote-custom')
     expect(resolved.provisionType).toBe('custom')
-    expect(resolved.manifest.providerId).toBe('kargo')
+    expect(resolved.manifest.providerId).toBe('acme-envs')
     expect(resolved.resolveSecret('TOKEN')).toBe('tok')
   })
 
@@ -504,7 +512,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
     // The on-demand route is documented to never throw to the client. With a provider +
     // VCS resolver wired but NO connection registered yet, it must still delegate (config
     // simply absent), not surface the requireConnection 409.
-    const repo = fakeRepoFiles({ '.kargo.yml': 'name: x\njobs: [a]\n' })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': 'name: x\njobs: [a]\n' })
     let captured: RepoValidationRequest | undefined
     const service = new EnvironmentConnectionService({
       environmentConnectionRepository: fakeConnections(),
@@ -527,7 +535,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
   })
 
   it('delegates to the provider with a VCS-neutral reader, forwarding providerConfig + gitRef', async () => {
-    const repo = fakeRepoFiles({ '.kargo.yml': 'name: x\njobs: [a]\n' })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': 'name: x\njobs: [a]\n' })
     let captured: RepoValidationRequest | undefined
     const repoConn = fakeConnections()
     const service = new EnvironmentConnectionService({
@@ -539,10 +547,13 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       environmentProvider: {
         validateRepo: async (req: RepoValidationRequest) => {
           captured = req
-          const file = await req.readRepoFile('.kargo.yml')
+          const file = await req.readRepoFile('.acme-envs.yml')
           return file
             ? { ok: true, issues: [] }
-            : { ok: false, issues: [{ severity: 'error', message: 'missing', path: '.kargo.yml' }] }
+            : {
+                ok: false,
+                issues: [{ severity: 'error', message: 'missing', path: '.acme-envs.yml' }],
+              }
         },
       } as unknown as EnvironmentProvider,
       resolveRepoFilesForWorkspace: async () => repoCtx(repo),
@@ -563,7 +574,7 @@ describe('EnvironmentConnectionService — validateRepo', () => {
   })
 
   it('passes provider issues through when the repo is invalid', async () => {
-    const repo = fakeRepoFiles() // no .kargo.yml
+    const repo = fakeRepoFiles() // no .acme-envs.yml
     const repoConn = fakeConnections()
     const service = new EnvironmentConnectionService({
       environmentConnectionRepository: repoConn,
@@ -573,10 +584,13 @@ describe('EnvironmentConnectionService — validateRepo', () => {
       environmentBackendRegistry: registry,
       environmentProvider: {
         validateRepo: async (req: RepoValidationRequest) => {
-          const file = await req.readRepoFile('.kargo.yml')
+          const file = await req.readRepoFile('.acme-envs.yml')
           return file
             ? { ok: true, issues: [] }
-            : { ok: false, issues: [{ severity: 'error', message: 'missing', path: '.kargo.yml' }] }
+            : {
+                ok: false,
+                issues: [{ severity: 'error', message: 'missing', path: '.acme-envs.yml' }],
+              }
         },
       } as unknown as EnvironmentProvider,
       resolveRepoFilesForWorkspace: async () => repoCtx(repo),
@@ -588,7 +602,9 @@ describe('EnvironmentConnectionService — validateRepo', () => {
 
     const result = await service.validateRepo('ws1', { owner: 'o', repo: 'r' })
     expect(result.ok).toBe(false)
-    expect(result.issues).toEqual([{ severity: 'error', message: 'missing', path: '.kargo.yml' }])
+    expect(result.issues).toEqual([
+      { severity: 'error', message: 'missing', path: '.acme-envs.yml' },
+    ])
   })
 })
 
@@ -753,24 +769,28 @@ describe('EnvironmentConnectionService — custom-provider autodetection', () =>
 describe('EnvironmentConnectionService — bootstrapRepo', () => {
   const VALID = 'name: x\njobs: [a]\n'
 
-  // A provider that writes `.kargo.yml` and validates it exists.
+  // A provider that writes `.acme-envs.yml` and validates it exists.
   function bootstrapProvider(over: Partial<EnvironmentProvider> = {}): EnvironmentProvider {
     return {
       validateRepo: async (req: RepoValidationRequest) => {
-        const file = await req.readRepoFile('.kargo.yml')
+        const file = await req.readRepoFile('.acme-envs.yml')
         const ok = !!file && file.content.includes('jobs')
         return ok
           ? { ok: true, issues: [] }
           : {
               ok: false,
               issues: [
-                { severity: 'error', message: file ? 'invalid' : 'missing', path: '.kargo.yml' },
+                {
+                  severity: 'error',
+                  message: file ? 'invalid' : 'missing',
+                  path: '.acme-envs.yml',
+                },
               ],
             }
       },
       bootstrapProviderConfiguration: async () => ({
-        files: [{ path: '.kargo.yml', content: VALID }],
-        commitMessage: 'add kargo config',
+        files: [{ path: '.acme-envs.yml', content: VALID }],
+        commitMessage: 'add acme-envs config',
       }),
       ...over,
     } as unknown as EnvironmentProvider
@@ -818,13 +838,13 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     })
     expect(result.ok).toBe(true)
     expect(result.committed).toBe(true)
-    expect(repo.store.get('.kargo.yml')).toBe(VALID)
+    expect(repo.store.get('.acme-envs.yml')).toBe(VALID)
     expect(repo.commits).toHaveLength(1)
     expect(repo.commits[0]?.branch).toBe('main')
   })
 
   it('is idempotent: skips committing when the file already matches', async () => {
-    const repo = fakeRepoFiles({ '.kargo.yml': VALID })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': VALID })
     const service = serviceWith(bootstrapProvider(), repo)
     await service.register('ws1', {
       config: { kind: 'manifest', manifest: baseManifest },
@@ -888,7 +908,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   })
 
   it('starts an async repair run (returns repairJobId, ok pending) when generation needs an agent and the caller allows it', async () => {
-    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': 'broken: [' })
     let dispatchedRef: { owner: string; repo: string; gitRef: string } | null = null
     const service = serviceWith(
       bootstrapProvider({
@@ -897,7 +917,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
           needsAgent: true,
           issues: [{ severity: 'error', message: 'cannot merge existing config' }],
         }),
-        describeRepairAgent: () => ({ prompt: 'fix the kargo config' }),
+        describeRepairAgent: () => ({ prompt: 'fix the acme-envs config' }),
       }),
       repo,
       {
@@ -928,7 +948,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   })
 
   it('revalidate re-runs the provider validation at a ref (the repair run completion callback)', async () => {
-    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': 'broken: [' })
     const service = serviceWith(
       bootstrapProvider({ describeRepairAgent: () => ({ prompt: 'fix' }) }),
       repo,
@@ -948,7 +968,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
     expect(before.ok).toBe(false)
 
     // The agent's fix landed → ok:true on re-validation.
-    repo.store.set('.kargo.yml', VALID)
+    repo.store.set('.acme-envs.yml', VALID)
     const after = await service.revalidate({
       workspaceId: 'ws1',
       owner: 'o',
@@ -959,7 +979,7 @@ describe('EnvironmentConnectionService — bootstrapRepo', () => {
   })
 
   it('does not dispatch the agent when needsAgent but the caller did not opt in', async () => {
-    const repo = fakeRepoFiles({ '.kargo.yml': 'broken: [' })
+    const repo = fakeRepoFiles({ '.acme-envs.yml': 'broken: [' })
     let dispatched = false
     const service = serviceWith(
       bootstrapProvider({

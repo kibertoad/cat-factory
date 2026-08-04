@@ -1,4 +1,4 @@
-// The PRE-TOKEN INPUT GATE: a deterministic, runtime-neutral reduction over a task's own
+// The PRE-DISPATCH INPUT GATE: a deterministic, runtime-neutral reduction over a task's own
 // authored input, answering one question: is there anything here an agent could act on?
 //
 // It exists because the cheapest refusal the platform could previously produce cost a model

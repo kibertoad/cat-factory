@@ -111,7 +111,7 @@ describe('navSlotFilter', () => {
     // Model providers are NOT an integration: the split is what makes the engines findable.
     expect(kept).toContain('model-providers')
     // ...and so does everything the everyday delivery loop runs on, however deep it feels:
-    // authoring a flow, the standards library, and the PREnv/runner plumbing.
+    // authoring a flow, the standards library, and the ephemeral-env/runner plumbing.
     expect(kept).toContain('build-pipeline')
     expect(kept).toContain('fragments')
     // Also the only route to the guided per-service Compose environment setup, which folded

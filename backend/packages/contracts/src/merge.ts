@@ -86,7 +86,7 @@ export type MergeClassRules = v.InferOutput<typeof mergeClassRulesSchema>
  * A partial map from {@link workspaceRoleSchema} to that role's own {@link mergeClassRulesSchema}.
  * The base `classRules` say what the WORK may do; this says what a given tier of person may do
  * with it, so a workspace can widen `dependency` to `always` for everyone and still hold a
- * non-engineer's runs to review on `source`.
+ * non-developer's runs to review on `source`.
  *
  * Composition is NARROW-ONLY ({@link narrowMergeClassRule}): a role entry may only make a
  * class MORE restrictive than the base rule, never less. That is the whole safety property — an
@@ -115,7 +115,7 @@ export type ClassRulesByRole = v.InferOutput<typeof classRulesByRoleSchema>
  * such a role starts does the work and opens its PR, but nothing merges — not automatically, and
  * not through the manual merge endpoint either.
  *
- * This is the "sandboxed run for a non-engineer" setting. It is expressed on the preset rather
+ * This is the "sandboxed run for a non-developer" setting. It is expressed on the preset rather
  * than on the role catalog because it is a POLICY about a body of work (this service's tasks),
  * not a capability of the person: the same product manager may be trusted to land copy changes on
  * one service and nothing at all on another, and the preset is already what a task selects.

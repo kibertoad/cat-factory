@@ -82,7 +82,7 @@
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -105,7 +105,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -10272,7 +10272,7 @@ details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
