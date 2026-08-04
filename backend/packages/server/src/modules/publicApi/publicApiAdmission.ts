@@ -56,6 +56,16 @@ export const PARKING_INLINE_KINDS = new Set<string>([
 export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
 
 /**
+ * The park surface the PRE-TOKEN INPUT GATE presents. A THIRD kind of thing again, and the
+ * distinction matters more here than the others: the two above are properties of the PIPELINE, so
+ * {@link parkSurfacesOf} can read them off the step chain, while this one is a property of the
+ * TASK. A run whose pipeline parks nowhere at all still stops here if its task states nothing an
+ * agent could act on, which is why it is composed in by {@link publicRunParkSurfaces} at the start
+ * surfaces (which have the task in hand) rather than derived from the pipeline.
+ */
+export const INPUT_GATE_PARK_SURFACE = 'input-gate'
+
+/**
  * POLLING-GATE kinds that park on a human, re-exported from `@cat-factory/contracts` so every park
  * surface this module enumerates is reachable from one place.
  *
@@ -95,7 +105,10 @@ export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
  * builds updates itself, where a hand-written sentence would keep promising an answer path that
  * does not exist — which is exactly the defect this replaced.
  */
-export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([REQUIREMENTS_REVIEW_AGENT_KIND])
+export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
+  REQUIREMENTS_REVIEW_AGENT_KIND,
+  INPUT_GATE_PARK_SURFACE,
+])
 
 /** The pipeline shape admission reasons about — the step chain plus its parallel flag arrays. */
 export interface AdmissiblePipelineShape {
@@ -185,12 +198,8 @@ export function parkSurfacesOf(pipeline: AdmissiblePipelineShape): string[] {
  * 404s for the run it is about. Required means a new start surface that forgets to say which route
  * it offers fails to typecheck, rather than shipping another surface's exit as advice.
  */
-export function parkingRefusalMessage(
-  pipeline: AdmissiblePipelineShape,
-  options: { cancelPath: string },
-): string {
+export function parkingRefusalMessage(surfaces: string[], options: { cancelPath: string }): string {
   const { cancelPath } = options
-  const surfaces = parkSurfacesOf(pipeline)
   const answerable = surfaces.filter((s) => PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
   const unanswerable = surfaces.filter((s) => !PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
   const parts = [`This pipeline can park on a human decision (${surfaces.join(', ')}).`]
@@ -205,6 +214,26 @@ export function parkingRefusalMessage(
     )
   }
   return parts.join(' ')
+}
+
+/**
+ * Every park surface a public run against `pipeline` can end up on, pipeline-shape and task-shape
+ * together. This is what both public START surfaces gate on, and what the refusal is built from.
+ *
+ * `inputGateBlocks` is REQUIRED rather than defaulted, for the same reason `cancelPath` is above: a
+ * default is a claim, and both possible defaults are wrong somewhere. `false` re-opens the exact
+ * hole this closes (a `write` key starting a run that parks with nothing able to answer it) and
+ * `true` refuses runs that were never going to park. Required means a new start surface has to
+ * answer the question rather than inherit somebody else's answer.
+ */
+export function publicRunParkSurfaces(
+  pipeline: AdmissiblePipelineShape,
+  options: { inputGateBlocks: boolean },
+): string[] {
+  const surfaces = parkSurfacesOf(pipeline)
+  // Prepended: the gate parks BEFORE the first dispatch, so if it is going to hold this run it
+  // holds it before any of the pipeline's own park surfaces are reached.
+  return options.inputGateBlocks ? [INPUT_GATE_PARK_SURFACE, ...surfaces] : surfaces
 }
 
 /**

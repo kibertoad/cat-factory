@@ -41,6 +41,7 @@ describe('deployer agent + environment discovery', () => {
     })
     const task = await app.call<Block>('POST', `/workspaces/${ws}/blocks/${frame.body.id}/tasks`, {
       title: 'Run e2e suite',
+      description: 'Stand the service up and run the end-to-end suite against it.',
     })
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {

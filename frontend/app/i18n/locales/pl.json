@@ -566,6 +566,8 @@
         "binary_output_service_invalid": "Nie można rozpoznać usługi dla wyników binarnych",
         "binary_output_generator_invalid": "Nie można rozpoznać generatora danych binarnych",
         "foundational_service_not_inherited": "Ta tablica zarejestrowała tę usługę",
+        "input_gate_not_parked": "Nie ma na co odpowiadać",
+        "input_gate_parked": "Odpowiedz w kontroli danych wejściowych zadania",
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
         "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić"
       },
@@ -600,6 +602,8 @@
         "binary_output_service_invalid": "Krok generujący wyniki binarne wybiera usługę fundamentalną, której katalog tego obszaru roboczego nie może rozpoznać: identyfikator jest nieznany albo wybrana usługa przechowywania nie ma zdolności asset-storage. Popraw wybór w kroku lub zarejestruj usługę, a następnie uruchom ponownie.",
         "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, albo żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją lub popraw wybór w kroku, a następnie uruchom ponownie.",
         "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy.",
+        "input_gate_not_parked": "Ten przebieg nie czeka już na kontrolę danych wejściowych. Ktoś mógł już na nią odpowiedzieć albo przebieg poszedł dalej.",
+        "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
@@ -3159,6 +3163,16 @@
         "saveFailed": "Nie udało się zapisać ustawień",
         "budgetSaved": "Budżet zapisany",
         "budgetSaveFailed": "Nie udało się zapisać budżetu"
+      },
+      "inputGate": {
+        "heading": "Kontrola danych wejściowych przed startem przebiegu",
+        "body": "Sprawdza treść zadania przed pierwszym krokiem agenta, żeby zadanie, na którym nikt nie mógłby pracować, zatrzymało się bez żadnych kosztów. Standard wstrzymuje przebieg przy pustym lub zastępczym opisie, błędzie bez kontekstu odtworzenia albo zadaniu przeglądu bez pull requesta.",
+        "mode": "Tryb",
+        "modes": {
+          "standard": "Standard (wstrzymaj przy blokującym braku)",
+          "advisory": "Informacyjny (zapisuj, nigdy nie wstrzymuj)",
+          "off": "Wyłączone (pomiń kontrolę)"
+        }
       }
     },
     "localModelEndpoints": {
@@ -4541,6 +4555,51 @@
       "park": "Zapytano człowieka",
       "bounce": "Odesłane do poprawki",
       "fail": "Przebieg nieudany"
+    }
+  },
+  "inputGate": {
+    "blockedTitle": "To zadanie wymaga więcej szczegółów, zanim ruszy",
+    "blockedBody": "Przebieg zatrzymał się przed pierwszym krokiem agenta, więc nic nie zostało wydane. Uzupełnij braki w zadaniu i sprawdź ponownie.",
+    "waivedTitle": "Uruchomiono mimo niekompletnego zadania",
+    "waivedBody": "Ktoś zdecydował uruchomić to zadanie z poniższymi brakami. Zostają w historii przebiegu.",
+    "advisoryTitle": "Odnotowano pewne braki, uruchomienie było kontynuowane",
+    "advisoryBody": "Kontrola danych wejściowych zadania wykryła je przy starcie. Żaden nie wstrzymuje pracy, więc nic nie zostało zatrzymane. Uzupełnienie ich ułatwi kolejne uruchomienie.",
+    "severity": {
+      "blocking": "Blokujące",
+      "advisory": "Informacyjne"
+    },
+    "recheck": "Sprawdź zadanie ponownie",
+    "proceed": "Uruchom mimo to",
+    "recheckHint": "Ponowne sprawdzenie czyta zadanie w obecnej postaci, więc najpierw je popraw.",
+    "issue": {
+      "description_missing": {
+        "title": "Brak opisu",
+        "hint": "Tytuł nazywa zadanie, a opis jest tym, na czym pracuje agent. Napisz, co ma się zmienić i dlaczego."
+      },
+      "description_placeholder": {
+        "title": "Opis zastępczy",
+        "hint": "Opis to wypełniacz (\"TBD\", \"n/a\", \"naprawić\"), a nie opis pracy."
+      },
+      "description_thin": {
+        "title": "Bardzo krótki opis",
+        "hint": "Kilka słów rzadko określa, co znaczy \"gotowe\". Więcej szczegółów tutaj oszczędza rundę pytań później."
+      },
+      "reproduction_missing": {
+        "title": "Brak kontekstu odtworzenia",
+        "hint": "Błąd bez kroków, bez porównania oczekiwane-rzeczywiste i bez stosu wywołań nie pozwala poznać, kiedy jest naprawiony."
+      },
+      "review_target_missing": {
+        "title": "Brak pull requesta do przejrzenia",
+        "hint": "Zadanie przeglądu potrzebuje numeru lub adresu pull requesta, który ma przeczytać."
+      },
+      "success_criteria_missing": {
+        "title": "Brak kryteriów sukcesu",
+        "hint": "Podaj pytanie, na które odpowiada spike, albo jak wygląda dobry wynik, żeby wyznaczony czas miał cel."
+      },
+      "unknown": {
+        "title": "Nierozpoznane ustalenie",
+        "hint": "Ten przebieg zapisał kontrolę, której ta wersja już nie zna. Przejrzyj zadanie ręcznie przed kontynuowaniem."
+      }
     }
   },
   "requirements": {

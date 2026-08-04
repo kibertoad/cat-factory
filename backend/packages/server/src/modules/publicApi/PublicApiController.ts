@@ -22,12 +22,19 @@ import {
   type ExecutionInstance,
   type PublicJob,
   type PublicPipeline,
+  type PublicApiScope,
   type PublicRun,
   type PublicService,
   type PublicTask,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { CredentialRequiredError, runBestEffort, UnavailableError } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  inputGateInputOf,
+  type InputGateInput,
+  runBestEffort,
+  UnavailableError,
+} from '@cat-factory/kernel'
 import { scopeSatisfies } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -42,7 +49,8 @@ import type { AppEnv } from '../../http/env.js'
 import { authorize } from './publicApiAuth.js'
 import { resolveTicket } from './ticketLinkage.js'
 import {
-  canParkOnHuman,
+  type AdmissiblePipelineShape,
+  publicRunParkSurfaces,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   parkingRefusalMessage,
@@ -267,6 +275,39 @@ async function rollbackInitiativeRun<E extends AppEnv>(
   )
 }
 
+/**
+ * The refusal message when a caller's scope cannot answer the parks a start would set in motion,
+ * or `null` when there is nothing to refuse.
+ *
+ * Shared by both public start surfaces (`POST /jobs` and `POST /tasks/:taskId/start`) because the
+ * rule is one rule: a pipeline that can park on a human needs a caller able to answer it, which is
+ * exactly what the `decide` scope asserts, and a `write` key gets a refusal naming THIS run's park
+ * surfaces (saying so, rather than promising an answer path that does not exist, for any the
+ * decision surface cannot answer yet).
+ *
+ * `gateInput` is what makes it a RUN-level rather than a pipeline-level question: the pre-token
+ * input gate parks on the shape of the TASK, so a run under a pipeline that parks nowhere still
+ * stops there. The jobs surface passes the shape of the anchor block it is about to create, since
+ * the brief becomes that block's description and is exactly what the engine's own check reads a
+ * moment later.
+ */
+async function unanswerableParkRefusal(
+  container: AppEnv['Variables']['container'],
+  auth: { workspaceId: string; scope: PublicApiScope },
+  pipeline: AdmissiblePipelineShape,
+  gateInput: InputGateInput,
+  cancelPath: string,
+): Promise<string | null> {
+  const surfaces = publicRunParkSurfaces(pipeline, {
+    inputGateBlocks: await container.executionService.inputGateWouldBlock(
+      auth.workspaceId,
+      gateInput,
+    ),
+  })
+  if (surfaces.length === 0 || scopeSatisfies(auth.scope, 'decide')) return null
+  return parkingRefusalMessage(surfaces, { cancelPath })
+}
+
 export function publicApiController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   // The route registrations are grouped into cohesive registrars (jobs, board tasks, pipeline
@@ -362,19 +403,18 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         400,
       )
     }
-    // The parking half is a SCOPE question (see PARKING_INLINE_KINDS): a pipeline that can park
-    // on a human decision needs a caller able to answer it, which is exactly what a `decide`-scope
-    // key asserts. A `write` key gets the pre-existing refusal, naming THIS pipeline's park
-    // surfaces and, for any the public decision surface cannot answer yet, saying so rather than
-    // promising an answer path that does not exist (`parkingRefusalMessage`).
-    if (canParkOnHuman(pipeline) && !scopeSatisfies(auth.scope, 'decide')) {
+    // The parking half is a SCOPE question (see `unanswerableParkRefusal`). The input gate is
+    // asked about the anchor block created below, since the brief becomes its description.
+    const parkRefusal = await unanswerableParkRefusal(
+      container,
+      auth,
+      pipeline,
+      { title: title?.trim() || input.slice(0, 80), description: input, level: 'task' },
+      PUBLIC_JOB_CANCEL_PATH,
+    )
+    if (parkRefusal) {
       return c.json(
-        {
-          error: {
-            code: 'pipeline_requires_decide_scope',
-            message: parkingRefusalMessage(pipeline, { cancelPath: PUBLIC_JOB_CANCEL_PATH }),
-          },
-        },
+        { error: { code: 'pipeline_requires_decide_scope', message: parkRefusal } },
         403,
       )
     }
@@ -815,16 +855,19 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // different rows. It also keeps a per-start read off the whole catalog, which the
     // list-then-filter form paid for on every board start.
     const boardPipeline = await container.pipelineService.get(auth.workspaceId, pipelineId)
-    if (boardPipeline && canParkOnHuman(boardPipeline) && !scopeSatisfies(auth.scope, 'decide')) {
+    // Same rule as `POST /jobs` (see `unanswerableParkRefusal`), with THIS task's own input.
+    const taskParkRefusal = boardPipeline
+      ? await unanswerableParkRefusal(
+          container,
+          auth,
+          boardPipeline,
+          inputGateInputOf(found.block),
+          PUBLIC_TASK_STOP_PATH,
+        )
+      : null
+    if (taskParkRefusal) {
       return c.json(
-        {
-          error: {
-            code: 'pipeline_requires_decide_scope',
-            message: parkingRefusalMessage(boardPipeline, {
-              cancelPath: PUBLIC_TASK_STOP_PATH,
-            }),
-          },
-        },
+        { error: { code: 'pipeline_requires_decide_scope', message: taskParkRefusal } },
         403,
       )
     }

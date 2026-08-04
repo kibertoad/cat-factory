@@ -16,6 +16,8 @@ import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { PipelineStep } from '~/types/execution'
 import type { ChangeClass, ReviewEffort } from '~/types/merge'
 import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
+import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import { inputGateNoticeFor } from '~/utils/inputGate'
 
 const props = defineProps<{ block: Block }>()
 
@@ -58,6 +60,14 @@ const isEmpty = computed(
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
+/**
+ * The run's PRE-TOKEN INPUT GATE notice: the park while it holds the run, the waiver once
+ * somebody overruled it, and the ADVISORY findings a `passed` verdict still carries (which is
+ * the entire product of `advisory` mode, and how `standard` mode reports a thin description).
+ * Read off the RUN, not a step: the gate guards the first dispatch and leaves nothing
+ * kind-specific behind. Which verdicts earn a notice is `inputGateNoticeFor`'s call.
+ */
+const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
 
 // A failed pipeline run surfaces the shared failure banner + retry — the
 // execution failure surface that the old `pr_ready` flip used to hide.
@@ -298,6 +308,16 @@ async function mergePr() {
           </UButton>
         </div>
       </div>
+      <!-- What the task's input check found. Rendered above the step list because it is a fact
+           about the RUN, and because the remedy for a park is to edit the task, not open a step.
+           An advisory verdict renders here too: nothing was parked, but something was found. -->
+      <InputGateNotice
+        v-if="inputGateNotice"
+        :gate="inputGateNotice.gate"
+        :tone="inputGateNotice.tone"
+        :execution-id="instance.id"
+        class="mb-2"
+      />
       <ul class="space-y-1">
         <li
           v-for="(s, i) in instance.steps"
@@ -417,7 +437,7 @@ async function mergePr() {
               v-else-if="
                 s.approval &&
                 s.approval.status === 'pending' &&
-                dedicatedParkView(s) === 'fork-decision'
+                dedicatedParkView(s, instance) === 'fork-decision'
               "
               color="primary"
               variant="soft"
@@ -434,7 +454,7 @@ async function mergePr() {
               v-else-if="
                 s.approval &&
                 s.approval.status === 'pending' &&
-                dedicatedParkView(s) === 'follow-ups'
+                dedicatedParkView(s, instance) === 'follow-ups'
               "
               color="primary"
               variant="soft"
@@ -461,8 +481,17 @@ async function mergePr() {
             >
               {{ t('inspector.execution.reviewFindings') }}
             </UButton>
+            <!-- The generic approve/review rail. Reached only once no dedicated surface owns
+                 the park: the branches above took the fork and follow-up windows, so the one
+                 left to exclude is the PRE-TOKEN INPUT GATE, which rides `step.approval` too
+                 but is refused by the generic resolver server-side (approving it would mark the
+                 run's first working step done and skip the work). It is answered by the notice
+                 above the list. Asked of `dedicatedParkView` rather than re-derived here, so
+                 the rule that decides which surface owns a park lives in exactly one place. -->
             <UButton
-              v-else-if="s.approval && s.approval.status === 'pending'"
+              v-else-if="
+                s.approval && s.approval.status === 'pending' && !dedicatedParkView(s, instance)
+              "
               color="warning"
               variant="soft"
               size="xs"

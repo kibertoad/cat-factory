@@ -8,6 +8,7 @@ import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
+import { runInputGateSchema } from './input-gate.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
@@ -1468,5 +1469,19 @@ export const executionInstanceSchema = v.object({
    * (see {@link runDiagnosticsSchema}); absent on legacy runs and pure inline pipelines.
    */
   diagnostics: v.optional(runDiagnosticsSchema),
+  /**
+   * The PRE-TOKEN INPUT GATE's verdict on the task this run implements (see
+   * {@link runInputGateSchema}): the structural check of the authored input that runs before
+   * the first agent step is dispatched, so a task nobody could act on parks having spent no
+   * tokens at all.
+   *
+   * ABSENT means the gate has not evaluated this run YET: the run has not reached its first
+   * dispatch. It never means "clean": a clean evaluation stamps `passed`, and a workspace with
+   * the gate off stamps `off`. Keeping those three apart is what makes the record idempotent
+   * under a durable replay (a re-driven run reads its settled verdict rather than re-judging a
+   * block a human has since edited) and what stops "the gate is off" from reading as "the input
+   * is fine".
+   */
+  inputGate: v.optional(runInputGateSchema),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>

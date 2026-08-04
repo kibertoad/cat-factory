@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canParkOnHuman,
   HUMAN_WAIT_GATE_KINDS,
+  INPUT_GATE_PARK_SURFACE,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   PARKING_INLINE_KINDS,
@@ -11,6 +12,7 @@ import {
   parkSurfacesOf,
   PUBLIC_JOB_CANCEL_PATH,
   PUBLIC_TASK_STOP_PATH,
+  publicRunParkSurfaces,
   PUBLICLY_ANSWERABLE_PARK_SURFACES,
 } from './publicApiAdmission.js'
 
@@ -197,7 +199,7 @@ describe('public-API admission', () => {
       // are answerable only in the app, so the advice bought a wider-scoped key and a run whose
       // only exit is cancel.
       const message = parkingRefusalMessage(
-        { agentKinds: ['clarity-review'] },
+        publicRunParkSurfaces({ agentKinds: ['clarity-review'] }, { inputGateBlocks: false }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain('clarity-review')
@@ -211,7 +213,7 @@ describe('public-API admission', () => {
       // name a route that 404s for the run it is about. `cancelPath` is required rather than
       // defaulted precisely so a third start surface cannot inherit either of these by accident.
       const message = parkingRefusalMessage(
-        { agentKinds: ['clarity-review'] },
+        publicRunParkSurfaces({ agentKinds: ['clarity-review'] }, { inputGateBlocks: false }),
         { cancelPath: PUBLIC_TASK_STOP_PATH },
       )
       expect(message).toContain('POST /api/v1/tasks/:taskId/stop')
@@ -220,10 +222,10 @@ describe('public-API admission', () => {
 
     it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {
       const message = parkingRefusalMessage(
-        {
-          agentKinds: ['requirements-review', 'initiative-breakdown'],
-          gates: [false, true],
-        },
+        publicRunParkSurfaces(
+          { agentKinds: ['requirements-review', 'initiative-breakdown'], gates: [false, true] },
+          { inputGateBlocks: false },
+        ),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain(
@@ -234,7 +236,7 @@ describe('public-API admission', () => {
 
     it('mentions no cancel-only caveat when every park is answerable', () => {
       const message = parkingRefusalMessage(
-        { agentKinds: ['requirements-review'] },
+        publicRunParkSurfaces({ agentKinds: ['requirements-review'] }, { inputGateBlocks: false }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain('/api/v1/runs/:runId/decisions')
@@ -248,7 +250,7 @@ describe('public-API admission', () => {
       // into the answerable set rather than leaving the message silently wrong.
       for (const kind of [...PARKING_INLINE_KINDS, ...HUMAN_WAIT_GATE_KINDS]) {
         const message = parkingRefusalMessage(
-          { agentKinds: [kind] },
+          publicRunParkSurfaces({ agentKinds: [kind] }, { inputGateBlocks: false }),
           { cancelPath: PUBLIC_JOB_CANCEL_PATH },
         )
         expect(message.includes('/api/v1/runs/:runId/decisions'), kind).toBe(
@@ -273,5 +275,45 @@ describe('public-API admission', () => {
       ).toBe(false)
       expect(isHeadlessInlinePipeline({ agentKinds: ['coder'] }, registry)).toBe(false)
     })
+  })
+})
+
+describe('publicRunParkSurfaces', () => {
+  // The regression this pins: the PRE-TOKEN INPUT GATE parks on the shape of the TASK, so
+  // `parkSurfacesOf` (which reads the step chain) cannot see it. A `write` key could start a
+  // title-only task under a pipeline that parks nowhere and get a run that stopped before its
+  // first dispatch with nothing able to answer it and only cancel as a way out.
+  const inlineOnly = { agentKinds: ['task-estimator'] }
+
+  it('reports no park for a non-parking pipeline whose task is fine', () => {
+    expect(publicRunParkSurfaces(inlineOnly, { inputGateBlocks: false })).toEqual([])
+  })
+
+  it('reports the gate for a non-parking pipeline whose TASK would park the run', () => {
+    expect(publicRunParkSurfaces(inlineOnly, { inputGateBlocks: true })).toEqual([
+      INPUT_GATE_PARK_SURFACE,
+    ])
+  })
+
+  it('lists the gate FIRST, since it parks before any step of the pipeline runs', () => {
+    const surfaces = publicRunParkSurfaces(
+      { agentKinds: ['requirements-review'] },
+      { inputGateBlocks: true },
+    )
+    expect(surfaces[0]).toBe(INPUT_GATE_PARK_SURFACE)
+    expect(surfaces).toContain('requirements-review')
+  })
+
+  it('is answerable, so the refusal steers at the decision surface rather than at cancel', () => {
+    // The gate has a public resolve route (`POST /api/v1/runs/:runId/decisions/input-gate/resolve`),
+    // so unlike the app-only parks it must NOT be described as cancel-only.
+    expect(PUBLICLY_ANSWERABLE_PARK_SURFACES.has(INPUT_GATE_PARK_SURFACE)).toBe(true)
+    const message = parkingRefusalMessage(
+      publicRunParkSurfaces(inlineOnly, { inputGateBlocks: true }),
+      { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+    )
+    expect(message).toContain(INPUT_GATE_PARK_SURFACE)
+    expect(message).toContain('/api/v1/runs/:runId/decisions')
+    expect(message).not.toContain('cannot answer')
   })
 })

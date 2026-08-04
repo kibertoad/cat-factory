@@ -16,7 +16,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
   an LLM can walk them within a context budget; see `docs/debug-api.md`), `publicApiAuth.ts` (the
   shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
-  caller may launch) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
+  caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
+  the pre-token input gate, which parks on the shape of the TASK and so is invisible to the
+  step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
   on the surface shares (`GET /jobs`, `GET /services/:id/tasks`, every `/api/v1/debug/*` list) plus the coarse-status
   projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
   definition of a run's sort key so a cursor can never name a different value than the query
