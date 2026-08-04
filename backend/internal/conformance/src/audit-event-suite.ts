@@ -1,12 +1,15 @@
 import type { AuditEventRecord, AuditEventRepository } from '@cat-factory/kernel'
+import { isRetiredAuditValue } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the append-only account audit log. The vocabulary and the write seam
 // are runtime-neutral, but each facade persists the log in its own store (D1 on Cloudflare,
-// Postgres via Drizzle on Node), and the two things most likely to drift are the ones a
-// single-runtime test would never catch: the discriminated ACTOR mapped across three columns, and
-// keyset pagination over a (at, id) tuple whose tie-break decides whether an event is served
-// twice or skipped. Both are driven here through whichever real repository a runtime hands over.
+// Postgres via Drizzle on Node), and the things most likely to drift are the ones a
+// single-runtime test would never catch: the discriminated ACTOR mapped across three columns, the
+// `details` fields round-tripping through one TEXT column, how a retired vocabulary member reads
+// back, and keyset pagination over an (at, id) tuple whose tie-break decides whether an event is
+// served twice or skipped. All are driven here through whichever real repository a runtime hands
+// over.
 
 function event(overrides: Partial<AuditEventRecord> & Pick<AuditEventRecord, 'id'>) {
   return {
@@ -14,9 +17,9 @@ function event(overrides: Partial<AuditEventRecord> & Pick<AuditEventRecord, 'id
     workspaceId: null,
     actor: { kind: 'user' as const, userId: 'usr-1' },
     action: 'account.member_added' as const,
-    targetType: 'user',
+    targetType: 'user' as const,
     targetId: 'usr-2',
-    summary: 'Added to the account with role(s) developer',
+    details: { roles: 'developer' },
     at: 1_000,
     ...overrides,
   }
@@ -52,9 +55,42 @@ export function defineAuditEventSuite(name: string, makeRepo: () => AuditEventRe
         action: 'account.member_added',
         targetType: 'user',
         targetId: 'usr-2',
-        summary: 'Added to the account with role(s) developer',
+        details: { roles: 'developer' },
         at: 1_000,
       })
+    })
+
+    it('round-trips every detail VALUE shape through the one text column', async () => {
+      // `details` is a JSON blob in a TEXT column on both stores, so the types a writer states
+      // have to survive the trip: a cleared budget must not come back as the string "null", and a
+      // number must not come back as a string the viewer then renders with quotes.
+      const repo = makeRepo()
+      const { acc } = ids()
+      await repo.append(
+        event({
+          id: `aud-${acc}-1`,
+          accountId: acc,
+          action: 'account.budget_changed',
+          targetType: 'account',
+          details: { limit: null },
+        }),
+      )
+      await repo.append(
+        event({
+          id: `aud-${acc}-2`,
+          accountId: acc,
+          at: 2_000,
+          action: 'account.budget_changed',
+          targetType: 'account',
+          details: { limit: 250, note: 'raised', urgent: true },
+        }),
+      )
+
+      const page = await repo.listByAccount(acc)
+      expect(page.events.map((e) => e.details)).toEqual([
+        { limit: 250, note: 'raised', urgent: true },
+        { limit: null },
+      ])
     })
 
     it('maps each actor kind back to the principal it was written as', async () => {
@@ -91,6 +127,36 @@ export function defineAuditEventSuite(name: string, makeRepo: () => AuditEventRe
       ])
       // The board-scoped event keeps its workspace; the account-scoped ones stay null.
       expect(page.events.map((e) => e.workspaceId)).toEqual([ws, null, null])
+    })
+
+    it('reads a RETIRED action / target type back named, never dropped or guessed', async () => {
+      // `action` and `targetType` are closed vocabularies that are also persisted, so a member
+      // retired from the type goes on existing in rows written before it was. The cast is the
+      // point: no current build can write these, and every future one has to read them. A dropped
+      // row is the one failure an audit log must not have.
+      const repo = makeRepo()
+      const { acc } = ids()
+      await repo.append(
+        event({
+          id: `aud-${acc}-1`,
+          accountId: acc,
+          action: 'account.seat_reassigned' as AuditEventRecord['action'],
+          targetType: 'apiKey' as AuditEventRecord['targetType'],
+        }),
+      )
+
+      const page = await repo.listByAccount(acc)
+      expect(page.events).toHaveLength(1)
+      expect(page.events[0]?.action).toEqual({ retired: 'account.seat_reassigned' })
+      expect(page.events[0]?.targetType).toEqual({ retired: 'apiKey' })
+      // …and the guard both facades and the viewer narrow with agrees.
+      const action = page.events[0]!.action
+      expect(isRetiredAuditValue(action) ? action.retired : 'not-retired').toBe(
+        'account.seat_reassigned',
+      )
+      // Everything else on the row still reads normally: the retirement costs the label, not the
+      // record of who did it.
+      expect(page.events[0]?.actor).toEqual({ kind: 'user', userId: 'usr-1' })
     })
 
     it('scopes reads to one account', async () => {

@@ -54,7 +54,13 @@ export const auditEvents = audit.table(
     action: text('action').notNull(),
     target_type: text('target_type').notNull(),
     target_id: text('target_id').notNull(),
-    summary: text('summary').notNull(),
+    // WHAT changed, as a JSON object of machine-readable fields (`{"previousRole":"viewer"}`),
+    // never a human-readable sentence: the backend does not localize, and an audit row is
+    // PERSISTED, so English prose written today could never be re-rendered for a reader in
+    // another locale. The viewer interpolates these into translated copy keyed by `action`
+    // (`AUDIT_ACTION_DETAIL_KEYS` in contracts). One column rather than a table because nothing
+    // ever queries BY a detail: the only read is one account's newest-first page.
+    details: text('details').notNull(),
     at: bigint('at', { mode: 'number' }).notNull(),
   },
   // The viewer's ONLY read is one account's newest-first page. `id` breaks the `at` tie so two

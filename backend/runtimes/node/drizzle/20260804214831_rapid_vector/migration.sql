@@ -10,7 +10,7 @@ CREATE TABLE "audit"."audit_events" (
 	"action" text NOT NULL,
 	"target_type" text NOT NULL,
 	"target_id" text NOT NULL,
-	"summary" text NOT NULL,
+	"details" text NOT NULL,
 	"at" bigint NOT NULL
 );
 --> statement-breakpoint

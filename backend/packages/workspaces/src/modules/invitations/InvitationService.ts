@@ -143,14 +143,14 @@ export class InvitationService {
     await this.deps.invitationRepository.create(record)
     // Audited on the CREATE, not after the send: the invitation is redeemable from here, so an
     // event withheld until the email went out would omit exactly the invitations that were
-    // shared by hand. The raw token never appears in the summary (it is the credential).
-    this.audit.record({
+    // shared by hand. The raw token is never a detail (it is the credential).
+    await this.audit.record({
       accountId,
       actor: { kind: 'user', userId: actingUserId },
       action: 'account.invitation_created',
       targetType: 'invitation',
       targetId: record.id,
-      summary: `Invited ${normalizedEmail} with role(s) ${record.roles.join(', ')}`,
+      details: { email: normalizedEmail, roles: record.roles.join(', ') },
     })
 
     const acceptUrl = this.deps.appBaseUrl
@@ -189,13 +189,13 @@ export class InvitationService {
     )
     if (invitation.accountId !== accountId) throw new NotFoundError('Invitation', invitationId)
     await this.deps.invitationRepository.setStatus(invitationId, 'revoked')
-    this.audit.record({
+    await this.audit.record({
       accountId,
       actor: { kind: 'user', userId: actingUserId },
       action: 'account.invitation_revoked',
       targetType: 'invitation',
       targetId: invitationId,
-      summary: `Revoked the pending invitation to ${invitation.email}`,
+      details: { email: invitation.email },
     })
   }
 
@@ -244,14 +244,18 @@ export class InvitationService {
     await this.deps.onAccountMembershipChanged?.(record.accountId)
     // The actor is the person ACCEPTING, not the admin who invited them: this event records that
     // a membership came into existence, and the invitation's own event already records who
-    // offered it. `invitedBy` stays in the summary so the pair reads as one story.
-    this.audit.record({
+    // offered it. `invitedBy` rides the details so the pair reads as one story.
+    await this.audit.record({
       accountId: record.accountId,
       actor: { kind: 'user', userId },
       action: 'account.invitation_accepted',
       targetType: 'invitation',
       targetId: record.id,
-      summary: `Accepted the invitation to ${record.email} (invited by ${record.invitedBy}), joining with role(s) ${record.roles.join(', ')}`,
+      details: {
+        email: record.email,
+        roles: record.roles.join(', '),
+        invitedBy: record.invitedBy,
+      },
     })
     return record.accountId
   }

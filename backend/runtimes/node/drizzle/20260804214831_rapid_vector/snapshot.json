@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "982eb264-4f29-410c-886a-36646dc4d3ec",
+  "id": "b843e09d-f8ba-4b7c-b4f2-2e3da3e57c5c",
   "prevIds": [
     "0c6ba21f-baa2-4a18-b3a9-4b92f631ca06"
   ],
@@ -12598,7 +12598,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "summary",
+      "name": "details",
       "entityType": "columns",
       "schema": "audit",
       "table": "audit_events"

@@ -37,10 +37,11 @@ injected into the container). Both are pruned to the same window
 The account audit log (`audit_events`) is also kept out of the main DB, but none of the telemetry
 reasoning applies to it and repeating that reasoning would get the design wrong:
 
-- **Cloudflare:** a separate, required `AUDIT_DB` D1 database (its own `[[d1_databases]]` binding
-  - `migrations_dir = audit-migrations`). Provision it once with
-    `wrangler d1 create cat_factory_audit`. The readiness probe reports `audit` so an unbound
-    binding is found before the trail is needed rather than after.
+- **Cloudflare:** a separate, required `AUDIT_DB` D1 database, with its own `[[d1_databases]]`
+  binding and `migrations_dir = audit-migrations`. Provision it once with
+  `wrangler d1 create cat_factory_audit`. Required means required: the container build refuses an
+  unbound binding, so the deployment answers the misconfiguration screen rather than running
+  silently unaudited, and `/ready` names `audit` so an operator reads which binding it is.
 - **Node:** an `audit` Postgres schema (`pgSchema('audit')` in `db/tables/audit.ts`), served by
   the same connection/pool; the generated migration creates it.
 
@@ -53,9 +54,11 @@ at ~395 days; the telemetry sinks grow far faster but prune at 3). On a store wi
 per-database ceiling, that combination is what would put a years-deep trail in competition with
 live transactional state.
 
-Measured cost, so the arithmetic is not guesswork: **~508 B/row** on Postgres (264 heap + 244
-index — the index costs as much as the data, because the keyset carries `id` as its tie-break).
-That is ~2.5× the ~0.2 KB/row the rest of this document assumes. At ~3 rows per run:
+Measured cost, so the arithmetic is not guesswork: **~500 B/row** on Postgres (~260 heap + ~245
+index, the index costing as much as the data because the keyset carries `id` as its tie-break).
+That is ~2.5× the ~0.2 KB/row the rest of this document assumes. The heap figure moves with the
+`details` blob, which is a handful of short fields, so treat it as the order of magnitude rather
+than a constant. At ~3 rows per run:
 
 | runs/day | rows/year | size/year |
 | -------- | --------- | --------- |
@@ -76,6 +79,12 @@ It also makes one correctness property structural rather than remembered: `audit
 `workspace_id` but must **never** be reached by the workspace-delete cascade, since a board being
 deleted is itself worth having a record of. Both facades' cascade-completeness guards exclude it by
 schema/database rather than by an entry in a list someone could add.
+
+What a row holds is **`action` + `details`, never a sentence**: the values are machine-readable
+fields (`{"previousRole":"viewer","role":"admin"}`) the viewer interpolates into translated copy.
+The backend does not localize, and this store is where that rule bites hardest, because a row is
+kept for years: English prose written today could never be re-rendered for a reader in another
+locale, and unlike a wire shape a persisted one cannot be changed later.
 
 **Retention for it is not wired yet** (its own initiative slice), so the table is unbounded today.
 

@@ -149,14 +149,14 @@ export class WorkspaceMemberService {
     await this.invalidate(workspaceId)
     const actor = this.actorOf(addedByUserId)
     if (actor) {
-      this.audit.record({
+      await this.audit.record({
         accountId,
         workspaceId,
         actor,
         action: 'workspace.member_added',
         targetType: 'user',
         targetId: userId,
-        summary: `Added to the board with role ${role}`,
+        details: { role },
       })
     }
     return toWire(record)
@@ -171,23 +171,25 @@ export class WorkspaceMemberService {
   ): Promise<WorkspaceMember> {
     const existing = await this.members.get(workspaceId, userId)
     if (!existing) throw new NotFoundError('Workspace member', userId)
+    const actor = this.actorOf(actingUserId)
+    // The board's account, read back rather than assumed: a roster write is only reachable on an
+    // account-scoped board, but the audit event is account-keyed and guessing the scope is how a
+    // row lands where no admin will ever read it. Resolved BEFORE the write, because this read can
+    // refuse (see {@link accountIdOf}) and a refusal after the upsert would report a failure for a
+    // change that had already committed.
+    const accountId = actor ? await this.accountIdOf(workspaceId) : null
     const record: WorkspaceMemberRecord = { ...existing, role }
     await this.members.upsert(record)
     await this.invalidate(workspaceId)
-    const actor = this.actorOf(actingUserId)
-    if (actor) {
-      // The board's account, read back rather than assumed: a roster write is only reachable on an
-      // account-scoped board, but the audit event is account-keyed and guessing the scope is how a
-      // row lands where no admin will ever read it.
-      const accountId = await this.accountIdOf(workspaceId)
-      this.audit.record({
+    if (actor && accountId) {
+      await this.audit.record({
         accountId,
         workspaceId,
         actor,
         action: 'workspace.member_role_changed',
         targetType: 'user',
         targetId: userId,
-        summary: `Board role changed from ${existing.role} to ${role}`,
+        details: { previousRole: existing.role, role },
       })
     }
     return toWire(record)
@@ -198,19 +200,22 @@ export class WorkspaceMemberService {
     // Read the row BEFORE the delete: after it there is nothing left to say what was removed, and
     // an idempotent no-op must not produce an event claiming a member was removed.
     const existing = await this.members.get(workspaceId, userId)
+    const actor = this.actorOf(actingUserId)
+    // Also before the delete, and for the second reason given on {@link setRole}: this read can
+    // refuse, and refusing after the row is gone would report a failure for a removal that
+    // happened. An absent row audits nothing, so it resolves nothing either.
+    const accountId = actor && existing ? await this.accountIdOf(workspaceId) : null
     await this.members.remove(workspaceId, userId)
     await this.invalidate(workspaceId)
-    const actor = this.actorOf(actingUserId)
-    if (actor && existing) {
-      const accountId = await this.accountIdOf(workspaceId)
-      this.audit.record({
+    if (actor && existing && accountId) {
+      await this.audit.record({
         accountId,
         workspaceId,
         actor,
         action: 'workspace.member_removed',
         targetType: 'user',
         targetId: userId,
-        summary: `Removed from the board (held role ${existing.role})`,
+        details: { role: existing.role },
       })
     }
   }
@@ -232,17 +237,37 @@ export class WorkspaceMemberService {
     await this.invalidate(workspaceId)
     const actor = this.actorOf(actingUserId)
     if (actor) {
-      this.audit.record({
+      await this.audit.record({
         accountId,
         workspaceId,
         actor,
         action: 'workspace.access_mode_changed',
         targetType: 'workspace',
         targetId: workspaceId,
-        summary: `Board access mode set to ${mode}`,
+        details: { accessMode: mode },
       })
     }
     return requireWorkspace(this.workspaces, workspaceId)
+  }
+
+  /**
+   * The board's owning account id, for keying an audit event. Unlike {@link ensureAccountScoped}
+   * this NEVER heals: it is only reached from a roster write that already found a member row, and
+   * a member row can only exist on an account-scoped board. A board that is somehow unscoped here
+   * throws rather than inventing a scope, because an audit row filed under the wrong account is
+   * one no admin will ever read. Callers resolve it BEFORE their write, so that refusal costs the
+   * write rather than arriving after it.
+   */
+  private async accountIdOf(workspaceId: string): Promise<string> {
+    const row = assertFound(
+      await this.workspaces.accessRowOf(workspaceId),
+      'Workspace',
+      workspaceId,
+    )
+    if (row.accountId === null) {
+      throw new ValidationError('This board is not linked to an account')
+    }
+    return row.accountId
   }
 
   /**
@@ -260,25 +285,6 @@ export class WorkspaceMemberService {
    * to). On heal we also (re)assert the owner's `admin` member row so a follow-up flip to
    * `restricted` can't lock the owner out, mirroring the creator auto-enroll in `WorkspaceService`.
    */
-  /**
-   * The board's owning account id, for keying an audit event. Unlike {@link ensureAccountScoped}
-   * this NEVER heals: it is only reached from a roster write that already found a member row, and
-   * a member row can only exist on an account-scoped board. A board that is somehow unscoped here
-   * throws rather than inventing a scope, because an audit row filed under the wrong account is
-   * one no admin will ever read.
-   */
-  private async accountIdOf(workspaceId: string): Promise<string> {
-    const row = assertFound(
-      await this.workspaces.accessRowOf(workspaceId),
-      'Workspace',
-      workspaceId,
-    )
-    if (row.accountId === null) {
-      throw new ValidationError('This board is not linked to an account')
-    }
-    return row.accountId
-  }
-
   private async ensureAccountScoped(workspaceId: string): Promise<string> {
     const row = assertFound(
       await this.workspaces.accessRowOf(workspaceId),

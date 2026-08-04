@@ -209,9 +209,10 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     checks.telemetry = env.TELEMETRY_DB
       ? await probe(() => env.TELEMETRY_DB!.prepare('SELECT 1').first())
       : { ok: false, error: 'TELEMETRY_DB is not bound' }
-    // AUDIT_DB is REQUIRED for the same reason, and reported here for a sharper one: an
-    // unbound audit database does not break any request, it just silently records nothing,
-    // so readiness is the only place a deployment finds out before it needs the trail.
+    // AUDIT_DB is REQUIRED for the same reason and fails the same way: the container build
+    // refuses it (`requireAuditDb`), so an unbound binding serves the misconfiguration screen
+    // on EVERY request rather than quietly recording nothing. Probed here so a fresh deployment
+    // reads which binding is missing off one unauthenticated endpoint.
     checks.audit = env.AUDIT_DB
       ? await probe(() => env.AUDIT_DB!.prepare('SELECT 1').first())
       : { ok: false, error: 'AUDIT_DB is not bound' }

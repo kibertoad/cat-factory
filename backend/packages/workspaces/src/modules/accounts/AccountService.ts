@@ -266,19 +266,22 @@ export class AccountService {
     // An explicit key (even `undefined`) means "clear"; an absent key leaves it. Each key that
     // was actually present is audited SEPARATELY after its own write commits, so the log states
     // what changed rather than that "settings were edited" — a single event for a two-key patch
-    // would make a budget raise unreadable next to a cloud-provider switch.
+    // would make a budget raise unreadable next to a cloud-provider switch. Presence, not
+    // difference: re-submitting the same value is an action an admin took, and a log that
+    // silently drops the no-ops would leave an admin unable to tell "nobody touched this" from
+    // "somebody confirmed it".
     if ('defaultCloudProvider' in input) {
       const provider = input.defaultCloudProvider ?? null
       await this.deps.accountRepository.updateSettings(accountId, {
         defaultCloudProvider: provider,
       })
-      this.audit.record({
+      await this.audit.record({
         accountId,
         actor: { kind: 'user', userId: actingUserId },
         action: 'account.settings_changed',
         targetType: 'account',
         targetId: accountId,
-        summary: `Default cloud provider set to ${provider ?? 'none'}`,
+        details: { defaultCloudProvider: provider },
       })
     }
     if ('spendMonthlyLimit' in input) {
@@ -292,16 +295,15 @@ export class AccountService {
       await this.deps.accountRepository.updateSettings(accountId, { spendMonthlyLimit: limit })
       // Drop the spend service's cached account limit so the new ceiling takes effect now.
       await this.deps.onAccountBudgetChanged?.(accountId)
-      this.audit.record({
+      // `null` is the CLEARED ceiling, and it has to reach the viewer as null rather than as a
+      // zero or an omitted key: "no limit" and "a limit of nothing" are opposite policies.
+      await this.audit.record({
         accountId,
         actor: { kind: 'user', userId: actingUserId },
         action: 'account.budget_changed',
         targetType: 'account',
         targetId: accountId,
-        summary:
-          limit == null
-            ? 'Monthly spend limit cleared'
-            : `Monthly spend limit set to ${String(limit)}`,
+        details: { limit },
       })
     }
     const account = assertFound(
@@ -343,13 +345,13 @@ export class AccountService {
     // A new account membership grants access to every non-restricted board in the account, so drop
     // the workspace-access cache (workspace-rbac). After the write commits.
     await this.deps.onAccountMembershipChanged?.(accountId)
-    this.audit.record({
+    await this.audit.record({
       accountId,
       actor: { kind: 'user', userId: actingUserId },
       action: 'account.member_added',
       targetType: 'user',
       targetId: userId,
-      summary: `Added to the account with role(s) ${membership.roles.join(', ')}`,
+      details: { roles: membership.roles.join(', ') },
     })
     return toMember(membership)
   }
@@ -374,13 +376,13 @@ export class AccountService {
     await this.deps.onAccountMembershipChanged?.(accountId)
     // Both role sets, because the interesting question about a role change is what it was
     // before: a log that records only the new value cannot tell a promotion from a demotion.
-    this.audit.record({
+    await this.audit.record({
       accountId,
       actor: { kind: 'user', userId: actingUserId },
       action: 'account.member_roles_changed',
       targetType: 'user',
       targetId: targetUserId,
-      summary: `Account role(s) changed from ${target.roles.join(', ')} to ${next.join(', ')}`,
+      details: { previousRoles: target.roles.join(', '), roles: next.join(', ') },
     })
     return toMember(membership)
   }

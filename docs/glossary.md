@@ -175,10 +175,10 @@ backlog the team already agreed to, a hunt looks for work nobody has taken.
 Every persisted table has two schemas that must stay in step (`CLAUDE.md` → "Keep the runtimes
 symmetric"):
 
-- **Cloudflare (D1/SQLite)**: hand-numbered SQL across **four** dirs at the
+- **Cloudflare (D1/SQLite)**: hand-numbered SQL across **five** dirs at the
   `backend/runtimes/cloudflare/` package root: `migrations/` (+ `telemetry-migrations/`,
-  `sandbox-migrations/`, `migrations-provisioning/`). Duplicate numeric prefixes are fine (they
-  apply in lexical order).
+  `sandbox-migrations/`, `migrations-provisioning/`, `audit-migrations/`), one per D1 binding.
+  Duplicate numeric prefixes are fine (they apply in lexical order).
 - **Node (Drizzle/Postgres)**: one `backend/runtimes/node/drizzle/` dir of generated migrations
   - the single source of truth `backend/runtimes/node/src/db/schema.ts`. It is a content-addressed
     DAG (`prevIds`), not a linear journal: see `CLAUDE.md` → "Resolving conflicting Drizzle

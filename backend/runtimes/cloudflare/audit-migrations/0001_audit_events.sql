@@ -31,7 +31,11 @@ CREATE TABLE audit_events (
   action TEXT NOT NULL,
   target_type TEXT NOT NULL,
   target_id TEXT NOT NULL,
-  summary TEXT NOT NULL,
+  -- WHAT changed, as a JSON object of machine-readable fields (`{"previousRole":"viewer"}`),
+  -- never a human-readable sentence: the backend does not localize, and an audit row is
+  -- PERSISTED, so English prose written today could never be re-rendered for a reader in another
+  -- locale. The viewer interpolates these into translated copy keyed by `action`.
+  details TEXT NOT NULL,
   at INTEGER NOT NULL
 );
 CREATE INDEX idx_audit_events_account_at ON audit_events (account_id, at DESC, id DESC);

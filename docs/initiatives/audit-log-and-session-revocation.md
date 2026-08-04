@@ -38,7 +38,7 @@ revocation via a per-user session-generation check.
 
 1. **One writer seam, not scattered calls**: an `AuditService` (orchestration/integrations)
    with a single `record(event)`: `{ accountId, workspaceId?, actor (userId | apiKeyRef |
-'system'), action, targetType, targetId, summary, at }`. Services call it at the point
+'system'), action, targetType, targetId, details, at }`. Services call it at the point
    the mutation **commits** (not in controllers; the service layer is where actor +
    outcome are both known). Best-effort: an audit write failure logs, never fails the
    action.
@@ -50,8 +50,8 @@ revocation via a per-user session-generation check.
 3. **Storage**: append-only `audit_events` table (D1 ⇄ Drizzle + conformance), indexed by
    account + time, paginated reads only (`listByAccount(cursor)`), retention-swept on a
    long window (audit wants years, not days, but pre-1.0, pick a pragmatic default env
-   knob). **Payloads are summaries, never secrets**: key _names_, not values; no prompt
-   bodies.
+   knob). **Payloads are safe-to-show fields, never secrets**: key _names_, not values; no
+   prompt bodies.
 4. **Viewer**: an account-admin panel (filter by action class / actor / time; beside
    `AccountTeamSettings.vue`), reading the paginated endpoint.
 5. **Session revocation via generation, not blocklist**: add a `sessionGeneration` (int) to
@@ -122,8 +122,8 @@ revocation via a per-user session-generation check.
   Node), for RETENTION rather than write profile. After the run-lifecycle slice this is the only
   table in the platform that grows monotonically with run volume AND wants a multi-year window
   (`token_usage` grows with runs but prunes at ~395 days; the telemetry sinks grow far faster but
-  prune at 3), and D1's ceiling is 10 GB PER DATABASE. Measured **~508 B/row** on Postgres (264
-  heap + 244 index, the index as expensive as the data because the keyset carries `id` as its
+  prune at 3), and D1's ceiling is 10 GB PER DATABASE. Measured **~500 B/row** on Postgres (~260
+  heap + ~245 index, the index as expensive as the data because the keyset carries `id` as its
   tie-break): 1,000 runs/day ≈ 550 MB/year, 10,000 ≈ 5.5 GB/year. Full arithmetic in
   [`storage-and-retention.md`](../../backend/docs/storage-and-retention.md).
 
@@ -144,10 +144,15 @@ revocation via a per-user session-generation check.
   an unaudited write with auth off is a property of running with auth off, whereas an event blaming
   the engine for a human's action is a defect in the log. `WorkspaceMemberService.actorOf` is the
   single place this is decided.
-- **`record` is fire-and-forget and returns `void`.** It must never fail, delay or reorder the
-  action it describes. The READ has the OPPOSITE disposition and propagates: an empty page and an
-  unreachable store must not look the same to an admin. Nothing in the platform reads an event back
-  to decide anything, which is what makes the fire-and-forget safe.
+- **`record` never FAILS the action it describes, and is nonetheless AWAITED.** Fire-and-forget was
+  the first shape and is wrong on the primary runtime: an un-awaited promise is discarded when a
+  Worker isolate freezes after the response (the rule `@cat-factory/server`'s `http/waitUntil.ts`
+  states, and the reason `ContainerAgentExecutor` awaits its context snapshot), so the row would
+  simply be missing in production while every test driving a fake recorder passed. `runBestEffort`
+  keeps the swallow, so an outage still costs the row and never the mutation. Anything a later slice
+  records from a durable driver has the same obligation, for the same reason (an isolate hibernating
+  on `step.sleep` drops it too). The READ has the OPPOSITE disposition and propagates: an empty page
+  and an unreachable store must not look the same to an admin.
 - **`CoreDependencies.auditRecorder` is REQUIRED**, joining `logger` and `operationalMetrics`. An
   un-wired audit log reads as "nobody changed anything", the exact assurance it exists to give.
   `noopAuditRecorder` is the explicit opt-out.
@@ -166,14 +171,29 @@ revocation via a per-user session-generation check.
   in the same millisecond straddle a page boundary and get served twice or skipped; the conformance
   suite pins exactly that case. The codec lives in kernel (`domain/audit-log.ts`) so the two
   facades cannot drift, because a mismatched cursor looks like nothing at all at the boundary.
-- **`action` is a CLOSED vocabulary that is also PERSISTED, so slice 4's viewer owes a runtime
-  guard.** Both repositories read the column back with a cast (`row.action as AuditAction`), which
-  is the honest "trust the row" read at a store boundary, but it means a RETIRED member still
-  exists in the data after it leaves the type. Nothing switches on the value yet. The moment the
-  viewer maps actions to copy through an exhaustive `Record`, an old row becomes `undefined`
-  spliced into an admin's screen: narrow with a predicate derived from the picklist's own options,
-  and render an unrecognised action as itself rather than dropping the row. A dropped row is the
-  one failure an audit viewer must never have. Retiring a member is never a rename in place.
+- **`action` and `targetType` are CLOSED vocabularies that are also PERSISTED**, so the read side
+  widens rather than casting. Slice 1 first read both columns back with a bare
+  `row.action as AuditAction`, the honest-looking "trust the row" read at a store boundary; what it
+  hides is that a member RETIRED from the union goes on existing in rows written before it was, so
+  the moment the viewer maps actions to copy through an exhaustive `Record` an old row splices
+  `undefined` into an admin's screen. `AuditEventView` therefore types both as
+  `| RetiredAuditValue`, and `readAuditAction` / `readAuditTargetType` (predicates DERIVED from the
+  picklists' own options) name an unrecognised value as itself. Never guessed onto a current member,
+  and above all never dropped: a missing row is the one failure an audit viewer must not have.
+  Retiring a member is never a rename in place.
+- **A row states VALUES, not prose.** `details` is machine-readable fields the viewer interpolates
+  into translated copy, with `AUDIT_ACTION_DETAIL_KEYS` naming each action's slots. Slice 1 first
+  wrote an English `summary` sentence, which reads as helpful and is the one modelling mistake here
+  that cannot be walked back: the backend does not localize, and a PERSISTED sentence (unlike a wire
+  shape) can never be re-rendered for a reader in another locale years later. Anything a later slice
+  wants a viewer to say goes in as fields plus a key.
+- **A new D1 lineage is four edits, and three of them are outside the runtime.** `audit-migrations/`
+  needs its `[[d1_databases]]` entry, its `files` entry in the worker package, a leg in
+  `deploy/backend`'s `db:migrate:*` scripts AND a path in deploy.yml's `migrations` change filter.
+  Miss either of the last two and slice 7's retention migration is never applied to production: the
+  Worker ships against a schema that never moved, which surfaces as a repository error rather than
+  as a failed deploy. The production `wrangler.toml` also may not carry a placeholder id in a LIVE
+  binding, since deploys are automatic on merge (CI's "Guard deploy placeholders" refuses one).
 - **Slice 7 is still owed and the table is unbounded until it lands.** `deleteOlderThan` was
   deliberately NOT added in slice 1: an unwired repository method is dead surface, and adding it
   means classifying it (`sweeper`) and wiring both facades' retention sweeps, which IS slice 7.

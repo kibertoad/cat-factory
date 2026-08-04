@@ -32,11 +32,17 @@ export {
   AUDIT_PAGE_LIMIT_DEFAULT,
   AUDIT_PAGE_LIMIT_MAX,
   auditActorColumns,
+  auditEventColumns,
   auditPageLimit,
   decodeAuditCursor,
+  decodeAuditDetails,
   encodeAuditCursor,
+  encodeAuditDetails,
   rowToAuditActor,
+  rowToAuditEventView,
   type AuditCursor,
+  type AuditEventColumns,
+  type AuditEventRow,
 } from './domain/audit-log.js'
 // `narrowMergeClassRule` is NOT re-exported from here: it moved to `@cat-factory/contracts` beside
 // the rule maps it composes, so the preset editor in the SPA narrows by the same implementation the

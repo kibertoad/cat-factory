@@ -1,40 +1,17 @@
-import type { AuditEventPage, AuditEventRecord, AuditEventRepository } from '@cat-factory/kernel'
+import type {
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
+  AuditEventRow,
+} from '@cat-factory/kernel'
 import {
-  auditActorColumns,
+  auditEventColumns,
   auditPageLimit,
   decodeAuditCursor,
   encodeAuditCursor,
-  rowToAuditActor,
+  rowToAuditEventView,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
-
-interface AuditEventRow {
-  id: string
-  account_id: string
-  workspace_id: string | null
-  actor_kind: string
-  actor_user_id: string | null
-  actor_api_key_id: string | null
-  action: string
-  target_type: string
-  target_id: string
-  summary: string
-  at: number
-}
-
-function toRecord(row: AuditEventRow): AuditEventRecord {
-  return {
-    id: row.id,
-    accountId: row.account_id,
-    workspaceId: row.workspace_id,
-    actor: rowToAuditActor(row),
-    action: row.action as AuditEventRecord['action'],
-    targetType: row.target_type,
-    targetId: row.target_id,
-    summary: row.summary,
-    at: row.at,
-  }
-}
 
 /** D1 append-only account audit log. Mirror of the Drizzle repo. */
 export class D1AuditEventRepository implements AuditEventRepository {
@@ -45,28 +22,28 @@ export class D1AuditEventRepository implements AuditEventRepository {
   }
 
   async append(event: AuditEventRecord): Promise<void> {
-    const actor = auditActorColumns(event.actor)
+    const row = auditEventColumns(event)
     // No conflict clause: an id collision is an id-generator bug, and quietly folding one append
     // onto another would lose an audited action, the one outcome this table exists to prevent.
     await this.db
       .prepare(
         `INSERT INTO audit_events
            (id, account_id, workspace_id, actor_kind, actor_user_id, actor_api_key_id,
-            action, target_type, target_id, summary, at)
+            action, target_type, target_id, details, at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        event.id,
-        event.accountId,
-        event.workspaceId ?? null,
-        actor.actor_kind,
-        actor.actor_user_id,
-        actor.actor_api_key_id,
-        event.action,
-        event.targetType,
-        event.targetId,
-        event.summary,
-        event.at,
+        row.id,
+        row.account_id,
+        row.workspace_id,
+        row.actor_kind,
+        row.actor_user_id,
+        row.actor_api_key_id,
+        row.action,
+        row.target_type,
+        row.target_id,
+        row.details,
+        row.at,
       )
       .run()
   }
@@ -98,7 +75,7 @@ export class D1AuditEventRepository implements AuditEventRepository {
 
     const result = await statement.all<AuditEventRow>()
     const rows = result.results ?? []
-    const page = rows.slice(0, limit).map(toRecord)
+    const page = rows.slice(0, limit).map(rowToAuditEventView)
     const last = page.at(-1)
     return {
       events: page,

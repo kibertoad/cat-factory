@@ -8,6 +8,7 @@ import type {
   Membership,
   MembershipRepository,
 } from '@cat-factory/kernel'
+import { AUDIT_ACTION_DETAIL_KEYS } from '@cat-factory/contracts'
 import { InvitationService } from './InvitationService.js'
 
 // The audit half of the invitation lifecycle. Two properties beyond "an event was written":
@@ -18,7 +19,20 @@ import { InvitationService } from './InvitationService.js'
 
 function recorder() {
   const events: AuditEvent[] = []
-  return { events, recorder: { record: (event: AuditEvent) => events.push(event) } }
+  return {
+    events,
+    recorder: {
+      record: (event: AuditEvent) => {
+        // Every event, not case by case: the viewer interpolates details by key, so a missing one
+        // renders a gap and an extra one is a value no locale has a slot for.
+        expect(Object.keys(event.details).sort()).toEqual(
+          [...AUDIT_ACTION_DETAIL_KEYS[event.action]].sort(),
+        )
+        events.push(event)
+        return Promise.resolve()
+      },
+    },
+  }
 }
 
 function makeService(opts: { invitations?: AccountInvitationRecord[] } = {}) {
@@ -95,11 +109,11 @@ describe('InvitationService audit events', () => {
       actor: { kind: 'user', userId: 'usr-admin' },
       action: 'account.invitation_created',
       targetType: 'invitation',
+      // The NORMALISED address, so the log matches the row the invitation was written as.
+      details: { email: 'new.person@acme.test', roles: 'developer' },
     })
-    expect(events[0]?.summary).toContain('new.person@acme.test')
-    expect(events[0]?.summary).toContain('developer')
     // The accept token is the credential the invitation grants; it must never reach the log.
-    expect(events[0]?.summary).not.toContain(created.token)
+    expect(JSON.stringify(events[0]?.details)).not.toContain(created.token)
   })
 
   it('does not record a SUPERSEDED pending invite as a revocation', async () => {
@@ -125,11 +139,11 @@ describe('InvitationService audit events', () => {
       action: 'account.invitation_revoked',
       targetType: 'invitation',
       targetId: 'inv_live',
+      details: { email: 'someone@acme.test' },
     })
-    expect(events[0]?.summary).toContain('someone@acme.test')
   })
 
-  it('attributes an acceptance to the person accepting, keeping the inviter in the summary', async () => {
+  it('attributes an acceptance to the person accepting, keeping the inviter in the details', async () => {
     const { service, events } = makeService({
       invitations: [invitation({ id: 'inv_open', invitedBy: 'usr-admin' })],
     })
@@ -140,10 +154,10 @@ describe('InvitationService audit events', () => {
     expect(events[0]).toMatchObject({
       action: 'account.invitation_accepted',
       // The ACCEPTING user, not the admin who offered it: this event records that a membership
-      // came into existence.
+      // came into existence. The inviter rides the details, so the pair reads as one story.
       actor: { kind: 'user', userId: 'usr-joiner' },
+      details: { email: 'someone@acme.test', roles: 'developer', invitedBy: 'usr-admin' },
     })
-    expect(events[0]?.summary).toContain('usr-admin')
   })
 
   it('records nothing when an acceptance is refused', async () => {

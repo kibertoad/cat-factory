@@ -563,6 +563,7 @@ export type {
   AuditEventPage,
   AuditEventRecord,
   AuditEventRepository,
+  AuditEventView,
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'

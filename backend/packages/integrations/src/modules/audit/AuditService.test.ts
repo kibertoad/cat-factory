@@ -42,9 +42,9 @@ const event = {
   accountId: 'acc-1',
   actor: { kind: 'user' as const, userId: 'usr-1' },
   action: 'account.member_added' as const,
-  targetType: 'user',
+  targetType: 'user' as const,
   targetId: 'usr-2',
-  summary: 'Added to the account with role(s) developer',
+  details: { roles: 'developer' },
 }
 
 describe('AuditService', () => {
@@ -52,24 +52,35 @@ describe('AuditService', () => {
     const { appended, repo } = fakeRepo()
     const { svc } = service(repo)
 
-    svc.record(event)
-    // `record` is fire-and-forget, so the append settles on a later microtask.
-    await vi.waitFor(() => expect(appended).toHaveLength(1))
+    await svc.record(event)
 
-    expect(appended[0]).toEqual({ ...event, id: 'aud_1', at: 1_700_000_000_000 })
+    expect(appended).toEqual([{ ...event, id: 'aud_1', at: 1_700_000_000_000 }])
   })
 
-  it('returns before the append settles, so an audited action never waits on the log', () => {
+  it('resolves only once the append has settled, so the row cannot be dropped', async () => {
+    // The regression this pins: a fire-and-forget append is discarded on the Worker when the
+    // isolate freezes after the response (see `http/waitUntil.ts`), so the row would be missing in
+    // production while a fake recorder went on passing. `record` must not resolve early.
     let release: (() => void) | undefined
+    let landed = false
     const { repo } = fakeRepo({
-      append: vi.fn(() => new Promise<void>((resolve) => (release = resolve))),
+      append: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            release = () => {
+              landed = true
+              resolve()
+            }
+          }),
+      ),
     })
     const { svc } = service(repo)
 
-    // A pending store must not block the caller: `record` returns void, synchronously.
-    expect(svc.record(event)).toBeUndefined()
-    expect(release).toBeDefined()
+    const settled = svc.record(event).then(() => landed)
+    expect(landed).toBe(false)
     release?.()
+
+    await expect(settled).resolves.toBe(true)
   })
 
   it('swallows a failing append and WARNS, naming the action and account', async () => {
@@ -80,11 +91,11 @@ describe('AuditService', () => {
     })
     const { svc, logger } = service(repo)
 
-    expect(() => svc.record(event)).not.toThrow()
+    await expect(svc.record(event)).resolves.toBeUndefined()
 
-    await vi.waitFor(() => expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1))
-    const warn = logger.lines.find((l) => l.level === 'warn')
-    expect(warn?.fields).toMatchObject({
+    const warns = logger.lines.filter((l) => l.level === 'warn')
+    expect(warns).toHaveLength(1)
+    expect(warns[0]?.fields).toMatchObject({
       accountId: 'acc-1',
       action: 'account.member_added',
       actorKind: 'user',
@@ -95,9 +106,8 @@ describe('AuditService', () => {
     const { appended, repo } = fakeRepo()
     const { svc } = service(repo)
 
-    svc.record(event)
-    svc.record({ ...event, action: 'account.member_roles_changed' })
-    await vi.waitFor(() => expect(appended).toHaveLength(2))
+    await svc.record(event)
+    await svc.record({ ...event, action: 'account.member_roles_changed' })
 
     expect(appended.map((e) => e.id)).toEqual(['aud_1', 'aud_2'])
   })

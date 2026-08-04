@@ -35,11 +35,11 @@ import type {
   UserRepository,
 } from '@cat-factory/kernel'
 import {
-  auditActorColumns,
+  auditEventColumns,
   auditPageLimit,
   decodeAuditCursor,
   encodeAuditCursor,
-  rowToAuditActor,
+  rowToAuditEventView,
 } from '@cat-factory/kernel'
 import { and, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
@@ -591,20 +591,6 @@ export class DrizzleMachineNodeRepository implements MachineNodeRepository {
   }
 }
 
-function rowToAuditEvent(row: typeof auditEvents.$inferSelect): AuditEventRecord {
-  return {
-    id: row.id,
-    accountId: row.account_id,
-    workspaceId: row.workspace_id,
-    actor: rowToAuditActor(row),
-    action: row.action as AuditEventRecord['action'],
-    targetType: row.target_type,
-    targetId: row.target_id,
-    summary: row.summary,
-    at: row.at,
-  }
-}
-
 /** Postgres append-only account audit log. Mirror of the D1 repo. */
 export class DrizzleAuditEventRepository implements AuditEventRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -612,17 +598,7 @@ export class DrizzleAuditEventRepository implements AuditEventRepository {
   async append(event: AuditEventRecord): Promise<void> {
     // No conflict clause: an id collision is an id-generator bug, and quietly folding one append
     // onto another would lose an audited action, the one outcome this table exists to prevent.
-    await this.db.insert(auditEvents).values({
-      id: event.id,
-      account_id: event.accountId,
-      workspace_id: event.workspaceId ?? null,
-      ...auditActorColumns(event.actor),
-      action: event.action,
-      target_type: event.targetType,
-      target_id: event.targetId,
-      summary: event.summary,
-      at: event.at,
-    })
+    await this.db.insert(auditEvents).values(auditEventColumns(event))
   }
 
   async listByAccount(
@@ -651,7 +627,7 @@ export class DrizzleAuditEventRepository implements AuditEventRepository {
       .orderBy(desc(auditEvents.at), desc(auditEvents.id))
       .limit(limit + 1)
 
-    const page = rows.slice(0, limit).map(rowToAuditEvent)
+    const page = rows.slice(0, limit).map(rowToAuditEventView)
     const last = page.at(-1)
     return {
       events: page,

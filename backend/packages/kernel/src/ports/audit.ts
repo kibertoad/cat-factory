@@ -1,15 +1,21 @@
-import type { AuditAction, AuditActorKind } from '@cat-factory/contracts'
+import type {
+  AuditAction,
+  AuditActorKind,
+  AuditEventDetails,
+  AuditTargetType,
+  RetiredAuditValue,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // The account audit log: an append-only record of WHO did WHAT, WHEN, for the privileged and
 // destructive actions an account admin is answerable for.
 //
 // Two ports, because the writer and the store want opposite things. `AuditRecorder` is the
-// narrow seam a domain service depends on: one method, returns void, never throws, so an
-// audited service is unchanged in shape from an unaudited one and a service test needs no
-// store. `AuditEventRepository` is the persistence port a facade implements. Keeping them
-// apart is what lets the tenancy services in `@cat-factory/workspaces` audit themselves
-// without depending on how (or whether) a deployment persists the result.
+// narrow seam a domain service depends on: one method, never throws, so an audited service is
+// unchanged in shape from an unaudited one and a service test needs no store.
+// `AuditEventRepository` is the persistence port a facade implements. Keeping them apart is what
+// lets the tenancy services in `@cat-factory/workspaces` audit themselves without depending on
+// how (or whether) a deployment persists the result.
 // ---------------------------------------------------------------------------
 
 /** WHO performed an audited action. */
@@ -31,11 +37,11 @@ export type AuditActor =
 /**
  * One audited action, as its writer states it.
  *
- * **`summary` carries no secret material, ever.** A credential-shaped event records the
- * provider and the key NAME; never the value, never a decrypted blob, never model or prompt
- * text. The audit store is strictly more exposed than the transactional domain (its whole
- * purpose is to be read by humans, and a later slice serves it over HTTP), so the boundary is
- * here at the type's documentation rather than at each call site's discretion.
+ * **`details` carries no secret material and no PROSE.** The values are machine-readable fields
+ * the viewer interpolates into translated copy (`AUDIT_ACTION_DETAIL_KEYS` in contracts names
+ * them per action), which is what lets a row written today be read in another locale years
+ * later. A credential-shaped event records the provider and the key NAME; never the value, never
+ * a decrypted blob, never model or prompt text.
  */
 export interface AuditEvent {
   /** The account the action belongs to; the only scope the viewer reads by. */
@@ -44,18 +50,25 @@ export interface AuditEvent {
   workspaceId?: string | null
   actor: AuditActor
   action: AuditAction
-  /** What kind of thing was acted ON (`user`, `invitation`, `workspace`, `account`). */
-  targetType: string
+  /** What kind of thing was acted ON; `targetId` is an id within it. */
+  targetType: AuditTargetType
   /** Id of the thing acted on, within `targetType`. */
   targetId: string
   /**
-   * A short human-readable statement of what changed, for the viewer's row. Values that are
-   * safe to show (a role set, a budget ceiling, an email domain), never values that are not.
+   * What changed, as fields: `{ previousRole: 'viewer', role: 'admin' }`. Keyed by action in
+   * `AUDIT_ACTION_DETAIL_KEYS`, so the writer and the viewer agree about the slots rather than
+   * each deciding. Values safe to show only (a role set, a budget ceiling, an email).
    */
-  summary: string
+  details: AuditEventDetails
 }
 
-/** A persisted audit event: an {@link AuditEvent} plus what the store assigned it. */
+/**
+ * An audit event as WRITTEN: an {@link AuditEvent} plus what the store assigned it.
+ *
+ * The vocabularies are still CLOSED here, which is the point of separating this from
+ * {@link AuditEventView}: nothing can append a value the build does not declare, while a read
+ * must cope with one a past build did.
+ */
 export interface AuditEventRecord extends AuditEvent {
   /** Store-assigned id (`aud_*`). */
   id: string
@@ -63,9 +76,23 @@ export interface AuditEventRecord extends AuditEvent {
   at: number
 }
 
+/**
+ * An audit event as READ BACK, for a viewer to render.
+ *
+ * `action` and `targetType` widen to `| RetiredAuditValue` because both are closed vocabularies
+ * that are also persisted: a member retired from the type goes on existing in rows written
+ * before it was. Widening HERE is what forces every reader to say what it renders for one,
+ * instead of dropping the row or interpolating `undefined` (see `RetiredAuditValue` in
+ * contracts).
+ */
+export interface AuditEventView extends Omit<AuditEventRecord, 'action' | 'targetType'> {
+  action: AuditAction | RetiredAuditValue
+  targetType: AuditTargetType | RetiredAuditValue
+}
+
 /** One page of audit events, newest first. */
 export interface AuditEventPage {
-  events: AuditEventRecord[]
+  events: AuditEventView[]
   /**
    * Cursor for the next (older) page, or null at the end. Opaque to the caller: a facade may
    * change its encoding freely, and nothing but the same repository ever reads it.
@@ -98,25 +125,32 @@ export interface AuditEventRepository {
 }
 
 /**
- * The write seam a domain service depends on: state that something audit-worthy happened and
- * move on.
+ * The write seam a domain service depends on: state that something audit-worthy happened.
  *
- * `record` returns `void` and MUST NOT throw. An audit write is a best-effort side channel: a
- * store outage must cost the audit row, never the membership change the operator asked for.
- * That swallow is the implementation's job (it logs through the kernel `Logger`, so a
- * permanently broken audit store surfaces as warnings rather than as silence), which is why
- * the port gives a service nothing to handle and no reason to wrap the call.
+ * `record` MUST NOT throw or reject. An audit write is a best-effort side channel: a store
+ * outage must cost the audit row, never the membership change the operator asked for. That
+ * swallow is the implementation's job (it logs through the kernel `Logger`, so a permanently
+ * broken audit store surfaces as warnings rather than as silence), which is why the port gives a
+ * service nothing to handle and no reason to wrap the call.
+ *
+ * It is AWAITED rather than fire-and-forget, and that is a correctness requirement, not a style
+ * choice: on the Worker an un-awaited write is dropped when the isolate is frozen after the
+ * response (the rule `@cat-factory/server`'s `http/waitUntil.ts` exists to state), so a
+ * fire-and-forget append would record nothing on the primary runtime while every test that
+ * drives a fake recorder still passed. A store round-trip is worth strictly more than the
+ * milliseconds it costs an admin action, because "nobody changed anything" is the exact
+ * assurance this log exists to give.
  */
 export interface AuditRecorder {
-  record(event: AuditEvent): void
+  record(event: AuditEvent): Promise<void>
 }
 
 /**
  * The no-op recorder, for a deployment or a test with no audit store wired.
  *
- * Named rather than an inline `{ record: () => {} }` at each site, for the same reason
+ * Named rather than an inline `{ record: async () => {} }` at each site, for the same reason
  * `noopLogger` and `noopOperationalMetrics` are: a caller that audits nothing should have to
  * SAY so in code, so "this deployment does not persist audit events" and "somebody forgot to
  * wire the store" stop looking identical at the construction site.
  */
-export const noopAuditRecorder: AuditRecorder = { record: () => {} }
+export const noopAuditRecorder: AuditRecorder = { record: () => Promise.resolve() }

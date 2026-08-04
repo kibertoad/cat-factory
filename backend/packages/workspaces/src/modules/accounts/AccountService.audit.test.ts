@@ -6,6 +6,7 @@ import type {
   Membership,
   MembershipRepository,
 } from '@cat-factory/kernel'
+import { AUDIT_ACTION_DETAIL_KEYS } from '@cat-factory/contracts'
 import { AccountService, type AccountServiceDependencies } from './AccountService.js'
 
 // The audit half of the tenancy service: WHICH privileged actions produce an event, and what each
@@ -18,7 +19,21 @@ import { AccountService, type AccountServiceDependencies } from './AccountServic
 
 function recorder() {
   const events: AuditEvent[] = []
-  return { events, recorder: { record: (event: AuditEvent) => events.push(event) } }
+  return {
+    events,
+    recorder: {
+      record: (event: AuditEvent) => {
+        // Checked for EVERY event this file records, not case by case: the viewer interpolates
+        // details into translated copy by key, so a missing key renders a gap in a sentence and an
+        // extra one is a value no locale has a slot for.
+        expect(Object.keys(event.details).sort()).toEqual(
+          [...AUDIT_ACTION_DETAIL_KEYS[event.action]].sort(),
+        )
+        events.push(event)
+        return Promise.resolve()
+      },
+    },
+  }
 }
 
 function makeService(
@@ -84,8 +99,8 @@ describe('AccountService audit events', () => {
       action: 'account.member_added',
       targetType: 'user',
       targetId: 'usr-new',
+      details: { roles: 'developer' },
     })
-    expect(events[0]?.summary).toContain('developer')
   })
 
   it('records a role change with BOTH the old and the new role set', async () => {
@@ -102,13 +117,12 @@ describe('AccountService audit events', () => {
     expect(events[0]).toMatchObject({
       action: 'account.member_roles_changed',
       targetId: 'usr-target',
+      // Without the previous value a reader cannot tell this promotion from a demotion.
+      details: { previousRoles: 'developer', roles: 'admin' },
     })
-    // Without the previous value a reader cannot tell this promotion from a demotion.
-    expect(events[0]?.summary).toContain('developer')
-    expect(events[0]?.summary).toContain('admin')
   })
 
-  it('records a budget change, and states a cleared limit as cleared rather than as a value', async () => {
+  it('records a budget change, and states a cleared limit as null rather than as a value', async () => {
     const { service, events } = makeService()
 
     await service.updateSettings('acc-1', 'usr-admin', { spendMonthlyLimit: 500 })
@@ -118,8 +132,9 @@ describe('AccountService audit events', () => {
       'account.budget_changed',
       'account.budget_changed',
     ])
-    expect(events[0]?.summary).toContain('500')
-    expect(events[1]?.summary).toMatch(/cleared/i)
+    // A ceiling stays a NUMBER (the viewer formats it as currency for its locale), and "no limit"
+    // reads as null: a 0 there would say the opposite policy.
+    expect(events.map((e) => e.details)).toEqual([{ limit: 500 }, { limit: null }])
   })
 
   it('splits a two-key settings patch into one event per key that actually changed', async () => {

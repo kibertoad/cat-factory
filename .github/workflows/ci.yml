@@ -345,6 +345,20 @@ jobs:
             node scripts/check-runner-image-tag.mjs
           fi
 
+      # Guard the production deployment config against an unfilled placeholder in a LIVE
+      # binding. deploy.yml ships the Worker automatically on merge, and `wrangler deploy`
+      # validates every D1 id against the API, so a `REPLACE_WITH_…` that reaches main turns the
+      # deploy red with no window for the operator step that was supposed to precede it. A
+      # placeholder inside a COMMENTED example block (an optional binding a deployment opts into)
+      # is the intended shape and passes.
+      - name: Guard deploy placeholders
+        run: |
+          if grep -vE '^\s*#' deploy/backend/wrangler.toml | grep -q 'REPLACE_WITH_'; then
+            echo "::error file=deploy/backend/wrangler.toml::An active binding still holds a REPLACE_WITH_ placeholder. Provision the resource and paste its id, or comment the binding out."
+            grep -nE 'REPLACE_WITH_' deploy/backend/wrangler.toml
+            exit 1
+          fi
+
       # Guard the human/LLM-facing package map: every workspace package must have a
       # package.json description AND a row in the README repository-layout tables, so a new
       # package can't become invisible to the docs an LLM reads first. Pure node; no install.

@@ -46,9 +46,10 @@ prerequisites are configured.
 - `audit/`: `AuditService`, the ONE writer of the account audit log and the implementation of
   kernel's `AuditRecorder`. It lives here rather than beside the tenancy services that call it
   because those are in `@cat-factory/workspaces`, which the facades do not depend on; they consume
-  the kernel PORT, so only the facade that builds the service needs to see this. `record` is
-  fire-and-forget and never throws (a store outage costs the row, not the mutation);
-  `listByAccount` propagates, because an empty page and an unreachable store are opposite facts.
+  the kernel PORT, so only the facade that builds the service needs to see this. `record` never
+  throws (a store outage costs the row, not the mutation) but IS awaited, because an un-awaited
+  write is dropped when a Worker isolate freezes after the response; `listByAccount` propagates,
+  because an empty page and an unreachable store are opposite facts.
 - `backend-registries.ts`: a loose registration file sitting among the module dirs.
 
 **See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
