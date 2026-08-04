@@ -115,6 +115,29 @@ describe('AgentKindRegistry capabilities', () => {
     expect(registry.toolServersFor('coder').servers).toEqual([])
   })
 
+  it('enumerates registered kinds AND the kinds capabilities were assigned to', () => {
+    // The union is what boot validation and the capability-credential checklist walk. `all()` is
+    // not it: the recommended attachment path is `assignToolServers('coder', …)`, and no built-in
+    // is a registry entry — so an `all()` walk skipped every assigned declaration, which is how a
+    // cleartext endpoint on `coder` used to boot clean.
+    const registry = new AgentKindRegistry()
+    registry.registerToolServer(SERVER)
+    registry.registerSkill(SKILL)
+    registry.register({ kind: 'auditor', systemPrompt: 'p' })
+    registry.assignToolServers('coder', ['issues'])
+    registry.assignSkills('ci-fixer', ['house-review'])
+    expect([...registry.kindsWithCapabilities()].sort()).toEqual(['auditor', 'ci-fixer', 'coder'])
+    expect(registry.all().map((d) => d.kind)).toEqual(['auditor'])
+  })
+
+  it('lists a kind once when it is both registered and assigned to', () => {
+    const registry = new AgentKindRegistry()
+    registry.registerToolServer(SERVER)
+    registry.register({ kind: 'auditor', systemPrompt: 'p', toolServers: [SERVER] })
+    registry.assignToolServers('auditor', ['issues'])
+    expect(registry.kindsWithCapabilities()).toEqual(['auditor'])
+  })
+
   it('a later registration REPOINTS a server an installed package registered', () => {
     const registry = new AgentKindRegistry()
     registry.registerToolServer(SERVER)

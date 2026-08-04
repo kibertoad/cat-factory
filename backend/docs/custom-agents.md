@@ -283,26 +283,60 @@ port itself and registers it through its facade's `createToolSecretResolver` opt
 `AgentRunContext`, a prompt, or the telemetry snapshot: it rides the job body's dedicated
 `mcpServers` field, exactly like the tester's `testSecrets`.
 
-Rules worth knowing before declaring one:
+#### Which runs actually get the server
 
-- **A dropped server is STATED, never silent.** A server the harness cannot serve (Pi has no MCP
-  client; an ambient Codex run has no per-run config home) or whose required credential did not
-  resolve is reported to the agent as unavailable in the prompt's tool-server section. Silence
-  would let the agent plan around a tool that was never there and discover the gap mid-run.
-- **A required credential that does not resolve DROPS the server**: `required` defaults to true,
-  because a tool whose first call 401s is worse than one the agent was told it does not have.
-- **Codex is stdio-only.** An `http` server is skipped in its config; declare
-  `harnesses: ['claude-code']` on such a server so the drop is reported rather than invisible.
-- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
-  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
-  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
+**A declared server that is not wired is STATED to the agent, never silently missing** (in the
+prompt's tool-server section) and recorded on the run's context snapshot. Silence would let the
+agent plan around a tool that was never there and discover the gap mid-run. Each reason below is its
+own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders them
+through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
+
+| Reason                  | What happened                                                                                                                    | The fix                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, or the `harnesses` list           |
+| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport         |
+| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value       |
+| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help) |
+| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                         |
+
+Three rules decide which of those a given declaration can hit:
+
+- **Codex is stdio-only, and the platform knows it.** Which transports each CLI's MCP client reaches
+  is a fact about the CLI, held once in kernel's `MCP_HARNESS_TRANSPORTS`, so nothing needs
+  declaring for it. `harnesses` is for narrowing a server to a CLI it makes SENSE on, not for
+  restating a transport limit. Narrowing to a combination no harness can serve (an `http` server on
+  `['codex']`, anything on `['pi']`) is dead configuration a run cannot report, because it never
+  applies rather than being dropped for a reason, so boot warns (`tool_server_unservable`).
 - **Tool servers need a container surface.** An inline LLM step has no agent CLI to wire them into;
   boot validation warns about that combination. The same warning covers `skills`, for the same
   reason.
-- **`allowedTools` is SCOPING, not a security boundary.** It is always stated in the prompt, and
-  additionally passed to claude-code's `--allowedTools`, but whether that CLI list gates depends
-  on the run's permission mode, and Codex cannot express a per-tool restriction at all. If an agent
-  kind must never reach a server's other tools, do not wire that server for that kind.
+- **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
+  the job-body field. Past that the excess is dropped under `over_budget`, and boot warns
+  (`too_many_tool_servers`) so the deployment learns which declarations are past the line rather than
+  reading it off a run's prompt. The realistic cause is accretion: several packages each calling
+  `assignToolServers` on one kind, none of them individually wrong. Unlike the linked-context corpus
+  (which REFUSES the dispatch), the excess is dropped rather than fatal, because tool servers are
+  deployment CODE: taking a deployment down for a registration fault boot already warned about is
+  worse than running with fewer tools.
+
+#### What the agent may call (`allowedTools`)
+
+- **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
+  argument with commas, so `['search_issues,get_issue']` becomes two patterns of which the second
+  matches nothing, while the prompt goes on advertising the name verbatim. Refused at registration
+  (`invalid_tool_server_tool_name`) and dropped again at the job boundary.
+- **It is SCOPING, not a security boundary.** It is always stated in the prompt, and additionally
+  passed to claude-code's `--allowedTools`, but whether that CLI list gates depends on the run's
+  permission mode, and Codex cannot express a per-tool restriction at all. If an agent kind must
+  never reach a server's other tools, do not wire that server for that kind.
+
+#### Credentials
+
+- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
+  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
+  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
+- **`required` defaults to true**, because a tool whose first call 401s is worse than one the agent
+  was told it does not have.
 - **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
   both the key it wants and the endpoint that key is sent to, so
   `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
@@ -349,6 +383,19 @@ Rules worth knowing before declaring one:
   allow-list holding only `MCP_…` keys silently resolves nothing for a registered image or music
   generator: the run continues and the agent reports the integration as unavailable, with nothing
   naming the allow-list as the cause. Cover both families, or list the exact keys.
+
+#### Two things that hold WHEREVER the server was declared
+
+- **A server ASSIGNED to a built-in is checked exactly like a registered kind's own.** Boot
+  validation and the credential checklist enumerate `AgentKindRegistry.kindsWithCapabilities()`:
+  registered kinds PLUS every kind named by `assignSkills` / `assignToolServers`. No built-in is a
+  registry entry, and `assignToolServers('coder', …)` is the recommended attachment path, so an
+  `all()` walk skipped the commonest case entirely. Anything new that enumerates "kinds with
+  capabilities" uses that helper, or the hole reopens.
+- **A tool-server call does not count against the agent's no-edit progress bound.** An `mcp__*` call
+  is exempt like a read, because reaching a wired server is what this section's own prompt tells the
+  agent to do. It is bounded by its own consecutive-call cap instead
+  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`, raisable per kind through `tuning.guardLimits`).
 
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.

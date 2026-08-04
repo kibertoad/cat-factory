@@ -62,7 +62,15 @@ const UNAVAILABLE_REASONS: Record<
   string
 > = {
   harness_unsupported: 'not supported by the agent runtime this run uses',
+  // Deliberately indistinguishable to the agent from `harness_unsupported`, and for the reason
+  // stated below: the two differ in what an OPERATOR must change (a `harnesses` list vs the choice
+  // of runtime), and nothing the agent can do depends on which it is. The distinction is carried by
+  // the log line and the boot warning.
+  transport_unsupported: 'not supported by the agent runtime this run uses',
   missing_secret: 'its credential is not configured for this deployment',
+  // A cap, not a fault, so the phrasing does not invite the agent to retry or work around it: the
+  // tool exists and this run simply did not get it.
+  over_budget: 'not wired for this run (too many tool servers were declared)',
   // Deliberately the SAME shape of statement as the line above rather than the operator's fault.
   // The agent's disposition is identical (the tool is absent and retrying will not produce it),
   // and telling it that a declaration is misconfigured invites it to work around the platform.

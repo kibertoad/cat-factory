@@ -482,6 +482,30 @@ export class AgentKindRegistry {
   }
 
   /**
+   * Every kind that has capabilities declared FOR it: the registered kinds plus the kinds named by
+   * {@link assignSkills} / {@link assignToolServers}.
+   *
+   * THE enumeration for "kinds with capabilities", and the reason it exists is that `all()` is not
+   * one. Assignment is the RECOMMENDED path — it is how a deployment attaches a playbook or an MCP
+   * server to `coder`, `ci-fixer`, `tester-api`, `merger` or `conflict-resolver`, none of which are
+   * registry entries — so an enumeration that walked `all()` skipped exactly the commonest case.
+   * Boot validation and the capability-credential checklist both did, which meant a server declared
+   * by assignment reached neither the `insecure_tool_server_url` refusal nor the operator's list of
+   * keys to fill in.
+   *
+   * Anything new that enumerates kinds to read their skills or tool servers uses THIS, not `all()`,
+   * or that hole reopens. Stable but arbitrary order: registered kinds in registration order, then
+   * skill-assigned kinds, then tool-server-assigned ones. Nothing may depend on it — a kind's OWN
+   * capability precedence is `skillsFor` / `toolServersFor`, which is a different question.
+   */
+  kindsWithCapabilities(): AgentKind[] {
+    const kinds = new Set<AgentKind>(this.registry.keys())
+    for (const kind of this.assignedSkills.keys()) kinds.add(kind)
+    for (const kind of this.assignedToolServers.keys()) kinds.add(kind)
+    return [...kinds]
+  }
+
+  /**
    * Register a VARIATION of an existing agent kind — an alternate prompt a pipeline step selects
    * by id, running the base kind in every other respect. A later registration of the same id
    * replaces the earlier one, which is also how a deployment RE-WORDS a variant an installed

@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **proposed; no slices landed.** Source: the 2026-08-04 review of both MCP surfaces.
+Status: **in progress; slice 1 landed.** Source: the 2026-08-04 review of both MCP surfaces.
 
 ## Goal
 
@@ -64,25 +64,25 @@ dump and never uses the word MCP).
 
 ## Slices
 
-- [ ] **1. Honest wiring: every declared server is either served or stated.** The consuming-side
-      defects, together because they are one property enforced at three layers.
-      `servableOnThisRun` becomes transport-aware, so an `http` server on a Codex run is dropped
-      WITH a stated reason (a new member of the existing unavailability vocabulary in
-      `prompts/capabilities.ts`) instead of advertised and then skipped by `codexMcpConfigToml`.
-      Boot validation gains a transport-by-harness rule (a definition whose `harnesses` and
-      `transport` can never be served anywhere is a boot warning, `harnesses: ['pi']` included)
-      and starts validating ASSIGNED capabilities: iterate the union of `registry.all()` and the
-      kinds named by `assignSkills`/`assignToolServers`, minding that `requiresContainer` answers
-      false for unregistered kinds, so the container warning must consult the built-in container
-      set rather than the registry. `collectDeclaredCapabilityCredentials` enumerates the same
-      union, so a credential declared only via assignment to a built-in reaches the operator
-      checklist. Field validation closes the unvalidated inputs: `allowedTools` entries refuse
-      commas (the harness joins them with `','` into one `--allowedTools` argument), and the
-      server list gets the same size cap discipline as the context-file corpus. The progress
-      guard learns `mcp__*` (disposition to decide in the slice: exempt like exploration tools,
-      or a separate budget); this is the phase's one image bump, so the harness-side test backfill
-      rides it: the `toolServersSection` prompt contract, `harnesses` narrowing, Codex
-      `config.toml` end to end, and the Codex+http case above.
+- [x] **1. Honest wiring: every declared server is either served or stated.** ([#1662](https://github.com/kibertoad/cat-factory/pull/1662))
+      The consuming-side defects, together because they are one property enforced at three layers.
+      `servableOnThisRun` became transport-aware, so an `http` server on a Codex run is dropped
+      WITH a stated reason (`transport_unsupported`, a new member of the unavailability vocabulary)
+      instead of advertised and then skipped by `codexMcpConfigToml`. Boot validation gained a
+      transport-by-harness rule (`tool_server_unservable`, a warning, `harnesses: ['pi']` included)
+      and now validates ASSIGNED capabilities through the new
+      `AgentKindRegistry.kindsWithCapabilities()` union helper, with the container warning going
+      through `runsInContainer` rather than `registry.requiresContainer` (which answers false for
+      every built-in). `collectDeclaredCapabilityCredentials` enumerates the same union.
+      `allowedTools` entries are held to `isValidMcpToolName` (the comma case), and the server list
+      to `TOOL_SERVER_BUDGET`, dropping the excess under `over_budget` rather than refusing the
+      dispatch as the context-file corpus does: tool servers are deployment CODE, so boot is where
+      the fault is named. The progress guard exempts `mcp__*` from the no-edit bound and bounds it
+      with its own `maxConsecutiveMcpCalls` streak, the disposition the web-tool cap already
+      established. Image bumped to 1.89.0, carrying the harness-side test backfill: the
+      `toolServersSection` prompt contract, the transport matrix, Codex `config.toml` end to end
+      (asserted from INSIDE the run, since the per-run home is wiped in `finally`), and the
+      `allowedTools` boundary.
 - [ ] **2. The published server: guarded, filterable, structured.** Extend
       `check-publish-integrity.mjs` and `check-package-catalog.mjs` to `sdk/*`, add an MCP runner
       to `backend/internal/sdk-smoketest` so CI drives the real binary against a real backend,
@@ -146,42 +146,42 @@ dump and never uses the word MCP).
 ## Findings inventory
 
 Every finding from the review, with its disposition. "Slice N" means the slice's checklist above
-carries it.
+carries it; "done" means that slice has landed.
 
-| Finding                                                                          | Disposition                  |
-| -------------------------------------------------------------------------------- | ---------------------------- |
-| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                      |
-| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                      |
-| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                      |
-| No cap on server count/size, unlike the context-file corpus                       | Slice 1                      |
-| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                      |
-| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                      |
-| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                      |
-| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                      |
-| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6  |
-| Tool filtering is group-coarse, startup-only                                      | Slice 2                      |
-| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                      |
-| `destructiveHint` unset on the four spending tools                                | Slice 2                      |
-| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                      |
-| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                      |
-| No probe/health check; `allowedTools` never checked against reality               | Slice 4                      |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                      |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                      |
-| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                      |
-| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                      |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 4                      |
-| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                      |
-| Capability credentials absent from the public API                                 | Slice 5                      |
-| No OAuth for remote tool servers                                                  | Slice 6                      |
-| No MCP authorization on the serving side                                          | Slice 6                      |
-| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)          |
-| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)          |
-| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)          |
-| No marketplace/catalog of known vendor servers                                    | Not pursued (below)          |
+| Finding                                                                           | Disposition                   |
+| --------------------------------------------------------------------------------- | ----------------------------- |
+| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1 (done)                |
+| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1 (done)                |
+| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1 (done)                |
+| No cap on server count/size, unlike the context-file corpus                       | Slice 1 (done)                |
+| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1 (done)                |
+| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1 (done)                |
+| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                       |
+| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                       |
+| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
+| Tool filtering is group-coarse, startup-only                                      | Slice 2                       |
+| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                       |
+| `destructiveHint` unset on the four spending tools                                | Slice 2                       |
+| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                       |
+| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
+| No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                       |
+| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                       |
+| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 4                       |
+| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                       |
+| Capability credentials absent from the public API                                 | Slice 5                       |
+| No OAuth for remote tool servers                                                  | Slice 6                       |
+| No MCP authorization on the serving side                                          | Slice 6                       |
+| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
+| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
+| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)           |
+| No marketplace/catalog of known vendor servers                                    | Not pursued (below)           |
 | Checklist granularity ((workspace, key) sharing, unscoped list)                   | Standing decisions, unchanged |
-| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)    |
-| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)             |
-| Pi has no MCP client                                                              | Standing non-goal (ADR 0029) |
+| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)     |
+| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
+| Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
 
 ## Deliberately not pursued
 
@@ -218,13 +218,22 @@ Recorded so the next iteration does not re-propose them.
 
 - **Any harness-side change is an image bump** (`@cat-factory/executor-harness` version + the
   three pinned tags + `RECOMMENDED_HARNESS_IMAGE`), and a reused tag does not deploy. Slice 1
-  bundles its harness edits into one bump; slice 4's handshake is a second.
-- **The kernel/harness copies are pinned by conformity tests.** The id pattern and the URL rule
-  exist twice on purpose; slice 1's validation additions must extend both sides and the pinning
-  test, not just kernel.
-- **`registry.all()` walks are in more places than validation.** Slice 1 fixes the two found
-  (boot validation, the credential checklist); anything new that enumerates "kinds with
-  capabilities" must use the union helper it introduces, or the same hole reopens.
+  bundled its harness edits into one bump (1.89.0); slice 4's handshake is a second.
+- **The kernel/harness copies are pinned by conformity tests.** The id pattern, the tool-name
+  pattern and the URL rule exist twice on purpose; a validation addition must extend both sides and
+  the pinning test, not just kernel.
+- **`registry.all()` walks are in more places than validation.** Slice 1 fixed the two found (boot
+  validation, the credential checklist) and introduced
+  `AgentKindRegistry.kindsWithCapabilities()`; anything new that enumerates "kinds with
+  capabilities" must use it, or the same hole reopens.
+- **A new unavailability reason owes prose in `UNAVAILABLE_REASONS`** (the exhaustive `Record` in
+  `prompts/capabilities.ts`), phrased for the AGENT rather than an operator: it needs to know the
+  tool is absent and that trying harder will not produce it. Two reasons deliberately render the
+  SAME sentence (`harness_unsupported` / `transport_unsupported`) because the distinction is the
+  operator's, carried by the log line and the boot warning.
+- **The harness-side stdio-only skips are backstops now, not decisions.** `codexMcpConfigToml` still
+  drops an `http` server, but the backend has already dropped it with a reason, so a change that
+  makes the harness silently skip something is again the defect slice 1 closed.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
   the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
   internal-first soft launch for an endpoint whose whole point is external callers.

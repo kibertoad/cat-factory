@@ -22,6 +22,11 @@ export interface AgentGuardTuning {
   maxConsecutiveErrors?: number
   /** Consecutive web-search/fetch calls tolerated before it counts as a research loop. */
   maxConsecutiveWebCalls?: number
+  /**
+   * Consecutive tool-server (`mcp__*`) calls tolerated before it counts as a lookup loop. Raise it
+   * for a kind whose PRIMARY working tool is an MCP server, the way `researcher` raises the web cap.
+   */
+  maxConsecutiveMcpCalls?: number
 }
 
 /** Execution tuning for an agent kind (guard limits only, for now). */

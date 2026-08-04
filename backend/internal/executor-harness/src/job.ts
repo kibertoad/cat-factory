@@ -181,9 +181,11 @@ function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
   const noEdit = posInt(o.maxToolCallsWithoutEdit)
   const errors = posInt(o.maxConsecutiveErrors)
   const web = posInt(o.maxConsecutiveWebCalls)
+  const mcp = posInt(o.maxConsecutiveMcpCalls)
   if (noEdit !== undefined) spec.maxToolCallsWithoutEdit = noEdit
   if (errors !== undefined) spec.maxConsecutiveErrors = errors
   if (web !== undefined) spec.maxConsecutiveWebCalls = web
+  if (mcp !== undefined) spec.maxConsecutiveMcpCalls = mcp
   return Object.keys(spec).length > 0 ? spec : undefined
 }
 
@@ -874,6 +876,7 @@ export interface GuardLimitsSpec {
   maxToolCallsWithoutEdit?: number
   maxConsecutiveErrors?: number
   maxConsecutiveWebCalls?: number
+  maxConsecutiveMcpCalls?: number
 }
 
 /**

@@ -173,12 +173,20 @@ export interface McpServerDefinition {
    * mode decides whether the CLI treats that list as a gate at all, and Codex's config cannot
    * express a per-tool restriction. A server whose other tools an agent kind must genuinely never
    * reach should not be wired for that kind at all, rather than wired and narrowed.
+   *
+   * Each name is held to {@link isValidMcpToolName}, because the harness JOINS the list into one
+   * `--allowedTools` argument with commas: a name carrying a comma or whitespace would split into
+   * two entries matching nothing.
    */
   allowedTools?: string[]
   /**
    * Which harnesses can serve this server. Defaults to {@link MCP_SUPPORTED_HARNESSES} — the CLIs
    * that speak MCP. A run on a harness outside the list keeps working; the server is dropped and
    * the prompt says so, rather than the agent being told about a tool it cannot call.
+   *
+   * Narrowing this is NOT how a TRANSPORT restriction is expressed: which transports a CLI can
+   * reach is a fact about the CLI, held in {@link MCP_HARNESS_TRANSPORTS} and applied on top of
+   * this list. See {@link mcpServableHarnesses}.
    */
   harnesses?: HarnessKind[]
   /** Credentials the server needs, by name. Resolved at dispatch; never rendered into a prompt. */
@@ -209,22 +217,59 @@ export interface UnavailableToolServer {
   id: string
   label: string
   /**
-   * `reserved_secret` is kept apart from `missing_secret` because the two need OPPOSITE fixes and
-   * a single value would send an operator to the wrong one: a missing secret is a variable to set,
-   * while a reserved one is a DECLARATION to change — the server named a variable the platform's
-   * own configuration owns, and setting it is exactly what must not help.
+   * Each member names a DIFFERENT fix, which is why they are not folded together:
+   *
+   * - `reserved_secret` is kept apart from `missing_secret` because a missing secret is a variable
+   *   to SET, while a reserved one is a DECLARATION to change — the server named a variable the
+   *   platform's own configuration owns, and setting it is exactly what must not help.
+   * - `transport_unsupported` is kept apart from `harness_unsupported` for the same reason: the
+   *   harness DOES speak MCP and the definition DOES allow it, but this CLI's client cannot reach
+   *   this transport (Codex is stdio-only). The fix is a second server declaration or a narrowed
+   *   `harnesses` list, not a different harness.
+   * - `over_budget` says the server was declared, servable and credentialed, and lost to a cap.
+   *   Nothing about the server is wrong; the KIND declares more than a job body carries.
    */
-  reason: 'harness_unsupported' | 'missing_secret' | 'reserved_secret'
+  reason:
+    | 'harness_unsupported'
+    | 'transport_unsupported'
+    | 'missing_secret'
+    | 'reserved_secret'
+    | 'over_budget'
 }
 
-/** The harnesses whose CLI speaks MCP. Pi has no MCP client, so it is deliberately absent. */
-export const MCP_SUPPORTED_HARNESSES: readonly HarnessKind[] = ['claude-code', 'codex']
+/**
+ * Which MCP transports each harness's CLI can actually reach. An exhaustive `Record` over
+ * `HarnessKind`, so a new harness cannot be added without stating its answer: an omitted entry
+ * would read as "no transports" and silently drop every tool server on that harness.
+ *
+ * Pi has no MCP client at all (hence the empty list, which is what keeps it out of
+ * {@link MCP_SUPPORTED_HARNESSES}); Codex's client is stdio-only, which is why an `http` server on
+ * a Codex run is DROPPED with a stated reason rather than advertised in the prompt and then skipped
+ * by the harness's TOML writer.
+ */
+export const MCP_HARNESS_TRANSPORTS: Record<HarnessKind, readonly McpTransport['kind'][]> = {
+  pi: [],
+  'claude-code': ['stdio', 'http'],
+  codex: ['stdio'],
+}
+
+/**
+ * The harnesses whose CLI speaks MCP. DERIVED from {@link MCP_HARNESS_TRANSPORTS} rather than
+ * listed again, so "speaks MCP" and "can reach at least one transport" cannot drift into
+ * disagreeing. Pi has no MCP client, so it is absent.
+ */
+export const MCP_SUPPORTED_HARNESSES: readonly HarnessKind[] = (
+  Object.keys(MCP_HARNESS_TRANSPORTS) as HarnessKind[]
+).filter((harness) => MCP_HARNESS_TRANSPORTS[harness].length > 0)
 
 /**
  * Whether a tool server can run on this harness: its own `harnesses` allow-list when it declared
  * one, else the CLIs that speak MCP at all. A definition may NARROW the default (a server that
  * only makes sense under one CLI) but never widen it — a harness with no MCP client cannot be
  * taught one by a registration.
+ *
+ * This answers the DECLARATION half only. Whether the harness can reach the definition's transport
+ * is {@link mcpHarnessServesTransport}, and {@link mcpServableHarnesses} is both together.
  */
 export function mcpServerSupportsHarness(
   definition: Pick<McpServerDefinition, 'harnesses'>,
@@ -233,6 +278,52 @@ export function mcpServerSupportsHarness(
   if (!MCP_SUPPORTED_HARNESSES.includes(harness)) return false
   return definition.harnesses ? definition.harnesses.includes(harness) : true
 }
+
+/** Whether this harness's MCP client can reach a server over `transport`. */
+export function mcpHarnessServesTransport(
+  harness: HarnessKind,
+  transport: McpTransport['kind'],
+): boolean {
+  return MCP_HARNESS_TRANSPORTS[harness].includes(transport)
+}
+
+/**
+ * Every harness that could serve this definition: what it allows, intersected with the harnesses
+ * whose client reaches its transport.
+ *
+ * EMPTY means the definition can never run anywhere — an `http` server narrowed to `harnesses:
+ * ['codex']`, or anything narrowed to `['pi']`. That is dead configuration a run cannot report
+ * (nothing was ever going to be dropped for a REASON; the server simply never applies), so boot
+ * validation is the only place it can be named.
+ */
+export function mcpServableHarnesses(
+  definition: Pick<McpServerDefinition, 'harnesses' | 'transport'>,
+): HarnessKind[] {
+  return MCP_SUPPORTED_HARNESSES.filter(
+    (harness) =>
+      mcpServerSupportsHarness(definition, harness) &&
+      mcpHarnessServesTransport(harness, definition.transport.kind),
+  )
+}
+
+/**
+ * Bounds on the tool servers ONE dispatch carries, mirroring `CONTEXT_BUDGET`'s discipline for the
+ * linked-context corpus: the job body is a single HTTP payload, and a kind that accretes servers
+ * (its own declarations plus every `assignToolServers` call a deployment makes) bloats every
+ * dispatch of that kind with config the agent has no room to use.
+ *
+ * The disposition differs from the context corpus on purpose. A context file is HUMAN-attached, so
+ * an over-budget corpus refuses the dispatch and lets the person decide; tool servers are
+ * DEPLOYMENT CODE, and refusing a run for a registration fault would take the deployment down for
+ * something boot validation already warned about. So the excess is dropped under `over_budget` —
+ * stated to the agent like every other drop — and the cap is what the boot warning counts against.
+ */
+export const TOOL_SERVER_BUDGET = {
+  /** Max tool servers wired into one dispatch. */
+  maxServers: 12,
+  /** Total bytes of the serialised `mcpServers` job-body field (~32 KB). */
+  maxTotalBytes: 32_768,
+} as const
 
 /**
  * A valid MCP server id: lowercase alphanumerics, dashes and underscores. The id becomes part of
@@ -244,6 +335,24 @@ export const MCP_SERVER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
 export function isValidMcpServerId(id: string): boolean {
   return MCP_SERVER_ID_PATTERN.test(id)
+}
+
+/**
+ * A tool name an `allowedTools` entry may name. Letters, digits, `_`, `.` and `-` — the character
+ * set MCP tool names actually use — and nothing else.
+ *
+ * The rule exists for the COMMA above all. `claudeAllowedToolPatterns` renders each entry as
+ * `mcp__<server>__<tool>` and the harness passes the whole list as ONE `--allowedTools` argument
+ * joined by commas, so `search_issues,get_issue` in a single entry becomes two patterns of which
+ * the first is `mcp__issues__search_issues` (right, but by accident) and the second a bare
+ * `get_issue` that matches no tool the CLI has. Whitespace is refused for the same reason, and the
+ * failure mode is the one this whole area exists to prevent: the PROMPT still advertises the name
+ * verbatim, so the agent is told about a tool the allow-list never granted.
+ */
+export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+export function isValidMcpToolName(name: string): boolean {
+  return MCP_TOOL_NAME_PATTERN.test(name)
 }
 
 /**

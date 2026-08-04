@@ -50,6 +50,15 @@ export interface ProgressGuardLimits {
    * without it.
    */
   maxConsecutiveWebCalls?: number
+  /**
+   * Abort after this many consecutive MCP tool-server calls (`mcp__*`) with no other
+   * tool call in between — the tool-server analogue of `maxConsecutiveWebCalls`, and
+   * present for the same reason. An `mcp__*` call is exempt from the no-edit bound (see
+   * `isMcpToolCall`), so without a streak of its own a run could query a tool server
+   * indefinitely without tripping any guard. Any non-MCP tool call resets the streak.
+   * Optional: defaults to {@link DEFAULT_PROGRESS_GUARD_LIMITS}.
+   */
+  maxConsecutiveMcpCalls?: number
 }
 
 // `satisfies` (not a type annotation) so each property keeps its concrete `number`
@@ -63,6 +72,11 @@ export const DEFAULT_PROGRESS_GUARD_LIMITS = {
   // A genuine research burst is a handful of searches; an uninterrupted run of this
   // many web calls (with no read/edit/bash between) is a search loop, not progress.
   maxConsecutiveWebCalls: 25,
+  // Looser than the web cap: a tool server is usually the agent's route to the SYSTEM OF
+  // RECORD (the issue tracker, the advisory database, the design source), and reading a
+  // list and then each of its items is a normal opening move, not a rabbit-hole. A run
+  // that makes this many in a row with no read, edit or bash between is looping.
+  maxConsecutiveMcpCalls: 40,
 } satisfies ProgressGuardLimits
 
 // Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
@@ -139,6 +153,18 @@ const EXPLORATION_TOOLS = new Set([
 // Pi's `web_search`/`web_fetch` and Claude Code's `WebSearch`/`WebFetch`.
 const WEB_TOOLS = new Set(['web_search', 'web_fetch', 'websearch', 'webfetch'])
 
+// A call to a tool server (MCP). Every MCP client names these `mcp__<server>__<tool>`, and
+// the prefix is the ONLY thing the harness can know about them: what a given server's tools
+// do is a backend registration this image has never seen, so the guard classifies by shape.
+//
+// Matched, rather than enumerated in EXPLORATION_TOOLS, because the set is open: it is
+// whatever tool servers the running kind was wired with. A prefix test is also why this is a
+// function — `name.startsWith`, on the already-lower-cased name, so `MCP__Issues__search`
+// classifies the same as `mcp__issues__search`.
+function isMcpToolCall(loweredName: string): boolean {
+  return loweredName.startsWith('mcp__')
+}
+
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -159,6 +185,10 @@ export function progressGuardLimitsFromEnv(
     maxConsecutiveWebCalls: num(
       env.JOB_MAX_CONSECUTIVE_WEB_CALLS,
       DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
+    ),
+    maxConsecutiveMcpCalls: num(
+      env.JOB_MAX_CONSECUTIVE_MCP_CALLS,
+      DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveMcpCalls,
     ),
   }
 }
@@ -186,11 +216,16 @@ export function mergeGuardLimits(
       overrides.maxToolCallsWithoutEdit,
     ),
     maxConsecutiveErrors: loosen(base.maxConsecutiveErrors, overrides.maxConsecutiveErrors),
-    // `maxConsecutiveWebCalls` is optional on the interface (callers may omit it), so
-    // fall back to the default before loosening — keeps `loosen`'s base a concrete number.
+    // `maxConsecutiveWebCalls` / `maxConsecutiveMcpCalls` are optional on the interface
+    // (callers may omit them), so fall back to the default before loosening — keeps
+    // `loosen`'s base a concrete number.
     maxConsecutiveWebCalls: loosen(
       base.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
       overrides.maxConsecutiveWebCalls,
+    ),
+    maxConsecutiveMcpCalls: loosen(
+      base.maxConsecutiveMcpCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveMcpCalls,
+      overrides.maxConsecutiveMcpCalls,
     ),
   }
 }
@@ -207,6 +242,7 @@ export class ProgressGuard {
   private edits = 0
   private consecutiveErrors = 0
   private consecutiveWebCalls = 0
+  private consecutiveMcpCalls = 0
 
   constructor(
     private readonly limits: ProgressGuardLimits,
@@ -257,13 +293,41 @@ export class ProgressGuard {
       this.consecutiveWebCalls = 0
     }
 
-    // Planning, read-only exploration and subagent-dispatch calls don't count toward the
-    // no-edit bound (see PLANNING_TOOLS / EXPLORATION_TOOLS / SUBAGENT_DISPATCH_TOOLS) —
-    // only "action" calls without an edit do.
+    // Tool-server (MCP) calls: bounded as their own streak for exactly the reason the web
+    // streak exists — they are exempt from the no-edit bound below, and an exemption with no
+    // counter-bound is a loop the guard cannot see. Any non-MCP call resets it.
+    const isMcp = isMcpToolCall(name)
+    if (isMcp) {
+      this.consecutiveMcpCalls++
+      const mcpCap =
+        this.limits.maxConsecutiveMcpCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveMcpCalls
+      if (this.consecutiveMcpCalls >= mcpCap) {
+        return (
+          `no progress: ${this.consecutiveMcpCalls} consecutive tool-server (MCP) calls without ` +
+          `any other action — the agent is stuck querying its tools instead of doing the work. ` +
+          `Aborting.`
+        )
+      }
+    } else {
+      this.consecutiveMcpCalls = 0
+    }
+
+    // Planning, read-only exploration, subagent-dispatch and tool-server calls don't count
+    // toward the no-edit bound (see PLANNING_TOOLS / EXPLORATION_TOOLS /
+    // SUBAGENT_DISPATCH_TOOLS / `isMcpToolCall`) — only "action" calls without an edit do.
+    //
+    // An `mcp__*` call is exempt for the same reason a `read` is: the bound targets the
+    // credential rabbit-hole (endless `bash` probing with nothing implemented), and reaching
+    // a registered tool server is the platform TELLING the agent to look something up
+    // ("prefer them over guessing"). Counting them would abort an edits-expected kind for
+    // consulting the issue tracker the deployment wired for it — punishing the run for
+    // following its own prompt. They are neutral rather than edit-satisfying, exactly like a
+    // subagent dispatch: a read-only lookup must not clear the suspicion the bound holds.
     if (
       PLANNING_TOOLS.has(name) ||
       EXPLORATION_TOOLS.has(name) ||
-      SUBAGENT_DISPATCH_TOOLS.has(name)
+      SUBAGENT_DISPATCH_TOOLS.has(name) ||
+      isMcp
     ) {
       return null
     }

@@ -9,7 +9,13 @@ import type {
   ToolSecretResolver,
   UnavailableToolServer,
 } from '@cat-factory/kernel'
-import { mcpServerSupportsHarness, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  TOOL_SERVER_BUDGET,
+  mcpHarnessServesTransport,
+  mcpServerSupportsHarness,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import {
   isReservedPlatformEnvKey,
   isToolchainEnvName,
@@ -114,11 +120,20 @@ export async function resolveToolServers(
   const toolServers: ResolvedToolServer[] = []
   const unavailableToolServers: UnavailableToolServer[] = []
   const mcpServers: McpServerJobSpec[] = []
+  let bytes = 0
 
   for (const definition of declared.servers) {
     const label = definition.label ?? definition.id
-    if (!servableOnThisRun(input, definition)) {
-      unavailableToolServers.push({ id: definition.id, label, reason: 'harness_unsupported' })
+    const unservable = servableOnThisRun(input, definition)
+    if (unservable) {
+      input.logger?.warn('tool server cannot be served on this run; stating it as unavailable', {
+        agentKind: input.context.agentKind,
+        toolServerId: definition.id,
+        harness: input.harness,
+        transport: definition.transport.kind,
+        reason: unservable,
+      })
+      unavailableToolServers.push({ id: definition.id, label, reason: unservable })
       continue
     }
     const secrets = await resolveSecrets(input, definition)
@@ -126,6 +141,26 @@ export async function resolveToolServers(
       unavailableToolServers.push({ id: definition.id, label, reason: secrets.reason })
       continue
     }
+    const spec = buildJobSpec(definition, secrets.values)
+    // The cap is measured on the RESOLVED spec, because that is the thing the job body carries —
+    // a declaration's size says nothing about the env map its credentials fold into.
+    const size = new TextEncoder().encode(JSON.stringify(spec)).length
+    if (
+      mcpServers.length >= TOOL_SERVER_BUDGET.maxServers ||
+      bytes + size > TOOL_SERVER_BUDGET.maxTotalBytes
+    ) {
+      input.logger?.warn('tool server dropped: the dispatch is over its tool-server budget', {
+        agentKind: input.context.agentKind,
+        toolServerId: definition.id,
+        wired: mcpServers.length,
+        maxServers: TOOL_SERVER_BUDGET.maxServers,
+        bytes,
+        maxTotalBytes: TOOL_SERVER_BUDGET.maxTotalBytes,
+      })
+      unavailableToolServers.push({ id: definition.id, label, reason: 'over_budget' })
+      continue
+    }
+    bytes += size
     toolServers.push({
       id: definition.id,
       label,
@@ -133,22 +168,33 @@ export async function resolveToolServers(
       ...(definition.allowedTools?.length ? { tools: definition.allowedTools } : {}),
       transport: definition.transport.kind,
     })
-    mcpServers.push(buildJobSpec(definition, secrets.values))
+    mcpServers.push(spec)
   }
   return { toolServers, unavailableToolServers, mcpServers }
 }
 
 /**
- * Whether this run can actually serve the definition: the harness must speak MCP (and be one the
- * definition allows), AND the run must have somewhere per-job to put the server config. An ambient
- * Codex run fails the second test — see {@link ResolveToolServersInput.ambientAuth}.
+ * Why this run cannot serve the definition, or undefined when it can. Three tests, each with its
+ * own reason because each names a different fix:
+ *
+ * 1. the harness must speak MCP and be one the definition allows (`harness_unsupported`);
+ * 2. the harness's client must reach the definition's TRANSPORT (`transport_unsupported`) — Codex
+ *    is stdio-only, and this test is what stops an `http` server being advertised in the prompt
+ *    ("prefer them over guessing") and then silently skipped by the harness's TOML writer;
+ * 3. the run must have somewhere per-job to put the server config, which an ambient Codex run does
+ *    not — see {@link ResolveToolServersInput.ambientAuth}. Reported as `harness_unsupported`
+ *    because what is missing is the runtime's config home, not anything about the transport.
  */
 function servableOnThisRun(
   input: ResolveToolServersInput,
   definition: McpServerDefinition,
-): boolean {
-  if (!mcpServerSupportsHarness(definition, input.harness)) return false
-  return !(input.ambientAuth && input.harness === 'codex')
+): UnavailableToolServer['reason'] | undefined {
+  if (!mcpServerSupportsHarness(definition, input.harness)) return 'harness_unsupported'
+  if (!mcpHarnessServesTransport(input.harness, definition.transport.kind)) {
+    return 'transport_unsupported'
+  }
+  if (input.ambientAuth && input.harness === 'codex') return 'harness_unsupported'
+  return undefined
 }
 
 /**

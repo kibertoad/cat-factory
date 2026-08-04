@@ -15,6 +15,7 @@ import {
 } from './validation/validateRegistrations.js'
 import type { AgentRunContext, CustomTaskType, GateRegistry } from '@cat-factory/kernel'
 import {
+  TOOL_SERVER_BUDGET,
   defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
@@ -328,6 +329,134 @@ describe('validateRegistrations', () => {
     ).toBe(true)
   })
 
+  it('errors on an unknown resultView (no silent prose fallback)', () => {
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      presentation: {
+        label: 'Auditor',
+        icon: 'i',
+        color: '#fff',
+        description: 'd',
+        // A bare id that is neither a built-in nor namespaced — exactly the typo the validator catches.
+        resultView: 'no-such-view',
+      },
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
+        (p) => p.code === 'unknown_result_view',
+      ),
+    ).toBe(true)
+  })
+
+  it('accepts a consumer-namespaced resultView id (paired to a deployment component on the SPA)', () => {
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      presentation: {
+        label: 'Auditor',
+        icon: 'i',
+        color: '#fff',
+        description: 'd',
+        resultView: 'acme:security-report',
+      },
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
+        (p) => p.code === 'unknown_result_view',
+      ),
+    ).toBe(false)
+  })
+
+  it('warns (does not throw) when postOps lack structured output', () => {
+    registry.register({
+      kind: 'render-only',
+      systemPrompt: 'x',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      postOps: [async () => {}],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
+  })
+
+  // A `retire()` call that names a still-live pipeline does NOTHING — `retiredPipelines` keeps a
+  // live pipeline over a tombstone for it, so a deployment cannot withdraw the curated built-ins.
+  // That is deliberate; being silent about it is not, and boot is the last point where the author
+  // can act. These pin that the check fires on the inert case and stays quiet on the two valid ones.
+  it('errors on a retirement that names a pipeline the live catalog still ships', () => {
+    const pipelines = defaultPipelineRegistry()
+    pipelines.retire('pl_full')
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+      pipelineRegistry: pipelines,
+    })
+    const problem = problems.find((p) => p.code === 'retirement_of_live_pipeline')
+    expect(problem?.severity).toBe('error')
+    expect(problem?.message).toContain('pl_full')
+    expect(() =>
+      validateRegistrations({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }),
+    ).toThrow()
+  })
+
+  it('accepts a retirement whose id nothing currently defines', () => {
+    // The INTENDED use: a tombstone for a pipeline an older version of the deployment's own package
+    // shipped. Its definition is long gone from their code — reaching the boards that still store
+    // the row is the entire point, so flagging this would refuse the feature's main case.
+    const pipelines = defaultPipelineRegistry()
+    pipelines.retire('pl_org_flow_v1', { replacedBy: 'pl_full' })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }).some((p) => p.code === 'retirement_of_live_pipeline'),
+    ).toBe(false)
+  })
+
+  it('accepts retiring a pipeline the SAME registry had registered', () => {
+    // `retire` drops the registration, so the id is no longer live and the tombstone stands.
+    const pipelines = defaultPipelineRegistry()
+    pipelines.register({ id: 'pl_org_flow', name: 'Org flow', agentKinds: ['coder'] })
+    pipelines.retire('pl_org_flow')
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }).some((p) => p.code === 'retirement_of_live_pipeline'),
+    ).toBe(false)
+  })
+})
+
+// A kind's declared capabilities must be REACHABLE: the ids resolve, the kind has a surface that
+// can serve them, the running harness can reach the transport, and the list fits a dispatch. Split
+// out of the `validateRegistrations` block above (and from the credential rules below) when the
+// three concerns together pushed one describe past the function-size ratchet.
+//
+// "Declared for" includes ASSIGNED capabilities: `assignToolServers('coder', …)` is the recommended
+// way to attach a server to a built-in, and no built-in is a registry entry, so validation walks
+// `kindsWithCapabilities()` rather than `all()`.
+describe('agent-capability validation: reach and scoping', () => {
+  let registry: AgentKindRegistry
+  let gates: GateRegistry
+  beforeEach(() => {
+    registry = new AgentKindRegistry()
+    gates = defaultGateRegistry()
+  })
+
   it('errors on a skill / tool-server id with no registration', () => {
     // The failure this catches is invisible at run time: the agent simply works without the
     // playbook or the tool it was supposed to have, and the output is merely worse.
@@ -401,6 +530,199 @@ describe('validateRegistrations', () => {
     expect(() =>
       validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
     ).not.toThrow()
+  })
+
+  it('accepts registered + inline capabilities on a container kind', () => {
+    registry.registerSkill({
+      id: 'house-review',
+      name: 'house-review',
+      description: 'd',
+      instructions: 'i',
+    })
+    registry.registerToolServer({ id: 'issues', transport: { kind: 'stdio', command: 'x' } })
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      skills: ['house-review', { catalogSkillId: 'src:s:triage' }],
+      toolServers: ['issues', { id: 'docs', transport: { kind: 'http', url: 'https://x/mcp' } }],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toEqual([])
+  })
+
+  // Capabilities ASSIGNED to a kind the registry has no entry for — `assignToolServers('coder', …)`
+  // — are the recommended attachment path and the heavily-used one. Validation used to walk
+  // `registry.all()` only, so every one of these declarations booted unchecked: the dispatch-time
+  // floors still held, but the "refused at declaration" layer was skipped for the commonest case.
+
+  describe('capabilities assigned to a BUILT-IN kind', () => {
+    it('validates a server assigned to a built-in exactly as a registered kind’s own', () => {
+      registry.assignToolServers('coder', [
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'http://mcp.example.com/sse' },
+          secretKeys: [{ key: 'ENCRYPTION_KEY', header: 'Authorization' }],
+        },
+      ])
+      const problems = collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      })
+      expect(problems.some((p) => p.code === 'insecure_tool_server_url')).toBe(true)
+      expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(true)
+    })
+
+    it('reports an unregistered id assigned by reference', () => {
+      registry.assignToolServers('ci-fixer', ['never-registered'])
+      registry.assignSkills('merger', ['also-never-registered'])
+      const problems = collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      })
+      expect(problems.some((p) => p.code === 'unknown_tool_server')).toBe(true)
+      expect(problems.some((p) => p.code === 'unknown_bundled_skill')).toBe(true)
+    })
+
+    it('does NOT call a built-in container kind inline', () => {
+      // `registry.requiresContainer` answers false for a kind it has no registration for, so a
+      // naive container check would warn about `coder` — the single most likely assignment target —
+      // as an inline kind whose tool servers can never take effect. The check goes through
+      // `runsInContainer`, which knows the built-in container set.
+      registry.registerToolServer({ id: 'issues', transport: { kind: 'stdio', command: 'x' } })
+      registry.registerSkill({ id: 'house', name: 'house', description: 'd', instructions: 'i' })
+      registry.assignToolServers('coder', ['issues'])
+      registry.assignSkills('coder', ['house'])
+      const problems = collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      })
+      expect(problems).toEqual([])
+    })
+
+    it('still warns for an INLINE built-in, where the declaration really is inert', () => {
+      // `spec-writer` runs inline in the engine: it has no agent CLI to wire a server into.
+      registry.assignToolServers('requirements-reviewer', [
+        { id: 'issues', transport: { kind: 'stdio', command: 'x' } },
+      ])
+      const problems = collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      })
+      expect(problems.find((p) => p.code === 'tool_servers_without_container')?.severity).toBe(
+        'warn',
+      )
+    })
+  })
+
+  describe('a tool server no harness could serve', () => {
+    const assign = (server: Parameters<typeof registry.registerToolServer>[0]) => {
+      registry.register({
+        kind: 'auditor',
+        systemPrompt: 'audit',
+        agent: { surface: 'container-explore' },
+        toolServers: [server],
+      })
+      return collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates })
+    }
+
+    it('warns about an http server narrowed to codex, whose client is stdio-only', () => {
+      // Boot is the ONLY place this can be said. No run ever drops the server for a reason — it
+      // simply never applies, so no prompt, no log line and no operator surface mentions it.
+      const problems = assign({
+        id: 'docs',
+        harnesses: ['codex'],
+        transport: { kind: 'http', url: 'https://mcp.example.com/mcp' },
+      })
+      const warning = problems.find((p) => p.code === 'tool_server_unservable')
+      expect(warning?.severity).toBe('warn')
+      expect(warning?.message).toContain('stdio-only')
+    })
+
+    it('warns about anything narrowed to pi, which has no MCP client at all', () => {
+      const problems = assign({
+        id: 'issues',
+        harnesses: ['pi'],
+        transport: { kind: 'stdio', command: 'x' },
+      })
+      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(true)
+    })
+
+    it('stays silent for a combination SOME harness serves', () => {
+      // An http server on the default (unnarrowed) list is claude-code-only and perfectly fine:
+      // a Codex run states it as unavailable, which is a run-time report, not a registration fault.
+      const problems = assign({
+        id: 'docs',
+        transport: { kind: 'http', url: 'https://mcp.example.com/mcp' },
+      })
+      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(false)
+    })
+  })
+
+  it('errors on an allowedTools entry that is not a single tool name', () => {
+    // The harness joins the list into ONE `--allowedTools` argument with commas, so this entry
+    // becomes two patterns of which the second matches nothing — while the prompt goes on
+    // advertising the name verbatim, which is the "told about a tool it cannot call" failure the
+    // whole unavailability vocabulary exists to prevent.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'issues',
+          transport: { kind: 'stdio', command: 'x' },
+          allowedTools: ['search_issues,get_issue'],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'invalid_tool_server_tool_name')).toBe(true)
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toThrow(/invalid_tool_server_tool_name/)
+  })
+
+  it('warns when a kind has more tool servers declared for it than a dispatch carries', () => {
+    // A warning, not an error: the dispatch drops the excess under `over_budget` and the run works
+    // with fewer tools than the deployment believes it wired. Accretion is the realistic cause —
+    // several packages each calling `assignToolServers`, none of them individually wrong.
+    const servers = Array.from({ length: TOOL_SERVER_BUDGET.maxServers + 1 }, (_, i) => ({
+      id: `srv${i}`,
+      transport: { kind: 'stdio' as const, command: 'x' },
+    }))
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: servers,
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    const warning = problems.find((p) => p.code === 'too_many_tool_servers')
+    expect(warning?.severity).toBe('warn')
+    expect(warning?.message).toContain('over_budget')
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
+  })
+})
+
+// The CREDENTIAL half of a tool-server declaration. Every rule here exists because a definition
+// names BOTH the key it wants and the endpoint that key is sent to, so a registration that looks
+// harmless can put the deployment's own secrets on someone else's wire.
+describe('agent-capability validation: credentials', () => {
+  let registry: AgentKindRegistry
+  let gates: GateRegistry
+  beforeEach(() => {
+    registry = new AgentKindRegistry()
+    gates = defaultGateRegistry()
   })
 
   it('rejects a cleartext http tool-server endpoint off loopback', () => {
@@ -527,137 +849,6 @@ describe('validateRegistrations', () => {
       collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
         (p) => p.code === 'insecure_tool_server_url',
       ),
-    ).toBe(false)
-  })
-
-  it('accepts registered + inline capabilities on a container kind', () => {
-    registry.registerSkill({
-      id: 'house-review',
-      name: 'house-review',
-      description: 'd',
-      instructions: 'i',
-    })
-    registry.registerToolServer({ id: 'issues', transport: { kind: 'stdio', command: 'x' } })
-    registry.register({
-      kind: 'auditor',
-      systemPrompt: 'audit',
-      agent: { surface: 'container-explore' },
-      skills: ['house-review', { catalogSkillId: 'src:s:triage' }],
-      toolServers: ['issues', { id: 'docs', transport: { kind: 'http', url: 'https://x/mcp' } }],
-    })
-    expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
-    ).toEqual([])
-  })
-
-  it('errors on an unknown resultView (no silent prose fallback)', () => {
-    registry.register({
-      kind: 'auditor',
-      systemPrompt: 'audit',
-      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
-      presentation: {
-        label: 'Auditor',
-        icon: 'i',
-        color: '#fff',
-        description: 'd',
-        // A bare id that is neither a built-in nor namespaced — exactly the typo the validator catches.
-        resultView: 'no-such-view',
-      },
-    })
-    expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'unknown_result_view',
-      ),
-    ).toBe(true)
-  })
-
-  it('accepts a consumer-namespaced resultView id (paired to a deployment component on the SPA)', () => {
-    registry.register({
-      kind: 'auditor',
-      systemPrompt: 'audit',
-      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
-      presentation: {
-        label: 'Auditor',
-        icon: 'i',
-        color: '#fff',
-        description: 'd',
-        resultView: 'acme:security-report',
-      },
-    })
-    expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'unknown_result_view',
-      ),
-    ).toBe(false)
-  })
-
-  it('warns (does not throw) when postOps lack structured output', () => {
-    registry.register({
-      kind: 'render-only',
-      systemPrompt: 'x',
-      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
-      postOps: [async () => {}],
-    })
-    const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
-    })
-    expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
-    expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
-    ).not.toThrow()
-  })
-
-  // A `retire()` call that names a still-live pipeline does NOTHING — `retiredPipelines` keeps a
-  // live pipeline over a tombstone for it, so a deployment cannot withdraw the curated built-ins.
-  // That is deliberate; being silent about it is not, and boot is the last point where the author
-  // can act. These pin that the check fires on the inert case and stays quiet on the two valid ones.
-  it('errors on a retirement that names a pipeline the live catalog still ships', () => {
-    const pipelines = defaultPipelineRegistry()
-    pipelines.retire('pl_full')
-    const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
-      pipelineRegistry: pipelines,
-    })
-    const problem = problems.find((p) => p.code === 'retirement_of_live_pipeline')
-    expect(problem?.severity).toBe('error')
-    expect(problem?.message).toContain('pl_full')
-    expect(() =>
-      validateRegistrations({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
-      }),
-    ).toThrow()
-  })
-
-  it('accepts a retirement whose id nothing currently defines', () => {
-    // The INTENDED use: a tombstone for a pipeline an older version of the deployment's own package
-    // shipped. Its definition is long gone from their code — reaching the boards that still store
-    // the row is the entire point, so flagging this would refuse the feature's main case.
-    const pipelines = defaultPipelineRegistry()
-    pipelines.retire('pl_org_flow_v1', { replacedBy: 'pl_full' })
-    expect(
-      collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
-      }).some((p) => p.code === 'retirement_of_live_pipeline'),
-    ).toBe(false)
-  })
-
-  it('accepts retiring a pipeline the SAME registry had registered', () => {
-    // `retire` drops the registration, so the id is no longer live and the tombstone stands.
-    const pipelines = defaultPipelineRegistry()
-    pipelines.register({ id: 'pl_org_flow', name: 'Org flow', agentKinds: ['coder'] })
-    pipelines.retire('pl_org_flow')
-    expect(
-      collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
-      }).some((p) => p.code === 'retirement_of_live_pipeline'),
     ).toBe(false)
   })
 })
