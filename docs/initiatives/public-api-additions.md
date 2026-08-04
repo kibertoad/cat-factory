@@ -25,7 +25,7 @@ surface discovered later belongs in this table rather than in a revised number:
 | `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*` |
 | implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`    |
 | judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`  |
-| pre-token input gate      | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`   |
+| pre-dispatch input gate   | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`   |
 | approval gate             | `step.approval`      | ❌ none (slice **A1**                      |
 | agent-raised decision     | `step.decision`      | ❌ none) slice **A2**                      |
 | `clarity-review`          | clarity module       | ❌ none (slice **A3**                      |
@@ -36,7 +36,7 @@ surface discovered later belongs in this table rather than in a revised number:
 | visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
 | `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)              |
 
-**The pre-token input gate is the odd row**, and worth reading before adding another: every other
+**The pre-dispatch input gate is the odd row**, and worth reading before adding another: every other
 entry is a park a PIPELINE can carry, so `parkSurfacesOf` sees it in the step chain and admission
 can refuse a `write` key up front. The gate parks on the shape of the TASK, so it holds runs under
 pipelines that park nowhere and was invisible to that enumeration entirely. It is composed in at

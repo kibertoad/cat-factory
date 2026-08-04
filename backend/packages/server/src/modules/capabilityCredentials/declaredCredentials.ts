@@ -69,11 +69,16 @@ export async function collectDeclaredCapabilityCredentials(
   }
 
   // Enumerated through the KINDS rather than off the server registrations, so the list is the
-  // servers some registered kind can actually reach: a server registered by id and attached to
-  // nothing never runs, so a credential for it is a key an operator would fill in for no dispatch.
-  // This resolves inline and by-reference declarations alike — hence the dedupe.
-  for (const kind of input.agentKindRegistry.all()) {
-    for (const server of input.agentKindRegistry.toolServersFor(kind.kind).servers) {
+  // servers some kind can actually reach: a server registered by id and attached to nothing never
+  // runs, so a credential for it is a key an operator would fill in for no dispatch. This resolves
+  // inline and by-reference declarations alike — hence the dedupe.
+  //
+  // Through `kindsWithCapabilities()`, NOT `all()`: `assignToolServers('coder', …)` is the
+  // recommended way to attach a server to a built-in, and a built-in is not a registry entry, so
+  // walking `all()` left the commonest declaration path out of the checklist entirely and the
+  // operator saw a list that was silently missing the key their `coder` runs would need.
+  for (const kind of input.agentKindRegistry.kindsWithCapabilities()) {
+    for (const server of input.agentKindRegistry.toolServersFor(kind).servers) {
       for (const secret of server.secretKeys ?? []) {
         push({
           subject: 'tool-server',

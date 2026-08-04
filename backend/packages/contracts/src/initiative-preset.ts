@@ -1,12 +1,19 @@
 import * as v from 'valibot'
 import {
+  descriptorFieldEntries,
+  descriptorFieldShowWhenSchema,
+  descriptorFieldTypeSchema,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+  type DescriptorFieldShowWhen,
+} from './form-fields.js'
+import {
   INITIATIVE_ID_MAX,
   INITIATIVE_SHORT_MAX,
   INITIATIVE_TITLE_MAX,
   initiativeExecutionPolicySchema,
   initiativePresetInputsSchema,
   type InitiativePresetInputs,
-  type InitiativePresetInputValue,
 } from './initiative.js'
 
 // ---------------------------------------------------------------------------
@@ -22,74 +29,30 @@ import {
 // `docs/initiatives/initiative-presets-and-docs-refresh.md` and the kernel
 // `initiative-preset-registry.ts`.
 //
-// The field descriptor extends the `ProviderConfigField` family with the two shapes a
-// preset form needs that a flat provider form did not: `checkbox-group` (a multi-select
-// whose value is `string[]`) and `path` (a repo-relative directory), plus single-condition
-// `showWhen` visibility (a per-doc-type subfolder shown only when that type is checked).
-// Descriptor labels are backend-supplied English (the `describeConfig` convention); only
-// the surrounding chrome is i18n.
+// The FIELD vocabulary itself is shared with the other descriptor-driven form surface (a reusable
+// operation's per-case brief on a custom task type) and lives in `form-fields.ts`; a preset admits
+// EVERY type in it, including `password`, and this module only re-exports the preset-named
+// aliases plus the two descriptor-taking wrappers. Descriptor labels are backend-supplied English
+// (the `describeConfig` convention); only the surrounding chrome is i18n.
 // ---------------------------------------------------------------------------
 
 /**
- * How a preset field is rendered/collected. The first six mirror {@link ProviderConfigField}'s
- * types exactly; `checkbox-group` (a multi-select, value `string[]`) and `path` (a repo-relative
- * directory, {@link isSafeRepoDirPath}-validated) are the two additions the preset form needs.
+ * How a preset field is rendered/collected: the whole shared union, a preset being the surface
+ * that motivated it. `password` is admitted here (a preset input may carry a token the planning
+ * flow needs) and refused for a task type, whose values reach prompts and telemetry.
  */
-export const initiativePresetFieldTypeSchema = v.picklist([
-  'text',
-  'password',
-  'select',
-  'number',
-  'checkbox',
-  'textarea',
-  'checkbox-group',
-  'path',
-])
+export const initiativePresetFieldTypeSchema = descriptorFieldTypeSchema
 export type InitiativePresetFieldType = v.InferOutput<typeof initiativePresetFieldTypeSchema>
 
-/**
- * Single-condition visibility for a field: it renders only when the referenced field's value
- * matches. `equals` compares a scalar value; `includes` tests membership in a `checkbox-group`
- * value (the per-doc-type subfolder case — "show `diagramsDir` only when `docTypes` includes
- * `diagrams`"). Deliberately ONE condition — resist growing this into a recursive schema
- * renderer (that is the descriptor-forms initiative's separate line item).
- */
-export const initiativePresetShowWhenSchema = v.object({
-  /** The `key` of the field whose value gates this one's visibility. */
-  key: v.pipe(v.string(), v.minLength(1)),
-  /**
-   * Show when the referenced scalar value equals this. A union so `equals` can gate a
-   * `checkbox` (boolean) or `number` field, not only a `select`/`text` string — the
-   * comparison is strict, so the type must match the referenced field's value.
-   */
-  equals: v.optional(v.union([v.string(), v.boolean(), v.number()])),
-  /** Show when the referenced `checkbox-group` value includes this. */
-  includes: v.optional(v.string()),
-})
-export type InitiativePresetShowWhen = v.InferOutput<typeof initiativePresetShowWhenSchema>
+/** Single-condition visibility for a preset field (the shared {@link descriptorFieldShowWhenSchema}). */
+export const initiativePresetShowWhenSchema = descriptorFieldShowWhenSchema
+export type InitiativePresetShowWhen = DescriptorFieldShowWhen
 
 /** One value a preset needs, rendered as a single form field. */
 export const initiativePresetFieldSchema = v.object({
-  /** Stable key the value is stored/sent under (e.g. `docTypes`, `docsRoot`). */
-  key: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-  /** Human label for the form field (backend-supplied English). */
-  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  /** Optional helper text shown under the field. */
-  help: v.optional(v.string()),
-  /** Optional input placeholder. */
-  placeholder: v.optional(v.string()),
-  /** Whether the value is required (absent ⇒ optional). A hidden (`showWhen`) field is never required. */
-  required: v.optional(v.boolean()),
+  ...descriptorFieldEntries,
   /** Field type; absent is treated as `text`. */
   type: v.optional(initiativePresetFieldTypeSchema),
-  /** Choices for a `select` / `checkbox-group` field. */
-  options: v.optional(v.array(v.object({ value: v.string(), label: v.string() }))),
-  /** The scalar default (`text`/`select`/`path`/`number`/`checkbox`); the form falls back to it when blank. */
-  default: v.optional(v.string()),
-  /** The multi-select default for a `checkbox-group` field. */
-  defaultValues: v.optional(v.array(v.string())),
-  /** Single-condition visibility; absent ⇒ always shown. */
-  showWhen: v.optional(initiativePresetShowWhenSchema),
 })
 export type InitiativePresetField = v.InferOutput<typeof initiativePresetFieldSchema>
 
@@ -221,159 +184,47 @@ export function parseInitiativePresetDescriptor(value: unknown): InitiativePrese
 }
 
 // ---------------------------------------------------------------------------
-// Path safety + input validation (pure — shared by the create-flow validation).
+// Input validation (the shared pure rules, bound to a preset's descriptor).
+//
+// The rules themselves live in `form-fields.ts` and take a plain field list, because the other
+// descriptor-driven surface (a custom task type's per-case form) has no preset descriptor to pass.
+// These two wrappers exist because a preset's callers hold the DESCRIPTOR, not its fields, and the
+// preset-named helpers below read as what they are at those call sites.
 // ---------------------------------------------------------------------------
 
 /**
- * Whether `path` is a SAFE repo-relative DIRECTORY (the `path`-field analogue of
- * {@link isSafeDocPath}, minus the `.md` requirement). A preset `path` value is used verbatim
- * as an in-repo placement dir the writers commit under, so it must not escape the repo: no `..`
- * traversal, no absolute path (`/…` or a Windows drive), no backslash / NUL. An empty string is
- * NOT a valid path (callers treat "unset" separately). A trailing slash is tolerated.
+ * The field-list-shaped rules under their preset names: `isPresetFieldVisible` (a field's
+ * `showWhen` against the current inputs), `renderInitiativePresetValue` (one value as prose), and
+ * the `path` write-boundary guard. Aliases, not copies: one implementation, two vocabularies.
  */
-export function isSafeRepoDirPath(path: string): boolean {
-  const p = path.trim()
-  if (!p || p.length > 300) return false
-  if (p.startsWith('/') || /^[a-zA-Z]:/.test(p)) return false
-  if (p.includes('\\') || p.includes('\0')) return false
-  return !p.split('/').some((segment) => segment === '..')
-}
-
-/** Whether a field is visible given the current input values (its `showWhen` condition). */
-export function isPresetFieldVisible(
-  field: InitiativePresetField,
-  inputs: InitiativePresetInputs,
-): boolean {
-  const cond = field.showWhen
-  if (!cond) return true
-  const value = inputs[cond.key]
-  if (cond.equals !== undefined) {
-    // An unchecked checkbox is ABSENT from the inputs (an off box stays unset — see the create
-    // form's `defaultPresetInputs` / renderer), so an absent value reads as `false` when the
-    // condition compares against a boolean. Without this, `equals: false` would never match at
-    // initial render (only after a toggle on→off), hiding a field that should be shown.
-    const actual = value === undefined && typeof cond.equals === 'boolean' ? false : value
-    return actual === cond.equals
-  }
-  if (cond.includes !== undefined) return Array.isArray(value) && value.includes(cond.includes)
-  // A `showWhen` with neither predicate is a malformed condition — treat as always visible.
-  return true
-}
-
-/** Whether a filled value matches the field's declared type (structural, pre-semantic check). */
-function valueMatchesFieldType(
-  field: InitiativePresetField,
-  value: InitiativePresetInputValue,
-): boolean {
-  switch (field.type) {
-    case 'checkbox-group':
-      return Array.isArray(value)
-    case 'checkbox':
-      return typeof value === 'boolean'
-    case 'number':
-      return typeof value === 'number'
-    default:
-      // text / password / select / textarea / path (and the untyped default) are strings.
-      return typeof value === 'string'
-  }
-}
+export {
+  isDescriptorFieldVisible as isPresetFieldVisible,
+  isSafeRepoDirPath,
+  renderDescriptorFieldValue as renderInitiativePresetValue,
+} from './form-fields.js'
 
 /**
  * Validate a filled preset form against its descriptor, returning a list of human-readable
- * problems (EMPTY ⇒ valid). Pure + total (never throws), so the create controller can map a
- * non-empty result to a single ValidationError. Enforces: no unknown keys, correct value type
- * per field, required VISIBLE fields present (a required `checkbox` must be CHECKED — an
- * unchecked `false` counts as unset), `select`/`checkbox-group` values drawn from the declared
- * options, and `path` values that stay inside the repo ({@link isSafeRepoDirPath}). Hidden
- * fields (failing `showWhen`) are not required and their stale values are ignored.
+ * problems (EMPTY means valid). Pure + total (never throws), so the create controller can map a
+ * non-empty result to a single ValidationError and the SPA can disable submit off the same call.
  */
 export function validateInitiativePresetInputs(
   descriptor: InitiativePresetDescriptor,
   inputs: InitiativePresetInputs,
 ): string[] {
-  const problems: string[] = []
-  const byKey = new Map(descriptor.fields.map((f) => [f.key, f]))
-
-  for (const key of Object.keys(inputs)) {
-    if (!byKey.has(key)) problems.push(`Unknown field "${key}".`)
-  }
-
-  for (const field of descriptor.fields) {
-    const visible = isPresetFieldVisible(field, inputs)
-    const value = inputs[field.key]
-    // A checkbox is "present" only when checked: a required checkbox means "must be checked",
-    // so an unchecked (`false`) box counts as unset and fails the required check below.
-    const present =
-      value !== undefined &&
-      !(typeof value === 'string' && value.trim() === '') &&
-      !(Array.isArray(value) && value.length === 0) &&
-      value !== false
-
-    if (!visible) continue
-    if (!present) {
-      if (field.required) problems.push(`Field "${field.key}" is required.`)
-      continue
-    }
-    if (!valueMatchesFieldType(field, value)) {
-      problems.push(`Field "${field.key}" has the wrong type for a ${field.type ?? 'text'} field.`)
-      continue
-    }
-    const optionValues = new Set((field.options ?? []).map((o) => o.value))
-    if (field.type === 'select' && optionValues.size > 0 && !optionValues.has(value as string)) {
-      problems.push(`Field "${field.key}" has a value outside its options.`)
-    }
-    if (field.type === 'checkbox-group' && optionValues.size > 0) {
-      for (const entry of value as string[]) {
-        if (!optionValues.has(entry))
-          problems.push(`Field "${field.key}" has an option "${entry}" outside its choices.`)
-      }
-    }
-    if (field.type === 'path' && !isSafeRepoDirPath(value as string)) {
-      problems.push(
-        `Field "${field.key}" must be a relative path inside the repo (no "..", absolute, or backslash segments).`,
-      )
-    }
-  }
-
-  return problems
+  return validateDescriptorFields(descriptor.fields, inputs)
 }
 
 /**
- * Reduce a filled preset form to the values SAFE to freeze on the entity: only fields the
- * descriptor declares AND that are currently VISIBLE (their `showWhen` holds). Unknown keys and
- * hidden fields — whose stale values {@link validateInitiativePresetInputs} deliberately skips —
- * are dropped, so a hidden field can never freeze an unvalidated value (e.g. a `path` that escapes
- * the repo). Pure + total; run AFTER validation, on a form already known valid.
+ * Reduce a filled preset form to the values SAFE to freeze on the entity: the declared, currently
+ * VISIBLE fields only, so a hidden field can never freeze an unvalidated value (e.g. a `path` that
+ * escapes the repo). Pure + total; run AFTER validation, on a form already known valid.
  */
 export function sanitizeInitiativePresetInputs(
   descriptor: InitiativePresetDescriptor,
   inputs: InitiativePresetInputs,
 ): InitiativePresetInputs {
-  const sanitized: InitiativePresetInputs = {}
-  for (const field of descriptor.fields) {
-    if (!isPresetFieldVisible(field, inputs)) continue
-    const value = inputs[field.key]
-    if (value !== undefined) sanitized[field.key] = value
-  }
-  return sanitized
-}
-
-/**
- * Render one filled preset value as human-readable prose (option labels preferred over raw
- * values, `checkbox-group` joined, boolean → `Yes`/`No`). Shared by the create flow's skip-interview
- * qa seeding and the SPA form review so a field reads identically in both. Backend-supplied English
- * (the `describeConfig` convention). Pure + total.
- */
-export function renderInitiativePresetValue(
-  field: InitiativePresetField,
-  value: InitiativePresetInputValue,
-): string {
-  const labelOf = (v: string): string =>
-    (field.options ?? []).find((o) => o.value === v)?.label ?? v
-  if (Array.isArray(value)) return value.map(labelOf).join(', ')
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (typeof value === 'number') return String(value)
-  return labelOf(value)
+  return sanitizeDescriptorFields(descriptor.fields, inputs)
 }
 
 /** Strictly parse a bounded preset-inputs record. Throws on shape violations. */

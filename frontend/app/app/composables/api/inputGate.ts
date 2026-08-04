@@ -2,7 +2,7 @@ import { resolveInputGateContract, type ResolveInputGateChoice } from '@cat-fact
 import type { ApiContext } from './context'
 
 /**
- * The PRE-TOKEN INPUT GATE: a run whose task states nothing an agent could act on parks before
+ * The PRE-DISPATCH INPUT GATE: a run whose task states nothing an agent could act on parks before
  * its first dispatch, having spent no tokens. This resolves that park: `recheck` re-evaluates
  * the task as it now stands (the fix is verified, not asserted), `proceed` waives the findings.
  *

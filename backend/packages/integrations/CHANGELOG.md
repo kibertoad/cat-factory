@@ -1,5 +1,26 @@
 # @cat-factory/integrations
 
+## 0.123.5
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+
+## 0.123.4
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+
 ## 0.123.3
 
 ### Patch Changes
@@ -1671,7 +1692,7 @@
 
 ### Patch Changes
 
-- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. a Kargo PREnv that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
+- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. an ephemeral environment that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
 
 ## 0.101.2
 
@@ -3140,11 +3161,10 @@
 
 ### Patch Changes
 
-- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+- 6c4bcef: chore(environments): use neutral illustrative naming in shared custom-deployment-provider code and UI
 
-  "Kargo" is one specific proprietary deployment provider and should not appear as the
-  canonical example in the framework's shared code or UI. Replaced every illustrative
-  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  Shared framework code and UI should carry neutral, self-contained examples. Replaced
+  every illustrative reference (comments, the `manifestId` placeholder/help text, config-file examples) with
   neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
   Behaviour is unchanged.
 
@@ -6394,8 +6414,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that

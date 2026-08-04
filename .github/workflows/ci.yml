@@ -146,7 +146,8 @@ jobs:
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
-            # SDK clients against it, so it runs when EITHER side of that contract moves: the
+            # SDK clients plus the published MCP server against it, so it runs when EITHER side of
+            # that contract moves: the
             # SDKs themselves, the generator that writes them, the published spec, the Valibot
             # contracts the spec is generated FROM, or the controllers that serve `/api/v1`. That
             # last pair is the point — an SDK is only correct relative to the surface it talks to,
@@ -1231,7 +1232,7 @@ jobs:
   # Gated on the `sdk` filter, so it runs when either side of the contract moves — the clients and
   # their generator, or the `/api/v1` contracts and controllers they talk to.
   sdk-smoketest:
-    name: SDK smoketest (4 languages)
+    name: SDK smoketest (4 languages + MCP)
     needs: changes
     if: ${{ needs.changes.outputs.sdk == 'true' }}
     runs-on: ubuntu-latest
@@ -1322,6 +1323,10 @@ jobs:
       - name: Wait for Postgres
         run: .github/scripts/wait-postgres.sh
 
+      # Two phases: the four clients compared against each other, then the published MCP server
+      # spawned as a real process against the same backend. The build above is what puts
+      # `sdk/mcp/dist/bin.js` there; the harness fails naming the build command if it is absent,
+      # because nothing about that phase can be concluded without it.
       - name: Run the cross-SDK smoketest
         run: pnpm --filter @cat-factory/sdk-smoketest run smoketest
 

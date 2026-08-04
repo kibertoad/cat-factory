@@ -58,8 +58,8 @@ describe('makeResolveRepoFilesForCoords', () => {
     )
     const ctx = await resolve('ws1', { owner: 'acme', repo: 'widgets' })
     expect(ctx?.baseBranch).toBe('trunk')
-    await ctx?.repo.getFile('.kargo.yml')
-    expect(client.getFileContent).toHaveBeenCalledWith(42, REF, '.kargo.yml', undefined)
+    await ctx?.repo.getFile('.acme-envs.yml')
+    expect(client.getFileContent).toHaveBeenCalledWith(42, REF, '.acme-envs.yml', undefined)
   })
 
   it('defaults the base branch to main when the projection carries none', async () => {
