@@ -297,12 +297,14 @@ export {
   memoizeBinaryGeneratorViews,
   registryBinaryGeneratorSource,
 } from './ports/binary-generators.js'
+// `binaryFormatCoverage` is NOT re-exported from here: it moved to `@cat-factory/contracts`
+// beside the vocabulary it reads, so the SPA imports the same implementation the backend does.
+// A convenience re-export would put two import paths on one rule, which is the shape that let a
+// second hand-written copy exist in the first place.
 export {
-  type BinaryFormatCoverage,
   type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
-  binaryFormatCoverage,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,

@@ -4305,6 +4305,7 @@
       "binaryOutputMediaTypeUnverifiable": "選択されたどの統合も {formats} を宣言していませんが、うち一つは形式をまったく宣言していないため、確認できませんでした。ステップはそのまま開始されます。その統合の API で出力できるか確認してください。",
       "binaryOutputMediaTypeUnusable": "メディアタイプではないため保存されませんでした: {entries}。それぞれ type/subtype の形で入力してください。",
       "binaryOutputGeneratorMissing": "このデプロイメントは次の生成統合を登録していません: {ids}。これらはこのワークスペースではなくデプロイメントのコードで登録します。",
+      "binaryOutputGeneratorOverlap": "選択された統合のうち複数が同じコンテンツタイプを生成します（{overlaps}）。それ自体は問題ありませんが、どれを呼び出すかをコンテンツタイプが決められなくなります。このステップのプロンプトで、どれを何に使うかを指定してください。指定がなければエージェントは一つを選び、そのまま使い続けます。",
       "binaryOutputModalityUncovered": "このステップが提供することになっている {modalities} を、選択されたどの統合も生成できません。",
       "binaryOutputModalityRetired": "{modality}（現在は提供されていません。このステップのコンテンツ種別を選び直してください）",
       "binaryOutputModality": {

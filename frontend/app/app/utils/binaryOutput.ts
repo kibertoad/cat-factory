@@ -1,5 +1,14 @@
-import { ASSET_STORAGE_CAPABILITY, normalizeMediaType } from '@cat-factory/contracts'
-import type { BinaryModality, RegisteredBinaryGenerator } from '@cat-factory/contracts'
+import {
+  ASSET_STORAGE_CAPABILITY,
+  binaryFormatCoverage,
+  binaryModalityOverlaps,
+  normalizeMediaType,
+} from '@cat-factory/contracts'
+import type {
+  BinaryModality,
+  BinaryModalityOverlap,
+  RegisteredBinaryGenerator,
+} from '@cat-factory/contracts'
 import type {
   BinaryOutputArtifact,
   BinaryOutputConfig,
@@ -412,6 +421,22 @@ export type BinaryOutputPickIssue =
    * comes to look exactly like "this is fine".
    */
   | 'media_type_unverifiable'
+  /**
+   * Two or more selected integrations produce the SAME content type, so the content type no
+   * longer decides which one the agent calls.
+   *
+   * ADVISORY, like `media_type_unverifiable` and unlike everything above it: the step saves, it
+   * starts, and selecting two producers of one kind is the whole reason the selection is a list.
+   * What it costs is a decision nobody has written down, and the agent resolves an unstated
+   * choice by picking one and picking it consistently, which is invisible in the artifacts,
+   * since every one of them has the right modality, the right format and a clean storage verdict.
+   *
+   * It is raised HERE as well as in the agent's brief because this is the surface where it can be
+   * acted on: the person selecting two integrations is the one who knows why, and the step's
+   * prompt is a field they already have open. The brief catches the step whose author did not
+   * think to write it; this catches the author.
+   */
+  | 'generator_overlap'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -426,12 +451,24 @@ export interface BinaryOutputPickState {
   uncoveredMediaTypes: readonly string[]
   /** The declared formats that could not be judged, kept apart from the refusal above. */
   unverifiableMediaTypes: readonly string[]
+  /**
+   * The content types more than one selected integration produces, with the ids that share each.
+   * Computed through the SAME `binaryModalityOverlaps` the agent's brief renders from, so the
+   * picker and the brief cannot describe one selection two ways.
+   */
+  generatorOverlaps: readonly BinaryModalityOverlap[]
 }
 
 /**
  * The GENERATIVE half of {@link binaryOutputPickIssues}, mirroring kernel's
  * `binaryGeneratorSelectionIssues` so the builder surfaces the `binary_output_generator_invalid`
  * refusal before the round trip rather than inventing a second opinion.
+ *
+ * What is mirrored is the DISPOSITION: which conditions refuse, which advise, and what each is
+ * called on this surface. The two rules underneath are IMPORTED (`binaryFormatCoverage`,
+ * `binaryModalityOverlaps`), because a rule restated on both sides of a wire is one that can come
+ * to two answers about the same selection, and the reader here is the person who would then be
+ * told the builder's version and the agent the other.
  *
  * `unavailable` is the one state that is NOT derivable from the list, which is why the snapshot
  * carries it as its own flag. An empty list normally IS a real empty — this deployment registers
@@ -453,16 +490,21 @@ function generatorPickIssues(
   uncovered: BinaryModality[]
   uncoveredMediaTypes: string[]
   unverifiableMediaTypes: string[]
+  overlaps: BinaryModalityOverlap[]
 } {
   const none = {
     unknownGeneratorIds: [],
     uncovered: [],
     uncoveredMediaTypes: [],
     unverifiableMediaTypes: [],
+    overlaps: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
-  const selectedIds = config?.generatorIds ?? []
+  // Deduplicated on the way in, exactly as `resolveBinaryGeneratorSelection` does it on the
+  // backend: a step that names one integration twice holds ONE, and every line below states a
+  // count or a list a repeat would double.
+  const selectedIds = [...new Set(config?.generatorIds ?? [])]
   const unknownGeneratorIds = selectedIds.filter((id) => !byId.has(id))
   // Coverage is judged against what RESOLVED, exactly as admission judges it: an unknown id
   // contributes no content types, so a step whose only audio generator is unregistered is told
@@ -470,47 +512,26 @@ function generatorPickIssues(
   const selected = selectedIds.flatMap((id) => byId.get(id) ?? [])
   const covered = new Set(selected.flatMap((g) => g.modalities))
   const uncovered = (config?.modalities ?? []).filter((m) => !covered.has(m))
-  const format = formatCoverage(config?.mediaTypes ?? [], selected)
+  const format = binaryFormatCoverage(config?.mediaTypes ?? [], selected)
+  // Judged against what RESOLVED, like every rule above it, and against the SELECTION rather than
+  // the step's declared content types: the case that most often puts two producers of one kind on
+  // one step is the one where neither is the deliverable (an image generated to feed a mesh API),
+  // and gating on `modalities` would go silent on exactly that step.
+  const overlaps = binaryModalityOverlaps(selected)
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
   if (format.uncovered.length) issues.push('media_type_uncovered')
   if (format.unverifiable.length) issues.push('media_type_unverifiable')
+  if (overlaps.length) issues.push('generator_overlap')
   return {
     issues,
     unknownGeneratorIds,
     uncovered,
     uncoveredMediaTypes: format.uncovered,
     unverifiableMediaTypes: format.unverifiable,
+    overlaps,
   }
-}
-
-/**
- * The SPA's copy of kernel's `binaryFormatCoverage`, restated for the reason the two `*_service`
- * members above are: the builder cannot see kernel, and the wire vocabulary that does cross
- * (`@cat-factory/contracts`) carries the schema, not the rule.
- *
- * The THIRD outcome is what must not be lost in the copying. A generator that declares no formats
- * has said "only my modality is known" — a documented state, not an empty answer — so a
- * requirement it cannot be judged against is unverifiable and the step still starts. Collapsing
- * that into `uncovered` would flag steps the backend admits (and send someone editing a selection
- * that is fine); collapsing it into silence would present an unchecked requirement as a checked
- * one.
- */
-function formatCoverage(
-  required: readonly string[],
-  selected: readonly Pick<RegisteredBinaryGenerator, 'mediaTypes'>[],
-): { uncovered: string[]; unverifiable: string[] } {
-  const emitted = new Set(selected.flatMap((g) => g.mediaTypes ?? []))
-  const undeclared = selected.some((g) => (g.mediaTypes ?? []).length === 0)
-  const uncovered: string[] = []
-  const unverifiable: string[] = []
-  for (const mediaType of required) {
-    if (emitted.has(mediaType)) continue
-    if (undeclared) unverifiable.push(mediaType)
-    else uncovered.push(mediaType)
-  }
-  return { uncovered, unverifiable }
 }
 
 /**
@@ -572,6 +593,7 @@ export function binaryOutputPickIssues(
       uncoveredModalities: generative.uncovered,
       uncoveredMediaTypes: generative.uncoveredMediaTypes,
       unverifiableMediaTypes: generative.unverifiableMediaTypes,
+      generatorOverlaps: generative.overlaps,
     }
   }
 
@@ -595,5 +617,6 @@ export function binaryOutputPickIssues(
     uncoveredModalities: generative.uncovered,
     uncoveredMediaTypes: generative.uncoveredMediaTypes,
     unverifiableMediaTypes: generative.unverifiableMediaTypes,
+    generatorOverlaps: generative.overlaps,
   }
 }
