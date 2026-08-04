@@ -355,8 +355,7 @@ function isLiveVisualConfirm(state: VisualConfirmStepState): boolean {
  * against the DATA: a row persisted by a newer build lands here. `false` is the safe answer, as a
  * phase nobody classified is not something to put in front of a caller as an open question.
  */
-function unclassifiedPhase(phase: never): boolean {
-  void phase
+function unclassifiedPhase(_phase: never): boolean {
   return false
 }
 
