@@ -740,6 +740,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@cat-factory/mcp-server':
+        specifier: workspace:*
+        version: link:../../../sdk/mcp
       '@cat-factory/orchestration':
         specifier: workspace:*
         version: link:../orchestration

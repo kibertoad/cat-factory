@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { CAT_FACTORY_TOOL_GROUPS, type CatFactoryTool } from './tools.generated.ts'
 
 // What a deployment can decide about this facade, and how it is read off the environment.
@@ -7,6 +6,11 @@ import { CAT_FACTORY_TOOL_GROUPS, type CatFactoryTool } from './tools.generated.
 // keeps the facade thin: the API's own scopes are the authority on what a key may do, and a
 // filter that pretended otherwise would be a second, weaker access-control story sitting in front
 // of the real one.
+//
+// This module imports no Node built-in, and `runtime-neutral.test.ts` pins that: everything the
+// hosted endpoint (`http.ts`) reaches is bundled into a deployment's Worker, where `node:fs` does
+// not resolve at BUILD time. Which is why reading the key file is a dependency the executable
+// injects rather than an import here.
 
 /** How a `CatFactoryMcpServer` is configured. */
 export interface CatFactoryMcpOptions {
@@ -41,11 +45,23 @@ export interface CatFactoryMcpOptions {
    * Expose only the tools that change nothing (the GETs). For an agent that should be able to
    * READ a deployment and never act on it.
    *
-   * This is a convenience, NOT a security boundary: the tools are gone from this server, but the
-   * key still carries whatever scope it was minted with, and anything else holding it can still
-   * write. Mint a `read`-scoped key for the boundary.
+   * On the STDIO server this is a convenience, NOT a security boundary: the tools are gone from
+   * this server, but the key still carries whatever scope it was minted with, and anything else
+   * holding it can still write. Mint a `read`-scoped key for the boundary — which is what the
+   * hosted endpoint does the other way round, deriving this FROM the key (see
+   * {@link readOnlyReason}).
    */
   readOnly?: boolean
+  /**
+   * Why {@link readOnly} is set. Defaults to `configured`.
+   *
+   * Carried because the two causes need DIFFERENT fixes and a model told only "writes are hidden"
+   * cannot tell them apart: `configured` is an operator's switch on this server (edit the host
+   * config), `key-scope` is the key itself being `read`-scoped (mint a wider key). Stated in the
+   * instructions, so a model asks the person who can act rather than reporting the platform as
+   * unable to write.
+   */
+  readOnlyReason?: ReadOnlyReason
   /** Ceiling on one tool result, in characters. See `DEFAULT_MAX_RESULT_CHARS`. */
   maxResultChars?: number
   /** Per-request deadline in ms, passed to the SDK; `0` disables it. */
@@ -62,6 +78,17 @@ export interface CatFactoryMcpOptions {
   fetch?: typeof globalThis.fetch
 }
 
+/**
+ * Why the write tools are withheld.
+ *
+ * - `configured` — an operator started this server read-only.
+ * - `key-scope`  — the key presented to it is `read`-scoped, so a write tool could only 403.
+ *
+ * A closed vocabulary rather than a free-form note: the instructions switch on it exhaustively,
+ * so a third cause fails to compile until it has been written down for a model to read.
+ */
+export type ReadOnlyReason = 'configured' | 'key-scope'
+
 /** The environment variables `optionsFromEnv` reads. */
 export const ENV_VARS = {
   baseUrl: 'CAT_FACTORY_BASE_URL',
@@ -76,9 +103,17 @@ export const ENV_VARS = {
   maxRetries: 'CAT_FACTORY_MCP_MAX_RETRIES',
 } as const
 
-/** How `optionsFromEnv` reaches the filesystem, injected so a test needs no temp file. */
+/**
+ * How `optionsFromEnv` reaches the filesystem.
+ *
+ * REQUIRED rather than defaulted to `readFileSync`, so this module imports no Node built-in: the
+ * same modules are bundled into a deployment's hosted endpoint (see `http.ts`), and on workerd
+ * `node:fs` does not resolve at build time — a default here would be a Worker that fails to BUILD
+ * for the sake of a code path it can never take. Reading a file is the executable's business; the
+ * `cat-factory-mcp` binary passes `readFileSync` and a test passes its own reader.
+ */
 export interface EnvReadDeps {
-  readSecretFile?: (path: string) => string
+  readSecretFile: (path: string) => string
 }
 
 /**
@@ -91,7 +126,7 @@ export interface EnvReadDeps {
  */
 export function optionsFromEnv(
   env: Record<string, string | undefined>,
-  deps: EnvReadDeps = {},
+  deps: EnvReadDeps,
 ): CatFactoryMcpOptions {
   const baseUrl = env[ENV_VARS.baseUrl]?.trim()
   if (!baseUrl) throw new Error(`${ENV_VARS.baseUrl} is required (the deployment's origin).`)
@@ -148,10 +183,9 @@ function readApiKey(env: Record<string, string | undefined>, deps: EnvReadDeps):
         'that holds one.',
     )
   }
-  const read = deps.readSecretFile ?? ((target: string) => readFileSync(target, 'utf8'))
   let contents: string
   try {
-    contents = read(path)
+    contents = deps.readSecretFile(path)
   } catch (error) {
     // The PATH is named and the cause is passed through; the contents never are, on any branch of
     // this function, because this message goes to a host's log.
@@ -208,8 +242,8 @@ export interface ToolSelection {
   exposed: CatFactoryTool[]
   /** Groups the operator switched off. Empty when no group filter was applied. */
   filteredGroups: string[]
-  /** Whether the write tools were withheld by `readOnly`. */
-  writeToolsHidden: boolean
+  /** Why the write tools were withheld by `readOnly`, or null when they were not. */
+  writeToolsHidden: ReadOnlyReason | null
   /** Tools the operator withheld BY NAME. Empty when no deny-list was applied. */
   deniedTools: string[]
   /** Whether an allow-list narrowed the server to an explicitly chosen set of tools. */
@@ -259,7 +293,7 @@ export function selectTools(
   return {
     exposed,
     filteredGroups,
-    writeToolsHidden: options.readOnly === true,
+    writeToolsHidden: options.readOnly === true ? (options.readOnlyReason ?? 'configured') : null,
     deniedTools: denied ? [...denied].sort() : [],
     toolsAllowListed: allowed !== null,
   }

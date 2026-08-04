@@ -40,6 +40,13 @@ export function corsReflectsWhenUnset(environment: string | undefined): boolean 
  * - `X-Request-Id` — the correlation id (`mountRequestLogging`). Allowed INBOUND so a
  *   caller that already has one (a load balancer, another service) can propagate it
  *   rather than have the backend mint a second, unrelated id for the same request.
+ * - `Mcp-Protocol-Version` — the negotiated protocol version an MCP client sends to the
+ *   hosted endpoint (`POST /api/v1/mcp`). A Streamable HTTP client sends it on every
+ *   request AFTER `initialize` and on none before, so leaving it out fails in the shape
+ *   that reads as a working endpoint: the handshake preflight asks only for headers
+ *   already listed above and succeeds, then every real call is dropped by the browser.
+ *   The session header has no entry on purpose — that endpoint is stateless and mints no
+ *   session id, so a client never has one to send back.
  */
 export const CORS_ALLOWED_HEADERS = [
   'Content-Type',
@@ -47,6 +54,7 @@ export const CORS_ALLOWED_HEADERS = [
   'X-Personal-Password',
   'X-Connection-Id',
   'X-Request-Id',
+  'Mcp-Protocol-Version',
 ]
 
 /**
