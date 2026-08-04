@@ -5,6 +5,7 @@ import type {
   InitiativeRepository,
   ServiceConnection,
   ServiceRepository,
+  TaskRepository,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
 
@@ -28,6 +29,7 @@ export interface RemovalCascadeDeps {
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
+  taskRepository?: TaskRepository
 }
 
 export interface RemovalCascadeInput {
@@ -126,6 +128,31 @@ async function detachDoomedDocuments(
 }
 
 /**
+ * Detach every tracker issue filed as a doomed block, the documents rule applied to the other
+ * table that carries a single `linked_block_id`.
+ *
+ * Nothing is deleted here either: the issue lives in the tracker and its projection outlives the
+ * task it was filed as. What must not survive is the LINK, because three readers take a non-null
+ * `linkedBlockId` to mean "this issue is spoken for", and none of them checks whether the block it
+ * names still exists. Left stale, deleting a filed task takes its ticket out of circulation
+ * PERMANENTLY: the bug-intake sweep excludes it from every future search, `claimBlockLink`'s
+ * `… AND linked_block_id IS NULL` refuses every future filing of it (naming a task nobody can
+ * open), and a comment reply on the ticket routes to the dead block and bails.
+ *
+ * One batched write over the whole doomed subtree, never a detach per block.
+ */
+async function detachDoomedIssues(
+  deps: RemovalCascadeDeps,
+  { homeWorkspaceId, deletedId, doomed }: RemovalCascadeInput,
+): Promise<void> {
+  const repo = deps.taskRepository
+  if (!repo) return
+  // `deletedId` joins the set for the dangling case, exactly as above: the block row may already
+  // be gone (so it is absent from `doomed`'s source list) while its issue link lives on.
+  await repo.unlinkAllFromBlocks(homeWorkspaceId, [...new Set([...doomed, deletedId])])
+}
+
+/**
  * Run every side-table reclaim for a block delete, in the order `removeBlock` performed them
  * inline. Sequential on purpose: these are independent writes, but a burst of parallel deletes
  * against D1 buys nothing and makes a partial failure harder to reason about.
@@ -137,6 +164,7 @@ export async function reclaimDoomedEntities(
   await reclaimServices(deps, input)
   await reclaimInitiatives(deps, input)
   await detachDoomedDocuments(deps, input)
+  await detachDoomedIssues(deps, input)
 }
 
 /**

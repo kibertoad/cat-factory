@@ -669,10 +669,75 @@ export type NotificationWebhookRunEvent = 'run.started' | 'run.completed' | 'run
 /** Every `NotificationWebhookRunEvent` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_WEBHOOK_RUN_EVENT_VALUES = ['run.started', 'run.completed', 'run.failed'] as const
 
+export interface PublicAgentDecision {
+  decisionId: string
+  kind: 'agent-decision'
+  options: string[]
+  question: string
+  stepKind: string
+}
+
+export interface PublicApprovalGateDecision {
+  approvalId: string
+  exceeded: boolean
+  /** Always present; `null` when the server has no value for it. */
+  feedback: string | null
+  kind: 'approval-gate'
+  proposal: string
+  status: PublicApprovalGateDecisionStatus
+  stepIndex: number
+  stepKind: string
+}
+
+export type PublicApprovalGateDecisionStatus = 'pending' | 'approved' | 'changes_requested' | 'rejected'
+
+/** Every `PublicApprovalGateDecisionStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_APPROVAL_GATE_DECISION_STATUS_VALUES = ['pending', 'approved', 'changes_requested', 'rejected'] as const
+
+export interface PublicApproveStep {
+  /** Length 0..50000. */
+  proposal?: string
+}
+
+export interface PublicBrainstormDecision {
+  /** Always present; `null` when the server has no value for it. */
+  convergedDirection: string | null
+  iteration: number
+  kind: 'brainstorm'
+  maxIterations: number
+  options: PublicReviewFinding[]
+  sessionId: string
+  stage: PublicBrainstormDecisionStage
+  status: PublicRequirementsDecisionStatus
+  taskId: string
+}
+
+export type PublicBrainstormDecisionStage = 'requirements' | 'architecture'
+
+/** Every `PublicBrainstormDecisionStage` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_BRAINSTORM_DECISION_STAGE_VALUES = ['requirements', 'architecture'] as const
+
+export interface PublicChallengePrReviewFinding {
+  /** Length 0..4000. */
+  question?: string
+}
+
 export interface PublicChooseFork {
   custom?: string | null
   forkId?: string | null
   note?: string | null
+}
+
+export interface PublicClarityDecision {
+  /** Always present; `null` when the server has no value for it. */
+  clarifiedReport: string | null
+  findings: PublicReviewFinding[]
+  iteration: number
+  kind: 'clarity-review'
+  maxIterations: number
+  reviewId: string
+  status: PublicRequirementsDecisionStatus
+  taskId: string
 }
 
 /** Discriminated by `kind`. */
@@ -681,6 +746,13 @@ export type PublicDecision =
   | PublicForkDecision
   | PublicJudgeDecision
   | PublicInputGateDecision
+  | PublicApprovalGateDecision
+  | PublicAgentDecision
+  | PublicClarityDecision
+  | PublicBrainstormDecision
+  | PublicPrReviewDecision
+  | PublicHumanTestDecision
+  | PublicVisualConfirmDecision
 
 export interface PublicDecisionList {
   decisions: PublicDecision[]
@@ -712,6 +784,35 @@ export type PublicForkDecisionStatus = 'proposing' | 'awaiting_choice' | 'answer
 
 /** Every `PublicForkDecisionStatus` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_FORK_DECISION_STATUS_VALUES = ['proposing', 'awaiting_choice', 'answering', 'chosen', 'single_path', 'skipped'] as const
+
+export interface PublicHumanTestDecision {
+  attempts: number
+  /** Always present; `null` when the server has no value for it. */
+  degradedReason: string | null
+  /** Always present; `null` when the server has no value for it. */
+  environment: PublicHumanTestEnvironment | null
+  kind: 'human-test'
+  maxAttempts: number
+  phase: PublicHumanTestDecisionPhase
+}
+
+export type PublicHumanTestDecisionPhase = 'provisioning' | 'awaiting_human' | 'fixing' | 'resolving_conflicts' | 'passed'
+
+/** Every `PublicHumanTestDecisionPhase` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_HUMAN_TEST_DECISION_PHASE_VALUES = ['provisioning', 'awaiting_human', 'fixing', 'resolving_conflicts', 'passed'] as const
+
+export interface PublicHumanTestEnvironment {
+  /** Always present; `null` when the server has no value for it. */
+  expiresAt: number | null
+  status: PublicHumanTestEnvironmentStatus
+  /** Always present; `null` when the server has no value for it. */
+  url: string | null
+}
+
+export type PublicHumanTestEnvironmentStatus = 'provisioning' | 'ready' | 'failed' | 'expired' | 'tearing_down' | 'torn_down'
+
+/** Every `PublicHumanTestEnvironmentStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_HUMAN_TEST_ENVIRONMENT_STATUS_VALUES = ['provisioning', 'ready', 'failed', 'expired', 'tearing_down', 'torn_down'] as const
 
 export interface PublicIncorporate {
   /** Length 0..4000. */
@@ -840,9 +941,95 @@ export interface PublicPipelineList {
   pipelines: PublicPipeline[]
 }
 
+export interface PublicPrReviewDecision {
+  findings: PublicPrReviewDecisionFinding[]
+  kind: 'pr-review'
+  /** Always present; `null` when the server has no value for it. */
+  prUrl: string | null
+  selectedFindingIds: string[]
+  slices: PublicPrReviewDecisionSlice[]
+  status: PublicPrReviewDecisionStatus
+  /** Always present; `null` when the server has no value for it. */
+  summary: string | null
+}
+
+export interface PublicPrReviewDecisionFinding {
+  category: PublicPrReviewDecisionFindingCategory
+  /** Always present; `null` when the server has no value for it. */
+  challenge: PublicPrReviewDecisionFindingChallenge | null
+  detail: string
+  findingId: string
+  /** Always present; `null` when the server has no value for it. */
+  line: number | null
+  path: string
+  severity: PublicPrReviewDecisionFindingSeverity
+  /** Always present; `null` when the server has no value for it. */
+  side: PublicPrReviewDecisionFindingSide | null
+  /** Always present; `null` when the server has no value for it. */
+  sliceId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  suggestedFix: string | null
+  title: string
+}
+
+export type PublicPrReviewDecisionFindingCategory = 'correctness' | 'security' | 'performance' | 'maintainability' | 'style' | 'test' | 'other'
+
+/** Every `PublicPrReviewDecisionFindingCategory` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PR_REVIEW_DECISION_FINDING_CATEGORY_VALUES = ['correctness', 'security', 'performance', 'maintainability', 'style', 'test', 'other'] as const
+
+export interface PublicPrReviewDecisionFindingChallenge {
+  /** Always present; `null` when the server has no value for it. */
+  justification: string | null
+  /** Always present; `null` when the server has no value for it. */
+  question: string | null
+  status: PublicPrReviewDecisionFindingChallengeStatus
+}
+
+export type PublicPrReviewDecisionFindingChallengeStatus = 'investigating' | 'upheld' | 'amended' | 'retracted' | 'failed'
+
+/** Every `PublicPrReviewDecisionFindingChallengeStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PR_REVIEW_DECISION_FINDING_CHALLENGE_STATUS_VALUES = ['investigating', 'upheld', 'amended', 'retracted', 'failed'] as const
+
+export type PublicPrReviewDecisionFindingSeverity = 'blocker' | 'high' | 'medium' | 'low' | 'nit'
+
+/** Every `PublicPrReviewDecisionFindingSeverity` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PR_REVIEW_DECISION_FINDING_SEVERITY_VALUES = ['blocker', 'high', 'medium', 'low', 'nit'] as const
+
+export type PublicPrReviewDecisionFindingSide = 'LEFT' | 'RIGHT'
+
+/** Every `PublicPrReviewDecisionFindingSide` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PR_REVIEW_DECISION_FINDING_SIDE_VALUES = ['LEFT', 'RIGHT'] as const
+
+export interface PublicPrReviewDecisionSlice {
+  paths: string[]
+  rationale: string
+  sliceId: string
+  title: string
+}
+
+export type PublicPrReviewDecisionStatus = 'reviewing' | 'awaiting_selection' | 'challenging' | 'fixing' | 'posting' | 'done' | 'skipped'
+
+/** Every `PublicPrReviewDecisionStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PR_REVIEW_DECISION_STATUS_VALUES = ['reviewing', 'awaiting_selection', 'challenging', 'fixing', 'posting', 'done', 'skipped'] as const
+
+export interface PublicRejectStep {
+  /** Length 0..2000. */
+  reason?: string
+}
+
 export interface PublicReplyFinding {
   /** Length 1..4000. */
   reply: string
+}
+
+export interface PublicRequestGateFix {
+  /** Length 1..10000. */
+  findings: string
+}
+
+export interface PublicRequestStepChanges {
+  /** Length 1..10000. */
+  feedback: string
 }
 
 export interface PublicRequirementsDecision {
@@ -861,6 +1048,11 @@ export type PublicRequirementsDecisionStatus = 'ready' | 'incorporating' | 'revi
 
 /** Every `PublicRequirementsDecisionStatus` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_REQUIREMENTS_DECISION_STATUS_VALUES = ['ready', 'incorporating', 'reviewing', 'merged', 'exceeded', 'incorporated'] as const
+
+export interface PublicResolveAgentDecision {
+  /** Length 1..4000. */
+  choice: string
+}
 
 export interface PublicResolveExceeded {
   choice: PublicResolveExceededChoice
@@ -889,6 +1081,16 @@ export type PublicResolveJudgeChoice = 'proceed' | 'bounce' | 'stop'
 
 /** Every `PublicResolveJudgeChoice` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_RESOLVE_JUDGE_CHOICE_VALUES = ['proceed', 'bounce', 'stop'] as const
+
+export interface PublicResolvePrReview {
+  action?: PublicResolvePrReviewAction
+  findingIds?: string[]
+}
+
+export type PublicResolvePrReviewAction = 'finish' | 'fix' | 'post'
+
+/** Every `PublicResolvePrReviewAction` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_RESOLVE_PR_REVIEW_ACTION_VALUES = ['finish', 'fix', 'post'] as const
 
 export interface PublicReviewFinding {
   category: PublicReviewFindingCategory
@@ -1045,6 +1247,29 @@ export type PublicUsageRowBilling = 'metered' | 'subscription'
 
 /** Every `PublicUsageRowBilling` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_USAGE_ROW_BILLING_VALUES = ['metered', 'subscription'] as const
+
+export interface PublicVisualConfirmDecision {
+  attempts: number
+  /** Always present; `null` when the server has no value for it. */
+  degradedReason: string | null
+  kind: 'visual-confirmation'
+  maxAttempts: number
+  pairs: PublicVisualConfirmDecisionPair[]
+  phase: PublicVisualConfirmDecisionPhase
+}
+
+export interface PublicVisualConfirmDecisionPair {
+  /** Always present; `null` when the server has no value for it. */
+  actualArtifactId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  referenceArtifactId: string | null
+  view: string
+}
+
+export type PublicVisualConfirmDecisionPhase = 'awaiting_human' | 'fixing' | 'approved'
+
+/** Every `PublicVisualConfirmDecisionPhase` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_VISUAL_CONFIRM_DECISION_PHASE_VALUES = ['awaiting_human', 'fixing', 'approved'] as const
 
 export interface PutNotificationWebhook {
   alertEvents?: NotificationWebhookAlertEvent[]

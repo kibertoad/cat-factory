@@ -1,5 +1,86 @@
 # @cat-factory/mcp-server
 
+## 0.7.0
+
+### Minor Changes
+
+- 99be350: Public API: answer every remaining park a run can stop on
+
+  `/api/v1/runs/:runId/decisions` could answer four parks; a `decide` key could START many more than
+  that, so a caller could put a run into a state only the app could get it out of. Twenty-four
+  additive endpoints close the gap: the generic approval gate (approve / request-changes / reject,
+  plus `resolve-exceeded` for a companion at its rework cap), agent-raised decisions, the
+  clarity-review and both brainstorm loops, PR deep-review curation, and the two human-verdict gates.
+  The decision list gained seven kinds alongside them, and the OpenAPI surface version is now `1.7.0`.
+
+  Of the parks a pipeline can carry, only `human-review` is now unanswerable, and by construction
+  rather than omission: its answer is a person approving the pull request on the VCS host. Two park
+  surfaces the original investigation missed (follow-up triage, interview gates) are recorded in
+  `docs/initiatives/public-api-additions.md` as unbuilt and are NOT advertised as answerable.
+
+  Behaviour change worth reviewing: a park that rides the engine's generic `step.approval` but is
+  owned by a dedicated surface (a review gate, a fork choice, a human-verdict gate, follow-up triage,
+  an interview) is reported as its own kind, never as `approval-gate`, because the engine refuses the
+  generic verbs on those. `StepDecisionController`'s refusal and the public projection now read one
+  shared classifier so the two cannot disagree.
+
+### Patch Changes
+
+- Updated dependencies [99be350]
+  - @cat-factory/sdk@0.9.0
+
+## 0.6.0
+
+### Minor Changes
+
+- 8511a90: MCP maturation slice 3: the public API is now served over MCP from the deployment itself.
+
+  `POST /api/v1/mcp` speaks Model Context Protocol behind the same public-API key auth as every other
+  `/api/v1` route, so an MCP host reaches a deployment with a URL and a key and nothing installed. That
+  is the point of the slice: until now "drive cat-factory from a model" meant an npm dependency, a local
+  process per host and a long-lived key in the host's plaintext config, which rules out claude.ai, hosted
+  agents and anything that cannot spawn a subprocess. The stdio binary stays, for hosts with no HTTP MCP
+  support and for use against a deployment you do not run.
+
+  It is the SAME server behind both paths: the endpoint mounts `@cat-factory/mcp-server`'s
+  `handleMcpHttpRequest`, so the generated tool table, the instructions and the result rendering are the
+  same bytes, and every tool call is one `/api/v1` request under the CALLER's own forwarded key. Nothing
+  is reachable over MCP that the same key could not reach with `curl`. Behaviour worth knowing about:
+  the key's SCOPE decides the tool list (a `read`-scoped key is served only the tools that change
+  nothing, and the instructions say a wider key would expose the rest, so a model asks for one instead of
+  reporting the platform as unable to write); above `read` the whole table is listed and each tool's own
+  rung is enforced by the endpoint it calls, arriving as tool content the model can act on; and the
+  endpoint is stateless with JSON responses, so `GET` and `DELETE` are answered `405`.
+
+  Two things a caller and an operator each notice. A tool's `/api/v1` call INHERITS the MCP request's
+  `X-Request-Id`, so the tool call and the API call it caused share one correlation id and a log holding
+  both lines can be joined on it (supply your own on the MCP request and both halves land under it).
+  And `Mcp-Protocol-Version` joins the shared CORS allow-list both facades serve, without which a
+  cross-origin BROWSER host would negotiate successfully and then have every later call dropped by the
+  browser, since a Streamable HTTP client sends that header on every request after `initialize` and on
+  none before it.
+
+  The endpoint joins the PUBLIC surface under the stability contract from this release. It is
+  deliberately absent from `docs/openapi.json`: a JSON-RPC endpoint has no operation shape to describe,
+  and describing it would mint an SDK method in four languages for a protocol none of those clients
+  speaks. `backend/docs/public-api.md` carries the obligation instead, which also means the endpoint's
+  arrival does not move the spec's `info.version`: that version tracks the described surface.
+
+  `@cat-factory/mcp-server` gains `handleMcpHttpRequest` / `refuseMcpMethod`, so any deployment of this
+  API can mount the endpoint, plus a `readOnlyReason` option that lets the instructions name the right
+  fix for a narrowed tool list.
+
+  INTERNAL BREAK in `@cat-factory/mcp-server`: `optionsFromEnv(env, deps)` now REQUIRES
+  `deps.readSecretFile` rather than defaulting to `readFileSync`, and `ToolSelection.writeToolsHidden` is
+  a `ReadOnlyReason | null` rather than a boolean. The first is what keeps every module the hosted
+  endpoint reaches free of Node built-ins: those modules are bundled into deployments' Workers, where
+  `node:fs` does not resolve at build time, so the default was a Worker that fails to BUILD for the sake
+  of a code path it can never take. `bin.ts` supplies the reader.
+
+### Patch Changes
+
+- @cat-factory/sdk@0.8.0
+
 ## 0.5.0
 
 ### Minor Changes

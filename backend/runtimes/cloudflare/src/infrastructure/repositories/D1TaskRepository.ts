@@ -229,4 +229,17 @@ export class D1TaskRepository implements TaskRepository {
       .bind(workspaceId, blockId)
       .run()
   }
+
+  async unlinkAllFromBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    for (const chunk of chunkForIn([...blockIds])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `UPDATE tasks SET linked_block_id = NULL WHERE workspace_id = ? AND linked_block_id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .run()
+    }
+  }
 }

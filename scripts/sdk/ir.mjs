@@ -96,6 +96,13 @@ const INLINE_ENUM_NAMES = {
   'done,pending,waiting_decision,working': 'StepState',
   'critical,high,low,medium': 'Severity',
   'error,ok,warning': 'LlmCallOutcome',
+  // The iterative-review lifecycle, shared verbatim by the requirements review, the clarity
+  // review and both brainstorm dialogues (the engine drives all three through one controller, so
+  // the contracts alias one picklist). The name is PINNED because the requirements decision
+  // shipped first and published it: without this the deduped enum would take whichever variant
+  // member the walk reached first, silently RENAMING a type in four released SDKs — a break
+  // `/api/v1` does not do, and one that would arrive as a clean diff nobody read.
+  'exceeded,incorporated,incorporating,merged,ready,reviewing': 'PublicRequirementsDecisionStatus',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */

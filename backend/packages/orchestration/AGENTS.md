@@ -41,7 +41,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `StepDecisionController` (the HUMAN decision surface on a parked run; resolve / approve /
   request-changes / reject / merge / decline-to-merge and the human-review fix request; the
   engine keeps thin delegates because the HTTP + public-API controllers reach it through the
-  facade), `PollRunningController` + `PollCompletionController` (the RUNNING and SETTLED halves
+  facade) + `step-park.logic.ts` (`dedicatedParkSurface`: WHICH surface owns a parked step, since
+  `step.approval` is the generic parking mechanism a dozen specialised gates ride — shared with
+  the public API's decision projection so what it offers and what this refuses cannot drift), `PollRunningController` + `PollCompletionController` (the RUNNING and SETTLED halves
   of the agent-poll branch tree), `OneShotStepController` (the one-shot engine steps `tracker` /
   `bug-intake` / `initiative-committer`),
   `DeployerStepController` (the deployer provision fan-out + env projection; the fourth

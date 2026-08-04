@@ -12,7 +12,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `modules/*/…Controller.ts`: the ~50 Hono controllers, one dir per module.
 - `modules/publicApi/`: the key-authenticated `/api/v1` surface (NOT behind the session gate):
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
-  parked human decisions; the headless clarification loop), `PublicDebugController` (the
+  parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run
+  for the key, `projection.ts` turns a run into the decision list, and one `*Routes.ts` per park
+  family answers it — approval gates and agent questions, the three iterative-review loops, the
+  container-backed PR review and human-verdict gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
   an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
   HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
