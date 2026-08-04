@@ -326,6 +326,42 @@
                     },
                     "type": "array"
                   },
+                  "platformFailedTotal": {
+                    "type": "number"
+                  },
+                  "platformFailingRuns": {
+                    "items": {
+                      "properties": {
+                        "blockId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "number"
+                        },
+                        "executionId": {
+                          "type": "string"
+                        },
+                        "failureKind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "executionId",
+                        "blockId",
+                        "failureKind",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "platformWindow": {
                     "enum": [
                       "1h",

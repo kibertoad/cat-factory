@@ -502,6 +502,8 @@ export interface NotificationPayload {
   onCallAssessment?: NotificationPayloadOnCallAssessment
   pipelineName?: string
   platformAlerts?: NotificationPayloadPlatformAlert[]
+  platformFailedTotal?: number
+  platformFailingRuns?: NotificationPayloadPlatformFailingRun[]
   platformWindow?: NotificationPayloadPlatformWindow
   prUrl?: string
   releaseSignals?: NotificationPayloadReleaseSignal[]
@@ -563,6 +565,14 @@ export type NotificationPayloadPlatformAlert = 'failure_rate_high' | 'duration_p
 
 /** Every `NotificationPayloadPlatformAlert` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_PAYLOAD_PLATFORM_ALERT_VALUES = ['failure_rate_high', 'duration_p99_high', 'backlog_high', 'throughput_stalled', 'failure_kind_dominant', 'sweep_degraded'] as const
+
+export interface NotificationPayloadPlatformFailingRun {
+  /** Always present; `null` when the server has no value for it. */
+  blockId: string | null
+  createdAt: number
+  executionId: string
+  failureKind: string
+}
 
 export type NotificationPayloadPlatformWindow = '1h' | '24h' | '7d'
 

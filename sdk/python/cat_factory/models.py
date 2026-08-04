@@ -2068,6 +2068,10 @@ class NotificationPayload:
     #: May be absent entirely.
     platform_alerts: list[NotificationPayloadPlatformAlert] | None = None
     #: May be absent entirely.
+    platform_failed_total: float | None = None
+    #: May be absent entirely.
+    platform_failing_runs: list[NotificationPayloadPlatformFailingRun] | None = None
+    #: May be absent entirely.
     platform_window: NotificationPayloadPlatformWindow | None = None
     #: May be absent entirely.
     pr_url: str | None = None
@@ -2092,7 +2096,7 @@ class NotificationPayload:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayload":
         """Decode a `NotificationPayload` from its JSON object."""
-        known = {"assessment", "changeClass", "driftAffected", "findingCount", "forkCount", "initiativeReason", "mergeTrackRecordId", "mergedRepos", "onCallAssessment", "pipelineName", "platformAlerts", "platformWindow", "prUrl", "releaseSignals", "revertUrl", "sliceCount", "targetUserId", "unmergedRepos", "unreachableAreas"}
+        known = {"assessment", "changeClass", "driftAffected", "findingCount", "forkCount", "initiativeReason", "mergeTrackRecordId", "mergedRepos", "onCallAssessment", "pipelineName", "platformAlerts", "platformFailedTotal", "platformFailingRuns", "platformWindow", "prUrl", "releaseSignals", "revertUrl", "sliceCount", "targetUserId", "unmergedRepos", "unreachableAreas"}
         return cls(
             assessment=None if data.get("assessment") is None else NotificationPayloadAssessment.from_dict(data.get("assessment")),
             change_class=None if data.get("changeClass") is None else _enum(NotificationPayloadChangeClass, data.get("changeClass")),
@@ -2105,6 +2109,8 @@ class NotificationPayload:
             on_call_assessment=None if data.get("onCallAssessment") is None else NotificationPayloadOnCallAssessment.from_dict(data.get("onCallAssessment")),
             pipeline_name=data.get("pipelineName"),
             platform_alerts=None if data.get("platformAlerts") is None else [_enum(NotificationPayloadPlatformAlert, item) for item in data.get("platformAlerts") or []],
+            platform_failed_total=data.get("platformFailedTotal"),
+            platform_failing_runs=None if data.get("platformFailingRuns") is None else [NotificationPayloadPlatformFailingRun.from_dict(item) for item in data.get("platformFailingRuns") or []],
             platform_window=None if data.get("platformWindow") is None else _enum(NotificationPayloadPlatformWindow, data.get("platformWindow")),
             pr_url=data.get("prUrl"),
             release_signals=None if data.get("releaseSignals") is None else [NotificationPayloadReleaseSignal.from_dict(item) for item in data.get("releaseSignals") or []],
@@ -2141,6 +2147,10 @@ class NotificationPayload:
             out["pipelineName"] = self.pipeline_name
         if self.platform_alerts is not None:
             out["platformAlerts"] = [_encode(item) for item in self.platform_alerts]
+        if self.platform_failed_total is not None:
+            out["platformFailedTotal"] = self.platform_failed_total
+        if self.platform_failing_runs is not None:
+            out["platformFailingRuns"] = [_encode(item) for item in self.platform_failing_runs]
         if self.platform_window is not None:
             out["platformWindow"] = _encode(self.platform_window)
         if self.pr_url is not None:
@@ -2351,6 +2361,43 @@ class NotificationPayloadPlatformAlert(StrEnum):
     THROUGHPUT_STALLED = "throughput_stalled"
     FAILURE_KIND_DOMINANT = "failure_kind_dominant"
     SWEEP_DEGRADED = "sweep_degraded"
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationPayloadPlatformFailingRun:
+    """`NotificationPayloadPlatformFailingRun`, as carried on the wire."""
+
+    created_at: float
+    execution_id: str
+    failure_kind: str
+    #: Always present; ``None`` when the server has no value for it.
+    block_id: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadPlatformFailingRun":
+        """Decode a `NotificationPayloadPlatformFailingRun` from its JSON object."""
+        known = {"createdAt", "executionId", "failureKind", "blockId"}
+        return cls(
+            created_at=data.get("createdAt"),
+            execution_id=data.get("executionId"),
+            failure_kind=data.get("failureKind"),
+            block_id=data.get("blockId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["createdAt"] = self.created_at
+        out["executionId"] = self.execution_id
+        out["failureKind"] = self.failure_kind
+        out["blockId"] = self.block_id
+        return out
 
 
 class NotificationPayloadPlatformWindow(StrEnum):

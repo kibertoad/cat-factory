@@ -692,6 +692,10 @@ type NotificationPayload struct {
 	PipelineName *string `json:"pipelineName,omitempty"`
 	// PlatformAlerts may be absent entirely.
 	PlatformAlerts []NotificationPayloadPlatformAlert `json:"platformAlerts,omitempty"`
+	// PlatformFailedTotal may be absent entirely.
+	PlatformFailedTotal *float64 `json:"platformFailedTotal,omitempty"`
+	// PlatformFailingRuns may be absent entirely.
+	PlatformFailingRuns []NotificationPayloadPlatformFailingRun `json:"platformFailingRuns,omitempty"`
 	// PlatformWindow may be absent entirely.
 	PlatformWindow *NotificationPayloadPlatformWindow `json:"platformWindow,omitempty"`
 	// PRURL may be absent entirely.
@@ -816,6 +820,15 @@ const (
 
 // NotificationPayloadPlatformAlertValues lists every NotificationPayloadPlatformAlert this SDK release knows.
 var NotificationPayloadPlatformAlertValues = []NotificationPayloadPlatformAlert{NotificationPayloadPlatformAlertFailureRateHigh, NotificationPayloadPlatformAlertDurationP99High, NotificationPayloadPlatformAlertBacklogHigh, NotificationPayloadPlatformAlertThroughputStalled, NotificationPayloadPlatformAlertFailureKindDominant, NotificationPayloadPlatformAlertSweepDegraded}
+
+// NotificationPayloadPlatformFailingRun is the `NotificationPayloadPlatformFailingRun` wire model.
+type NotificationPayloadPlatformFailingRun struct {
+	// BlockID always present; nil when the server has no value for it.
+	BlockID     *string `json:"blockId"`
+	CreatedAt   float64 `json:"createdAt"`
+	ExecutionID string  `json:"executionId"`
+	FailureKind string  `json:"failureKind"`
+}
 
 // NotificationPayloadPlatformWindow is the `NotificationPayloadPlatformWindow` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must
