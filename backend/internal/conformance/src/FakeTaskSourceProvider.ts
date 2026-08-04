@@ -18,10 +18,34 @@ import {
 } from '@cat-factory/integrations'
 import { fakeTrackerWebhookAdapter } from './fakeTrackerWebhook.js'
 
-const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
+/**
+ * The BUILT-IN descriptors, so a fake standing in for a shipped source presents exactly what the
+ * real one does. Keyed by string rather than exhaustively by `TaskSourceKind`, because the kind is
+ * an open vocabulary: a deployment-registered source has no entry here by construction, and
+ * {@link descriptorFor} synthesises one for it.
+ */
+const BUILTIN_DESCRIPTORS: Record<string, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,
   github: GITHUB_ISSUES_DESCRIPTOR,
   linear: LINEAR_TASK_DESCRIPTOR,
+}
+
+/**
+ * A descriptor for any source kind: the shipped one for a built-in, else a minimal generated one
+ * so the suite can register a `<ns>:<name>` source and drive it end to end.
+ */
+function descriptorFor(kind: TaskSourceKind): TaskSourceDescriptor {
+  const builtin = BUILTIN_DESCRIPTORS[kind]
+  if (builtin) return builtin
+  return {
+    source: kind,
+    label: kind,
+    icon: 'i-lucide-circle-dot',
+    credentialFields: [{ key: 'token', label: 'Token', secret: true }],
+    refLabel: 'Issue key',
+    refPlaceholder: 'ISSUE-1',
+    searchable: true,
+  }
 }
 
 /**
@@ -60,7 +84,7 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
     readonly kind: TaskSourceKind = 'jira',
     issues: Record<string, Partial<TaskContent>> = {},
   ) {
-    this.descriptor = DESCRIPTORS[kind]
+    this.descriptor = descriptorFor(kind)
     for (const [externalId, partial] of Object.entries(issues)) this.set(externalId, partial)
   }
 

@@ -898,8 +898,13 @@ an unconfigured one **FAILS CLOSED**. Push never replaces the `bug-intake` recon
 qualifying issue event FIRES that schedule rather than re-implementing intake. Ticket-comment replies take
 explicit first-token commands only and route through the SAME service methods the SPA calls (**never a
 parallel mutation path into the engine**), behind three guards on reply text (identity,
-data-not-instructions, the iteration budget). Doc:
-[`tracker-webhook-intake.md`](./docs/initiatives/tracker-webhook-intake.md).
+data-not-instructions, the iteration budget). A schedule may instead dispatch **per ticket**, running the
+pushed ticket as its own task; that mode REQUIRES on-demand and refuses a `bug-intake` pipeline, because
+each combination would otherwise work a different ticket than the one pushed. **The match is a VERDICT,
+never a boolean**: a predicate the delivery cannot answer is `unconfirmed`, which `queue` fires on (its
+run's vendor search re-checks everything) and `per-ticket` withholds on and LOGS, since nothing downstream
+would catch a wrong dispatch and no cadence sweep will retry it. Doc:
+[`0032-tracker-webhook-intake.md`](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
 **Bug hunt**: scan a tracker board's open + UNASSIGNED bugs, rate impact against complexity, adopt one
 onto `pl_bugfix`. **Persists NOTHING**, so runtime symmetry is by construction. **One vendor call per scan

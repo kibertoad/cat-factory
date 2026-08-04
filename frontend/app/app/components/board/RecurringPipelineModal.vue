@@ -7,6 +7,9 @@
 // where that pipeline files its ticket) and saved alongside.
 import type { IssueIntakeConfig, Recurrence, ScheduleTemplate } from '~/types/recurring'
 import type { TaskSourceKind } from '~/types/domain'
+import type { IssueIntakeRefusalReason } from '@cat-factory/contracts'
+import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
+import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 
 const ui = useUiStore()
@@ -17,7 +20,7 @@ const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const toast = useToast()
 const access = useWorkspaceAccess()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const open = computed({
   get: () => ui.addRecurringFrameId !== null,
@@ -50,6 +53,68 @@ const intakeSource = ref<TaskSourceKind | null>(null)
 const intakeJiraProjectKey = ref('')
 const intakeLinearTeamId = ref('')
 const intakeGithubRepo = ref('')
+/**
+ * The board scope for a DEPLOYMENT-REGISTERED source, held opaquely. Its own field rather than
+ * reusing one of the three above, mirroring `issueIntakeConfigSchema.board.boardId`: only that
+ * deployment's provider knows what its board id means, so the form carries the string and the
+ * label stays generic.
+ */
+const intakeBoardId = ref('')
+
+/**
+ * Opt in to driving THIS schedule from tracker webhooks, for a pipeline that has no `bug-intake`
+ * step. Enabling it also switches the schedule to on-demand, because the two are inseparable: a
+ * cadence tick carries no triggering ticket, and the server refuses that combination.
+ */
+const trackerTrigger = ref(false)
+
+function setTrackerTrigger(on: boolean): void {
+  trackerTrigger.value = on
+  if (on) onDemand.value = true
+}
+
+/**
+ * On-demand is FORCED, not merely defaulted, while the tracker trigger is on: the server refuses a
+ * per-ticket schedule that could also fire on a cadence, and setting the switch once at opt-in time
+ * left the refusal reachable by turning it back off afterwards. The switch is disabled rather than
+ * hidden, so the state it is locked into stays visible and the reason is stated beside it.
+ */
+const onDemandLocked = computed(() => trackerTrigger.value)
+
+/**
+ * Translated copy for a refused intake configuration, keyed off the backend's machine-readable
+ * `details.reason`.
+ *
+ * The form makes both refusals unrepresentable, so this is the SECOND line rather than the first:
+ * a stale form whose pipeline gained a `bug-intake` step since it opened, or an API client driving
+ * the same endpoint, still reaches them, and the backend does not localize its prose. An EXHAUSTIVE
+ * `Record` over the contracts union is the drift guard: a new refusal reason fails this typecheck
+ * until it has copy, which a runtime `t()` lookup could not catch.
+ */
+const INTAKE_REFUSAL_KEYS: Record<IssueIntakeRefusalReason, string> = {
+  per_ticket_requires_on_demand: 'board.recurring.refusalPerTicketRequiresOnDemand',
+  per_ticket_conflicts_with_bug_intake: 'board.recurring.refusalPerTicketConflictsWithBugIntake',
+}
+
+function intakeRefusalCopy(error: unknown): string | null {
+  const reason = apiErrorReason(error)
+  if (!reason || !(reason in INTAKE_REFUSAL_KEYS)) return null
+  // `te` before `t`, the `usePipelineErrorToast` idiom: a locale missing the key falls through to
+  // the backend's prose rather than rendering the key path at the user.
+  const key = INTAKE_REFUSAL_KEYS[reason as IssueIntakeRefusalReason]
+  return te(key) ? t(key) : null
+}
+
+/**
+ * Whether the picked source is one this build ships (and so has a vendor-specific board field).
+ *
+ * Read from the contracts constant rather than re-listing the three ids: the vocabulary has one
+ * owner, and a fourth built-in source would otherwise render the opaque board field here while
+ * every other surface offered its vendor one.
+ */
+const intakeSourceIsBuiltin = computed(() =>
+  (BUILTIN_TASK_SOURCE_KINDS as readonly string[]).includes(intakeSource.value ?? ''),
+)
 const intakeTitleFragment = ref('')
 const intakeLabels = ref('') // comma-separated in the UI, sent as an array
 const intakeIssueType = ref('')
@@ -98,6 +163,23 @@ const isBugIntake = computed(() => {
     (kind, i) => kind === 'bug-intake' && pipeline.enabled?.[i] !== false,
   )
 })
+/**
+ * Whether the intake section is shown, and in which DISPATCH mode — both DERIVED from the picked
+ * pipeline rather than chosen, because the two modes are not interchangeable:
+ *
+ *  - a `bug-intake` pipeline pulls its own work from the board, so a pushed event can only mean
+ *    "drain the queue now" (`queue`);
+ *  - any other pipeline has no step that picks work, so a pushed event can only mean "run THIS
+ *    ticket" (`per-ticket`).
+ *
+ * Deriving it makes the combination the server refuses (`per-ticket` on a `bug-intake` pipeline)
+ * unrepresentable here, instead of offering it and reporting a validation error afterwards.
+ */
+const showIntake = computed(() => isBugIntake.value || trackerTrigger.value)
+const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
+  isBugIntake.value ? 'queue' : 'per-ticket',
+)
+
 // Sources that can back intake right now (connected / App-installed AND enabled).
 const intakeSources = computed(() => tasks.offeredSources)
 
@@ -119,6 +201,8 @@ watch(open, (isOpen) => {
   intakeJiraProjectKey.value = ''
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
+  intakeBoardId.value = ''
+  trackerTrigger.value = false
   intakeTitleFragment.value = ''
   intakeLabels.value = ''
   intakeIssueType.value = ''
@@ -147,6 +231,8 @@ const { requestClose } = useUnsavedGuard({
     intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeBoardId: intakeBoardId.value.trim(),
+    trackerTrigger: trackerTrigger.value,
     intakeTitleFragment: intakeTitleFragment.value.trim(),
     intakeLabels: intakeLabels.value.trim(),
     intakeIssueType: intakeIssueType.value.trim(),
@@ -156,10 +242,13 @@ const { requestClose } = useUnsavedGuard({
 
 // The board field required for the picked source must be filled before a bug-intake schedule saves.
 const intakeReady = computed(() => {
-  if (!isBugIntake.value) return true
+  if (!showIntake.value) return true
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  // A registered source is scoped by its opaque board id. Falling through to `false` here would
+  // make its schedule permanently unsaveable rather than merely unscoped.
+  if (intakeSource.value) return intakeBoardId.value.trim().length > 0
   return false
 })
 
@@ -181,6 +270,9 @@ function buildIssueIntake(): IssueIntakeConfig {
       ...(source === 'github' && intakeGithubRepo.value.trim()
         ? { githubRepo: intakeGithubRepo.value.trim() }
         : {}),
+      ...(!intakeSourceIsBuiltin.value && intakeBoardId.value.trim()
+        ? { boardId: intakeBoardId.value.trim() }
+        : {}),
     },
     predicates: {
       ...(intakeTitleFragment.value.trim()
@@ -192,6 +284,9 @@ function buildIssueIntake(): IssueIntakeConfig {
     ...(source === 'github' && intakeInProgressLabel.value.trim()
       ? { inProgressLabel: intakeInProgressLabel.value.trim() }
       : {}),
+    // Sent only when it differs from the default, so an ordinary bug-intake schedule's stored
+    // config is byte-for-byte what it was before the mode existed.
+    ...(intakeDispatch.value === 'per-ticket' ? { dispatch: 'per-ticket' as const } : {}),
   }
 }
 
@@ -227,13 +322,13 @@ async function add() {
       onDemand: onDemand.value,
       ...(onDemand.value ? {} : { recurrence: recurrence.value }),
       ...(description.value.trim() ? { description: description.value.trim() } : {}),
-      ...(isBugIntake.value ? { issueIntake: buildIssueIntake() } : {}),
+      ...(showIntake.value ? { issueIntake: buildIssueIntake() } : {}),
     })
     ui.closeAddRecurring()
   } catch (e) {
     toast.add({
       title: t('board.recurring.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
+      description: intakeRefusalCopy(e) ?? (e instanceof Error ? e.message : String(e)),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -287,10 +382,16 @@ async function add() {
         </UFormField>
 
         <div class="flex items-start gap-2 rounded-lg border border-slate-800 p-3">
-          <USwitch v-model="onDemand" size="sm" class="mt-0.5" />
+          <USwitch v-model="onDemand" :disabled="onDemandLocked" size="sm" class="mt-0.5" />
           <div class="space-y-0.5">
             <p class="text-xs font-medium text-slate-200">{{ t('board.recurring.onDemand') }}</p>
-            <p class="text-[11px] text-slate-500">{{ t('board.recurring.onDemandHint') }}</p>
+            <p class="text-[11px] text-slate-500">
+              {{
+                onDemandLocked
+                  ? t('board.recurring.onDemandLockedHint')
+                  : t('board.recurring.onDemandHint')
+              }}
+            </p>
           </div>
         </div>
 
@@ -356,7 +457,29 @@ async function add() {
           </UFormField>
         </div>
 
-        <div v-if="isBugIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
+        <!--
+          A pipeline with no `bug-intake` step has no step that picks work, so tracker intake is an
+          OPT-IN here: turning it on makes a matching webhook event run that ticket as its own task.
+          A `bug-intake` pipeline needs no toggle — it cannot run without intake config at all.
+        -->
+        <div v-if="!isBugIntake" class="flex items-start gap-2">
+          <USwitch
+            :model-value="trackerTrigger"
+            size="sm"
+            class="mt-0.5"
+            @update:model-value="setTrackerTrigger"
+          />
+          <div>
+            <p class="text-xs font-medium text-slate-200">
+              {{ t('board.recurring.trackerTrigger') }}
+            </p>
+            <p class="text-[11px] text-slate-500">
+              {{ t('board.recurring.trackerTriggerHint') }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="showIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ t('board.recurring.intake') }}
           </p>
@@ -410,8 +533,23 @@ async function add() {
             <!-- A GitHub repo ref is always the literal `owner/name` path, never localized. -->
             <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
           </UFormField>
+          <UFormField
+            v-if="intakeSource && !intakeSourceIsBuiltin"
+            :label="t('board.recurring.intakeBoardId')"
+            :help="t('board.recurring.intakeBoardIdHelp')"
+            required
+          >
+            <UInput v-model="intakeBoardId" class="w-full" />
+          </UFormField>
 
           <template v-if="intakeSource">
+            <p class="text-[11px] text-slate-500">
+              {{
+                intakeDispatch === 'per-ticket'
+                  ? t('board.recurring.intakeDispatchPerTicketHint')
+                  : t('board.recurring.intakeDispatchQueueHint')
+              }}
+            </p>
             <UFormField :label="t('board.recurring.intakeTitleFragment')">
               <UInput
                 v-model="intakeTitleFragment"

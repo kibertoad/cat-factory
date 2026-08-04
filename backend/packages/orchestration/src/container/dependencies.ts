@@ -616,7 +616,7 @@ export interface CoreDependencies {
    * Idempotency markers for INBOUND tracker comments (the ticket-reply half of the clarification
    * loop). Absent ⇒ ticket replies are ignored entirely, because applying a comment's commands
    * without a claim would re-answer the same finding on every vendor redelivery. See
-   * `docs/initiatives/tracker-webhook-intake.md`.
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   trackerCommentIngestRepository?: TrackerCommentIngestRepository
 

@@ -411,6 +411,7 @@ describe('TrackerWebhookService — issue events', () => {
     title: 'Crash',
     labels: ['bug'],
     issueType: 'Bug',
+    board: 'ENG',
     url: null,
   }
 

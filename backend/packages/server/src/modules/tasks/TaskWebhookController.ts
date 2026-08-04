@@ -21,7 +21,7 @@ import type { AppEnv } from '../../http/env.js'
  * Scanning every workspace's connections for one whose secret verifies would be a deployment-wide
  * N+1 on every unauthenticated POST — a free amplification oracle. The workspace id is not a secret
  * (it is in every API path already); the per-connection `webhookSecret` is what authenticates. See
- * D1 of `docs/initiatives/tracker-webhook-intake.md`.
+ * D1 of `backend/docs/adr/0032-tracker-webhook-intake.md`.
  *
  * The shape is otherwise the GitHub receiver's, step for step: verify over the RAW body before any
  * parse, ack fast (202), and hand the parsed event to the facade's queue — falling back to inline

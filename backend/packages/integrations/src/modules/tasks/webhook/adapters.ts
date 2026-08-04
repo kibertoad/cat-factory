@@ -85,6 +85,9 @@ export const githubIssuesWebhookAdapter: TaskSourceWebhookAdapter = {
         title: readString(payload, 'issue', 'title') ?? '',
         labels: readNameList(payload, 'issue', 'labels'),
         issueType: readString(payload, 'issue', 'type', 'name'),
+        // The `owner/name` slug is exactly what `IssueIntakeQuery.board.githubRepo` carries, and
+        // it is already parsed above for the external id.
+        board: repo,
         url: readString(payload, 'issue', 'html_url'),
       }
     }
@@ -145,6 +148,9 @@ export const jiraWebhookAdapter: TaskSourceWebhookAdapter = {
         title: readString(fields, 'summary') ?? '',
         labels: readStringList(fields, 'labels'),
         issueType: readString(fields, 'issuetype', 'name'),
+        // The project KEY, not its numeric id: `IssueIntakeQuery.board.jiraProjectKey` is what a
+        // schedule stores and what `listBoards` hands back, and JQL scopes on the key.
+        board: readString(fields, 'project', 'key')?.toUpperCase() ?? null,
         url: readString(payload, 'issue', 'self'),
       }
     }
@@ -203,6 +209,11 @@ export const linearWebhookAdapter: TaskSourceWebhookAdapter = {
         // Linear has no issue-type notion; intake's `issueType` predicate is a no-op here, the
         // same way `searchIssues` ignores it for this source.
         issueType: null,
+        // The team UUID, which is what `buildLinearIntakeFilter` matches on (`team.id.eq`) and
+        // what `listTeams` hands the board picker, never the human team KEY, which would look
+        // plausible and never match. Linear sends the nested team on most Issue payloads and a
+        // bare `teamId` on the leaner ones.
+        board: readString(data, 'team', 'id') ?? readString(data, 'teamId'),
         url: readString(data, 'url'),
       }
     }

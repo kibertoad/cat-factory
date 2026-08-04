@@ -179,6 +179,9 @@ describe('githubIssuesWebhookAdapter.parse', () => {
       title: 'Crash on submit',
       labels: ['bug'],
       issueType: 'Bug',
+      // The `owner/name` slug is exactly what an intake config's `githubRepo` scope carries, so a
+      // schedule scoped to one repository can compare against it with no per-vendor knowledge.
+      board: 'acme/api',
       url: 'https://github.test/acme/api/issues/7',
     })
   })
@@ -231,6 +234,32 @@ describe('jiraWebhookAdapter.parse', () => {
       }),
     )
     expect(event).toMatchObject({ kind: 'issue', action: 'closed', labels: ['bug'] })
+  })
+
+  it('reads the board as the project KEY, upper-cased, never the project id', () => {
+    // `IssueIntakeQuery.board.jiraProjectKey` is a KEY: it is what a schedule stores, what
+    // `listBoards` hands the picker, and what JQL scopes on. The numeric id would look plausible
+    // in the payload and never match a configured scope.
+    const event = jiraWebhookAdapter.parse(
+      raw({
+        webhookEvent: 'jira:issue_created',
+        issue: {
+          key: 'ENG-4',
+          fields: { summary: 'x', project: { id: '10001', key: 'eng' }, labels: [] },
+        },
+      }),
+    )
+    expect(event).toMatchObject({ kind: 'issue', board: 'ENG' })
+  })
+
+  it('states a MISSING project as null rather than guessing one', () => {
+    const event = jiraWebhookAdapter.parse(
+      raw({
+        webhookEvent: 'jira:issue_created',
+        issue: { key: 'ENG-5', fields: { summary: 'x', labels: [] } },
+      }),
+    )
+    expect(event).toMatchObject({ kind: 'issue', board: null })
   })
 
   it('ignores an ADF comment body it cannot read as text', () => {
@@ -287,9 +316,31 @@ describe('linearWebhookAdapter.parse', () => {
         },
       }),
     )
-    // Linear has no issue-type notion, so `null` is the honest answer — and the intake predicate
-    // fails open on it rather than excluding the whole source.
+    // Linear has no issue-type notion, so `null` is the honest answer, reported as a predicate the
+    // delivery cannot answer rather than one it fails, which is what stops it excluding the source.
     expect(event).toMatchObject({ kind: 'issue', action: 'closed', issueType: null })
+  })
+
+  it('reads the board as the team UUID, falling back to a bare `teamId`', () => {
+    // `buildLinearIntakeFilter` matches `team.id.eq`, and `listTeams` hands the picker the same
+    // UUID. The human team KEY would look plausible here and never match a configured scope.
+    const withTeam = linearWebhookAdapter.parse(
+      raw({
+        type: 'Issue',
+        action: 'create',
+        data: { identifier: 'ENG-5', title: 'x', team: { id: 'team-uuid', key: 'ENG' } },
+      }),
+    )
+    expect(withTeam).toMatchObject({ board: 'team-uuid' })
+
+    const leaner = linearWebhookAdapter.parse(
+      raw({
+        type: 'Issue',
+        action: 'create',
+        data: { identifier: 'ENG-6', title: 'x', teamId: 'team-uuid' },
+      }),
+    )
+    expect(leaner).toMatchObject({ board: 'team-uuid' })
   })
 
   it('ignores a non-create comment action and an unrelated entity', () => {

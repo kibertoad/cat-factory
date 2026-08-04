@@ -314,6 +314,7 @@ export type {
   TrackerWebhookEvent,
 } from './tracker-webhook.js'
 export {
+  BUILTIN_TASK_SOURCE_KINDS,
   TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
   TRACKER_WEBHOOK_SECRET_KEY,
   isTaskSourceKind,
