@@ -122,7 +122,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   catalog. `adoptForRun` resolves a run's pipeline and MATERIALISES a catalog built-in the board was
   never seeded with (a reusable operation pins its pipeline by id, so an older board would otherwise
   refuse to start a task it created); `resolveDefinition` is the read-only twin for a question about
-  a prospective run. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
+  a prospective run (every gate in front of a start, so a bare `pipelineRepository.get` there is the
+  smell); `adoptableCatalog` is the bulk form for a caller already holding the workspace's whole
+  list. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
   `PipelineService.reseed` shares its row builder. See
   `backend/docs/pipeline-catalog-lifecycle.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,

@@ -28,6 +28,7 @@ import type {
   ModelPresetCacheValue,
   ModelPresetRepository,
   ModelRef,
+  OperationalMetrics,
   PipelineRegistry,
   PipelineRepository,
   PrVerificationReportPublisher,
@@ -112,6 +113,13 @@ export interface ExecutionServiceDependencies {
    * `PipelineService` share ONE instance.
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * The deployment's operational counters. Required, per the rule an un-wired counter breaks: a
+   * zero and an unreported signal are different facts and only one of them is honest. Today the
+   * engine's own increment is `pipeline.adopted` (see `pipelines/pipelineAdoption.ts`); it arrives
+   * through the `CoreDependencies` spread, where it is required too.
+   */
+  operationalMetrics: OperationalMetrics
   executionRepository: ExecutionRepository
   /**
    * Resolves the owning account of a workspace so a service that pins no cloud

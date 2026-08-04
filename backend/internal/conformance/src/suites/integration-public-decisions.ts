@@ -1,4 +1,5 @@
-import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
+import { PipelineRegistry } from '@cat-factory/kernel'
+import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -165,6 +166,60 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
       decideAuth,
     )
     expect(started.status).toBe(202)
+  })
+
+  it('applies the decide-scope rule to a pipeline the board has not ADOPTED yet', async () => {
+    // The check above resolves the caller's `pipelineId` to inspect it for parks, and a board can
+    // legitimately hold no row for a pipeline a run will nonetheless launch: run resolution ADOPTS a
+    // catalog built-in the workspace was never seeded with. Reading the stored row alone therefore
+    // found nothing to inspect, skipped the refusal, and let `start` adopt and park the run anyway —
+    // so a plain `write` key set in motion exactly the park the scope ladder withholds. Over the
+    // wire on both facades, because the pipeline read the check runs against is facade-wired.
+    const PIPELINE_ID = 'pl_conf_unadopted_parking'
+    const before = harness.makeApp()
+    const { workspace } = await before.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    // The org ships a read-only catalog pipeline that PARKS (an approval gate on its only step),
+    // after this board was seeded, so the board holds no row for it.
+    const registry = new PipelineRegistry()
+    registry.register({
+      id: PIPELINE_ID,
+      name: 'Gated coder',
+      builtin: true,
+      version: 1,
+      agentKinds: ['coder'],
+      gates: [true],
+    })
+    const app = harness.makeApp(undefined, { pipelineRegistry: registry })
+    const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(snapshot.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    const writeAuth = await mintKey(app, wsId, 'write')
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/tasks/task_login/start`,
+      { pipelineId: PIPELINE_ID },
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+    // Refused BEFORE any side effect: a rejected start must not leave the adoption behind, or the
+    // board's library would gain a pipeline nothing was allowed to run.
+    const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(after.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    // And the same key ladder still ADMITS it: a `decide` key starts the run, which adopts the row.
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const started = await app.call(
+      'POST',
+      `/api/v1/tasks/task_login/start`,
+      { pipelineId: PIPELINE_ID },
+      decideAuth,
+    )
+    expect(started.status).toBe(202)
+    const adopted = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(adopted.body.pipelines.map((p) => p.id)).toContain(PIPELINE_ID)
   })
 
   it('refuses a write key on a human-review pipeline, and admits a non-parking one', async () => {

@@ -80,12 +80,7 @@ import type {
   BrainstormSession,
   BrainstormStage,
 } from '@cat-factory/kernel'
-import type {
-  BlockRepository,
-  ExecutionRepository,
-  PipelineRepository,
-  WorkspaceRepository,
-} from '@cat-factory/kernel'
+import type { BlockRepository, ExecutionRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
@@ -150,6 +145,17 @@ function buildPrReportController(
 }
 
 /**
+ * The engine's logger, normalised. A helper rather than a `this.log` read, because a collaborator
+ * built mid-constructor captures the logger by VALUE into its own dependency literal, and `this.log`
+ * is assigned partway down: reading the field from a factory that runs before that line hands the
+ * collaborator `undefined` and turns its first best-effort warn into a `TypeError`. One normalisation
+ * site, reachable from anywhere in the construction sequence.
+ */
+function engineLogger(deps: ExecutionServiceDependencies): Logger {
+  return deps.logger ?? noopLogger
+}
+
+/**
  * How a run resolves its pipeline: the workspace's stored row, else the catalog entry the board was
  * never seeded with, ADOPTED so every other surface can see what ran
  * (`pipelines/pipelineAdoption.ts`). A reusable operation pins its pipeline by id, so a board older
@@ -162,6 +168,7 @@ function buildPipelineAdoption(deps: ExecutionServiceDependencies): PipelineAdop
   return createPipelineAdoption({
     pipelineRepository: deps.pipelineRepository,
     pipelineRegistry: deps.pipelineRegistry,
+    operationalMetrics: deps.operationalMetrics,
     logger: deps.logger,
   })
 }
@@ -299,7 +306,6 @@ export class ExecutionService {
     const {
       workspaceRepository,
       blockRepository,
-      pipelineRepository,
       executionRepository,
       idGenerator,
       clock,
@@ -384,7 +390,7 @@ export class ExecutionService {
     const runContext = buildRunContextAndAdmission(dependencies)
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
-    this.postMergeBoard = this.buildPostMergeBoard(pipelineRepository)
+    this.postMergeBoard = this.buildPostMergeBoard(dependencies)
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
@@ -483,7 +489,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
-    this.log = logger ?? noopLogger
+    this.log = engineLogger(dependencies)
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.stepDecisions = new StepDecisionController({
@@ -600,15 +606,19 @@ export class ExecutionService {
     })
   }
 
-  private buildPostMergeBoard(pipelineRepository: PipelineRepository): PostMergeBoardController {
+  private buildPostMergeBoard(deps: ExecutionServiceDependencies): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
-    // structurally incompatible with the interface even from inside it.
+    // structurally incompatible with the interface even from inside it. The repository and the
+    // logger come off `deps` rather than off `this`, because this runs partway through the
+    // constructor: neither is an engine field by then (see {@link engineLogger}).
     const host: PostMergeBoardHost = {
       blockRepository: this.blockRepository,
-      pipelineRepository,
+      pipelineRepository: deps.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       admission: this.admission,
       board: this.board,
       events: this.events,
+      logger: engineLogger(deps),
     }
     return new PostMergeBoardController(host, {
       // A system-initiated auto-start has no human present to unlock a personal credential, so it

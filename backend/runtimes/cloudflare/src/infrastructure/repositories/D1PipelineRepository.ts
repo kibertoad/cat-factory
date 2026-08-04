@@ -65,7 +65,7 @@ export class D1PipelineRepository implements PipelineRepository {
 
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
-      .prepare(`${INSERT_PIPELINE_SQL}`)
+      .prepare(INSERT_PIPELINE_SQL)
       .bind(...pipelineBindings(workspaceId, pipeline))
       .run()
   }

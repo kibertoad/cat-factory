@@ -42,10 +42,29 @@ Three rules hold it together:
   insert the same definition, so first write wins and the loser has nothing to report. `reseed`'s
   absent branch goes through it too, since it races the same way.
 
-`resolveDefinition` is the read-only twin, for a question about a PROSPECTIVE run (the
-personal-credential gate's "which vendors would this need"). It must agree with `adoptForRun` about
-what would run and differ only in writing: answering `null` there read as "this pipeline needs no
-credential", and the run then started ungated.
+#### A read on the run path asks ADOPTION, never the bare row
+
+`resolveDefinition` is the read-only twin, for a question about a PROSPECTIVE run. It must agree with
+`adoptForRun` about what would run and differ only in writing, because every gate standing in front
+of a start resolves the pipeline first and then decides. Answer `null` there and the gate does not
+refuse, it CONCLUDES, off a pipeline that is about to run anyway:
+
+- the personal-credential gate read "no agent kinds", so a run needing an individual subscription
+  started ungated;
+- the public API's decide-scope check found nothing to inspect for parks, so a `write`-only key set
+  in motion exactly the park that scope withholds (`PipelineService.resolveForRun`, which replaced
+  the `get` that served the stored row, is the one read both public start paths take);
+- the post-merge auto-start dropped a dependent whose pin had no row, so a merge propagated into a
+  task that silently never began (that path holds the workspace's whole list already, so it resolves
+  misses through `adoptableCatalog()` rather than a point read per miss).
+
+So a bare `pipelineRepository.get` on a run-adjacent path is the smell. Adoption is also COUNTED,
+not only logged (`pipeline.adopted`): the log line says which board caught up, and only the rate says
+how many are still behind a catalog the deployment already shipped.
+
+Still refusing on purpose: an initiative policy edit and a recurring schedule naming an un-adopted
+pipeline. Both are AUTHORING paths where the SPA only offers stored pipelines, so adopting on them
+would materialise rows for pipelines nobody ran.
 
 ### The registration SHAPE picks the lifecycle, and only one of the two can be updated
 

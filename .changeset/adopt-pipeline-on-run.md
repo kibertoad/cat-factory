@@ -1,5 +1,6 @@
 ---
 '@cat-factory/kernel': minor
+'@cat-factory/observability-otel': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/node-server': minor
@@ -36,15 +37,29 @@ writers write the same catalog definition, so first write wins and the loser has
 own, and both now build the row through one shared `adoptedCatalogRow` so adopting and reseeding cannot
 diverge on labels or archive state.
 
-Worth watching in review: the read-only twin, `resolveDefinition`, is not symmetry. It fixes a real
-hole. `individualVendorsForBlock` backs the personal-credential gate on the start request and read the
-bare row, so an un-adopted pipeline resolved to no agent kinds, the gate concluded the run needed no
-personal subscription, and the run then adopted and started ungated. It now asks the same question
-adoption would answer, without writing. The other thing to check is the wiring:
-`ExecutionServiceDependencies.pipelineRegistry` is optional, so a facade that forgets it typechecks and
-the built-in half of adoption still works, leaving only a deployment's own registered pipelines
-unadoptable. The composition root reads `runtime.pipelineRegistry`, never an injected argument, so the
-engine and `PipelineService` adopt from one instance.
+Widening what a start resolves means every GATE standing in front of one had to be widened with it,
+which is where the read-only twin `resolveDefinition` earns its place. Each of these read the bare row
+and, finding nothing, did not refuse but CONCLUDED, about a pipeline that was about to run anyway:
+
+- `individualVendorsForBlock` backs the personal-credential gate on the start request, so an un-adopted
+  pipeline resolved to no agent kinds, the gate concluded the run needed no personal subscription, and
+  the run then adopted and started ungated.
+- The public API's decide-scope check resolves the caller's `pipelineId` to inspect it for parks. A
+  `null` skipped the check entirely, and `start` then adopted and parked the run, so a `write`-only key
+  could set in motion exactly the park that scope exists to withhold. Both public start paths now read
+  `PipelineService.resolveForRun`, which replaces the `get` that served the stored row (nothing wants
+  that read any more). One public-API behaviour change falls out of it, additive: naming a pipeline the
+  board has not adopted starts the run (or is refused for want of `decide`) instead of answering `404`
+  / `pipeline_not_public`, so an integration pinning a pipeline by id no longer waits on a human to
+  reseed the board.
+- The post-merge auto-start resolved dependents from the workspace's pipeline LIST and dropped any
+  whose pin had no row, silently, so a merge propagated into a task that never began. It now resolves
+  misses through `adoptableCatalog()` (no point read per miss: the list already proves there is no
+  row), and a dependent whose pin resolves to nothing at all is reported rather than dropped.
+
+So a bare `pipelineRepository.get` on a run-adjacent path is now the smell. Adoption is also COUNTED,
+through the new `pipeline.adopted` operational counter: the log line says which board caught up, and
+only the rate says how many are still behind a catalog the deployment already shipped.
 
 Left refusing on purpose: an initiative policy edit or a recurring schedule naming an un-adopted
 pipeline. Both are authoring paths where the SPA only offers stored pipelines, so the refusal is

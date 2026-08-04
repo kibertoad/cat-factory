@@ -1,5 +1,11 @@
 import { seedPipelines } from '@cat-factory/kernel'
-import type { Logger, Pipeline, PipelineRegistry, PipelineRepository } from '@cat-factory/kernel'
+import type {
+  Logger,
+  OperationalMetrics,
+  Pipeline,
+  PipelineRegistry,
+  PipelineRepository,
+} from '@cat-factory/kernel'
 import { noopLogger } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
@@ -75,6 +81,18 @@ export interface PipelineAdoption {
    * definition, which `insertIfAbsent` settles first-write-wins.
    */
   adoptForRun(workspaceId: string, pipelineId: string): Promise<Pipeline | null>
+  /**
+   * Every ADOPTABLE catalog definition, indexed by id, for a caller that already holds the
+   * workspace's WHOLE pipeline list and therefore already knows which ids have no row (the
+   * post-merge auto-start's dependent loop). Synchronous and repository-free: an id absent from
+   * `listByWorkspace` is absent, so a point read per miss would be a banned N+1 that re-answers
+   * what the list already said.
+   *
+   * Build it ONCE per caller invocation and index into it. It is a fresh catalog construction on
+   * every call, deliberately not memoised: the registry is an instance a deployment registers onto,
+   * and a stale memo would answer for a catalog the composition root has since added to.
+   */
+  adoptableCatalog(): Map<string, Pipeline>
 }
 
 export interface PipelineAdoptionDependencies {
@@ -86,31 +104,52 @@ export interface PipelineAdoptionDependencies {
    * built-in, which is exactly the reusable-operation case, so a facade must thread it.
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * Where the `pipeline.adopted` counter lands. REQUIRED rather than optional because an un-wired
+   * counter is indistinguishable from a deployment whose boards are all current: a caller that
+   * only ever asks the READ half (`PipelineService`, whose instance never writes) passes
+   * `noopOperationalMetrics` and says so at the call site.
+   */
+  operationalMetrics: OperationalMetrics
   logger?: Logger
 }
 
 export function createPipelineAdoption(deps: PipelineAdoptionDependencies): PipelineAdoption {
   const log = deps.logger ?? noopLogger
-  // The catalog build only ever happens on the MISS, so the hot path is the single point-read a
-  // start already did.
+  const catalogEntry = (pipelineId: string) =>
+    unadoptedCatalogEntry(pipelineId, deps.pipelineRegistry)
+  // The catalog build happens only on a stored-row MISS, so the hot path stays the single point
+  // read a start already did. A miss is not always an adoption, though: an id NOTHING defines
+  // misses on every attempt, so a caller naming bogus ids in a loop rebuilds the catalog each
+  // time. That is pure in-memory construction bounded by the caller's own request rate, and it is
+  // the price of not memoising a registry the composition root may still be registering onto.
   const resolve = async (workspaceId: string, pipelineId: string) =>
-    (await deps.pipelineRepository.get(workspaceId, pipelineId)) ??
-    unadoptedCatalogEntry(pipelineId, deps.pipelineRegistry) ??
-    null
+    (await deps.pipelineRepository.get(workspaceId, pipelineId)) ?? catalogEntry(pipelineId) ?? null
 
   return {
     resolveDefinition: resolve,
+    adoptableCatalog() {
+      const adoptable = new Map<string, Pipeline>()
+      for (const seed of seedPipelines(deps.pipelineRegistry)) {
+        if (seed.builtin) adoptable.set(seed.id, adoptedCatalogRow(seed))
+      }
+      return adoptable
+    },
     async adoptForRun(workspaceId, pipelineId) {
       const stored = await deps.pipelineRepository.get(workspaceId, pipelineId)
       if (stored) return stored
-      const seed = unadoptedCatalogEntry(pipelineId, deps.pipelineRegistry)
+      const seed = catalogEntry(pipelineId)
       if (!seed) return null
       await deps.pipelineRepository.insertIfAbsent(workspaceId, seed)
+      // Logged AND counted, for the two different questions. The line answers "what happened to
+      // this board"; the counter answers "how many boards are still behind the shipped catalog",
+      // which no per-run line can add up to.
       log.info('Adopted a catalog pipeline into the workspace on first run', {
         workspaceId,
         pipelineId,
         version: seed.version,
       })
+      deps.operationalMetrics.increment('pipeline.adopted')
       return seed
     },
   }
