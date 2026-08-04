@@ -5568,6 +5568,7 @@
     "operation": {
       "provision": "Spin up",
       "teardown": "Tear down",
+      "teardown-verify": "Teardown check",
       "status": "Status check",
       "dispatch": "Spin up",
       "release": "Tear down",

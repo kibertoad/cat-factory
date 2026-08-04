@@ -5317,6 +5317,7 @@
     "operation": {
       "provision": "Başlat",
       "teardown": "Kapat",
+      "teardown-verify": "Kapatma kontrolü",
       "status": "Durum kontrolü",
       "dispatch": "Başlat",
       "release": "Kapat",

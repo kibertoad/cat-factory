@@ -5317,6 +5317,7 @@
     "operation": {
       "provision": "הקמה",
       "teardown": "פירוק",
+      "teardown-verify": "בדיקת פירוק",
       "status": "בדיקת מצב",
       "dispatch": "הקמה",
       "release": "פירוק",

@@ -5,6 +5,7 @@ import type {
   EnvironmentRegistryRepository,
   ProvisioningOutcome,
   SecretCipher,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import { EnvironmentTeardownService } from './EnvironmentTeardownService.js'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
@@ -120,7 +121,12 @@ describe('EnvironmentTeardownService teardown-recorded hook', () => {
     await service.teardown('ws_1', 'env_1')
 
     expect(seen).toEqual([{ outcome: 'success', rowsAtCall: 1 }])
-    expect(rows).toEqual([{ operation: 'teardown', outcome: 'success' }])
+    // The confirmation row lands AFTER the hook, which is deliberate: the hook reports the
+    // teardown ATTEMPT, and its consumer re-reads the whole log anyway.
+    expect(rows).toEqual([
+      { operation: 'teardown', outcome: 'success' },
+      { operation: 'teardown-verify', outcome: 'failure' },
+    ])
   })
 
   it('notifies on a FAILED attempt too, and still surfaces the provider error', async () => {
@@ -146,6 +152,121 @@ describe('EnvironmentTeardownService teardown-recorded hook', () => {
       throw new Error('the report publisher is down')
     })
 
-    await expect(service.teardown('ws_1', 'env_1')).resolves.toMatchObject({ id: 'env_1' })
+    await expect(service.teardown('ws_1', 'env_1')).resolves.toMatchObject({
+      handle: { id: 'env_1' },
+    })
+  })
+})
+
+// The teardown CONFIRMATION. A provider call that returns without throwing is not an environment
+// being gone: the generic manifest provider destroys nothing when its manifest omits a
+// `teardown:` request and still reports `torn_down`, and a namespace DELETE returns while the
+// namespace is still Terminating. These pin that only a positive probe is read as a reclaim, and
+// that each way of failing to prove one stays its own answer.
+
+/** A provider whose probe returns whatever the test needs. */
+function probing(probe: TeardownProbe): EnvironmentProvider {
+  return {
+    async teardown() {
+      return { status: 'torn_down' }
+    },
+    async confirmTeardown() {
+      return probe
+    },
+  } as unknown as EnvironmentProvider
+}
+
+describe('EnvironmentTeardownService teardown confirmation', () => {
+  it('confirms only when the probe positively finds the environment gone', async () => {
+    const { rows, log } = fakeLog()
+    const service = makeService(probing({ state: 'gone' }), log)
+
+    const result = await service.teardown('ws_1', 'env_1')
+
+    expect(result.confirmation).toBe('confirmed')
+    expect(result.reason).toBeNull()
+    expect(rows).toContainEqual({ operation: 'teardown-verify', outcome: 'success' })
+  })
+
+  it('reports a still-running environment as still_standing, not as a reclaim', async () => {
+    // The headline case: a no-op teardown. The provider said yes and destroyed nothing, so the
+    // environment is up, billing, and — before the probe — reported on the PR as torn down.
+    const { rows, log } = fakeLog()
+    const service = makeService(
+      probing({ state: 'present', terminating: false, detail: 'still Active' }),
+      log,
+    )
+
+    const result = await service.teardown('ws_1', 'env_1')
+
+    expect(result.confirmation).toBe('still_standing')
+    expect(result.reason).toContain('still Active')
+    expect(rows).toContainEqual({ operation: 'teardown-verify', outcome: 'failure' })
+  })
+
+  it('keeps a TERMINATING environment apart from one that never went away', async () => {
+    // A namespace draining its finalizers will confirm on a later pass; an Active one never
+    // will. Same probe state, opposite advice, so they must not share a verdict.
+    const service = makeService(probing({ state: 'present', terminating: true }), fakeLog().log)
+
+    expect((await service.teardown('ws_1', 'env_1')).confirmation).toBe('unconfirmed')
+  })
+
+  it('separates a PERMANENT inability to verify from a transient one', async () => {
+    // A manifest with no `status:` request answers identically forever and is fixed by a human
+    // editing it; an apiserver that refused one read may well answer the next. An operator
+    // waiting on the first for a confirmation that is never coming is the failure here.
+    const permanent = makeService(
+      probing({ state: 'unknown', retryable: false, reason: 'no status request declared' }),
+      fakeLog().log,
+    )
+    const transient = makeService(
+      probing({ state: 'unknown', retryable: true, reason: 'apiserver timed out' }),
+      fakeLog().log,
+    )
+
+    expect((await permanent.teardown('ws_1', 'env_1')).confirmation).toBe('unverifiable')
+    expect((await transient.teardown('ws_1', 'env_1')).confirmation).toBe('unconfirmed')
+  })
+
+  it('treats a provider that cannot verify as unverifiable, never as confirmed', async () => {
+    // `workingProvider` implements no `confirmTeardown`. Silence about an environment is not
+    // evidence of its death — this is the inversion the whole change rests on.
+    const service = makeService(workingProvider, fakeLog().log)
+
+    const result = await service.teardown('ws_1', 'env_1')
+
+    expect(result.confirmation).toBe('unverifiable')
+    expect(result.reason).toContain('cannot confirm')
+  })
+
+  it('does not let a THROWING probe undo a teardown that succeeded', async () => {
+    // The teardown worked and the record is tombstoned; the probe only adds knowledge, so its
+    // worst case is the absence of knowledge rather than a failed teardown.
+    const provider = {
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+      async confirmTeardown(): Promise<never> {
+        throw new Error('probe exploded')
+      },
+    } as unknown as EnvironmentProvider
+    const service = makeService(provider, fakeLog().log)
+
+    const result = await service.teardown('ws_1', 'env_1')
+
+    expect(result.confirmation).toBe('unconfirmed')
+    expect(result.reason).toContain('probe exploded')
+  })
+
+  it('records no confirmation row when the teardown itself failed', async () => {
+    // There is nothing to confirm about a destroy the provider refused, and writing a verify
+    // failure beside the teardown failure would double-count one stuck environment.
+    const { rows, log } = fakeLog()
+    const service = makeService(refusingProvider, log)
+
+    await expect(service.teardown('ws_1', 'env_1')).rejects.toThrow('provider refused')
+
+    expect(rows).toEqual([{ operation: 'teardown', outcome: 'failure' }])
   })
 })

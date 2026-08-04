@@ -5872,6 +5872,7 @@
     "operation": {
       "provision": "Avvio",
       "teardown": "Smantellamento",
+      "teardown-verify": "Verifica dello smantellamento",
       "status": "Controllo dello stato",
       "dispatch": "Avvio",
       "release": "Smantellamento",

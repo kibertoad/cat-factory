@@ -5317,6 +5317,7 @@
     "operation": {
       "provision": "起動",
       "teardown": "破棄",
+      "teardown-verify": "破棄の確認",
       "status": "ステータスチェック",
       "dispatch": "起動",
       "release": "破棄",

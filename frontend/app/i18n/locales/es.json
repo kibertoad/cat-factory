@@ -5317,6 +5317,7 @@
     "operation": {
       "provision": "Arrancar",
       "teardown": "Desmontar",
+      "teardown-verify": "Comprobación de desmontaje",
       "status": "Comprobación de estado",
       "dispatch": "Arrancar",
       "release": "Desmontar",

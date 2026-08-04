@@ -84,18 +84,45 @@ const provisioned = (createdAt: number, targetId = ENV): ProvisioningLifecycleEv
   outcome: 'success',
   createdAt,
   targetId,
+  error: null,
 })
 const tornDown = (createdAt: number, targetId = ENV): ProvisioningLifecycleEvent => ({
   operation: 'teardown',
   outcome: 'success',
   createdAt,
   targetId,
+  error: null,
 })
 const teardownFailed = (createdAt: number, targetId = ENV): ProvisioningLifecycleEvent => ({
   operation: 'teardown',
   outcome: 'failure',
   createdAt,
   targetId,
+  error: null,
+})
+/**
+ * The INDEPENDENT probe that found the environment gone — what turns a teardown the platform
+ * ASKED for into one it can prove happened. A `tornDown` row without one of these is deliberately
+ * not a reclaim (see the `unconfirmed` cases below).
+ */
+const verifiedGone = (createdAt: number, targetId = ENV): ProvisioningLifecycleEvent => ({
+  operation: 'teardown-verify',
+  outcome: 'success',
+  createdAt,
+  targetId,
+  error: null,
+})
+/** The probe ran and could not establish the environment is gone, with the provider's reason. */
+const verifyFailed = (
+  createdAt: number,
+  error: string,
+  targetId = ENV,
+): ProvisioningLifecycleEvent => ({
+  operation: 'teardown-verify',
+  outcome: 'failure',
+  createdAt,
+  targetId,
+  error,
 })
 
 describe('composeEnvironments', () => {
@@ -110,7 +137,7 @@ describe('composeEnvironments', () => {
 
   it('reports a complete proof when the environment came up, was used, and was reclaimed', () => {
     const section = compose([deployed, uiTester()], {
-      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      provisioning: read(provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
       evidenceUrl: 'https://app.test/?run=exec_1&view=test-evidence',
       artifactUrl: (id) => `https://api.test/workspaces/ws_1/artifacts/${id}/blob`,
     })
@@ -149,7 +176,7 @@ describe('composeEnvironments', () => {
     // emits a link to nowhere, and dropping the id in favour of one would leave a reviewer with
     // nothing at all.
     const section = compose([deployed, uiTester()], {
-      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      provisioning: read(provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
       evidenceUrl: null,
     })
 
@@ -215,7 +242,7 @@ describe('composeEnvironments', () => {
       environment: { id: 'env_1', url: null, status: 'ready' },
     })
     const section = compose([deployed, staleProjection, uiTester()], {
-      provisioning: read(provisioned(1_000), tornDown(9_000)),
+      provisioning: read(provisioned(1_000), tornDown(9_000), verifiedGone(9_001)),
     })
 
     expect(section.teardown).toBe('confirmed')
@@ -236,6 +263,74 @@ describe('composeEnvironments', () => {
     expect(failed.gaps.join(' ')).toContain('needs reclaiming by hand')
   })
 
+  it('refuses to call an UNVERIFIED teardown a reclaim', () => {
+    // The regression this exists for: a provider whose teardown is a declared no-op (a manifest
+    // with no `teardown:` request) returns success having destroyed nothing. Reading the teardown
+    // row alone put a green tick on a PR about an environment that was still running and still
+    // billing. A teardown with no successful verify beside it is `unconfirmed`, never `confirmed`.
+    const section = compose([deployed, uiTester()], {
+      provisioning: read(provisioned(1_000), tornDown(3_000)),
+    })
+
+    expect(section.teardown).toBe('unconfirmed')
+    expect(section.proof).toBe('incomplete')
+    expect(section.timeline.teardownsUnconfirmed).toBe(1)
+    expect(section.gaps.join(' ')).toContain('could not be confirmed gone')
+  })
+
+  it('surfaces the probe’s own reason for an unconfirmed teardown', () => {
+    // "The manifest declares no teardown request" and "the apiserver refused the read" are the
+    // same verdict and completely different jobs, so the verbatim cause travels to the PR rather
+    // than a generic line a reader has to go to the logs to act on.
+    const section = compose([deployed, uiTester()], {
+      provisioning: read(
+        provisioned(1_000),
+        tornDown(3_000),
+        verifyFailed(3_100, 'The environment was still running after the teardown.'),
+      ),
+    })
+
+    expect(section.teardown).toBe('unconfirmed')
+    expect(section.gaps.join(' ')).toContain('still running after the teardown')
+  })
+
+  it('keeps an unconfirmed teardown apart from one nobody has attempted', () => {
+    // Both leave an environment possibly standing, and they need different people: nobody has
+    // asked yet vs the platform asked and could not check. Flattening them would tell an operator
+    // to wait for a teardown that already happened, or to chase one that has not.
+    const unattempted = compose([deployed, uiTester()], {
+      provisioning: read(provisioned(1_000)),
+    })
+    const unverified = compose([deployed, uiTester()], {
+      provisioning: read(provisioned(1_000), tornDown(3_000)),
+    })
+
+    expect(unattempted.teardown).toBe('pending')
+    expect(unverified.teardown).toBe('unconfirmed')
+  })
+
+  it('reports the run as pending when ANY environment has no teardown at all', () => {
+    // A run holding one unverified teardown and one environment nobody touched is `pending`, the
+    // more alarming of the two: an untouched environment is certainly still up, where an
+    // unverified one merely might be.
+    const twoFrames = step({
+      agentKind: 'deployer',
+      deployEnvs: {
+        frm_api: { status: 'ready', url: 'https://api.test' },
+        frm_web: { status: 'ready', url: 'https://web.test' },
+      },
+    })
+    const section = compose([twoFrames, uiTester()], {
+      provisioning: read(
+        provisioned(1_000, 'env_a'),
+        provisioned(1_100, 'env_b'),
+        tornDown(3_000, 'env_a'),
+      ),
+    })
+
+    expect(section.teardown).toBe('pending')
+  })
+
   it('counts a stuck environment once however many times the sweep retried it', () => {
     // The sweep retries every pass, so a provider that keeps refusing appends a failure row per
     // pass. Counting rows would report one wedged environment as a growing fleet of them.
@@ -251,7 +346,12 @@ describe('composeEnvironments', () => {
     // Latest-attempt-wins: an environment that failed once and went away on the next pass is
     // gone, and reporting it as needing a human is a false alarm on a settled PR.
     const section = compose([deployed, uiTester()], {
-      provisioning: read(provisioned(1_000), teardownFailed(4_000), tornDown(5_000)),
+      provisioning: read(
+        provisioned(1_000),
+        teardownFailed(4_000),
+        tornDown(5_000),
+        verifiedGone(5_001),
+      ),
     })
 
     expect(section.teardown).toBe('confirmed')
@@ -267,6 +367,7 @@ describe('composeEnvironments', () => {
       provisioning: read(
         provisioned(1_000, 'env_old'),
         tornDown(2_500, 'env_old'),
+        verifiedGone(2_501, 'env_old'),
         provisioned(2_600, 'env_new'),
       ),
     })
@@ -284,7 +385,7 @@ describe('composeEnvironments', () => {
     // that settled before its environment came up.
     const recipeStep = { ...provisioned(400), targetId: null }
     const section = compose([deployed, uiTester()], {
-      provisioning: read(recipeStep, provisioned(1_000), tornDown(3_000)),
+      provisioning: read(recipeStep, provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
     })
 
     expect(section.timeline.provisionedAt).toBe(1_000)
@@ -293,7 +394,7 @@ describe('composeEnvironments', () => {
 
   it('refuses to attribute a LOCAL tester run to the ephemeral environment', () => {
     const section = compose([deployed, uiTester({ environment: 'local' })], {
-      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      provisioning: read(provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
     })
 
     expect(section.evidence.status).toBe('local')
@@ -307,7 +408,7 @@ describe('composeEnvironments', () => {
 
   it('keeps an UNDECLARED tester environment apart from a declared local one', () => {
     const section = compose([deployed, uiTester({ environment: undefined })], {
-      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      provisioning: read(provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
     })
 
     expect(section.evidence.status).toBe('undeclared')
@@ -319,7 +420,7 @@ describe('composeEnvironments', () => {
     // The tester settled at 2_000, after a teardown recorded at 1_500: the observations are real
     // and cannot be about the environment that was standing.
     const section = compose([deployed, uiTester()], {
-      provisioning: read(provisioned(500), tornDown(1_500)),
+      provisioning: read(provisioned(500), tornDown(1_500), verifiedGone(1_501)),
     })
 
     expect(section.proof).toBe('incomplete')
@@ -335,7 +436,7 @@ describe('composeEnvironments', () => {
       },
     })
     const section = compose([partlyFailed, uiTester()], {
-      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      provisioning: read(provisioned(1_000), tornDown(3_000), verifiedGone(3_001)),
     })
 
     expect(section.proof).toBe('incomplete')
@@ -365,7 +466,11 @@ describe('renderEnvironments', () => {
   it('renders the dated timeline and the captured evidence table', () => {
     const rendered = renderEnvironments(
       compose([deployed, uiTester({}, 1_700_000_300_000)], {
-        provisioning: read(provisioned(1_700_000_000_000), tornDown(1_700_000_600_000)),
+        provisioning: read(
+          provisioned(1_700_000_000_000),
+          tornDown(1_700_000_600_000),
+          verifiedGone(1_700_000_600_001),
+        ),
         evidenceUrl: 'https://app.test/?run=exec_1&view=test-evidence',
       }),
     ).join('\n')

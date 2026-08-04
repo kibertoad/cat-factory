@@ -392,6 +392,15 @@ export const prReportEnvironmentTimelineSchema = v.object({
    * environment does not read as a fleet of them.
    */
   teardownFailures: v.number(),
+  /**
+   * How many environments the run stood up whose teardown call SUCCEEDED but whose follow-up
+   * probe did not confirm they are gone. Counted separately from {@link teardownFailures}
+   * because the two are opposite failures of knowledge: a teardown failure is a provider that
+   * said no, this is a provider that said yes and could not be taken at its word. Zero on a
+   * clean, verified reclaim — and zero also when nothing was torn down at all, which is why it
+   * is read beside the teardown verdict rather than on its own.
+   */
+  teardownsUnconfirmed: v.number(),
 })
 export type PrReportEnvironmentTimeline = v.InferOutput<typeof prReportEnvironmentTimelineSchema>
 
@@ -471,7 +480,16 @@ export type PrReportEnvironmentEvidence = v.InferOutput<typeof prReportEnvironme
  *
  * `teardown` prefers the provisioning log's RECORDED attempts, per environment identity, and
  * falls back to the run's live step projection only when there is no log to read:
- *  - `confirmed`      — every environment the run stood up was reclaimed.
+ *  - `confirmed`      — every environment the run stood up was reclaimed, and an INDEPENDENT
+ *                       probe after each teardown found it gone. The only state that earns a
+ *                       tick, because it is the only one backed by an observation rather than
+ *                       by a provider call that returned without complaint.
+ *  - `unconfirmed`    — every environment was torn down, but at least one teardown could not be
+ *                       VERIFIED: the probe found it still standing, could not run, or could not
+ *                       settle the question. Distinct from `confirmed` because a provider whose
+ *                       teardown is a declared no-op reports success having destroyed nothing,
+ *                       and distinct from `pending` because the platform did do its part; see
+ *                       {@link teardownConfirmationSchema} for which of the causes applies.
  *  - `pending`        — at least one is still standing (the run may still be using it).
  *  - `failed`         — an environment's latest teardown attempt FAILED, so it is still standing
  *                       for a reason someone has to act on.
@@ -481,7 +499,7 @@ export const prReportEnvironmentsSchema = v.object({
   status: prReportSectionStatusSchema,
   note: v.optional(v.nullable(v.string())),
   entries: v.array(prReportEnvironmentSchema),
-  teardown: v.picklist(['confirmed', 'pending', 'failed', 'not_applicable']),
+  teardown: v.picklist(['confirmed', 'unconfirmed', 'pending', 'failed', 'not_applicable']),
   timeline: prReportEnvironmentTimelineSchema,
   evidence: prReportEnvironmentEvidenceSchema,
   /**

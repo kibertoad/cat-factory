@@ -63,7 +63,7 @@ import { findStep } from './prReport.steps.js'
  */
 export type ProvisioningLifecycleEvent = Pick<
   ProvisioningLogRecord,
-  'operation' | 'outcome' | 'createdAt' | 'targetId'
+  'operation' | 'outcome' | 'createdAt' | 'targetId' | 'error'
 >
 
 /**
@@ -130,8 +130,23 @@ const TIMELINE_GAP_NOTES: Record<PrReportTimelineGap, string> = {
 interface LoggedEnvironments {
   /** Environment ids the log records this run successfully standing up. */
   provisioned: Set<string>
-  /** Every id whose latest teardown attempt SUCCEEDED, whoever stood it up. */
+  /**
+   * Every id an independent probe CONFIRMED gone after its teardown, whoever stood it up. This
+   * is the set the `confirmed` verdict is decided on, and membership requires a successful
+   * `teardown-verify` row — never merely a teardown that returned without complaint. A provider
+   * whose teardown is a declared no-op reports success having destroyed nothing, so a teardown
+   * row alone proves only that the platform asked.
+   */
   reclaimed: Set<string>
+  /**
+   * Ids THIS RUN stood up that were torn down but NOT confirmed gone: the probe found them
+   * standing, could not run, or could not settle the question. `reason` is the probe's verbatim
+   * explanation, so the report can say which without a reader going to the logs.
+   *
+   * Kept apart from {@link stuck} because the platform's part succeeded here and failed there,
+   * and apart from {@link reclaimed} because neither may be reported as a reclaim.
+   */
+  unconfirmed: Map<string, string | null>
   /**
    * Ids THIS RUN stood up whose latest teardown attempt FAILED. Scoped to the run's own set,
    * because a stuck environment is what the section asks a reader to go and deal with, and a
@@ -149,6 +164,7 @@ interface LoggedEnvironments {
 function indexEnvironments(events: readonly ProvisioningLifecycleEvent[]): LoggedEnvironments {
   const provisioned = new Set<string>()
   const latestTeardown = new Map<string, ProvisioningLifecycleEvent>()
+  const latestVerify = new Map<string, ProvisioningLifecycleEvent>()
   for (const event of events) {
     if (!event.targetId) continue
     if (event.operation === 'provision' && event.outcome === 'success') {
@@ -156,17 +172,36 @@ function indexEnvironments(events: readonly ProvisioningLifecycleEvent[]): Logge
     } else if (event.operation === 'teardown') {
       const seen = latestTeardown.get(event.targetId)
       if (!seen || event.createdAt >= seen.createdAt) latestTeardown.set(event.targetId, event)
+    } else if (event.operation === 'teardown-verify') {
+      const seen = latestVerify.get(event.targetId)
+      if (!seen || event.createdAt >= seen.createdAt) latestVerify.set(event.targetId, event)
     }
   }
   const reclaimed = new Set<string>()
+  const unconfirmed = new Map<string, string | null>()
   const stuck = new Set<string>()
   for (const [id, event] of latestTeardown) {
-    // A teardown of an environment this run has no bring-up row for is still evidence that it is
-    // gone; a FAILED one is only this run's problem to report if this run stood it up.
-    if (event.outcome === 'success') reclaimed.add(id)
-    else if (provisioned.has(id)) stuck.add(id)
+    // A teardown of an environment this run has no bring-up row for is still evidence about it;
+    // a FAILED one is only this run's problem to report if this run stood it up.
+    if (event.outcome !== 'success') {
+      if (provisioned.has(id)) stuck.add(id)
+      continue
+    }
+    // The teardown succeeded. Whether the environment is GONE is a separate question, answered
+    // only by a verify row — and its ABSENCE is not a pass. A deployment running an older
+    // engine, or one whose verify write was lost, records no verify row, and reading that
+    // silence as a confirmation is precisely the false tick this whole leg exists to stop.
+    const verified = latestVerify.get(id)
+    if (verified?.outcome === 'success') reclaimed.add(id)
+    else {
+      unconfirmed.set(
+        id,
+        verified?.error ??
+          'The teardown was not verified, so whether this environment is gone is unknown.',
+      )
+    }
   }
-  return { provisioned, reclaimed, stuck }
+  return { provisioned, reclaimed, unconfirmed, stuck }
 }
 
 /**
@@ -197,6 +232,7 @@ function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
         tornDownAt: null,
         provisionFailures: 0,
         teardownFailures: 0,
+        teardownsUnconfirmed: 0,
       },
     }
   }
@@ -225,6 +261,11 @@ function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
       tornDownAt,
       provisionFailures,
       teardownFailures: logged.stuck.size,
+      // Only the run's OWN environments, matching `teardownFailures`: a neighbouring run's
+      // unverified teardown is not something this PR asks anyone to act on.
+      teardownsUnconfirmed: [...logged.unconfirmed.keys()].filter((id) =>
+        logged.provisioned.has(id),
+      ).length,
     },
   }
 }
@@ -263,6 +304,12 @@ function projectionsAllGone(instance: ExecutionInstance): boolean {
  * `confirmed` requires POSITIVE evidence from one source or the other. With a readable log that
  * records the bring-up and no teardown, the answer is `pending`: the log not mentioning a
  * teardown IS the observation that none happened, and no projection may override it.
+ *
+ * And a recorded teardown is not by itself that positive evidence. `confirmed` needs every one
+ * of the run's environments to carry a successful VERIFY — an independent probe that found it
+ * gone. Where the teardown ran but the probe did not settle it, the answer is `unconfirmed`,
+ * which is its own verdict rather than a softened `confirmed`, because the environment may well
+ * still be running and still costing money.
  */
 function teardownState(
   instance: ExecutionInstance,
@@ -270,14 +317,24 @@ function teardownState(
   logged: LoggedEnvironments | null,
 ): PrVerificationReport['environments']['teardown'] {
   if (!entries.some((e) => e.status === 'ready')) return 'not_applicable'
-  // No log to read: fall back to the run's own step projections, the weaker signal.
+  // No log to read: fall back to the run's own step projections, the weaker signal. This one
+  // still yields `confirmed`, because with no log there is no verify row to be missing — the
+  // projection is the only evidence there is, and it is the evidence this branch is for.
   if (!logged) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
   if (logged.stuck.size > 0) return 'failed'
   // A log that records no bring-up at all cannot speak to the teardown either way, so the
   // projection is consulted rather than concluding from the log's silence.
   if (logged.provisioned.size === 0) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
-  const outstanding = [...logged.provisioned].filter((id) => !logged.reclaimed.has(id))
-  return outstanding.length === 0 ? 'confirmed' : 'pending'
+  const outstanding = [...logged.provisioned].filter(
+    (id) => !logged.reclaimed.has(id) && !logged.unconfirmed.has(id),
+  )
+  // Something the run stood up has no teardown on record at all: it is still live as far as
+  // anyone knows. That outranks an unconfirmed one, because "nobody has asked yet" is a
+  // different (and more likely still-running) state than "we asked and could not check".
+  if (outstanding.length > 0) return 'pending'
+  return [...logged.provisioned].every((id) => logged.reclaimed.has(id))
+    ? 'confirmed'
+    : 'unconfirmed'
 }
 
 /** The tester step whose report the evidence leg reads. */
@@ -375,6 +432,7 @@ function composeProof(
   teardown: PrVerificationReport['environments']['teardown'],
   timeline: PrReportEnvironmentTimeline,
   evidence: PrReportEnvironmentEvidence,
+  logged: LoggedEnvironments | null,
 ): Pick<PrVerificationReport['environments'], 'proof' | 'gaps'> {
   const ready = entries.filter((e) => e.status === 'ready').length
   const failed = entries.filter((e) => e.status === 'failed').length
@@ -409,6 +467,20 @@ function composeProof(
   }
   if (teardown === 'pending') {
     gaps.push('The environment has not been confirmed torn down; it may still be running.')
+  }
+  if (teardown === 'unconfirmed') {
+    // The probe's own words, not a generic line: "the manifest declares no `teardown:` request"
+    // and "the apiserver refused the read" are the same verdict and completely different jobs.
+    // Deduped, because one cause (an unverifiable provider) usually explains every frame at once
+    // and repeating it per environment would bury the count under identical sentences.
+    const reasons = [...new Set([...(logged?.unconfirmed.values() ?? [])].filter(Boolean))]
+    const count = timeline.teardownsUnconfirmed
+    gaps.push(
+      count === 1
+        ? 'An environment was torn down but could not be confirmed gone, so it may still be running.'
+        : `${count} environments were torn down but could not be confirmed gone, so they may still be running.`,
+    )
+    for (const reason of reasons) gaps.push(`Teardown could not be verified: ${reason}`)
   }
   if (teardown === 'failed') {
     gaps.push(
@@ -485,7 +557,7 @@ export function composeEnvironments(
     teardown,
     timeline,
     evidence,
-    ...composeProof(entries, teardown, timeline, evidence),
+    ...composeProof(entries, teardown, timeline, evidence, logged),
   }
 }
 
@@ -531,6 +603,9 @@ function renderTimeline(timeline: PrReportEnvironmentTimeline): string[] {
   }
   if (timeline.teardownFailures > 0) {
     parts.push(`${timeline.teardownFailures} could not be torn down`)
+  }
+  if (timeline.teardownsUnconfirmed > 0) {
+    parts.push(`${timeline.teardownsUnconfirmed} unconfirmed`)
   }
   return [`**Timeline:** ${parts.join(' · ')}`]
 }
@@ -592,12 +667,16 @@ export function renderEnvironments(envs: PrVerificationReport['environments']): 
   out.push('', ...renderTimeline(envs.timeline))
   const teardown =
     envs.teardown === 'confirmed'
-      ? '✅ torn down'
-      : envs.teardown === 'pending'
-        ? '⏳ still live'
-        : envs.teardown === 'failed'
-          ? '❌ teardown failed'
-          : 'nothing to tear down'
+      ? '✅ torn down (confirmed gone)'
+      : envs.teardown === 'unconfirmed'
+        ? // Deliberately not a tick and not a cross: the platform did its part and the result
+          // could not be established. Rendering it either way is the misreport.
+          '⚠️ torn down, but not confirmed gone'
+        : envs.teardown === 'pending'
+          ? '⏳ still live'
+          : envs.teardown === 'failed'
+            ? '❌ teardown failed'
+            : 'nothing to tear down'
   out.push(`**Teardown:** ${teardown}`, '')
   return [...out, ...renderEvidence(envs.evidence)]
 }

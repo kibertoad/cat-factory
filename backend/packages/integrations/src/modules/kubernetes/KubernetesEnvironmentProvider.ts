@@ -17,6 +17,7 @@ import type {
   RunnerJobView,
   RunRepoContext,
   SecretResolver,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
@@ -65,6 +66,23 @@ const GATEWAY_API_VERSION = 'gateway.networking.k8s.io/v1'
 const APPLY_TIMEOUT_MS = 30_000
 const READ_TIMEOUT_MS = 30_000
 const FIELD_MANAGER = 'cat-factory'
+
+/**
+ * The `status.phase` of a namespace read (`Active` / `Terminating`), or null when the body
+ * could not be parsed. Null is NOT read as either phase by the caller: a namespace that answered
+ * a GET is present whatever its body says, and only the terminating/active split is unknown.
+ */
+async function namespacePhase(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { status?: { phase?: unknown } }
+    const phase = body?.status?.phase
+    return typeof phase === 'string' ? phase : null
+  } catch {
+    // silent-catch-ok: an unparseable body only costs the Active/Terminating detail; the caller
+    // already knows the namespace is present because the read succeeded.
+    return null
+  }
+}
 
 export interface KubernetesEnvironmentProviderOptions {
   /** Reserved for future URL-policy-aware behaviour; unused today. */
@@ -186,6 +204,69 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       )
     }
     return { status: 'torn_down' }
+  }
+
+  /**
+   * Confirm the namespace this environment lived in is gone, by reading it back.
+   *
+   * A namespace `DELETE` is asynchronous: the apiserver accepts it immediately and the namespace
+   * sits in `Terminating` until its finalizers drain, which for a workload holding a PVC or a
+   * webhook can be minutes. So the teardown call returning is genuinely not the environment being
+   * gone, and this is the read that settles it: a 404 is the proof, an `Active` namespace means
+   * the delete did nothing, and `Terminating` is reported as still-present-but-on-its-way rather
+   * than as either, so a caller can re-probe instead of concluding.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    const namespace = req.provisionFields.namespace ?? req.externalId
+    // No namespace was ever recorded, so there is nothing to look for. Deliberately NOT reported
+    // as `gone`: nothing was observed, and a provision that failed before it created a namespace
+    // is indistinguishable here from a record that lost its external id.
+    if (!namespace) {
+      // Permanent: no later probe invents an id the record never had.
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: 'No namespace recorded for this environment.',
+      }
+    }
+    let config: KubernetesEnvironmentConfig
+    try {
+      config = this.parseConfig(req.manifest)
+    } catch (err) {
+      // A manifest that no longer parses is fixed by editing it, not by re-probing.
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: err instanceof Error ? err.message : String(err),
+      }
+    }
+    const client = this.makeClient(config, req.resolveSecret)
+    let res: Response
+    try {
+      res = await client.fetch('GET', namespaceUrl(config, namespace), undefined, READ_TIMEOUT_MS)
+    } catch (err) {
+      return {
+        state: 'unknown',
+        retryable: true,
+        reason: `Could not read namespace '${namespace}': ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+    if (res.status === 404) return { state: 'gone' }
+    if (!res.ok) {
+      // A 401/403 is the apiserver refusing the read, not an answer about the namespace. Reporting
+      // it as `gone` would turn an expired token into a clean teardown proof on every run.
+      return {
+        state: 'unknown',
+        retryable: true,
+        reason: `Could not read namespace '${namespace}' (HTTP ${res.status}): ${await safeText(res)}`,
+      }
+    }
+    const phase = await namespacePhase(res)
+    return {
+      state: 'present',
+      terminating: phase === 'Terminating',
+      ...(phase ? { detail: `Namespace '${namespace}' is ${phase}.` } : {}),
+    }
   }
 
   async testConnection(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {

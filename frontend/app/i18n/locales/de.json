@@ -5872,6 +5872,7 @@
     "operation": {
       "provision": "Hochfahren",
       "teardown": "Abbauen",
+      "teardown-verify": "Abbau-Prüfung",
       "status": "Statusprüfung",
       "dispatch": "Hochfahren",
       "release": "Abbauen",

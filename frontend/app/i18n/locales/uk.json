@@ -5317,6 +5317,7 @@
     "operation": {
       "provision": "Запустити",
       "teardown": "Згорнути",
+      "teardown-verify": "Перевірка згортання",
       "status": "Перевірка стану",
       "dispatch": "Запустити",
       "release": "Згорнути",
