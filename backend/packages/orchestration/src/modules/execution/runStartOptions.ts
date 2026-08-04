@@ -46,19 +46,19 @@ export interface RunStartOptions {
    */
   origin?: RunOrigin
   /**
-   * How this run is ENTERING the system: `ui` (the default — every in-app surface),
-   * `public-api` (started headlessly through `/api/v1`) or `tracker` (dispatched from a pushed
-   * ticket by a per-ticket issue-intake schedule). Persisted on the run
-   * ({@link ExecutionInstance.intakeOrigin}) because clarification behaviour diverges by
-   * intake: a headless run pushes its parked questions out to the task's linked tracker issue,
-   * whereas a UI-started task's overseer is in the SPA. Distinct from {@link origin}, which
-   * gates pipeline availability and is not persisted, and from `initiatedBy`, which is `null`
-   * for a public-API run, a schedule fire and auth-disabled dev alike. Set by the two
-   * public-API start paths and the per-ticket webhook dispatch; a retry/restart carries the
-   * stored value forward.
+   * How this run is ENTERING the system (`IntakeOrigin`: `ui`, `public-api`, `tracker` or
+   * `schedule`). Persisted on the run ({@link ExecutionInstance.intakeOrigin}) because
+   * clarification behaviour diverges by intake: a HEADLESS run (`isHeadlessIntake`) pushes its
+   * parked questions out to the task's linked tracker issue, whereas a UI-started task's overseer
+   * is in the SPA. Distinct from {@link origin}, which gates pipeline availability and is not
+   * persisted, and from `initiatedBy`, which is `null` for a public-API run, a schedule fire and
+   * auth-disabled dev alike. A retry/restart carries the stored value forward.
    *
-   * A start path that is unattended must SET this rather than leave it to the default: the
-   * default is a claim that a human is watching in the app.
+   * **Every UNATTENDED start path must SET this**; only the in-app start may rely on the `ui`
+   * default, because the default is a positive claim that a human is watching. The optionality is
+   * for that one caller, so a typecheck cannot enforce the rule: `intakeOrigin.coverage.spec.ts`
+   * (in `@cat-factory/server`) classifies each start path instead, and a new one fails there
+   * until it is answered.
    */
   intakeOrigin?: IntakeOrigin
   /**

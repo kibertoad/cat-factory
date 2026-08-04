@@ -113,16 +113,31 @@ run's value forward, exactly like `initiatedBy`.
 
 Naming: `intakeOrigin`, not `origin`; `RunOrigin` is taken and means something else.
 
-**Amended after the tracker-webhook initiative landed** (ADR 0032). The vocabulary gained a third
-member, `tracker`: a run a per-ticket intake schedule dispatched from a pushed ticket. The
+**Amended after the tracker-webhook initiative landed** (ADR 0032). The vocabulary gained two
+members, `tracker` (a run a per-ticket intake schedule dispatched from a pushed ticket) and
+`schedule` (a cadence fire, or the queue-drain push that only makes the tick happen sooner). The
 writeback gate now asks the CLASSIFICATION (`isHeadlessIntake` in `@cat-factory/contracts`, a
 `Record` over the picklist so a new member has to answer it) rather than `=== 'public-api'`.
 
 The equality test was the actual defect, not a simplification that aged: per-ticket dispatch is
 headless by construction, its questions have exactly one place to go, and its reply channel was
-already ungated, so a ticket-driven trial parked and told nobody while the loop looked wired. The
-rule to carry forward is that `ui` is a POSITIVE claim that a human is watching in the app, so an
-unattended start path states its origin rather than defaulting into that claim.
+already ungated, so a ticket-driven trial parked and told nobody while the loop looked wired.
+
+Two rules carry forward from that.
+
+- **`ui` is a POSITIVE claim that a human is watching in the app**, never a catch-all for "nothing
+  said". Every unattended start path states its origin; only the in-app start may take the
+  default. The field has to stay optional for that one caller, so the rule cannot be a typecheck:
+  `intakeOrigin.coverage.spec.ts` classifies each start path instead, and a new one fails there
+  until someone answers it.
+- **The classification is not "was anyone present" but "is there a STABLE place to hold a
+  conversation."** That is why `schedule` is `false` despite being unattended: a fire works the
+  schedule's REUSED block, and queue mode's `BugIntakeService` replace-links each pick onto it, so
+  a question posted there loses its reply channel on the next fire (the reply resolves to no block
+  and is dropped). Making queue mode clarify on its ticket is a change to the LINKAGE (a per-run
+  link, or a block per pick, which is what per-ticket dispatch already is), never a flip of the
+  flag: the flip alone would post the question and discard the answer, which is worse than the
+  silence it replaces.
 
 ### D3: Park notification out: SSE frames plus a webhook `NotificationChannel`
 

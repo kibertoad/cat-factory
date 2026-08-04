@@ -271,6 +271,15 @@ What the modes do NOT share is the reason they stay exclusive rather than becomi
   asks `isHeadlessIntake` and not `=== 'public-api'`, and an unattended start path must STATE its
   origin, because the default is a claim that someone is watching.
 
+  **A QUEUE-mode fire is `intakeOrigin: 'schedule'` and is deliberately NOT headless**, which is
+  the sharpest illustration of what the classification actually asks. Both modes are unattended;
+  only per-ticket has somewhere durable to hold the conversation. Queue mode works the schedule's
+  reused block and `BugIntakeService` REPLACE-links each pick onto it, dropping the previous
+  fire's ticket, so a question posted there loses its answer channel the next time the schedule
+  fires (the reply lands on an issue whose `linkedBlockId` has moved and is dropped as
+  `issue_not_linked`). Reading the flag as "was anyone present" would post it anyway. Giving queue
+  mode a clarification loop is a change to the LINKAGE, not to this flag.
+
 The SPA DERIVES the mode from the pipeline instead of offering it: a `bug-intake` pipeline can only
 mean `queue`, anything else can only mean `per-ticket`. That makes the refused combination
 unrepresentable in the form rather than reported after a save, and the on-demand switch is LOCKED

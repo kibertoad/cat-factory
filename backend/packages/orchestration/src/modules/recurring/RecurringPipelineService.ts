@@ -31,7 +31,7 @@ import {
   requireWorkspace,
   ValidationError,
 } from '@cat-factory/kernel'
-import type { IssueIntakeConfig } from '@cat-factory/contracts'
+import type { IntakeOrigin, IssueIntakeConfig } from '@cat-factory/contracts'
 import { judgeIssueEventForIntake, type TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import {
@@ -465,6 +465,9 @@ export class RecurringPipelineService {
       force: true,
       initiatedBy: gate.initiatedBy,
       activate: gate.activate,
+      // `ui`, not `schedule`: run-now is a person in the app pressing the button, and their
+      // clarification surface is the one they are already looking at.
+      intakeOrigin: 'ui',
     })
     return assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
   }
@@ -479,7 +482,7 @@ export class RecurringPipelineService {
     let fired = 0
     let skipped = 0
     for (const { workspaceId, schedule } of due) {
-      const started = await this.fire(workspaceId, schedule, { now })
+      const started = await this.fire(workspaceId, schedule, { now, intakeOrigin: 'schedule' })
       if (started) fired++
       else skipped++
     }
@@ -553,7 +556,11 @@ export class RecurringPipelineService {
         const started =
           dispatch === 'per-ticket'
             ? await this.firePerTicket(workspaceId, schedule, event, now)
-            : await this.fire(workspaceId, schedule, { now })
+            : // `schedule`, the same as a cadence tick: the push only made the tick happen
+              // sooner, and the run it starts is identical (ADR 0032). The queue mode's reused
+              // block re-points its ticket link on every fire, so it is deliberately NOT
+              // classified headless — see `HEADLESS_INTAKE`.
+              await this.fire(workspaceId, schedule, { now, intakeOrigin: 'schedule' })
         if (started) fired++
       } catch (error) {
         // NOT rethrown: the caller is a webhook consumer whose only lever is retry, and retrying
@@ -701,7 +708,14 @@ export class RecurringPipelineService {
       force?: boolean
       initiatedBy?: string | null
       activate?: (executionId: string) => Promise<void>
-    } = {},
+      /**
+       * How the run this fire starts ENTERED the system. Required rather than defaulted: two of
+       * the three callers are unattended and one is a person clicking run-now, and the default
+       * (`ui`) is a claim that someone is watching. A fourth caller has to answer this instead
+       * of inheriting whichever answer suited the last one.
+       */
+      intakeOrigin: IntakeOrigin
+    },
   ): Promise<boolean> {
     const now = opts.now ?? this.clock.now()
 
@@ -792,6 +806,8 @@ export class RecurringPipelineService {
           // `origin: 'recurring'` gates the pipeline's launch availability — a one-off-only
           // pipeline can never be fired from a schedule (see assertPipelineLaunchable).
           origin: 'recurring',
+          // A DIFFERENT question from `origin`: not what may launch, but who is watching.
+          intakeOrigin: opts.intakeOrigin,
         },
       )
       executionId = instance.id

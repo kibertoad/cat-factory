@@ -7,29 +7,51 @@ import * as v from 'valibot'
 // after the fact. Split out of `execution.ts`, which describes the STEPS.
 
 /**
- * How a run entered the system. `ui` is every in-app surface (the SPA board, an initiative
- * spawn, a cadence-driven recurring schedule fire) and is the DEFAULT for anything that
- * doesn't say otherwise; `public-api` is a run started headlessly through the `/api/v1`
- * surface; `tracker` is a run a tracker webhook dispatched from a pushed ticket (the
- * per-ticket dispatch mode of an issue-intake schedule). See `ExecutionInstance.intakeOrigin`.
+ * How a run entered the system. See `ExecutionInstance.intakeOrigin`.
+ *
+ * - `ui`: someone started it in the app, on their own board. The read-time default, and what
+ *   every legacy run is.
+ * - `public-api`: started headlessly through the `/api/v1` surface.
+ * - `tracker`: dispatched from a pushed ticket by a per-ticket issue-intake schedule.
+ * - `schedule`: a recurring schedule fired it, either on its cadence or because a tracker push
+ *   drained its queue early. Both are the same run against the same reused block (ADR 0032), so
+ *   they deliberately share one origin; what differs is only what made the tick happen.
+ *
+ * `ui` is the DEFAULT, which makes it a positive claim that a human is watching in the app, not
+ * a catch-all for "nothing said". Every UNATTENDED start path names itself, so a path that
+ * states nothing is the app: the one caller allowed to rely on the default. That rule exists
+ * because the opposite reading is silent, and it already cost one bug (a webhook-dispatched run
+ * defaulted into `ui` and its parked review's questions never reached the requester's ticket).
  */
-export const intakeOriginSchema = v.picklist(['ui', 'public-api', 'tracker'])
+export const intakeOriginSchema = v.picklist(['ui', 'public-api', 'tracker', 'schedule'])
 export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
 
 /**
- * Whether an intake origin means there is NO human overseer in the app: the run entered from
- * outside, so anything it needs from a person has to be pushed back out to where it came from
- * (the parked requirements review's questions, above all).
+ * Whether an intake origin means the run's questions have to be pushed back OUT to where it came
+ * from, because there is no human overseer in the app to answer them (the parked requirements
+ * review's questions, above all).
  *
  * A `Record` rather than a `!== 'ui'` test on purpose: this is the classification the whole
  * clarification writeback keys off, and a new intake surface must state which side of it falls
- * on rather than inheriting "headless" by being new. Adding a member to the picklist above
- * fails to compile until it is answered here.
+ * on rather than inheriting an answer by being new. Adding a member to the picklist above fails
+ * to compile until it is answered here.
+ *
+ * `schedule` is the entry worth explaining, because "unattended" would predict `true` and the
+ * answer is `false`. A cadence fire runs against the schedule's REUSED block, and in queue mode
+ * `BugIntakeService` REPLACE-links each pick onto it: the block's linked ticket is dropped and
+ * re-pointed on the next fire, by design, so the block never accumulates stale context. Posting
+ * questions there would open a conversation on a channel that closes underneath it, since a
+ * reply arriving after the link moved resolves to no block and is dropped. What the writeback
+ * needs is not "was anyone present" but "is there a STABLE place to hold a conversation", and a
+ * reused block does not have one. Per-ticket dispatch does, which is why it is `true`: one
+ * permanent block per ticket. Giving queue mode the same treatment is a change to the LINKAGE
+ * (a per-run link, or a block per pick), never a flip of this flag.
  */
 const HEADLESS_INTAKE: Record<IntakeOrigin, boolean> = {
   ui: false,
   'public-api': true,
   tracker: true,
+  schedule: false,
 }
 
 /**

@@ -402,3 +402,72 @@ describe('RecurringPipelineService per-ticket dispatch', () => {
     expect(start.mock.calls[0]![3]).toMatchObject({ origin: 'manual', initiatedBy: null })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Schedule fires: the OTHER half of the intake-origin question.
+//
+// `fire` serves three callers, and they do not agree about who is watching: the cadence sweeper
+// and the queue-drain push are unattended, run-now is a person pressing a button. All three go
+// through one private method, so the origin has to be threaded from the caller rather than
+// inferred inside it — and `schedule` is deliberately NOT classified headless, because a fire
+// works the schedule's reused block whose ticket link moves on the next pass.
+// ---------------------------------------------------------------------------
+
+describe('RecurringPipelineService schedule-fire intake origin', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function cadenceSchedule(): PipelineSchedule {
+    return { ...onDemandSchedule(), onDemand: false, nextRunAt: 0 }
+  }
+
+  function makeFireService(schedule: PipelineSchedule) {
+    const start = vi.fn(
+      async (_ws: string, _blockId: string, _pipelineId: string, _options?: RunStartOptions) =>
+        ({ id: 'exec_1' }) as ExecutionInstance,
+    )
+    const deps: RecurringPipelineServiceDependencies = {
+      pipelineScheduleRepository: {
+        get: async () => schedule,
+        listDue: async () => [{ workspaceId: WS, schedule }],
+        upsert: async () => {},
+        insertRun: async () => {},
+        updateRun: async () => {},
+        listRuns: async () => [],
+      } as unknown as RecurringPipelineServiceDependencies['pipelineScheduleRepository'],
+      workspaceRepository: {
+        get: async () => ({ id: WS }) as Workspace,
+      } as unknown as RecurringPipelineServiceDependencies['workspaceRepository'],
+      pipelineRepository: {
+        get: async () => ({ id: 'pl_1', agentKinds: ['coder'] }),
+      } as unknown as RecurringPipelineServiceDependencies['pipelineRepository'],
+      blockRepository: {
+        get: async () => frame(),
+        insert: async () => {},
+      } as unknown as RecurringPipelineServiceDependencies['blockRepository'],
+      executionRepository: {
+        getByBlock: async () => null,
+      } as unknown as RecurringPipelineServiceDependencies['executionRepository'],
+      executionService: {
+        start,
+        individualVendorsForBlock: async () => [],
+      } as unknown as ExecutionService,
+      idGenerator: { next: (prefix: string) => `${prefix}_x` },
+      clock: { now: () => 1000 } as Clock,
+    }
+    return { service: new RecurringPipelineService(deps), start }
+  }
+
+  it('fires a cadence schedule as SCHEDULE — nobody is watching a sweeper tick', async () => {
+    const { service, start } = makeFireService(cadenceSchedule())
+    expect(await service.runDue(1000)).toMatchObject({ fired: 1 })
+    expect(start.mock.calls[0]![3]).toMatchObject({ intakeOrigin: 'schedule', origin: 'recurring' })
+  })
+
+  it('fires run-now as UI — a person pressed the button and is looking at the app', async () => {
+    // The same private `fire`, the opposite answer. Inferring this inside `fire` (from `force`,
+    // say) would make the two indistinguishable to a reader of the call sites.
+    const { service, start } = makeFireService(onDemandSchedule())
+    await service.runNow(WS, 'sch_1', { initiatedBy: 'usr_1' })
+    expect(start.mock.calls[0]![3]).toMatchObject({ intakeOrigin: 'ui', initiatedBy: 'usr_1' })
+  })
+})

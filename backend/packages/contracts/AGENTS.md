@@ -24,11 +24,15 @@ top-level files are the domain contracts.
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
 - `execution.ts`: the pipeline STEP and run shapes. `run-provenance.ts` beside it holds the
-  facts about a run rather than its work: `intakeOrigin` (how it entered: `ui`, `public-api` or
-  `tracker`, classified by `isHeadlessIntake`, which the clarification writeback keys off),
-  `mode` (whether it may land its work) and `diagnostics` (where it actually ran). All three
-  ride the run's `detail` JSON, so a new member is free to add and easy to forget to SET: a
-  start path that leaves `intakeOrigin` unset is claiming a human is watching in the app.
+  facts about a run rather than its work: `intakeOrigin` (how it entered: `ui`, `public-api`,
+  `tracker` or `schedule`, classified by `isHeadlessIntake`, which the clarification writeback
+  keys off), `mode` (whether it may land its work) and `diagnostics` (where it actually ran).
+  All three ride the run's `detail` JSON, so a member is free to add and easy to forget to SET.
+  Two rules follow: **`ui` is a positive claim that a human is watching in the app**, so every
+  unattended start path names itself and only the in-app start may take the default
+  (`intakeOrigin.coverage.spec.ts` in `@cat-factory/server` classifies each one); and
+  **`isHeadlessIntake` is not "was anyone present"** but "is there a stable place to hold a
+  conversation", which is why `schedule` answers `false`.
 - `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding

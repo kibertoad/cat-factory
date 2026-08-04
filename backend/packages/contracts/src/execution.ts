@@ -1347,17 +1347,15 @@ export const executionInstanceSchema = v.object({
    */
   mode: v.optional(runModeSchema),
   /**
-   * HOW this run entered the system — `ui` (the SPA / any in-app surface, the default),
-   * `public-api` (started headlessly through `/api/v1`) or `tracker` (dispatched from a pushed
-   * ticket by a per-ticket issue-intake schedule). Distinct from `initiatedBy`, which is `null`
-   * for a public-API run, a recurring-schedule fire AND auth-disabled dev alike, and from the
-   * launch-time `RunOrigin` (`manual`/`recurring`), which gates pipeline availability and is not
-   * persisted. Recorded because clarification behaviour diverges by intake: a headless run
-   * ({@link isHeadlessIntake}) pushes its parked questions out to the task's linked tracker
-   * issue, whereas a UI-started task's overseer is in the SPA and must keep behaving exactly as
-   * before. Carried forward across retry/restart. Absent on legacy runs ⇒ treated as `ui` (the
-   * safe reading: no outbound question writeback for a run whose intake we can't prove was
-   * headless).
+   * HOW this run entered the system (`intakeOriginSchema`, which documents each member).
+   * Distinct from `initiatedBy`, which is `null` for a public-API run, a recurring-schedule fire
+   * AND auth-disabled dev alike, and from the launch-time `RunOrigin` (`manual`/`recurring`),
+   * which gates pipeline availability and is not persisted. Recorded because clarification
+   * behaviour diverges by intake: a headless run ({@link isHeadlessIntake}) pushes its parked
+   * questions out to the task's linked tracker issue, whereas a UI-started task's overseer is in
+   * the SPA and must keep behaving exactly as before. Carried forward across retry/restart.
+   * Absent on legacy runs ⇒ treated as `ui` (the safe reading: no outbound question writeback
+   * for a run whose intake we can't prove was headless).
    */
   intakeOrigin: v.optional(intakeOriginSchema),
   /**
