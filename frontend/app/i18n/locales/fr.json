@@ -1480,6 +1480,7 @@
       "calls": "Appels",
       "cost": "Coût estimé",
       "costHint": "Calculé aux tarifs publics, chaque classe d'entrée à son propre taux : une lecture de cache coûte environ un dixième d'une entrée fraîche, une écriture de cache environ un quart de plus. Une exécution sur abonnement ne paie rien au token ; ceci est donc ce que les mêmes tokens auraient coûté à l'usage.",
+      "costIncomplete": "Non affiché : au moins une phase a utilisé un modèle pour lequel cette installation n'a aucun tarif, un total serait donc incomplet. Les phases tarifées sont listées ci-dessous.",
       "tokensInOut": "Tokens (entrée / sortie)",
       "transportOverhead": "Surcoût de transport",
       "modelExecution": "Exécution du modèle",

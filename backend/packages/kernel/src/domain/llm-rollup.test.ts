@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { LlmCallMetricSummary } from '../ports/llm-metrics.js'
 import {
   type LlmRateResolver,
+  costOfTokenClasses,
   foldRollupTotals,
   foldRollupsByAgentKind,
   foldRollupsByPhase,
@@ -149,6 +150,23 @@ describe('priceRollupCells', () => {
     expect(priced[0]?.costEstimate).toBeCloseTo(3, 10)
   })
 
+  it('drops the model dimension it priced from, so no consumer can read it back', () => {
+    // A collapsed cell has no ONE model — reading one off it would name whichever contributor
+    // happened to arrive first, which looks like an answer. The type is what forbids it; this
+    // pins that the runtime shape agrees.
+    const [priced] = priceRollupCells([cell()], rates)
+    expect(priced).not.toHaveProperty('model')
+    expect(priced).not.toHaveProperty('provider')
+  })
+
+  it('collapses without pricing when no rate table is wired', () => {
+    // Collapsing is not conditional on pricing: every consumer gets the same shape either way.
+    const priced = priceRollupCells([cell(), cell({ model: 'other' })])
+    expect(priced).toHaveLength(1)
+    expect(priced[0]?.calls).toBe(2)
+    expect(priced[0]?.costEstimate).toBeNull()
+  })
+
   it('leaves a cell null when the deployment cannot price its model', () => {
     // Null, never 0: an unpriced model and a free one are opposite facts.
     const [priced] = priceRollupCells([cell({ provider: 'mystery', model: 'x' })], rates)
@@ -166,5 +184,53 @@ describe('priceRollupCells', () => {
     expect(foldRollupTotals(priced).costEstimate).toBeNull()
     // The priced cell still reports its own cost — only the TOTAL declines to answer.
     expect(priced.find((p) => p.phase === 'agent')?.costEstimate).toBeCloseTo(1, 10)
+  })
+})
+
+describe('costOfTokenClasses', () => {
+  const rates = {
+    inputPerMillion: 1_000_000,
+    cacheReadPerMillion: 100_000,
+    cacheWritePerMillion: 1_250_000,
+    outputPerMillion: 5_000_000,
+  }
+
+  it('prices each class at its own tier rather than the fresh one', () => {
+    // The ONE place this arithmetic lives: the ledger, the rollup and the export all route
+    // through it, so a class priced at the wrong tier here would be wrong on every surface at
+    // once rather than on one of three copies.
+    expect(
+      costOfTokenClasses(rates, {
+        promptTokens: 1,
+        cacheReadTokens: 1,
+        cacheWriteTokens: 1,
+        completionTokens: 1,
+      }),
+    ).toBeCloseTo(7.35, 10)
+  })
+
+  it('charges a cache WRITE more than fresh input and a READ far less', () => {
+    const write = costOfTokenClasses(rates, {
+      promptTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 1,
+      completionTokens: 0,
+    })
+    const read = costOfTokenClasses(rates, {
+      promptTokens: 0,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 0,
+      completionTokens: 0,
+    })
+    const fresh = costOfTokenClasses(rates, {
+      promptTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      completionTokens: 0,
+    })
+    // Summing the three classes and applying the fresh rate would make a loop that keeps
+    // invalidating its prefix indistinguishable from one riding a warm cache.
+    expect(write).toBeGreaterThan(fresh)
+    expect(read).toBeLessThan(fresh)
   })
 })

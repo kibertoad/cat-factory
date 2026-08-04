@@ -58,9 +58,11 @@ export type {
   LlmKindRollup,
   LlmPhaseRollup,
   LlmRateResolver,
+  LlmTokenClassCounts,
   LlmTokenRates,
 } from './domain/llm-rollup.js'
 export {
+  costOfTokenClasses,
   foldRollupTotals,
   foldRollupsByAgentKind,
   foldRollupsByPhase,

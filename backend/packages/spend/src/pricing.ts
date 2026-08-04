@@ -1,5 +1,6 @@
-import type { ModelRef } from '@cat-factory/kernel'
+import type { LlmTokenRates, ModelRef } from '@cat-factory/kernel'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
+import { costOfTokenClasses } from '@cat-factory/kernel'
 import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contracts'
 
 // Pricing for the spend safeguard. Token usage is converted to a monetary cost
@@ -49,13 +50,14 @@ export const CACHE_READ_MULTIPLIER = 0.1
  */
 export const CACHE_WRITE_MULTIPLIER = 1.25
 
-/** A {@link ModelPrice} with both cache tiers resolved — no optional fields left to derive. */
-export interface ResolvedModelPrice {
-  inputPerMillion: number
-  outputPerMillion: number
-  cacheReadPerMillion: number
-  cacheWritePerMillion: number
-}
+/**
+ * A {@link ModelPrice} with both cache tiers resolved — no optional fields left to derive.
+ *
+ * Declared as kernel's {@link LlmTokenRates} rather than a second copy of the same four fields,
+ * because {@link ratesFor} IS what a facade hands the telemetry rollup as its rate resolver. A
+ * structural twin would let the two shapes drift apart while every call site still compiled.
+ */
+export type ResolvedModelPrice = LlmTokenRates
 
 /**
  * The three ORTHOGONAL input classes a call spent, as the telemetry side carries them
@@ -323,13 +325,14 @@ export function estimateClassedCost(
   ref: ModelRef,
   usage: InputTokenClassUsage & { outputTokens: number },
 ): number {
-  const rates = ratesFor(pricing, ref)
-  return (
-    (usage.promptTokens / 1_000_000) * rates.inputPerMillion +
-    (usage.cacheReadTokens / 1_000_000) * rates.cacheReadPerMillion +
-    (usage.cacheWriteTokens / 1_000_000) * rates.cacheWritePerMillion +
-    (usage.outputTokens / 1_000_000) * rates.outputPerMillion
-  )
+  // The arithmetic itself is kernel's, shared with the telemetry rollup and the export, so the
+  // ledger and the run surfaces cannot come to price the same classes differently.
+  return costOfTokenClasses(ratesFor(pricing, ref), {
+    promptTokens: usage.promptTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    completionTokens: usage.outputTokens,
+  })
 }
 
 /**

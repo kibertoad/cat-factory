@@ -1480,6 +1480,7 @@
       "calls": "Çağrılar",
       "cost": "Tahmini maliyet",
       "costHint": "Liste fiyatlarıyla, her girdi sınıfı kendi tarifesiyle hesaplanır: önbellekten okuma taze girdinin yaklaşık onda biri, önbelleğe yazma ise yaklaşık dörtte bir fazlası kadardır. Abonelikle yapılan bir çalıştırma token başına ücret ödemez; bu, aynı tokenların kullandıkça öde ile kaça mal olacağıdır.",
+      "costIncomplete": "Gösterilmiyor: en az bir aşama, bu kurulumun ücretini bilmediği bir modelde çalıştı; bu yüzden çalışma toplamı eksik olurdu. Ücreti bilinen aşamalar aşağıda listeleniyor.",
       "tokensInOut": "Token (giriş / çıkış)",
       "transportOverhead": "Taşıma yükü",
       "modelExecution": "Model yürütme",

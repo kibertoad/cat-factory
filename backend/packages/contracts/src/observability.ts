@@ -289,6 +289,17 @@ export const llmMetricsExportSchema = v.object({
   totals: llmExportTotalsSchema,
   insights: v.array(llmExportInsightSchema),
   calls: v.array(llmCallMetricSchema),
+  /**
+   * True when the run had more calls than the export's row cap, so `calls` (and every figure
+   * folded from it) covers only the newest slice.
+   *
+   * Stated rather than left to be inferred from `calls.length`: a reader who does not know the
+   * cap cannot tell a complete bundle from a truncated one, and a bundle handed to a model for
+   * "why did this run spend so much?" is exactly where a partial total gets quoted as a whole.
+   * The money figures decline to answer at all when this is true (`costEstimate` is null);
+   * the token counts remain the partial sums they always were, now labelled as such.
+   */
+  truncated: v.boolean(),
 })
 export type LlmMetricsExport = v.InferOutput<typeof llmMetricsExportSchema>
 

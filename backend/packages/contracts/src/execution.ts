@@ -640,8 +640,13 @@ export const stepMetricsSchema = v.object({
    * ISO 4217 currency `costEstimate` is denominated in — the deployment's spend currency, since
    * that is the currency its price table is written in. Carried BESIDE the amount rather than
    * assumed by the reader: the built-in table is EUR, a deployment may configure another, and a
-   * bare number rendered under the wrong symbol is a wrong number. Absent ⇒ nothing to label,
-   * which is the only state where a reader has no amount to mislabel either.
+   * bare number rendered under the wrong symbol is a wrong number.
+   *
+   * It labels every amount in this payload, so it is present whenever ANY of them exists: this
+   * step's own `costEstimate` or one of its `byPhase` rows. Absent ⇒ nothing here is priced,
+   * which is the only state where a reader has no amount to mislabel either. In particular a
+   * step whose total is null because ONE phase ran on an unpriced model still carries the
+   * currency, since its other phases carry real money.
    */
   costCurrency: v.optional(v.string()),
   /**

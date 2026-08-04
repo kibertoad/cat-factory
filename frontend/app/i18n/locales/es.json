@@ -1480,6 +1480,7 @@
       "calls": "Llamadas",
       "cost": "Coste estimado",
       "costHint": "Calculado a precios de lista, cada clase de entrada con su propia tarifa: una lectura de caché cuesta alrededor de una décima parte de la entrada nueva y una escritura de caché aproximadamente un cuarto más. Una ejecución por suscripción no paga nada por token, así que esto es lo que habrían costado los mismos tokens con pago por uso.",
+      "costIncomplete": "No se muestra: al menos una fase se ejecutó con un modelo para el que esta instalación no tiene tarifa, así que el total de la ejecución quedaría incompleto. Las fases con precio aparecen abajo.",
       "tokensInOut": "Tokens (entrada / salida)",
       "transportOverhead": "Sobrecarga de transporte",
       "modelExecution": "Ejecución del modelo",

@@ -222,3 +222,34 @@ cacheWrite }`), so the inline path reads it straight off rather than re-deriving
   `summarizeByExecution` instead of a rate table of its own, so the two cannot quote different
   money for one run. The metrics EXPORT prices per CALL rather than per cell, which is strictly
   finer and agrees, because it holds the rows.
+- **The COLLAPSED cell is its own type, so nothing can ask it which model it was.**
+  `priceRollupCells` returns `LlmRollupCell` (`(agentKind, phase)` + totals) while the store
+  returns `LlmCallMetricSummary` (that plus `provider`/`model`). Leaving the model fields on the
+  collapsed cell and forbidding them in prose was the first shape, and it reads as available:
+  after the fold the value is whichever contributor happened to arrive first, which looks like an
+  answer rather than the absence it is. The split makes it a typecheck. Collapsing is also NOT
+  conditional on pricing (`rates` is optional), so a deployment with no price table hands its
+  consumers the same shape, with null costs.
+- **One arithmetic, three producers.** `costOfTokenClasses` (kernel) is the only place the
+  four-term sum lives; the ledger's `estimateClassedCost`, the rollup fold and the export's
+  per-call sum all route through it. Three copies were three chances to price a class at the
+  wrong tier, and a wrong cost is indistinguishable from a right one.
+- **A CAPPED read may not be priced.** The metrics export returns the newest
+  `DEFAULT_LIST_LIMIT` (1000) calls, so on a longer run its totals are a slice. Token counts have
+  always been partial there, but money folded from a slice is exactly the "smaller number that
+  reads as complete" the null rule exists to prevent — and the bundle's whole purpose is to be
+  handed to a model that would quote it. So the export fetches ONE row past the cap to know, says
+  `truncated: true`, and reports null costs. Any future reader that prices a bounded list owes
+  the same.
+- **The CURRENCY labels every amount in a payload, so it is stated whenever any of them exists.**
+  Keying `StepMetrics.costCurrency` on the step's own total withheld the label from precisely the
+  mixed-model step whose total is null BECAUSE one phase ran unpriced, leaving its priced phases
+  carrying money with no denomination. It is now emitted when the total OR any phase is priced.
+- **A partly-priced run SHOWS what it could price and SAYS what it could not.** The observability
+  panel gates its cost column on "this run priced something", never on the run TOTAL being known:
+  a mixed-model run is the normal shape, so gating on the total meant one unpriced phase hid the
+  cost of every other with no indication anything had been withheld. The total then renders as an
+  explicit dash plus `summary.costIncomplete`, rather than the section silently disappearing.
+- **`formatCost` never prints a rounded-down zero.** Below 0.0001 it renders `<0.0001`: a priced
+  but tiny step reading as `0.0000` makes the same "this was free" claim the null path is careful
+  to avoid.

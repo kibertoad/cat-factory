@@ -306,6 +306,8 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
           },
           insights: [],
           calls: [],
+          // An empty bundle is complete, not a slice: there was nothing to cap.
+          truncated: false,
         }
     c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
     return c.json(exported, 200)

@@ -4,7 +4,7 @@ import type {
   ExecutionInstance,
   LlmCallBodySlice,
   LlmCallMetricPage,
-  LlmCallMetricSummary,
+  LlmRollupCell,
   PipelineStep,
 } from '@cat-factory/kernel'
 import { foldRollupTotals, foldRollupsByAgentKind, foldRollupsByPhase } from '@cat-factory/kernel'
@@ -260,7 +260,7 @@ export function toDebugAgentContextDetail(
 
 /**
  * Fold the store's `(agentKind, phase)` rollup cells into the run-level totals + the two
- * breakdowns the overview reports. Built from {@link LlmCallMetricSummary} — the aggregate the
+ * breakdowns the overview reports. Built from {@link LlmRollupCell} — the aggregate the
  * store computes without touching a text column — rather than from the calls themselves, so a
  * 3,000-call run costs one GROUP BY here instead of reading 3,000 rows to add them up in
  * JavaScript.
@@ -272,7 +272,7 @@ export function toDebugAgentContextDetail(
  * The per-kind output reuses the metrics EXPORT's shapes on purpose: both describe the same
  * run's model activity, and two independently-derived totals would eventually disagree.
  */
-export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
+export function foldLlmRollup(summaries: LlmRollupCell[]): {
   totals: LlmExportTotals
   byAgentKind: LlmExportInsight[]
   byPhase: LlmPhaseInsight[]

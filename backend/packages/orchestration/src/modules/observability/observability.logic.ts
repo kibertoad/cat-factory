@@ -2,6 +2,7 @@ import {
   LLM_WARNING_FINISH_REASONS,
   type LlmCallMetric,
   type LlmRateResolver,
+  costOfTokenClasses,
 } from '@cat-factory/kernel'
 import type { LlmExportInsight, LlmMetricsExport } from '@cat-factory/contracts'
 
@@ -189,6 +190,17 @@ export function reconstructPrompts(calls: LlmCallMetric[]): LlmCallMetric[] {
   }))
 }
 
+/** What the caller knows about the bundle that the stored calls alone cannot say. */
+export interface LlmMetricsExportOptions {
+  /** Rates for pricing each call. Absent ⇒ every `costEstimate` is null (nothing prices them). */
+  rates?: LlmRateResolver
+  /**
+   * The caller hit its row cap, so `storedCalls` is a SLICE of the run. Costs then decline to
+   * answer rather than reporting the slice's sum as the run's.
+   */
+  truncated?: boolean
+}
+
 /**
  * Build the LLM-friendly export bundle for a run from its recorded calls: a
  * self-describing JSON document (totals + per-agent insights + every call, with
@@ -199,8 +211,9 @@ export function buildLlmMetricsExport(
   executionId: string,
   storedCalls: LlmCallMetric[],
   generatedAt: number,
-  rates?: LlmRateResolver,
+  options: LlmMetricsExportOptions = {},
 ): LlmMetricsExport {
+  const { rates, truncated = false } = options
   // The export is a self-contained analysis bundle, so rebuild each call's full
   // prompt from the stored deltas before assembling it.
   const calls = reconstructPrompts(storedCalls)
@@ -237,7 +250,7 @@ export function buildLlmMetricsExport(
       transportOverheadRatio: transportOverheadRatio(upstreamMs, overheadMs),
       errors: kindCalls.filter((c) => !c.ok).length,
       warnings: kindCalls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
-      costEstimate: costOfCalls(kindCalls, rates),
+      costEstimate: costOfCalls(kindCalls, rates, truncated),
     }
   })
 
@@ -264,10 +277,11 @@ export function buildLlmMetricsExport(
       errors: calls.filter((c) => !c.ok).length,
       warnings: calls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
       truncatedCalls: calls.filter((c) => c.finishReason === 'length').length,
-      costEstimate: costOfCalls(calls, rates),
+      costEstimate: costOfCalls(calls, rates, truncated),
     },
     insights,
     calls,
+    truncated,
   }
 }
 
@@ -277,23 +291,24 @@ export function buildLlmMetricsExport(
  * Per call rather than per summed group because one agent kind's calls are routinely served by
  * more than one model — a harness CLI answers some of its own turns with a cheaper one — so a
  * group total priced at any single model's rate would be wrong for every group but the uniform
- * ones.
+ * ones. The arithmetic is kernel's `costOfTokenClasses`, the same one the rollup and the
+ * ledger use, so the export cannot come to disagree with the surfaces beside it.
  *
- * Returns null when nothing prices them, or when ANY call's model has no rate: a total that
- * silently omitted the calls it could not price is a smaller number that still reads as
- * complete.
+ * Returns null in three cases, all of them "this number would be a lie": nothing prices these
+ * calls, ANY call's model has no rate, or the call list is a TRUNCATED slice of the run. Each
+ * would otherwise produce a smaller number that still reads as a complete total.
  */
-function costOfCalls(calls: LlmCallMetric[], rates?: LlmRateResolver): number | null {
-  if (!rates) return null
+function costOfCalls(
+  calls: LlmCallMetric[],
+  rates: LlmRateResolver | undefined,
+  truncated: boolean,
+): number | null {
+  if (!rates || truncated) return null
   let total = 0
   for (const call of calls) {
     const r = rates(call.provider, call.model)
     if (!r) return null
-    total +=
-      (call.promptTokens / 1_000_000) * r.inputPerMillion +
-      (call.cacheReadTokens / 1_000_000) * r.cacheReadPerMillion +
-      (call.cacheWriteTokens / 1_000_000) * r.cacheWritePerMillion +
-      (call.completionTokens / 1_000_000) * r.outputPerMillion
+    total += costOfTokenClasses(r, call)
   }
   return total
 }

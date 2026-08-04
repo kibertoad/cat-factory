@@ -3234,6 +3234,7 @@
       "calls": "Chiamate",
       "cost": "Costo stimato",
       "costHint": "Calcolato ai prezzi di listino, ogni classe di input alla propria tariffa: una lettura dalla cache costa circa un decimo dell'input nuovo, una scrittura in cache circa un quarto in più. Un'esecuzione in abbonamento non paga nulla per token, quindi questo è quanto sarebbero costati gli stessi token a consumo.",
+      "costIncomplete": "Non mostrato: almeno una fase ha usato un modello per cui questa installazione non ha una tariffa, quindi un totale sarebbe incompleto. Le fasi con prezzo sono elencate sotto.",
       "tokensInOut": "Token (in / out)",
       "transportOverhead": "Overhead di trasporto",
       "modelExecution": "Esecuzione del modello",

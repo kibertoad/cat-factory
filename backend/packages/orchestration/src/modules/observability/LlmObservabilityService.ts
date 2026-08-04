@@ -16,7 +16,7 @@ import type {
   HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
-  LlmCallMetricSummary,
+  LlmRollupCell,
   LlmRateResolver,
   LlmTraceSink,
   WorkspaceSettingsCacheValue,
@@ -418,15 +418,12 @@ export class LlmObservabilityService {
    * the ONE place that fold happens, so the board rollup and the debug overview cannot report
    * different money for the same run.
    */
-  async summarizeByExecution(
-    workspaceId: string,
-    executionId: string,
-  ): Promise<LlmCallMetricSummary[]> {
+  async summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmRollupCell[]> {
     const cells = await this.repository.summarizeByExecution(workspaceId, executionId)
     // No rates wired ⇒ collapse the model dimension anyway, so every consumer sees the same
     // `(agentKind, phase)` shape regardless of whether this deployment can price it. The cost
     // stays null, which says "not priced here" rather than "cost nothing".
-    return priceRollupCells(cells, this.modelRates ?? (() => null))
+    return priceRollupCells(cells, this.modelRates)
   }
 
   /**
@@ -435,11 +432,21 @@ export class LlmObservabilityService {
    * model for analysis. Stamped with the service clock.
    */
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
-    const calls = await this.listByExecution(workspaceId, executionId)
+    // ONE row past the cap, so the bundle can SAY it is a slice instead of presenting the
+    // newest 1000 calls as the whole run. A separate COUNT would be a second query for one
+    // boolean, and inferring it from `calls.length === limit` guesses wrong on the run whose
+    // call count lands exactly on the cap.
+    const fetched = await this.listByExecution(workspaceId, executionId, DEFAULT_LIST_LIMIT + 1)
+    const truncated = fetched.length > DEFAULT_LIST_LIMIT
+    const calls = truncated ? fetched.slice(0, DEFAULT_LIST_LIMIT) : fetched
     // Priced from the SAME table the rollups use. The export costs each call individually
     // (it holds the rows), which is strictly finer than the rollup's per-cell arithmetic and
-    // agrees with it: both price a class at its own tier.
-    return buildLlmMetricsExport(executionId, calls, this.clock.now(), this.modelRates)
+    // agrees with it: both price a class at its own tier. A truncated bundle prices nothing:
+    // a slice's sum quoted as a run's cost is the failure the null rule exists to prevent.
+    return buildLlmMetricsExport(executionId, calls, this.clock.now(), {
+      rates: this.modelRates,
+      truncated,
+    })
   }
 }
 

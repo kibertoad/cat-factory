@@ -3234,6 +3234,7 @@
       "calls": "Aufrufe",
       "cost": "Geschätzte Kosten",
       "costHint": "Zu Listenpreisen berechnet, jede Eingabeklasse mit ihrem eigenen Satz: Ein Cache-Lesevorgang kostet etwa ein Zehntel frischer Eingabe, ein Cache-Schreibvorgang etwa ein Viertel mehr. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
+      "costIncomplete": "Nicht angezeigt: Mindestens eine Phase lief auf einem Modell, für das diese Installation keinen Satz kennt, daher wäre eine Gesamtsumme unvollständig. Die berechneten Phasen sind unten aufgeführt.",
       "tokensInOut": "Tokens (ein / aus)",
       "transportOverhead": "Transport-Overhead",
       "modelExecution": "Modellausführung",

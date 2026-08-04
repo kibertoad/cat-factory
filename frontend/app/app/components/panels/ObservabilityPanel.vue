@@ -175,9 +175,23 @@ const costCurrency = computed(
   () => instance.value?.steps?.find((s) => s.metrics?.costCurrency)?.metrics?.costCurrency,
 )
 /**
+ * Whether to show money at all: this deployment prices, and at least one phase of this run
+ * actually got a figure.
+ *
+ * Deliberately NOT gated on the run TOTAL being known. A mixed-model run is the normal shape
+ * (a harness CLI serves some turns with a model of its own choosing), so one phase on an
+ * unpriced model is common — and gating the column on the total meant that one phase hid the
+ * cost of every other, with no indication anything had been withheld.
+ */
+const showCost = computed(
+  () => !!costCurrency.value && phaseRows.value.some((p) => p.costEstimate != null),
+)
+/**
  * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
  * the capped call list the token totals beside it use, which would silently under-report a run
- * longer than the page. Null when any phase could not be priced (see `sumCosts`).
+ * longer than the page. Null when any phase could not be priced (see `sumCosts`), in which case
+ * the tile SAYS the total is incomplete rather than quietly dropping it: a missing figure and a
+ * partial one are both wrong to render as a number, but only one of them is worth explaining.
  */
 const runCost = computed(() =>
   formatCost(sumCosts(phaseRows.value.map((p) => p.costEstimate)), costCurrency.value),
@@ -332,14 +346,18 @@ function exportJson() {
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
                 </div>
-                <div v-if="runCost">
+                <div v-if="showCost">
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
                     {{ t('observability.summary.cost') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
-                    {{ runCost }}
+                    {{ runCost ?? '—' }}
                     <span class="mt-0.5 block text-[11px] text-slate-500">
-                      {{ t('observability.summary.costHint') }}
+                      {{
+                        runCost
+                          ? t('observability.summary.costHint')
+                          : t('observability.summary.costIncomplete')
+                      }}
                     </span>
                   </dd>
                 </div>
@@ -466,7 +484,7 @@ function exportJson() {
                       <th class="py-1 px-3 text-end font-normal">
                         {{ t('observability.phase.columns.tokensInOut') }}
                       </th>
-                      <th v-if="runCost" class="py-1 px-3 text-end font-normal">
+                      <th v-if="showCost" class="py-1 px-3 text-end font-normal">
                         <span :title="t('observability.phase.costHint')">
                           {{ t('observability.phase.columns.cost') }}
                         </span>
@@ -510,7 +528,7 @@ function exportJson() {
                         {{ formatTokens(totalInputTokens(p)) }}↑
                         {{ formatTokens(p.completionTokens) }}↓
                       </td>
-                      <td v-if="runCost" class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-slate-300">
                         <!-- An em dash, not 0: this phase's model had no rate, and a zero here
                              would read as a phase that cost nothing. -->
                         {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}

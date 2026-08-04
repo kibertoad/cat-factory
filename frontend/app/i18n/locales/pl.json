@@ -1480,6 +1480,7 @@
       "calls": "Wywołania",
       "cost": "Szacowany koszt",
       "costHint": "Wyliczony według cennika, każda klasa wejścia po własnej stawce: odczyt z pamięci podręcznej kosztuje około jednej dziesiątej świeżego wejścia, a zapis około jedną czwartą więcej. Uruchomienie w ramach subskrypcji nie płaci za tokeny, więc jest to kwota, jaką te same tokeny kosztowałyby w rozliczeniu za użycie.",
+      "costIncomplete": "Nie pokazano: co najmniej jedna faza korzystała z modelu, dla którego ta instalacja nie zna stawki, więc suma całego przebiegu byłaby niepełna. Wycenione fazy są wypisane poniżej.",
       "tokensInOut": "Tokeny (we / wy)",
       "transportOverhead": "Narzut transportu",
       "modelExecution": "Wykonanie modelu",

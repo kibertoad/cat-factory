@@ -37,21 +37,35 @@ export function totalInputTokens(m: {
 }
 
 /**
+ * Smallest amount {@link formatCost} will print as a figure. Below it, four decimals round to
+ * `0.0000`, which is the same "free" claim a null renders as `0.00` — so such an amount is
+ * shown as a threshold instead.
+ */
+const MIN_RENDERED_COST = 0.0001
+
+/**
  * Format an estimated cost for display, or null when there is nothing honest to show.
  *
  * Null in ⇒ null out, and the caller renders the tokens WITHOUT a money figure: a cost the
  * deployment could not price and a cost of zero are different facts, and `0.00` claims the
  * second one. Small amounts keep more decimals because most steps land well under a unit and
- * rounding them all to `0.00` would make the whole column useless.
+ * rounding them all to `0.00` would make the whole column useless; an amount too small even
+ * for those decimals is rendered as `<0.0001` rather than rounded down to the zero this
+ * function exists to avoid printing.
  */
 export function formatCost(amount: number | null | undefined, currency?: string): string | null {
   if (amount == null) return null
-  const digits = amount > 0 && amount < 1 ? 4 : 2
-  const value = amount.toFixed(digits)
+  const value = formatCostAmount(amount)
   // The currency is a bare ISO code beside the number rather than a locale symbol: the amounts
   // come from a deployment-configured table whose code is whatever an operator set, and a
   // symbol we guessed for an unrecognised code would be a wrong label on a right number.
   return currency ? `${value} ${currency}` : value
+}
+
+function formatCostAmount(amount: number): string {
+  if (amount > 0 && amount < MIN_RENDERED_COST) return `<${MIN_RENDERED_COST}`
+  // Four decimals under a unit, where most steps land; two above it, where they read as money.
+  return amount.toFixed(amount > 0 && amount < 1 ? 4 : 2)
 }
 
 /**

@@ -280,3 +280,46 @@ describe('computeStoredPrompt', () => {
     rebuilt.forEach((c, i) => expect(c.promptText).toBe(fulls[i]))
   })
 })
+
+describe('buildLlmMetricsExport — pricing', () => {
+  const rates = () => ({
+    inputPerMillion: 1_000_000,
+    cacheReadPerMillion: 100_000,
+    cacheWritePerMillion: 1_250_000,
+    outputPerMillion: 5_000_000,
+  })
+  const calls = [
+    metric({
+      id: 'a',
+      agentKind: 'coder',
+      promptTokens: 1,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 1,
+      completionTokens: 1,
+    }),
+  ]
+
+  it('prices each input class at its own tier', () => {
+    // 1 + 0.1 + 1.25 + 5, the same arithmetic (kernel's `costOfTokenClasses`) the rollup and
+    // the ledger use, so the export cannot disagree with the surfaces beside it.
+    const out = buildLlmMetricsExport('exec-1', calls, 1, { rates })
+    expect(out.totals.costEstimate).toBeCloseTo(7.35, 10)
+    expect(out.truncated).toBe(false)
+  })
+
+  it('declines to price a TRUNCATED bundle rather than costing a slice as the whole run', () => {
+    // The cap is what makes this necessary: the slice's sum is a smaller number that still
+    // reads as a total, and this bundle exists to be handed to a model that would quote it.
+    const out = buildLlmMetricsExport('exec-1', calls, 1, { rates, truncated: true })
+    expect(out.truncated).toBe(true)
+    expect(out.totals.costEstimate).toBeNull()
+    expect(out.insights.every((i) => i.costEstimate === null)).toBe(true)
+    // The token counts are still reported — partial, and now labelled as such.
+    expect(out.totals.completionTokens).toBe(1)
+  })
+
+  it('reports null costs when nothing prices the calls', () => {
+    const out = buildLlmMetricsExport('exec-1', calls, 1)
+    expect(out.totals.costEstimate).toBeNull()
+  })
+})

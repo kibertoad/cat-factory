@@ -101,6 +101,13 @@ describe('formatCost', () => {
     expect(formatCost(12.5, 'EUR')).toBe('12.50 EUR')
   })
 
+  it('shows a threshold rather than rounding a real cost down to zero', () => {
+    // `0.0000` makes a priced-but-tiny step read as free — the same claim the null case is
+    // careful not to make. A cheap step is not a free one.
+    expect(formatCost(0.00001, 'EUR')).toBe('<0.0001 EUR')
+    expect(formatCost(0.0001, 'EUR')).toBe('0.0001 EUR')
+  })
+
   it('labels the amount with the currency it was priced in rather than assuming one', () => {
     // The price table's currency is operator-configured; the built-in one is EUR, not USD.
     expect(formatCost(1, 'USD')).toBe('1.00 USD')
