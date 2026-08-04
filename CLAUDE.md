@@ -989,6 +989,15 @@ groups by so an image generator is never asked for music. **A new member must cl
 cleared.** A deliverable is described on three axes: the KIND (`modalities`, which decides which
 generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
 else (the PROMPT); a member is earned only when neither lower axis can carry the distinction.
+**A modality stops deciding at the SECOND producer of it, and no definition field may take over.**
+Two image APIs on one step are both admissible and exactly one is right, so a discriminator with an
+admission rule (`style`, `resolutionRange`, `intendedUse`) would refuse correctly-configured steps:
+those axes do not PARTITION the deliverable the way `modalities` and `mediaTypes` do, so there is no
+`covered`/`uncovered` to compute. The choice belongs to `generatorIds`, then to the step's own
+prompt (the `consumes` ruling one level up: a fact about a COMBINATION or a CHOICE is never a fact
+about one definition). The platform's whole contribution is `binaryModalityOverlaps`, which STATES
+which content types have two producers and RANKS NOTHING, to the agent in its brief and to the human
+in the picker, refusing nothing and warning at no registry.
 `image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
 scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
 the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST (both 3D members
@@ -1766,6 +1775,14 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
 - **Hexagonal layering**: controllers (`@cat-factory/server`) → services (orchestration/integrations) →
   ports (kernel). Infra adapters live in each facade and implement the ports + the `gateways` seam, wired
   via constructor injection of one `dependencies` object. Opt-in integrations wire only when configured.
+- **A pure rule BOTH the backend and the SPA must agree about lives in `@cat-factory/contracts`**, never
+  restated on each side. The SPA cannot see kernel, so a rule that stays there becomes a hand-written copy
+  the moment a surface has to state the same judgement to a human, and the two then drift into describing
+  one selection two different ways with nothing comparing them (`binaryFormatCoverage` and
+  `binaryModalityOverlaps` are the worked example). What decides is who has to AGREE about the answer, not
+  which package the rule feels like it belongs to. A rule needing kernel's own types stays in kernel; so
+  does the DISPOSITION of its outcomes (which refuses a run, which only warns), being a fact about
+  admission rather than about the thing judged.
 - **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An implementer kind
   (the `brief-standards` trait) re-sends its whole system prompt on every turn of a long loop, so it folds
   a fragment's condensed `brief` instead of the full `body`; reviewer/planner kinds keep the full text. Two

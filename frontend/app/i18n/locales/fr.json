@@ -4287,6 +4287,7 @@
       "binaryOutputMediaTypeUnverifiable": "Aucune intégration sélectionnée ne déclare {formats}, mais l’une d’elles ne déclare aucun format, cela n’a donc pas pu être vérifié. L’étape démarre quand même ; confirmez dans l’API de l’intégration qu’elle peut l’émettre.",
       "binaryOutputMediaTypeUnusable": "Non enregistré, car ce ne sont pas des types de média : {entries}. Écrivez chacun sous la forme type/subtype.",
       "binaryOutputGeneratorMissing": "Ce déploiement n'enregistre pas ces intégrations génératives : {ids}. Elles s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
+      "binaryOutputGeneratorOverlap": "Plusieurs intégrations sélectionnées produisent le même type de contenu ({overlaps}). Ce n’est pas un problème en soi, mais le type de contenu ne décide plus laquelle l’agent appelle : indiquez dans le prompt de cette étape laquelle utiliser et pour quoi, sinon il en choisira une et s’y tiendra.",
       "binaryOutputModalityUncovered": "Aucune intégration sélectionnée ne produit {modalities}, que cette étape doit livrer.",
       "binaryOutputModalityRetired": "{modality} (n'est plus proposé — resélectionnez les types de contenu de cette étape)",
       "binaryOutputModality": {

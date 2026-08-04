@@ -428,8 +428,9 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.issues).toEqual([])
   })
 
-  // The FORMAT half, mirroring kernel's `binaryFormatCoverage` — and its three outcomes, which
-  // are what a second copy of the rule most easily loses.
+  // The FORMAT half. The rule itself is contracts' `binaryFormatCoverage`, tested there; what
+  // these pin is the picker's own job, which is mapping its three outcomes onto two issues that
+  // read differently: a refusal and an advisory.
   const meshy = {
     id: 'meshy',
     modalities: ['3d-model' as const],
@@ -488,6 +489,59 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.issues).toEqual(['generators_unavailable'])
     expect(pick.unknownGeneratorIds).toEqual([])
     expect(pick.uncoveredModalities).toEqual([])
+  })
+
+  it('flags an OVERLAP as ADVISORY, where the content type stops deciding', () => {
+    // The step saves and starts: two producers of one content type is the reason the selection is
+    // a list. What it costs is a decision nobody wrote down, and this is the surface where the
+    // person who knows the answer has the step's prompt already open.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'flux'] },
+      catalog,
+      true,
+      [...generators, { id: 'flux', modalities: ['image' as const] }],
+    )
+    expect(pick.issues).toEqual(['generator_overlap'])
+    expect(pick.generatorOverlaps).toEqual([{ modality: 'image', generatorIds: ['retro', 'flux'] }])
+  })
+
+  it('reads a repeated id as ONE integration, exactly as the backend resolves it', () => {
+    // A step naming one integration twice holds one producer, so there is no choice to advise
+    // about, and the unknown-id list must not name the same missing id twice either.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'retro', 'ghost', 'ghost'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toEqual(['unknown_generator'])
+    expect(pick.unknownGeneratorIds).toEqual(['ghost'])
+    expect(pick.generatorOverlaps).toEqual([])
+  })
+
+  it('says nothing about an overlap while one integration produces each content type', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'studio'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).not.toContain('generator_overlap')
+    expect(pick.generatorOverlaps).toEqual([])
+  })
+
+  it('claims no overlap about a set nobody could read', () => {
+    // Same rule every other generative judgement here follows: an unreachable mothership answers
+    // the same empty list a deployment registering nothing does, and only one of them is a fact.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'flux'] },
+      catalog,
+      true,
+      [],
+      true,
+    )
+    expect(pick.issues).toEqual(['generators_unavailable'])
+    expect(pick.generatorOverlaps).toEqual([])
   })
 
   it('still judges an EMPTY set, which is a real answer about the deployment', () => {

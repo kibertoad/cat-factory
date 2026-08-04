@@ -4299,6 +4299,7 @@
       "binaryOutputMediaTypeUnverifiable": "Seçili entegrasyonların hiçbiri {formats} bildirmiyor, ancak içlerinden biri hiç biçim bildirmiyor; bu yüzden denetlenemedi. Adım yine de başlar; entegrasyonun API’sinden bunu üretebildiğini doğrulayın.",
       "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
+      "binaryOutputGeneratorOverlap": "Seçili entegrasyonlardan birden fazlası aynı içerik türünü üretiyor ({overlaps}). Bunda bir sakınca yok, ancak artık hangisinin çağrılacağına içerik türü karar vermiyor: bu adımın isteminde hangisinin ne için kullanılacağını belirtin, yoksa ajan birini seçip onu kullanmayı sürdürür.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
       "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {

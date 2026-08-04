@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  binaryFormatCoverage,
+  binaryModalityOverlaps,
   binaryModalitySchema,
   isBinaryModality,
   mediaTypeSchema,
@@ -93,5 +95,116 @@ describe('binaryOutputConfigSchema.mediaTypes', () => {
   it('refuses a parameterised or malformed format at the boundary', () => {
     expect(v.safeParse(mediaTypeSchema, 'model/gltf-binary; q=1').success).toBe(false)
     expect(v.safeParse(mediaTypeSchema, 'gltf').success).toBe(false)
+  })
+})
+
+describe('binaryModalityOverlaps', () => {
+  const flux = { id: 'flux', modalities: ['image'] as const }
+  const retro = { id: 'retro-diffusion', modalities: ['image'] as const }
+  const meshy = { id: 'meshy', modalities: ['3d-model'] as const }
+
+  it('says nothing while one integration produces each content type', () => {
+    // The common case, and the reason the callers render nothing on an empty result: a warning
+    // that fires on every correct selection is one nobody reads.
+    expect(binaryModalityOverlaps([retro, meshy])).toEqual([])
+    expect(binaryModalityOverlaps([])).toEqual([])
+    expect(binaryModalityOverlaps([retro])).toEqual([])
+  })
+
+  it('names the shared content type and every id that produces it', () => {
+    expect(binaryModalityOverlaps([flux, retro, meshy])).toEqual([
+      { modality: 'image', generatorIds: ['flux', 'retro-diffusion'] },
+    ])
+  })
+
+  it('reports each shared content type separately, in first-appearance order', () => {
+    const overlaps = binaryModalityOverlaps([
+      { id: 'a', modalities: ['audio', 'image'] },
+      { id: 'b', modalities: ['image'] },
+      { id: 'c', modalities: ['audio'] },
+    ])
+    expect(overlaps).toEqual([
+      { modality: 'audio', generatorIds: ['a', 'c'] },
+      { modality: 'image', generatorIds: ['a', 'b'] },
+    ])
+  })
+
+  it('counts one integration ONCE, however often it is named', () => {
+    // A step that listed an id twice holds one producer, not two, and telling it otherwise would
+    // put a paragraph about a choice into a brief where no choice exists. The same rule inside a
+    // single definition: a modality declared twice is still one producer of it.
+    expect(binaryModalityOverlaps([retro, retro])).toEqual([])
+    expect(binaryModalityOverlaps([{ id: 'a', modalities: ['image', 'image'] }])).toEqual([])
+  })
+
+  it('ranks nothing: the ids come back in the order they were given', () => {
+    // Deliberate: the platform has no cost, quality or intent model, so any ordering it invented
+    // would read as a recommendation it has no basis for.
+    expect(binaryModalityOverlaps([retro, flux])[0]?.generatorIds).toEqual([
+      'retro-diffusion',
+      'flux',
+    ])
+    expect(binaryModalityOverlaps([flux, retro])[0]?.generatorIds).toEqual([
+      'flux',
+      'retro-diffusion',
+    ])
+  })
+})
+
+describe('binaryFormatCoverage', () => {
+  it('covers a format some selected integration declares', () => {
+    expect(
+      binaryFormatCoverage(['model/gltf-binary'], [{ mediaTypes: ['model/gltf-binary'] }]),
+    ).toEqual({ uncovered: [], unverifiable: [] })
+  })
+
+  it('refuses a format every selected integration declared its way out of', () => {
+    // Every integration DECLARED its formats, so the answer is a fact rather than a gap: the step
+    // is asking for a container nothing it selected emits.
+    expect(binaryFormatCoverage(['model/fbx'], [{ mediaTypes: ['model/gltf-binary'] }])).toEqual({
+      uncovered: ['model/fbx'],
+      unverifiable: [],
+    })
+  })
+
+  it('keeps UNVERIFIABLE apart from uncovered, which is the whole reason it exists', () => {
+    // A generator declaring no formats has said "only my modality is known": a documented state,
+    // not an empty answer. Collapsing it into `uncovered` refuses steps the backend admits;
+    // collapsing it into silence presents an unchecked requirement as a checked one. An ABSENT
+    // list and an empty one are the same state, because the wire type omits the field and a
+    // code-registered definition may list nothing.
+    expect(binaryFormatCoverage(['model/fbx'], [{ mediaTypes: [] }])).toEqual({
+      uncovered: [],
+      unverifiable: ['model/fbx'],
+    })
+    expect(binaryFormatCoverage(['model/fbx'], [{}])).toEqual({
+      uncovered: [],
+      unverifiable: ['model/fbx'],
+    })
+  })
+
+  it('lets ONE silent integration cover for the whole selection, never per integration', () => {
+    // The judgement is about the SELECTION: one integration that declared nothing might be the
+    // one that emits it, and no rule here can tell. Judging per integration would report a
+    // requirement as refused and unverifiable at once.
+    expect(
+      binaryFormatCoverage(['model/fbx'], [{ mediaTypes: ['model/gltf-binary'] }, {}]),
+    ).toEqual({ uncovered: [], unverifiable: ['model/fbx'] })
+  })
+
+  it('refuses a format outright when NOTHING is selected to be silent about it', () => {
+    // An empty selection declares nothing and hides nothing, exactly as a modality requirement
+    // against an empty selection is already uncovered rather than unknowable.
+    expect(binaryFormatCoverage(['model/fbx'], [])).toEqual({
+      uncovered: ['model/fbx'],
+      unverifiable: [],
+    })
+  })
+
+  it('says nothing about a step that requires no format', () => {
+    expect(binaryFormatCoverage([], [{ mediaTypes: [] }])).toEqual({
+      uncovered: [],
+      unverifiable: [],
+    })
   })
 })
