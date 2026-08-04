@@ -6,9 +6,11 @@ This document tracks the **app-wide internationalization migration** of the
 
 It is a **living status doc**. For the authoritative _how-to_ (catalog layout, the
 add-a-string workflow, key conventions, plural/date/number rules, translator
-descriptions, and the CI drift guards) see the **Internationalization (i18n)**
-section of [`CLAUDE.md`](../CLAUDE.md): this file does not duplicate those rules,
-it only records **what is done and what is left**.
+descriptions, and the CI drift guards) see the **Internationalization (i18n)
+authoring** section of
+[`frontend/app/README.md`](../frontend/app/README.md#internationalization-i18n-authoring):
+this file does not duplicate those rules, it only records **what is done and what
+is left**.
 
 ## TL;DR
 
