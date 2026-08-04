@@ -482,6 +482,39 @@ export class AgentKindRegistry {
   }
 
   /**
+   * Every kind that has a skill or tool server declared FOR it, whether on its own registration or
+   * through {@link assignSkills} / {@link assignToolServers}.
+   *
+   * THE enumeration for "kinds with capabilities", and the reason it exists is that `all()` is not
+   * one. Assignment is the RECOMMENDED path: it is how a deployment attaches a playbook or an MCP
+   * server to `coder`, `ci-fixer`, `tester-api`, `merger` or `conflict-resolver`, none of which are
+   * registry entries, so an enumeration that walked `all()` skipped exactly the commonest case.
+   * Boot validation and the capability-credential checklist both did, which meant a server declared
+   * by assignment reached neither the `insecure_tool_server_url` refusal nor the operator's list of
+   * keys to fill in.
+   *
+   * A registered kind that declares NEITHER is left out, so the answer means what its name says and
+   * a caller may read a non-empty list off it. That matters for the reader more than for today's two
+   * consumers, whose per-kind checks no-op on an empty declaration either way. The test is the RAW
+   * declaration, not a resolved one: a kind naming an id nothing registered still belongs here, since
+   * naming the unregistered id is precisely what boot validation has to report.
+   *
+   * Anything new that enumerates kinds to read their skills or tool servers uses THIS, not `all()`,
+   * or that hole reopens. Stable but arbitrary order: registered kinds in registration order, then
+   * skill-assigned kinds, then tool-server-assigned ones. Nothing may depend on it; a kind's OWN
+   * capability precedence is `skillsFor` / `toolServersFor`, which is a different question.
+   */
+  kindsWithCapabilities(): AgentKind[] {
+    const kinds = new Set<AgentKind>()
+    for (const [kind, definition] of this.registry) {
+      if (definition.skills?.length || definition.toolServers?.length) kinds.add(kind)
+    }
+    for (const [kind, refs] of this.assignedSkills) if (refs.length) kinds.add(kind)
+    for (const [kind, refs] of this.assignedToolServers) if (refs.length) kinds.add(kind)
+    return [...kinds]
+  }
+
+  /**
    * Register a VARIATION of an existing agent kind — an alternate prompt a pipeline step selects
    * by id, running the base kind in every other respect. A later registration of the same id
    * replaces the earlier one, which is also how a deployment RE-WORDS a variant an installed

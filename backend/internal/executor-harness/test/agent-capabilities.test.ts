@@ -98,6 +98,37 @@ describe('parseMcpServerSpecs (transport boundary)', () => {
   })
 })
 
+describe('parseMcpServerSpecs (allowedTools boundary)', () => {
+  const body = (allowedTools: unknown) => [
+    { id: 'issues', transport: 'stdio', command: 'npx', allowedTools },
+  ]
+
+  it('drops an entry that packs several tools into one comma-joined string', () => {
+    // The runner joins the whole list into ONE `--allowedTools` argument with commas, so this entry
+    // would become two patterns of which the second matches no tool the CLI has. The backend
+    // refuses it at registration; this is the boundary check for a body that arrived another way.
+    expect(parseMcpServerSpecs(body(['search_issues,get_issue', 'list_issues']))?.[0]).toEqual({
+      id: 'issues',
+      transport: 'stdio',
+      command: 'npx',
+      allowedTools: ['list_issues'],
+    })
+  })
+
+  it('drops whitespace and glob punctuation, keeping real tool names', () => {
+    expect(
+      parseMcpServerSpecs(body(['search issues', 'get_*', '', 'search_issues']))?.[0]?.allowedTools,
+    ).toEqual(['search_issues'])
+  })
+
+  it('falls back to NO restriction when nothing in the list survives', () => {
+    // Deliberately the same answer as an absent field (every tool the server exposes), because the
+    // alternative is worse: `claudeAllowedToolPatterns` would then send a list whose only surviving
+    // entries are the platform's built-in tool names, i.e. a run narrowed to no MCP tools at all.
+    expect(parseMcpServerSpecs(body(['a,b', 'c d']))?.[0]?.allowedTools).toBeUndefined()
+  })
+})
+
 describe('mcpServerSecretValues', () => {
   it('reads exactly the keys the backend marked secret, across both transports', () => {
     expect(
