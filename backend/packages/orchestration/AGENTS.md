@@ -119,8 +119,11 @@ are about resolving ONE thing consistently rather than about any one feature:
 per-run credential can be used) and `src/inlineBlockModel.ts` (`resolveInlineBlockModelRef`: WHICH
 model that call runs, with the same block-pin → preset default → routing-default precedence the
 dispatch path uses, the preset's route ORDER, and the container-only-subscription degrade). It
-replaced seven byte-identical private `modelFor` methods; wire it through
-`container/inline-model-deps.ts` so the model resolver and the route order can't be wired apart.
+replaced eight byte-identical private `modelFor` methods; wire it through
+`container/inline-model-deps.ts`, which hands over the model and the route order as ONE
+`resolvePresetRouting` dependency — they are two columns of one preset row, so wiring them apart
+both invited a site to take the model and miss the order (silent: the run works, on the wrong
+provider) and read that row twice per call.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
 "Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/modularisation.md` +

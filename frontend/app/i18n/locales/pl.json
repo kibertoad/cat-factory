@@ -2377,7 +2377,9 @@
         "customHint": "Ten preset preferuje trasy w tej kolejności. Model dostępny tylko na niższej trasie nadal działa, jest tylko próbowany później.",
         "reset": "Użyj domyślnej kolejności",
         "moveUp": "Preferuj tę trasę bardziej",
-        "moveDown": "Preferuj tę trasę mniej"
+        "moveDown": "Preferuj tę trasę mniej",
+        "subscriptionOverrideHint": "Podłączona subskrypcja nadal wygrywa w przypadku modeli, które ją oferują: silnik kieruje je do planu niezależnie od tej kolejności. Trasy poniżej pozycji subskrypcji dotyczą wszystkich pozostałych modeli.",
+        "badgesUseDefaultPresetHint": "Trasa pokazana obok każdego modelu powyżej to trasa domyślnego presetu przestrzeni roboczej, a nie tego presetu."
       }
     },
     "account": {
@@ -5825,7 +5827,7 @@
       "newDescription": "Pojawiły się nowe wbudowane presety modelu. Dodaj je do biblioteki tej tablicy.",
       "add": "Dodaj",
       "updatesHeading": "Dostępne aktualizacje",
-      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów modelu. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów modelu. Zregeneruj, aby ją przyjąć: domyślny i kolejność są zachowane, ale własna kolejność tras na presecie zostanie wyczyszczona.",
       "versionAvailable": "Dostępna wersja {from} → {to}.",
       "reseed": "Zregeneruj",
       "reseedAll": "Zaktualizuj wszystkie ({count})",

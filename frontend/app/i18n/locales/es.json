@@ -2377,7 +2377,9 @@
         "customHint": "Este preajuste prefiere las rutas en este orden. Un modelo accesible solo por una ruta inferior sigue funcionando, solo se intenta más tarde.",
         "reset": "Usar el orden predeterminado",
         "moveUp": "Preferir más esta ruta",
-        "moveDown": "Preferir menos esta ruta"
+        "moveDown": "Preferir menos esta ruta",
+        "subscriptionOverrideHint": "Una suscripción conectada sigue ganando en los modelos que ofrecen una: el motor los enruta al plan sin importar este orden. Las rutas por debajo de la entrada de suscripción se aplican a todos los demás modelos.",
+        "badgesUseDefaultPresetHint": "La ruta que aparece junto a cada modelo arriba es la del preset predeterminado del espacio de trabajo, no la de este preset."
       }
     },
     "account": {
@@ -5825,7 +5827,7 @@
       "newDescription": "Hay nuevos presets de modelo integrados. Añádelos a la biblioteca de este tablero.",
       "add": "Añadir",
       "updatesHeading": "Actualizaciones disponibles",
-      "updatesDescription": "Hay una versión más reciente de estos presets de modelo integrados. Regenera para adoptarla (se conservan el predeterminado y el orden).",
+      "updatesDescription": "Hay una versión más reciente de estos presets de modelo integrados. Regenera para adoptarla: se conservan el predeterminado y el orden, pero se borra un orden de rutas personalizado del preset.",
       "versionAvailable": "Versión {from} → {to} disponible.",
       "reseed": "Regenerar",
       "reseedAll": "Actualizar todos ({count})",

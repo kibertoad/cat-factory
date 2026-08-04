@@ -8,6 +8,7 @@
 // (`container-executor-deps.ts`) import it without either module reaching back into the root.
 
 import {
+  type AppCaches,
   type ModelFlavor,
   type ModelProviderResolver,
   composeTraceSinks,
@@ -125,10 +126,11 @@ export function buildModelProviderResolver(env: Env, db: D1Database): ModelProvi
  */
 export function buildResolveWorkspaceModelDefault(
   db: D1Database,
+  caches?: AppCaches,
 ): (workspaceId: string, agentKind: string, modelPresetId?: string) => Promise<string | undefined> {
   const repo = new D1ModelPresetRepository({ db })
   return (workspaceId, agentKind, modelPresetId) =>
-    resolvePresetModelForKind(repo, workspaceId, agentKind, modelPresetId)
+    resolvePresetModelForKind(repo, workspaceId, agentKind, modelPresetId, caches?.modelPreset)
 }
 
 /**
@@ -138,8 +140,9 @@ export function buildResolveWorkspaceModelDefault(
  */
 export function buildResolvePresetProviderPreference(
   db: D1Database,
+  caches?: AppCaches,
 ): (workspaceId: string, modelPresetId?: string) => Promise<readonly ModelFlavor[] | undefined> {
   const repo = new D1ModelPresetRepository({ db })
   return (workspaceId, modelPresetId) =>
-    resolvePresetProviderPreference(repo, workspaceId, modelPresetId)
+    resolvePresetProviderPreference(repo, workspaceId, modelPresetId, caches?.modelPreset)
 }

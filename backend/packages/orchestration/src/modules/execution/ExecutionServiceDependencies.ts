@@ -25,6 +25,7 @@ import type {
   JudgeAssessor,
   JudgeRegistry,
   Logger,
+  ModelPresetCacheValue,
   ModelPresetRepository,
   ModelRef,
   PipelineRepository,
@@ -466,6 +467,13 @@ export interface ExecutionServiceDependencies {
    * `RiskPolicyService` on every preset write.
    */
   riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
+  /**
+   * Optional: the {@link AppCaches.modelPreset} slice — read-through for the block's MODEL preset,
+   * whose two run-path columns (the step's model for the kind, the route order) every dispatch
+   * resolves. Absent → every dispatch hits the repository (tests / no cache wired). Invalidated by
+   * `ModelPresetService` on every preset write.
+   */
+  modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
   /**
    * Optional: the merge track record — the per-class change classification the merge policy's
    * per-class rules key off, plus the best-effort record of every merge decision (and the

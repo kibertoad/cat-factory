@@ -52,6 +52,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'logger'
   | 'workspaceAgentSettingsRepository'
   | 'modelPresetRepository'
+  | 'modelPresetCache'
   | 'foundationalServiceResolver'
   | 'binaryGeneratorSource'
 >
@@ -69,6 +70,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     agentPrompts: deps.agentPromptRepository,
     agentSettings: deps.workspaceAgentSettingsRepository,
     modelPresets: deps.modelPresetRepository,
+    modelPresetCache: deps.modelPresetCache,
     consensusGroups: deps.consensusGroupRepository,
     documents: deps.documentRepository,
     documentUrlResolver: deps.documentUrlResolver,

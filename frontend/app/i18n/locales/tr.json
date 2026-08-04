@@ -2377,7 +2377,9 @@
         "customHint": "Bu hazır ayar rotaları bu sırayla tercih eder. Yalnızca daha alt bir rotadan erişilebilen bir model yine çalışır, sadece daha sonra denenir.",
         "reset": "Varsayılan sırayı kullan",
         "moveUp": "Bu rotayı daha çok tercih et",
-        "moveDown": "Bu rotayı daha az tercih et"
+        "moveDown": "Bu rotayı daha az tercih et",
+        "subscriptionOverrideHint": "Bağlı bir abonelik, abonelik sunan modellerde hâlâ önceliklidir: motor bu sıralamadan bağımsız olarak onları plana yönlendirir. Abonelik girdisinin altındaki rotalar diğer tüm modeller için geçerlidir.",
+        "badgesUseDefaultPresetHint": "Yukarıda her modelin yanında gösterilen rota, bu ön ayarın değil, çalışma alanının varsayılan ön ayarının rotasıdır."
       }
     },
     "account": {
@@ -5837,7 +5839,7 @@
       "newDescription": "Yeni yerleşik model ön ayarları geldi. Bu panonun kütüphanesine ekleyin.",
       "add": "Ekle",
       "updatesHeading": "Güncellemeler mevcut",
-      "updatesDescription": "Bu yerleşik model ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "updatesDescription": "Bu yerleşik model ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın: varsayılan ve sıralama korunur, ancak ön ayardaki özel rota sırası temizlenir.",
       "versionAvailable": "Sürüm {from} → {to} mevcut.",
       "reseed": "Yeniden tohumla",
       "reseedAll": "Tümünü güncelle ({count})",

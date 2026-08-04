@@ -13,7 +13,6 @@ import type {
   RequirementReviewItem,
   RequirementReviewStatus,
   ReviewItemStatus,
-  ModelPresetRepository,
 } from '@cat-factory/kernel'
 import {
   assertFound,
@@ -114,13 +113,11 @@ export interface IterativeReviewDeps {
    * reviewer/rework on a subscription model. Absent → always degrade (Node/Worker).
    */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-agent-kind default model id (consulted when the block pins none). */
-  resolveWorkspaceModelDefault?: InlineBlockModelDeps['resolveWorkspaceModelDefault']
   /**
-   * The workspace's model-preset library, read for the ROUTE order the block's preset states.
-   * Absent ⇒ the deployment's default order.
+   * The workspace's per-kind default MODEL and the ROUTE order the preset in force states, from
+   * ONE read. Absent ⇒ block pin plus the routing default, on the deployment's default order.
    */
-  modelPresets?: ModelPresetRepository
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /**
    * Resolve the run/execution + initiator a reviewer pass belongs to, from the block under
    * review. Threaded into the model scope so a facade that serves an inline subscription ref

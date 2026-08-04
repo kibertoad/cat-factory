@@ -613,26 +613,6 @@ export type ModelFlavor = v.InferOutput<typeof modelFlavorSchema>
  */
 export const DEFAULT_MODEL_FLAVOR_ORDER: readonly ModelFlavor[] = modelFlavorSchema.options
 
-/**
- * The full order a resolution walks given a preset's own preference: the routes it named, in the
- * order it named them, then every route it OMITTED in {@link DEFAULT_MODEL_FLAVOR_ORDER} order.
- *
- * A preference REORDERS, it never filters. A preset naming three routes must not make a model whose
- * only route is the fourth unresolvable — that route should merely be tried last. Returning a total
- * order over every route rather than the caller's list is what makes that structural, and it is why
- * the editor has no "remove" affordance: there is nothing to remove.
- *
- * A repeat keeps its FIRST position (the caller's own statement of where the route belongs); the
- * write boundary refuses one, so this only ever tolerates rather than trusts.
- */
-export function orderedModelFlavorPreference(
-  preference?: readonly ModelFlavor[],
-): readonly ModelFlavor[] {
-  if (!preference?.length) return DEFAULT_MODEL_FLAVOR_ORDER
-  const named = new Set(preference)
-  return [...named, ...DEFAULT_MODEL_FLAVOR_ORDER.filter((flavor) => !named.has(flavor))]
-}
-
 const MODEL_FLAVOR_SET: ReadonlySet<string> = new Set(modelFlavorSchema.options)
 
 /**
@@ -651,6 +631,33 @@ const MODEL_FLAVOR_SET: ReadonlySet<string> = new Set(modelFlavorSchema.options)
  */
 export function isModelFlavor(value: string): value is ModelFlavor {
   return MODEL_FLAVOR_SET.has(value)
+}
+
+/**
+ * The full order a resolution walks given a preset's own preference: the routes it named, in the
+ * order it named them, then every route it OMITTED in {@link DEFAULT_MODEL_FLAVOR_ORDER} order.
+ *
+ * A preference REORDERS, it never filters. A preset naming three routes must not make a model whose
+ * only route is the fourth unresolvable — that route should merely be tried last. Returning a total
+ * order over every route rather than the caller's list is what makes that structural, and it is why
+ * the editor has no "remove" affordance: there is nothing to remove.
+ *
+ * A repeat keeps its FIRST position (the caller's own statement of where the route belongs); the
+ * write boundary refuses one, so this only ever tolerates rather than trusts.
+ *
+ * The result is narrowed through {@link isModelFlavor} rather than trusting the argument's type,
+ * because the ONE thing a stale entry must never do is reach a `Record<ModelFlavor, …>` lookup and
+ * kernel's `effectiveVariant` indexes `FLAVOR_HANDLERS` with exactly what this returns. Every
+ * producer narrows already (the persistence mapper, the write boundary's picklist), so this is the
+ * guarantee made LOCAL instead of being a property of every present and future caller.
+ */
+export function orderedModelFlavorPreference(
+  preference?: readonly ModelFlavor[],
+): readonly ModelFlavor[] {
+  if (!preference?.length) return DEFAULT_MODEL_FLAVOR_ORDER
+  const named = new Set(preference.filter(isModelFlavor))
+  if (!named.size) return DEFAULT_MODEL_FLAVOR_ORDER
+  return [...named, ...DEFAULT_MODEL_FLAVOR_ORDER.filter((flavor) => !named.has(flavor))]
 }
 
 /**

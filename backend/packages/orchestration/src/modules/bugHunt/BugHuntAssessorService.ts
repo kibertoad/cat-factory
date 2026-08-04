@@ -6,7 +6,6 @@ import type {
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
-  ModelPresetRepository,
 } from '@cat-factory/kernel'
 import { extractJson, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
 import {
@@ -46,13 +45,11 @@ export interface BugHuntAssessorServiceDeps {
   resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /** Keep an ambient-eligible harness ref inline (local mode) instead of degrading it. */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's default model for the `bug-hunter` kind. */
-  resolveWorkspaceModelDefault?: InlineBlockModelDeps['resolveWorkspaceModelDefault']
   /**
-   * The workspace's model-preset library, read for the ROUTE order the DEFAULT preset states (a
-   * hunt selects none). Absent ⇒ the deployment's default order.
+   * The workspace's per-kind default MODEL and the ROUTE order the preset in force states, from
+   * ONE read. Absent ⇒ block pin plus the routing default, on the deployment's default order.
    */
-  modelPresets?: ModelPresetRepository
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /** Current time, injected so the rendered candidate ages are deterministic under test. */
   now?: () => number
   /** Facade logger; a swallowed ranking failure with no trace is an unowned bug. */

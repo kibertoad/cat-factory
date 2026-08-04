@@ -13,16 +13,34 @@
 //    default". Only the first keeps tracking the shipped order as the product changes it, so
 //    reordering back to the default clears the preference rather than storing a copy of it, and
 //    the header says which of the two the preset is in.
+//
+// A third property is the engine's rather than this order's, and it is why the control can warn:
+// "subscriptions always win" is applied on TOP of the resolved route, so on a workspace with a
+// connected plan a dual-mode model ignores an order that ranks `subscription` lower than the
+// shipped default does. The logic module says when; the copy says so plainly.
 import { computed } from 'vue'
+import type { ModelFlavor } from '@cat-factory/contracts'
+import { orderedModelFlavorPreference } from '@cat-factory/contracts'
 import {
-  DEFAULT_MODEL_FLAVOR_ORDER,
-  type ModelFlavor,
-  orderedModelFlavorPreference,
-} from '@cat-factory/contracts'
+  commitFlavorOrder,
+  moveFlavor,
+  subscriptionOverridesOrder,
+} from '~/components/settings/ProviderPreferenceEditor.logic'
 
 const props = defineProps<{
   /** The preset's stored order; empty/absent ⇒ the deployment's default order. */
   modelValue: ModelFlavor[] | undefined
+  /**
+   * Whether this workspace has ANY subscription vendor connected. Drives the caveat only: the
+   * override it warns about is the engine's, so the control cannot prevent it, only name it.
+   */
+  hasSubscription?: boolean
+  /**
+   * Whether the preset being edited is the workspace DEFAULT. `GET /models` resolves its flavour
+   * badges under the default preset's order, so on any OTHER preset the model list beside this
+   * control is showing routes this order does not govern, and the control says so.
+   */
+  isDefaultPreset?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [ModelFlavor[] | undefined] }>()
 
@@ -48,27 +66,20 @@ const ROUTE_HINTS: Record<ModelFlavor, string> = {
 const order = computed(() => orderedModelFlavorPreference(props.modelValue))
 const isCustom = computed(() => (props.modelValue?.length ?? 0) > 0)
 
-function sameAsDefault(next: readonly ModelFlavor[]): boolean {
-  return next.every((flavor, i) => DEFAULT_MODEL_FLAVOR_ORDER[i] === flavor)
-}
+/** A connected plan overrules a deprioritised subscription route — see the logic module. */
+const subscriptionWins = computed(() =>
+  subscriptionOverridesOrder({
+    preference: props.modelValue,
+    hasSubscription: props.hasSubscription ?? false,
+  }),
+)
 
-/**
- * Commit a reordering. An order equal to today's default is emitted as UNSET, so a preset never
- * pins a copy of the shipped order and silently stops following it when the product changes.
- */
-function commit(next: ModelFlavor[]) {
-  emit('update:modelValue', sameAsDefault(next) ? undefined : next)
-}
+/** The badges beside this control render under the DEFAULT preset's order, not this one's. */
+const badgesShowAnotherOrder = computed(() => isCustom.value && props.isDefaultPreset === false)
 
 function move(index: number, delta: number) {
-  const next = [...order.value]
-  const target = index + delta
-  const moved = next[index]
-  const displaced = next[target]
-  if (!moved || !displaced) return
-  next[index] = displaced
-  next[target] = moved
-  commit(next)
+  const next = moveFlavor(order.value, index, delta)
+  if (next) emit('update:modelValue', commitFlavorOrder(next))
 }
 
 function reset() {
@@ -100,6 +111,27 @@ function reset() {
           ? t('settings.modelConfiguration.routeOrder.customHint')
           : t('settings.modelConfiguration.routeOrder.defaultHint')
       }}
+    </p>
+    <!-- The engine applies "subscriptions always win" ON TOP of this order, so on a workspace with
+         a connected plan a dual-mode model ignores a deprioritised subscription route. Said here
+         rather than left to be discovered in a run: copy that promises a residency-guaranteed
+         route a connected plan quietly overrules is the one thing this control must not do. -->
+    <p
+      v-if="subscriptionWins"
+      class="mb-2 text-[11px] leading-relaxed text-amber-400/90"
+      data-testid="preset-route-order-subscription-warning"
+    >
+      {{ t('settings.modelConfiguration.routeOrder.subscriptionOverrideHint') }}
+    </p>
+    <!-- The model list beside this control shows each model's route under the WORKSPACE DEFAULT
+         preset (that is what `GET /models` resolves), so on any other preset those badges are
+         answering a different question than this order asks. -->
+    <p
+      v-if="badgesShowAnotherOrder"
+      class="mb-2 text-[11px] leading-relaxed text-slate-500"
+      data-testid="preset-route-order-badge-hint"
+    >
+      {{ t('settings.modelConfiguration.routeOrder.badgesUseDefaultPresetHint') }}
     </p>
     <ol
       class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"

@@ -1,6 +1,6 @@
-import type { ModelFlavor, ModelPresetRepository, ModelRef } from '@cat-factory/kernel'
+import type { ModelFlavor, ModelRef } from '@cat-factory/kernel'
 import { inlineModelRef } from '@cat-factory/kernel'
-import { resolvePresetProviderPreference } from './modules/modelPresets/ModelPresetService.js'
+import type { PresetRouting } from './modules/modelPresets/ModelPresetService.js'
 
 // The model half of what the INLINE LLM callers share, the sibling of `inlineScope.ts`'s scope half.
 // The judge, the fork-decision chat, the iterative reviewers, the doc/initiative interviewers, the
@@ -30,18 +30,22 @@ export interface InlineBlockModelDeps {
   ) => ModelRef | undefined
   /** Keep an ambient-eligible harness ref inline (local mode) instead of degrading it. */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-agent-kind default model id (consulted when nothing is pinned). */
-  resolveWorkspaceModelDefault?: (
+  /**
+   * Both preset-derived facts this call needs — the workspace's per-kind default MODEL and the
+   * ROUTE order the same preset states — from ONE read of the preset in force.
+   *
+   * ONE dependency rather than the pair it replaced (`resolveWorkspaceModelDefault` +
+   * the preset repository), for two reasons that point the same way. A site that wired the model
+   * half and forgot the route half would resolve a preset's model onto the deployment's default
+   * route with nothing failing; and asking for the two separately read the SAME row twice on every
+   * inline call, since the model id and the order are two columns of it. Absent ⇒ block pin plus
+   * routing default, exactly as before presets existed.
+   */
+  resolvePresetRouting?: (
     workspaceId: string,
     agentKind: string,
     modelPresetId?: string,
-  ) => Promise<string | undefined>
-  /**
-   * The workspace's model-preset library, read for the ROUTE order the selected preset states.
-   * Absent ⇒ the deployment's default order, which is what these callers had before presets could
-   * state one.
-   */
-  modelPresets?: ModelPresetRepository
+  ) => Promise<PresetRouting>
 }
 
 /**
@@ -65,7 +69,8 @@ export interface InlineModelSelection {
  *
  * The preset in force supplies the route ORDER for both id resolutions, so a preset that prefers a
  * residency-guaranteed route gets it here as well as at dispatch. Resolved once per call rather than
- * threaded in, because an inline caller has no `AgentRunContext` to carry it.
+ * threaded in, because an inline caller has no `AgentRunContext` to carry it — and once per call
+ * means exactly one preset read, which is why the model and the order arrive as one dependency.
  *
  * Returns undefined only when nothing resolved AND no routing default is wired — the caller's cue
  * that no model is configured for the feature.
@@ -80,17 +85,11 @@ export async function resolveInlineBlockModelRef(
   const runsInline = deps.runsInline
   const degrade = (ref: ModelRef): ModelRef =>
     inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
-  const preference = deps.modelPresets
-    ? await resolvePresetProviderPreference(deps.modelPresets, workspaceId, selection.modelPresetId)
-    : undefined
+  const routing = await deps.resolvePresetRouting?.(workspaceId, agentKind, selection.modelPresetId)
+  const preference = routing?.providerPreference
   const fromBlock = deps.resolveBlockModel?.(selection.modelId, preference)
   if (fromBlock) return degrade(fromBlock)
-  const defaultId = await deps.resolveWorkspaceModelDefault?.(
-    workspaceId,
-    agentKind,
-    selection.modelPresetId,
-  )
-  const fromDefault = deps.resolveBlockModel?.(defaultId, preference)
+  const fromDefault = deps.resolveBlockModel?.(routing?.modelId, preference)
   if (fromDefault) return degrade(fromDefault)
   return fallback
 }

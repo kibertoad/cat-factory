@@ -218,6 +218,14 @@ BASE flavour walk picks, and the subscription override still sits on top of it. 
 puts `subscription` first does not yet bypass that override, and a workspace holding no token is
 unaffected by such an order — which is exactly the separation the outstanding slice removes.
 
+The consequence runs the other way too, and it is the one a user can hit: on a workspace WITH a
+token, a preset promoting a residency-guaranteed route is overruled for every dual-mode model,
+because the override is applied after the walk rather than inside it. The preset editor therefore
+warns whenever a stated order does not itself put `subscription` first
+(`ProviderPreferenceEditor.logic.ts`), rather than letting the copy promise a route a connected
+plan quietly takes back. That warning is deleted by the same slice that moves the override into
+the order.
+
 ---
 
 ## 5. Harnesses, where a model runs

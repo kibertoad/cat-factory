@@ -300,7 +300,7 @@ function selectWorkerProviderCapabilities(
         workspaceAccountOf: (id) => new D1WorkspaceRepository({ db }).accountOf(id),
         modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
         caches: deps.caches,
-        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db),
+        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db, deps.caches),
       },
       workspaceId,
       initiatedBy,
@@ -469,12 +469,13 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
       overrides.agentExecutor ??
-      maybeWrapConsensus(
-        selectAgentExecutor({
+      maybeWrapConsensus({
+        standard: selectAgentExecutor({
           env,
           config,
           db,
           clock,
+          caches,
           resolveTransport,
           agentKindRegistry,
           subscriptions,
@@ -489,7 +490,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
         db,
         eventPublisher,
         agentKindRegistry,
-      ),
+        caches,
+      }),
     agentKindRegistry,
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.

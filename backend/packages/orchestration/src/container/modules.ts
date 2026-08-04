@@ -1044,6 +1044,9 @@ export function createModelPresetsModule(deps: CoreDependencies): ModelPresetsMo
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.defaultModelPresetId ? { defaultPresetId: deps.defaultModelPresetId } : {}),
+    // Every write drops the workspace group, so a re-pointed model or a re-ordered route list is
+    // visible on the very next dispatch rather than after the TTL.
+    ...(deps.caches ? { modelPresetCache: deps.caches.modelPreset } : {}),
   })
   return { service }
 }

@@ -17,9 +17,11 @@ import type {
   ExecutionInstance,
   FrontendConfig,
   Initiative,
+  GroupCacheHandle,
   InitiativePresetRegistry,
   InitiativeRepository,
   Logger,
+  ModelPresetCacheValue,
   ModelPresetRepository,
   PipelineStep,
   RequirementReviewRepository,
@@ -236,6 +238,11 @@ export interface AgentContextBuilderDeps {
    * default order, unchanged.
    */
   modelPresets?: ModelPresetRepository
+  /**
+   * Optional: the `AppCaches.modelPreset` slice the preset read above goes through — the row is
+   * slow-moving admin config that every dispatch resolves. Absent ⇒ the read runs live.
+   */
+  modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
   /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the

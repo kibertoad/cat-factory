@@ -226,15 +226,23 @@ Gotchas this slice surfaced, for whoever takes slice 3:
 - **The dispatch and the start guard needed DIFFERENT travel paths** (see "Where the preference
   travels" above). Adding only the guard's would have left every dispatch on the default order,
   and adding only the context's would have let a run be admitted against a route it never takes.
-- **Seven inline callers each hand-rolled the step precedence.** The judge, the fork chat, the
+- **Eight inline callers each hand-rolled the step precedence.** The judge, the fork chat, the
   iterative reviewers (+ the brainstorm/clarity subclasses), the doc/initiative interviewers, the
-  tester QC companion and the bug-hunt assessor carried byte-identical private `modelFor`
-  methods, so the order had to reach seven places. They now share
+  tester QC companion, the bug-hunt assessor and the Kaizen grader carried byte-identical private
+  `modelFor` methods, so the order had to reach eight places. They now share
   `resolveInlineBlockModelRef` (`orchestration/src/inlineBlockModel.ts`, the model twin of
-  `inlineScope.ts`) and one wiring factory (`container/inline-model-deps.ts`). **Wire the model
-  resolver and the route order TOGETHER** — that is what the factory is for: a site that wires
-  the first and forgets the second resolves a preset's model onto the deployment's default route,
-  and nothing fails, so it can only be caught by reading.
+  `inlineScope.ts`) and one wiring factory (`container/inline-model-deps.ts`). **The model and the
+  route order arrive as ONE `resolvePresetRouting` dependency**, not two wired side by side, and
+  the eighth caller is why: Kaizen resolved through a seam with no `providerPreference` parameter,
+  so it took the factory's model half and silently ignored the order — a compliance preset got its
+  route for every inline call on a block except its grading. Two columns of one row, wired apart,
+  is an invitation to take one; wired together it is also ONE read instead of two.
+- **That row is read on EVERY dispatch and every inline call**, so it goes through an
+  `AppCaches.modelPreset` slice — the merge preset's `riskPolicy` twin one table over, same key
+  shape (`picked:<id>` / `default`), same invalidate-on-every-write rule in `ModelPresetService`,
+  same pass-through on the Worker's isolate-safe profile. Slice 3 adds per-workspace token state
+  to this resolution; that state is NOT cacheable on this key (it varies by run initiator), so it
+  has to ride the capability set rather than the preset row.
 - **"Equals the default order" must be stored as ABSENT.** The editor emits `undefined` when a
   reordering lands back on the default, and an empty list on the wire is the reset. Otherwise a
   preset would pin a copy of today's order and silently stop following it — which is exactly what
@@ -247,6 +255,17 @@ Gotchas this slice surfaced, for whoever takes slice 3:
   route is gone there is no current member a human could re-pick it as, and the surviving entries
   keep their relative order. What it must never do is reach a `Record<ModelFlavor, …>` lookup,
   which is why `parseProviderPreferenceColumn` narrows with `isModelFlavor` first.
+- **The subscription override sits ON TOP of this order, and the editor has to SAY so.**
+  `ModelRouter.resolveEffectiveRef` swaps the resolved ref for the subscription one whenever the
+  workspace (or, for an individual vendor, the initiator) holds a token, so on such a deployment a
+  preset promoting Bedrock is overruled for every dual-mode model. Until slice 3 folds that
+  override into this order, `ProviderPreferenceEditor` warns whenever a custom order does not
+  itself put `subscription` first (`subscriptionOverridesOrder`). **Slice 3 deletes that warning**;
+  it is the visible marker of exactly what slice 3 is for.
+- **`GET /models` resolves its flavour badges under the WORKSPACE DEFAULT preset**, because a
+  workspace-wide read has no block in hand. That is right for the API and wrong-looking in the
+  editor, where the badges sit beside an order for some other preset — so the editor says which
+  preset the badges are about whenever the two can differ.
 - **Not verified against live databases in the authoring session** (no Docker/Postgres, and the
   Worker tests don't run on Windows). The migration pair, the mappers and the conformance
   assertion are typechecked and the pure-logic suites are green; CI's real-D1 + real-Postgres

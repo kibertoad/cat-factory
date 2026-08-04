@@ -513,7 +513,12 @@ function fail(title: string, e: unknown) {
                    AWS Bedrock ahead of a model's own provider API, an everyday preset a flat-rate
                    subscription first. An override of the deployment default, so basic mode hides it
                    until the preset actually carries one. -->
-              <ProviderPreferenceEditor v-if="showRouteOrder" v-model="editor.providerPreference" />
+              <ProviderPreferenceEditor
+                v-if="showRouteOrder"
+                v-model="editor.providerPreference"
+                :has-subscription="creds.configuredVendors.size > 0"
+                :is-default-preset="editor.isDefault"
+              />
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">

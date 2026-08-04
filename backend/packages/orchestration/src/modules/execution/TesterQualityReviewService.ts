@@ -1,10 +1,4 @@
-import type {
-  Block,
-  ModelProvider,
-  ModelProviderResolver,
-  ModelRef,
-  ModelPresetRepository,
-} from '@cat-factory/kernel'
+import type { Block, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import { resolveScopedModelProvider } from '@cat-factory/kernel'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
@@ -48,13 +42,11 @@ export interface TesterQualityReviewDeps {
   resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /** Keep an ambient-eligible harness ref inline (local mode) instead of degrading it. */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-agent-kind default model id (block pins none). */
-  resolveWorkspaceModelDefault?: InlineBlockModelDeps['resolveWorkspaceModelDefault']
   /**
-   * The workspace's model-preset library, read for the ROUTE order the block's preset states.
-   * Absent ⇒ the deployment's default order.
+   * The workspace's per-kind default MODEL and the ROUTE order the preset in force states, from
+   * ONE read. Absent ⇒ block pin plus the routing default, on the deployment's default order.
    */
-  modelPresets?: ModelPresetRepository
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
   resolveRunContext?: ResolveBlockRunContext
 }

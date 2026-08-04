@@ -2377,7 +2377,9 @@
         "customHint": "Ce préréglage préfère les routes dans cet ordre. Un modèle accessible uniquement par une route inférieure fonctionne toujours, il est simplement essayé plus tard.",
         "reset": "Utiliser l'ordre par défaut",
         "moveUp": "Préférer davantage cette route",
-        "moveDown": "Préférer moins cette route"
+        "moveDown": "Préférer moins cette route",
+        "subscriptionOverrideHint": "Un abonnement connecté l'emporte toujours pour les modèles qui en proposent un : le moteur les achemine vers le forfait quel que soit cet ordre. Les routes situées sous l'entrée abonnement s'appliquent à tous les autres modèles.",
+        "badgesUseDefaultPresetHint": "La route affichée à côté de chaque modèle ci-dessus est celle du preset par défaut de l'espace de travail, pas celle de ce preset."
       }
     },
     "account": {
@@ -5825,7 +5827,7 @@
       "newDescription": "De nouveaux presets de modèle intégrés sont arrivés. Ajoutez-les à la bibliothèque de ce tableau.",
       "add": "Ajouter",
       "updatesHeading": "Mises à jour disponibles",
-      "updatesDescription": "Une version plus récente de ces presets de modèle intégrés est arrivée. Régénérez pour l'adopter (le preset par défaut et l'ordre sont conservés).",
+      "updatesDescription": "Une version plus récente de ces presets de modèle intégrés est arrivée. Régénérez pour l'adopter : le preset par défaut et l'ordre sont conservés, mais un ordre de routes personnalisé sur le preset est effacé.",
       "versionAvailable": "Version {from} → {to} disponible.",
       "reseed": "Régénérer",
       "reseedAll": "Tout mettre à jour ({count})",

@@ -1,8 +1,10 @@
 import type {
   AgentPromptRepository,
   Block,
+  GroupCacheHandle,
   Logger,
   ModelFlavor,
+  ModelPresetCacheValue,
   ModelPresetRepository,
   PipelineStep,
   WorkspaceAgentSettingsRepository,
@@ -69,6 +71,12 @@ export interface DispatchPromptSettingsDeps {
   agentSettings?: WorkspaceAgentSettingsRepository
   /** The workspace's model-preset library, read for the block's route order. */
   modelPresets?: ModelPresetRepository
+  /**
+   * The `AppCaches.modelPreset` slice that read goes through. The row is slow-moving admin config
+   * that EVERY dispatch resolves, so it is exactly the profile the merge preset's cache exists for;
+   * absent ⇒ the read runs live (tests / no cache wired).
+   */
+  modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
   logger?: Logger
 }
 
@@ -188,6 +196,7 @@ export async function resolveDispatchProviderPreference(
     deps.modelPresets,
     workspaceId,
     block.modelPresetId,
+    deps.modelPresetCache,
   )
   return preference?.length ? { providerPreference: preference } : {}
 }
