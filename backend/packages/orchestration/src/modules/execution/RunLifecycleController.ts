@@ -7,16 +7,19 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
+  Logger,
   PipelineRepository,
   PipelineStep,
   SubscriptionActivationRepository,
   WorkRunner,
+  WorkspaceRole,
 } from '@cat-factory/kernel'
 import type { PreloadedBlocks } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
   DEFAULT_RISK_POLICY,
+  noopLogger,
   ValidationError,
 } from '@cat-factory/kernel'
 import { companionFor } from '@cat-factory/agents'
@@ -27,6 +30,7 @@ import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp
 import { isRalphKind, resolveRalphConfig, seedRalphState } from './ralph.logic.js'
 import { buildResumedInstance, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import { claimLiveRunOrConflict, handOffLiveRun, type RunStartDeps } from './runStart.js'
+import { settleRunModeForStart } from './runMode.logic.js'
 import { descendantIds } from '../board/board.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunAdmission } from './RunAdmission.js'
@@ -50,6 +54,22 @@ export interface RunLifecycleDeps {
   runStateMachine: RunStateMachine
   workRunner: WorkRunner
   subscriptionActivations?: SubscriptionActivationRepository
+  /**
+   * The logger the start path reports a POLICY sandbox through: a run held to a dry run by its
+   * merge preset is a disposition the initiator did not choose, so it is stated to the operator
+   * as well as to the run's own notes.
+   */
+  logger?: Logger
+  /**
+   * The roles the task's merge preset forces into dry-run mode, as a BOUND CALLBACK rather than
+   * the merge-policy service itself: this controller launches runs and has no other business with
+   * merge policy, and the one fact it needs is a list of roles. Absent (a caller with no preset
+   * layer wired) sandboxes nobody, which is the shipped default.
+   */
+  resolveDryRunRoles?: (
+    workspaceId: string,
+    block: Block,
+  ) => Promise<readonly WorkspaceRole[] | undefined>
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   requireBlock: (workspaceId: string, id: string) => Promise<Block>
   failRun: (
@@ -273,6 +293,17 @@ export class RunLifecycleController {
     const frontendRun = pipelineHasVisualStep({ agentKinds: pipeline.agentKinds })
       ? await this.deps.contextBuilder.resolveFrontendRunInfo(workspaceId, block)
       : undefined
+    // Settle the run's MODE once and pin it below. Read at START, never at merge time: a run
+    // admitted as live must not become un-mergeable because the preset was edited while it
+    // worked, nor a sandboxed one escape because its role was un-listed mid-flight.
+    const { mode, notes } = await settleRunModeForStart({
+      requested: options.mode,
+      role: options.initiatedByRole,
+      loadDryRunRoles: async () => await this.deps.resolveDryRunRoles?.(workspaceId, block),
+      baseNotes: frontendRun?.notes ?? [],
+      logger: this.deps.logger ?? noopLogger,
+      fields: { workspaceId, executionId, blockId },
+    })
     const instance: ExecutionInstance = {
       id: executionId,
       blockId,
@@ -282,11 +313,17 @@ export class RunLifecycleController {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      // The authority this run is admitted under, pinned for the DURABLE merge path (which
+      // rebuilds the run from its stored row and has no request context to re-resolve a role
+      // from). Absent stays absent rather than being guessed onto a tier; `mode` is stored only
+      // when sandboxed, since `live` is the read-time default and what every legacy run was.
+      initiatedByRole: options.initiatedByRole ?? null,
+      ...(mode === 'dry_run' ? { mode } : {}),
       // Only a headless start carries an explicit intake origin; `ui` is the read-time
       // default, so an ordinary board/schedule start stores nothing extra.
       ...(intakeOrigin != null ? { intakeOrigin } : {}),
       createdAt: this.deps.clock.now(),
-      ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
+      ...(notes.length ? { notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }
     await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, prior?.id)

@@ -243,6 +243,17 @@ With that scoping, the pipeline properties are:
   built-in): `autoMergeEnabled: false` routes _every_ PR to a human `merge_review` regardless of
   scores, and per-class `classRules` put floors under the model's opinion (e.g. "schema-class
   changes always get a human"). A class rule can never override `autoMergeEnabled: false`.
+- **Who STARTED the run is part of the policy, pinned at admission.** A preset also carries
+  `classRulesByRole` (the per-class rules narrowed by the initiator's workspace role) and
+  `dryRunRoles` (roles whose runs open a PR but never merge, at either exit: the auto-merge AND the
+  `mergePr` endpoint the review card calls). Both are MECHANISMS in the same sense as the class
+  computation: the role and the mode are recorded on the run when it is admitted and read back from
+  the stored row, so nothing the agent returns, and no preset edit made while the run works, can
+  change the authority it runs under. Narrowing is subtractive by construction
+  (`narrowMergeClassRule`), so a role entry can never widen what the base rules allow, and a run
+  with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
+  rules rather than being guessed onto a tier. Full model:
+  [`role-scoped-merge-policy.md`](../../docs/initiatives/role-scoped-merge-policy.md).
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint
@@ -302,6 +313,13 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **The merger's judgment**, or any other LLM verdict, for anything the preset and class rules
   don't floor. Judgments are defeatable by the same injection you're worried about.
 - **Intra-container separation** between agent and harness (Layer 2's stated limit).
+- **The sandboxed run mode (`dryRunRoles`) against someone who has repo write.** It refuses both of
+  the PLATFORM's merge exits; it cannot stop a human merging the PR by hand on the host, and a PR is
+  deliberately still opened. It is a real control in one specific shape: the engine falls back to
+  the DEPLOYMENT credential for an initiator with no stored PAT, so a non-engineer who cannot merge
+  on GitHub can still cause a merge by tapping the review card, and the mode closes that escalation.
+  Against anyone holding write access on the host it is advisory. Branch protection, the first item
+  on the hardening checklist below, is the mechanism; this is scoping on top of it.
 - **The absence of a secret in the prompt.** Injected `.cat-context/` files and job bodies carry
   non-secret projections by design (`context.toolServers` never carries credential values; tool
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
