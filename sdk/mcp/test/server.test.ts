@@ -72,7 +72,7 @@ describe('the MCP facade end to end', () => {
   it('lists tools with their schemas and the read-only annotation', async () => {
     ;({ client } = await connect(OPTIONS, () => json({})))
     const { tools } = await client.listTools()
-    expect(tools).toHaveLength(37)
+    expect(tools).toHaveLength(40)
     const start = tools.find((tool) => tool.name === 'tasks_start')!
     expect(start.annotations?.readOnlyHint).toBe(false)
     expect(tools.find((tool) => tool.name === 'tasks_get')!.annotations?.readOnlyHint).toBe(true)

@@ -18,7 +18,7 @@ import { CatFactoryResources } from './operations.generated.ts'
  *
  * Every call is scoped to the key's workspace, and each resource client mirrors one tag of the
  * published OpenAPI surface: `jobs`, `services`, `tasks`, `pipelines`, `notifications`,
- * `usage`, `decisions`, `debug`.
+ * `webhook`, `usage`, `decisions`, `debug`.
  *
  * The client is stateless beyond its configuration, so one instance is safe to share across
  * concurrent work.

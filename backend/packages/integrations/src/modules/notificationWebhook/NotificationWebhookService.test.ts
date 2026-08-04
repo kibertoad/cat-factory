@@ -5,9 +5,10 @@ import { NotificationWebhookService } from './NotificationWebhookService.js'
 
 // The management half of the webhook. Two things here are easy to get wrong and expensive when
 // wrong: the write-boundary SSRF guard (an internal endpoint accepted here is a signed POST at an
-// internal host later) and the keep-the-stored-secret semantics of an omitted `secret` (dropping it
-// silently un-signs every future delivery, which looks fine right up until a receiver starts
-// rejecting).
+// internal host later) and keep-on-omit, which holds for EVERY field. Both of its edges are silent
+// when broken. Dropping an omitted `secret` un-signs every future delivery, which looks fine right
+// up until a receiver starts rejecting; re-defaulting an omitted `url` would point the workspace
+// somewhere else entirely, and the tool that did it still answers 200.
 
 const cipher = {
   encrypt: async (plaintext: string) => `sealed:${plaintext}`,
@@ -97,5 +98,39 @@ describe('NotificationWebhookService', () => {
     })
     expect(updated.hasSecret).toBe(true)
     expect(store.stored()!.secretSealed).toBe('sealed:a-signing-secret-1234')
+  })
+
+  it('keeps the registered endpoint when a later put omits the url', async () => {
+    const store = repo()
+    const svc = service(store)
+    await svc.put('ws1', { url: 'https://example.test/hook', secret: 'a-signing-secret-1234' })
+    // Subscribing to a new family is a ONE-field write. A mandatory re-send would make this edit
+    // carry a url the caller never meant to change, and a stale cached one would redirect every
+    // future delivery while looking like it only added a subscription.
+    const updated = await svc.put('ws1', { alertEvents: ['platform_health.firing'] })
+    expect(updated).toMatchObject({
+      url: 'https://example.test/hook',
+      alertEvents: ['platform_health.firing'],
+      hasSecret: true,
+    })
+  })
+
+  it('refuses a put that names no url when nothing is registered yet', async () => {
+    // Keep-on-omit needs something to keep. The refusal is machine-readable so a client can tell
+    // "you must register first" from the SSRF guard's rejection of an endpoint it did supply.
+    await expect(service(repo()).put('ws1', { types: ['merge_review'] })).rejects.toMatchObject({
+      code: 'validation',
+      details: { reason: 'webhook_url_required' },
+    })
+  })
+
+  it('leaves a stored endpoint alone when the deployment later narrows its allow-list', async () => {
+    // The widened deployment registered a localhost receiver; a later narrowing must not strand
+    // the operator, who now needs exactly the edit (disable) that reacts to it. Deliveries stop
+    // either way, because the delivery path re-applies the guard per redirect hop.
+    const store = repo()
+    await service(store, true).put('ws1', { url: 'http://localhost:9000/hook' })
+    const narrowed = await service(store).put('ws1', { enabled: false })
+    expect(narrowed).toMatchObject({ url: 'http://localhost:9000/hook', enabled: false })
   })
 })

@@ -27,6 +27,11 @@ import ai.catfactory.sdk.EventStream;
 import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
 import ai.catfactory.sdk.model.CreatePublicTask;
+import ai.catfactory.sdk.model.NotificationWebhook;
+import ai.catfactory.sdk.model.NotificationWebhookAlertEvent;
+import ai.catfactory.sdk.model.NotificationWebhookRunEvent;
+import ai.catfactory.sdk.model.PublicNotificationWebhook;
+import ai.catfactory.sdk.model.PutNotificationWebhook;
 import ai.catfactory.sdk.model.PublicPipeline;
 import ai.catfactory.sdk.model.PublicRun;
 import ai.catfactory.sdk.model.PublicTask;
@@ -190,6 +195,41 @@ public final class Smoketest {
         step("notifications.list", () -> {
             var result = client.notifications().list();
             observations.put("notificationCount", result.notifications().size());
+        });
+
+        // The webhook round-trip is where the four clients are most exposed to a null decoding
+        // differently: an unregistered endpoint is a `webhook: null` FIELD, and "the server said
+        // null" must not arrive as an absence, an empty object, or a zero-valued struct in any
+        // language.
+        step("webhook.get / set / delete", () -> {
+            PublicNotificationWebhook before = client.webhook().get();
+            observations.put("webhookInitiallyNull", before.webhook() == null);
+            NotificationWebhook saved = client.webhook().set(PutNotificationWebhook.builder()
+                    .url("https://hooks.example.com/cat-factory-smoketest")
+                    .secret("smoketest-signing-secret")
+                    .runEvents(List.of(NotificationWebhookRunEvent.RUN_COMPLETED))
+                    .build());
+            observations.put("webhookSavedUrl", saved.url());
+            // The secret is write-only: what comes back is the boolean, never the value.
+            observations.put("webhookSavedHasSecret", saved.hasSecret());
+            List<String> events = new ArrayList<>();
+            for (NotificationWebhookRunEvent event : saved.runEvents()) {
+                events.add(event.wireValue());
+            }
+            observations.put("webhookSavedRunEvents", String.join(",", events));
+            // Omitting a field must send NO field, not an empty one: a `url: ""` here would blank
+            // the endpoint on a call that only meant to add an alert subscription, and still
+            // answer 200.
+            NotificationWebhook edited = client.webhook().set(PutNotificationWebhook.builder()
+                    .alertEvents(List.of(NotificationWebhookAlertEvent.PLATFORM_HEALTH_FIRING))
+                    .build());
+            observations.put("webhookUrlSurvivesOmittedUpdate", edited.url().equals(saved.url()));
+            PublicNotificationWebhook read = client.webhook().get();
+            observations.put(
+                    "webhookReadMatchesSaved",
+                    read.webhook() != null && read.webhook().url().equals(saved.url()));
+            client.webhook().delete();
+            observations.put("webhookNullAfterDelete", client.webhook().get().webhook() == null);
         });
 
         step("error: not found", () -> {

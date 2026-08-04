@@ -25,6 +25,7 @@ import type {
   ListPublicJobsResponse,
   LlmCallOutcome,
   Notification,
+  NotificationWebhook,
   PublicApproveStep,
   PublicChallengePrReviewFinding,
   PublicChooseFork,
@@ -34,6 +35,7 @@ import type {
   PublicJobAccepted,
   PublicJobStatus,
   PublicNotificationList,
+  PublicNotificationWebhook,
   PublicPipelineList,
   PublicRejectStep,
   PublicReplyFinding,
@@ -50,6 +52,7 @@ import type {
   PublicTask,
   PublicTaskList,
   PublicUsage,
+  PutNotificationWebhook,
   RunStatus,
   StartPublicTask,
   TaskStatus,
@@ -461,6 +464,55 @@ export class NotificationsResource {
     return this.#transport.request<PublicNotificationList>({
       method: 'GET',
       path: `/api/v1/notifications`,
+      options,
+    })
+  }
+}
+
+/** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+export class WebhookResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Remove the outbound webhook
+   * Deregister the endpoint; deliveries stop. Idempotent.
+   * `DELETE /api/v1/notification-webhook` — operation `deletePublicNotificationWebhook`.
+   */
+  delete(options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/notification-webhook`,
+      options,
+    })
+  }
+
+  /**
+   * Read the workspace's outbound webhook
+   * The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.
+   * `GET /api/v1/notification-webhook` — operation `getPublicNotificationWebhook`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicNotificationWebhook> {
+    return this.#transport.request<PublicNotificationWebhook>({
+      method: 'GET',
+      path: `/api/v1/notification-webhook`,
+      options,
+    })
+  }
+
+  /**
+   * Register or update the outbound webhook
+   * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
+   * `PUT /api/v1/notification-webhook` — operation `putPublicNotificationWebhook`.
+   */
+  set(body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+    return this.#transport.request<NotificationWebhook>({
+      method: 'PUT',
+      path: `/api/v1/notification-webhook`,
+      body,
       options,
     })
   }
@@ -1182,6 +1234,8 @@ export abstract class CatFactoryResources {
   readonly pipelines: PipelinesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
   readonly notifications: NotificationsResource
+  /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+  readonly webhook: WebhookResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
@@ -1195,6 +1249,7 @@ export abstract class CatFactoryResources {
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
     this.notifications = new NotificationsResource(transport)
+    this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)

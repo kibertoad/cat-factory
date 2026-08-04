@@ -85,6 +85,22 @@ const EXPECTED: Record<string, unknown> = {
   // The surface-specific code the SDKs deliberately do NOT narrow to an enum. All four must
   // surface it verbatim rather than flattening it to the status class.
   forbiddenCode: 'insufficient_scope',
+  // The outbound webhook round-trip. `webhookInitiallyNull` and `webhookNullAfterDelete` are the
+  // ones that earn their place: an unregistered endpoint is a `webhook: null` FIELD, and a client
+  // that decoded it as an absence, an empty object or a zero-valued struct would report an
+  // endpoint registered at the empty string rather than none at all.
+  webhookInitiallyNull: true,
+  webhookSavedUrl: 'https://hooks.example.com/cat-factory-smoketest',
+  // Write-only: the projection says a secret is SET and never says what it is.
+  webhookSavedHasSecret: true,
+  webhookSavedRunEvents: 'run.completed',
+  // Keep-on-omit is where an OPTIONAL field is most exposed to a client that serializes "absent"
+  // as a zero value: a `url` sent as `""` instead of left out would blank the workspace's endpoint
+  // on a call that meant to add a subscription, and the 200 would look identical. Each client
+  // sends a body naming only `alertEvents` and must get the registered url back unchanged.
+  webhookUrlSurvivesOmittedUpdate: true,
+  webhookReadMatchesSaved: true,
+  webhookNullAfterDelete: true,
   startedHasExecutionId: true,
   sseFramesAreKnown: true,
   runStatusIsKnown: true,
