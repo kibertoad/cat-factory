@@ -194,12 +194,14 @@ cd local && npm install && npm run db:up && npm start     # serves :8787
 cd ../frontend && npm install && npm run dev              # Nuxt dev on :3000
 ```
 
-You still need to:
+The executor image agent jobs run in is **not** yours to fetch: the backend pulls the version
+it was built against on first boot, so `LOCAL_HARNESS_IMAGE` stays unset in the generated
+`.env` unless you passed `--harness-image` to pin one deliberately.
 
-- **Pull the executor image** the agent jobs run as: `docker pull ghcr.io/kibertoad/cat-factory-executor:latest`.
-- **Configure at least one model provider** in `local/.env` (the simplest is Cloudflare Workers
-  AI over REST: `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`; or a direct vendor key like
-  `ANTHROPIC_API_KEY`). Without one, no model is selectable and pipelines can't start.
+You still need to **configure at least one model provider** in `local/.env` (the simplest is
+Cloudflare Workers AI over REST: `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`; or a direct
+vendor key like `ANTHROPIC_API_KEY`), or add one through the UI after signing in. The stack
+boots without one, but no model is selectable and pipelines can't start.
 
 The generated `README.md` repeats these steps with your chosen values, and links to the full
 [local-mode docs](../../../deploy/local/README.md) (container-runtime matrix, repo linking, the
