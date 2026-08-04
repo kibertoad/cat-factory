@@ -5,6 +5,7 @@ import type {
   BinaryGeneratorRegistry,
   FoundationalServiceRegistry,
   GateRegistry,
+  InitiativePresetRegistry,
   PipelineRegistry,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
@@ -24,6 +25,7 @@ import { universalFragments } from '@cat-factory/prompt-fragments'
 import {
   type BinaryGeneratorDefinition,
   type CustomTaskType,
+  type DescriptorField,
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
@@ -97,6 +99,13 @@ export interface ValidateRegistrationsOptions {
    * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned initiative-preset registry to validate (the facade's injected instance — the SAME
+   * one it threads through `CoreDependencies.initiativePresetRegistry`). Optional: when omitted, no
+   * preset create form is checked. A facade passes it so a preset whose form cannot be filled fails
+   * at boot rather than rendering an empty picker (or an invisible field) in the create modal.
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
   /**
    * The app-owned foundational-service registry to validate (the facade's injected instance —
    * the SAME one it threads through `CoreDependencies.foundationalServiceRegistry`). Optional:
@@ -207,6 +216,10 @@ export function collectRegistrationProblems(
 
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
+
+  // 5b. Initiative presets: the OTHER surface that declares a form over the same vocabulary, held
+  //     to the same fillability bar by the same checker.
+  problems.push(...checkInitiativePresetForms(opts))
 
   // 6. Agent capabilities: the skills + tool servers each kind declares.
   problems.push(...checkAgentCapabilities(agentKinds, registry))
@@ -745,12 +758,85 @@ function checkTaskTypeFragments(
 }
 
 /**
+ * A descriptor-driven create FORM that structurally cannot be filled. Each of these is a typo in the
+ * deployment's own descriptor with no run-time recovery, and each fails SILENTLY without this check:
+ * a duplicate key means the later declaration wins wherever the fields are indexed, an optionless
+ * picker renders an empty control (and, if required, makes the subject un-creatable), and a
+ * `showWhen` naming no declared field hides its own field forever, so the value can never be
+ * collected.
+ *
+ * Errors rather than warnings, because unlike a `defaultFragmentIds` id (which may legitimately name
+ * a tenant-tier fragment invisible at boot) every input here is fully known from the registration.
+ *
+ * Takes a plain FIELD LIST, because both surfaces that declare a form draw on one vocabulary
+ * (`contracts/src/form-fields.ts`): a custom task type's per-case form and an initiative preset's
+ * create form fail these three ways identically, so they are checked by one function under their
+ * own code prefixes rather than by a copy each.
+ */
+function descriptorFormProblems(
+  fields: readonly DescriptorField[],
+  codePrefix: 'task_type' | 'initiative_preset',
+  subject: string,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const seen = new Set<string>()
+  const declared = new Set(fields.map((field) => field.key))
+  const bad = (code: string, message: string): void => {
+    problems.push({
+      severity: 'error',
+      code: `${codePrefix}_${code}`,
+      message: `${subject} ${message}`,
+    })
+  }
+  for (const field of fields) {
+    if (seen.has(field.key)) bad('field_duplicate', `declares field "${field.key}" twice.`)
+    seen.add(field.key)
+    if ((field.type === 'select' || field.type === 'checkbox-group') && !field.options?.length) {
+      bad(
+        'field_no_options',
+        `declares "${field.key}" as a ${field.type} with no options, so the form renders an empty picker.`,
+      )
+    }
+    if (field.showWhen && !declared.has(field.showWhen.key)) {
+      bad(
+        'field_unknown_condition',
+        `gates field "${field.key}" on "${field.showWhen.key}", which it does not declare, so the field never shows.`,
+      )
+    }
+  }
+  return problems
+}
+
+/**
+ * Section 5b of {@link collectRegistrationProblems}: every registered initiative PRESET's create
+ * form must be fillable, on the same bar and through the same checker as a custom task type's (see
+ * {@link descriptorFormProblems}). Only run when a preset registry is supplied.
+ *
+ * The built-in presets ride along rather than being exempted: they are registrations like any
+ * other, and a shipped descriptor that broke its own form should fail this deployment's boot
+ * exactly as a deployment-authored one does.
+ */
+function checkInitiativePresetForms(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  if (!opts.initiativePresetRegistry) return []
+  return opts.initiativePresetRegistry
+    .descriptors()
+    .flatMap((descriptor) =>
+      descriptorFormProblems(
+        descriptor.fields,
+        'initiative_preset',
+        `Initiative preset "${descriptor.id}"`,
+      ),
+    )
+}
+
+/**
  * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
  * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
  * must resolve against the built-in + registered pipeline catalog (else the created task would
- * silently fall back to the positional default), and its `defaultFragmentIds` are checked against
- * the code fragment pool (see {@link checkTaskTypeFragments}). Only run when a task-type registry
- * is supplied. Split out to keep the collector under the complexity ceiling.
+ * silently fall back to the positional default); its `defaultFragmentIds` are checked against the
+ * code fragment pool (see {@link checkTaskTypeFragments}); and its create form must be fillable (see
+ * {@link descriptorFormProblems}). Only run when a task-type registry is supplied. Split out to keep
+ * the collector under the complexity ceiling.
  */
 function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -759,6 +845,13 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
   const fragmentPool = new Set(universalFragments().map((fragment) => fragment.id))
   for (const taskType of opts.taskTypeRegistry.all()) {
     problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
+    problems.push(
+      ...descriptorFormProblems(
+        taskType.fields ?? [],
+        'task_type',
+        `Custom task type "${taskType.taskType}"`,
+      ),
+    )
     if (!isNamespacedId(taskType.taskType)) {
       problems.push({
         severity: 'error',

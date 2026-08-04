@@ -1,6 +1,6 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slice 1 landed (the fold + the bundle); slices 2-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-2 landed (the fold + the bundle; the shared field vocabulary); slices 3-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -432,7 +432,7 @@ else could offer the way back). Mechanics:
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ----------------------------------------------------------- |
 | 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ✅ done | [#1650](https://github.com/kibertoad/cat-factory/pull/1650) |
 | 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
-| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ⬜ todo |                                                             |
+| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ✅ done |                                                             |
 | 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |                                                             |
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
@@ -493,6 +493,71 @@ final so neither ships a shape that changes a slice later.
   for D11/D12: only the id SET freezes at creation, so a task created on a process whose package
   lacks the registration never gains the operation's fragments and a later build does not go back
   for it, while the projection self-heals the moment the descriptor is there.
+
+### What slice 2 surfaced (carry into the rest)
+
+- **The shared module is `contracts/src/form-fields.ts` and its helpers take a FIELD LIST**:
+  `descriptorFieldEntries` (spread into each surface's own `v.object` with its narrowed `type`
+  picklist), `descriptorFieldValuesSchema` (the filled bag, now `taskTypeFields.custom` AND
+  `presetInputs`), plus `isDescriptorFieldVisible` / `validateDescriptorFields` /
+  `sanitizeDescriptorFields` / `renderDescriptorFieldValue`. The preset names survive as ALIASES
+  (`isPresetFieldVisible`) and two descriptor-taking wrappers, so no preset call site moved.
+  **Kernel re-exports the four helpers**, keeping the "an org package imports its whole vocabulary
+  from kernel, with no contracts dependency" rule slice 1 established.
+- **A declared `maxLength` is now enforced SERVER-side** for both surfaces, not just by the input's
+  own attribute. It was a form-only bound before, and a form is not the only door. It is also CAPPED
+  at `DESCRIPTOR_FIELD_VALUE_MAX`, the bound the filled bag itself carries: a descriptor allowed to
+  declare more would render an input accepting what the request schema then refuses, and that
+  refusal arrives as a raw schema error rather than the readable per-field message.
+- **`InitiativePresetFields.vue` is GONE**, not left beside the new one:
+  `components/common/DescriptorFields.vue` is the single renderer, taking `:fields` plus a
+  `testid-prefix` so each surface keeps its own selectors. The task form's `select` therefore
+  changed from a button row to a `USelect` (correct for an operation with many options), and its
+  fields gained the preset form's `checkbox` / `checkbox-group` / `path` / defaults / `showWhen`.
+- **Only the DEFAULT-seeding rule stayed frontend-side** (`utils/descriptorFields.ts`
+  `defaultDescriptorValues`), matching the preset precedent: the server validates and sanitizes but
+  never fills in a default. **Slice 8 has to decide this deliberately**, because a headless caller
+  omitting a field that is `required` AND has a `default` is refused today where the SPA is not.
+  Either the check applies defaults first (one rule at every door) or the public contract demands
+  explicit values; do not let the two doors diverge by accident.
+- **The rest of `utils/descriptorFields.ts` is the EDIT rules** (`setDescriptorValue`,
+  `setDescriptorCheckbox`, `toggleDescriptorGroupValue`), pure functions over the value bag rather
+  than methods inside the SFC, because what an edit freezes is exactly what a unit test should be
+  able to reach without mounting a component. They enforce the same drop-when-unset judgement the
+  shared `sanitize` makes, plus the one thing only a form sees: a half-typed `number` input reads as
+  `NaN`, which serialises to `null` and is refused by the value schema.
+- **An ABSENT bag is checked against an EMPTY one.** A required field is unanswered whether the
+  caller sent `custom: {}` or no `custom` key at all, and a check the caller opts out of by sending
+  nothing is not a check. This is a behaviour change for any non-SPA path creating a task of an
+  operation with required fields (an initiative item's `spawn`, a script): it is a 422 now.
+- **Sanitization DROPS an unfilled value rather than freezing it**, because validation short-circuits
+  on one and therefore type-checks it never: a `false` on a text field reached the row and the prompt
+  fold rendered it to every agent as `Notes: No`. The single exception is an explicit `false` on a
+  `checkbox`, the opt-OUT of a default-ON toggle, which a consumer reads as `inputs[key] !== false`
+  (`seedMigrationPlan`) and which absence cannot express.
+- **Creation validation lives in the slice-1 collaborator** (`board/taskTypeCreationDefaults.ts`
+  `validatedFields`), because it is the same registry lookup as the fragment union and the pipeline
+  pin, read a third time. `BoardService` gained two lines, which is all its budget had left.
+- **Three cases pass through UNCHECKED, each on purpose**: a built-in type (its fields are
+  schema-typed top-level keys), an unregistered namespaced type (a supported row per D11, so
+  degrading data must not brick creation), and a descriptor declaring a `formPanel` (the panel owns
+  its bag). The conformance suite pins the third-party case, since it is the one that reads like a
+  bug when you find it.
+- **The conformance task-type block moved to its own module** (`suites/agent-task-types.ts`,
+  `defineTaskTypeConformance`) when the refusal assertions pushed `suites/agents.ts` over its
+  size budget. Slices 4 and 7 add their assertions THERE.
+- **The example's `operations` field is now a `checkbox-group`** (`string[]`, as slice 1 flagged),
+  and a `showWhen`-gated `actionName` field exercises conditional visibility end to end.
+- **Boot validation gained the FORM checks the richer vocabulary needs** (`descriptorFormProblems`):
+  a duplicate field key, an optionless `select`/`checkbox-group`, and a `showWhen` gating a field on
+  an undeclared key are ERRORS, not warnings, because each is fully known from the registration and
+  invisible at run time (the last one hides its own field forever). Keep this bar for any attribute a
+  later slice adds: warn only where boot genuinely cannot see the answer, as with a tenant-tier
+  fragment id. It takes a plain FIELD LIST and both surfaces go through it under their own code
+  prefixes (`task_type_field_*` / `initiative_preset_field_*`), so an initiative preset's create form
+  is boot-validated too; all three facades pass `initiativePresetRegistry`.
+- **One i18n key moved**: the path-invalid message is `common.pathInvalid` now that two surfaces
+  render it, carrying each locale's existing translation verbatim.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 
