@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
 import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
@@ -8,11 +8,12 @@ import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
 import { buildExcerpt } from './documents.logic.js'
 
-// DocumentImportService: fetches a page from a connected source and persists it
-// as a local document projection. The cached body backs both the planner (doc →
-// board structure) and the agent-context injection, so an import is the
-// prerequisite for spawning structure or linking context. Source specifics
-// (ref parsing, fetching) are delegated to the source's provider.
+// DocumentImportService: gets a document's text into the workspace's local projection, from
+// either direction. `import` FETCHES a page from a connected source (ref parsing and fetching
+// delegated to that source's provider); `ingest` takes a body the caller already holds. Both
+// land the same row, because the cached body is what the planner (doc → board structure) and the
+// agent-context injection read, so either is the prerequisite for spawning structure or linking
+// context.
 
 export interface DocumentImportServiceDependencies {
   registry: DocumentSourceRegistry
@@ -20,6 +21,40 @@ export interface DocumentImportServiceDependencies {
   connectionService: DocumentConnectionService
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /** Mints the external id an `ingest`ed document is keyed by (it has no source id of its own). */
+  idGenerator: IdGenerator
+}
+
+/** A document body supplied directly by a caller rather than fetched from a connected source. */
+export interface UploadedDocument {
+  title: string
+  /** The document text, as Markdown. */
+  content: string
+}
+
+/**
+ * The excerpt an uploaded body yields, or a refusal when it yields none.
+ *
+ * PURE and exported so a caller writing several uploads can validate the whole list before the
+ * first write, rather than discovering the fourth one is empty with three rows already stored.
+ * `ingest` calls it too, so the rule holds however the upload arrives.
+ *
+ * The refusal is STRICTER than the run-time one, deliberately. `hasReadableContent` passes
+ * anything with a non-empty raw `body`, because a container agent opens the materialised markdown
+ * and can at least see what is in it; only the excerpt-only inline readers refuse a body that
+ * renders to nothing. Here the bytes are in hand and the caller can still fix them, so a document
+ * that would reach HALF the readers as blank is refused for all of them rather than shipped and
+ * discovered mid-run.
+ */
+export function assertUploadReadable(input: UploadedDocument): string {
+  const excerpt = buildExcerpt(input.content)
+  if (!excerpt.trim()) {
+    throw new ValidationError(
+      `Document '${input.title}' has no readable text, so an agent would receive an empty ` +
+        `attachment. Supply the document body as Markdown or plain text.`,
+    )
+  }
+  return excerpt
 }
 
 /** Project a stored document record onto the wire shape (drops body + tombstone). */
@@ -94,6 +129,49 @@ export class DocumentImportService {
       // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
       role: existing?.role ?? null,
       docKind: existing?.docKind ?? null,
+      syncedAt: this.deps.clock.now(),
+      deletedAt: null,
+    }
+    await this.deps.documentRepository.upsert(record)
+    return toSourceDocument(record)
+  }
+
+  /**
+   * Persist a document body the caller supplied directly, as an `upload`-origin projection.
+   *
+   * The same row shape `import` writes, so everything downstream (the block link, the
+   * linked-context resolution, the `.cat-context/` materialisation, the corpus budget) works on
+   * it without knowing where the text came from. What it does NOT have is a provider: nothing can
+   * re-fetch it, re-probe it for a fresher version, or link back to a page, which is exactly why
+   * `upload` is a {@link DocumentOrigin} and not a {@link DocumentSourceKind}.
+   *
+   * The external id is MINTED rather than derived from the content. A content-addressed id would
+   * make two tasks uploading the same spec collide on the primary key, and since a document row
+   * carries a single `linkedBlockId` the second upload would silently steal the first task's
+   * attachment. Each upload is its own document.
+   *
+   * REFUSES text that yields no readable excerpt, through {@link assertUploadReadable} — which a
+   * caller sequencing several uploads calls FIRST, on its own, so nothing is written until the
+   * whole list is known to be good. See its own note for what that refusal is and is not.
+   */
+  async ingest(workspaceId: string, input: UploadedDocument): Promise<SourceDocument> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const excerpt = assertUploadReadable(input)
+    const record: DocumentRecord = {
+      workspaceId,
+      source: 'upload',
+      externalId: this.deps.idGenerator.next('doc'),
+      title: input.title,
+      // No page to link back to. Empty rather than a synthesised URL: readers render the origin
+      // only when there is one (see `sourceDocumentSchema.url`), and a fabricated link would send
+      // a human chasing a page that does not exist.
+      url: '',
+      excerpt,
+      body: input.content,
+      contentHash: contentHash(input.content),
+      linkedBlockId: null,
+      role: null,
+      docKind: null,
       syncedAt: this.deps.clock.now(),
       deletedAt: null,
     }

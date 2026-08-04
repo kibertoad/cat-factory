@@ -405,6 +405,7 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
   })
 
   registerDocumentSourceTests(harness)
+  registerDocumentPersistenceTests(harness)
 }
 
 /**
@@ -553,7 +554,21 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       )
       expect(explicit(afterDelete.body.connections)).toEqual([])
     })
+  })
+}
 
+/**
+ * Document + task PERSISTENCE probes: the workspace+DocKind role links, an `upload`-origin
+ * document, the interactive document-interview session, and the batched issue reads.
+ *
+ * Split from the HTTP lifecycle tests above purely to keep each function within the per-function
+ * line budget, on the same rule that split this file from the suite. Every test is unchanged.
+ * What they have in common: each drives a repository directly, because the write path needs a
+ * live source (or an LLM) the dev-open HTTP path cannot reach, so the probe is the only place a
+ * facade that maps a column differently fails a shared test.
+ */
+function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
+  describe('document + task persistence', () => {
     it('persists workspace+DocKind template (singular) and exemplar (multi) role links', async () => {
       // WS1 items 2–4: the role-tagged document links a workspace attaches to a DocKind. The
       // link WRITE path needs an imported document row (import needs a live source the dev-open
@@ -629,6 +644,102 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       // Unlinking clears the tag — the built-in template resumes for the kind.
       await repo.clearRole(ws, 'github', 'docs/templates/rfc-b.md')
       expect(await repo.getRoleLink(ws, 'template', 'rfc')).toBeNull()
+    })
+
+    it('persists an `upload`-origin document, with no source URL, identically', async () => {
+      // A document handed to the platform through `POST /api/v1/services/:id/tasks` rather than
+      // fetched from a connected source. It is the first row whose `source` names no provider and
+      // whose `url` is empty, and both facades have to agree about that: a repo that coerced the
+      // empty url to null (or refused the unknown origin) would take the attached spec off the
+      // agent's context on ONE runtime only, which reads as a healthy run against a missing spec.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+
+      await repo.upsert({
+        workspaceId: ws,
+        source: 'upload',
+        externalId: 'doc_upload_1',
+        title: 'Checkout PRD',
+        url: '',
+        excerpt: 'Support split payments.',
+        body: '# Checkout PRD\n\nSupport split payments.',
+        contentHash: 'abc123',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 2_000,
+        deletedAt: null,
+      })
+
+      const stored = await repo.get(ws, 'upload', 'doc_upload_1')
+      expect(stored?.url).toBe('')
+      expect(stored?.body).toBe('# Checkout PRD\n\nSupport split payments.')
+
+      // It attaches to a block like any other document, which is how it reaches the agent.
+      await repo.linkBlock(ws, 'upload', 'doc_upload_1', 'task_1')
+      expect((await repo.listByBlock(ws, 'task_1')).map((d) => d.externalId)).toEqual([
+        'doc_upload_1',
+      ])
+
+      // And its empty url must never be matched by a URL lookup, which resolves links a task's
+      // DESCRIPTION names: one uploaded document answering for another would be silent.
+      expect(await repo.getByUrl(ws, '')).toBeNull()
+    })
+
+    it('batch-resolves, batch-links and detaches documents identically across origins', async () => {
+      // The batched trio behind attaching a LIST of documents to one task. Every one of them
+      // spans ORIGINS (an imported page beside an uploaded body), which is where a facade that
+      // grouped or filtered by origin differently would diverge — and the divergence is silent:
+      // a document missing from the batch read is a document missing from the agent's corpus.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+
+      const base = {
+        workspaceId: ws,
+        title: 'doc',
+        excerpt: 'x',
+        body: 'x',
+        contentHash: 'h',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 3_000,
+        deletedAt: null,
+      }
+      await repo.upsert({ ...base, source: 'confluence', externalId: 'PAGE-1', url: 'https://w/1' })
+      await repo.upsert({ ...base, source: 'confluence', externalId: 'PAGE-2', url: 'https://w/2' })
+      await repo.upsert({ ...base, source: 'upload', externalId: 'doc_up', url: '' })
+
+      const refs = [
+        { source: 'confluence', externalId: 'PAGE-1' },
+        { source: 'upload', externalId: 'doc_up' },
+      ] as const
+      // A ref that resolves nothing is absent rather than an error, and never drags in a
+      // same-id row from another origin.
+      const found = await repo.listByRefs(ws, [...refs, { source: 'notion', externalId: 'PAGE-1' }])
+      expect(found.map((d) => `${d.source}:${d.externalId}`).sort()).toEqual([
+        'confluence:PAGE-1',
+        'upload:doc_up',
+      ])
+
+      await repo.linkBlockMany(ws, refs, 'task_1')
+      expect((await repo.listByBlock(ws, 'task_1')).map((d) => d.externalId).sort()).toEqual([
+        'PAGE-1',
+        'doc_up',
+      ])
+      // PAGE-2 was not named, so it stays unattached: a batch write must not widen to its origin.
+      expect((await repo.get(ws, 'confluence', 'PAGE-2'))?.linkedBlockId).toBeNull()
+
+      // The block-delete cascade's detach, keyed by BLOCK rather than by ref — a link naming a
+      // deleted block would otherwise make its document look permanently spoken for.
+      await repo.detachBlocks(ws, ['task_1'])
+      expect(await repo.listByBlock(ws, 'task_1')).toEqual([])
+      // The documents themselves survive; only the link went.
+      expect(await repo.get(ws, 'upload', 'doc_up')).not.toBeNull()
     })
 
     it('persists an interactive document-interview session identically (WS5)', async () => {

@@ -6,10 +6,12 @@ import type {
   DocumentConnection,
   DocumentLinkRole,
   DocumentSearchResult,
+  DocumentOrigin,
   DocumentSourceDescriptor,
   DocumentSourceKind,
   SourceDocument,
 } from '~/types/domain'
+import { isConnectableSource } from '@cat-factory/contracts'
 import { useSourceIntegration } from '~/composables/useSourceIntegration'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -119,8 +121,21 @@ export const useDocumentsStore = defineStore('documents', () => {
     return result
   }
 
+  /**
+   * The descriptor for a STORED document's origin, or undefined when it has none.
+   *
+   * `descriptorFor` is keyed by a connectable `DocumentSourceKind`, and a stored document's
+   * origin is wider than that: an `upload` was handed to the platform through the API and has no
+   * source behind it to describe. Narrowing through the predicate DERIVED from the source
+   * picklist is what keeps that a typed absence rather than an `undefined` the caller trips over,
+   * and what makes adding a source fail the build here until it is handled.
+   */
+  function descriptorForOrigin(origin: DocumentOrigin): DocumentSourceDescriptor | undefined {
+    return isConnectableSource(origin) ? descriptorFor(origin) : undefined
+  }
+
   /** Attach an imported page to a block as agent context. */
-  async function linkToBlock(blockId: string, source: DocumentSourceKind, externalId: string) {
+  async function linkToBlock(blockId: string, source: DocumentOrigin, externalId: string) {
     const doc = await api.linkDocument(workspace.requireId(), { source, externalId, blockId })
     upsertDoc(doc)
     return doc
@@ -148,7 +163,7 @@ export const useDocumentsStore = defineStore('documents', () => {
    * kind, then reconcile the local list (a template replaces the prior one for its kind).
    */
   async function linkForKind(
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     role: DocumentLinkRole,
     docKind: DocKind,
@@ -171,7 +186,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   }
 
   /** Clear a document's role tag (built-in template resumes for the kind / exemplar drops). */
-  async function unlinkForKind(source: DocumentSourceKind, externalId: string) {
+  async function unlinkForKind(source: DocumentOrigin, externalId: string) {
     await api.unlinkDocumentForKind(workspace.requireId(), { source, externalId })
     roleLinks.value = roleLinks.value.filter(
       (d) => !(d.source === source && d.externalId === externalId),
@@ -187,6 +202,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     connectedSources,
     anyConnected,
     descriptorFor,
+    descriptorForOrigin,
     connectionFor,
     isConnected,
     docsForBlock,

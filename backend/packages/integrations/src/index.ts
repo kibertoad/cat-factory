@@ -33,9 +33,11 @@ export {
   type DocumentContentResolverServiceDependencies,
 } from './modules/documents/DocumentContentResolverService.js'
 export {
+  assertUploadReadable,
   DocumentImportService,
   type DocumentImportServiceDependencies,
   toSourceDocument,
+  type UploadedDocument,
 } from './modules/documents/DocumentImportService.js'
 export {
   DocumentPlannerService,

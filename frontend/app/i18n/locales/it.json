@@ -3681,7 +3681,8 @@
       "connectSourceNamed": "Collega {source}",
       "empty": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono durante l'implementazione di questa attività.",
       "emptyInitiative": "Allega un requisito, un RFC o un PRD così gli agenti di pianificazione lo leggono mentre redigono questa iniziativa.",
-      "attached": "Documento allegato"
+      "attached": "Documento allegato",
+      "uploadedHint": "Caricato tramite l'API, quindi non c'è una pagina di origine da aprire."
     },
     "templates": {
       "title": "Modelli ed esempi di documenti",
@@ -5201,6 +5202,7 @@
         "input_gate_not_parked": "Niente a cui rispondere",
         "input_gate_parked": "Rispondi nel controllo di input dell'attività",
         "ticket_already_linked": "Questo ticket ha già un'attività",
+        "document_already_linked": "Documento già allegato",
         "dry_run_not_mergeable": "Una prova non può essere unita"
       },
       "description": {
@@ -5237,6 +5239,7 @@
         "input_gate_not_parked": "Questa esecuzione non attende più il controllo dell'input. Forse qualcuno ha già risposto, o l'esecuzione è andata avanti.",
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
+        "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "action": {

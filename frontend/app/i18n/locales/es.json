@@ -577,6 +577,7 @@
         "input_gate_not_parked": "Nada que responder",
         "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
+        "document_already_linked": "El documento ya está adjunto",
         "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
       },
       "description": {
@@ -613,6 +614,7 @@
         "input_gate_not_parked": "Esta ejecución ya no espera su comprobación de entrada. Puede que alguien la haya respondido o que la ejecución haya avanzado.",
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
+        "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
         "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "action": {
@@ -4060,7 +4062,8 @@
       "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
       "emptyInitiative": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al redactar esta iniciativa.",
-      "attached": "Documento adjuntado"
+      "attached": "Documento adjuntado",
+      "uploadedHint": "Subido a través de la API, por lo que no hay página de origen que abrir."
     },
     "templates": {
       "title": "Plantillas y ejemplos de documentos",

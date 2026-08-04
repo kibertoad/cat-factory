@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { documentSourceKindSchema } from './documents.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { taskSourceKindSchema } from './tasks.js'
@@ -253,10 +254,68 @@ export const publicTaskTicketSchema = v.object({
 })
 export type PublicTaskTicket = v.InferOutput<typeof publicTaskTicketSchema>
 
+/** Characters of document text ONE uploaded attachment may carry (see {@link publicTaskDocumentSchema}). */
+export const MAX_UPLOADED_DOCUMENT_CHARS = 100_000
+
+/** Context documents ONE task creation may attach (imported and uploaded together). */
+export const MAX_TASK_DOCUMENTS = 10
+
+/** A page NAMED in a document source the workspace has connected. See {@link publicTaskDocumentSchema}. */
+export const publicTaskSourceDocumentSchema = v.object({
+  kind: v.literal('source'),
+  /** A document source this workspace has connected. */
+  source: documentSourceKindSchema,
+  /**
+   * The page's id or its full URL: the SAME grammar the app's own import takes, resolved by that
+   * source's `parseRef`, so a caller passes whichever form it happens to hold.
+   */
+  ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+})
+export type PublicTaskSourceDocument = v.InferOutput<typeof publicTaskSourceDocumentSchema>
+
+/** A document body CARRIED by the caller. See {@link publicTaskDocumentSchema}. */
+export const publicTaskUploadedDocumentSchema = v.object({
+  kind: v.literal('upload'),
+  /** Names the document for the agent (it becomes the attachment's heading and filename). */
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  /**
+   * The document text, as Markdown. Refused when it yields no readable text at all (a body of
+   * pure markup would reach the agent as an empty attachment).
+   */
+  content: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_UPLOADED_DOCUMENT_CHARS)),
+})
+export type PublicTaskUploadedDocument = v.InferOutput<typeof publicTaskUploadedDocumentSchema>
+
+/**
+ * A requirements document to attach to the task being created: the spec the work is to be built
+ * against, in whichever of the two forms the caller holds it.
+ *
+ * This is what makes `/api/v1` usable for spec-sized intake at all. `description` is capped at
+ * 2,000 characters because it is a task's own framing, echoed into every prompt; a PRD pasted
+ * into it would be truncated, and the 50,000-character `POST /jobs` brief is a different surface
+ * (inline pipelines only, no repository). An attached document has neither limit: the full text
+ * is materialised into the run's checkout under `.cat-context/` for a container agent to open, and
+ * folded into the prompt for an inline one, exactly as a document a human attached in the app.
+ *
+ * The two variants differ only in where the text comes from, never in what the run does with it:
+ *
+ * - `source` NAMES a page in a document source the workspace has connected (Confluence, Notion,
+ *   GitHub docs, Figma, Zeplin, Linear). The platform fetches and projects it, so the page stays
+ *   the source of truth and a re-import picks up edits.
+ * - `upload` CARRIES the text. For a caller that generated the spec, or holds it in a file, or
+ *   whose deployment has connected no document source at all. There is no page behind it, so
+ *   nothing re-fetches it: the bytes supplied here are what every agent on the run will read.
+ */
+export const publicTaskDocumentSchema = v.variant('kind', [
+  publicTaskSourceDocumentSchema,
+  publicTaskUploadedDocumentSchema,
+])
+export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
+
 /**
  * Create a task under a service. A deliberately MINIMAL external input mapped onto the
- * internal `AddTaskInput`: it exposes only title/description/taskType/ticket, not the rich
- * internal knobs (risk/model presets, pinned pipeline, agent config), so the public
+ * internal `AddTaskInput`: it exposes only title/description/taskType/ticket/documents, not the
+ * rich internal knobs (risk/model presets, pinned pipeline, agent config), so the public
  * surface stays small and stable.
  */
 export const createPublicTaskSchema = v.object({
@@ -275,6 +334,20 @@ export const createPublicTaskSchema = v.object({
    * so a caller needs no bookkeeping of its own to stay idempotent.
    */
   ticket: v.optional(publicTaskTicketSchema),
+  /**
+   * Requirements documents to attach to the new task, in the order the agents should read them.
+   * Omitted or empty ⇒ an unattached task, exactly as before.
+   *
+   * Every one of them is resolved or written BEFORE the task is returned, and a failure at any
+   * point takes the whole creation with it: a `201` means the task carries every document named
+   * here. The alternative is the failure this whole surface exists to avoid, where a run looks
+   * perfectly healthy while an agent works from a spec it never received.
+   *
+   * The per-document cap above bounds one attachment; the CORPUS is bounded separately by the
+   * run's materialised-context budget, which is shared with linked tracker issues and cannot be
+   * known here. Overflowing it refuses the run's first dispatch and names what did not fit.
+   */
+  documents: v.optional(v.pipe(v.array(publicTaskDocumentSchema), v.maxLength(MAX_TASK_DOCUMENTS))),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
