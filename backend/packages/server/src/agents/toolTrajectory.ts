@@ -1,5 +1,11 @@
-import type { AgentJobHandle, LlmToolSpan, LlmTraceSink, Logger } from '@cat-factory/kernel'
-import { runBestEffort } from '@cat-factory/kernel'
+import type {
+  AgentJobHandle,
+  LlmToolSpan,
+  LlmTraceSink,
+  Logger,
+  StoreAgentContextGate,
+} from '@cat-factory/kernel'
+import { describeError, runBestEffort } from '@cat-factory/kernel'
 import type { ToolCallsRecordInput } from '@cat-factory/orchestration'
 
 // The tool-loop half of a container job's poll drain, extracted from `ContainerAgentExecutor`
@@ -22,10 +28,26 @@ import type { ToolCallsRecordInput } from '@cat-factory/orchestration'
 /** Record a poll window's drained tool calls as trajectory rows. */
 export type RecordToolCalls = (input: ToolCallsRecordInput) => Promise<void>
 
-/** Where a drained batch goes. Both optional: an unwired destination is simply skipped. */
+/** Where a drained batch goes, and whether its bodies may be kept. */
 export interface ToolTrajectoryDeps {
   llmTraceSink?: LlmTraceSink
   recordToolCalls?: RecordToolCalls
+  /**
+   * The double gate on a tool call's captured `args`/`result`: the deployment's
+   * `LLM_RECORD_PROMPTS` switch AND the workspace's `storeAgentContext`, composed by the facade
+   * into one predicate.
+   *
+   * Applied HERE rather than in either destination, because both of them receive the same bodies
+   * and a gate read per destination is how two answers get to disagree — a body withheld from
+   * the store and shipped to an external trace backend anyway is precisely the defect the shared
+   * gate exists to prevent.
+   *
+   * Absent ⇒ bodies are WITHHELD. An unwired gate is a facade that has not said what its
+   * deployment permits, and the safe reading of silence is "not permitted"; the calls still flow
+   * with `bodies: 'withheld'`, which SAYS so, rather than arriving as tools that took no
+   * arguments.
+   */
+  toolBodyGate?: StoreAgentContextGate
 }
 
 /**
@@ -44,12 +66,13 @@ export interface ToolTrajectoryDeps {
 export async function drainToolCalls(
   deps: ToolTrajectoryDeps,
   handle: AgentJobHandle,
-  spans: LlmToolSpan[] | undefined,
+  captured: LlmToolSpan[] | undefined,
   logger: Logger,
 ): Promise<void> {
-  if (!spans || spans.length === 0) return
+  if (!captured || captured.length === 0) return
   const executionId = handle.runId ?? handle.jobId
   const agentKind = handle.agentKind ?? 'agent'
+  const spans = await gateBodies(deps.toolBodyGate, handle.workspaceId ?? null, captured, logger)
   const traceSink = deps.llmTraceSink
   if (traceSink?.recordToolSpans) {
     await runBestEffort(logger, 'containerAgent.recordToolSpans', () =>
@@ -66,4 +89,44 @@ export async function drainToolCalls(
       record({ workspaceId, executionId, agentKind, jobId: handle.jobId, spans }),
     )
   }
+}
+
+/**
+ * Apply the body gate to a captured batch, blanking `args`/`result` and MARKING each call as
+ * withheld when it refuses.
+ *
+ * Marked rather than merely blanked: an empty `args` on a `stored` call means the tool took no
+ * arguments, and that is a claim about the run this function is in no position to make.
+ *
+ * A gate that THROWS fails closed — an unreadable settings row is not consent — but the batch is
+ * still forwarded, because losing a run's whole trajectory to a settings-store hiccup would trade
+ * a privacy bug for an observability one.
+ */
+async function gateBodies(
+  gate: StoreAgentContextGate | undefined,
+  workspaceId: string | null,
+  spans: LlmToolSpan[],
+  logger: Logger,
+): Promise<LlmToolSpan[]> {
+  let allowed = false
+  if (gate) {
+    try {
+      allowed = await gate(workspaceId)
+    } catch (error) {
+      logger.warn('tool-call bodies withheld: workspace settings unreadable', {
+        scope: 'tool-trajectory',
+        workspaceId,
+        ...describeError(error),
+      })
+    }
+  }
+  if (allowed) return spans
+  return spans.map((span) => ({
+    ...span,
+    bodies: 'withheld' as const,
+    args: '',
+    result: '',
+    argsDropped: 0,
+    resultDropped: 0,
+  }))
 }

@@ -14,8 +14,10 @@ import type {
   Clock,
   IdGenerator,
   Logger,
+  StoreAgentContextGate,
   WebSearchAvailability,
 } from '@cat-factory/kernel'
+import { createStoreAgentContextGate } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
   LlmObservabilityService,
@@ -104,12 +106,18 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     new ToolCallObservabilityService({
       agentToolCallRepository: repos.agentToolCallRepository,
       clock,
-      recordPrompts: config.observability.recordPrompts,
-      workspaceSettingsRepository: repos.workspaceSettingsRepository,
-      logger,
     }),
     logger,
   )
+  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
+  // deployment switch) and applied once per drain, so the store and any external trace sink see
+  // the same decision. `false` short-circuits the settings read entirely.
+  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
+    ? createStoreAgentContextGate({
+        repository: repos.workspaceSettingsRepository,
+        ...(caches?.workspaceSettings ? { cache: caches.workspaceSettings } : {}),
+      })
+    : () => Promise.resolve(false)
   // A deployment-wide trusted web-search upstream, built from this facade's own `WEB_SEARCH_*`
   // env, used by the search proxy as a fallback when a run's account has no web-search config
   // (local mode defaults `WEB_SEARCH_SEARXNG_URL` to its self-hosted SearXNG). Distinct from the
@@ -242,6 +250,7 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     searchQueryObservability,
     recordHarnessCalls,
     recordToolCalls,
+    toolBodyGate,
     defaultWebSearchUpstream,
     resolveWebSearchAvailability,
     packageRegistrySecretCipher,

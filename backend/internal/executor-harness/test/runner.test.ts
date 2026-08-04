@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
 import { HarnessFailure } from '../src/failure.js'
-import type { HarnessCallMetric } from '../src/pi.js'
+import type { HarnessCallMetric, ToolSpan } from '../src/pi.js'
+
+/** A tool span with the trajectory fields a real harness stamps, so a test states only what it cares about. */
+const span = (partial: Partial<ToolSpan> & Pick<ToolSpan, 'tool'>): ToolSpan => ({
+  seq: 0,
+  startedAt: 0,
+  endedAt: 0,
+  ok: true,
+  bodies: 'stored',
+  args: '',
+  result: '',
+  argsDropped: 0,
+  resultDropped: 0,
+  ...partial,
+})
+
 
 // The registry is generic over the job/result shape; the lifecycle/watchdog tests only
 // need a job carrying its id and a result carrying the optional fields they assert on.
@@ -84,10 +99,10 @@ describe('JobRegistry', () => {
     const registry = new JobRegistry<TestJob, TestResult>(
       limits,
       async (_job, opts: RunOptions) => {
-        opts.onSpan?.({ tool: 'read', startedAt: 1, endedAt: 2, ok: true })
-        opts.onSpan?.({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true })
+        opts.onSpan?.(span({ tool: 'read', startedAt: 1, endedAt: 2, ok: true }))
+        opts.onSpan?.(span({ tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true }))
         await tick(50)
-        opts.onSpan?.({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false })
+        opts.onSpan?.(span({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false }))
         await tick(50)
         return { summary: 's' }
       },
@@ -261,7 +276,7 @@ describe('JobRegistry', () => {
       // Enter the 'agent' phase and run one tool, then go silent — so the kill can report
       // WHERE it hung and which tool last ran, exactly as a wedged Pi process would.
       opts.onPhase?.('agent')
-      opts.onSpan?.({ tool: 'bash', startedAt: 1, endedAt: 2, ok: true })
+      opts.onSpan?.(span({ tool: 'bash', startedAt: 1, endedAt: 2, ok: true }))
       return new Promise<TestResult>((_resolve, reject) => {
         opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
       })

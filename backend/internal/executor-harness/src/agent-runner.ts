@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
 import { createClaudeRunTelemetry, subagentDispatchId } from './claude-call-aggregator.js'
+import {
+  ToolCallTracker,
+  type TrackedToolCall,
+  recordClaudeToolResults,
+} from './tool-trajectory.js'
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
@@ -13,6 +18,7 @@ import {
   type PiRunOutcome,
   type PiRunStats,
   type TodoProgress,
+  type ToolSpan,
 } from './pi.js'
 import {
   claudeAllowedToolPatterns,
@@ -123,6 +129,13 @@ export interface SubscriptionRunOptions {
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * Called once per completed tool call with a {@link ToolSpan}: the run's TRAJECTORY. The CLI's
+   * tool loop is internal to the CLI and never touches our proxy, so its own event stream is the
+   * only place these exist — without this hook a subscription-harness run's account of what it
+   * DID dies with the container.
+   */
+  onSpan?: (span: ToolSpan) => void
   /**
    * Called with the FULL set of per-slice reviews each time one lands, so the backend can persist
    * a parallel review's completed work as it happens instead of only from the terminal result.
@@ -628,6 +641,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // diagnostic. Disabled when the caller supplies no limits (only the external watchdog bounds it).
   const progressGuard = createClaudeProgressGuard(opts)
   const { rememberTool, feedGuard, guardAbort } = progressGuard
+  // The run's TRAJECTORY: each `tool_use` block paired with the `tool_result` that answers it on
+  // the following user turn, numbered and captured (scrubbed + capped). The CLI's stream is the
+  // only place this loop is visible at all — its tool calls never touch our proxy — so without
+  // this a subscription-harness run's "how" died with the container.
+  const tools = new ToolCallTracker(secrets)
+  const emitSpan = (call: TrackedToolCall): void => {
+    opts.onSpan?.({ ...call, bodies: 'stored' })
+  }
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
@@ -650,6 +671,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // `is_error` its `tool_result` carries on the next `user` turn.
         if (typeof block.id === 'string' && typeof block.name === 'string') {
           rememberTool(block.id, block.name)
+          tools.started(block.id, block.name, block.input)
         }
         if (block.name === 'TodoWrite') {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
@@ -672,6 +694,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)
+        // The trajectory's other half. Fed on the FINAL flush too, unlike the guard: the CLI
+        // having exited is exactly when the last calls' results matter and killing nothing is
+        // no longer a risk.
+        if (opts.onSpan) recordClaudeToolResults(tools, content, emitSpan)
         telemetry.onToolResult(dispatchId, content)
       }
     } else if (type === 'result') {

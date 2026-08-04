@@ -17,6 +17,7 @@ import {
   type RunnerJobRef,
   type RunnerJobView,
   type RunnerJobResult,
+  type StoreAgentContextGate,
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
@@ -270,6 +271,11 @@ export interface ContainerAgentExecutorDependencies {
    * absent ⇒ the calls still reach any wired trace sink and nothing is persisted.
    */
   recordToolCalls?: RecordToolCalls
+  /**
+   * The double gate on a drained tool call's captured `args`/`result` (see `toolTrajectory.ts`).
+   * Absent ⇒ every body is withheld, and the calls say so.
+   */
+  toolBodyGate?: StoreAgentContextGate
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
    * returns true for a resolved subscription harness + vendor, the job carries

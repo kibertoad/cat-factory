@@ -17,8 +17,10 @@ import {
   type ProvisioningSubsystem,
   type RunnerPoolProvider,
   type RunnerTransport,
+  type StoreAgentContextGate,
   type ToolSecretResolver,
   type WebSearchAvailability,
+  createStoreAgentContextGate,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -407,12 +409,15 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     new ToolCallObservabilityService({
       agentToolCallRepository: new D1AgentToolCallRepository({ db: requireTelemetryDb(env) }),
       clock,
-      recordPrompts: config.observability.recordPrompts,
-      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-      logger,
     }),
     logger,
   )
+  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
+  // deployment switch) and applied once per drain, so the store and any external trace sink see
+  // the same decision. `false` short-circuits the settings read entirely.
+  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
+    ? createStoreAgentContextGate({ repository: new D1WorkspaceSettingsRepository({ db }) })
+    : () => Promise.resolve(false)
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
   // so its adapter registry is empty today — every vendor reports modeled).
@@ -516,6 +521,7 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // into `llm_call_metrics` alongside the proxy-metered Pi rows.
     recordHarnessCalls,
     recordToolCalls,
+    toolBodyGate,
     // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
     // run's tokens into the rolling windows, for BOTH pooled and personal runs.
     recordSubscriptionQuotaUsage: (target, usage) =>

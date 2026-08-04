@@ -172,7 +172,19 @@ export class LangfuseTraceSink implements LlmTraceSink {
         startTime: iso(span.startedAt),
         endTime: iso(span.endedAt),
         level: span.ok ? 'DEFAULT' : 'ERROR',
-        metadata: { agentKind: context.agentKind },
+        // The call's arguments and result go in Langfuse's own input/output slots rather than
+        // metadata, so the trajectory reads in the UI the way a generation's prompt does.
+        // Present only when the double gate allowed capture (upstream blanks them otherwise).
+        ...(span.args ? { input: span.args } : {}),
+        ...(span.result ? { output: span.result } : {}),
+        metadata: {
+          agentKind: context.agentKind,
+          // The ordinal a trajectory orders by: a tool loop routinely fires several calls inside
+          // one millisecond, so start time alone cannot sequence them.
+          ...(span.seq !== undefined ? { seq: span.seq } : {}),
+          ...(span.argsDropped ? { argsDroppedChars: span.argsDropped } : {}),
+          ...(span.resultDropped ? { resultDroppedChars: span.resultDropped } : {}),
+        },
       },
     }))
     await this.send(batch)

@@ -7,9 +7,8 @@ import type {
   LlmToolSpan,
   Logger,
   RecordAgentToolCallInput,
-  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_WORKSPACE_SETTINGS, describeError, noopLogger } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 
 /**
  * Backstop cap (characters) the service applies to a stored `args`/`result`.
@@ -34,73 +33,46 @@ function clamp(text: string, alreadyDropped: number): { text: string; dropped: n
 
 export interface ToolCallObservabilityServiceDependencies {
   agentToolCallRepository: AgentToolCallRepository
-  workspaceSettingsRepository: WorkspaceSettingsRepository
   clock: Clock
-  /**
-   * The deployment's prompt-recording switch (`LLM_RECORD_PROMPTS`, default true). When
-   * false the operator has opted out of retaining model-adjacent text, so a call's
-   * arguments and result are dropped here too — the operator opt-out wins over the
-   * per-workspace toggle.
-   */
-  recordPrompts?: boolean
-  logger?: Logger
 }
 
 /**
- * The tool-call trajectory sink: what an agent DID, one row per tool invocation, in the
- * order it made them. A sibling of {@link AgentContextObservabilityService} (what the agent
- * was GIVEN) and {@link SearchQueryObservabilityService} (what it SEARCHED).
+ * The tool-call trajectory sink: what an agent DID, one row per tool invocation, in the order it
+ * made them. A sibling of {@link AgentContextObservabilityService} (what the agent was GIVEN) and
+ * {@link SearchQueryObservabilityService} (what it SEARCHED).
  *
- * The METADATA of a call (which tool, when, whether it worked) is always recorded: it
- * carries no model- or user-authored text, it is what makes a stalled run legible after
- * the fact, and a deployment that could not see its agents' tool loops at all was the gap
- * this sink closes. The BODIES are gated twice, exactly like the other two body-bearing
- * sinks: the deployment-wide {@link recordPrompts} switch AND the per-workspace
- * `storeAgentContext` setting. A withheld body is RECORDED AS withheld rather than stored
- * as an empty string, because "the operator opted out" and "the tool took no arguments"
- * are different facts and a reader that cannot tell them apart will read the first as the
- * second.
+ * The METADATA of a call (which tool, when, whether it worked) is always recorded: it carries no
+ * model- or user-authored text, and it is what makes a stalled run legible after the fact. The
+ * BODIES ride the same double gate as every other body-capturing path (`LLM_RECORD_PROMPTS` AND
+ * the workspace's `storeAgentContext`), but that gate is applied ONE step upstream, at the drain
+ * that fans a poll window out to both this sink and the external trace sinks — because a body
+ * withheld from the store and shipped to Langfuse anyway is exactly the privacy defect the shared
+ * gate exists to prevent, and reading the settings twice per drain is how the two answers get to
+ * disagree.
  *
- * A settings read that THROWS fails closed (bodies withheld, metadata still recorded): an
- * unreadable settings row is not consent, and losing a run's whole trajectory over a store
- * hiccup would trade a privacy bug for an observability one.
+ * So this service HONOURS the `bodies` state it is handed and never upgrades it: a `withheld` call
+ * is stored withheld. What it owns is the identity, the timestamp, and the backstop clamp.
  */
 export class ToolCallObservabilityService implements AgentToolCallRecorder {
   private readonly repository: AgentToolCallRepository
-  private readonly settings: WorkspaceSettingsRepository
   private readonly clock: Clock
-  private readonly recordPrompts: boolean
-  private readonly log: Logger
 
-  constructor({
-    agentToolCallRepository,
-    workspaceSettingsRepository,
-    clock,
-    recordPrompts = true,
-    logger,
-  }: ToolCallObservabilityServiceDependencies) {
+  constructor({ agentToolCallRepository, clock }: ToolCallObservabilityServiceDependencies) {
     this.repository = agentToolCallRepository
-    this.settings = workspaceSettingsRepository
     this.clock = clock
-    this.recordPrompts = recordPrompts
-    this.log = logger ?? noopLogger
   }
 
   /**
-   * Persist one drained batch, stamping each row's id and capture time. The id is derived
-   * from `(jobId, seq)` — the same shape `makeHarnessCallRecorder` uses for a subscription
-   * harness's calls, and for the same reason: a batch reaches the store on the durable poll
-   * path, which replays, so a re-recorded call must collapse onto the row it already wrote
-   * instead of duplicating a step of the trajectory.
+   * Persist one drained batch, stamping each row's id and capture time. The id is derived from
+   * `(jobId, seq)` — the same shape `makeHarnessCallRecorder` uses for a subscription harness's
+   * calls, and for the same reason: a batch reaches the store on the durable poll path, which
+   * replays, so a re-recorded call must collapse onto the row it already wrote instead of
+   * duplicating a step of the trajectory.
    */
   async record(calls: RecordAgentToolCallInput[]): Promise<void> {
     if (calls.length === 0) return
-    // One drain is one dispatch, so one workspace: the gate is read once per batch rather
-    // than once per call, which would be the banned N+1 read against the settings store.
-    const bodiesAllowed = await this.bodiesAllowed(calls[0]!.workspaceId)
     const createdAt = this.clock.now()
-    const rows = calls.map((call) => this.toRow(call, bodiesAllowed, createdAt))
-    await this.repository.recordMany(rows)
+    await this.repository.recordMany(calls.map((call) => this.toRow(call, createdAt)))
   }
 
   /** A run's trajectory, oldest first — the drill-down read. */
@@ -117,44 +89,18 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
     return this.repository.listPage(workspaceId, query)
   }
 
-  private toRow(
-    call: RecordAgentToolCallInput,
-    bodiesAllowed: boolean,
-    createdAt: number,
-  ): AgentToolCall {
-    // The producer's own state wins where it already withheld: an image that captured no
-    // bodies cannot have them restored by a permissive gate here.
-    const bodies = bodiesAllowed && call.bodies === 'stored' ? 'stored' : 'withheld'
-    const args = bodies === 'stored' ? clamp(call.args, call.argsDropped) : { text: '', dropped: 0 }
-    const result =
-      bodies === 'stored' ? clamp(call.result, call.resultDropped) : { text: '', dropped: 0 }
+  private toRow(call: RecordAgentToolCallInput, createdAt: number): AgentToolCall {
+    const stored = call.bodies === 'stored'
+    const args = stored ? clamp(call.args, call.argsDropped) : { text: '', dropped: 0 }
+    const result = stored ? clamp(call.result, call.resultDropped) : { text: '', dropped: 0 }
     return {
       ...call,
       id: `${call.jobId}-tc-${call.seq}`,
-      bodies,
       args: args.text,
       argsDropped: args.dropped,
       result: result.text,
       resultDropped: result.dropped,
       createdAt,
-    }
-  }
-
-  private async bodiesAllowed(workspaceId: string): Promise<boolean> {
-    if (!this.recordPrompts) return false
-    try {
-      const settings = (await this.settings.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
-      return settings.storeAgentContext
-    } catch (error) {
-      // Fail CLOSED: an unreadable settings row is not consent. The metadata rows still
-      // record, so the trajectory survives a store hiccup with its bodies withheld — and
-      // the row SAYS they were withheld, so nobody reads the gap as an empty tool loop.
-      this.log.warn('tool-call bodies withheld: workspace settings unreadable', {
-        scope: 'tool-call-observability',
-        workspaceId,
-        ...describeError(error),
-      })
-      return false
     }
   }
 }
