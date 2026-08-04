@@ -578,6 +578,7 @@
       "storedAt": "Zuletzt gesetzt am {date}",
       "notStoredWithFallback": "Für dieses Board ist nichts gespeichert. Diese Installation liest den Schlüssel auch aus ihrer eigenen Umgebung, die Fähigkeit funktioniert also möglicherweise trotzdem.",
       "notStored": "Für dieses Board ist nichts gespeichert, und diese Installation hat keinen Rückfallwert aus der Umgebung. Die Fähigkeit kann sich daher nicht authentifizieren.",
+      "notStoredUnknownFallback": "Für dieses Board ist nichts gespeichert. Die Kette der Anmeldedaten dieser Installation lässt sich hier nicht beschreiben, daher ist nicht bekannt, ob der Schlüssel anderswo beantwortet wird.",
       "setValue": "Wert",
       "replaceValue": "Gespeicherten Wert ersetzen",
       "save": "Speichern",

@@ -451,6 +451,22 @@ export interface NodeContainerOptions {
    */
   createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
   /**
+   * Whether this node's own environment answers a capability credential the workspace has NOT
+   * stored. Defaults to true, which is what a single-tenant install, a local checkout and a CI
+   * environment all want: the operator sets the variable they already set for everything else.
+   *
+   * A MULTI-TENANT deployment sets it false. With the fallback on, a workspace that has typed
+   * nothing silently authenticates its runs as whoever set the variable, and the vendor bill lands
+   * in that account, which is the single-tenant answer this store exists to replace. Off, an
+   * unstored key resolves to nothing, the capability reports itself unavailable to its agent, and
+   * the credential checklist stops telling the operator that a blank row may still resolve.
+   *
+   * Ignored when {@link createToolSecretResolver} is set: that resolver replaces the whole chain,
+   * so there is no fallback of ours left to keep or drop. Whether a HOSTED deployment should
+   * default to store-only is a product call, and this option deliberately does not make it.
+   */
+  capabilityCredentialEnvironmentFallback?: boolean
+  /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
    * tags the per-run container vs the runner pool separately) sets this so

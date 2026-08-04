@@ -20,7 +20,7 @@ import {
   resolveCorsOrigin,
 } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
-import { registerToolSecretResolverFactory } from './infrastructure/toolSecretResolver'
+import { registerToolSecretPolicy } from './infrastructure/toolSecretResolver'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 
@@ -43,7 +43,7 @@ export interface CreateAppOptions {
    *
    *     createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })
    *
-   * Setting it here REGISTERS it process-wide (`registerToolSecretResolverFactory`) rather than
+   * Setting it here REGISTERS it process-wide (`registerToolSecretPolicy`) rather than
    * closing over this app, because container agents are dispatched by the durable driver, which
    * builds its own container from a bare `buildContainer(env)` and would never see an option held
    * on the app. Same reason, same mechanism as `registerModelRegistry`.
@@ -52,6 +52,19 @@ export interface CreateAppOptions {
    * `CoreDependencies` field is the whole `agentExecutor`.
    */
   createToolSecretResolver?: (env: Env) => ToolSecretResolver
+  /**
+   * Whether the Worker's own configured vars answer a capability credential the workspace has NOT
+   * stored. Defaults to true, which is right for a single-tenant deployment: the operator sets the
+   * var they already set for everything else.
+   *
+   * A MULTI-TENANT deployment sets it false, so a tenant that has typed nothing resolves nothing
+   * rather than silently running on whoever set the var and billing that vendor account. It also
+   * stops the credential checklist telling an operator a blank row may still resolve.
+   *
+   * Registered process-wide with the resolver above, and for the same reason. Ignored when
+   * `createToolSecretResolver` is set, which replaces the chain outright.
+   */
+  capabilityCredentialEnvironmentFallback?: boolean
 }
 
 // The Worker builds its container per request, so a persistent misconfiguration would throw on
@@ -92,8 +105,18 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // dispatches that resolve a capability credential) are advanced by `ExecutionWorkflow`, which
   // never sees these options. Done here rather than in `createWorker` so a deployment assembling
   // its own app from `createApp` gets the same reach.
-  if (options.createToolSecretResolver) {
-    registerToolSecretResolverFactory(options.createToolSecretResolver)
+  if (
+    options.createToolSecretResolver ||
+    options.capabilityCredentialEnvironmentFallback !== undefined
+  ) {
+    registerToolSecretPolicy({
+      ...(options.createToolSecretResolver
+        ? { createResolver: options.createToolSecretResolver }
+        : {}),
+      ...(options.capabilityCredentialEnvironmentFallback === undefined
+        ? {}
+        : { environmentFallback: options.capabilityCredentialEnvironmentFallback }),
+    })
   }
 
   // Correlation FIRST — before CORS and before the container build — so a CORS denial and the
