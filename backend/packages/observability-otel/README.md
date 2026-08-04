@@ -281,15 +281,21 @@ line keeps the correlation the emitting scope gave it.
 
 **Logs and traces meet structurally.** A line naming an `executionId` is stamped with the SAME
 derived trace id that run's spans carry, so a backend links them without either side matching an
-attribute. A line with no run claims no trace, rather than pointing at one nobody will emit (the
-same rule the standalone inline call follows above).
+attribute, and the record marks that trace SAMPLED so a backend knows the id it is pointed at is
+one it should have. A line with no run claims no trace (and no flags), rather than pointing at
+one nobody will emit (the same rule the standalone inline call follows above).
+
+That sharing is a **call** to the same `deriveTraceId` the spans go through, never a second copy
+of the derivation, and the test asserts a log record's trace id against a **span's**. Both matter:
+the two signals agreeing is the whole feature, nothing else enforces it, and a re-derivation plus
+a test comparing one log record to another would let the span side drift with every test green.
 
 **Draining is the facade's job, and the two runtimes differ only there:**
 
-| Runtime           | When the buffer is drained                                                              |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| Node / local      | An interval (`OTEL_LOGS_FLUSH_INTERVAL_MS`, default 5s), plus a final flush on shutdown |
-| Cloudflare Worker | The end of every invocation, as a `waitUntil` after the response                        |
+| Runtime           | When the buffer is drained                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Node / local      | An interval (`OTEL_LOGS_FLUSH_INTERVAL_MS`, default 5s), plus a final flush on shutdown bounded to 5s |
+| Cloudflare Worker | The end of every invocation, as a `waitUntil` after the response                                      |
 
 A Worker's module state is per ISOLATE and an isolate is discarded whenever the runtime decides,
 so a buffered line has no later tick guaranteed to reach it: the same reasoning (and the same
@@ -314,6 +320,16 @@ new failure class:
 - **A field that cannot be serialised degrades to a note naming the problem**, never taking the
   line with it. Absent and empty stay distinct: a `null`/`undefined` field is omitted rather
   than exported as `""`.
+- **A field that cannot even be READ degrades the same way, per field.** `LogFields` is
+  `Record<string, unknown>`, so a value can throw on access (an accessor property, a Proxy trap).
+  This runs on the DRAIN path, past the try/catch the logging adapter wraps `record` in, so the
+  mapping owes its own guards: an unreadable value is reported under its own key (the key's
+  presence is what says the emitter had something there) and its neighbours are unaffected.
+- **The send chain is terminated**, so `flush` cannot reject however the drain path fails. Sends
+  are serialised behind one promise tail, and an escaped rejection there is not one lost batch:
+  every later send would inherit it, the exporter would go permanently silent, and on Node the
+  flush interval's un-awaited call would become an unhandled rejection that the process failure
+  guards answer by exiting. Observability may not take the deployment down.
 
 **Opt-in on top of the base exporter** (it adds an egress POST per batch of lines): off unless
 `OTEL_ENABLED=true` + an endpoint AND `OTEL_LOGS=true`. `OTEL_LOGS_MAX_BATCH_SIZE` (default 128)

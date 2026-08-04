@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type LogRecord, createRecordingLogger } from '@cat-factory/kernel'
 import { DEFAULT_LOG_BATCH_SIZE, SELF_LOG_FIELD, createOtelLogExporter } from './logs.js'
-import { mapLogRecord } from './mapping.js'
+import { mapLogRecord, mapRunSpan } from './mapping.js'
 
 // The log exporter POSTs OTLP/JSON to `{endpoint}/v1/logs` over its injectable `fetchImpl`,
 // same shape as the trace/metric exporters beside it (see `index.test.ts` for why a stub
@@ -43,6 +43,13 @@ function recordsOf(call: Call): Record<string, never>[] {
   const resourceLogs = (call.body as { resourceLogs: Record<string, never>[] }).resourceLogs
   return (resourceLogs[0] as unknown as { scopeLogs: { logRecords: Record<string, never>[] }[] })
     .scopeLogs[0]!.logRecords
+}
+
+/** Every exported line's `body` string, across all the POSTs a stub captured. */
+function bodiesOf(calls: Call[]): string[] {
+  return calls
+    .flatMap((c) => recordsOf(c))
+    .map((r) => (r as unknown as { body: { stringValue: string } }).body.stringValue)
 }
 
 describe('OtelLogExporter', () => {
@@ -96,8 +103,22 @@ describe('OtelLogExporter', () => {
       // A boolean stays a boolean: a backend filters `ok = false` and `ok = "false"` differently.
       { key: 'ok', value: { boolValue: false } },
     ])
-    // The run's spans derive their trace id the same way, which is how logs and traces meet.
-    expect((record as unknown as { traceId: string }).traceId).toBe(mapLogRecord(line()).traceId)
+    // The join asserted against the OTHER signal, never against this mapping again: comparing
+    // two `mapLogRecord` calls is a tautology that holds however the derivation drifts, and
+    // logs meeting their run's spans is the entire point of stamping a trace id here.
+    const runSpan = mapRunSpan({
+      workspaceId: 'ws1',
+      executionId: 'exec1',
+      pipelineName: 'pl_default',
+      startedAt: 1,
+      endedAt: 2,
+      ok: true,
+      errorMessage: null,
+    })
+    expect((record as unknown as { traceId: string }).traceId).toBe(runSpan.traceId)
+    // And the record states that trace as sampled, which is how a backend knows the id it is
+    // pointed at is one it should have.
+    expect((record as unknown as { flags: number }).flags).toBe(1)
   })
 
   it('claims no trace for a line with no run', async () => {
@@ -107,7 +128,10 @@ describe('OtelLogExporter', () => {
     exporter.record(line({ fields: { scope: 'boot' } }))
     await exporter.flush()
 
+    // No trace and therefore no flags: an invented trace id per run-less line would fill the
+    // backend with single-entry traces, and flags pointing at nothing state a trace that isn't.
     expect(recordsOf(calls[0]!)[0]).not.toHaveProperty('traceId')
+    expect(recordsOf(calls[0]!)[0]).not.toHaveProperty('flags')
   })
 
   it('sends once a full batch has accumulated, without waiting for a flush', async () => {
@@ -169,6 +193,65 @@ describe('OtelLogExporter', () => {
     exporter.record(line())
     await expect(exporter.flush()).resolves.toBeUndefined()
     expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
+  })
+
+  it('survives a field bag it cannot read, and keeps exporting after one', async () => {
+    // `LogFields` is `Record<string, unknown>`, so a call site may pass an accessor that
+    // throws. This runs on the DRAIN path, past the try/catch the logging adapter wraps
+    // `record` in, so an escaping throw would reject `flush` and (the chain being a single
+    // promise tail) poison every later send: the exporter would go permanently silent, and on
+    // Node the interval's `void flush()` would become an unhandled rejection the process
+    // guards answer by exiting. Observability may not take the deployment down.
+    const { fetchImpl, calls } = capturingFetch()
+    const exporter = createOtelLogExporter({ endpoint: COLLECTOR, maxBatchSize: 1, fetchImpl })
+
+    const hostile: Record<string, unknown> = { workspaceId: 'ws1' }
+    Object.defineProperty(hostile, 'lazy', {
+      enumerable: true,
+      get() {
+        throw new Error('getter exploded')
+      },
+    })
+
+    exporter.record(line({ msg: 'hostile', fields: hostile }))
+    await expect(exporter.flush()).resolves.toBeUndefined()
+
+    // The line survived, the readable field beside the broken one survived, and the field that
+    // could not be read is REPORTED under its own key rather than quietly missing.
+    const attrs = recordsOf(calls[0]!)[0] as unknown as { attributes: { key: string }[] }
+    expect(attrs.attributes).toContainEqual({ key: 'workspaceId', value: { stringValue: 'ws1' } })
+    expect(attrs.attributes.find((a) => a.key === 'lazy')).toMatchObject({
+      value: { stringValue: expect.stringContaining('[unreadable: getter exploded]') },
+    })
+
+    // And the exporter is still alive: the send chain was not left rejected.
+    exporter.record(line({ msg: 'after' }))
+    await expect(exporter.flush()).resolves.toBeUndefined()
+    expect(bodiesOf(calls)).toContain('after')
+  })
+
+  it('never rejects, and recovers, when the drain path itself throws', async () => {
+    // The contract guard for everything the mapping does not already make total. A bag whose
+    // KEYS cannot even be enumerated is the one input that defeats a per-field guard.
+    const { fetchImpl, calls } = capturingFetch()
+    const logger = createRecordingLogger()
+    const exporter = createOtelLogExporter({ endpoint: COLLECTOR, logger, fetchImpl })
+
+    const trapped = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('ownKeys exploded')
+        },
+      },
+    ) as Record<string, unknown>
+
+    exporter.record(line({ msg: 'trapped', fields: trapped }))
+    await expect(exporter.flush()).resolves.toBeUndefined()
+
+    exporter.record(line({ msg: 'later' }))
+    await expect(exporter.flush()).resolves.toBeUndefined()
+    expect(bodiesOf(calls)).toContain('later')
   })
 
   it('bounds the buffer and REPORTS what it dropped', async () => {

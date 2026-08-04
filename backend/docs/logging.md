@@ -212,6 +212,14 @@ documented deliberate swallows.
 Never log an `Authorization` header, a raw query string, a request body, or a decrypted
 credential, not even at `debug`. `debug` is a level an operator turns on in production.
 
+**Emit-site redaction is an EGRESS boundary, not just a hygiene rule.** With a `LogSink` installed
+(below), a field leaves the deployment for a third-party collector rather than stopping at the
+operator's own stdout, and it is retained and indexed there. The sink deliberately does not
+re-scrub: a second pass at the fan-out would encourage treating the emit site as optional, and it
+cannot tell a redacted value from one that never needed redacting. So a missed `redactSecrets` is
+now a leak to somebody else's system, which is the reason the rule above says "at the emit site"
+and means it.
+
 ## Observability must never break agent work
 
 The rule the PR-verification-report initiative established applies to logging itself: a `Logger`
@@ -295,7 +303,16 @@ Four rules bind a new sink, each of them a way the seam could otherwise become a
   already handling a failure. Buffer and return; do the I/O in `flush`. The adapter wraps the
   call anyway (silently: the only channel available to report a broken log sink is the log sink),
   but a sink that relies on that wrapper is one bad deploy from losing every line.
-- **`flush` may not reject**, for the same reason every other best-effort path resolves.
+- **`flush` may not reject**, for the same reason every other best-effort path resolves, and a
+  sink must enforce that STRUCTURALLY rather than by having no throwing code. Where sends are
+  serialised behind one promise tail (the OTLP exporter's shape), a single escaped rejection is
+  not one lost batch: every later send chains onto the rejected tail and inherits it, so the sink
+  goes permanently silent, and on Node the flush interval's un-awaited call becomes an unhandled
+  rejection that the process failure guards answer by EXITING. Terminate the chain.
+- **Whatever a sink does per line must be TOTAL.** `LogFields` is `Record<string, unknown>`, so a
+  value can throw on read (an accessor, a Proxy trap) or refuse to serialise. Work done on the
+  drain path is past the adapter's wrapper, so it owes its own guards, per field rather than per
+  batch: one unreadable value should cost that value, and be reported in place of it.
 - **A sink gets the MERGED field bag**, `child`-bound fields folded in, because the correlation
   ids are the half a line is joined to a run by and a sink cannot reconstruct them.
 - **The level gate applies first**, so `LOG_LEVEL` governs both destinations. One dial, not two
@@ -305,6 +322,11 @@ Draining is the FACADE's job, not the sink's: Node flushes on an interval and on
 shutdown (after every other stop, so the shutdown's own lines get out), the Worker flushes at the
 end of each invocation, because its buffer is per isolate and an isolate is discarded without
 notice. A sink that started its own timer would be making a promise workerd cannot keep.
+
+The shutdown flush is **bounded** (5s). A full buffer drains as sequential POSTs that each carry
+the transport's own timeout, so an unbounded final flush can outlast the SIGTERM grace period a
+supervisor allows and be SIGKILLed, losing the shutdown lines it exists to deliver along with
+every other stop's. When the deadline fires it says so, because lines were left undelivered.
 
 ## Logging is half of it: count the event too
 

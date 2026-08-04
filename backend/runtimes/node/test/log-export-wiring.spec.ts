@@ -48,6 +48,23 @@ describe('Node facade: OTLP log export wiring', () => {
     expect(getLogSink()).toBeNull()
   })
 
+  it('gives up on the final flush rather than outliving its SIGTERM grace period', async () => {
+    // A collector that accepts the connection and never answers. Unbounded, `stop()` would
+    // wait out the transport timeout once per queued batch, pushing a shutdown past the
+    // grace period a supervisor allows and getting SIGKILLed: the shutdown lines this flush
+    // exists to deliver would be lost along with every other stop's.
+    const hanging = (() => new Promise<Response>(() => {})) as unknown as typeof fetch
+    const handle = startOtelLogExport(otelConfig(), logger, { fetchImpl: hanging })
+
+    logger.warn('shutting down')
+    const startedAt = Date.now()
+    await handle.stop()
+
+    // Resolved on the deadline (5s), not on the transport's own 10s-per-batch ceiling.
+    expect(Date.now() - startedAt).toBeLessThan(9_000)
+    expect(getLogSink()).toBeNull()
+  }, 20_000)
+
   it('is a no-op when OTEL_LOGS is not opted in', async () => {
     const { urls, fetchImpl } = capturingFetch()
     const handle = startOtelLogExport(otelConfig({ enabled: false }), logger, { fetchImpl })

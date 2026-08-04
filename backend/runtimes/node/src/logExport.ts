@@ -12,11 +12,44 @@ import { type Logger, type OtelConfig, setLogSink } from '@cat-factory/server'
 
 export interface LogExportHandle {
   /**
-   * Halt the interval, detach the sink, and deliver what is still buffered. Awaited on the
-   * shutdown path AFTER the other stops, so the lines those emit are exported too: a
-   * deployment's last words are usually the interesting ones.
+   * Halt the interval, detach the sink, and deliver what is still buffered, bounded by
+   * {@link SHUTDOWN_FLUSH_DEADLINE_MS}. Awaited on the shutdown path AFTER the other stops, so
+   * the lines those emit are exported too: a deployment's last words are usually the
+   * interesting ones.
    */
   stop: () => Promise<void>
+}
+
+/**
+ * How long the FINAL flush may take before shutdown continues without it.
+ *
+ * A full buffer is `maxBatchSize * 8` lines, drained as sequential POSTs that each get the
+ * transport's own 10s timeout, so an unbounded final flush is up to ~80s of a SIGTERM grace
+ * period that is typically 30. The supervisor would answer that with SIGKILL, which loses the
+ * shutdown lines this flush exists to deliver AND every other stop's. Bounding it trades the
+ * tail of an already-failing export for an orderly exit, and says so when it fires.
+ */
+const SHUTDOWN_FLUSH_DEADLINE_MS = 5_000
+
+/**
+ * Resolve when `work` settles or the deadline passes, whichever is first. Reports the timeout
+ * rather than passing it off as a completed flush: lines were left undelivered, and only the
+ * log says so. The timer is cleared on both paths so it can never hold the loop open past the
+ * exit it is guarding.
+ */
+async function withDeadline(work: Promise<void>, ms: number, log: Logger): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), ms)
+    timer.unref?.()
+  })
+  try {
+    if ((await Promise.race([work.then(() => 'done' as const), deadline])) === 'timeout') {
+      log.warn('otel: gave up on the final log flush', { scope: 'otel-logs', deadlineMs: ms })
+    }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /**
@@ -70,7 +103,7 @@ export function startOtelLogExport(
       // Detach FIRST, so anything logged during the final flush cannot re-enter the buffer
       // being drained and keep the drain loop alive.
       setLogSink(null)
-      await exporter.flush()
+      await withDeadline(exporter.flush(), SHUTDOWN_FLUSH_DEADLINE_MS, log)
     },
   }
 }

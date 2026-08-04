@@ -7,7 +7,7 @@ import {
   toUnixNano,
 } from './mapping.js'
 import { type KeyValue, keyValues, postOtlp } from './otlp.js'
-import type { LogRecord, LogSink, Logger } from '@cat-factory/kernel'
+import { type LogRecord, type LogSink, type Logger, describeError } from '@cat-factory/kernel'
 
 // A fetch-based OpenTelemetry exporter for the platform's own LOG lines: the third OTLP
 // signal this package publishes, beside the per-call traces/metrics (`./index`) and the
@@ -83,7 +83,7 @@ function encodeLogRecord(record: MappedLogRecord): Record<string, unknown> {
     severityText: record.severityText,
     body: { stringValue: record.body },
     attributes: keyValues(record.attributes),
-    ...(record.traceId ? { traceId: record.traceId } : {}),
+    ...(record.traceId ? { traceId: record.traceId, flags: record.traceFlags } : {}),
   }
 }
 
@@ -147,9 +147,29 @@ export class OtelLogExporter implements LogSink {
     await this.inFlight
   }
 
-  /** Queue a drain behind whatever is already sending, keeping POSTs strictly serial. */
+  /**
+   * Queue a drain behind whatever is already sending, keeping POSTs strictly serial.
+   *
+   * The chain is TERMINATED here, and that catch is the port's `flush` obligation made
+   * structural rather than merely intended. A rejection left on `this.inFlight` is not one bad
+   * batch: every later `kick` chains onto the rejected tail and inherits it, so the exporter
+   * would never deliver another line, `flush()` would reject forever, and on Node the
+   * interval's `void flush()` would become an unhandled rejection that the process failure
+   * guards answer by EXITING. Observability would have taken the deployment down.
+   *
+   * Nothing on the drain path is expected to throw (the mapping is total and `postOtlp`
+   * swallows), so this catch should stay unreachable. It is here because "unreachable" is a
+   * property of today's code, and the cost of being wrong about it is the whole process.
+   */
   private kick(): void {
-    this.inFlight = this.inFlight.then(() => this.drain())
+    this.inFlight = this.inFlight
+      .then(() => this.drain())
+      .catch((error) => {
+        this.logger?.warn('otel: log export drain failed', {
+          scope: 'otel-logs',
+          ...describeError(error),
+        })
+      })
   }
 
   private async drain(): Promise<void> {

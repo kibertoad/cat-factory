@@ -816,12 +816,17 @@ function flushTelemetryAfter(
   clock: SystemClock,
 ): void {
   ctx.waitUntil(
-    Promise.allSettled([work]).then(() =>
-      Promise.all([
-        flushOperationalMetricsForIsolate(loadConfig(env).otel, clock.now()) ?? undefined,
-        flushOtelLogsForIsolate(loadOtelConfig(env)) ?? undefined,
-      ]).then(() => {}),
-    ),
+    Promise.allSettled([work]).then(() => {
+      // ONE `loadOtelConfig` for both flushes, rather than the narrow read beside a whole
+      // `loadConfig(env).otel` (which is literally this same call). Both are telemetry that a
+      // deployment whose config validation fails still owes its operator, so neither should
+      // depend on the full config parsing cleanly.
+      const otel = loadOtelConfig(env)
+      return Promise.all([
+        flushOperationalMetricsForIsolate(otel, clock.now()) ?? undefined,
+        flushOtelLogsForIsolate(otel) ?? undefined,
+      ]).then(() => {})
+    }),
   )
 }
 

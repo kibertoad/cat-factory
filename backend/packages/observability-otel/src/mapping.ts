@@ -872,11 +872,43 @@ export function logAttributeValue(value: unknown): AttributeValue | undefined {
   }
 }
 
-/** Map a whole field bag, dropping the keys whose value carries nothing. */
+/** Render a value this mapping could not read at all, in the `logAttributeValue` vocabulary. */
+function unreadable(error: unknown): string {
+  return `[unreadable: ${error instanceof Error ? error.message : String(error)}]`
+}
+
+/**
+ * Map a whole field bag, dropping the keys whose value carries nothing.
+ *
+ * TOTAL by construction, which is the same promise {@link logAttributeValue} makes and for a
+ * stronger reason: this runs on the exporter's DRAIN path, downstream of the try/catch the
+ * logging adapter wraps `record` in, so a throw here escapes into the send chain rather than
+ * costing one line. `LogFields` is `Record<string, unknown>`, so both halves of the read can
+ * throw on a value a call site is free to pass: enumerating the keys (a Proxy trap) and
+ * reading one (an accessor property). Each is guarded separately so a single unreadable field
+ * costs THAT field and nothing else.
+ *
+ * A field that cannot be read is REPORTED under its own key rather than omitted: the key's
+ * presence is what tells a reader the emitter had something to say there, which an absent
+ * attribute would not.
+ */
 export function logAttributes(fields: Record<string, unknown>): AttributeMap {
   const attributes: AttributeMap = {}
-  for (const [key, raw] of Object.entries(fields)) {
-    const value = logAttributeValue(raw)
+  let keys: string[]
+  try {
+    keys = Object.keys(fields)
+  } catch (error) {
+    // The whole bag is unreadable. One sentinel attribute, because a line exported with no
+    // attributes at all reads as a line that carried none.
+    return { fields: unreadable(error) }
+  }
+  for (const key of keys) {
+    let value: AttributeValue | undefined
+    try {
+      value = logAttributeValue(fields[key])
+    } catch (error) {
+      value = unreadable(error)
+    }
     if (value !== undefined) attributes[key] = value
   }
   return attributes
@@ -892,12 +924,24 @@ export interface MappedLogRecord {
   body: string
   attributes: AttributeMap
   /**
-   * The trace this line belongs to, when it named a run. Set to the SAME derived id the run's
-   * spans carry, so a backend joins logs to the trace structurally rather than by matching an
-   * attribute; absent for a line with no run (most boot, sweep and request lines).
+   * The trace this line belongs to, when it named a run. Set through the SAME `deriveTraceId`
+   * the run's spans go through (never a second copy of the derivation), so a backend joins
+   * logs to the trace structurally rather than by matching an attribute; absent for a line
+   * with no run (most boot, sweep and request lines).
    */
   traceId?: string
+  /**
+   * W3C trace flags for {@link traceId}, present only alongside it. Always SAMPLED, because
+   * this pipeline has no sampler: a line that reached the exporter is a line the deployment
+   * chose to export. Spans carry no `flags` and need none (a span's presence in the batch
+   * states its own sampling); a log record is the side that has to state it, since a backend
+   * decides from these flags whether the trace it points at is one it should have.
+   */
+  traceFlags?: number
 }
+
+/** W3C `sampled` trace flag, the only one this exporter ever sets. */
+const TRACE_FLAG_SAMPLED = 0x01
 
 /**
  * Map one emitted line to a neutral OTLP log record.
@@ -909,17 +953,26 @@ export interface MappedLogRecord {
  * chose in the first place. The one thing the two signals DO share is the trace id, and it is
  * shared structurally: a line carrying an `executionId` is stamped with the run's derived
  * trace id, so a run's logs and its spans meet in the backend without either naming the other.
+ *
+ * That sharing is a CALL to `deriveTraceId`, not a second copy of what it does. The two signals
+ * agreeing is the whole feature and nothing else enforces it: a re-derivation here would let a
+ * change to the span side pass every test in this package while silently unjoining every log
+ * line from the run it belongs to.
  */
 export function mapLogRecord(record: LogRecord): MappedLogRecord {
   const executionId = record.fields.executionId
+  // `deriveTraceId(null)` mints a RANDOM id, which is right for a span (it still needs a trace
+  // of its own) and wrong for a line: a run-less line belongs to no trace, and inventing one
+  // per line would fill the backend with single-entry traces. So the run-less case is the
+  // absent field, and only the derivation itself is shared.
+  const runTraceId =
+    typeof executionId === 'string' && executionId ? deriveTraceId(executionId) : null
   return {
     timeMs: record.timeMs,
     severityNumber: LOG_SEVERITY_NUMBER[record.level],
     severityText: LOG_SEVERITY_TEXT[record.level],
     body: cap(record.msg),
     attributes: logAttributes(record.fields),
-    ...(typeof executionId === 'string' && executionId
-      ? { traceId: hashHex(executionId, 16) }
-      : {}),
+    ...(runTraceId ? { traceId: runTraceId, traceFlags: TRACE_FLAG_SAMPLED } : {}),
   }
 }
