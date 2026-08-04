@@ -1,4 +1,4 @@
-import { binaryModalityOverlaps } from '@cat-factory/contracts'
+import { binaryFormatCoverage, binaryModalityOverlaps } from '@cat-factory/contracts'
 import type { BinaryModality, BinaryOutputConfig } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
@@ -112,6 +112,12 @@ export interface ResolvedBinaryGeneratorSelection {
  * Resolve a step's `generatorIds` against the registry's views. Pure and shared by admission and
  * the brief, so the two can never disagree about which integrations a step has — the brief runs
  * per dispatch and would otherwise re-derive a set admission already judged.
+ *
+ * A repeated id resolves ONCE, on its first appearance. Nothing refuses a stored selection that
+ * names one integration twice, and every reader downstream of this states a COUNT of some kind:
+ * left in, the brief renders that integration's whole entry a second time (an agent reading two
+ * identical entries has been told nothing and charged tokens for it) and an overlap report would
+ * say a step holds two producers of what it holds one of.
  */
 export function resolveBinaryGeneratorSelection(
   config: BinaryOutputConfig | undefined,
@@ -120,54 +126,15 @@ export function resolveBinaryGeneratorSelection(
   const byId = new Map(generators.map((generator) => [generator.id, generator]))
   const selected: BinaryGeneratorView[] = []
   const unresolvedIds: string[] = []
+  const seen = new Set<string>()
   for (const id of config?.generatorIds ?? []) {
+    if (seen.has(id)) continue
+    seen.add(id)
     const generator = byId.get(id)
     if (generator) selected.push(generator)
     else unresolvedIds.push(id)
   }
   return { selected, unresolvedIds }
-}
-
-/**
- * How a step's declared FORMATS stand against what its selected integrations say they emit.
- *
- * THREE outcomes, not two, and the third is the whole reason this is its own function. A
- * generator declaring no `mediaTypes` is an explicit, documented state — "only the coarse
- * modality is known" — so a requirement it cannot be judged against is UNVERIFIABLE, not
- * uncovered. Refusing there would punish the honest declaration and break every integration that
- * has not pinned its formats down; calling it covered would be the mirror mistake, a clean bill
- * of health nobody issued, on the surface that decides whether the run may start. So the run is
- * admitted and the gap is STATED — to the agent in its brief, and to whoever composes the step —
- * which is the same disposition `generatorsUnverified` takes on the settlement side.
- *
- * Pure and shared by admission, the brief and the SPA's mirror, so none of them can hold a
- * different opinion about the same selection.
- */
-export interface BinaryFormatCoverage {
-  /** Declared formats no selected integration emits, judged against integrations that DECLARED
-   *  theirs. These refuse the run. */
-  uncovered: string[]
-  /** Declared formats nothing selected claims, where at least one selected integration declares
-   *  no formats at all — so the requirement MIGHT be met and nothing here may say otherwise. */
-  unverifiable: string[]
-}
-
-export function binaryFormatCoverage(
-  required: readonly string[],
-  selected: readonly Pick<BinaryGeneratorView, 'mediaTypes'>[],
-): BinaryFormatCoverage {
-  const emitted = new Set(selected.flatMap((generator) => generator.mediaTypes))
-  // An EMPTY selection declares nothing and hides nothing: with no integration to be silent, a
-  // format requirement is uncovered outright, exactly as a modality requirement already is.
-  const undeclared = selected.some((generator) => generator.mediaTypes.length === 0)
-  const uncovered: string[] = []
-  const unverifiable: string[] = []
-  for (const mediaType of required) {
-    if (emitted.has(mediaType)) continue
-    if (undeclared) unverifiable.push(mediaType)
-    else uncovered.push(mediaType)
-  }
-  return { uncovered, unverifiable }
 }
 
 /**

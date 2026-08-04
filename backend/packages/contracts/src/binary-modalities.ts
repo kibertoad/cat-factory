@@ -8,6 +8,14 @@ import * as v from 'valibot'
 // Its own leaf module — no imports beyond valibot — because both of those modules need it and one
 // of them sits downstream of the entity schemas the other is reached through. A vocabulary this
 // small has no business creating an import cycle.
+//
+// It also holds the two pure rules that read a step's SELECTION against that vocabulary
+// ({@link binaryModalityOverlaps}, {@link binaryFormatCoverage}). Both are read by the backend,
+// which composes the agent's brief and admits the run, and by the SPA, which offers the selection
+// in the first place. The SPA cannot see kernel, so a rule with a home only on one side becomes a
+// hand-kept copy on the other, which is how a step comes to be described one way in the builder
+// and another way in the brief. Each reads nothing but this vocabulary and a structural view of a
+// generator, so neither needs anything the other side cannot import.
 // ---------------------------------------------------------------------------
 
 /**
@@ -89,7 +97,7 @@ export interface BinaryModalityOverlap {
   /** The content type they share. */
   modality: BinaryModality
   /** The ids that produce it, in the order they were given. Always two or more. */
-  generatorIds: string[]
+  generatorIds: readonly string[]
 }
 
 /**
@@ -103,11 +111,9 @@ export interface BinaryModalityOverlap {
  * model and no view of what the step is for. A confident wrong preference is worse than none,
  * because it displaces the per-integration notes whoever is deciding would otherwise have read.
  *
- * Shared rather than copied. Kernel states the overlap to the AGENT in its brief and the SPA
- * states it to the HUMAN in the step picker, and the two must not be able to disagree about which
- * integrations overlap. Unlike `binaryFormatCoverage`, whose rule needs kernel's view type, this
- * one reads nothing but the modality vocabulary, so it lives beside the vocabulary and both sides
- * import it instead of it becoming a second hand-kept copy.
+ * Shared rather than copied, for the reason stated at the top of this module: kernel states the
+ * overlap to the AGENT in its brief and the SPA states it to the HUMAN in the step picker, and
+ * the two must not be able to disagree about which integrations overlap.
  *
  * Order is derived from the input, so a brief re-rendered per dispatch is byte-identical:
  * modalities come out in first-appearance order and ids in the order they were given. An id
@@ -133,6 +139,52 @@ export function binaryModalityOverlaps(
   return [...byModality]
     .filter(([, generatorIds]) => generatorIds.length > 1)
     .map(([modality, generatorIds]) => ({ modality, generatorIds }))
+}
+
+/** How a step's declared FORMATS stand against what its selected integrations say they emit. */
+export interface BinaryFormatCoverage {
+  /** Declared formats no selected integration emits, judged against integrations that DECLARED
+   *  theirs. These refuse the run. */
+  uncovered: string[]
+  /** Declared formats nothing selected claims, where at least one selected integration declares
+   *  no formats at all — so the requirement MIGHT be met and nothing here may say otherwise. */
+  unverifiable: string[]
+}
+
+/**
+ * Judge `required` against what `selected` declares it emits.
+ *
+ * THREE outcomes, not two, and the third is the whole reason this is its own function. A
+ * generator declaring no `mediaTypes` is an explicit, documented state — "only the coarse
+ * modality is known" — so a requirement it cannot be judged against is UNVERIFIABLE, not
+ * uncovered. Refusing there would punish the honest declaration and break every integration that
+ * has not pinned its formats down; calling it covered would be the mirror mistake, a clean bill
+ * of health nobody issued, on the surface that decides whether the run may start. So the run is
+ * admitted and the gap is STATED — to the agent in its brief, and to whoever composes the step —
+ * which is the same disposition `generatorsUnverified` takes on the settlement side.
+ *
+ * Shared by admission, the brief and the picker, so none of them can hold a different opinion
+ * about the same selection. An ABSENT `mediaTypes` and an empty one are one state here, because
+ * that is the one state the wire type and the registry view are each spelling: the wire type
+ * omits the field, a code-registered definition may list nothing, and both mean "only my
+ * modality is known".
+ */
+export function binaryFormatCoverage(
+  required: readonly string[],
+  selected: readonly { mediaTypes?: readonly string[] }[],
+): BinaryFormatCoverage {
+  const emitted = new Set(selected.flatMap((generator) => generator.mediaTypes ?? []))
+  // An EMPTY selection declares nothing and hides nothing: with no integration to be silent, a
+  // format requirement is uncovered outright, exactly as a modality requirement already is.
+  const undeclared = selected.some((generator) => (generator.mediaTypes ?? []).length === 0)
+  const uncovered: string[] = []
+  const unverifiable: string[] = []
+  for (const mediaType of required) {
+    if (emitted.has(mediaType)) continue
+    if (undeclared) unverifiable.push(mediaType)
+    else uncovered.push(mediaType)
+  }
+  return { uncovered, unverifiable }
 }
 
 /** The 3D containers, which say the content is 3D and DELIBERATELY nothing more. */

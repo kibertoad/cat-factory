@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  binaryFormatCoverage,
   binaryModalityOverlaps,
   binaryModalitySchema,
   isBinaryModality,
@@ -147,5 +148,63 @@ describe('binaryModalityOverlaps', () => {
       'flux',
       'retro-diffusion',
     ])
+  })
+})
+
+describe('binaryFormatCoverage', () => {
+  it('covers a format some selected integration declares', () => {
+    expect(
+      binaryFormatCoverage(['model/gltf-binary'], [{ mediaTypes: ['model/gltf-binary'] }]),
+    ).toEqual({ uncovered: [], unverifiable: [] })
+  })
+
+  it('refuses a format every selected integration declared its way out of', () => {
+    // Every integration DECLARED its formats, so the answer is a fact rather than a gap: the step
+    // is asking for a container nothing it selected emits.
+    expect(binaryFormatCoverage(['model/fbx'], [{ mediaTypes: ['model/gltf-binary'] }])).toEqual({
+      uncovered: ['model/fbx'],
+      unverifiable: [],
+    })
+  })
+
+  it('keeps UNVERIFIABLE apart from uncovered, which is the whole reason it exists', () => {
+    // A generator declaring no formats has said "only my modality is known": a documented state,
+    // not an empty answer. Collapsing it into `uncovered` refuses steps the backend admits;
+    // collapsing it into silence presents an unchecked requirement as a checked one. An ABSENT
+    // list and an empty one are the same state, because the wire type omits the field and a
+    // code-registered definition may list nothing.
+    expect(binaryFormatCoverage(['model/fbx'], [{ mediaTypes: [] }])).toEqual({
+      uncovered: [],
+      unverifiable: ['model/fbx'],
+    })
+    expect(binaryFormatCoverage(['model/fbx'], [{}])).toEqual({
+      uncovered: [],
+      unverifiable: ['model/fbx'],
+    })
+  })
+
+  it('lets ONE silent integration cover for the whole selection, never per integration', () => {
+    // The judgement is about the SELECTION: one integration that declared nothing might be the
+    // one that emits it, and no rule here can tell. Judging per integration would report a
+    // requirement as refused and unverifiable at once.
+    expect(
+      binaryFormatCoverage(['model/fbx'], [{ mediaTypes: ['model/gltf-binary'] }, {}]),
+    ).toEqual({ uncovered: [], unverifiable: ['model/fbx'] })
+  })
+
+  it('refuses a format outright when NOTHING is selected to be silent about it', () => {
+    // An empty selection declares nothing and hides nothing, exactly as a modality requirement
+    // against an empty selection is already uncovered rather than unknowable.
+    expect(binaryFormatCoverage(['model/fbx'], [])).toEqual({
+      uncovered: ['model/fbx'],
+      unverifiable: [],
+    })
+  })
+
+  it('says nothing about a step that requires no format', () => {
+    expect(binaryFormatCoverage([], [{ mediaTypes: [] }])).toEqual({
+      uncovered: [],
+      unverifiable: [],
+    })
   })
 })

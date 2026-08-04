@@ -533,10 +533,8 @@ needs a PNG from one of them, where the choice is about the KIND of picture, and
 own prompt is the only thing that can carry it.
 
 **The platform's contribution is to make the choice VISIBLE, and to compute nothing else.**
-`binaryModalityOverlaps` (`@cat-factory/contracts`, beside the vocabulary itself, so kernel and the
-SPA share ONE implementation rather than the SPA keeping a second hand-written copy the way it must
-for `binaryFormatCoverage`) reports which content types more than one selected integration
-produces. Four rules bind what is done with it:
+`binaryModalityOverlaps` reports which content types more than one selected integration produces.
+Four rules bind what is done with it:
 
 - **It states the fact and RANKS NOTHING.** "Prefer the narrower modality set" and "prefer the one
   declaring the format exclusively" were both tried and both are right by accident: narrowness is
@@ -566,6 +564,21 @@ states it to the HUMAN, advisory-styled beside `media_type_unverifiable` rather 
 refusals, because that is the party who both knows why two were selected and has the step's prompt
 open to write it down. The brief catches the step whose author did not think to write it; the
 picker catches the author.
+
+**Two readers is what decides where the rule LIVES**, and it settles a question this feature had
+already answered the other way once. `binaryModalityOverlaps` sits in `@cat-factory/contracts`
+beside the vocabulary it reads, so both sides import the same implementation; and
+`binaryFormatCoverage` moved there with it, having shipped in kernel with a hand-written copy in
+`app/utils/binaryOutput.ts` for a reason that did not survive being written down ("the rule needs
+kernel's view type"): it needs `{ mediaTypes }`, which is what the SPA's copy was proving all
+along. The test is not which package the rule feels like it belongs to but **who has to agree
+about the answer**. A rule the builder states to a human and the brief states to an agent is one
+where a divergence shows up as two descriptions of one selection, days apart, with nothing
+comparing them, so it belongs in the package both can import even when its most natural home
+would be kernel. What stays kernel-side is everything that needs kernel's own types: the registry
+views, the resolution of a step's ids against them, and the DISPOSITION of each outcome (which
+refuses the run, which only warns), which is a fact about admission rather than about the
+selection.
 
 The brief's paragraph also asks for the declaration block's `generator` field, which is otherwise
 optional. Optional is right in general (most steps hold one producer per content type, so the

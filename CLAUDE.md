@@ -1775,6 +1775,14 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
 - **Hexagonal layering**: controllers (`@cat-factory/server`) → services (orchestration/integrations) →
   ports (kernel). Infra adapters live in each facade and implement the ports + the `gateways` seam, wired
   via constructor injection of one `dependencies` object. Opt-in integrations wire only when configured.
+- **A pure rule BOTH the backend and the SPA must agree about lives in `@cat-factory/contracts`**, never
+  restated on each side. The SPA cannot see kernel, so a rule that stays there becomes a hand-written copy
+  the moment a surface has to state the same judgement to a human, and the two then drift into describing
+  one selection two different ways with nothing comparing them (`binaryFormatCoverage` and
+  `binaryModalityOverlaps` are the worked example). What decides is who has to AGREE about the answer, not
+  which package the rule feels like it belongs to. A rule needing kernel's own types stays in kernel; so
+  does the DISPOSITION of its outcomes (which refuses a run, which only warns), being a fact about
+  admission rather than about the thing judged.
 - **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An implementer kind
   (the `brief-standards` trait) re-sends its whole system prompt on every turn of a long loop, so it folds
   a fragment's condensed `brief` instead of the full `body`; reviewer/planner kinds keep the full text. Two

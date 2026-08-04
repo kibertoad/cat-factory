@@ -5,7 +5,6 @@ import {
   type BinaryGeneratorView,
 } from './binary-generator-registry.js'
 import {
-  binaryFormatCoverage,
   binaryGeneratorContextFileFor,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
@@ -187,7 +186,8 @@ describe('binaryGeneratorSelectionIssues', () => {
   it('admits a format it could not judge, because an undeclared list is not an empty one', () => {
     // A generator that declares no `mediaTypes` has said "only my modality is known" — a
     // documented state. Refusing there would punish the honest declaration; the gap is STATED
-    // in the brief and the picker instead.
+    // in the brief and the picker instead. What ADMISSION owes is this half: only the uncovered
+    // outcome refuses. The three outcomes themselves are contracts' `binaryFormatCoverage`.
     const undeclared = generator({ id: 'mystery-3d', modalities: ['3d-model'], mediaTypes: [] })
     expect(
       binaryGeneratorSelectionIssues(
@@ -199,10 +199,6 @@ describe('binaryGeneratorSelectionIssues', () => {
         [undeclared],
       ),
     ).toEqual([])
-    expect(binaryFormatCoverage(['model/fbx'], [undeclared])).toEqual({
-      uncovered: [],
-      unverifiable: ['model/fbx'],
-    })
   })
 
   it('tells an asset generator from a scene generator, which no media type could', () => {
@@ -223,10 +219,14 @@ describe('binaryGeneratorSelectionIssues', () => {
   })
 
   it('refuses a format outright when NOTHING is selected to be silent about it', () => {
-    expect(binaryFormatCoverage(['model/fbx'], [])).toEqual({
-      uncovered: ['model/fbx'],
-      unverifiable: [],
-    })
+    // The empty selection reaches admission as a refusal rather than as an unverifiable gap: with
+    // no integration to have declared nothing, the requirement is simply unmet.
+    expect(
+      binaryGeneratorSelectionIssues(
+        { storageServiceId: 'asset-store', mediaTypes: ['model/fbx'] },
+        [meshy],
+      ),
+    ).toEqual([{ problem: 'media_type_uncovered', mediaType: 'model/fbx' }])
   })
 
   it('does not translate a format into its modality, so an exotic one is checked as written', () => {
@@ -277,6 +277,31 @@ describe('binaryGeneratorSelectionIssues', () => {
     expect(message).toContain("'3d'")
     expect(message).toContain('no longer defines')
     expect(message).not.toContain('undefined')
+  })
+})
+
+describe('resolveBinaryGeneratorSelection', () => {
+  it('resolves a repeated id ONCE, on both sides of the split', () => {
+    // Nothing refuses a stored selection that names one integration twice, and every reader of
+    // this states a count: a repeat renders that integration's whole brief entry a second time,
+    // and reports a step as holding two producers of what it holds one of.
+    expect(
+      resolveBinaryGeneratorSelection(
+        {
+          storageServiceId: 'asset-store',
+          generatorIds: ['retro-diffusion', 'ghost', 'retro-diffusion', 'ghost'],
+        },
+        [generator()],
+      ),
+    ).toEqual({ selected: [generator()], unresolvedIds: ['ghost'] })
+  })
+
+  it('keeps selection order, because the brief and the picker both render in it', () => {
+    const { selected } = resolveBinaryGeneratorSelection(
+      { storageServiceId: 'asset-store', generatorIds: ['studio-music', 'retro-diffusion'] },
+      [generator(), music],
+    )
+    expect(selected.map((view) => view.id)).toEqual(['studio-music', 'retro-diffusion'])
   })
 })
 
@@ -396,19 +421,29 @@ describe('renderBinaryGeneratorSection', () => {
       modalities: ['image'],
       mediaTypes: ['image/jpeg'],
     })
-    const section = renderBinaryGeneratorSection({
+    const lines = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'flux'] },
         [generator(), flux],
       ),
       requestedModalities: [],
-    }).join('\n')
+    })
+    const section = lines.join('\n')
     expect(section).toContain('`retro-diffusion` and `flux` both produce images.')
     expect(section).toContain('They are not interchangeable.')
     expect(section).toContain('`generator` field')
     // Stated, never RANKED: the platform has no cost model, no quality model and no view of what
-    // the step is for, and a confident wrong preference displaces the notes above it.
-    expect(section).not.toMatch(/prefer|instead of `/i)
+    // the step is for, and a confident wrong preference displaces the notes above it. Asserted
+    // against the PARAGRAPH rather than the whole section, which also carries each integration's
+    // own description, prose a deployment writes and where "prefer" is its author's word to use.
+    const paragraph = lines
+      .slice(
+        lines.findIndex((line) => line.startsWith('More than one of these integrations')),
+        lines.findIndex((line) => line.includes('so the choice is on the record.')) + 1,
+      )
+      .join('\n')
+    expect(paragraph).toContain('both produce images.')
+    expect(paragraph).not.toMatch(/prefer|instead of `/i)
     // After the per-integration entries, so "the notes above" is literally true.
     expect(section.indexOf('They are not interchangeable.')).toBeGreaterThan(
       section.indexOf('Good for sprites and tiles'),
@@ -434,6 +469,9 @@ describe('renderBinaryGeneratorSection', () => {
     }).join('\n')
     expect(quiet).not.toContain('not interchangeable')
     expect(repeated).not.toContain('not interchangeable')
+    // And the entry itself is rendered once: two identical entries tell an agent nothing and are
+    // charged for like anything else in the brief.
+    expect(repeated.match(/### `retro-diffusion`/g)).toHaveLength(1)
   })
 
   it('names the overlap even when NEITHER shared content type is the deliverable', () => {

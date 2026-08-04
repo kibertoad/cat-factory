@@ -1,5 +1,6 @@
 import {
   ASSET_STORAGE_CAPABILITY,
+  binaryFormatCoverage,
   binaryModalityOverlaps,
   normalizeMediaType,
 } from '@cat-factory/contracts'
@@ -463,6 +464,12 @@ export interface BinaryOutputPickState {
  * `binaryGeneratorSelectionIssues` so the builder surfaces the `binary_output_generator_invalid`
  * refusal before the round trip rather than inventing a second opinion.
  *
+ * What is mirrored is the DISPOSITION: which conditions refuse, which advise, and what each is
+ * called on this surface. The two rules underneath are IMPORTED (`binaryFormatCoverage`,
+ * `binaryModalityOverlaps`), because a rule restated on both sides of a wire is one that can come
+ * to two answers about the same selection, and the reader here is the person who would then be
+ * told the builder's version and the agent the other.
+ *
  * `unavailable` is the one state that is NOT derivable from the list, which is why the snapshot
  * carries it as its own flag. An empty list normally IS a real empty — this deployment registers
  * none — and that is exactly why a selected id in that state is `unknown_generator` rather than
@@ -494,7 +501,10 @@ function generatorPickIssues(
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
-  const selectedIds = config?.generatorIds ?? []
+  // Deduplicated on the way in, exactly as `resolveBinaryGeneratorSelection` does it on the
+  // backend: a step that names one integration twice holds ONE, and every line below states a
+  // count or a list a repeat would double.
+  const selectedIds = [...new Set(config?.generatorIds ?? [])]
   const unknownGeneratorIds = selectedIds.filter((id) => !byId.has(id))
   // Coverage is judged against what RESOLVED, exactly as admission judges it: an unknown id
   // contributes no content types, so a step whose only audio generator is unregistered is told
@@ -502,7 +512,7 @@ function generatorPickIssues(
   const selected = selectedIds.flatMap((id) => byId.get(id) ?? [])
   const covered = new Set(selected.flatMap((g) => g.modalities))
   const uncovered = (config?.modalities ?? []).filter((m) => !covered.has(m))
-  const format = formatCoverage(config?.mediaTypes ?? [], selected)
+  const format = binaryFormatCoverage(config?.mediaTypes ?? [], selected)
   // Judged against what RESOLVED, like every rule above it, and against the SELECTION rather than
   // the step's declared content types: the case that most often puts two producers of one kind on
   // one step is the one where neither is the deliverable (an image generated to feed a mesh API),
@@ -522,34 +532,6 @@ function generatorPickIssues(
     unverifiableMediaTypes: format.unverifiable,
     overlaps,
   }
-}
-
-/**
- * The SPA's copy of kernel's `binaryFormatCoverage`, restated for the reason the two `*_service`
- * members above are: the builder cannot see kernel, and the wire vocabulary that does cross
- * (`@cat-factory/contracts`) carries the schema, not the rule.
- *
- * The THIRD outcome is what must not be lost in the copying. A generator that declares no formats
- * has said "only my modality is known" — a documented state, not an empty answer — so a
- * requirement it cannot be judged against is unverifiable and the step still starts. Collapsing
- * that into `uncovered` would flag steps the backend admits (and send someone editing a selection
- * that is fine); collapsing it into silence would present an unchecked requirement as a checked
- * one.
- */
-function formatCoverage(
-  required: readonly string[],
-  selected: readonly Pick<RegisteredBinaryGenerator, 'mediaTypes'>[],
-): { uncovered: string[]; unverifiable: string[] } {
-  const emitted = new Set(selected.flatMap((g) => g.mediaTypes ?? []))
-  const undeclared = selected.some((g) => (g.mediaTypes ?? []).length === 0)
-  const uncovered: string[] = []
-  const unverifiable: string[] = []
-  for (const mediaType of required) {
-    if (emitted.has(mediaType)) continue
-    if (undeclared) unverifiable.push(mediaType)
-    else uncovered.push(mediaType)
-  }
-  return { uncovered, unverifiable }
 }
 
 /**
