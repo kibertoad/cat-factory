@@ -1,4 +1,4 @@
-// Which PRE-TOKEN INPUT GATE verdicts a run surfaces, and how they are presented.
+// Which PRE-DISPATCH INPUT GATE verdicts a run surfaces, and how they are presented.
 //
 // The gate records a verdict for EVERY disposition, including the ones where it did nothing, so
 // "has a verdict" is not the same question as "has something to tell a human". This is the one

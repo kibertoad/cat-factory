@@ -23,7 +23,7 @@ describe('the generated tool table', () => {
     // The spec has 39 operations. Two of them stream, and a tool call has no channel for that —
     // so the arithmetic here is the guard that a future endpoint cannot quietly fail to become a
     // tool: generation fails on an unclassified stream, and this fails on a changed total that
-    // nobody has looked at. (38 → 39: the pre-token input gate's resolve, an ordinary
+    // nobody has looked at. (38 → 39: the pre-dispatch input gate's resolve, an ordinary
     // request/response operation, so it becomes a tool rather than an omission.)
     expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(39)
     expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId)).toEqual([

@@ -546,7 +546,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
     const manifest = {
       providerId: 'internal-envs',
       label: 'Internal Envs',
-      baseUrl: 'https://kargo.internal/api',
+      baseUrl: 'https://envs.internal/api',
       auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
       provision: { method: 'POST', pathTemplate: '/environments' },
       response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
@@ -584,7 +584,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
       }
       return { repo, baseBranch: 'main' }
     }
-    // A native provider that requires a `.kargo.yml` carrying a `jobs:` line.
+    // A native provider that requires a `.acme-envs.yml` carrying a `jobs:` line.
     const provider = {
       provision: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
       status: async () => ({ externalId: 'e', status: 'ready', url: null }) as never,
@@ -592,7 +592,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
       validateRepo: async (req: {
         readRepoFile: (p: string) => Promise<{ content: string } | null>
       }) => {
-        const file = await req.readRepoFile('.kargo.yml')
+        const file = await req.readRepoFile('.acme-envs.yml')
         const ok = !!file && file.content.includes('jobs')
         return ok
           ? { ok: true, issues: [] }
@@ -601,8 +601,8 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
               issues: [
                 {
                   severity: 'error' as const,
-                  message: file ? 'missing jobs' : 'missing .kargo.yml',
-                  path: '.kargo.yml',
+                  message: file ? 'missing jobs' : 'missing .acme-envs.yml',
+                  path: '.acme-envs.yml',
                 },
               ],
             }
@@ -613,7 +613,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
     const invalid = harness.makeApp(undefined, {
       environmentProvider: provider as unknown as EnvironmentProvider,
       resolveRepoFilesForCoords: async () =>
-        seed({ '.kargo.yml': 'name: x\n' }) as unknown as RunRepoContext,
+        seed({ '.acme-envs.yml': 'name: x\n' }) as unknown as RunRepoContext,
     })
     const wsBad = (await invalid.createWorkspace()).workspace
     // The descriptor advertises the capability identically on every runtime.
@@ -629,14 +629,14 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
     )
     expect(bad.status).toBe(200)
     expect(bad.body.ok).toBe(false)
-    expect(bad.body.issues[0]?.path).toBe('.kargo.yml')
+    expect(bad.body.issues[0]?.path).toBe('.acme-envs.yml')
 
     // A repo WITH a valid config → ok with no issues (no connection registered first:
     // the route must not 409 when nothing is registered — the on-demand contract).
     const valid = harness.makeApp(undefined, {
       environmentProvider: provider as unknown as EnvironmentProvider,
       resolveRepoFilesForCoords: async () =>
-        seed({ '.kargo.yml': 'name: x\njobs: [build]\n' }) as unknown as RunRepoContext,
+        seed({ '.acme-envs.yml': 'name: x\njobs: [build]\n' }) as unknown as RunRepoContext,
     })
     const wsGood = (await valid.createWorkspace()).workspace
     const good = await valid.call<RepoValidationResult>(
@@ -821,7 +821,7 @@ function registerProvisioningDetectionTests(harness: ConformanceHarness): void {
     // Simulate the agent pushing its fix, then drive the durable poll loop (production: a
     // pg-boss queue / an EnvConfigRepairWorkflow). The fake reports `done` on the first
     // poll, which triggers the service's re-validation against the now-valid repo.
-    store.set('.kargo.yml', 'name: x\njobs: [build]\n')
+    store.set('.acme-envs.yml', 'name: x\njobs: [build]\n')
     const polls = await app.driveEnvConfigRepair(wsId, jobId)
     expect(polls).toBeGreaterThanOrEqual(1)
 
@@ -865,7 +865,7 @@ function registerProvisioningDetectionTests(harness: ConformanceHarness): void {
  *
  * The fake provider's mechanical bootstrap always bails (`needsAgent: true`), so the
  * caller's opt-in dispatches the durable run. The returned `store` is the MUTABLE
- * in-memory repo behind it: flipping `.kargo.yml` from invalid to valid simulates the
+ * in-memory repo behind it: flipping `.acme-envs.yml` from invalid to valid simulates the
  * agent's push, which is what makes the service's injected re-validation record ok:true.
  * The repairer itself is the deterministic FakeEnvConfigRepairer the harness injects, so
  * none of this needs GitHub or a container.
@@ -876,7 +876,7 @@ async function startEnvConfigRepairRun(harness: ConformanceHarness): Promise<{
   jobId: string
   store: Map<string, string>
 }> {
-  const store = new Map<string, string>([['.kargo.yml', 'name: x\n']]) // invalid: no `jobs`
+  const store = new Map<string, string>([['.acme-envs.yml', 'name: x\n']]) // invalid: no `jobs`
   const repo = {
     getFile: async (path: string) => {
       const content = store.get(path)
@@ -896,13 +896,15 @@ async function startEnvConfigRepairRun(harness: ConformanceHarness): Promise<{
     validateRepo: async (req: {
       readRepoFile: (p: string) => Promise<{ content: string } | null>
     }) => {
-      const file = await req.readRepoFile('.kargo.yml')
+      const file = await req.readRepoFile('.acme-envs.yml')
       const ok = !!file && file.content.includes('jobs')
       return ok
         ? { ok: true, issues: [] }
         : {
             ok: false,
-            issues: [{ severity: 'error' as const, message: 'missing jobs', path: '.kargo.yml' }],
+            issues: [
+              { severity: 'error' as const, message: 'missing jobs', path: '.acme-envs.yml' },
+            ],
           }
     },
     // Mechanical bootstrap can't synthesise a config → ask for the agent fallback.
@@ -912,7 +914,7 @@ async function startEnvConfigRepairRun(harness: ConformanceHarness): Promise<{
       issues: [{ severity: 'error' as const, message: 'cannot synthesize config' }],
     }),
     // Declares agent-repair support (the fallback's gate; the fake repairer performs it).
-    describeRepairAgent: () => ({ prompt: 'Fix .kargo.yml: add a jobs list.' }),
+    describeRepairAgent: () => ({ prompt: 'Fix .acme-envs.yml: add a jobs list.' }),
   }
 
   const app = harness.makeApp(undefined, {

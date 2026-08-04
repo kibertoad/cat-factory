@@ -9,15 +9,15 @@ import { buildNodeResolveTransport } from '../src/container.js'
 const registry = defaultRunnerBackendRegistry()
 
 // The native runner-adapter seam: `buildNodeResolveTransport` must drive the actual
-// dispatch through an INJECTED `runnerPoolProvider` (e.g. a Kargo adapter) when one is
+// dispatch through an INJECTED `runnerPoolProvider` (e.g. a native pool adapter) when one is
 // supplied, falling back to the generic HTTP provider otherwise — symmetric with the
 // `environmentProvider` seam. A pure unit test (no DB): the connection repo is faked and
 // the manifest carries no secret refs, so `resolve()` needs no decryption.
 
 const manifest: RunnerPoolManifest = {
-  providerId: 'kargo',
-  label: 'Kargo',
-  baseUrl: 'https://kargo.test/api',
+  providerId: 'acme-envs',
+  label: 'Acme envs',
+  baseUrl: 'https://acme-envs.test/api',
   auth: { type: 'none' },
   dispatch: { method: 'POST', pathTemplate: '/jobs', bodyTemplate: '{}' },
   poll: { method: 'GET', pathTemplate: '/jobs/{{input.jobId}}' },

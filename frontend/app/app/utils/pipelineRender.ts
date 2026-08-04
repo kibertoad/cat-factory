@@ -150,7 +150,7 @@ export function dedicatedParkView(
   step: PipelineStep,
   instance: ExecutionInstance | null | undefined,
 ): 'follow-ups' | 'fork-decision' | 'input-gate' | null {
-  // The PRE-TOKEN INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
+  // The PRE-DISPATCH INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
   // STEP to recognise it by: its verdict is a fact about the RUN. Checked first, and off the
   // instance: approving it generically would mark the run's first working step done and skip
   // the work the run exists to do.

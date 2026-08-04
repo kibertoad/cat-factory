@@ -2,7 +2,7 @@ import type { Block, ExecutionInstance, RunInputGate } from '@cat-factory/kernel
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
-// PRE-TOKEN INPUT GATE conformance. The gate is the run's last chance to refuse work for free:
+// PRE-DISPATCH INPUT GATE conformance. The gate is the run's last chance to refuse work for free:
 // it reduces the task's authored input before the first agent step is dispatched, and parks the
 // run when there is structurally nothing to act on.
 //

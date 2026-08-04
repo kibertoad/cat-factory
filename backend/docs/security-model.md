@@ -316,7 +316,7 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **The sandboxed run mode (`dryRunRoles`) against someone who has repo write.** It refuses both of
   the PLATFORM's merge exits; it cannot stop a human merging the PR by hand on the host, and a PR is
   deliberately still opened. It is a real control in one specific shape: the engine falls back to
-  the DEPLOYMENT credential for an initiator with no stored PAT, so a non-engineer who cannot merge
+  the DEPLOYMENT credential for an initiator with no stored PAT, so an initiator who cannot merge
   on GitHub can still cause a merge by tapping the review card, and the mode closes that escalation.
   Against anyone holding write access on the host it is advisory. Branch protection, the first item
   on the hardening checklist below, is the mechanism; this is scoping on top of it.

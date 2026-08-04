@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
 
 /**
- * The PRE-TOKEN INPUT GATE's action surface. The verdict itself lives on the run
+ * The PRE-DISPATCH INPUT GATE's action surface. The verdict itself lives on the run
  * (`instance.inputGate`) and is kept fresh by the execution stream, so this store only wraps the
  * `resolve` action, tracks the in-flight state so the notice can disable its buttons, and
  * reflects the returned verdict back so the UI updates before the stream echoes it.
