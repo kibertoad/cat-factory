@@ -1,5 +1,52 @@
 # @cat-factory/node-server
 
+## 0.161.1
+
+### Patch Changes
+
+- bbc51fa: Split the last six files above 1500 lines so oxlint's `max-lines` can reach its final target,
+  where it matches `check-file-size.mjs`'s default budget.
+
+  Every change is a behaviour-neutral move behind a thin delegate or a re-export, so no call site
+  changed:
+
+  - `ExecutionService` sheds the run-lifecycle surface (`start` / `retry` / `restartFromStep` /
+    `resumePaused` / `cancel` / `stopRun` / `teardownForBlockTree`) to `RunLifecycleController` and
+    the iteration-cap resolution to `IterationCapController`, built as one pair by
+    `run-action-controllers.ts`.
+  - `RunDispatcher` sheds the dispatch side of a step to `AgentDispatchController` and its
+    dependency declarations to `RunDispatcherDependencies.ts`.
+  - The provisioning detector's compose / stack-recipe half moves to `provision-detect.compose.ts`
+    over a new shared `provision-detect.contract.ts`.
+  - The Node schema's outbound model-provider credential tables move to
+    `db/tables/model-credentials.ts`, re-exported.
+
+  The extractions also stranded four private fields whose only readers moved out
+  (`RunDispatcher`'s `resolveRunRepoContext` / `resolveProviderCapabilities` / `modelIdIsMetered`
+  and `ExecutionService`'s `subscriptionActivations`). They were assigned and never read, which no
+  typecheck reports, so they are deleted rather than left as write-only state.
+
+- Updated dependencies [bbc51fa]
+- Updated dependencies [36b1853]
+  - @cat-factory/orchestration@0.194.0
+  - @cat-factory/integrations@0.122.0
+  - @cat-factory/server@0.206.0
+  - @cat-factory/contracts@0.223.0
+  - @cat-factory/kernel@0.225.0
+  - @cat-factory/eks@0.1.211
+  - @cat-factory/agents@0.107.1
+  - @cat-factory/consensus@0.14.1
+  - @cat-factory/gates@0.8.57
+  - @cat-factory/gitlab@0.15.16
+  - @cat-factory/observability-otel@0.7.2
+  - @cat-factory/prompt-fragments@0.15.48
+  - @cat-factory/spend@0.13.13
+  - @cat-factory/caching@0.14.1
+  - @cat-factory/observability-langfuse@0.9.54
+  - @cat-factory/provider-bedrock@0.7.362
+  - @cat-factory/provider-cloudflare@0.7.363
+  - @cat-factory/provider-s3@0.2.282
+
 ## 0.161.0
 
 ### Minor Changes

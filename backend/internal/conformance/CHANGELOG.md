@@ -1,5 +1,20 @@
 # @cat-factory/conformance
 
+## 0.21.2
+
+### Patch Changes
+
+- Updated dependencies [bbc51fa]
+- Updated dependencies [36b1853]
+  - @cat-factory/orchestration@0.194.0
+  - @cat-factory/integrations@0.122.0
+  - @cat-factory/server@0.206.0
+  - @cat-factory/contracts@0.223.0
+  - @cat-factory/kernel@0.225.0
+  - @cat-factory/agents@0.107.1
+  - @cat-factory/gates@0.8.57
+  - @cat-factory/prompt-fragments@0.15.48
+
 ## 0.21.1
 
 ### Patch Changes
