@@ -526,6 +526,7 @@
       "roleRules": {
         "heading": "Grenzen je startender Rolle",
         "help": "Was ein Lauf darf, hängt auch davon ab, wer ihn gestartet hat. Eine Rolle kann strengeren Regeln als den obigen unterliegen oder nur Probeläufe machen: Die Pipeline arbeitet und öffnet einen Pull Request, zusammengeführt wird nichts. Eine Rolle kann diese Richtlinie nur verschärfen, nie lockern.",
+        "autoMergeOffWarning": "Für diese Vorlage ist das automatische Zusammenführen aus, jeder Pull Request geht also ohnehin an einen Menschen und die Kategoriegrenzen unten ändern nichts mehr. Probeläufe gelten weiterhin: Sie verweigern auch das manuelle Zusammenführen.",
         "sandboxLabel": "Nur Probeläufe",
         "sandboxNote": "Läufe dieser Rolle öffnen einen Pull Request und führen nichts zusammen, die Kategorieregeln unten können sie also nicht weiter einschränken.",
         "noRules": "Keine Kategoriegrenzen",
@@ -2836,6 +2837,7 @@
       "start": "Starten",
       "blocked": "Blockiert",
       "startPipeline": "{name} starten",
+      "startPipelineDryRun": "{name} als Probelauf starten: öffnet einen Pull Request, führt nichts zusammen",
       "pipelineFallback": "Pipeline",
       "waitingOn": "Wartet auf: {deps}",
       "blockedByDependenciesTitle": "Durch Abhängigkeiten blockiert",
@@ -2860,6 +2862,10 @@
       "buildSteps": "Build-Schritte",
       "reviewAndApprove": "Überprüfen & freigeben",
       "clickToViewStep": "Klicken, um Schrittdetails & Ausgabe anzuzeigen"
+    },
+    "dryRunToast": {
+      "title": "Probelauf gestartet",
+      "body": "\"{name}\" läuft. Läufe deiner Rolle führen bei dieser Aufgabe nichts zusammen."
     },
     "epic": {
       "label": "Epic",

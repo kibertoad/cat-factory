@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick, ref, type Ref } from 'vue'
 import type { Block, Pipeline } from '~/types/domain'
 import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
 import { useBoardStore } from '~/stores/board'
 import { useExecutionStore } from '~/stores/execution'
 import { useRiskPoliciesStore } from '~/stores/riskPolicies'
 import { useUiModeStore } from '~/stores/uiMode'
-import { useRunStart } from '~/composables/useRunStart'
+import { useDryRunPolicy, useRunStart } from '~/composables/useRunStart'
 
 // `useRunStart` resolves the mode a start will run in from two independent facts: what the user
 // asked for, and whether the task's merge preset sandboxes their role. The stores are real (a
@@ -38,15 +39,31 @@ const preset = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     ...over,
   }) as RiskPolicy
 
-/** Seed a task governed by `policy`, signed in as `role`, and hand back the composable. */
-function setup(options: { role: WorkspaceRole | null; policy?: RiskPolicy; advanced?: boolean }) {
+/**
+ * Seed a board governed by `policy`, signed in as `role`, and hand back the composable.
+ *
+ * `b1` is the task under test. `b2` is a second one carrying its own preset, so a test can move
+ * the id the composable is bound to: that is what the inspector does, being mounted once for the
+ * session and following the board selection rather than being rebuilt per block.
+ */
+function setup(options: {
+  role: WorkspaceRole | null
+  policy?: RiskPolicy
+  otherPolicy?: RiskPolicy
+  advanced?: boolean
+}) {
   const start = vi.fn().mockResolvedValue(true)
   vi.stubGlobal('useWorkspaceAccess', () => ({ role: { value: options.role } }))
-  useBoardStore().blocks = [{ id: 'b1', level: 'task', title: 'Task' } as Block]
-  useRiskPoliciesStore().hydrate([options.policy ?? preset()])
+  useBoardStore().blocks = [
+    { id: 'b1', level: 'task', title: 'Task' } as Block,
+    { id: 'b2', level: 'task', title: 'Other task', riskPolicyId: 'mp_other' } as Block,
+  ]
+  const other = options.otherPolicy ?? preset({ id: 'mp_other', isDefault: false })
+  useRiskPoliciesStore().hydrate([options.policy ?? preset(), other])
   useUiModeStore().setMode(options.advanced === false ? 'basic' : 'advanced')
   useExecutionStore().start = start
-  return { run: useRunStart('b1'), start }
+  const blockId: Ref<string | undefined> = ref('b1')
+  return { run: useRunStart(blockId), start, blockId }
 }
 
 describe('useRunStart', () => {
@@ -122,5 +139,66 @@ describe('useRunStart', () => {
     const { run } = setup({ role: 'member', policy: preset({ dryRunRoles: ['member'] }) })
     expect(run.preset.value?.id).toBe('mp_balanced')
     expect(run.forced.value).toBe(true)
+  })
+
+  // The request belongs to the block it was made on, and the surface holding it outlives that
+  // block: the inspector is mounted once and follows the board selection. Carrying the request
+  // across would sandbox the NEXT run started, on a task nobody armed it for, with the Run
+  // button's icon the only tell and reading as a property of the task now shown.
+  it('drops a pending request when the block changes under it', async () => {
+    const { run, blockId, start } = setup({ role: 'member' })
+    run.setRequested(true)
+    expect(run.dryRun.value).toBe(true)
+
+    blockId.value = 'b2'
+    await nextTick()
+
+    expect(run.requested.value).toBe(false)
+    expect(run.dryRun.value).toBe(false)
+    await run.start(pipeline)
+    expect(start).toHaveBeenCalledWith('b2', pipeline, { mode: undefined })
+  })
+
+  // The other half of following the selection: the policy read is per BLOCK, so moving to a task
+  // governed by a sandboxing preset must report the sandbox rather than the previous task's.
+  it('re-reads the policy for the block it is now bound to', async () => {
+    const { run, blockId } = setup({
+      role: 'member',
+      otherPolicy: preset({ id: 'mp_other', isDefault: false, dryRunRoles: ['member'] }),
+    })
+    expect(run.forced.value).toBe(false)
+
+    blockId.value = 'b2'
+    await nextTick()
+
+    expect(run.forced.value).toBe(true)
+    expect(run.canRequest.value).toBe(false)
+  })
+})
+
+// The board's one-tap start and its drag-drop start resolve a task at the moment of the action
+// and have no block to bind a composable to, so they read the policy through the same functions
+// `useRunStart` wraps. Sharing them is what keeps a sandbox from being visible on one start
+// surface and silent on another.
+describe('useDryRunPolicy', () => {
+  it('answers per block, for a target resolved at the moment of the start', () => {
+    setup({
+      role: 'member',
+      otherPolicy: preset({ id: 'mp_other', isDefault: false, dryRunRoles: ['member'] }),
+    })
+    const { forcedFor, presetFor } = useDryRunPolicy()
+    expect(forcedFor('b1')).toBe(false)
+    expect(forcedFor('b2')).toBe(true)
+    expect(presetFor('b2')?.id).toBe('mp_other')
+  })
+
+  // A block with no preset of its own is governed by the workspace default, and so is one the
+  // board cannot resolve: the same fallback the engine makes, rather than reading an unresolved
+  // block as unsandboxed, which would state the safer-looking answer without knowing it.
+  it('falls back to the workspace default for a block carrying no preset', () => {
+    setup({ role: 'member', policy: preset({ dryRunRoles: ['member'] }) })
+    const { forcedFor } = useDryRunPolicy()
+    expect(forcedFor('b1')).toBe(true)
+    expect(forcedFor(undefined)).toBe(true)
   })
 })

@@ -492,6 +492,7 @@
       "start": "Start",
       "blocked": "Blocked",
       "startPipeline": "Start {name}",
+      "startPipelineDryRun": "Start {name} as a dry run: opens a pull request, merges nothing",
       "pipelineFallback": "pipeline",
       "waitingOn": "Waiting on: {deps}",
       "blockedByDependenciesTitle": "Blocked by dependencies",
@@ -516,6 +517,13 @@
       "buildSteps": "Build steps",
       "reviewAndApprove": "Review & approve",
       "clickToViewStep": "Click to view step details & output"
+    },
+    "dryRunToast": {
+      "title": "Dry run started",
+      "body": "Running \"{name}\". Your role's runs merge nothing on this task."
+    },
+    "@dryRunToast": {
+      "description": "Toast shown when a run starts that the task's merge policy has sandboxed because of the initiator's workspace role: the pipeline runs and opens a pull request, and nothing merges. {name} is the pipeline name, kept verbatim. Not a choice the reader made, so word it as a statement of what the run will do rather than as a confirmation of a setting."
     },
     "epic": {
       "label": "Epic",
@@ -2986,6 +2994,7 @@
       "roleRules": {
         "heading": "Limits per initiator role",
         "help": "What a run may do also depends on who started it. A role can be held to stricter rules than the ones above, or to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the class limits below add nothing. Dry runs still apply: they refuse a manual merge too.",
         "sandboxLabel": "Dry runs only",
         "sandboxNote": "Runs started by this role open a pull request and merge nothing, so the class rules below cannot hold them to anything stricter.",
         "noRules": "No class limits",

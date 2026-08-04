@@ -447,6 +447,7 @@
       "start": "Uruchom",
       "blocked": "Zablokowane",
       "startPipeline": "Uruchom {name}",
+      "startPipelineDryRun": "Uruchom {name} jako uruchomienie próbne: otwiera pull request, niczego nie scala",
       "pipelineFallback": "pipeline",
       "waitingOn": "Oczekiwanie na: {deps}",
       "blockedByDependenciesTitle": "Zablokowane przez zależności",
@@ -471,6 +472,10 @@
         "title": "Uruchomiono",
         "body": "Trwa wykonywanie \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Uruchomiono próbnie",
+      "body": "Trwa wykonywanie \"{name}\". Uruchomienia twojej roli niczego nie scalają w tym zadaniu."
     },
     "epic": {
       "label": "Epik",
@@ -2747,6 +2752,7 @@
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
         "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można objąć surowszymi regułami niż powyższe albo wyłącznie uruchomieniami próbnymi: potok pracuje i otwiera pull request, ale nic nie jest scalane. Rola może tę zasadę tylko zaostrzyć, nigdy poluzować.",
+        "autoMergeOffWarning": "W tym zestawie automatyczne scalanie jest wyłączone, więc każdy pull request i tak trafia do człowieka, a ograniczenia kategorii poniżej niczego nie dodają. Uruchomienia próbne nadal obowiązują: odmawiają też scalenia ręcznego.",
         "sandboxLabel": "Tylko uruchomienia próbne",
         "sandboxNote": "Uruchomienia rozpoczęte przez tę rolę otwierają pull request i niczego nie scalają, więc reguły kategorii poniżej nie mogą ich już bardziej ograniczyć.",
         "noRules": "Brak ograniczeń kategorii",

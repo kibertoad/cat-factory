@@ -1,10 +1,11 @@
-import { dryRunForcedForRole, isDryRun } from '@cat-factory/contracts'
+import { dryRunForcedForRole } from '@cat-factory/contracts'
 import type { Logger, RunMode, WorkspaceRole } from '@cat-factory/kernel'
 
-// `isDryRun` is re-exported so the merge path keeps ONE import for the run-mode vocabulary it
-// reads. The rule itself (absent ⇒ `live`) lives in contracts, because the SPA has to read a run's
-// mode the same way to badge a sandboxed run rather than one that simply has not merged yet.
-export { isDryRun }
+// `isDryRun` reads a run's mode (absent ⇒ `live`) and lives in `@cat-factory/contracts`, because
+// the SPA has to read it the same way to badge a sandboxed run rather than one that simply has
+// not merged yet. It is deliberately NOT re-exported from here, for the same reason kernel stops
+// re-exporting `narrowMergeClassRule`: two import paths on one rule is the shape that lets a
+// second hand-written copy exist. Its callers import it from contracts directly.
 
 // ---------------------------------------------------------------------------
 // Pure resolution of a run's MODE — whether the run may land its work, or is a sandbox that

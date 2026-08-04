@@ -526,6 +526,7 @@
       "roleRules": {
         "heading": "Limiti per ruolo di chi avvia",
         "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere soggetto a regole più severe di quelle sopra, oppure alle sole prove: la pipeline lavora e apre una pull request, ma non viene unito nulla. Un ruolo può solo restringere questo criterio, mai allargarlo.",
+        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per categoria qui sotto non aggiungono nulla. Le prove restano valide: rifiutano anche un'unione manuale.",
         "sandboxLabel": "Solo prove",
         "sandboxNote": "Le esecuzioni avviate da questo ruolo aprono una pull request e non uniscono nulla, quindi le regole per categoria qui sotto non possono restringerle ulteriormente.",
         "noRules": "Nessun limite per categoria",
@@ -2836,6 +2837,7 @@
       "start": "Avvia",
       "blocked": "Bloccato",
       "startPipeline": "Avvia {name}",
+      "startPipelineDryRun": "Avvia {name} come prova: apre una pull request e non unisce nulla",
       "pipelineFallback": "pipeline",
       "waitingOn": "In attesa di: {deps}",
       "blockedByDependenciesTitle": "Bloccato dalle dipendenze",
@@ -2860,6 +2862,10 @@
       "buildSteps": "Fasi di build",
       "reviewAndApprove": "Rivedi e approva",
       "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase"
+    },
+    "dryRunToast": {
+      "title": "Prova avviata",
+      "body": "Esecuzione di \"{name}\". Le esecuzioni del tuo ruolo non uniscono nulla su questa attività."
     },
     "epic": {
       "label": "Epic",

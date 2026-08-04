@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MERGE_CLASS_RULES } from '@cat-factory/contracts'
 import type { ClassRulesByRole, MergeClassRules } from '~/types/merge'
 import {
   INHERIT_RULE,
@@ -22,8 +23,34 @@ describe('narrowingOptionsFor', () => {
   })
 })
 
+// The sentinel is a VALUE the select renders as an item, and Reka UI's `SelectItem` throws on an
+// empty-string value (it reserves `''` for "cleared, show the placeholder"). Nothing here can see
+// that widget, so the invariant it imposes is asserted where it is authored: the failure it
+// prevents is not a wrong label, it is the settings panel throwing when a role group is expanded.
+describe('INHERIT_RULE', () => {
+  it('is a non-empty value the select can carry as an item', () => {
+    expect(INHERIT_RULE).not.toBe('')
+    expect(INHERIT_RULE.length).toBeGreaterThan(0)
+  })
+
+  // It is also not one of the rules, or clearing a row would be indistinguishable from setting it.
+  it('cannot collide with a real rule', () => {
+    expect(MERGE_CLASS_RULES).not.toContain(INHERIT_RULE as string)
+  })
+})
+
 describe('roleClassRuleRows', () => {
   const base: MergeClassRules = { docs: 'always', schema: 'never' }
+
+  // The sentinel is truthy, so anything asking "did this role author a rule" by testing the
+  // SELECTION rather than the stored entry reads inheritance as a stored rule: it would offer
+  // "same as this policy" twice on every untouched row, and flag every one of them redundant.
+  it('never treats inheritance as a stored rule', () => {
+    for (const row of roleClassRuleRows(base, undefined)) {
+      expect(row.options).not.toContain(INHERIT_RULE as string)
+      expect(row.redundant).toBe(false)
+    }
+  })
 
   it('reads an absent entry as inheritance, never as thresholds', () => {
     const rows = roleClassRuleRows(base, undefined)

@@ -447,6 +447,7 @@
       "start": "Iniciar",
       "blocked": "Bloqueada",
       "startPipeline": "Iniciar {name}",
+      "startPipelineDryRun": "Iniciar {name} como ejecución de prueba: abre una pull request y no fusiona nada",
       "pipelineFallback": "pipeline",
       "waitingOn": "Esperando a: {deps}",
       "blockedByDependenciesTitle": "Bloqueada por dependencias",
@@ -471,6 +472,10 @@
         "title": "Ejecución iniciada",
         "body": "Ejecutando \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Ejecución de prueba iniciada",
+      "body": "Ejecutando \"{name}\". Las ejecuciones de tu rol no fusionan nada en esta tarea."
     },
     "epic": {
       "label": "Épica",
@@ -2747,6 +2752,7 @@
       "roleRules": {
         "heading": "Límites según el rol que inicia",
         "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede quedar sujeto a reglas más estrictas que las de arriba, o solo a ejecuciones de prueba: la canalización trabaja y abre una pull request, pero no se fusiona nada. Un rol solo puede endurecer esta política, nunca relajarla.",
+        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request ya pasa por una persona y los límites de categoría de abajo no añaden nada. Las ejecuciones de prueba siguen aplicándose: también rechazan una fusión manual.",
         "sandboxLabel": "Solo ejecuciones de prueba",
         "sandboxNote": "Las ejecuciones iniciadas por este rol abren una pull request y no fusionan nada, así que las reglas por categoría de abajo no pueden restringirlas más.",
         "noRules": "Sin límites por categoría",

@@ -26,8 +26,17 @@ import type {
   WorkspaceRole,
 } from '~/types/merge'
 
-/** The "this role adds nothing here" selection, stored as an omission. */
-export const INHERIT_RULE = '' as const
+/**
+ * The "this role adds nothing here" selection, stored as an OMISSION.
+ *
+ * It must be a non-empty string, and not because of a style preference: the select this feeds is
+ * Nuxt UI's `USelect` over Reka UI, whose `SelectItem` THROWS on an empty-string value (the empty
+ * string is how that widget spells "cleared, show the placeholder", so an item may not claim it).
+ * A `''` sentinel therefore does not degrade, it takes down the settings panel the moment a role
+ * group is expanded. It is a member of the selection union rather than `undefined` for the same
+ * reason: the row has to be able to OFFER inheriting as a choice, which is a value.
+ */
+export const INHERIT_RULE = 'inherit' as const
 export type RoleRuleSelection = MergeClassRule | typeof INHERIT_RULE
 
 /** One class's row inside one role's group. */
@@ -66,14 +75,18 @@ export function roleClassRuleRows(
 ): RoleClassRuleRow[] {
   return RULEABLE_CHANGE_CLASSES.map((changeClass) => {
     const baseRule = base[changeClass] ?? 'thresholds'
-    const selected = entry?.[changeClass] ?? INHERIT_RULE
-    const options = narrowingOptionsFor(baseRule)
+    // The role's own rule, or nothing at all. Held as `undefined` rather than folded into
+    // `selected` up front because "did this role author a rule here" is the question the two
+    // lines below both ask, and an absent entry is the one answer that is not one of the three
+    // rules. Testing the SENTINEL for that would tie them to whatever string it happens to be.
+    const stored = entry?.[changeClass]
+    const narrowing = narrowingOptionsFor(baseRule)
     return {
       changeClass,
       base: baseRule,
-      selected,
-      options: selected && !options.includes(selected) ? [...options, selected] : options,
-      redundant: !!selected && narrowMergeClassRule(baseRule, selected) === baseRule,
+      selected: stored ?? INHERIT_RULE,
+      options: stored && !narrowing.includes(stored) ? [...narrowing, stored] : narrowing,
+      redundant: !!stored && narrowMergeClassRule(baseRule, stored) === baseRule,
     }
   })
 }

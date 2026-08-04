@@ -234,7 +234,7 @@ sandbox has to be able to tell policy from a mis-click.
 ### In the SPA: the request is an override, the policy sandbox is not
 
 The two halves reach the interface tiers differently, and `useRunStart` is the one place that
-decides it for every start control:
+decides it for the controls that can carry a choice:
 
 - **Requesting a dry run** is an override of the default a live start would have used, unset until
   asked for and never persisted, so it is `advanced`-tier: hiding it leaves exactly the run a
@@ -248,6 +248,27 @@ file the run's mode under "the initiator asked for this" and cost the run the ad
 a sandbox nobody chose. And because a sandboxed run looks exactly like one that has not reached its
 merge yet, the run says what it is from the start (the run-mode badge on the execution panel), not
 only when the merger settles.
+
+#### Every start surface states the sandbox; only some of them can offer the request
+
+The board's task card and its drag-a-pipeline drop are ONE-TAP starts: there is no menu to hang a
+toggle on, and adding one would put a mode switch on a control whose whole point is that it is a
+single gesture. They therefore carry no request. What they do carry is the half that is not a
+choice, because "a policy sandbox is stated in both tiers" is a claim about what the user can SEE
+before acting, and a surface that stays silent is exactly the discovery-from-a-stalled-run failure
+the badge exists to prevent. The card's Start shows the sandbox on the button it is about to press;
+the drop says it in the toast, which is the only moment that surface has.
+
+That reading is `useDryRunPolicy`, split out of `useRunStart` and shared by all four. It is
+FUNCTIONS of a block id rather than computeds over one because the surfaces ask in two shapes: a
+bound control re-asks when the board selection moves, while the drop handler resolves its target at
+the moment of the drop and has no block to bind. One rule, two call shapes, rather than a second
+`includes` on the surface that could not use the first.
+
+The corollary on the bound surfaces is that the REQUEST belongs to the block it was made on. The
+inspector is mounted once for the session and follows the selection, so it outlives that block:
+the request is dropped when the block changes under it, or arming a sandbox on one task would
+silently sandbox the next run started on another.
 
 ## Consequences
 

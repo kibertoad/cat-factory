@@ -36,6 +36,14 @@ const props = defineProps<{
   dryRunRoles: DryRunRoles
   /** The base rules the role layer narrows, so each row can show what it inherits. */
   classRules: MergeClassRules
+  /**
+   * Whether the preset auto-merges at all. With the master switch off, every pull request already
+   * waits for a human, so a role's per-class narrowing has nothing left to subtract. The SANDBOX
+   * still does: it refuses the MANUAL merge too, which is the one thing the master switch leaves
+   * open. The two halves of this editor therefore stop being equally meaningful, and saying so is
+   * what keeps the inert half from reading as a policy that is doing something.
+   */
+  autoMergeEnabled: boolean
   disabled?: boolean
 }>()
 
@@ -120,6 +128,15 @@ function setRule(role: WorkspaceRole, changeClass: RuleableChangeClass, rule: Ro
       </span>
       <p class="mt-0.5 text-[11px] leading-snug text-slate-500">
         {{ t('settings.riskPolicy.roleRules.help') }}
+      </p>
+      <!-- Auto-merge off already sends every pull request to a human, so only the sandbox half of
+           this editor still changes anything (it refuses the manual merge as well). -->
+      <p
+        v-if="!autoMergeEnabled"
+        class="mt-1 text-[11px] leading-snug text-amber-400/90"
+        data-testid="merge-role-auto-merge-off"
+      >
+        {{ t('settings.riskPolicy.roleRules.autoMergeOffWarning') }}
       </p>
     </div>
 

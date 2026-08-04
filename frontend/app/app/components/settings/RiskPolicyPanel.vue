@@ -396,6 +396,7 @@ async function create() {
           v-model:class-rules-by-role="drafts[p.id]!.classRulesByRole"
           v-model:dry-run-roles="drafts[p.id]!.dryRunRoles"
           :class-rules="drafts[p.id]!.classRules"
+          :auto-merge-enabled="drafts[p.id]!.autoMergeEnabled"
           :disabled="busy === p.id"
         />
       </div>

@@ -447,6 +447,7 @@
       "start": "Démarrer",
       "blocked": "Bloquée",
       "startPipeline": "Démarrer {name}",
+      "startPipelineDryRun": "Démarrer {name} en exécution à blanc : ouvre une pull request, ne fusionne rien",
       "pipelineFallback": "pipeline",
       "waitingOn": "En attente de : {deps}",
       "blockedByDependenciesTitle": "Bloquée par des dépendances",
@@ -471,6 +472,10 @@
         "title": "Exécution démarrée",
         "body": "Exécution de \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Exécution à blanc démarrée",
+      "body": "Exécution de \"{name}\". Les exécutions de ton rôle ne fusionnent rien sur cette tâche."
     },
     "epic": {
       "label": "Épopée",
@@ -2747,6 +2752,7 @@
       "roleRules": {
         "heading": "Limites selon le rôle qui lance l'exécution",
         "help": "Ce qu'une exécution peut faire dépend aussi de qui l'a lancée. Un rôle peut être soumis à des règles plus strictes que celles ci-dessus, ou aux seules exécutions à blanc : le pipeline travaille et ouvre une pull request, mais rien n'est fusionné. Un rôle peut seulement durcir cette politique, jamais l'assouplir.",
+        "autoMergeOffWarning": "La fusion automatique est désactivée pour ce préréglage : chaque pull request passe déjà par un humain et les limites de catégorie ci-dessous n'ajoutent rien. Les exécutions à blanc restent en vigueur : elles refusent aussi une fusion manuelle.",
         "sandboxLabel": "Exécutions à blanc uniquement",
         "sandboxNote": "Les exécutions lancées par ce rôle ouvrent une pull request et ne fusionnent rien : les règles par catégorie ci-dessous ne peuvent donc rien durcir de plus.",
         "noRules": "Aucune limite par catégorie",

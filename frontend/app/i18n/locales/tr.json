@@ -447,6 +447,7 @@
       "start": "Başlat",
       "blocked": "Engellendi",
       "startPipeline": "{name} başlat",
+      "startPipelineDryRun": "{name} prova çalışması olarak başlat: bir pull request açar, hiçbir şeyi birleştirmez",
       "pipelineFallback": "pipeline",
       "waitingOn": "Bekleniyor: {deps}",
       "blockedByDependenciesTitle": "Bağımlılıklar tarafından engellendi",
@@ -471,6 +472,10 @@
         "title": "Çalıştırma başladı",
         "body": "\"{name}\" çalıştırılıyor."
       }
+    },
+    "dryRunToast": {
+      "title": "Prova çalışması başladı",
+      "body": "\"{name}\" çalıştırılıyor. Rolünün çalıştırmaları bu görevde hiçbir şeyi birleştirmez."
     },
     "epic": {
       "label": "Epik",
@@ -2888,6 +2893,7 @@
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
         "help": "Bir çalıştırmanın ne yapabileceği, onu kimin başlattığına da bağlıdır. Bir rol yukarıdaki kurallardan daha katı kurallara ya da yalnızca prova çalışmalarına tabi tutulabilir: pipeline çalışır ve bir pull request açar, hiçbir şey birleştirilmez. Bir rol bu ilkeyi yalnızca sıkılaştırabilir, asla gevşetemez.",
+        "autoMergeOffWarning": "Bu ön ayarda otomatik birleştirme kapalı, bu yüzden her pull request zaten bir kişiye gidiyor ve aşağıdaki kategori sınırları bir şey eklemiyor. Prova çalışmaları yine geçerli: elle birleştirmeyi de reddederler.",
         "sandboxLabel": "Yalnızca prova çalışmaları",
         "sandboxNote": "Bu rolün başlattığı çalıştırmalar bir pull request açar ve hiçbir şeyi birleştirmez, bu nedenle aşağıdaki kategori kuralları onları daha da katılaştıramaz.",
         "noRules": "Kategori sınırı yok",
