@@ -1,5 +1,6 @@
-import type { ModelRef } from '@cat-factory/kernel'
+import type { LlmTokenRates, ModelRef } from '@cat-factory/kernel'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
+import { costOfTokenClasses } from '@cat-factory/kernel'
 import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contracts'
 
 // Pricing for the spend safeguard. Token usage is converted to a monetary cost
@@ -13,8 +14,63 @@ import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contra
 
 /** Price per 1M input/output tokens for one model. */
 export interface ModelPrice {
+  /** Price per 1M FRESH (uncached) input tokens. */
   inputPerMillion: number
   outputPerMillion: number
+  /**
+   * Price per 1M input tokens served from the provider's prompt cache. Omitted ⇒ derived
+   * from {@link ModelPrice.inputPerMillion} via {@link CACHE_READ_MULTIPLIER}. An entry sets
+   * this only where a vendor departs from the near-universal ratio, so the ~50 entries below
+   * do not each restate the same arithmetic.
+   */
+  cacheReadPerMillion?: number
+  /**
+   * Price per 1M input tokens WRITTEN into the provider's cache. Omitted ⇒ derived via
+   * {@link CACHE_WRITE_MULTIPLIER}. Dearer than fresh input, which is why it cannot be
+   * folded into {@link ModelPrice.cacheReadPerMillion}: a loop that keeps invalidating its
+   * prefix and a loop riding a warm cache differ by roughly 12x per cached token.
+   */
+  cacheWritePerMillion?: number
+}
+
+/**
+ * Fallback ratio of a cache READ to fresh input, applied when a {@link ModelPrice} names no
+ * `cacheReadPerMillion`. Anthropic, OpenAI, DeepSeek and Google all bill a prefix-cache hit at
+ * 0.1x their base input rate, so a per-entry copy of the number would be ~50 chances to get one
+ * of them wrong rather than a source of accuracy.
+ */
+export const CACHE_READ_MULTIPLIER = 0.1
+
+/**
+ * Fallback ratio of a cache WRITE to fresh input. Anthropic (the only vendor that bills a
+ * separate write class at all) charges 1.25x for the 5-minute TTL and 2x for the 1-hour one;
+ * the harnesses request the default 5-minute TTL, so 1.25 is the rate our calls actually
+ * incur rather than the worst case. A model whose write class is dearer names its own
+ * `cacheWritePerMillion`.
+ */
+export const CACHE_WRITE_MULTIPLIER = 1.25
+
+/**
+ * A {@link ModelPrice} with both cache tiers resolved — no optional fields left to derive.
+ *
+ * Declared as kernel's {@link LlmTokenRates} rather than a second copy of the same four fields,
+ * because {@link ratesFor} IS what a facade hands the telemetry rollup as its rate resolver. A
+ * structural twin would let the two shapes drift apart while every call site still compiled.
+ */
+export type ResolvedModelPrice = LlmTokenRates
+
+/**
+ * The three ORTHOGONAL input classes a call spent, as the telemetry side carries them
+ * (`LlmCallMetric`): fresh input, cache reads and cache writes are additive, never nested, so
+ * total input is their sum. Priced apart because their rates differ by more than an order of
+ * magnitude — summing them first and applying the fresh rate is what made a 31M-token,
+ * 99.998%-cache-read run meter at roughly ten times what it cost.
+ */
+export interface InputTokenClassUsage {
+  /** FRESH (uncached) input tokens, exclusive of both cache classes. */
+  promptTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
 }
 
 export interface SpendPricing {
@@ -99,8 +155,8 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // these explicit entries a Cloudflare-Kimi run (the default coder) would fall back to
   // 0.1/0.1 and meter as ~0.00. Cloudflare lists K2.6/K2.7 at $0.95 in / $4.00 out and the
   // older K2.5 at $0.60 in / $3.00 out per 1M (USD→EUR ~0.92); these are Cloudflare's
-  // marked-up rates, above Moonshot's direct list (`moonshot:kimi-k2.6`). The spend table
-  // has no cached-input tier, so we use the standard cache-miss input rate. See
+  // marked-up rates, above Moonshot's direct list (`moonshot:kimi-k2.6`). Cloudflare
+  // publishes no separate cached-input rate for these, so they take the derived tiers. See
   // workers-ai/platform/pricing.
   'workers-ai:@cf/moonshotai/kimi-k2.5': { inputPerMillion: 0.55, outputPerMillion: 2.76 },
   'workers-ai:@cf/moonshotai/kimi-k2.6': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
@@ -241,6 +297,45 @@ export function priceFor(pricing: SpendPricing, ref: ModelRef): ModelPrice {
 }
 
 /**
+ * {@link priceFor} with both cache tiers filled in from the multipliers where the entry names
+ * none. Every per-class cost goes through this rather than reading {@link ModelPrice} directly,
+ * so a caller can never silently price a cache class at the fresh rate by forgetting the `??`.
+ */
+export function ratesFor(pricing: SpendPricing, ref: ModelRef): ResolvedModelPrice {
+  const price = priceFor(pricing, ref)
+  return {
+    inputPerMillion: price.inputPerMillion,
+    outputPerMillion: price.outputPerMillion,
+    cacheReadPerMillion: price.cacheReadPerMillion ?? price.inputPerMillion * CACHE_READ_MULTIPLIER,
+    cacheWritePerMillion:
+      price.cacheWritePerMillion ?? price.inputPerMillion * CACHE_WRITE_MULTIPLIER,
+  }
+}
+
+/**
+ * Cost of one call's usage priced PER INPUT CLASS, in the pricing currency — the accurate
+ * form, used wherever the producer could report the split.
+ *
+ * {@link estimateCost} is the fallback for a producer that reports one lumped input count: it
+ * prices the whole of it as fresh, which OVER-states a cached call and never under-states one.
+ * That direction is deliberate — a budget safeguard that undercounts stops safeguarding.
+ */
+export function estimateClassedCost(
+  pricing: SpendPricing,
+  ref: ModelRef,
+  usage: InputTokenClassUsage & { outputTokens: number },
+): number {
+  // The arithmetic itself is kernel's, shared with the telemetry rollup and the export, so the
+  // ledger and the run surfaces cannot come to price the same classes differently.
+  return costOfTokenClasses(ratesFor(pricing, ref), {
+    promptTokens: usage.promptTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    completionTokens: usage.outputTokens,
+  })
+}
+
+/**
  * A {@link ModelCostResolver}-shaped closure over a {@link SpendPricing}, for the
  * model catalog to surface each model's informational list cost in the picker.
  */
@@ -257,7 +352,13 @@ export function modelCostResolver(
   }
 }
 
-/** Cost of a single call's token usage, in the pricing currency. */
+/**
+ * Cost of a single call's token usage, in the pricing currency, from a LUMPED input count.
+ *
+ * Prices the whole input at the fresh rate because that is all this shape says: an
+ * {@link AgentTokenUsage} whose producer could not report the class split. Where the split IS
+ * available, {@link estimateClassedCost} is the accurate function and this one over-states.
+ */
 export function estimateCost(pricing: SpendPricing, ref: ModelRef, usage: AgentTokenUsage): number {
   const price = priceFor(pricing, ref)
   return (

@@ -57,11 +57,19 @@ export {
   VALIDATION_DETECTION_CONTENT_FILES,
 } from './domain/validation-detectors.js'
 export { UNATTRIBUTED_CALL_PHASE, normalizeCallPhase } from './domain/llm-phase.js'
-export type { LlmKindRollup, LlmPhaseRollup } from './domain/llm-rollup.js'
+export type {
+  LlmKindRollup,
+  LlmPhaseRollup,
+  LlmRateResolver,
+  LlmTokenClassCounts,
+  LlmTokenRates,
+} from './domain/llm-rollup.js'
 export {
+  costOfTokenClasses,
   foldRollupTotals,
   foldRollupsByAgentKind,
   foldRollupsByPhase,
+  priceRollupCells,
   rollupInputTokens,
 } from './domain/llm-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'

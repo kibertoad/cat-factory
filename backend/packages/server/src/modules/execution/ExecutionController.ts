@@ -307,9 +307,14 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
             errors: 0,
             warnings: 0,
             truncatedCalls: 0,
+            // Null, not 0: this branch is "no telemetry sink is wired", and a zero here would
+            // report a run that spent nothing rather than one nothing was recorded for.
+            costEstimate: null,
           },
           insights: [],
           calls: [],
+          // An empty bundle is complete, not a slice: there was nothing to cap.
+          truncated: false,
         }
     c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
     return c.json(exported, 200)

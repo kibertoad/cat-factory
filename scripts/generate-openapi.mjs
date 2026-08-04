@@ -31,7 +31,7 @@ const API_PREFIX = '/api/v1'
 // The public API is STABLE (see CLAUDE.md "The public API is stable"): additive changes bump the
 // minor here; a breaking change is not allowed on `/api/v1` at all: it means a new `/api/v2`
 // prefix served beside v1 through a deprecation window, and a new spec version with it.
-const API_VERSION = '1.1.0'
+const API_VERSION = '1.2.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and

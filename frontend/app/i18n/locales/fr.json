@@ -1509,6 +1509,9 @@
     "contextError": "Impossible de charger le contexte fourni.",
     "summary": {
       "calls": "Appels",
+      "cost": "Coût estimé",
+      "costHint": "Calculé aux tarifs publics, chaque classe d'entrée à son propre taux : une lecture de cache coûte environ un dixième d'une entrée fraîche, une écriture de cache environ un quart de plus. Une exécution sur abonnement ne paie rien au token ; ceci est donc ce que les mêmes tokens auraient coûté à l'usage.",
+      "costIncomplete": "Non affiché : au moins une phase a utilisé un modèle pour lequel cette installation n'a aucun tarif, un total serait donc incomplet. Les phases tarifées sont listées ci-dessous.",
       "tokensInOut": "Tokens (entrée / sortie)",
       "transportOverhead": "Surcoût de transport",
       "modelExecution": "Exécution du modèle",
@@ -1528,8 +1531,10 @@
         "phase": "Phase",
         "turns": "Tours",
         "tokensInOut": "Tokens (entrée / sortie)",
+        "cost": "Coût",
         "carryCost": "Coût de report"
       },
+      "costHint": "Coût estimé des tokens de cette phase aux tarifs publics. Un tiret signifie que cette installation n'a aucun tarif pour le modèle utilisé.",
       "carryCostHint": "Ce que chaque phase a fait peser sur les tours suivants : son contexte compté une fois pour chaque tour ultérieur ayant dû le renvoyer. Comparez les phases d'une exécution entre elles ; isolée, la valeur ne signifie rien. Une phase qui s'exécute en dernier reporte peu, quoi qu'elle ait dépensé : lisez donc cette colonne avec les tokens voisins.",
       "unattributed": "Non attribué",
       "unattributedHint": "enregistré par un canal qui ne rapporte aucune phase"
@@ -1537,6 +1542,7 @@
     "metricsBar": {
       "calls": "{count} appel | {count} appels",
       "inputCompletionTokens": "Total des tokens d'entrée / de sortie. L'entree compte aussi les tokens en cache : ils occupent toujours la fenêtre de contexte, exactement comme les compte la jauge de contexte de Claude Code.",
+      "costHint": "Coût estimé des tokens de cette étape aux tarifs publics, chaque classe d'entrée à son propre taux. Une exécution sur abonnement ne paie rien au token ; ceci est donc ce que les mêmes tokens auraient coûté à l'usage.",
       "fresh": "{tokens} frais",
       "freshHint": "Entrée traitée de zero, sans rien servi depuis le cache",
       "cacheRead": "{tokens} lus depuis le cache",

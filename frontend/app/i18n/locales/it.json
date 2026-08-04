@@ -3261,6 +3261,9 @@
     "contextError": "Impossibile caricare il contesto fornito.",
     "summary": {
       "calls": "Chiamate",
+      "cost": "Costo stimato",
+      "costHint": "Calcolato ai prezzi di listino, ogni classe di input alla propria tariffa: una lettura dalla cache costa circa un decimo dell'input nuovo, una scrittura in cache circa un quarto in più. Un'esecuzione in abbonamento non paga nulla per token, quindi questo è quanto sarebbero costati gli stessi token a consumo.",
+      "costIncomplete": "Non mostrato: almeno una fase ha usato un modello per cui questa installazione non ha una tariffa, quindi un totale sarebbe incompleto. Le fasi con prezzo sono elencate sotto.",
       "tokensInOut": "Token (in / out)",
       "transportOverhead": "Overhead di trasporto",
       "modelExecution": "Esecuzione del modello",
@@ -3280,8 +3283,10 @@
         "phase": "Fase",
         "turns": "Turni",
         "tokensInOut": "Token (in / out)",
+        "cost": "Costo",
         "carryCost": "Costo di trascinamento"
       },
+      "costHint": "Costo stimato dei token di questa fase ai prezzi di listino. Un trattino indica che questa installazione non ha una tariffa per il modello eseguito.",
       "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla. Una fase che viene eseguita per ultima trascina poco per quanto abbia speso, quindi leggi questa colonna insieme ai token accanto.",
       "unattributed": "Non attribuito",
       "unattributedHint": "registrato da un canale che non riporta la fase"
@@ -3289,6 +3294,7 @@
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
       "inputCompletionTokens": "Token totali di input / output. L'input conta anche i token in cache: occupano comunque la finestra di contesto, esattamente come li conta l'indicatore di contesto di Claude Code.",
+      "costHint": "Costo stimato dei token di questo passo ai prezzi di listino, ogni classe di input alla propria tariffa. Un'esecuzione in abbonamento non paga nulla per token, quindi questo è quanto sarebbero costati gli stessi token a consumo.",
       "fresh": "{tokens} freschi",
       "freshHint": "Input elaborato da zero, senza nulla servito dalla cache",
       "cacheRead": "{tokens} letti dalla cache",

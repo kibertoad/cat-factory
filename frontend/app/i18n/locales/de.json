@@ -3261,6 +3261,9 @@
     "contextError": "Der bereitgestellte Kontext konnte nicht geladen werden.",
     "summary": {
       "calls": "Aufrufe",
+      "cost": "Geschätzte Kosten",
+      "costHint": "Zu Listenpreisen berechnet, jede Eingabeklasse mit ihrem eigenen Satz: Ein Cache-Lesevorgang kostet etwa ein Zehntel frischer Eingabe, ein Cache-Schreibvorgang etwa ein Viertel mehr. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
+      "costIncomplete": "Nicht angezeigt: Mindestens eine Phase lief auf einem Modell, für das diese Installation keinen Satz kennt, daher wäre eine Gesamtsumme unvollständig. Die berechneten Phasen sind unten aufgeführt.",
       "tokensInOut": "Tokens (ein / aus)",
       "transportOverhead": "Transport-Overhead",
       "modelExecution": "Modellausführung",
@@ -3280,8 +3283,10 @@
         "phase": "Phase",
         "turns": "Runden",
         "tokensInOut": "Tokens (ein / aus)",
+        "cost": "Kosten",
         "carryCost": "Mitschleppkosten"
       },
+      "costHint": "Geschätzte Kosten der Token dieser Phase zu Listenpreisen. Ein Strich bedeutet, dass diese Installation keinen Satz für das ausgeführte Modell kennt.",
       "carryCostHint": "Wie stark jede Phase die nachfolgenden Runden belastet hat: ihr Kontext einmal für jede spätere Runde gezählt, die ihn erneut senden musste. Vergleichen Sie die Phasen eines Laufs miteinander; für sich allein sagt die Zahl nichts aus. Eine spät laufende Phase schleppt wenig mit, wie viel sie auch verbraucht hat; lesen Sie diese Spalte daher zusammen mit den Tokens daneben.",
       "unattributed": "Nicht zugeordnet",
       "unattributedHint": "von einem Kanal erfasst, der keine Phase meldet"
@@ -3289,6 +3294,7 @@
     "metricsBar": {
       "calls": "{count} Aufruf | {count} Aufrufe",
       "inputCompletionTokens": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",
+      "costHint": "Geschätzte Kosten der Token dieses Schritts zu Listenpreisen, jede Eingabeklasse mit ihrem eigenen Satz. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
       "fresh": "{tokens} frisch",
       "freshHint": "Eingabe, die von Grund auf verarbeitet wurde, ohne Anteil aus dem Cache",
       "cacheRead": "{tokens} aus dem Cache gelesen",

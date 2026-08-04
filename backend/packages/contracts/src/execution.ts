@@ -574,6 +574,16 @@ export const stepPhaseMetricsSchema = v.object({
   carryCostTokens: v.number(),
   /** Calls that failed (non-2xx / refused / in-process error). */
   errors: v.number(),
+  /**
+   * Estimated money this phase's tokens cost, in {@link stepMetricsSchema}'s `costCurrency`,
+   * priced per input CLASS (a cache read at ~0.1x fresh, a cache write at ~1.25x).
+   *
+   * `null` ⇒ the deployment could not price it (no rate for that model, or no price table
+   * wired); absent ⇒ a snapshot predating cost. Neither is `0`, which would claim the phase
+   * was free. A run whose phases are all null shows tokens without money rather than a
+   * confident zero.
+   */
+  costEstimate: v.optional(v.nullable(v.number())),
 })
 export type StepPhaseMetrics = v.InferOutput<typeof stepPhaseMetricsSchema>
 
@@ -619,6 +629,27 @@ export const stepMetricsSchema = v.object({
    * step's phases. Absent ⇒ unknown (a snapshot predating the per-phase rollup).
    */
   carryCostTokens: v.optional(v.number()),
+  /**
+   * Estimated money this step's tokens cost, in {@link stepMetricsSchema}'s `costCurrency`.
+   * See {@link stepPhaseMetricsSchema} for why `null` and absent are both kept apart from `0`.
+   *
+   * It is a LIST-PRICE estimate, not a bill: a subscription-harness step spent no per-token
+   * money at all, and this reports what the same tokens would have cost metered.
+   */
+  costEstimate: v.optional(v.nullable(v.number())),
+  /**
+   * ISO 4217 currency `costEstimate` is denominated in — the deployment's spend currency, since
+   * that is the currency its price table is written in. Carried BESIDE the amount rather than
+   * assumed by the reader: the built-in table is EUR, a deployment may configure another, and a
+   * bare number rendered under the wrong symbol is a wrong number.
+   *
+   * It labels every amount in this payload, so it is present whenever ANY of them exists: this
+   * step's own `costEstimate` or one of its `byPhase` rows. Absent ⇒ nothing here is priced,
+   * which is the only state where a reader has no amount to mislabel either. In particular a
+   * step whose total is null because ONE phase ran on an unpriced model still carries the
+   * currency, since its other phases carry real money.
+   */
+  costCurrency: v.optional(v.string()),
   /**
    * The step's burn split by the PHASE that spent it — the agent's own edit loop against a
    * pre-PR validation repair round against a reproduction-proof repair round, and so on. Rolled

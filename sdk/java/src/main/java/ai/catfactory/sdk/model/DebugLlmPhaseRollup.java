@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param carryCostShare Always present; {@code null} when the server has no value for it.
  * @param carryCostTokens the {@code carryCostTokens} field.
  * @param completionTokens the {@code completionTokens} field.
+ * @param costEstimate Always present; {@code null} when the server has no value for it.
  * @param errors the {@code errors} field.
  * @param overheadMs the {@code overheadMs} field.
  * @param phase the {@code phase} field.
@@ -41,6 +42,9 @@ public record DebugLlmPhaseRollup(
     @JsonProperty("carryCostTokens") Double carryCostTokens,
 
     @JsonProperty("completionTokens") Double completionTokens,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("costEstimate") @Nullable Double costEstimate,
 
     @JsonProperty("errors") Double errors,
 
@@ -76,6 +80,7 @@ public record DebugLlmPhaseRollup(
         private @Nullable Double carryCostShare;
         private @Nullable Double carryCostTokens;
         private @Nullable Double completionTokens;
+        private @Nullable Double costEstimate;
         private @Nullable Double errors;
         private @Nullable Double overheadMs;
         private @Nullable String phase;
@@ -126,6 +131,12 @@ public record DebugLlmPhaseRollup(
             return this;
         }
 
+        /** Set {@code costEstimate}. */
+        public Builder costEstimate(@Nullable Double costEstimate) {
+            this.costEstimate = costEstimate;
+            return this;
+        }
+
         /** Set {@code errors}. */
         public Builder errors(@Nullable Double errors) {
             this.errors = errors;
@@ -170,7 +181,7 @@ public record DebugLlmPhaseRollup(
 
         /** Build the {@link DebugLlmPhaseRollup}. */
         public DebugLlmPhaseRollup build() {
-            return new DebugLlmPhaseRollup(cacheHitRate, cacheReadTokens, cacheWriteTokens, calls, carryCostShare, carryCostTokens, completionTokens, errors, overheadMs, phase, promptTokens, truncatedCalls, upstreamMs, warnings);
+            return new DebugLlmPhaseRollup(cacheHitRate, cacheReadTokens, cacheWriteTokens, calls, carryCostShare, carryCostTokens, completionTokens, costEstimate, errors, overheadMs, phase, promptTokens, truncatedCalls, upstreamMs, warnings);
         }
     }
 }

@@ -1509,6 +1509,9 @@
     "contextError": "Sağlanan bağlam yüklenemedi.",
     "summary": {
       "calls": "Çağrılar",
+      "cost": "Tahmini maliyet",
+      "costHint": "Liste fiyatlarıyla, her girdi sınıfı kendi tarifesiyle hesaplanır: önbellekten okuma taze girdinin yaklaşık onda biri, önbelleğe yazma ise yaklaşık dörtte bir fazlası kadardır. Abonelikle yapılan bir çalıştırma token başına ücret ödemez; bu, aynı tokenların kullandıkça öde ile kaça mal olacağıdır.",
+      "costIncomplete": "Gösterilmiyor: en az bir aşama, bu kurulumun ücretini bilmediği bir modelde çalıştı; bu yüzden çalışma toplamı eksik olurdu. Ücreti bilinen aşamalar aşağıda listeleniyor.",
       "tokensInOut": "Token (giriş / çıkış)",
       "transportOverhead": "Taşıma yükü",
       "modelExecution": "Model yürütme",
@@ -1528,8 +1531,10 @@
         "phase": "Aşama",
         "turns": "Tur",
         "tokensInOut": "Token (giriş / çıkış)",
+        "cost": "Maliyet",
         "carryCost": "Taşıma maliyeti"
       },
+      "costHint": "Bu aşamanın tokenlarının liste fiyatlarına göre tahmini maliyeti. Tire, bu kurulumda çalışan model için bir tarife bulunmadığını gösterir.",
       "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez. En sonda çalışan bir aşama ne kadar harcarsa harcasın az taşır; bu sütunu yanındaki token sayılarıyla birlikte okuyun.",
       "unattributed": "Atanmamış",
       "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi"
@@ -1537,6 +1542,7 @@
     "metricsBar": {
       "calls": "{count} çağrı | {count} çağrı",
       "inputCompletionTokens": "Toplam giriş / çıkış token'i. Giriş, önbelleğe alınmış token'ları da sayar: bunlar hâlâ bağlam penceresini kaplar, tıpkı Claude Code'un kendi bağlam göstergesinin saydığı gibi.",
+      "costHint": "Bu adımın tokenlarının liste fiyatlarına göre, her girdi sınıfı kendi tarifesiyle hesaplanan tahmini maliyeti. Abonelikle yapılan bir çalıştırma token başına ücret ödemez; bu, aynı tokenların kullandıkça öde ile kaça mal olacağıdır.",
       "fresh": "{tokens} yeni",
       "freshHint": "Önbellekten hiçbir şey sunulmadan sıfırdan işlenen giriş",
       "cacheRead": "{tokens} önbellekten okundu",

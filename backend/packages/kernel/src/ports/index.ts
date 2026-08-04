@@ -116,6 +116,7 @@ export type {
   LlmCallRollupTotals,
   LlmCallRunPageQuery,
   LlmPromptChainTip,
+  LlmRollupCell,
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
 export type {
