@@ -1,4 +1,5 @@
 import type { Block, ExecutionInstance, RunInputGate } from '@cat-factory/kernel'
+import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -243,6 +244,81 @@ export function defineInputGateConformance(harness: ConformanceHarness): void {
         mode: 'advisory',
         issues: [{ code: 'description_missing', severity: 'advisory' }],
       })
+    })
+
+    it('parks on a CUSTOM task type’s own required field, and the field survives the round trip', async () => {
+      // A deployment declares a required field on its own task type, and the gate reads THAT
+      // declaration rather than a second one — so the create form and the run agree by
+      // construction. What the gate adds is WHEN it asks: the create check fired once, against
+      // the declaration as it stood that day; this one fires at every run, against the
+      // declaration as it stands now.
+      //
+      // Which is exactly what is modelled here. A task is created while the type declares the
+      // field OPTIONAL, then a later release marks it required. No create-time check can reach
+      // back to that row; the gate parks the run instead of dispatching an agent with nothing.
+      // (The same shape covers a task created on a node that did not register the type at all,
+      // which is normal in a two-process deployment.)
+      const optional = defaultTaskTypeRegistry()
+      const presentation = {
+        label: 'Incident',
+        icon: 'i-lucide-siren',
+        color: '#ef4444',
+        description: 'A production incident to triage.',
+      }
+      optional.register({
+        taskType: 'conf:incident',
+        presentation,
+        fields: [{ key: 'impact', label: 'Customer impact' }],
+      })
+      const before = harness.makeApp(undefined, { taskTypeRegistry: optional })
+      const { workspace } = await before.createWorkspace()
+      const wsId = workspace.id
+      const task = await before.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'EU shard outage',
+        description: 'The EU shard started refusing writes at 14:02 and recovered at 14:19.',
+        taskType: 'conf:incident',
+      })
+      expect(task.status).toBe(201)
+      const blockId = task.body.id
+
+      // The next release requires it. Same store, same task, stricter declaration.
+      const required = defaultTaskTypeRegistry()
+      required.register({
+        taskType: 'conf:incident',
+        presentation,
+        fields: [{ key: 'impact', label: 'Customer impact', required: true }],
+      })
+      const app = harness.makeApp(undefined, { taskTypeRegistry: required })
+      await app.call('POST', `/workspaces/${wsId}/blocks/${blockId}/executions`, {
+        pipelineId: 'pl_simple',
+      })
+
+      const parked = (await app.drive(wsId)).find((e) => e.blockId === blockId)!
+      expect(parked.status).toBe('blocked')
+      // The description is a real brief, so this park is the custom field's doing alone — and it
+      // NAMES the field, carrying the deployment's own label. That name is the part only a real
+      // runtime can vouch for: it rides the run row's `detail` JSON, and a facade that dropped it
+      // would leave a human parked on "something is missing".
+      expect(parked.inputGate?.issues).toEqual([
+        {
+          code: 'required_field_missing',
+          severity: 'blocking',
+          field: { key: 'impact', label: 'Customer impact' },
+        },
+      ])
+      // The whole point: it parked having dispatched nothing.
+      expect(parked.steps.every((s) => !s.output)).toBe(true)
+
+      // A human waives it, and the finding STAYS on the record under `overridden` — what was
+      // waived is part of the run's history, which no reader can mistake for `passed`.
+      const waived = await app.call<RunInputGate>(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/input-gate/resolve`,
+        { choice: 'proceed' },
+      )
+      expect(waived.status).toBe(200)
+      expect(waived.body.status).toBe('overridden')
+      expect(waived.body.issues[0]?.field).toEqual({ key: 'impact', label: 'Customer impact' })
     })
   })
 }

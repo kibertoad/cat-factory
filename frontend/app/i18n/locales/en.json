@@ -4869,6 +4869,11 @@
         "title": "No success criteria",
         "hint": "State the question the spike answers, or what a good outcome looks like, so the timebox has a target."
       },
+      "required_field_missing": {
+        "title": "Missing: {field}",
+        "hint": "This task type requires “{field}”, and the task does not answer it. Fill it in on the task, then re-check.",
+        "unnamedField": "a required field"
+      },
       "unknown": {
         "title": "Unrecognised finding",
         "hint": "This run recorded a check this version no longer knows about. Review the task by hand before continuing."

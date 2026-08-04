@@ -57,7 +57,7 @@ a model could not have acted on either.
 | 5   | Cross-runtime conformance: park → recheck → release, `off`/`advisory`, the 409                    | ✅ done |     |
 | 6   | Public API: the verdict as a parked decision + a `decide`-scope resolve, and admission for it     | ✅ done |     |
 | 7   | Tell the AGENTS what was waived (`AgentRunContext`), so an overridden run's prompt states the gap | ⬜ todo |     |
-| 8   | Per-task-type findings for deployment-registered types (a `TaskTypeRegistry` hook)                | ⬜ todo |     |
+| 8   | Per-task-type findings for deployment-registered types (a `TaskTypeRegistry` hook)                | ✅ done |     |
 | 9   | Count the parks (`OperationalMetrics`), so "is this catching more than it was" is answerable      | ⬜ todo |     |
 
 ## Conventions & gotchas
@@ -133,6 +133,33 @@ a model could not have acted on either.
   `success_criteria_missing` are advisory precisely because a one-line task can be a real task
   and a spike can be exploratory. When in doubt, advisory: a false advisory costs a line of text,
   a false park costs somebody's afternoon.
+- **A CUSTOM task type's findings come from the declaration it ALREADY made**, not a second one.
+  A registered type's create-form field descriptors carry `required`; the gate reads those,
+  through the same `unfilledRequiredDescriptorFields` rule the create form's own validator uses,
+  so a deployment cannot have a field enforced at one door and ignored at the other. Three things
+  follow and all three are load-bearing. The gate takes the SAME two stand-downs the create door
+  takes (a type this process does not register declares nothing; a type with a `formPanel` has a
+  bespoke section owning the whole bag, so its descriptors are not what was collected), because
+  the doors agreeing is the entire argument for reusing the declaration. `showWhen` is honoured,
+  so a field the form would have hidden is never required — parking on an input with nowhere to
+  go and fill it in is the exact false park this gate must not produce. And the findings are ONE
+  PER FIELD, unlike the description checks which collapse to a single reading: three unanswered
+  fields are three things to go and do, and a human told "a required field is missing" would fix
+  one and be parked again.
+- **What the gate adds over the create door is WHEN it asks.** The create check fires once,
+  against the declaration as it stood that day, on the paths that reach `addTask`. The gate fires
+  at every run, against the declaration as it stands now — so a requirement a deployment adds in
+  a later release reaches the tasks that predate it, and a task created on a node that did not
+  register the type is still judged where it runs (normal in a two-process deployment). That is
+  the case the conformance assertion drives, because it is the one no create-time check can cover.
+- **A deployment gets ONE code, not one per type.** `required_field_missing` covers every
+  registered type's every field; WHICH field rides on the finding's `field` (`key` for a machine,
+  deployment-supplied `label` for a human). The codes are a closed, PERSISTED vocabulary, so an
+  org registering twenty operations must add nothing to it — and the SPA's exhaustive `ISSUE_KEYS`
+  Record stays a fixed size. Severity is `blocking` because the deployment said the field was
+  required, which is the only authority available: this file classifies the built-ins by its own
+  judgement about what a model can work around, and a custom type's pipeline is one it has never
+  seen. A deployment wanting the softer reading marks the field optional and lets its reviewer ask.
 - **The reproduction-cue scan is deliberately GENEROUS** (a `stepsToReproduce` field, any of a
   list of cue words, or a list of two or more items). Missing a cue parks a task whose author did
   the work, which is worse than letting a thin bug report reach a reviewer that can ask about it

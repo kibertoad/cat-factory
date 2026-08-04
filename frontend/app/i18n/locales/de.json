@@ -5519,6 +5519,11 @@
         "title": "Keine Erfolgskriterien",
         "hint": "Nenne die Frage, die der Spike beantwortet, oder wie ein gutes Ergebnis aussieht, damit die Zeitbox ein Ziel hat."
       },
+      "required_field_missing": {
+        "title": "Fehlt: {field}",
+        "hint": "Dieser Aufgabentyp verlangt „{field}“, die Aufgabe beantwortet es aber nicht. Trage es an der Aufgabe nach und prüfe erneut.",
+        "unnamedField": "ein Pflichtfeld"
+      },
       "unknown": {
         "title": "Unbekannter Befund",
         "hint": "Dieser Lauf hat eine Prüfung erfasst, die diese Version nicht mehr kennt. Sieh die Aufgabe von Hand durch, bevor du fortfährst."

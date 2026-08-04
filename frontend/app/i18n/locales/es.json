@@ -4661,6 +4661,11 @@
         "title": "Sin criterios de éxito",
         "hint": "Indica la pregunta que responde el spike, o cómo sería un buen resultado, para que el tiempo acotado tenga un objetivo."
       },
+      "required_field_missing": {
+        "title": "Falta: {field}",
+        "hint": "Este tipo de tarea requiere «{field}» y la tarea no lo responde. Complétalo en la tarea y vuelve a comprobar.",
+        "unnamedField": "un campo obligatorio"
+      },
       "unknown": {
         "title": "Hallazgo no reconocido",
         "hint": "Esta ejecución registró una comprobación que esta versión ya no conoce. Revisa la tarea a mano antes de continuar."

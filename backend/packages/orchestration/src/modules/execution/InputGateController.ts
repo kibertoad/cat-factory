@@ -10,6 +10,7 @@ import type {
   PipelineStep,
   ResolveInputGateChoice,
   RunInputGate,
+  TaskTypeRegistry,
   WorkRunner,
 } from '@cat-factory/kernel'
 import {
@@ -37,6 +38,14 @@ export interface InputGateControllerDeps {
   /** The pure step mutators, used to resume the parked step in place. */
   stepGraph: StepGraph
   clock: Clock
+  /**
+   * The app-owned custom task-type registry, read for the create-form fields a deployment's own
+   * task type declares REQUIRED. Required here (a facade with no custom types passes an EMPTY
+   * registry, which says so in code) rather than optional, because an absent one would silently
+   * mean "this deployment's task types declare nothing" — indistinguishable from a correct
+   * answer until somebody's required field stopped being checked.
+   */
+  taskTypeRegistry: TaskTypeRegistry
   /**
    * Resolves the workspace's {@link InputGateMode}. ABSENT ⇒ the gate cannot know what this
    * workspace asked for, so it does not run and records `off`: the honest reading, and the
@@ -100,7 +109,7 @@ export class InputGateController {
     if (instance.inputGate || instance.currentStep !== 0) return null
 
     const mode = await this.resolveMode(workspaceId)
-    const verdict = evaluateInputGate(inputGateInputOf(block), mode)
+    const verdict = evaluateInputGate(inputGateInputOf(block, this.deps.taskTypeRegistry), mode)
     const record: RunInputGate = {
       status: verdict.status,
       mode: verdict.mode,
@@ -189,7 +198,10 @@ export class InputGateController {
     )
     const rechecked =
       choice === 'recheck'
-        ? evaluateInputGate(inputGateInputOf(block), current.inputGate.mode)
+        ? evaluateInputGate(
+            inputGateInputOf(block, this.deps.taskTypeRegistry),
+            current.inputGate.mode,
+          )
         : null
     const stillBlocked = rechecked ? hasBlockingInputIssues(rechecked.issues) : false
 

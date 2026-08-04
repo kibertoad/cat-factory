@@ -20,6 +20,7 @@ public enum PublicInputGateDecisionIssueCode {
     REPRODUCTION_MISSING("reproduction_missing"),
     REVIEW_TARGET_MISSING("review_target_missing"),
     SUCCESS_CRITERIA_MISSING("success_criteria_missing"),
+    REQUIRED_FIELD_MISSING("required_field_missing"),
 
     /**
      * A value this SDK release does not know.

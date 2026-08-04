@@ -4661,6 +4661,11 @@
         "title": "Brak kryteriów sukcesu",
         "hint": "Podaj pytanie, na które odpowiada spike, albo jak wygląda dobry wynik, żeby wyznaczony czas miał cel."
       },
+      "required_field_missing": {
+        "title": "Brakuje: {field}",
+        "hint": "Ten typ zadania wymaga pola „{field}”, a zadanie go nie wypełnia. Uzupełnij je w zadaniu i sprawdź ponownie.",
+        "unnamedField": "pole wymagane"
+      },
       "unknown": {
         "title": "Nierozpoznane ustalenie",
         "hint": "Ten przebieg zapisał kontrolę, której ta wersja już nie zna. Przejrzyj zadanie ręcznie przed kontynuowaniem."

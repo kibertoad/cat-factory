@@ -4661,6 +4661,11 @@
         "title": "Başarı ölçütü yok",
         "hint": "Spike'ın yanıtladığı soruyu ya da iyi bir sonucun neye benzediğini yazın ki ayrılan sürenin bir hedefi olsun."
       },
+      "required_field_missing": {
+        "title": "Eksik: {field}",
+        "hint": "Bu görev türü “{field}” alanını zorunlu kılıyor, ancak görevde doldurulmamış. Görevde doldurup yeniden denetleyin.",
+        "unnamedField": "zorunlu bir alan"
+      },
       "unknown": {
         "title": "Tanınmayan bulgu",
         "hint": "Bu çalışma, bu sürümün artık bilmediği bir denetimi kaydetmiş. Devam etmeden önce görevi elle gözden geçirin."

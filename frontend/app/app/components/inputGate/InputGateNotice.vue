@@ -64,6 +64,10 @@ const ISSUE_KEYS = {
     title: 'inputGate.issue.success_criteria_missing.title',
     hint: 'inputGate.issue.success_criteria_missing.hint',
   },
+  required_field_missing: {
+    title: 'inputGate.issue.required_field_missing.title',
+    hint: 'inputGate.issue.required_field_missing.hint',
+  },
 } as const satisfies Record<InputGateIssueCode, { title: string; hint: string }>
 
 /**
@@ -87,16 +91,30 @@ const TONE_COPY: Record<InputGateTone, { title: string; body: string }> = {
 }
 const copy = computed(() => TONE_COPY[props.tone])
 
+/**
+ * The interpolation a finding's copy is rendered with. Only `required_field_missing` carries a
+ * `field`, and its copy is the one line that cannot be written without knowing which input is
+ * missing: a deployment registers its own task types, so the platform has no vocabulary for
+ * "the incident's severity" and names the field instead. The label is deployment-supplied
+ * English, exactly as a custom agent kind's is.
+ *
+ * A finding whose `field` is somehow absent still renders: the copy falls back to naming no
+ * field rather than printing `undefined` into a sentence a human is meant to act on.
+ */
+function issueValues(issue: InputGateIssue): Record<string, string> {
+  return { field: issue.field?.label ?? t('inputGate.issue.required_field_missing.unnamedField') }
+}
+
 /** A finding's translated title, falling back to the generic line for a retired code. */
-function issueTitle(code: InputGateIssueCode): string {
-  const key = ISSUE_KEYS[code]?.title
-  return key && te(key) ? t(key) : t('inputGate.issue.unknown.title')
+function issueTitle(issue: InputGateIssue): string {
+  const key = ISSUE_KEYS[issue.code]?.title
+  return key && te(key) ? t(key, issueValues(issue)) : t('inputGate.issue.unknown.title')
 }
 
 /** A finding's translated remedy hint, on the same fallback. */
-function issueHint(code: InputGateIssueCode): string {
-  const key = ISSUE_KEYS[code]?.hint
-  return key && te(key) ? t(key) : t('inputGate.issue.unknown.hint')
+function issueHint(issue: InputGateIssue): string {
+  const key = ISSUE_KEYS[issue.code]?.hint
+  return key && te(key) ? t(key, issueValues(issue)) : t('inputGate.issue.unknown.hint')
 }
 
 async function resolve(choice: 'recheck' | 'proceed') {
@@ -126,7 +144,11 @@ async function resolve(choice: 'recheck' | 'proceed') {
         <p v-if="!compact" class="text-muted mt-0.5 text-xs">{{ t(copy.body) }}</p>
 
         <ul class="mt-2 space-y-1.5">
-          <li v-for="issue in issues" :key="issue.code" class="flex items-start gap-2 text-xs">
+          <li
+            v-for="issue in issues"
+            :key="`${issue.code}:${issue.field?.key ?? ''}`"
+            class="flex items-start gap-2 text-xs"
+          >
             <UBadge
               :color="issue.severity === 'blocking' ? 'warning' : 'neutral'"
               variant="subtle"
@@ -139,8 +161,8 @@ async function resolve(choice: 'recheck' | 'proceed') {
               }}
             </UBadge>
             <span class="min-w-0">
-              <span class="font-medium">{{ issueTitle(issue.code) }}</span>
-              <span class="text-muted">, {{ issueHint(issue.code) }}</span>
+              <span class="font-medium">{{ issueTitle(issue) }}</span>
+              <span class="text-muted">, {{ issueHint(issue) }}</span>
             </span>
           </li>
         </ul>

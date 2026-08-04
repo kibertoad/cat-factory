@@ -4661,6 +4661,11 @@
         "title": "Aucun critère de réussite",
         "hint": "Indiquez la question à laquelle le spike répond, ou ce qu'est un bon résultat, pour donner une cible au temps imparti."
       },
+      "required_field_missing": {
+        "title": "Manquant : {field}",
+        "hint": "Ce type de tâche exige « {field} », et la tâche n’y répond pas. Renseignez-le sur la tâche, puis revérifiez.",
+        "unnamedField": "un champ obligatoire"
+      },
       "unknown": {
         "title": "Constat non reconnu",
         "hint": "Cette exécution a enregistré une vérification que cette version ne connaît plus. Relisez la tâche à la main avant de continuer."
