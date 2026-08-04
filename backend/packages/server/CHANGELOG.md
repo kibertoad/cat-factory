@@ -1,5 +1,65 @@
 # @cat-factory/server
 
+## 0.209.0
+
+### Minor Changes
+
+- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+  authored task input.
+
+  The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
+  public surface's park enumeration (which reads the step chain) could not see it: a `write`-scope
+  key could start a title-only task on a pipeline that parks nowhere and get a run stopped before
+  its first dispatch, with `GET /api/v1/runs/:runId/decisions` reporting `parked: true`, nothing to
+  answer, and cancel as the only exit. The verdict is now a parked decision of its own, resolvable
+  at `POST /api/v1/runs/:runId/decisions/input-gate/resolve` with the same `recheck` / `proceed`
+  choices the app offers, and admission composes it in, so a key that cannot answer the park is
+  refused up front with a message naming it. Additive on `/api/v1`: OpenAPI `info.version` 1.2.0,
+  and the four SDK clients gain `decisions.resolveInputGate`.
+
+  `not_applicable` now covers any block whose description is not authored task input, which is the
+  block LEVEL plus the recurring task type rather than a task-type list alone. A run started against
+  a frame, module, epic or initiative ANCHOR reads the entity it stands for, not the caption on the
+  card, so judging that caption parked every initiative planning run on a field the flow never fills
+  in. A task the platform merely CREATED with a real brief (an initiative-spawned item, a ticket
+  import) is deliberately still judged.
+
+  Advisory findings are also visible at last: they were recorded on the run and reported over the
+  API while rendering nowhere, which left `advisory` mode with nothing to watch.
+
+- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+  run before a run's first agent step is dispatched. A task that states nothing an agent could act
+  on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
+  review call to report an absence a string comparison already knew about.
+
+  Six V1 findings, three of them blocking: no description, a placeholder-only description
+  (`TBD`/`n/a`/`fix it`), a `bug` with no reproduction context, and a `review` task naming no pull
+  request; a very short description and a `spike` with no success criteria ride as advisories. The
+  check never judges quality or infers intent, which is the reviewer's job.
+
+  **Behaviour change on upgrade.** The gate ships ON (`inputGateMode: 'standard'`), so a run
+  started against a title-only task parks on a notice instead of dispatching. Every blocking
+  finding names an input a model could not have acted on either, so the gate only replaces a call
+  that would have reported the same gap. A workspace can turn it down to `advisory` (record the
+  findings, never park) or `off` in Workspace settings. Resolve a parked run by fixing the task and
+  re-checking (the fix is re-evaluated, not taken on trust) or by proceeding anyway, which records
+  an `overridden` verdict that keeps the waived findings on the run.
+
+  Persistence: a new `input_gate_mode` column on `workspace_settings` (D1 migration `0080` and the
+  matching Drizzle migration); the verdict itself rides the run's existing `detail` JSON.
+
+### Patch Changes
+
+- Updated dependencies [10e0341]
+- Updated dependencies [10e0341]
+  - @cat-factory/contracts@0.229.0
+  - @cat-factory/kernel@0.230.0
+  - @cat-factory/orchestration@0.197.0
+  - @cat-factory/agents@0.109.1
+  - @cat-factory/integrations@0.123.3
+  - @cat-factory/prompt-fragments@0.15.54
+  - @cat-factory/spend@0.14.5
+
 ## 0.208.2
 
 ### Patch Changes
