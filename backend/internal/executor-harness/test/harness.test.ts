@@ -813,18 +813,59 @@ describe('ProgressGuard (anti-rabbithole)', () => {
   })
 
   it('keeps the web and tool-server streaks separate', () => {
-    // Interleaving must not accumulate on either cap — each resets the other, because neither is
-    // evidence of the loop the other watches for.
+    // Interleaving must not accumulate on either cap: each resets the other, because neither is
+    // evidence of the loop the other watches for. The combined backstop below is what keeps that
+    // from adding up to an unbounded run.
     const limits = {
       maxToolCallsWithoutEdit: 999,
       maxConsecutiveErrors: 99,
       maxConsecutiveWebCalls: 3,
       maxConsecutiveMcpCalls: 3,
+      maxConsecutiveNonActionCalls: 99,
     }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (let i = 0; i < 6; i++) {
       reason = guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search'))
+    }
+    expect(reason).toBeNull()
+  })
+
+  it('trips the combined backstop on interleaved exempt families that no family cap sees', () => {
+    // The hole every per-family exemption opens together: each cap resets on any call outside its
+    // own family, and a run that never makes an action call never reaches the no-edit bound either,
+    // so alternating two exempt families tripped NOTHING and only the job's wall-clock ceiling
+    // bounded it. Sequence deliberately alternates so both family caps stay at 1.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveWebCalls: 25,
+      maxConsecutiveMcpCalls: 40,
+      maxConsecutiveNonActionCalls: 6,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let i = 0; i < 5; i++) {
+      reason = guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search'))
+    }
+    expect(reason).toBeNull()
+    reason = guard.observe(toolCall('read'))
+    expect(reason).toMatch(/consecutive read-only calls/i)
+  })
+
+  it('lets an ACTION call reset the combined backstop, so read-up before an edit is unbounded', () => {
+    // The bound must not become a research judgement: reading a hundred files is legitimate work-up
+    // and any action call means the agent is doing something with what it read.
+    const limits = {
+      maxToolCallsWithoutEdit: 999,
+      maxConsecutiveErrors: 99,
+      maxConsecutiveNonActionCalls: 4,
+    }
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (let round = 0; round < 5; round++) {
+      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('read'))
+      reason = guard.observe(toolCall('bash'))
     }
     expect(reason).toBeNull()
   })
@@ -922,6 +963,10 @@ describe('ProgressGuard (anti-rabbithole)', () => {
       ...DEFAULT_PROGRESS_GUARD_LIMITS,
       maxConsecutiveMcpCalls: 9,
     })
+    expect(progressGuardLimitsFromEnv({ JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS: '300' })).toEqual({
+      ...DEFAULT_PROGRESS_GUARD_LIMITS,
+      maxConsecutiveNonActionCalls: 300,
+    })
     // Garbage values fall back rather than disabling the guard.
     expect(progressGuardLimitsFromEnv({ JOB_MAX_TOOLCALLS_WITHOUT_EDIT: '-3' })).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,
@@ -956,6 +1001,8 @@ describe('mergeGuardLimits (per-kind override over the base)', () => {
       maxToolCallsWithoutEdit: 1,
       maxConsecutiveErrors: 1,
       maxConsecutiveWebCalls: 1,
+      maxConsecutiveMcpCalls: 1,
+      maxConsecutiveNonActionCalls: 1,
     }
     expect(mergeGuardLimits(DEFAULT_PROGRESS_GUARD_LIMITS, tighter)).toEqual(
       DEFAULT_PROGRESS_GUARD_LIMITS,

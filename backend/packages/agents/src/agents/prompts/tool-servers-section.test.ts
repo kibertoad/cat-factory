@@ -1,4 +1,5 @@
 import type { AgentRunContext, UnavailableToolServer } from '@cat-factory/kernel'
+import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { toolServersSection } from './capabilities.js'
 
@@ -115,5 +116,38 @@ describe('toolServersSection', () => {
   it('tells the agent an over-budget drop is a cap rather than a fault', () => {
     const out = toolServersSection(ctx([], [{ id: 's', label: 'Server', reason: 'over_budget' }]))
     expect(out).toContain('too many tool servers were declared')
+  })
+
+  it('folds a runaway drop list into a stated count instead of one line per server', () => {
+    // The wired list is capped per dispatch but the DROP list is not, so the runaway declaration the
+    // cap exists for would otherwise arrive in the prompt anyway, one line each. Folded rather than
+    // truncated: the agent still learns more was declared than it got.
+    const dropped: UnavailableToolServer[] = Array.from(
+      { length: TOOL_SERVER_BUDGET.maxStatedUnavailable + 5 },
+      (_, i) => ({ id: `s${i}`, label: `S${i}`, reason: 'over_budget' }),
+    )
+    const out = toolServersSection(ctx([], dropped))
+    expect(out).toContain('- S0 (')
+    expect(out).toContain(`- S${TOOL_SERVER_BUDGET.maxStatedUnavailable - 1} (`)
+    expect(out).not.toContain(`- S${TOOL_SERVER_BUDGET.maxStatedUnavailable} (`)
+    expect(out).toContain('and 5 more declared tool servers, also not available on this run.')
+  })
+
+  it('states the fold in the singular when exactly one server was folded', () => {
+    const dropped: UnavailableToolServer[] = Array.from(
+      { length: TOOL_SERVER_BUDGET.maxStatedUnavailable + 1 },
+      (_, i) => ({ id: `s${i}`, label: `S${i}`, reason: 'missing_secret' }),
+    )
+    expect(toolServersSection(ctx([], dropped))).toContain('and 1 more declared tool server,')
+  })
+
+  it('names every drop when the list fits, so the fold is invisible in the normal case', () => {
+    const dropped: UnavailableToolServer[] = Array.from(
+      { length: TOOL_SERVER_BUDGET.maxStatedUnavailable },
+      (_, i) => ({ id: `s${i}`, label: `S${i}`, reason: 'harness_unsupported' }),
+    )
+    const out = toolServersSection(ctx([], dropped))
+    expect(out).toContain(`- S${TOOL_SERVER_BUDGET.maxStatedUnavailable - 1} (`)
+    expect(out).not.toContain('more declared tool')
   })
 })

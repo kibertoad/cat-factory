@@ -311,20 +311,27 @@ Three rules decide which of those a given declaration can hit:
   boot validation warns about that combination. The same warning covers `skills`, for the same
   reason.
 - **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
-  the job-body field. Past that the excess is dropped under `over_budget`, and boot warns
-  (`too_many_tool_servers`) so the deployment learns which declarations are past the line rather than
-  reading it off a run's prompt. The realistic cause is accretion: several packages each calling
-  `assignToolServers` on one kind, none of them individually wrong. Unlike the linked-context corpus
-  (which REFUSES the dispatch), the excess is dropped rather than fatal, because tool servers are
-  deployment CODE: taking a deployment down for a registration fault boot already warned about is
-  worse than running with fewer tools.
+  the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions
+  warn at boot** (`too_many_tool_servers`, `tool_servers_over_byte_budget`) so the deployment learns
+  from its own startup rather than off a run's prompt. The realistic cause is accretion: several
+  packages each calling `assignToolServers` on one kind, none of them individually wrong. Unlike the
+  linked-context corpus (which REFUSES the dispatch), the excess is dropped rather than fatal,
+  because tool servers are deployment CODE: taking a deployment down for a registration fault boot
+  already warned about is worse than running with fewer tools. Two asymmetries are deliberate. The
+  byte warning measures the DECLARATION (`toolServerDeclaredBytes`), a floor on what a dispatch
+  measures on the resolved spec, so it never fires falsely but also cannot name WHICH servers a run
+  will lose: the dispatch keeps every server that still fits, so once bytes are what bind the
+  survivors are not a prefix of the declaration. And the drop list itself has no budget, so past
+  `maxStatedUnavailable` the prompt folds the remainder into a count instead of one line each, while
+  the run context keeps them all.
 
 #### What the agent may call (`allowedTools`)
 
 - **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
   argument with commas, so `['search_issues,get_issue']` becomes two patterns of which the second
   matches nothing, while the prompt goes on advertising the name verbatim. Refused at registration
-  (`invalid_tool_server_tool_name`) and dropped again at the job boundary.
+  (`invalid_tool_server_tool_name`), and dropped at the DISPATCH (where it would otherwise reach the
+  prompt) and again at the job boundary, the same three-layer shape the credential floors have.
 - **It is SCOPING, not a security boundary.** It is always stated in the prompt, and additionally
   passed to claude-code's `--allowedTools`, but whether that CLI list gates depends on the run's
   permission mode, and Codex cannot express a per-tool restriction at all. If an agent kind must
@@ -388,14 +395,18 @@ Three rules decide which of those a given declaration can hit:
 
 - **A server ASSIGNED to a built-in is checked exactly like a registered kind's own.** Boot
   validation and the credential checklist enumerate `AgentKindRegistry.kindsWithCapabilities()`:
-  registered kinds PLUS every kind named by `assignSkills` / `assignToolServers`. No built-in is a
-  registry entry, and `assignToolServers('coder', …)` is the recommended attachment path, so an
-  `all()` walk skipped the commonest case entirely. Anything new that enumerates "kinds with
-  capabilities" uses that helper, or the hole reopens.
+  every kind that declares a skill or tool server on its own registration, PLUS every kind named by
+  `assignSkills` / `assignToolServers`. No built-in is a registry entry, and
+  `assignToolServers('coder', …)` is the recommended attachment path, so an `all()` walk skipped the
+  commonest case entirely. Anything new that enumerates "kinds with capabilities" uses that helper,
+  or the hole reopens.
 - **A tool-server call does not count against the agent's no-edit progress bound.** An `mcp__*` call
   is exempt like a read, because reaching a wired server is what this section's own prompt tells the
   agent to do. It is bounded by its own consecutive-call cap instead
-  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`, raisable per kind through `tuning.guardLimits`).
+  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`, raisable per kind through `tuning.guardLimits`), and by the
+  backstop every exempt family shares (`JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS`): a per-family cap
+  resets on any call outside its family, so raising one is safe while interleaving several would
+  otherwise have been bounded by nothing but the job's wall-clock ceiling.
 
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.

@@ -74,15 +74,20 @@ dump and never uses the word MCP).
       `AgentKindRegistry.kindsWithCapabilities()` union helper, with the container warning going
       through `runsInContainer` rather than `registry.requiresContainer` (which answers false for
       every built-in). `collectDeclaredCapabilityCredentials` enumerates the same union.
-      `allowedTools` entries are held to `isValidMcpToolName` (the comma case), and the server list
-      to `TOOL_SERVER_BUDGET`, dropping the excess under `over_budget` rather than refusing the
-      dispatch as the context-file corpus does: tool servers are deployment CODE, so boot is where
-      the fault is named. The progress guard exempts `mcp__*` from the no-edit bound and bounds it
-      with its own `maxConsecutiveMcpCalls` streak, the disposition the web-tool cap already
-      established. Image bumped to 1.89.0, carrying the harness-side test backfill: the
-      `toolServersSection` prompt contract, the transport matrix, Codex `config.toml` end to end
-      (asserted from INSIDE the run, since the per-run home is wiped in `finally`), and the
-      `allowedTools` boundary.
+      `allowedTools` entries are held to `isValidMcpToolName` at all three layers (registration, the
+      dispatch that builds the prompt projection, the job boundary), and the server list to
+      `TOOL_SERVER_BUDGET`, dropping the excess under `over_budget` rather than refusing the dispatch
+      as the context-file corpus does: tool servers are deployment CODE, so boot is where the fault
+      is named. BOTH budget dimensions warn at boot, the byte one measured on the declaration
+      (`toolServerDeclaredBytes`, a floor on the resolved spec the dispatch measures), and the
+      unbounded DROP list is folded into a count past `maxStatedUnavailable` so the runaway
+      declaration the cap exists for cannot reach the prompt one line at a time. The progress guard
+      exempts `mcp__*` from the no-edit bound and bounds it with its own `maxConsecutiveMcpCalls`
+      streak, plus `maxConsecutiveNonActionCalls` across every exempt family, since each per-family
+      cap resets on a call outside its family and interleaving two of them tripped nothing.
+      Image bumped to 1.89.0, carrying the harness-side test backfill: the `toolServersSection`
+      prompt contract, the transport matrix, Codex `config.toml` end to end (asserted from INSIDE
+      the run, since the per-run home is wiped in `finally`), and the `allowedTools` boundary.
 - [ ] **2. The published server: guarded, filterable, structured.** Extend
       `check-publish-integrity.mjs` and `check-package-catalog.mjs` to `sdk/*`, add an MCP runner
       to `backend/internal/sdk-smoketest` so CI drives the real binary against a real backend,
@@ -234,6 +239,17 @@ Recorded so the next iteration does not re-propose them.
 - **The harness-side stdio-only skips are backstops now, not decisions.** `codexMcpConfigToml` still
   drops an `http` server, but the backend has already dropped it with a reason, so a change that
   makes the harness silently skip something is again the defect slice 1 closed.
+- **A new progress-guard EXEMPTION owes two caps, not one.** Its own consecutive-call streak, and a
+  place in the shared `maxConsecutiveNonActionCalls` backstop (`isNonActionToolCall`), because every
+  per-family streak resets on a call outside its family: two exempt families interleaved trip
+  neither, and a run that makes no action call never reaches the no-edit bound either. The
+  exemption set and the backstop set must be the SAME predicate, or the guard either misses a loop
+  or kills a run for a call the bound says it may make.
+- **A cap on one side of a pair needs the other side asking whether it is now unbounded.** The
+  dispatch caps the servers it WIRES; the drop list it produces instead had no cap and lands in the
+  same prompt, which is why `maxStatedUnavailable` folds it. Same shape as the boot warnings: the
+  count dimension had one and the byte dimension did not, so a fat declaration was refused at
+  dispatch by a rule boot never mentioned.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
   the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
   internal-first soft launch for an endpoint whose whole point is external callers.

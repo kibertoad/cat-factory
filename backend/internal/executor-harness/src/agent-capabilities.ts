@@ -187,7 +187,7 @@ function sanitizeServerId(value: unknown): string | undefined {
  * {@link claudeAllowedToolPatterns} builds the list that the runner joins into one
  * `--allowedTools` argument with commas, so an entry carrying one splits into two patterns of which
  * the second matches no tool the CLI has. Dropped rather than passed through, because the entries
- * that survive are what narrows the session — a bad one would silently take the run's whole MCP
+ * that survive are what narrows the session: a bad one would silently take the run's whole MCP
  * surface with it.
  */
 export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -236,7 +236,7 @@ function parseStringArray(value: unknown): string[] | undefined {
 /**
  * The `allowedTools` list: string entries that are single tool NAMES (see
  * {@link MCP_TOOL_NAME_PATTERN}). Undefined when nothing survives, which is the same answer as an
- * absent field — every tool the server exposes — and the right one: the alternative is a list whose
+ * absent field (every tool the server exposes) and the right one: the alternative is a list whose
  * only surviving entries are the platform's own built-in tool names, i.e. a run narrowed to no MCP
  * tools at all. The backend refuses these at registration; this is the boundary check.
  */

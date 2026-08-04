@@ -4,10 +4,12 @@ import type { McpServerDefinition } from './agent-capabilities.js'
 import {
   MCP_HARNESS_TRANSPORTS,
   MCP_SUPPORTED_HARNESSES,
+  TOOL_SERVER_BUDGET,
   isValidMcpToolName,
   mcpHarnessServesTransport,
   mcpServableHarnesses,
   mcpServerSupportsHarness,
+  toolServerDeclaredBytes,
 } from './agent-capabilities.js'
 
 // The pure rules deciding whether a declared tool server can run at all. They exist here, in
@@ -95,6 +97,43 @@ describe('mcpServableHarnesses', () => {
     expect(mcpServableHarnesses(httpServer({ harnesses: ['codex'] }))).toEqual([])
     expect(mcpServableHarnesses(server({ harnesses: ['pi'] }))).toEqual([])
     expect(mcpServableHarnesses(server({ harnesses: [] }))).toEqual([])
+  })
+})
+
+// The measure boot validation warns on. It exists because the dispatch measures the RESOLVED spec,
+// which nothing before a run can see, and "no measure at all" is what left the byte half of the
+// budget with no declaration-time channel while the count half had one.
+describe('toolServerDeclaredBytes', () => {
+  it('counts the transport config, so a fat env block is visible before any run', () => {
+    const lean = toolServerDeclaredBytes(server())
+    const fat = toolServerDeclaredBytes(
+      server({ transport: { kind: 'stdio', command: 'npx', env: { BLOB: 'x'.repeat(5_000) } } }),
+    )
+    expect(lean).toBeLessThan(200)
+    expect(fat).toBeGreaterThan(5_000)
+  })
+
+  it('is a FLOOR: it ignores what stays behind and what a dispatch only adds', () => {
+    // `label` / `guidance` go to the prompt and `secretKeys` becomes resolved VALUES, which only
+    // grow the body. Counting the first two would let boot warn about a payload no dispatch sends.
+    const bare = toolServerDeclaredBytes(server())
+    const decorated = toolServerDeclaredBytes(
+      server({
+        label: 'Issue tracker',
+        guidance: 'Look up an issue before guessing at its intent.',
+        secretKeys: [{ key: 'ISSUE_TOKEN' }],
+      }),
+    )
+    expect(decorated).toBe(bare)
+  })
+
+  it('measures an http server by its url and headers', () => {
+    expect(toolServerDeclaredBytes(httpServer())).toBeGreaterThan(0)
+    expect(
+      toolServerDeclaredBytes(
+        httpServer({ transport: { kind: 'http', url: 'https://mcp.example.com/mcp' } }),
+      ),
+    ).toBeLessThan(TOOL_SERVER_BUDGET.maxTotalBytes)
   })
 })
 

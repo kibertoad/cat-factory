@@ -11,6 +11,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   TOOL_SERVER_BUDGET,
+  isValidMcpToolName,
   mcpHarnessServesTransport,
   mcpServerSupportsHarness,
   noopLogger,
@@ -136,27 +137,29 @@ export async function resolveToolServers(
       unavailableToolServers.push({ id: definition.id, label, reason: unservable })
       continue
     }
+    // The COUNT half of the budget is settled BEFORE the credentials are resolved. The resolver is
+    // a port a facade may back with a per-workspace store or a remote read, and a server past the
+    // count can never be wired whatever it answers, so resolving it would spend a round trip (and
+    // materialise a secret) for a server this dispatch has already lost. The BYTE half cannot move
+    // up here: only the resolved spec has the size the job body actually carries.
+    if (mcpServers.length >= TOOL_SERVER_BUDGET.maxServers) {
+      logOverBudget(input, definition, { wired: mcpServers.length, bytes })
+      unavailableToolServers.push({ id: definition.id, label, reason: 'over_budget' })
+      continue
+    }
     const secrets = await resolveSecrets(input, definition)
     if (!secrets.ok) {
       unavailableToolServers.push({ id: definition.id, label, reason: secrets.reason })
       continue
     }
-    const spec = buildJobSpec(definition, secrets.values)
-    // The cap is measured on the RESOLVED spec, because that is the thing the job body carries —
-    // a declaration's size says nothing about the env map its credentials fold into.
+    const allowedTools = sanitizeAllowedTools(input, definition)
+    const spec = buildJobSpec(definition, secrets.values, allowedTools)
+    // Measured on the RESOLVED spec, because that is the thing the job body carries: a
+    // declaration's size says nothing about the env map its credentials fold into. Boot validation
+    // measures the declaration alone (`toolServerDeclaredBytes`), which is a floor on this.
     const size = new TextEncoder().encode(JSON.stringify(spec)).length
-    if (
-      mcpServers.length >= TOOL_SERVER_BUDGET.maxServers ||
-      bytes + size > TOOL_SERVER_BUDGET.maxTotalBytes
-    ) {
-      input.logger?.warn('tool server dropped: the dispatch is over its tool-server budget', {
-        agentKind: input.context.agentKind,
-        toolServerId: definition.id,
-        wired: mcpServers.length,
-        maxServers: TOOL_SERVER_BUDGET.maxServers,
-        bytes,
-        maxTotalBytes: TOOL_SERVER_BUDGET.maxTotalBytes,
-      })
+    if (bytes + size > TOOL_SERVER_BUDGET.maxTotalBytes) {
+      logOverBudget(input, definition, { wired: mcpServers.length, bytes, size })
       unavailableToolServers.push({ id: definition.id, label, reason: 'over_budget' })
       continue
     }
@@ -165,7 +168,7 @@ export async function resolveToolServers(
       id: definition.id,
       label,
       ...(definition.guidance ? { guidance: definition.guidance } : {}),
-      ...(definition.allowedTools?.length ? { tools: definition.allowedTools } : {}),
+      ...(allowedTools?.length ? { tools: allowedTools } : {}),
       transport: definition.transport.kind,
     })
     mcpServers.push(spec)
@@ -173,16 +176,65 @@ export async function resolveToolServers(
   return { toolServers, unavailableToolServers, mcpServers }
 }
 
+/** One report per server the budget cost this dispatch, naming which dimension bound. */
+function logOverBudget(
+  input: ResolveToolServersInput,
+  definition: McpServerDefinition,
+  spent: { wired: number; bytes: number; size?: number },
+): void {
+  input.logger?.warn('tool server dropped: the dispatch is over its tool-server budget', {
+    agentKind: input.context.agentKind,
+    toolServerId: definition.id,
+    dimension: spent.size === undefined ? 'count' : 'bytes',
+    wired: spent.wired,
+    maxServers: TOOL_SERVER_BUDGET.maxServers,
+    bytes: spent.bytes,
+    ...(spent.size === undefined ? {} : { serverBytes: spent.size }),
+    maxTotalBytes: TOOL_SERVER_BUDGET.maxTotalBytes,
+  })
+}
+
+/**
+ * The `allowedTools` list this dispatch may both STATE and send, holding each entry to
+ * `isValidMcpToolName`.
+ *
+ * Registration refuses a bad entry, so this is the same belt-and-braces the reserved-key and
+ * `envName` floors below get, and for the same reason: what the prompt advertises must be what the
+ * CLI was actually given. The harness drops these entries at the job boundary, so an unfiltered
+ * list here would leave the prompt naming a tool the allow-list never granted, which is the exact
+ * failure the unavailability vocabulary exists to prevent.
+ *
+ * Nothing surviving is the same answer as an absent field (every tool the server exposes), matching
+ * the harness: the alternative sends a list whose only entries are the CLI's own built-in tool
+ * names, i.e. a run narrowed to no MCP tools at all.
+ */
+function sanitizeAllowedTools(
+  input: ResolveToolServersInput,
+  definition: McpServerDefinition,
+): string[] | undefined {
+  const declared = definition.allowedTools
+  if (!declared?.length) return undefined
+  const names = declared.filter((name) => isValidMcpToolName(name))
+  if (names.length !== declared.length) {
+    input.logger?.warn('tool server declares allowedTools entries that are not single tool names', {
+      toolServerId: definition.id,
+      dropped: declared.filter((name) => !isValidMcpToolName(name)),
+      kept: names.length,
+    })
+  }
+  return names.length ? names : undefined
+}
+
 /**
  * Why this run cannot serve the definition, or undefined when it can. Three tests, each with its
  * own reason because each names a different fix:
  *
  * 1. the harness must speak MCP and be one the definition allows (`harness_unsupported`);
- * 2. the harness's client must reach the definition's TRANSPORT (`transport_unsupported`) — Codex
- *    is stdio-only, and this test is what stops an `http` server being advertised in the prompt
+ * 2. the harness's client must reach the definition's TRANSPORT (`transport_unsupported`). Codex is
+ *    stdio-only, and this test is what stops an `http` server being advertised in the prompt
  *    ("prefer them over guessing") and then silently skipped by the harness's TOML writer;
  * 3. the run must have somewhere per-job to put the server config, which an ambient Codex run does
- *    not — see {@link ResolveToolServersInput.ambientAuth}. Reported as `harness_unsupported`
+ *    not (see {@link ResolveToolServersInput.ambientAuth}). Reported as `harness_unsupported`
  *    because what is missing is the runtime's config home, not anything about the transport.
  */
 function servableOnThisRun(
@@ -275,12 +327,17 @@ async function resolveSecrets(
  * an environment variable for a stdio server's child process, or a request header for an HTTP
  * one. A secret whose value is absent (an OPTIONAL one that did not resolve) is simply omitted,
  * so the server still starts without it.
+ *
+ * `allowedTools` arrives already sanitised (see {@link sanitizeAllowedTools}) rather than being
+ * read off the definition here, so the prompt projection and the body cannot disagree about which
+ * tools the run was narrowed to.
  */
 function buildJobSpec(
   definition: McpServerDefinition,
   secrets: Record<string, string>,
+  allowedTools: string[] | undefined,
 ): McpServerJobSpec {
-  const allowed = definition.allowedTools?.length ? { allowedTools: definition.allowedTools } : {}
+  const allowed = allowedTools?.length ? { allowedTools } : {}
   if (definition.transport.kind === 'stdio') {
     const credentials = envSecrets(definition.secretKeys, secrets)
     const env = { ...definition.transport.env, ...credentials }

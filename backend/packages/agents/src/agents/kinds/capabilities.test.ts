@@ -115,19 +115,38 @@ describe('AgentKindRegistry capabilities', () => {
     expect(registry.toolServersFor('coder').servers).toEqual([])
   })
 
-  it('enumerates registered kinds AND the kinds capabilities were assigned to', () => {
+  it('enumerates a registered kind’s OWN declarations and the kinds capabilities were assigned to', () => {
     // The union is what boot validation and the capability-credential checklist walk. `all()` is
     // not it: the recommended attachment path is `assignToolServers('coder', …)`, and no built-in
-    // is a registry entry — so an `all()` walk skipped every assigned declaration, which is how a
+    // is a registry entry, so an `all()` walk skipped every assigned declaration, which is how a
     // cleartext endpoint on `coder` used to boot clean.
     const registry = new AgentKindRegistry()
     registry.registerToolServer(SERVER)
     registry.registerSkill(SKILL)
-    registry.register({ kind: 'auditor', systemPrompt: 'p' })
+    registry.register({ kind: 'auditor', systemPrompt: 'p', skills: ['house-review'] })
     registry.assignToolServers('coder', ['issues'])
     registry.assignSkills('ci-fixer', ['house-review'])
     expect([...registry.kindsWithCapabilities()].sort()).toEqual(['auditor', 'ci-fixer', 'coder'])
     expect(registry.all().map((d) => d.kind)).toEqual(['auditor'])
+  })
+
+  it('leaves out a registered kind that declares no capabilities at all', () => {
+    // So the answer means what its name says and a caller may read a non-empty list off it. The two
+    // consumers today would no-op on such a kind either way, which is exactly why an implementation
+    // that included it could drift from its own name unnoticed.
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'auditor', systemPrompt: 'p' })
+    registry.assignSkills('merger', [])
+    expect(registry.kindsWithCapabilities()).toEqual([])
+  })
+
+  it('lists a kind whose declared id nothing registered, which is the case boot must report', () => {
+    // The test is the RAW declaration, not a resolved one: dropping this kind would hide the
+    // `unknown_tool_server` error, since resolution finds no server for it.
+    const registry = new AgentKindRegistry()
+    registry.assignToolServers('coder', ['never-registered'])
+    expect(registry.kindsWithCapabilities()).toEqual(['coder'])
+    expect(registry.toolServersFor('coder').servers).toEqual([])
   })
 
   it('lists a kind once when it is both registered and assigned to', () => {

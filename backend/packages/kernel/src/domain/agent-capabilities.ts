@@ -220,7 +220,7 @@ export interface UnavailableToolServer {
    * Each member names a DIFFERENT fix, which is why they are not folded together:
    *
    * - `reserved_secret` is kept apart from `missing_secret` because a missing secret is a variable
-   *   to SET, while a reserved one is a DECLARATION to change — the server named a variable the
+   *   to SET, while a reserved one is a DECLARATION to change: the server named a variable the
    *   platform's own configuration owns, and setting it is exactly what must not help.
    * - `transport_unsupported` is kept apart from `harness_unsupported` for the same reason: the
    *   harness DOES speak MCP and the definition DOES allow it, but this CLI's client cannot reach
@@ -291,7 +291,7 @@ export function mcpHarnessServesTransport(
  * Every harness that could serve this definition: what it allows, intersected with the harnesses
  * whose client reaches its transport.
  *
- * EMPTY means the definition can never run anywhere — an `http` server narrowed to `harnesses:
+ * EMPTY means the definition can never run anywhere: an `http` server narrowed to `harnesses:
  * ['codex']`, or anything narrowed to `['pi']`. That is dead configuration a run cannot report
  * (nothing was ever going to be dropped for a REASON; the server simply never applies), so boot
  * validation is the only place it can be named.
@@ -315,15 +315,55 @@ export function mcpServableHarnesses(
  * The disposition differs from the context corpus on purpose. A context file is HUMAN-attached, so
  * an over-budget corpus refuses the dispatch and lets the person decide; tool servers are
  * DEPLOYMENT CODE, and refusing a run for a registration fault would take the deployment down for
- * something boot validation already warned about. So the excess is dropped under `over_budget` —
- * stated to the agent like every other drop — and the cap is what the boot warning counts against.
+ * something boot validation already warned about. So the excess is dropped under `over_budget`
+ * (stated to the agent like every other drop), and BOTH dimensions are what the boot warnings
+ * count against: see {@link toolServerDeclaredBytes} for the byte half, which boot can only
+ * measure as a floor.
  */
 export const TOOL_SERVER_BUDGET = {
   /** Max tool servers wired into one dispatch. */
   maxServers: 12,
   /** Total bytes of the serialised `mcpServers` job-body field (~32 KB). */
   maxTotalBytes: 32_768,
+  /**
+   * Max servers the prompt NAMES as unavailable before it summarises the remainder as a count.
+   *
+   * The drop list is unbounded where the wired list is capped, so the pathological declaration
+   * `maxServers` exists to bound would otherwise land in the prompt anyway, one line per server.
+   * The data stays whole (every drop is still on the run context, so the telemetry snapshot and an
+   * operator read see all of them); only the rendering is bounded, and it says how many it folded.
+   */
+  maxStatedUnavailable: 12,
 } as const
+
+/**
+ * The bytes ONE declaration contributes to the `mcpServers` job-body field, counting only the
+ * fields that actually ride it: the id, the transport and its config, and `allowedTools`.
+ *
+ * A FLOOR, deliberately, and the only measure available before a dispatch: `label`, `guidance` and
+ * `secretKeys` stay behind (the first two go to the prompt, the third is a name list resolved into
+ * values), and a resolved credential only ADDS to what is counted here. That makes it sound for a
+ * boot warning ("this declaration is already past the budget") while the dispatch keeps measuring
+ * the resolved spec it really sends. A new job-body field left out of this count keeps it a floor,
+ * which is why the two are allowed to be different measures rather than one shared one.
+ */
+export function toolServerDeclaredBytes(definition: McpServerDefinition): number {
+  const transport =
+    definition.transport.kind === 'stdio'
+      ? {
+          command: definition.transport.command,
+          args: definition.transport.args,
+          env: definition.transport.env,
+        }
+      : { url: definition.transport.url, headers: definition.transport.headers }
+  const body = {
+    id: definition.id,
+    transport: definition.transport.kind,
+    ...transport,
+    allowedTools: definition.allowedTools,
+  }
+  return new TextEncoder().encode(JSON.stringify(body)).length
+}
 
 /**
  * A valid MCP server id: lowercase alphanumerics, dashes and underscores. The id becomes part of
@@ -338,8 +378,8 @@ export function isValidMcpServerId(id: string): boolean {
 }
 
 /**
- * A tool name an `allowedTools` entry may name. Letters, digits, `_`, `.` and `-` — the character
- * set MCP tool names actually use — and nothing else.
+ * A tool name an `allowedTools` entry may name: letters, digits, `_`, `.` and `-` (the character
+ * set MCP tool names actually use), and nothing else.
  *
  * The rule exists for the COMMA above all. `claudeAllowedToolPatterns` renders each entry as
  * `mcp__<server>__<tool>` and the harness passes the whole list as ONE `--allowedTools` argument

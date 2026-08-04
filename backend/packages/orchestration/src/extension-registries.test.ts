@@ -712,6 +712,51 @@ describe('agent-capability validation: reach and scoping', () => {
       validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
     ).not.toThrow()
   })
+
+  it('warns when a kind is under the server count but over the dispatch BYTE budget', () => {
+    // The dimension a count check cannot see: a handful of servers with fat env/args blocks is
+    // under `maxServers` and over the payload, so a dispatch drops some of them while boot said
+    // nothing. Measured on the declaration alone, which is a FLOOR on what a dispatch measures
+    // (resolved credentials only add), so a warning here is never a false alarm.
+    const fat = (i: number) => ({
+      id: `srv${i}`,
+      transport: { kind: 'stdio' as const, command: 'x', env: { BLOB: 'x'.repeat(12_000) } },
+    })
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [fat(0), fat(1), fat(2)],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    const warning = problems.find((p) => p.code === 'tool_servers_over_byte_budget')
+    expect(warning?.severity).toBe('warn')
+    expect(warning?.message).toContain('over_budget')
+    // Three servers is well under the count budget, so THAT warning must stay silent: two warnings
+    // for one fault would send the author looking for a server to delete.
+    expect(problems.some((p) => p.code === 'too_many_tool_servers')).toBe(false)
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
+  })
+
+  it('stays silent on a declaration that fits both dimensions', () => {
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        { id: 'issues', transport: { kind: 'stdio', command: 'x', env: { REGION: 'eu' } } },
+        { id: 'docs', transport: { kind: 'http', url: 'https://mcp.example.com/mcp' } },
+      ],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toEqual([])
+  })
 })
 
 // The CREDENTIAL half of a tool-server declaration. Every rule here exists because a definition

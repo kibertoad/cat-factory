@@ -24,6 +24,7 @@ import {
   mcpServableHarnesses,
   seedPipelines,
   stubGateContext,
+  toolServerDeclaredBytes,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import { universalFragments } from '@cat-factory/prompt-fragments'
@@ -460,7 +461,7 @@ function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): Reg
  * the heavily-used one (`assignToolServers('coder', …)`, `ci-fixer`, `tester-api`, `merger`,
  * `conflict-resolver`), and walking `all()` skipped every one of them: a cleartext endpoint or a
  * reserved credential key declared that way booted clean, and only the dispatch-time floors caught
- * it — which is a floor holding, not the "refused at declaration" layer doing its job.
+ * it, which is a floor holding rather than the "refused at declaration" layer doing its job.
  */
 function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProblem[] {
   return registry
@@ -483,8 +484,8 @@ function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProble
  *
  * The container question goes through `runsInContainer`, never `registry.requiresContainer`, and
  * that is load-bearing now that assigned capabilities are checked: `requiresContainer` answers false
- * for a kind it has no registration for, so every built-in — `coder` above all — would be warned
- * about as an inline kind the moment a deployment assigned it a playbook.
+ * for a kind it has no registration for, so every built-in (`coder` above all) would be warned about
+ * as an inline kind the moment a deployment assigned it a playbook.
  */
 function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -517,15 +518,18 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
 /**
  * A kind's declared TOOL SERVERS: the whole-list checks (unregistered ids, the per-dispatch budget,
  * the container surface), with each definition's own checks in
- * {@link checkToolServerDefinition}. "Declared for" includes assigned servers — see
+ * {@link checkToolServerDefinition}. "Declared for" includes assigned servers, see
  * {@link checkAgentCapabilities}.
  *
  * - an unregistered id is an ERROR, like an unregistered skill;
- * - more servers than a dispatch carries is a WARNING, because the dispatch drops the excess under
- *   `over_budget` rather than failing: the run still works, with fewer tools than the deployment
- *   believes it wired, and only boot can name which declarations are past the line. A warning also
- *   keeps the accretion case honest — a kind goes over budget through `assignToolServers` calls in
- *   several packages, none of which is individually wrong;
+ * - past EITHER dimension of the per-dispatch budget is a WARNING, because the dispatch drops the
+ *   excess under `over_budget` rather than failing: the run still works, with fewer tools than the
+ *   deployment believes it wired, and boot is the only place the DECLARATIONS past the line can be
+ *   named. A warning also keeps the accretion case honest, a kind going over budget through
+ *   `assignToolServers` calls in several packages none of which is individually wrong. Both
+ *   dimensions are checked because the dispatch enforces both, and a byte-driven drop is the one
+ *   that surprises: a handful of servers with fat `env`/`args`/`headers` blocks is under the count
+ *   and over the payload;
  * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
  *   into, so they can never take effect. A warning rather than an error because a deployment may
  *   deliberately declare them ahead of moving the kind onto a container surface.
@@ -544,18 +548,7 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
     })
   }
   for (const server of tools.servers) problems.push(...checkToolServerDefinition(kind, server))
-  if (tools.servers.length > TOOL_SERVER_BUDGET.maxServers) {
-    problems.push({
-      severity: 'warn',
-      code: 'too_many_tool_servers',
-      message:
-        `Agent kind "${kind}" has ${tools.servers.length} tool servers declared for it, past the ` +
-        `per-dispatch budget of ${TOOL_SERVER_BUDGET.maxServers}. A dispatch wires the first ` +
-        `${TOOL_SERVER_BUDGET.maxServers} and states the rest to the agent as unavailable ` +
-        `(over_budget), so the servers declared last will not be there. Drop some, or split the ` +
-        `work across kinds.`,
-    })
-  }
+  problems.push(...checkToolServerBudget(kind, tools.servers))
   if (tools.servers.length && !runsInContainer(kind, registry)) {
     problems.push({
       severity: 'warn',
@@ -571,19 +564,63 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
 }
 
 /**
+ * The per-dispatch budget, BOTH dimensions, as warnings: the dispatch drops the excess under
+ * `over_budget` and the run works with fewer tools, so a registration fault belongs at boot rather
+ * than in a refusal that takes the deployment down.
+ *
+ * The byte check measures {@link toolServerDeclaredBytes}, which is a FLOOR (a resolved credential
+ * only adds to it), so a declaration already past the budget here is certainly past it at dispatch.
+ * What boot deliberately does NOT claim is WHICH servers a run will lose: the dispatch keeps every
+ * server that still fits, so once bytes are what bind the survivors are not a prefix of the
+ * declaration. The count and the budget are what the author acts on, and the run itself names each
+ * server it dropped.
+ */
+function checkToolServerBudget(
+  kind: AgentKind,
+  servers: readonly McpServerDefinition[],
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (servers.length > TOOL_SERVER_BUDGET.maxServers) {
+    problems.push({
+      severity: 'warn',
+      code: 'too_many_tool_servers',
+      message:
+        `Agent kind "${kind}" has ${servers.length} tool servers declared for it, past the ` +
+        `per-dispatch budget of ${TOOL_SERVER_BUDGET.maxServers}. A dispatch wires the first ` +
+        `${TOOL_SERVER_BUDGET.maxServers} in declaration order and states the rest to the agent as ` +
+        `unavailable (over_budget). Drop some, or split the work across kinds.`,
+    })
+  }
+  const bytes = servers.reduce((total, server) => total + toolServerDeclaredBytes(server), 0)
+  if (bytes > TOOL_SERVER_BUDGET.maxTotalBytes) {
+    problems.push({
+      severity: 'warn',
+      code: 'tool_servers_over_byte_budget',
+      message:
+        `Agent kind "${kind}" declares tool servers whose transport config alone measures ${bytes} ` +
+        `bytes, past the per-dispatch budget of ${TOOL_SERVER_BUDGET.maxTotalBytes}. A dispatch ` +
+        `wires servers until that budget is spent and states the rest to the agent as unavailable ` +
+        `(over_budget); resolved credentials only add to this figure, and which servers lose out ` +
+        `depends on their sizes. Trim the env/args/headers blocks, or split the work across kinds.`,
+    })
+  }
+  return problems
+}
+
+/**
  * ONE tool server definition:
  *
  * - a malformed MCP server id is an ERROR, because it becomes both a tool-name fragment and a
  *   Codex TOML table key, so the CLI fails on it far from the registration that caused it;
  * - an `allowedTools` entry that is not a valid tool NAME is an ERROR, the comma case above all:
  *   the harness joins the whole list into one `--allowedTools` argument with commas, so an entry
- *   carrying one splits into two patterns and the second matches nothing — while the prompt goes
- *   on advertising the name verbatim, which is the "told about a tool it cannot call" failure the
+ *   carrying one splits into two patterns and the second matches nothing, while the prompt goes on
+ *   advertising the name verbatim. That is the "told about a tool it cannot call" failure the
  *   unavailability vocabulary exists to prevent;
  * - a definition NO harness could ever serve is a WARNING, and it is the only check here a run
  *   structurally cannot report: an `http` server narrowed to `harnesses: ['codex']` (whose client
  *   is stdio-only), or anything narrowed to `['pi']` (which has no MCP client), is never dropped
- *   FOR A REASON on any run — it simply never applies, so no prompt and no log line ever mentions
+ *   FOR A REASON on any run. It simply never applies, so no prompt and no log line ever mentions
  *   it. A warning rather than an error because the declaration is inert rather than dangerous;
  * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
  *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
@@ -626,7 +663,7 @@ function checkToolServerDefinition(
       message:
         `Tool server "${server.id}" ${on} declares transport "${server.transport.kind}" for ` +
         `harnesses [${(server.harnesses ?? MCP_SUPPORTED_HARNESSES).join(', ')}], and no harness ` +
-        `can serve that combination — so the server never applies to any run and no prompt or log ` +
+        `can serve that combination, so the server never applies to any run and no prompt or log ` +
         `line will say why. Codex's MCP client is stdio-only and Pi has none at all. Widen the ` +
         `harnesses, change the transport, or drop the declaration.`,
     })

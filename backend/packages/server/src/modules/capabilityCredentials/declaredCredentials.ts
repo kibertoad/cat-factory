@@ -74,8 +74,8 @@ export async function collectDeclaredCapabilityCredentials(
   // inline and by-reference declarations alike — hence the dedupe.
   //
   // Through `kindsWithCapabilities()`, NOT `all()`: `assignToolServers('coder', …)` is the
-  // recommended way to attach a server to a built-in, and a built-in is not a registry entry — so
-  // walking `all()` left the commonest declaration path out of the checklist entirely, and the
+  // recommended way to attach a server to a built-in, and a built-in is not a registry entry, so
+  // walking `all()` left the commonest declaration path out of the checklist entirely and the
   // operator saw a list that was silently missing the key their `coder` runs would need.
   for (const kind of input.agentKindRegistry.kindsWithCapabilities()) {
     for (const server of input.agentKindRegistry.toolServersFor(kind).servers) {

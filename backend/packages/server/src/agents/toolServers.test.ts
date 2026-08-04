@@ -273,6 +273,44 @@ describe('transport support', () => {
   })
 })
 
+// `allowedTools` decides two things that must not disagree: what the prompt advertises and what the
+// CLI is actually narrowed to. Registration refuses a bad entry, so these are the same
+// belt-and-braces the reserved-key and envName floors get at this layer.
+describe('allowedTools at the dispatch boundary', () => {
+  const withTools = (allowedTools: string[]): McpServerDefinition => ({
+    id: 'issues',
+    transport: { kind: 'stdio', command: 'npx' },
+    allowedTools,
+  })
+
+  it('drops an entry that is not a single tool name from BOTH channels at once', async () => {
+    // The harness drops the comma-packed entry at the job boundary, so leaving it here would put a
+    // tool name in the prompt that the allow-list never granted: the exact failure the whole
+    // unavailability vocabulary exists to prevent.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(withTools(['search_issues,get_issue', 'list_issues'])),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.toolServers[0]?.tools).toEqual(['list_issues'])
+    expect(result.mcpServers[0]?.allowedTools).toEqual(['list_issues'])
+  })
+
+  it('falls back to NO restriction when nothing in the list survives, as the harness does', async () => {
+    // Same answer as an absent field (every tool the server exposes). The alternative sends a list
+    // whose only entries are the CLI's own built-in tools, i.e. a run narrowed to no MCP tools.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(withTools(['a,b', 'search issues'])),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.toolServers[0]?.tools).toBeUndefined()
+    expect(result.mcpServers[0]?.allowedTools).toBeUndefined()
+  })
+})
+
 // The per-dispatch budget. A kind accretes tool servers through `assignToolServers` calls in several
 // packages, none of them individually wrong, and the job body is one HTTP payload.
 describe('the tool-server budget', () => {
@@ -303,9 +341,39 @@ describe('the tool-server budget', () => {
         reason: 'over_budget',
       })),
     )
-    // The prompt-facing projection stays in step with what the job body carries — an agent told
+    // The prompt-facing projection stays in step with what the job body carries: an agent told
     // about a server the body omits is exactly the failure this whole area exists to prevent.
     expect(result.toolServers.map((s) => s.id)).toEqual(result.mcpServers.map((s) => s.id))
+  })
+
+  it('does not resolve credentials for a server the COUNT cap has already lost', async () => {
+    // The resolver is a port a facade may back with a per-workspace store or a remote read, so a
+    // round trip (and a materialised secret) for a server this dispatch cannot wire is pure waste.
+    // The count is decidable before resolution; only the byte cap needs the resolved spec.
+    const asked: string[] = []
+    const recording: ToolSecretResolver = {
+      resolve: async ({ subject, keys }) => {
+        asked.push(subject.id)
+        return Object.fromEntries(keys.map((k) => [k.key, 'tok']))
+      },
+    }
+    const servers = many(TOOL_SERVER_BUDGET.maxServers + 3).map((s) => ({
+      ...s,
+      secretKeys: [{ key: `${s.id.toUpperCase()}_TOKEN` }],
+    }))
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(...servers),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: recording,
+    })
+    expect(asked).toEqual(servers.slice(0, TOOL_SERVER_BUDGET.maxServers).map((s) => s.id))
+    expect(result.unavailableToolServers.map((s) => s.reason)).toEqual([
+      'over_budget',
+      'over_budget',
+      'over_budget',
+    ])
   })
 
   it('caps on BYTES too, so a few fat declarations cannot bloat the body', async () => {

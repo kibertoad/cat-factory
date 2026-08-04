@@ -561,6 +561,7 @@ export {
   mcpHarnessServesTransport,
   mcpServableHarnesses,
   mcpServerSupportsHarness,
+  toolServerDeclaredBytes,
 } from './domain/agent-capabilities.js'
 
 export {

@@ -27,6 +27,12 @@ export interface AgentGuardTuning {
    * for a kind whose PRIMARY working tool is an MCP server, the way `researcher` raises the web cap.
    */
   maxConsecutiveMcpCalls?: number
+  /**
+   * Consecutive read-only calls of ANY exempt family (reads, searches, web, tool servers, subagent
+   * dispatches) tolerated with no action call between them. The backstop above the per-family caps,
+   * so raising one of those without raising this leaves the harness's own ceiling in place.
+   */
+  maxConsecutiveNonActionCalls?: number
 }
 
 /** Execution tuning for an agent kind (guard limits only, for now). */
