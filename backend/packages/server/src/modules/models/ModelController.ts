@@ -35,16 +35,25 @@ export function modelController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const userId = c.get('user')?.id
+    const presets = container.modelPresets?.service
     // Spread the container (it structurally supplies apiKeys/subscriptions/localModels/…),
     // then add the model-policy inputs: the account-settings SERVICE (the container exposes
     // it as a `{ service }` module), the workspace→account resolver, and the deployment's
     // support flag. The account read is cached via `container.caches.accountModelPolicy`.
+    //
+    // No preset id is passed, so the catalog renders under the WORKSPACE DEFAULT preset's route
+    // order. That is the honest answer for a workspace-wide read: the picker is asked "which route
+    // would this model take here", and a task that has selected another preset resolves under it
+    // at dispatch, where the block is in hand.
     const caps = await resolveWorkspaceCapabilities(
       {
         ...container,
         accountSettings: container.accountSettings?.service,
         workspaceAccountOf: (ws) => container.workspaceService.accountOf(ws),
         modelPolicySupported: container.config.infrastructure?.modelPolicy?.supported ?? false,
+        ...(presets
+          ? { resolvePresetProviderPreference: (ws: string) => presets.providerPreferenceFor(ws) }
+          : {}),
       },
       workspaceId,
       userId,

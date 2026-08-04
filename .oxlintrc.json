@@ -10,7 +10,7 @@
     "max-nested-callbacks": ["error", { "max": 4 }],
     "max-params": ["error", { "max": 6 }],
     "max-statements": ["error", { "max": 49 }],
-    "max-lines": ["error", { "max": 1956 }],
+    "max-lines": ["error", { "max": 1500 }],
     "max-lines-per-function": ["error", { "max": 250 }]
   },
   "overrides": [

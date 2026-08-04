@@ -1,15 +1,12 @@
 import type {
   AgentExecutor,
-  AgentJobHandle,
   AgentRunContext,
   AgentRunResult,
   Block,
   BlockRepository,
   BlueprintService,
-  BrainstormSession,
   ChallengePrReviewFindingInput,
   ChooseForkInput,
-  ClarityReview,
   Clock,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -18,66 +15,47 @@ import type {
   ForkChatRequestInput,
   ForkDecisionStepState,
   GateDefinition,
-  GateOutcomeRepository,
   GateRegistry,
   IdGenerator,
   IssueWritebackProvider,
-  JudgeAssessor,
   JudgeDefinition,
-  JudgeRegistry,
   JudgeStepState,
   Logger,
   PipelineStep,
   PrReviewStepState,
-  ProviderCapabilities,
   ProviderRegistry,
-  RequirementConcernLevel,
-  RequirementReview,
   ResolveJudgeInput,
   ResolvePrReviewInput,
-  ResolveRunRepoContext,
   RunInitiatorScope,
   StepCompletionResolver,
-  StepGating,
   StepResolverRegistry,
-  TicketTrackerProvider,
-  WorkRunner,
 } from '@cat-factory/kernel'
 import {
-  getErrorMessage,
   isAsyncAgentExecutor,
   noopLogger,
-  parseLocalModelId,
   runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
-import {
-  applyContainerRunning,
-  applySubtaskProgress,
-  recordDispatchAttribution,
-} from './step-fold.logic.js'
-import { FORK_PROPOSER_KIND, PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
+import { applyContainerRunning, applySubtaskProgress } from './step-fold.logic.js'
+import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
-import type { BugIntakeService, EnvironmentProvisioningService } from '@cat-factory/integrations'
+import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
-import { classifyDispatchFailure } from './job.logic.js'
-import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
+import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
 import { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
 import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
-import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { ReviewGateController } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { JudgeStepController } from './JudgeStepController.js'
 import { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import { GateStepController } from './GateStepController.js'
-import { GateOutcomeRecorder } from '../observability/GateOutcomeRecorder.js'
-import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 import {
   buildGateMap,
   type ExtensionContextDeps,
@@ -86,7 +64,6 @@ import {
 } from './extension-contexts.js'
 import { PrReviewController } from './PrReviewController.js'
 import type { PrVerificationReportController } from './PrVerificationReportController.js'
-import { initialPrReviewState } from './prReview.logic.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import { PollCompletionController } from './PollCompletionController.js'
 import { PollRunningController } from './PollRunningController.js'
@@ -116,117 +93,21 @@ import {
   buildStepHandlerRegistry as buildStepHandlerRegistryImpl,
   buildStepResolverRegistry as buildStepResolverRegistryImpl,
 } from './dispatcher-registries.js'
+import { AgentDispatchController } from './AgentDispatchController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { SpendService } from '@cat-factory/spend'
 import type { BlueprintReconciler } from './ExecutionService.js'
+import {
+  gateOutcomeRecording,
+  type ResolvedRiskPolicy,
+  type RunDispatcherDeps,
+} from './RunDispatcherDependencies.js'
 
-/**
- * The task's fully-resolved merge-threshold preset (block pin → workspace default →
- * built-in). The dispatcher only reads the gate-relevant fields; the full shape is kept so
- * a gate's `attemptBudget(preset)` sees every knob. Mirrors {@link ExecutionService.resolveRiskPolicy}.
- */
-type ResolvedRiskPolicy = {
-  maxComplexity: number
-  maxRisk: number
-  maxImpact: number
-  ciMaxAttempts: number
-  maxRequirementIterations: number
-  maxRequirementConcernAllowed: RequirementConcernLevel
-  judgeMinScore: number
-  judgeMaxBounces: number
-  releaseWatchWindowMinutes: number
-  releaseMaxAttempts: number
-  humanReviewGraceMinutes: number
-  forkDecision?: StepGating | null
-}
-
-/** Collaborators + leaf dependencies the {@link RunDispatcher} needs. */
-export interface RunDispatcherDeps {
-  blockRepository: BlockRepository
-  executionRepository: ExecutionRepository
-  agentExecutor: AgentExecutor
-  /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
-  agentKindRegistry: AgentKindRegistry
-  /** App-owned polling-gate registry (built-ins installed by the facade via `registerBuiltinGates`). */
-  gateRegistry: GateRegistry
-  /**
-   * The app-owned JUDGE registry (the fourth step-taxonomy bucket) the composition root
-   * injected, plus the verdict producer. An absent / disabled assessor makes every judge step
-   * a pass-through, which is exactly what a deployment with no model wired (and the
-   * conformance/e2e suites) gets. See `docs/initiatives/judge-registry.md`.
-   */
-  judgeRegistry: JudgeRegistry
-  judgeAssessor?: JudgeAssessor
-  /**
-   * The prompt-fragment library, used by the judge driver for ONE thing: resolving a rubric's
-   * per-workspace override body (see `JudgeRubric.fragmentId`). Absent ⇒ the registration's
-   * default rubric.
-   */
-  fragmentResolver?: FragmentBodyResolver
-  /** App-owned step-completion-resolver registry (deployment-registered resolvers). */
-  stepResolverRegistry: StepResolverRegistry
-  /** App-owned provider registry the gate machine's {@link GateContext} reads (gate data sources). */
-  providerRegistry: ProviderRegistry
-  workRunner: WorkRunner
-  events: ExecutionEventPublisher
-  idGenerator: IdGenerator
-  clock: Clock
-  /**
-   * Where the dispatcher's best-effort hooks (issue writeback, lease release, repo ops) report
-   * their drops. Absent ⇒ `noopLogger`, which is what the engine unit tests construct with.
-   */
-  logger?: Logger
-  /**
-   * Optional settled-gate projection: the gate machine records each terminal verdict into it
-   * for the operator dashboard's attempt statistics. Absent ⇒ nothing is recorded.
-   */
-  gateOutcomeRepository?: GateOutcomeRepository
-  spend: SpendService
-  stepGraph: StepGraph
-  runStateMachine: RunStateMachine
-  contextBuilder: AgentContextBuilder
-  mergeResolver: MergeResolver
-  companionController: CompanionController
-  testerController: TesterController
-  ralphController: RalphController
-  humanTestController: HumanTestController
-  visualConfirmationController: VisualConfirmationController
-  reviewGate: ReviewGateController
-  forkDecisionController: ForkDecisionController
-  prReviewController: PrReviewController
-  requirementsKind: ReviewKind<RequirementReview>
-  clarityKind: ReviewKind<ClarityReview>
-  requirementsBrainstormKind: ReviewKind<BrainstormSession>
-  architectureBrainstormKind: ReviewKind<BrainstormSession>
-  /**
-   * The interactive-interviewer gates wired for this deployment (initiative-planning, document
-   * interview, …). Each rides the shared {@link InterviewGateController} spine and is routed by
-   * the `interview-gate` TRAIT, keyed on its own `agentKind` — so adding a new interviewer wires
-   * its controller here, with no new dispatch branch. Absent/unwired kinds pass through.
-   */
-  interviewControllers?: InterviewGateController<unknown>[]
-  /** Keeps the run's verification report current on its PR; a no-op with no publisher wired. */
-  prVerificationReport: PrVerificationReportController
-  runInitiatorScope: RunInitiatorScope
-  environmentProvisioning?: EnvironmentProvisioningService
-  ticketTrackerProvider?: TicketTrackerProvider
-  issueWriteback?: IssueWritebackProvider
-  /** The recurring `bug-intake` step's read-and-claim helper; absent → the step is a no-op. */
-  bugIntakeService?: BugIntakeService
-  notificationService?: NotificationService
-  blueprintReconciler?: BlueprintReconciler
-  initiativeService?: InitiativeService
-  resolveRunRepoContext?: ResolveRunRepoContext
-  resolveProviderCapabilities?: (
-    workspaceId: string,
-    initiatedBy?: string | null,
-  ) => Promise<ProviderCapabilities>
-  /** Resolve a task's merge preset (stays on the engine, shared with the merge subgraph). */
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRiskPolicy>
-  /** Whether a resolved model id incurs metered monetary cost (the start gate's predicate). */
-  modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
-}
+// The dependency DECLARATIONS live in `RunDispatcherDependencies.ts` (the same move
+// `ExecutionServiceDependencies.ts` is) and are re-exported here, so every existing import site
+// still reaches them through this module.
+export type { ResolvedRiskPolicy, RunDispatcherDeps } from './RunDispatcherDependencies.js'
 
 /**
  * The per-step dispatch + completion spine of the execution engine. It owns the four
@@ -244,33 +125,6 @@ export interface RunDispatcherDeps {
  * engine's `finalizeMerge`). `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate`
  * delegate here; no behaviour changes in the move.
  */
-/**
- * The `recordGateOutcome` callback both gate-settling controllers take, or nothing when no
- * projection is wired.
- *
- * Computed ONCE and spread into both: a gate reaches a terminal verdict down two paths, the
- * precheck/exhaustion machine in {@link GateStepController} and the investigate-don't-fix
- * completion in {@link PollRunningController}, and wiring only the first is why the
- * `post-release-health` gate was absent from the statistics entirely. Two call sites, one
- * recorder, so a third settling path has one obvious thing to reach for.
- *
- * A free function rather than an inline branch in the constructor: each controller takes ONE
- * bound callback and must stay independent of the sink's collaborators, and the constructor is
- * already at its statement budget (budgets are split triggers).
- */
-function gateOutcomeRecording(
-  deps: Pick<RunDispatcherDeps, 'gateOutcomeRepository' | 'clock'>,
-  logger: Logger,
-): { recordGateOutcome?: (settled: SettledGate) => Promise<void> } {
-  if (!deps.gateOutcomeRepository) return {}
-  const recorder = new GateOutcomeRecorder({
-    gateOutcomeRepository: deps.gateOutcomeRepository,
-    now: () => deps.clock.now(),
-    logger,
-  })
-  return { recordGateOutcome: (settled) => recorder.record(settled) }
-}
-
 export class RunDispatcher {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
@@ -309,16 +163,14 @@ export class RunDispatcher {
   private readonly notificationService?: NotificationService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly initiativeService?: InitiativeService
-  private readonly resolveRunRepoContext?: ResolveRunRepoContext
-  private readonly resolveProviderCapabilities?: (
-    workspaceId: string,
-    initiatedBy?: string | null,
-  ) => Promise<ProviderCapabilities>
   private readonly resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
   ) => Promise<ResolvedRiskPolicy>
-  private readonly modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
+  // `resolveRunRepoContext` / `resolveProviderCapabilities` / `modelIdIsMetered` are NOT held
+  // here: their only readers moved to {@link AgentDispatchController}, which takes them straight
+  // off the deps object. A field kept "for symmetry" would be write-only state that no
+  // typecheck flags (TypeScript does not report an assigned-but-unread private member).
 
   /**
    * The deterministic `deployer` step family (the multi-frame provision fan-out, the async
@@ -334,6 +186,13 @@ export class RunDispatcher {
   private readonly pollCompletion: PollCompletionController
   /** The RUNNING half of the poll branch tree — the sibling of {@link pollCompletion}. */
   private readonly pollRunning: PollRunningController
+  /**
+   * The DISPATCH side of a step — the other side of the park from the two poll controllers above:
+   * context build, registered pre-ops, the async start-and-park / inline call, and the facts only a
+   * dispatch can record (resolved model, job attribution, investigation diagnostics). The public
+   * methods below are thin pass-throughs the execution service and the step registries re-export.
+   */
+  private readonly agentDispatch: AgentDispatchController
   /** The one-shot engine steps (`tracker` / `bug-intake` / `initiative-committer`). */
   private readonly oneShot: OneShotStepController
   /**
@@ -409,10 +268,7 @@ export class RunDispatcher {
     this.notificationService = deps.notificationService
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
-    this.resolveRunRepoContext = deps.resolveRunRepoContext
-    this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.resolveRiskPolicy = deps.resolveRiskPolicy
-    this.modelIdIsMetered = deps.modelIdIsMetered
     this.deployer = new DeployerStepController({
       blockRepository: deps.blockRepository,
       contextBuilder: deps.contextBuilder,
@@ -445,6 +301,21 @@ export class RunDispatcher {
       resolveRunRepoContext: deps.resolveRunRepoContext,
       issueWriteback: deps.issueWriteback,
       logger: deps.logger,
+    })
+    this.agentDispatch = new AgentDispatchController({
+      agentExecutor: deps.agentExecutor,
+      blockRepository: deps.blockRepository,
+      clock: deps.clock,
+      contextBuilder: deps.contextBuilder,
+      deployer: this.deployer,
+      repoOps: this.repoOps,
+      runStateMachine: deps.runStateMachine,
+      runInitiatorScope: this.runInitiatorScope,
+      resolveRunRepoContext: deps.resolveRunRepoContext,
+      resolveProviderCapabilities: deps.resolveProviderCapabilities,
+      modelIdIsMetered: deps.modelIdIsMetered,
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
     })
     this.prReviewResolution = new PrReviewResolutionController({
       runStateMachine: deps.runStateMachine,
@@ -600,296 +471,44 @@ export class RunDispatcher {
     }
   }
 
-  /**
-   * The generic container/inline-agent step — the lowest-priority StepHandler, claiming
-   * every step no more-specific handler did (coder, architect, spec-writer, merger,
-   * task-estimator, the container-backed companions, …). Builds the agent context, runs the
-   * kind's pre-ops, then either dispatches an async container job and parks (the durable
-   * driver polls between sleeps) or runs the inline LLM call and records the result. This is
-   * what the dispatch chain falls through to; all the deterministic / gate / inline-review
-   * kinds are claimed earlier by their own handlers (see {@link buildStepHandlerRegistry}).
-   */
-  private async handleAgentStep(
+  // ---- Dispatch-side pass-throughs ----------------------------------------
+  // The dispatch half of a step lives on {@link AgentDispatchController}; these thin delegations
+  // keep the dispatcher the single surface `ExecutionService` and the step registries re-export.
+
+  /** @see AgentDispatchController.handleAgentStep */
+  private handleAgentStep(
     ctx: StepHandlerContext,
     dispatchKind?: string,
     augmentContext?: (context: AgentRunContext) => void,
   ): Promise<AdvanceResult> {
-    const { workspaceId, instance, step, block, isFinalStep, options } = ctx
-
-    // Async (container) steps don't block: dispatch the job and park. The durable
-    // driver polls `pollAgentJob` between sleeps so the run can span far longer
-    // than a single durable step's timeout, while each step stays short. A set
-    // `jobId` means a prior (possibly replayed) dispatch already started the job,
-    // so we re-attach instead of starting a duplicate.
-    //
-    // `dispatchKind` overrides the dispatched agent kind WITHOUT changing `step.agentKind`
-    // — used by the fork-decision phase to dispatch the read-only `fork-proposer` explore
-    // job as a HELPER off the coder step (Phase A). The completion still records against the
-    // coder step, and the fork-proposal interceptor keys on `step.agentKind` + the fork state.
-    const context = await this.contextBuilder.buildContext(
-      workspaceId,
-      instance,
-      step,
-      isFinalStep,
-      block,
-      dispatchKind ? { agentKind: dispatchKind } : undefined,
-    )
-    // A caller re-dispatching this step under an overriding kind can fold extra context in
-    // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
-    // hands it the selected findings). Runs before pre-ops / dispatch so the job body sees it.
-    augmentContext?.(context)
-    // A registered custom kind's PRE-ops run deterministic backend repo work before the
-    // agent dispatches (e.g. read a baseline `spec/` shard into the prompt). Gated on the
-    // step not having dispatched yet so a Workflows replay (jobId already set) doesn't
-    // re-run them; a no-op for built-in kinds and when GitHub isn't wired.
-    if (!step.jobId) {
-      await this.repoOps.runRegisteredPreOps(workspaceId, instance, block, step, context)
-    }
-    const executor = this.agentExecutor
-    if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
-      if (!step.jobId) {
-        // The model is fixed the moment its ref resolves (block pin > workspace
-        // default > env routing) — long before the container is up — so name it on
-        // the very first "spinning up container" emit instead of waiting for the
-        // dispatch to return. startJob confirms the same value below.
-        const previewModel = await this.previewStepModel(context)
-        if (previewModel) step.model = previewModel
-        // Surface the explicit container lifecycle for the cold-boot window: dispatch
-        // blocks until the per-run container is up and has accepted the job, so emitting
-        // `starting` now lets the details show the boot (and then the live phase + the
-        // container id/url) instead of a blank "working" state.
-        step.container = { status: 'starting' }
-        // Seed the in-flight PR-review state so a `pr-reviewer` run surfaces a real `reviewing`
-        // phase in the deep-review window (the reviewed PR + the live slices-reviewed progress
-        // off the step's todo subtasks) instead of an empty panel until the findings land. Only
-        // on the reviewer's OWN first dispatch: a `fix`/`post` re-dispatch reuses this step under
-        // an overriding kind and already carries `prReview` (`fixing`/`posting`), which must not
-        // be reset back to `reviewing`.
-        if (step.agentKind === PR_REVIEWER_KIND && !step.prReview) {
-          const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
-          // Capture the PR head sha NOW (review start), so the `post` resolution can detect a
-          // branch update between here and posting and fold drifted findings into the summary.
-          const reviewedHeadSha = await this.resolveReviewedHeadSha(workspaceId, instance, block)
-          step.prReview = initialPrReviewState(prUrl, step.model ?? null, reviewedHeadSha)
-        }
-        // Surface the block's ephemeral environment (if any) alongside the cold-boot
-        // phase, so a run's details show the env spinning up next to the container.
-        await this.deployer.attachEnvironmentProjection(workspaceId, instance.blockId, step)
-        await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
-
-        let handle: AgentJobHandle
-        try {
-          handle = await executor.startJob(context)
-        } catch (error) {
-          // Classify the throw (see {@link classifyDispatchFailure}). A genuine container
-          // accept failure (HTTP/network/capacity) is framed as `dispatch` ("container failed
-          // to start") with the EXACT provider response as detail; a dispatch-time eviction
-          // routes to `evicted`. But a job is BUILT before any container is contacted, so a
-          // precondition (e.g. `github_not_connected` — no connected repo) is a `preflight`
-          // rejection that surfaces its own actionable message + machine-readable reason
-          // instead of the misleading container framing.
-          step.container = { status: 'errored' }
-          await this.runStateMachine.casPersist(workspaceId, instance)
-          await this.runStateMachine.emitInstance(workspaceId, instance)
-          // Hand the classifier the step's run history so a container lost AFTER work began (a
-          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`) is reported as an
-          // unrecoverable eviction — with elapsed minutes + any partial slice count — rather than
-          // the misleading "container failed to start". See ADR 0026 D1.
-          return {
-            kind: 'job_failed',
-            ...classifyDispatchFailure(error, {
-              evictionRecoveries: step.evictionRecoveries,
-              transientEvictionRecoveries: step.transientEvictionRecoveries,
-              startedAt: step.startedAt,
-              sliceCount: step.prReview?.slices?.length,
-            }),
-          }
-        }
-        step.jobId = handle.jobId
-        // Record the model at dispatch — the poll site can't resolve it later.
-        recordDispatchAttribution(step, handle, context.agentKind)
-        // Surface web-search availability + provider on the step (run details), resolved
-        // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
-        if (handle.search) step.search = handle.search
-        // Stamp after-the-fact investigation diagnostics for this dispatch: the step's
-        // agent kind, resolved model, and repo — the facts a failure post-mortem needs but
-        // that are otherwise spread across DB joins / the harness transcript. The execution
-        // backend (native vs. container) is unknown until the transport reports it on the
-        // first poll, so `pollAgentJob` fills it in then.
-        this.recordDispatchDiagnostics(instance, context, handle)
-        // The dispatch returned, so the container is up and the job is accepted; the
-        // live phase + the container id/url arrive on the first poll.
-        step.container = { status: 'up' }
-        await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
-      }
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    }
-
-    // Inline path: the model is resolved before the (blocking) LLM call, so surface
-    // it now — the board names the model while the step is querying instead of only
-    // once the result lands. recordStepResult re-asserts it from the result.
-    const previewModel = await this.previewStepModel(context)
-    if (previewModel && previewModel !== step.model) {
-      step.model = previewModel
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-    }
-
-    const result = await this.runAgent(context, options)
-    return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+    return this.agentDispatch.handleAgentStep(ctx, dispatchKind, augmentContext)
   }
 
-  /**
-   * Stamp the run's investigation diagnostics from a container dispatch (the `lastDispatch`
-   * block + the control-plane host). Mutates `instance` in place; the caller upserts. Reflects
-   * the MOST RECENT dispatch — a run's failure is almost always in its latest step, and keeping
-   * one block (not a per-step history) keeps the record small. `executionBackend` is left for the
-   * first poll to fill (the transport reports it). Never carries a token/secret.
-   */
-  private recordDispatchDiagnostics(
-    instance: ExecutionInstance,
-    context: AgentRunContext,
-    handle: AgentJobHandle,
-  ): void {
-    // Orchestration is runtime-neutral (no @types/node), so read `process.platform` off globalThis
-    // with a guard rather than the bare global — undefined on a runtime that doesn't expose it
-    // (e.g. workerd), which just omits the host block. Best-effort investigation context.
-    const platform = (globalThis as { process?: { platform?: string } }).process?.platform
-    instance.diagnostics = {
-      ...instance.diagnostics,
-      lastDispatch: {
-        stepIndex: instance.currentStep,
-        agentKind: context.agentKind,
-        ...(handle.model ? { model: handle.model } : {}),
-        ...(handle.repo ? { repo: handle.repo } : {}),
-        at: this.clock.now(),
-      },
-      ...(platform ? { host: { platform } } : {}),
-    }
-  }
-
-  /**
-   * Fill in `diagnostics.lastDispatch.executionBackend` from the transport-reported backend on
-   * the first poll that carries it (native host process vs. sandboxed container — the datum that
-   * is otherwise indistinguishable after the fact). Idempotent: a no-op once set, or when the
-   * update carries no backend / the dispatch block is missing. Returns whether it changed
-   * anything (so the caller can skip a redundant upsert).
-   */
+  /** @see AgentDispatchController.recordBackendDiagnostics */
   private recordBackendDiagnostics(
     instance: ExecutionInstance,
     backend: string | undefined,
   ): boolean {
-    const dispatch = instance.diagnostics?.lastDispatch
-    if (!backend || !dispatch || dispatch.executionBackend === backend) return false
-    instance.diagnostics = {
-      ...instance.diagnostics,
-      lastDispatch: { ...dispatch, executionBackend: backend },
-    }
-    return true
+    return this.agentDispatch.recordBackendDiagnostics(instance, backend)
   }
 
-  /**
-   * Preview the model a step will run (`provider:model`) ahead of the work, so the
-   * board can show it during the inline query / container cold-boot rather than only
-   * once the result or job handle lands. Best-effort: the executor may not implement
-   * a preview, and a resolution failure (e.g. an unwired container kind that fails at
-   * dispatch anyway) must never break the run — both yield undefined.
-   */
-  async previewStepModel(context: AgentRunContext): Promise<string | undefined> {
-    if (!this.agentExecutor.resolveModel) return undefined
-    try {
-      return await this.agentExecutor.resolveModel(context)
-    } catch {
-      return undefined
-    }
+  /** @see AgentDispatchController.previewStepModel */
+  previewStepModel(context: AgentRunContext): Promise<string | undefined> {
+    return this.agentDispatch.previewStepModel(context)
   }
 
-  /**
-   * Whether the current step incurs NO metered monetary LLM cost, so the spend gate can
-   * let it proceed even when the budget is exhausted. Two non-metered cases:
-   *  - a flat-rate SUBSCRIPTION (quota) model — Claude Code / Codex on a pooled token;
-   *    resolved through the executor (the authority on "subscriptions always win").
-   *  - a LOCAL-runner model (Ollama / LM Studio / …) — keyless, runs on the user's own
-   *    endpoint, so it costs the deployment nothing; detected off the resolved model id.
-   * This is what makes a `0` budget mean "no PAID spend" without bricking a workspace that
-   * deliberately runs only local models or subscriptions (see the spend-budget docs).
-   *
-   * Once the executor resolves the step's concrete model id, the metered/non-metered
-   * decision is delegated to the SAME {@link modelIdIsMetered} predicate the up-front
-   * {@link assertBudgetAllowsPipeline} gate uses, so the two gates can't classify a model
-   * differently (a divergence would let a run pass the start gate then immediately pause,
-   * or vice versa). The executor's `isQuotaBased` is still consulted first as the
-   * authoritative subscription-routing signal; the shared predicate covers local-runner +
-   * subscription-by-capability + Cloudflare classification identically to the start gate.
-   * Falls back to a bare local-id check when no capability resolver is wired.
-   *
-   * Best-effort and side-effect-free: an executor without the capability, a missing block,
-   * or any resolution error all report false (treated as budget-metered, the prior
-   * behaviour). Only consulted on the over-budget path, so it never touches the happy path.
-   */
-  async currentStepIsNonMetered(
+  /** @see AgentDispatchController.currentStepIsNonMetered */
+  currentStepIsNonMetered(
     workspaceId: string,
     instance: ExecutionInstance,
-    step: ExecutionInstance['steps'][number],
+    step: PipelineStep,
   ): Promise<boolean> {
-    try {
-      const block = await this.blockRepository.get(workspaceId, instance.blockId)
-      if (!block) return false
-      const isFinalStep = instance.currentStep === instance.steps.length - 1
-      const context = await this.contextBuilder.buildContext(
-        workspaceId,
-        instance,
-        step,
-        isFinalStep,
-        block,
-      )
-      if (this.agentExecutor.isQuotaBased && (await this.agentExecutor.isQuotaBased(context))) {
-        return true
-      }
-      if (this.agentExecutor.resolveModel) {
-        const modelId = await this.agentExecutor.resolveModel(context)
-        // Classify the resolved id through the shared predicate (same as the start gate)
-        // when capabilities are wired; else fall back to the bare local-runner check.
-        if (this.resolveProviderCapabilities) {
-          const caps = await this.resolveProviderCapabilities(workspaceId, instance.initiatedBy)
-          if (!this.modelIdIsMetered(modelId, caps)) return true
-        } else if (parseLocalModelId(modelId)) {
-          return true
-        }
-      }
-      return false
-    } catch {
-      return false
-    }
+    return this.agentDispatch.currentStepIsNonMetered(workspaceId, instance, step)
   }
 
-  /**
-   * Resolve the reviewed PR's head sha at review-START, stamped onto `step.prReview` when the
-   * `pr-reviewer` first dispatches. The `post` resolution later re-reads the PR head and folds
-   * every finding into the summary when it moved (the frozen line numbers may have drifted). Best
-   * effort: null on any failure, no PR number, or a client without the `pullRequestHeadSha`
-   * capability — the drift check then simply doesn't run (posting falls back to per-line filtering).
-   */
-  private async resolveReviewedHeadSha(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block | null | undefined,
-  ): Promise<string | null> {
-    if (!block) return null
-    const prNumber = resolvePrNumber(block.taskTypeFields ?? undefined)
-    if (prNumber == null) return null
-    try {
-      const runRepo = await this.resolveRunRepoContext?.(workspaceId, block.id)
-      const headSha = runRepo?.repo.pullRequestHeadSha
-      if (!headSha) return null
-      return await this.runInitiatorScope({ workspaceId, initiatedBy: instance.initiatedBy }, () =>
-        headSha(prNumber),
-      )
-    } catch {
-      return null
-    }
+  /** @see AgentDispatchController.runAgent */
+  runAgent(context: AgentRunContext, options: AdvanceOptions = {}): Promise<AgentRunResult> {
+    return this.agentDispatch.runAgent(context, options)
   }
 
   /**
@@ -1810,26 +1429,6 @@ export class RunDispatcher {
     itemId: string,
   ): Promise<FollowUpsStepState> {
     return this.followUpGate.dismissFollowUp(workspaceId, executionId, itemId)
-  }
-
-  /**
-   * Invoke the agent for an already-built context. Failures are swallowed into the
-   * step output so a run never wedges — unless `rethrowAgentErrors` is set (the
-   * durable path), in which case the error propagates so the driver's per-step
-   * retry can take over.
-   */
-  async runAgent(context: AgentRunContext, options: AdvanceOptions = {}): Promise<AgentRunResult> {
-    try {
-      return await this.agentExecutor.run(context)
-    } catch (error) {
-      // The durable driver wants real failures to surface so its per-step retry
-      // can kick in (and the error gets persisted after retries are exhausted).
-      if (options.rethrowAgentErrors) throw error
-      // Otherwise a failed agent must not wedge the run; record and complete.
-      return {
-        output: `Agent error: ${getErrorMessage(error)}`,
-      }
-    }
   }
 
   /**

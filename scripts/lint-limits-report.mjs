@@ -28,6 +28,12 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+// Spawn the package's own bin ENTRY POINT under this node, not `node_modules/.bin/oxlint`: the
+// latter is a POSIX shell script `execFileSync` can't spawn on Windows, and its `.CMD` sibling
+// needs `shell: true` (which would then re-parse the temp config path). The entry point is a
+// plain ES module, so `node <path>` is the one spelling that works on every platform.
+const oxlintBin = join(repoRoot, 'node_modules/oxlint/bin/oxlint')
+
 // The ratcheted rules, paired with the reasonable end-state target from the initiative tracker.
 // Keep this list in step with `.oxlintrc.json`'s `rules` block and the tracker's baseline table.
 const RULES = [
@@ -100,8 +106,8 @@ function runProbe() {
     let stdout = ''
     try {
       stdout = execFileSync(
-        join(repoRoot, 'node_modules/.bin/oxlint'),
-        ['--config', configPath, '--format', 'json', '.'],
+        process.execPath,
+        [oxlintBin, '--config', configPath, '--format', 'json', '.'],
         { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
       )
     } catch (err) {

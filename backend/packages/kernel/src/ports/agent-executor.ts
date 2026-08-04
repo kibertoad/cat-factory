@@ -9,6 +9,7 @@ import type {
   FrontendConfig,
   InjectedContextFile,
   InstanceSize,
+  ModelFlavor,
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
@@ -119,6 +120,19 @@ export interface AgentRunContext {
    * value set here neither raises nor constrains an ambient `claude`/`codex` inline run.
    */
   maxOutputTokens?: number
+  /**
+   * The order this dispatch prefers a model's ROUTES in, from the model preset in force
+   * (`ModelPreset.providerPreference`): a compliance preset can put AWS Bedrock ahead of a
+   * model's own provider API, an everyday preset can put a flat-rate subscription first.
+   * Absent ⇒ the deployment's default order (`DEFAULT_PROVIDER_PREFERENCE`).
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link systemPromptOverride} and {@link maxOutputTokens}: the container, inline and consensus
+   * paths must not disagree about which route a step ran on, and the run's telemetry records the
+   * route that was actually used. It REORDERS and never filters, so a model whose only route the
+   * preset omitted still resolves — see kernel's `orderedProviderPreference`.
+   */
+  providerPreference?: readonly ModelFlavor[]
   /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
