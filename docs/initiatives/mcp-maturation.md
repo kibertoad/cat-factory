@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **proposed; no slices landed.** Source: the 2026-08-04 review of both MCP surfaces.
+Status: **in progress; slice 2 landed.** Source: the 2026-08-04 review of both MCP surfaces.
 
 ## Goal
 
@@ -83,20 +83,24 @@ dump and never uses the word MCP).
       or a separate budget); this is the phase's one image bump, so the harness-side test backfill
       rides it: the `toolServersSection` prompt contract, `harnesses` narrowing, Codex
       `config.toml` end to end, and the Codex+http case above.
-- [ ] **2. The published server: guarded, filterable, structured.** Extend
-      `check-publish-integrity.mjs` and `check-package-catalog.mjs` to `sdk/*`, add an MCP runner
-      to `backend/internal/sdk-smoketest` so CI drives the real binary against a real backend,
-      and cover `bin.ts` (stderr-only rule, exit codes, `CAT_FACTORY_API_KEY_FILE` as the
-      plaintext-config mitigation until slice 6). Then the protocol depth the generator already
-      has the data for: per-tool allow/deny beside the group filter (today excluding the
-      PR-merging `notifications_act` costs the whole `notifications` group), `outputSchema` +
-      `structuredContent` from the response schemas already in the IR, compact JSON instead of
-      `JSON.stringify(value, null, 2)` (the indentation inflates every read for free), and
-      `destructiveHint`/`idempotentHint` on the four real-money tools (`tasks_start`,
-      `tasks_retry`, `jobs_create`, `notifications_act`). Docs ride along: `sdk/AGENTS.md` learns
-      the MCP package exists (the generated table, the `MCP_OMITTED_OPERATIONS` rule), the README
-      gains a `claude mcp add` snippet and one worked flow (create, start, poll, decide), and the
-      server instructions gain polling guidance for the SSE-shaped gaps.
+- [x] **2. The published server: guarded, filterable, structured.** (#1662) Landed as scoped, with
+      two decisions the slice had to make on the way: - **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a
+      successful result with no `structuredContent` for a tool that declares a schema, and
+      VALIDATES the content it gets. `/api/v1` is additive forever, so every assertion that
+      validation could turn against a newer deployment is dropped on the way out: no `required`, no
+      `enum`, no closed `anyOf`, no bounds. The known members of a vocabulary go in the field's
+      description, where a new member cannot invalidate them. `emit-mcp.mjs` carries this as an
+      `INPUT`/`OUTPUT` mode rather than a second renderer. - **The result cap became a REFUSAL rather than a truncation**, forced by the same obligation:
+      half an object cannot satisfy the schema it was cut out of. It is also the better trade on its
+      own terms, since the old `[TRUNCATED]` note spent the whole cap delivering "this is not valid
+      JSON, narrow instead of reading on".
+
+      What the phase COSTS, for whoever revisits it: the declared output schemas add roughly 31 KB to
+              every `tools/list`, against about 20 KB before, and the text block still accompanies
+              `structuredContent` as the protocol recommends. Dropping the declarations (keeping
+              `structuredContent`) is the cheap reversal if real transcripts show the tool-list read
+              dominating; the compact-JSON change offsets part of it on the result side.
+
 - [ ] **3. Hosted MCP endpoint.** Mount the existing server behind
       `StreamableHTTPServerTransport` on BOTH facades, behind the public-API key auth and scope
       ladder, with a conformance assertion so the facades cannot drift. This is the adoption
@@ -148,40 +152,40 @@ dump and never uses the word MCP).
 Every finding from the review, with its disposition. "Slice N" means the slice's checklist above
 carries it.
 
-| Finding                                                                          | Disposition                  |
-| -------------------------------------------------------------------------------- | ---------------------------- |
-| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                      |
-| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                      |
-| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                      |
-| No cap on server count/size, unlike the context-file corpus                       | Slice 1                      |
-| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                      |
-| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                      |
-| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                      |
-| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                      |
-| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6  |
-| Tool filtering is group-coarse, startup-only                                      | Slice 2                      |
-| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                      |
-| `destructiveHint` unset on the four spending tools                                | Slice 2                      |
-| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                      |
-| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                      |
-| No probe/health check; `allowedTools` never checked against reality               | Slice 4                      |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                      |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                      |
-| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                      |
-| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                      |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 4                      |
-| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                      |
-| Capability credentials absent from the public API                                 | Slice 5                      |
-| No OAuth for remote tool servers                                                  | Slice 6                      |
-| No MCP authorization on the serving side                                          | Slice 6                      |
-| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)          |
-| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)          |
-| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)          |
-| No marketplace/catalog of known vendor servers                                    | Not pursued (below)          |
+| Finding                                                                           | Disposition                   |
+| --------------------------------------------------------------------------------- | ----------------------------- |
+| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                       |
+| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                       |
+| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                       |
+| No cap on server count/size, unlike the context-file corpus                       | Slice 1                       |
+| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                       |
+| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                       |
+| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                       |
+| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                       |
+| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
+| Tool filtering is group-coarse, startup-only                                      | Slice 2                       |
+| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                       |
+| `destructiveHint` unset on the four spending tools                                | Slice 2                       |
+| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                       |
+| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
+| No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                       |
+| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                       |
+| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 4                       |
+| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                       |
+| Capability credentials absent from the public API                                 | Slice 5                       |
+| No OAuth for remote tool servers                                                  | Slice 6                       |
+| No MCP authorization on the serving side                                          | Slice 6                       |
+| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
+| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
+| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)           |
+| No marketplace/catalog of known vendor servers                                    | Not pursued (below)           |
 | Checklist granularity ((workspace, key) sharing, unscoped list)                   | Standing decisions, unchanged |
-| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)    |
-| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)             |
-| Pi has no MCP client                                                              | Standing non-goal (ADR 0029) |
+| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)     |
+| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
+| Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
 
 ## Deliberately not pursued
 
@@ -228,3 +232,23 @@ Recorded so the next iteration does not re-propose them.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
   the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
   internal-first soft launch for an endpoint whose whole point is external callers.
+
+## Gotchas slice 2 surfaced
+
+- **A declared `outputSchema` is a CONTRACT the caller enforces, not a hint.** The MCP client throws
+  when a schema-carrying tool answers successfully without `structuredContent`, and ajv-validates the
+  content against the schema. Anything that shortens, samples or partially renders a result is
+  therefore incompatible with declaring one, which is what turned the cap into a refusal. Slice 3's
+  hosted endpoint inherits this: the same tool table, the same obligation.
+- **`sdk/*` was outside two guards, and the fix is the GLOB, not another entry.** Both
+  `check-publish-integrity.mjs` and `check-package-catalog.mjs` named `sdk/typescript` or nothing;
+  they now expand `sdk/*`, so the next SDK-family member is covered without anyone remembering. The
+  Python/Go/Java clients have no `package.json` and drop out at read time.
+- **The MCP phase of `sdk-smoketest` is graded, not compared.** There is one implementation, so it
+  does not join `compareReports`; it reuses that module's problem vocabulary only so both phases
+  report the same way. It is also the only check that can see a generated output schema disagree with
+  what the deployment really answers, which makes it the natural home for slice 3's hosted-endpoint
+  assertions too.
+- **`pnpm build` on Windows executes zero tasks** (the root script's quoted `--filter` globs survive
+  into turbo verbatim), so a local `pnpm check:publish` reports every package as an empty shell. Run
+  `pnpm exec turbo run build --filter=./backend/** --filter=./sdk/**` instead.

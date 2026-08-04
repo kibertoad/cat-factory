@@ -71,13 +71,19 @@ export function createCatFactoryMcpServer(options: CatFactoryMcpOptions): CatFac
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      // Declared only where the operation has an object to describe (a `204` has none). A tool that
+      // declares one is then OBLIGED to return `structuredContent` on every success, which is why
+      // `renderResult` refuses an over-cap result rather than truncating it.
+      ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
       annotations: {
         title: tool.title,
-        // The only annotation this facade can state truthfully. `readOnlyHint` follows from the
-        // HTTP method; `destructiveHint` and `idempotentHint` are deliberately left unset rather
-        // than guessed, because a DELETE here is idempotent AND destructive and the defaults a
-        // host assumes for an unset hint are safer than a wrong one.
+        // `readOnlyHint` follows from the HTTP method. The other two come from the generated table
+        // and are present only where the consequence is real money or a merged pull request; where
+        // they are absent the protocol's own defaults apply, which are the cautious ones.
         readOnlyHint: tool.readOnly,
+        ...(tool.hints
+          ? { destructiveHint: tool.hints.destructive, idempotentHint: tool.hints.idempotent }
+          : {}),
       },
     })),
   }))
@@ -102,6 +108,7 @@ export function createCatFactoryMcpServer(options: CatFactoryMcpOptions): CatFac
       const result = await tool.invoke(client, args)
       return renderResult(result, {
         toolName: tool.name,
+        structured: tool.outputSchema !== undefined,
         ...(options.maxResultChars !== undefined ? { maxChars: options.maxResultChars } : {}),
       })
     } catch (error) {

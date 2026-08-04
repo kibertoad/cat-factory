@@ -10,6 +10,17 @@ It is a **facade**, not a client. Every tool is one call on
 
 ## Run it
 
+With Claude Code, in one line:
+
+```sh
+claude mcp add cat-factory \
+  --env CAT_FACTORY_BASE_URL=https://cat-factory.example.com \
+  --env CAT_FACTORY_API_KEY_FILE=$HOME/.config/cat-factory/api-key \
+  -- npx -y @cat-factory/mcp-server
+```
+
+Or in any host's own config format:
+
 ```jsonc
 // An MCP host's server config
 {
@@ -19,7 +30,7 @@ It is a **facade**, not a client. Every tool is one call on
       "args": ["-y", "@cat-factory/mcp-server"],
       "env": {
         "CAT_FACTORY_BASE_URL": "https://cat-factory.example.com",
-        "CAT_FACTORY_API_KEY": "cf_live_...",
+        "CAT_FACTORY_API_KEY_FILE": "/home/you/.config/cat-factory/api-key",
       },
     },
   },
@@ -30,19 +41,76 @@ Mint the key from the deployment (`backend/docs/public-api.md` §Setup) and give
 scope that does the job**: `read ⊂ write ⊂ decide ⊂ admin`. Every tool is scoped to the key's
 workspace, and the key is what actually decides what a model can do here.
 
-| Variable                           | Meaning                                                         |
-| ---------------------------------- | --------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`             | The deployment's origin. Required.                              |
-| `CAT_FACTORY_API_KEY`              | A public-API key. Required.                                     |
-| `CAT_FACTORY_MCP_GROUPS`           | Comma-separated resource groups to expose. Unset ⇒ all of them. |
-| `CAT_FACTORY_MCP_READ_ONLY`        | `true` ⇒ expose only the tools that change nothing.             |
-| `CAT_FACTORY_MCP_MAX_RESULT_CHARS` | Ceiling on one tool result. Default 100,000.                    |
-| `CAT_FACTORY_MCP_TIMEOUT_MS`       | Per-request deadline passed to the SDK. `0` disables it.        |
-| `CAT_FACTORY_MCP_MAX_RETRIES`      | Retries for a retriable failure, passed to the SDK.             |
+| Variable                           | Meaning                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL`             | The deployment's origin. Required.                                         |
+| `CAT_FACTORY_API_KEY`              | A public-API key. Required, unless the file below is given.                |
+| `CAT_FACTORY_API_KEY_FILE`         | A file holding the key instead. Either one, never both.                    |
+| `CAT_FACTORY_MCP_GROUPS`           | Comma-separated resource groups to expose. Unset ⇒ all of them.            |
+| `CAT_FACTORY_MCP_TOOLS`            | Comma-separated tool names to expose. Unset ⇒ all the other filters leave. |
+| `CAT_FACTORY_MCP_EXCLUDE_TOOLS`    | Comma-separated tool names to withhold, applied after every other filter.  |
+| `CAT_FACTORY_MCP_READ_ONLY`        | `true` ⇒ expose only the tools that change nothing.                        |
+| `CAT_FACTORY_MCP_MAX_RESULT_CHARS` | Ceiling on one tool result. Default 100,000.                               |
+| `CAT_FACTORY_MCP_TIMEOUT_MS`       | Per-request deadline passed to the SDK. `0` disables it.                   |
+| `CAT_FACTORY_MCP_MAX_RETRIES`      | Retries for a retriable failure, passed to the SDK.                        |
 
-Missing credentials, an unknown group name and a non-numeric ceiling all **fail at startup**. A
-server that comes up and then fails every call is reported by the host as connected, and the model
-spends turns discovering otherwise.
+Missing credentials, an unknown group or tool name, a filter combination that would expose nothing,
+and a non-numeric ceiling all **fail at startup**. A server that comes up and then fails every call
+is reported by the host as connected, and the model spends turns discovering otherwise.
+
+### Keep the key out of the host's config
+
+`CAT_FACTORY_API_KEY_FILE` names a file to read the key from. A stdio server's environment IS the
+host's config file, so the inline variable means a long-lived credential in plaintext in a home
+directory, readable by everything that can read that file and present in every backup and every
+screen share of it. A path is not a secret, so pointing at one lets the key live somewhere locked
+down (`chmod 600`, a mounted secret, a secrets-manager sidecar's drop).
+
+Setting **both** is refused rather than resolved by precedence: two live sources for one credential
+means a rotation can land on the half nobody reads, and the deployment goes on working with the old
+key right up until it is revoked.
+
+### Choosing what a model can reach
+
+Three filters, narrowest last, all of them a convenience rather than a boundary (the key's scope is
+the boundary):
+
+- `CAT_FACTORY_MCP_GROUPS` is the coarse unit an operator thinks in: "no debug tools on this one".
+- `CAT_FACTORY_MCP_TOOLS` exposes an explicitly chosen set. Precise, but it has to be re-edited
+  whenever `/api/v1` grows, and a forgotten edit silently withholds the new capability.
+- `CAT_FACTORY_MCP_EXCLUDE_TOOLS` withholds named tools and keeps admitting everything else,
+  including tools added later. This is the one to reach for to keep ONE capability away from a model:
+  `CAT_FACTORY_MCP_EXCLUDE_TOOLS=notifications_act` keeps the PR-merging tool away without costing
+  the inbox it belongs to.
+
+Whatever is switched off, the server **says so in its instructions**, naming the withheld tools and
+stating that the deployment still supports them. An unexplained absence reads to a model as a
+platform that cannot do the thing, which it then reports to its user, or works around.
+
+## A worked flow
+
+Create a task, run it, watch it, answer the park. This is the shape of nearly every session here:
+
+1. **`services_list`**: the board's service frames. A task is created under one, and the `serviceId`
+   comes from here rather than being guessable.
+2. **`pipelines_list`**: which pipelines a task can be started with, and which are headless-startable.
+3. **`tasks_create`** (`serviceId`, `body.title`, `body.description`, `body.taskType`) returns the
+   `taskId`. Nothing runs yet; this is a board card.
+4. **`tasks_start`** (`taskId`) **spends**: it begins a real agent run against a real repository, and
+   returns the `runId`. Confirm with the person first; the tool is annotated `destructiveHint`, so
+   most hosts will ask anyway.
+5. **`tasks_get_run`** (`runId`): poll it. There is no streaming tool (see below), an agent step takes
+   minutes, so poll every 15-30 seconds and say so instead of going quiet. Keep going until the
+   status is terminal or a decision is parked.
+6. **`decisions_list`** (`runId`): a run that stops advancing has usually PARKED on a human decision,
+   and it waits indefinitely by design. Answer it with the other `decisions_*` tools
+   (`decisions_incorporate`, `decisions_proceed`, `decisions_choose_fork`,
+   `decisions_resolve_judge`, …) or leave it for a person.
+7. **`notifications_list`**: the human-actionable tail, including the merge decision.
+   `notifications_act` can merge a pull request, which is the other tool that spends.
+
+For a run against a supplied brief with no board card and nothing pushed to a repository, the
+`jobs_*` group is the same loop in one step: `jobs_create` → poll `jobs_get` → `jobs_cancel`.
 
 To mount it on your own transport instead of stdio:
 
@@ -69,6 +137,13 @@ Concretely:
   contract the deployment validates against, so a tool cannot describe a request shape the server
   would reject. An OPEN vocabulary (a closed set plus a documented escape hatch, like `taskType`)
   is never narrowed to an `enum`, because that would refuse a value the server accepts.
+- **The output schema is deliberately looser than the spec.** Every tool that answers with a JSON
+  object declares an `outputSchema` and returns `structuredContent` beside the text. But a caller's
+  own MCP client VALIDATES a result against that schema, and `/api/v1` is additive forever, so the
+  emitted version carries no `required`, no `enum`, no closed `anyOf` and no length or range bounds.
+  Each of those would be a way for an older copy of this package to reject a newer deployment's
+  honest answer. The known members of a vocabulary are stated in the field's description instead,
+  where a new member cannot invalidate them.
 - **Argument validation stops at the door.** Required path ids are checked so a request can be
   built at all; the body goes to the deployment, whose 422 names the field and is far more useful
   to a model than anything this layer could say.
@@ -107,18 +182,27 @@ quietly stale.
 
 ## Things a caller should know
 
-- **`readOnlyHint` is set from the HTTP method** and is what a host uses to decide what needs a
-  human's confirmation. `destructiveHint` and `idempotentHint` are deliberately left unset rather
-  than guessed: a `DELETE` here is both idempotent and destructive, and an unset hint gets a host's
-  safe default where a wrong one gets its unsafe one.
+- **`readOnlyHint` is set from the HTTP method.** `destructiveHint` and `idempotentHint` are set on
+  the operations whose consequence is real money or a merged pull request (`tasks_start`,
+  `tasks_retry`, `jobs_create`, `notifications_act`, `tasks_delete`) and left UNSET everywhere else.
+  That asymmetry is deliberate: the protocol's default for an unset hint is already the cautious one,
+  so a blanket `destructiveHint: false` over the cheap writes would lower a host's caution on a
+  guess. `tasks_delete` is the case `readOnlyHint` cannot express at all: idempotent AND
+  destructive.
 - **Read-only mode is a convenience, not a boundary.** It removes tools from this server; the key
-  still carries whatever scope it was minted with. Mint a `read`-scoped key for the boundary.
-- **A large result is truncated with a note that says so**, names how much was dropped, and points
-  at the `limit` / `cursor` / `offset` parameters that would have avoided it. The truncated tail is
-  not valid JSON and the note says that first, because a model that starts reading at the top will
-  otherwise summarise half a document as though it were whole.
-- **Spending tools are called out in the server's instructions**: `tasks_start`, `tasks_retry`,
-  `jobs_create` each begin a real agent run, and `notifications_act` can merge a pull request.
+  still carries whatever scope it was minted with. Mint a `read`-scoped key for the boundary. The
+  same goes for the two per-tool filters.
+- **A result that does not fit is REFUSED, not truncated.** The message names how many characters
+  there were, the limit, and the way out from either side: `limit` / `cursor` on the list endpoints,
+  `offset` on the debug text reads, or a bigger `CAT_FACTORY_MCP_MAX_RESULT_CHARS`. Half an object
+  cannot satisfy the output schema it was cut out of, and a truncated prefix spends the whole cap on
+  a document whose own note tells the model not to read it.
+- **Results are compact JSON.** Two-space indentation reads better to a human than to a model and
+  costs roughly a third of every result in whitespace; a host that wants it pretty can re-print the
+  structured content it also gets.
+- **Spending tools are called out in the server's instructions**, derived from those same
+  annotations rather than restated in prose, so a tool withheld on this server is not named as one to
+  be careful with.
 
 ## Development
 
@@ -127,8 +211,17 @@ pnpm --filter @cat-factory/mcp-server build
 pnpm --filter @cat-factory/mcp-server test:run
 pnpm gen:sdk      # regenerate the tool table after a contracts change
 pnpm check:sdk    # the CI drift guard
+pnpm check:publish   # after a build: the empty-shell / publint / attw guard
 ```
 
-The end-to-end tests drive a **real** MCP client over an in-memory transport against a real SDK
-client whose `fetch` is stubbed, so a tool that lists but cannot be called fails a test rather than
-shipping.
+Three layers of coverage, and the split is about what each CAN see:
+
+- **Unit tests** (`test/`) drive a **real** MCP client over an in-memory transport against a real SDK
+  client whose `fetch` is stubbed, so a tool that lists but cannot be called fails a test rather than
+  shipping. `test/stdio.test.ts` covers the executable's rules (connect before announcing, every
+  human-readable byte off stdout, refuse rather than start) without spawning anything.
+- **The MCP phase of `backend/internal/sdk-smoketest`** spawns the built `dist/bin.js` as a real
+  process against a real backend. It is the only thing that can see the published output schemas
+  DISAGREE with what the deployment actually answers, because the client validates them.
+- **`pnpm check:publish`** covers the shape this package is most exposed to: one `bin` entry pointing
+  at a gitignored `dist`, which is exactly how two other packages once reached npm as empty shells.

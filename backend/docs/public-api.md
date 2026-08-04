@@ -236,15 +236,26 @@ same spec, so it inherits every convention on this page rather than re-stating t
     "cat-factory": {
       "command": "npx",
       "args": ["-y", "@cat-factory/mcp-server"],
-      "env": { "CAT_FACTORY_BASE_URL": "$BASE", "CAT_FACTORY_API_KEY": "cf_live_..." },
+      // CAT_FACTORY_API_KEY takes the key inline; CAT_FACTORY_API_KEY_FILE names a file to read it
+      // from, which keeps a long-lived credential out of the host's plaintext config.
+      "env": {
+        "CAT_FACTORY_BASE_URL": "$BASE",
+        "CAT_FACTORY_API_KEY_FILE": "/run/secrets/cat-factory",
+      },
     },
   },
 }
 ```
 
-The key's SCOPE is what decides what the model may do — mint the narrowest one that does the job.
-The two SSE endpoints are deliberately not tools (a tool call has no streaming channel; see
-[`sdk/mcp/README.md`](../../sdk/mcp/README.md)).
+The key's SCOPE is what decides what the model may do: mint the narrowest one that does the job. The
+server's own filters (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TOOLS`,
+`CAT_FACTORY_MCP_EXCLUDE_TOOLS`, `CAT_FACTORY_MCP_READ_ONLY`) narrow what one host can see, but they
+are a convenience rather than a boundary: the key still carries whatever scope it was minted with.
+
+The two SSE endpoints are deliberately not tools (a tool call has no streaming channel), so watching
+a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's instructions say in
+so many words. The env-var table and a worked flow (create, start, poll, decide):
+[`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
 error codes, scopes and paging rules are the same whichever you use.
