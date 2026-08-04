@@ -127,6 +127,20 @@ describe('toolServerDeclaredBytes', () => {
     expect(decorated).toBe(bare)
   })
 
+  it('counts BYTES, not UTF-16 units, so a non-ASCII config value is not undercounted', () => {
+    // Kernel compiles against neither DOM nor Node types, so this is a hand-counted UTF-8 length.
+    // `string.length` would read a CJK env value as a third of its real size, which would break the
+    // floor the boot warning depends on.
+    const ascii = toolServerDeclaredBytes(
+      server({ transport: { kind: 'stdio', command: 'npx', env: { NOTE: 'aaa' } } }),
+    )
+    const cjk = toolServerDeclaredBytes(
+      server({ transport: { kind: 'stdio', command: 'npx', env: { NOTE: '課題管理' } } }),
+    )
+    // Four 3-byte characters where the ASCII case had three 1-byte ones.
+    expect(cjk - ascii).toBe(9)
+  })
+
   it('measures an http server by its url and headers', () => {
     expect(toolServerDeclaredBytes(httpServer())).toBeGreaterThan(0)
     expect(

@@ -362,7 +362,25 @@ export function toolServerDeclaredBytes(definition: McpServerDefinition): number
     ...transport,
     allowedTools: definition.allowedTools,
   }
-  return new TextEncoder().encode(JSON.stringify(body)).length
+  return utf8ByteLength(JSON.stringify(body))
+}
+
+/**
+ * The UTF-8 byte length of a string, counted rather than encoded: kernel is runtime-neutral and
+ * compiled against neither DOM nor Node types, so it has no `TextEncoder` or `Buffer` to reach for.
+ *
+ * `string.length` would not do instead. It counts UTF-16 units, so a CJK or emoji-bearing config
+ * value reads as a THIRD to a HALF of the bytes it will occupy, and a budget that undercounts by
+ * that much stops being the floor its callers rely on. Iterating with `for…of` walks code points,
+ * so a surrogate pair is one 4-byte character rather than two 3-byte ones.
+ */
+function utf8ByteLength(value: string): number {
+  let bytes = 0
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0
+    bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4
+  }
+  return bytes
 }
 
 /**
