@@ -420,6 +420,12 @@ so retrying on the `409` never accumulates duplicates. The one state a retry can
 store failure at the moment of the claim: that answers `5xx`, and the retry either finds the
 ticket taken (the write had landed) or files cleanly (it had not).
 
+**Deleting the task releases its ticket.** The link is what the `409` is about, and it goes with the
+block, so a ticket whose task was deleted files cleanly again rather than refusing forever against a
+task that no longer exists. Nothing about the ticket itself is touched: the issue stays in the
+tracker, and its projection (body, comments, history) survives the delete. The same delete also
+returns the ticket to the recurring intake sweep's candidate pool.
+
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
 
