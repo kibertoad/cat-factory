@@ -287,7 +287,10 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     expect(spans).toHaveLength(2)
 
     const [rootSpan, stepSpan] = spans as [Record<string, unknown>, Record<string, unknown>]
-    expect(rootSpan.name).toBe('run Bugfix')
+    // The bare operation, with the workspace-authored pipeline kept to an attribute: a span
+    // name is the low-cardinality class a backend derives RED metrics from.
+    expect(rootSpan.name).toBe('run')
+    expect(attrMap(rootSpan.attributes as KeyValue[])['cat_factory.pipeline']).toBe('Bugfix')
     expect(rootSpan.spanId).toBe(deriveRunSpanId('exec1'))
     expect(rootSpan.parentSpanId).toBeUndefined()
     expect((rootSpan.status as { code: number; message: string }).code).toBe(2) // ERROR

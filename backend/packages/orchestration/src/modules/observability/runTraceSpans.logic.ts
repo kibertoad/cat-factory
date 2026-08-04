@@ -7,9 +7,19 @@ import type { LlmRunSpan, LlmStepSpan } from '@cat-factory/kernel'
 // They are built at SETTLEMENT because that is the first moment a run's boundaries are known.
 // A generation exported hours earlier already named its parent by DERIVING the id from the run
 // (see `deriveStepSpanId` in `@cat-factory/observability-otel`), so nothing has to be buffered
-// and no producer has to have seen another — the backend assembles the tree from ids alone.
+// and no producer has to have seen another: the backend assembles the tree from ids alone.
 // It is also the ordinary OpenTelemetry ordering, where a parent exports after the children it
 // outlives; the only unusual thing here is how long "outlives" can be.
+//
+// This is a pure function of the PERSISTED RUN, which is a correctness property rather than a
+// testing convenience. `emitInstance` fires again for an already-terminal run (a durable
+// re-drive, a decision resolved against a run that has settled), so this fold runs more than
+// once for one run. Every id it feeds is DERIVED, so a re-emission re-exports the SAME span
+// ids; reading the wall clock for the run's extent would pair those stable ids with a
+// DIFFERENT duration each time, which a backend cannot collapse the way it collapses a
+// byte-identical duplicate. The extent therefore comes from stamps the run already recorded,
+// each of them set-once precisely so a replay cannot move it (`StepGraph.finishStep`,
+// `AgentFailure.occurredAt`).
 
 /** A settled run's root span plus the per-agent-kind step spans that hang under it. */
 export interface RunTraceSpans {
@@ -23,6 +33,23 @@ interface StepFold {
   endedAt: number
   stepCount: number
   failed: boolean
+}
+
+/** Every epoch-ms stamp the run itself recorded, in no particular order. */
+function observedStamps(instance: ExecutionInstance): number[] {
+  const stamps: number[] = []
+  for (const step of instance.steps) {
+    // A step in flight when the run settled carries no `finishedAt` (it is stamped only on the
+    // transition to `done`), so its start and its last observed sign of life are what bound it.
+    for (const stamp of [step.startedAt, step.finishedAt, step.lastActivityAt]) {
+      if (typeof stamp === 'number') stamps.push(stamp)
+    }
+  }
+  // The exact instant a FAILED run settled. A `done` run's counterpart is its last step's
+  // `finishedAt`, already collected above, so both terminal states are bounded by a fact the
+  // run recorded rather than by how long the platform took to notice.
+  if (typeof instance.failure?.occurredAt === 'number') stamps.push(instance.failure.occurredAt)
+  return stamps
 }
 
 /**
@@ -39,7 +66,6 @@ interface StepFold {
 export function buildRunTraceSpans(
   workspaceId: string | null,
   instance: ExecutionInstance,
-  settledAt: number,
 ): RunTraceSpans | null {
   const started = instance.steps
     .map((step) => step.startedAt)
@@ -47,11 +73,17 @@ export function buildRunTraceSpans(
   const runStartedAt = instance.createdAt ?? (started.length > 0 ? Math.min(...started) : null)
   if (runStartedAt === null) return null
 
-  // A settle time earlier than the start would render as a negative-width span; clamp rather
-  // than drop, since the run itself is real either way.
-  const runEndedAt = Math.max(runStartedAt, settledAt)
+  // The run's end is the latest thing it was OBSERVED to do. Taking the max against the start
+  // also covers a creation stamp that postdates every step, which would otherwise render as a
+  // negative-width span.
+  const runEndedAt = Math.max(runStartedAt, ...observedStamps(instance))
   const failure = instance.failure ?? null
   const ok = instance.status === 'done'
+  // A failed run whose failure was never attributed to a step (`stepIndex` is optional, and a
+  // bootstrap failure has no step to point at) leaves every step span UNSET rather than
+  // guessing at one. The root still carries the error, so the failure is not lost; what is
+  // withheld is the single thing the run does not know, which is where it happened.
+  const failedStepIndex = ok ? null : (failure?.stepIndex ?? null)
 
   const folds = new Map<string, StepFold>()
   for (const [index, step] of instance.steps.entries()) {
@@ -67,7 +99,7 @@ export function buildRunTraceSpans(
       stepCount: (existing?.stepCount ?? 0) + 1,
       // Only the step the run actually failed ON is marked ERROR. Marking every step of a
       // failed run would say the reviewer that passed had failed too.
-      failed: (existing?.failed ?? false) || (!ok && failure?.stepIndex === index),
+      failed: (existing?.failed ?? false) || failedStepIndex === index,
     })
   }
 

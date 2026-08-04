@@ -41,7 +41,6 @@ describe('buildRunTraceSpans', () => {
           step({ agentKind: 'coder', startedAt: 1_600, finishedAt: 4_000 }),
         ],
       }),
-      9_000,
     )!
 
     expect(spans.run).toEqual({
@@ -49,7 +48,8 @@ describe('buildRunTraceSpans', () => {
       executionId: 'exec_1',
       pipelineName: 'Bugfix',
       startedAt: 500,
-      endedAt: 9_000,
+      // The last step's finish, not the moment the platform got round to emitting.
+      endedAt: 4_000,
       ok: true,
       errorMessage: null,
     })
@@ -71,7 +71,6 @@ describe('buildRunTraceSpans', () => {
           step({ agentKind: 'coder', startedAt: 3_000, finishedAt: 4_000 }),
         ],
       }),
-      5_000,
     )!
 
     const coder = spans.steps.find((s) => s.agentKind === 'coder')!
@@ -99,7 +98,6 @@ describe('buildRunTraceSpans', () => {
           step({ agentKind: 'coder', startedAt: 1_600, finishedAt: null }),
         ],
       }),
-      5_000,
     )!
 
     expect(spans.run.ok).toBe(false)
@@ -109,8 +107,75 @@ describe('buildRunTraceSpans', () => {
       ['architect', true, null],
       ['coder', false, 'container died'],
     ])
-    // An unfinished step's span closes at the run's settle time rather than running open.
-    expect(spans.steps[1]!.endedAt).toBe(5_000)
+    // The failing step never finished, so it closes at the instant the failure was recorded
+    // rather than running open.
+    expect(spans.steps[1]!.endedAt).toBe(4_000)
+  })
+
+  it('leaves every step UNSET when the failure names no step', () => {
+    // `stepIndex` is optional (a bootstrap failure has no step to point at). Attributing the
+    // failure to a step anyway would be a guess, and a guess about which step broke is worse
+    // than the root carrying the error alone: it sends an operator to the wrong container.
+    const spans = buildRunTraceSpans(
+      'ws_1',
+      instance({
+        status: 'failed',
+        failure: {
+          kind: 'agent',
+          message: 'run aborted',
+          detail: null,
+          hint: null,
+          occurredAt: 4_000,
+          lastSubtasks: null,
+        },
+        steps: [
+          step({ agentKind: 'architect', startedAt: 1_000, finishedAt: 1_500 }),
+          step({ agentKind: 'coder', startedAt: 1_600, finishedAt: null }),
+        ],
+      }),
+    )!
+
+    expect(spans.run.ok).toBe(false)
+    expect(spans.run.errorMessage).toBe('run aborted')
+    expect(spans.steps.every((s) => s.ok && s.errorMessage === null)).toBe(true)
+  })
+
+  it('is byte-identical across repeated folds of the same settled run', () => {
+    // `emitInstance` fires again for an already-terminal run, and every span id is derived, so
+    // a second fold re-exports the SAME ids. Reading the wall clock for the extent would pair
+    // those ids with a different duration each time, which is a contradiction rather than the
+    // duplicate a backend collapses.
+    const settled = instance({
+      status: 'failed',
+      failure: {
+        kind: 'agent',
+        message: 'container died',
+        detail: null,
+        hint: null,
+        occurredAt: 4_000,
+        lastSubtasks: null,
+        stepIndex: 0,
+      },
+      steps: [step({ agentKind: 'coder', startedAt: 1_600, finishedAt: null })],
+    })
+
+    expect(buildRunTraceSpans('ws_1', settled)).toEqual(buildRunTraceSpans('ws_1', settled))
+  })
+
+  it('bounds a still-running step by its last observed sign of life', () => {
+    // A container step in flight when the run settled has no `finishedAt`. Its heartbeat is the
+    // latest thing the run actually observed, so the extent stops there rather than at the
+    // step's start (which would understate a long, quiet phase by its whole duration).
+    const spans = buildRunTraceSpans(
+      'ws_1',
+      instance({
+        status: 'failed',
+        steps: [step({ startedAt: 1_000, finishedAt: null, lastActivityAt: 8_000 })],
+      }),
+    )!
+
+    expect(spans.run.endedAt).toBe(8_000)
+    expect(spans.steps[0]!.endedAt).toBe(8_000)
   })
 
   it('gives a step that never started no span at all', () => {
@@ -124,7 +189,6 @@ describe('buildRunTraceSpans', () => {
           step({ agentKind: 'human-review', startedAt: null, finishedAt: null }),
         ],
       }),
-      5_000,
     )!
 
     expect(spans.steps.map((s) => s.agentKind)).toEqual(['coder'])
@@ -134,7 +198,6 @@ describe('buildRunTraceSpans', () => {
     const spans = buildRunTraceSpans(
       'ws_1',
       instance({ createdAt: undefined, steps: [step({ startedAt: 1_234 })] }),
-      5_000,
     )!
 
     expect(spans.run.startedAt).toBe(1_234)
@@ -147,13 +210,13 @@ describe('buildRunTraceSpans', () => {
       buildRunTraceSpans(
         'ws_1',
         instance({ createdAt: undefined, steps: [step({ startedAt: null, finishedAt: null })] }),
-        5_000,
       ),
     ).toBeNull()
   })
 
-  it('clamps a settle time that precedes the run start', () => {
-    const spans = buildRunTraceSpans('ws_1', instance({ createdAt: 9_000 }), 1_000)!
+  it('never renders a negative-width span when the creation stamp postdates every step', () => {
+    const spans = buildRunTraceSpans('ws_1', instance({ createdAt: 9_000 }))!
     expect(spans.run.endedAt).toBe(9_000)
+    expect(spans.run.endedAt).toBeGreaterThanOrEqual(spans.run.startedAt)
   })
 })

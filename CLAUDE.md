@@ -1405,12 +1405,17 @@ place the runtimes deliberately differ in TRANSPORT, not behaviour (workerd can'
 sharing `src/mapping.ts` pinned equal by `conformity.test.ts`, so span names, attributes and metric names
 change in the mapping layer. **A run's spans are a HIERARCHY (`run → agent kind → generations + tool
 calls`) built from DERIVED ids, never shared state**: every parent id is a pure function of the run, so a
-stateless per-call emission names a parent it has never seen and a durable replay re-derives the identical
-tree instead of a duplicate one. The parents are emitted ONCE at settlement, from the same terminal hook
-the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`), for the same
-reason: a run reaches `done` from four sites. The step level's grain is the agent KIND because that is the
-finest thing a generation event can NAME; a folded slice states its `step_count` rather than passing two
-steps off as one. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
+stateless per-call emission names a parent it has never seen. The parents are emitted at settlement, from
+the same terminal hook the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`),
+for the same reason: a run reaches `done` from four sites. That hook fires AGAIN for an already-settled
+run, so **the parents' EXTENT is folded from stamps the run recorded, never read off a clock at emit
+time** (`buildRunTraceSpans`): derived ids alone make a replay re-export the same span ids, and pairing
+those with a duration that moved is a contradiction where a byte-identical duplicate is something a
+backend collapses. The step level's grain is the agent KIND because that is the finest thing a generation
+event can NAME; a folded slice states its `step_count` rather than passing two steps off as one. **A span
+NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
+counterpart of the bounded-dimension rule: free text like a pipeline name rides an attribute, or a tenant
+mints unbounded series on the operator's backend by renaming things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
 exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model

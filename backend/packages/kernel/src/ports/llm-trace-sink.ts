@@ -17,8 +17,13 @@ import { describeError } from '../shared/best-effort.js'
 // sink. The port is implemented by an opt-in package (`@cat-factory/observability-langfuse`)
 // and wired into a facade only when configured; absent ⇒ no external emission and no
 // behaviour change. A sink MUST NOT throw into its caller (LLM work must never break
-// because observability is down) — implementations swallow + log their own errors, and
-// callers additionally schedule the call off the response path.
+// because observability is down) — implementations swallow + log their own errors.
+//
+// Whether a CALLER also schedules the emission off its own path is decided per method, by
+// what losing that emission costs: the per-call `recordGeneration` fan-out is dispatched
+// without awaiting, because it sits on the metering hot path and a dropped generation costs
+// one span, while `recordRunSpans` is awaited, because it runs once per run after the run's
+// state is committed and its spans are the PARENTS every other span already named.
 
 /** One completed LLM call (proxied or inline), normalised for an external trace. */
 export interface LlmGenerationEvent {

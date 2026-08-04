@@ -372,11 +372,12 @@ describe('LlmObservabilityService.recordRunTrace', () => {
       recordRunSpans(run, steps) {
         calls.push({ run, steps })
       },
-    }).recordRunTrace('ws_1', settledRun, 5_000)
+    }).recordRunTrace('ws_1', settledRun)
 
     expect(calls).toHaveLength(1)
     expect(calls[0]!.run.executionId).toBe('exec')
-    expect(calls[0]!.run.endedAt).toBe(5_000)
+    // The last step's finish, not a wall-clock read: the hook fires again for a settled run.
+    expect(calls[0]!.run.endedAt).toBe(2_000)
     expect(calls[0]!.steps.map((s) => s.agentKind)).toEqual(['coder'])
   })
 
@@ -384,7 +385,7 @@ describe('LlmObservabilityService.recordRunTrace', () => {
     // Langfuse omits the method: its trace is a first-class object generations attach to by id,
     // so there are no parents to synthesise. That must cost nothing, not throw.
     await expect(
-      service({ recordGeneration() {} }).recordRunTrace('ws_1', settledRun, 5_000),
+      service({ recordGeneration() {} }).recordRunTrace('ws_1', settledRun),
     ).resolves.toBeUndefined()
   })
 
@@ -395,7 +396,7 @@ describe('LlmObservabilityService.recordRunTrace', () => {
         recordRunSpans() {
           throw new Error('collector down')
         },
-      }).recordRunTrace('ws_1', settledRun, 5_000),
+      }).recordRunTrace('ws_1', settledRun),
     ).resolves.toBeUndefined()
   })
 })

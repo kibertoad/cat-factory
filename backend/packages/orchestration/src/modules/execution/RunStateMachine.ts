@@ -297,11 +297,13 @@ export class RunStateMachine {
     // have been naming since the run started: the root span and one per agent kind. Here,
     // beside the other terminal hooks, for the same reason the lifecycle edge is — a run
     // reaches `done` from four sites and a fifth added later would silently emit nothing.
-    // A durable replay re-emits the identical spans (every id is DERIVED from the run, not
-    // minted), so at-least-once delivery costs a rewrite of the same tree rather than a
-    // duplicate one, and no claim table is needed to make that true.
+    // A durable replay re-emits the BYTE-IDENTICAL spans: every id is DERIVED from the run
+    // rather than minted, and the extent is folded from stamps the run recorded rather than
+    // read off the clock here, so at-least-once delivery costs a duplicate a backend can
+    // collapse rather than a second, contradictory tree. No claim table is needed to make
+    // that true, which is why this can sit on a hook that fires again for a settled run.
     if (instance.status === 'done' || instance.status === 'failed') {
-      await this.llmObservability?.recordRunTrace(workspaceId, instance, this.clock.now())
+      await this.llmObservability?.recordRunTrace(workspaceId, instance)
     }
     // When a run reaches a terminal state, delete its per-run personal-credential
     // activation immediately (individual-usage subscriptions) so the system-encrypted

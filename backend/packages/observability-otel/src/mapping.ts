@@ -68,6 +68,12 @@ export const OPERATION = {
   invokeAgent: 'invoke_agent',
 } as const
 
+/**
+ * The run root span's name. A constant rather than an interpolation, because a span name is a
+ * low-cardinality CLASS; see {@link mapRunSpan} for why the pipeline stays an attribute.
+ */
+export const RUN_SPAN_NAME = 'run'
+
 /** Metric names + units (OTel GenAI client metrics). */
 export const METRIC = {
   tokenUsage: 'gen_ai.client.token.usage',
@@ -160,6 +166,14 @@ function randomHex(bytes: number): string {
  * SAME trace id and the backend groups them into one trace — the fetch and SDK transports
  * therefore agree without sharing state. FNV-1a, re-hashed with a counter salt to fill the
  * width. Guaranteed non-zero (OTLP rejects an all-zero id).
+ *
+ * A SPREADING function, not a cryptographic one, and the ids it derives are chosen so that is
+ * enough: the only ones that must not collide are the handful within a single trace (one run
+ * span plus one step span per agent kind, each keyed on a distinct prefixed string), and a
+ * trace id collides only across two different execution ids over the full 128 bits. Nothing
+ * here is a security boundary, and no leaf span id comes from it: those are `randomSpanId`.
+ * A collision-resistant hash would be the right answer the moment an id is derived from
+ * something an untrusted party chooses.
  */
 function hashHex(input: string, bytes: number): string {
   let out = ''
@@ -509,6 +523,14 @@ export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): Map
  *
  * It carries no `gen_ai.operation.name`. A pipeline run is orchestration, not a model
  * operation, and stamping one would file the wait on a human decision as GenAI activity.
+ *
+ * The name is the bare `run`, with the pipeline riding as `cat_factory.pipeline` rather than
+ * interpolated into it. A span name is the one field a backend treats as a low-cardinality
+ * CLASS: it keys the RED metrics a span-metrics connector derives, and the trace-side
+ * counterpart of the rule that a metric dimension must be BOUNDED. Every other name here is a
+ * closed vocabulary (an operation, a model, an agent kind, a tool), but a pipeline is
+ * workspace-authored free text, so interpolating it would let a tenant mint an unbounded
+ * number of series on an operator's backend by renaming pipelines.
  */
 export function mapRunSpan(run: LlmRunSpan): MappedSpan {
   const attributes: AttributeMap = {
@@ -519,7 +541,7 @@ export function mapRunSpan(run: LlmRunSpan): MappedSpan {
   return {
     traceId: deriveTraceId(run.executionId),
     spanId: deriveRunSpanId(run.executionId),
-    name: `run ${run.pipelineName}`,
+    name: RUN_SPAN_NAME,
     kind: 'internal',
     startTimeMs: run.startedAt,
     endTimeMs: run.endedAt,

@@ -174,7 +174,8 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
     sink.recordRunSpans(run, steps)
 
     const [generation, rootSpan, stepSpan] = spans.getFinishedSpans()
-    expect(rootSpan!.name).toBe('run Bugfix')
+    expect(rootSpan!.name).toBe('run')
+    expect(rootSpan!.attributes['cat_factory.pipeline']).toBe('Bugfix')
     // The SDK would otherwise mint a random span id here, leaving every child pointing at a
     // parent that never exists — the id has to come from the mapping layer's derivation.
     expect(rootSpan!.spanContext().spanId).toBe(deriveRunSpanId('exec1'))

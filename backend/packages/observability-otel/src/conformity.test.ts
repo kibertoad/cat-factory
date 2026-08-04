@@ -307,7 +307,7 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
       'execute_tool edit_file',
       'execute_tool run_command',
       'invoke_agent coder',
-      'run Bugfix',
+      'run',
     ])
 
     for (const [name, fetchSpan] of fetchSpans) {
@@ -328,7 +328,7 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
     // …and it is a HIERARCHY rather than a flat set of siblings: run → step → leaves, assembled
     // identically by both transports even though each leaf was emitted before its parent existed.
     for (const spans of [fetchSpans, sdkSpans]) {
-      const root = spans.get('run Bugfix')!
+      const root = spans.get('run')!
       const step = spans.get('invoke_agent coder')!
       expect(root.parentSpanId).toBeUndefined()
       expect(step.parentSpanId).toBe(root.spanId)

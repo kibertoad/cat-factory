@@ -16,6 +16,14 @@ Two things in `src/mapping.ts` bind changes here:
   emission name a parent emitted hours later (at run settlement, via `recordRunSpans`). A new
   span type picks its parent by deriving one, and a transport must emit `MappedSpan.spanId`
   verbatim rather than minting its own — an SDK-generated id for a parent orphans every child.
+  Derived ids also make the parents REPLAY-safe, but only together with a replay-safe extent:
+  the settlement hook fires again for an already-settled run, so whatever feeds `LlmRunSpan` /
+  `LlmStepSpan` must fold recorded stamps rather than read a clock (see `buildRunTraceSpans` in
+  orchestration), or one run exports the same span ids with a duration that keeps moving.
+- **A span NAME is a bounded class.** `chat {model}`, `execute_tool {tool}`,
+  `invoke_agent {agentKind}` and the bare `run` are all closed vocabularies; a new span type
+  keeps free text (a pipeline name, a task title, a repo) in an attribute, because the name is
+  what a span-metrics connector turns into a time series.
 - **`ATTR` and the README's GenAI semantic-convention coverage table are edited together.**
   The convention is experimental, so what we cover, extend and deliberately omit is documented
   rather than inferred.
