@@ -2632,7 +2632,7 @@
         },
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
-          "help": "Cuando una ejecución iniciada por la API se detiene para aclarar requisitos, publica sus preguntas abiertas — cada una con el id que debe nombrar la respuesta — en la incidencia vinculada. Las tareas iniciadas en la aplicación no se ven afectadas."
+          "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
         }
       },
       "probeFailure": {
@@ -3541,7 +3541,28 @@
         "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
       },
       "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
-      "invalidNumbers": "Estos límites no son números"
+      "invalidNumbers": "Estos límites no son números",
+      "failureKinds": {
+        "label": "Reglas por tipo de fallo",
+        "description": "Avisa cuando un tipo de fallo alcanza la proporción de fallos que le permites. El límite de causa dominante de arriba pregunta si un tipo está desbordando al resto; estas reglas preguntan si un tipo concreto ha alcanzado lo que este despliegue tolera de él.",
+        "overrideLabel": "Definir reglas por tipo propias de esta cuenta",
+        "overrideHint": "Desactivado, la cuenta usa las reglas configuradas en el despliegue. Activado, la lista de abajo las sustituye por completo, y una lista vacía significa ninguna regla por tipo.",
+        "empty": "Sin reglas. Esta cuenta no generará la alerta por tipo de fallo.",
+        "kindLabel": "Tipo de fallo",
+        "shareLabel": "Proporción de fallos (%)",
+        "shareHint": "La regla se activa a partir de esta proporción.",
+        "minCountLabel": "Fallos mínimos",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Cuántos fallos de ese tipo necesita la ventana antes de que la regla pueda dispararse. Sin esto, una proporción baja salta a la mínima: cinco ejecuciones con un desalojo ya son el 20 %.",
+        "addRule": "Añadir regla",
+        "allKindsCovered": "Cada tipo de fallo ya tiene una regla.",
+        "removeRule": "Eliminar regla",
+        "duplicateKind": "Cada tipo de fallo admite como máximo una regla.",
+        "tooManyRules": "Como máximo {max} reglas por tipo. Elimina algunas antes de guardar.",
+        "unknownKind": "{kind} (no reconocido)",
+        "invalidTitle": "Estas reglas por tipo no se pueden guardar",
+        "invalidRows": "Revisa las reglas {rows}: la proporción debe ser mayor que 0 y como máximo 100, el mínimo debe ser un número entero de 1 o más, y cada tipo puede aparecer una sola vez."
+      }
     }
   },
   "providers": {

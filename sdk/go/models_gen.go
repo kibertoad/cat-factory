@@ -672,6 +672,8 @@ type NotificationPayload struct {
 	OnCallAssessment *NotificationPayloadOnCallAssessment `json:"onCallAssessment,omitempty"`
 	// PipelineName may be absent entirely.
 	PipelineName *string `json:"pipelineName,omitempty"`
+	// PlatformAlertFailureKinds may be absent entirely.
+	PlatformAlertFailureKinds []string `json:"platformAlertFailureKinds,omitempty"`
 	// PlatformAlertTransition may be absent entirely.
 	PlatformAlertTransition *float64 `json:"platformAlertTransition,omitempty"`
 	// PlatformAlerts may be absent entirely.
@@ -799,11 +801,12 @@ const (
 	NotificationPayloadPlatformAlertBacklogHigh         NotificationPayloadPlatformAlert = "backlog_high"
 	NotificationPayloadPlatformAlertThroughputStalled   NotificationPayloadPlatformAlert = "throughput_stalled"
 	NotificationPayloadPlatformAlertFailureKindDominant NotificationPayloadPlatformAlert = "failure_kind_dominant"
+	NotificationPayloadPlatformAlertFailureKindRateHigh NotificationPayloadPlatformAlert = "failure_kind_rate_high"
 	NotificationPayloadPlatformAlertSweepDegraded       NotificationPayloadPlatformAlert = "sweep_degraded"
 )
 
 // NotificationPayloadPlatformAlertValues lists every NotificationPayloadPlatformAlert this SDK release knows.
-var NotificationPayloadPlatformAlertValues = []NotificationPayloadPlatformAlert{NotificationPayloadPlatformAlertFailureRateHigh, NotificationPayloadPlatformAlertDurationP99High, NotificationPayloadPlatformAlertBacklogHigh, NotificationPayloadPlatformAlertThroughputStalled, NotificationPayloadPlatformAlertFailureKindDominant, NotificationPayloadPlatformAlertSweepDegraded}
+var NotificationPayloadPlatformAlertValues = []NotificationPayloadPlatformAlert{NotificationPayloadPlatformAlertFailureRateHigh, NotificationPayloadPlatformAlertDurationP99High, NotificationPayloadPlatformAlertBacklogHigh, NotificationPayloadPlatformAlertThroughputStalled, NotificationPayloadPlatformAlertFailureKindDominant, NotificationPayloadPlatformAlertFailureKindRateHigh, NotificationPayloadPlatformAlertSweepDegraded}
 
 // NotificationPayloadPlatformFailingRun is the `NotificationPayloadPlatformFailingRun` wire model.
 type NotificationPayloadPlatformFailingRun struct {
