@@ -160,6 +160,7 @@ type ConformanceAppOpts = {
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
   appBaseUrl?: string
+  apiBaseUrl?: string
   taskSourceProviders?: CoreDependencies['taskSourceProviders']
   detectionConventions?: CoreDependencies['detectionConventions']
 }
@@ -242,6 +243,7 @@ function buildConformanceOverrides(
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,
       appBaseUrl: o.appBaseUrl,
+      apiBaseUrl: o.apiBaseUrl,
     }),
   }
 }

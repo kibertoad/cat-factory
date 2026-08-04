@@ -85,6 +85,17 @@ export interface PrReportEnvironmentInputs {
    * configured no public app URL (the report never emits a link to nowhere).
    */
   evidenceUrl: string | null
+  /**
+   * Builds the direct link to ONE artifact's bytes on the deployment's own blob endpoint, or
+   * returns null when no public backend URL is configured.
+   *
+   * A function rather than pre-built URLs because the composer is what knows which artifacts
+   * survived the row cap, and a workspace id threaded through this module for one string would
+   * be the only reason it needed one. Absent (a caller that wires no backend URL) ⇒ every row
+   * carries its id and no link, which is what the section did before: the id is what an operator
+   * greps the store for, so it is never dropped in favour of the link.
+   */
+  artifactUrl?: (artifactId: string) => string | null
 }
 
 /** Cap a list, recording what was dropped in the report's own `truncations` log. */
@@ -329,6 +340,7 @@ function composeEvidence(
     view: redactSecrets(shot.view) ?? '',
     artifactId: shot.artifactId,
     hasReference: !!shot.referenceArtifactId,
+    url: inputs.artifactUrl?.(shot.artifactId) ?? null,
   }))
   const common = {
     ranAgainst,
@@ -546,8 +558,15 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
   if (evidence.screenshots.length) {
     out.push('', '| View | Artifact | Reference |', '| --- | --- | --- |')
     for (const shot of evidence.screenshots) {
+      // The id stays in the cell whether or not a link was built: it is what an operator greps the
+      // store for, and a deployment with no public backend URL has no link to offer. The URL is
+      // ours (built from configured base + a stored id), so it needs no host-markdown escaping —
+      // the LABEL is the untrusted half.
+      const artifact = shot.url
+        ? `[\`${hostMarkdown.cell(shot.artifactId)}\`](${shot.url})`
+        : `\`${hostMarkdown.cell(shot.artifactId)}\``
       out.push(
-        `| ${hostMarkdown.cell(shot.view)} | \`${hostMarkdown.cell(shot.artifactId)}\` | ${shot.hasReference ? 'paired' : '—'} |`,
+        `| ${hostMarkdown.cell(shot.view)} | ${artifact} | ${shot.hasReference ? 'paired' : '—'} |`,
       )
     }
   }

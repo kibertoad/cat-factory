@@ -515,6 +515,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     idGenerator,
     clock,
     agentExecutor,
+    // This service's own externally-reachable URL — the same value the container harness reaches
+    // the LLM proxy on. The verification report builds direct links to captured artifacts' bytes
+    // from it; unset ⇒ the report lists artifact ids with no link, never a link to nowhere.
+    apiBaseUrl: env.PUBLIC_URL?.trim() || undefined,
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.

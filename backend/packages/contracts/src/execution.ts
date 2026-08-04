@@ -809,7 +809,7 @@ export const pipelineStepSchema = v.object({
    * Recorded by the engine from the runner result on every outcome (an `inconclusive` verdict
    * never fails the step — see the initiative's D6). Rides the run's persisted `detail` blob —
    * no migration. Absent when the run was not opted in or carried no declaration. See
-   * {@link reproductionReportSchema} and docs/initiatives/bugfix-reproduction-proof.md.
+   * {@link reproductionReportSchema} and backend/docs/adr/0033-bugfix-reproduction-proof.md.
    */
   reproduction: v.optional(v.nullable(reproductionReportSchema)),
   /**

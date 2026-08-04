@@ -1862,6 +1862,33 @@
         "failedSummary": "{failed} von {total} Prüfungen schlugen nach {attempts} von {maxAttempts} Versuchen weiterhin fehl, daher wurde kein Pull Request geöffnet.",
         "exitCode": "Exit-Code {code}",
         "timedOut": "Zeitüberschreitung"
+      },
+      "reproduction": {
+        "heading": "Reproduktionsnachweis",
+        "status": {
+          "reproduced": "Reproduziert",
+          "inconclusive": "Unbelegt",
+          "declared_infeasible": "Nicht reproduzierbar"
+        },
+        "verdict": {
+          "reproduced": "Die deklarierte Prüfung schlug im Stand vor dem Fix fehl und besteht in diesem Stand.",
+          "inconclusive": "Die Prüfung hat den Defekt über den Fix hinweg nicht nachgewiesen, der Fix ist also nicht belegt.",
+          "declared_infeasible": "Der Agent hat erklärt, dass sich dieser Fehler nicht in einem Test reproduzieren lässt, und angegeben, was er stattdessen geprüft hat."
+        },
+        "tree": {
+          "base": "Stand vor dem Fix",
+          "final": "Endgültiger Stand"
+        },
+        "command": "Befehl",
+        "reason": "Warum nicht reproduzierbar",
+        "alternative": "Stattdessen geprüft",
+        "passed": "bestanden",
+        "exitCode": "Exit-Code {code}",
+        "timedOut": "Zeitüberschreitung",
+        "setupFailed": "Setup fehlgeschlagen",
+        "notRun": "nicht ausgeführt",
+        "attempts": "Versuch {attempts} von {maxAttempts}",
+        "omittedTestPaths": "{count} deklarierte Testdatei wurde vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut. | {count} deklarierte Testdateien wurden vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut."
       }
     },
     "inspector": {

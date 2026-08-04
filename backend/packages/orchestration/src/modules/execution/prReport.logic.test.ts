@@ -64,6 +64,10 @@ describe('composePrVerificationReport', () => {
     expect(report.environments.note).toContain('No deployer step')
     expect(report.merge.status).toBe('absent')
     expect(report.merge.note).toContain('No merger step')
+    expect(report.validation.status).toBe('absent')
+    expect(report.validation.note).toContain('no check commands')
+    expect(report.reproduction.status).toBe('absent')
+    expect(report.reproduction.note).toContain('No reproduction step')
     // Still a schema-valid report — an evidence-free run publishes a truthful empty one.
     expect(() => parsePrVerificationReport(report)).not.toThrow()
   })

@@ -1063,8 +1063,15 @@ fails BOTH and red-then-red is `inconclusive`. Target **`baseSha`** specifically
 `--depth 1`, so `HEAD~1` isn't in history) and apply the **declared PATHS only** onto the base worktree, or
 a whole-tree checkout drags the fix across and greens it. A failure REPAIRS, then degrades to
 `inconclusive` with the PR still opening: the opposite disposition from validation, because a red check
-means the WORK is broken while an unproven reproduction means the EVIDENCE is weak. Doc:
-[`bugfix-reproduction-proof.md`](./docs/initiatives/bugfix-reproduction-proof.md).
+means the WORK is broken while an unproven reproduction means the EVIDENCE is weak. **An absent `final`
+run is NORMAL for `inconclusive`** (a green base already settles the verdict, so the second tree is not
+run) and **the producer's own `note` is rendered VERBATIM** by every reader, never re-derived from
+`base.passed`: only the side that ran the two trees can tell a test that misses the defect from a resumed
+run whose base already carried this step's own work. The verdict reaches a human on three surfaces off the
+one `step.reproduction` (the PR report section, the result-window shell's trailing section, and the
+step-detail card) and **both SPA surfaces are required**, because the proof is recorded on whichever step
+OPENED the PR, which is the view-less `coder` in every built-in pipeline. Doc:
+[ADR 0033](./backend/docs/adr/0033-bugfix-reproduction-proof.md).
 
 **Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md`
 (requested **only when `opensPr`**, since an in-place fixer amends a PR whose description it doesn't own)

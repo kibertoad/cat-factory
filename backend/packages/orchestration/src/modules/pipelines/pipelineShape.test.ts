@@ -95,6 +95,21 @@ describe('validatePipelineShape', () => {
     }
   })
 
+  it('every bugfix preset writes a failing reproduction test BEFORE the fix', () => {
+    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
+    for (const id of ['pl_bugfix', 'pl_bug_triage']) {
+      const kinds = byId.get(id)!.agentKinds
+      const repro = kinds.indexOf('repro-test')
+      const coder = kinds.indexOf('coder')
+      expect(repro, `${id} must write a reproduction test`).toBeGreaterThanOrEqual(0)
+      // Order is the whole content of the step: it SEEDS the shared work branch the coder then
+      // resumes, so a red test exists before the fix does. It is also the declaration seam the
+      // reproduction proof reads — after the coder there would be no pre-fix tree left to prove
+      // anything against.
+      expect(repro, `${id} must reproduce before it fixes`).toBeLessThan(coder)
+    }
+  })
+
   it('the adaptive build pipeline is estimate-gated off a leading task-estimator', () => {
     const full = seedPipelines().find((p) => p.id === 'pl_full')
     expect(full, 'pl_full must be a built-in seed pipeline').toBeTruthy()

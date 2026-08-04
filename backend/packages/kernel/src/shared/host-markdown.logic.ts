@@ -211,6 +211,43 @@ export function inline(value: string, max: number = MAX_CELL_CHARS): string {
   return inertLine(truncate(value.replace(/\s+/g, ' '), max))
 }
 
+/**
+ * Render captured COMMAND OUTPUT as a fenced block the output itself cannot break out of.
+ *
+ * A test runner, a linter or a compiler legitimately prints backticks (a rule quoting a template
+ * literal, a snapshot echoing a fenced fixture), and a fixed three-tick fence closes on the first
+ * such run: everything after it lands in the document as prose — the rest of the log, the sections
+ * rendered below it, and the machine-readable JSON block that is the report's contract. Sizing the
+ * fence one tick longer than the longest run in the body is CommonMark's rule for exactly this, so
+ * the block always spans the whole tail.
+ *
+ * Deliberately NOT `inertLine`d: the host does not auto-link inside a fenced block, so escaping
+ * would only show the reader a literal `&#35;` where the command printed a `#`. The fence is the
+ * whole boundary here, which is why it has to be the right length.
+ */
+export function outputBlock(text: string): string {
+  const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length))
+  const fence = '`'.repeat(Math.max(3, longestRun + 1))
+  return `${fence}\n${text.replace(/\r\n?/g, '\n').replace(/\n+$/, '')}\n${fence}`
+}
+
+/**
+ * Bound a captured output tail, keeping the END of it and SAYING what was cut.
+ *
+ * The tail is where a failure is reported — a stack trace, an assertion diff, a compiler's error
+ * summary — so a prefix cut throws away the half a reviewer opened the report for. Returns the
+ * kept text plus how many characters were dropped, so a caller can log the cut in the report's own
+ * `truncations` rather than presenting a shortened log as a whole one.
+ */
+export function boundOutput(
+  text: string,
+  max: number,
+): { text: string; dropped: number; total: number } {
+  const total = text.length
+  if (total <= max) return { text, dropped: 0, total }
+  return { text: text.slice(total - max), dropped: total - max, total }
+}
+
 /** Cap a list at {@link MAX_LIST_ITEMS}, returning the kept rows plus how many were dropped. */
 export function capList<T>(items: readonly T[]): { items: T[]; dropped: number } {
   if (items.length <= MAX_LIST_ITEMS) return { items: [...items], dropped: 0 }

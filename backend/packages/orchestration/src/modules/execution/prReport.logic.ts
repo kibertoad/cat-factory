@@ -20,6 +20,13 @@ import {
   composeEnvironments,
   renderEnvironments,
 } from './prReport.environments.js'
+import {
+  composeReproduction,
+  composeValidation,
+  makeOutputCapper,
+  renderReproduction,
+  renderValidation,
+} from './prReport.commands.js'
 import { findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
@@ -497,6 +504,12 @@ export function composePrVerificationReport(
   inputs: PrReportInputs,
 ): PrVerificationReport {
   const truncations: string[] = []
+  // The two captured-output sections share the spine's list cap and add a char cap of their own,
+  // both logging into the ONE `truncations` array a reader learns to read.
+  const commandCaps = {
+    cap: <T>(items: readonly T[], label: string): T[] => cap(items, label, truncations),
+    output: makeOutputCapper(truncations),
+  }
   const steps = instance.steps.map((step, index) => ({
     index,
     agentKind: step.agentKind,
@@ -522,6 +535,8 @@ export function composePrVerificationReport(
       })),
     },
     ci: composeCi(instance, truncations),
+    validation: composeValidation(instance, commandCaps),
+    reproduction: composeReproduction(instance, commandCaps),
     tests: composeTests(instance, truncations),
     requirements: composeRequirements(instance, inputs.spec, truncations),
     environments: composeEnvironments(instance, inputs.environments, (items, label) =>
@@ -781,6 +796,11 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '',
     ...renderRun(report.run, report.observability.runUrl),
     ...renderCi(report.ci),
+    // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same
+    // question a reviewer asks first ("does it work?"), and unlike CI they are the platform's own
+    // run of the commands on the exact tree that was pushed.
+    ...renderValidation(report.validation),
+    ...renderReproduction(report.reproduction),
     ...renderTests(report.tests),
     ...renderRequirements(report.requirements),
     ...renderEnvironments(report.environments),

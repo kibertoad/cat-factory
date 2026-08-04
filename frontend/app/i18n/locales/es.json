@@ -1400,6 +1400,33 @@
         "failedSummary": "{failed} de {total} comprobaciones seguían fallando tras {attempts} de {maxAttempts} intentos, así que no se abrió ninguna solicitud de incorporación.",
         "exitCode": "código de salida {code}",
         "timedOut": "tiempo agotado"
+      },
+      "reproduction": {
+        "heading": "Prueba de reproducción",
+        "status": {
+          "reproduced": "Reproducido",
+          "inconclusive": "No demostrado",
+          "declared_infeasible": "No reproducible"
+        },
+        "verdict": {
+          "reproduced": "La comprobación declarada falló en el árbol previo a la corrección y pasa en este.",
+          "inconclusive": "La comprobación no demostró el defecto a ambos lados de la corrección, por lo que la corrección no queda evidenciada.",
+          "declared_infeasible": "El agente declaró que este error no se puede reproducir en una prueba e indicó qué verificó en su lugar."
+        },
+        "tree": {
+          "base": "Árbol previo a la corrección",
+          "final": "Árbol final"
+        },
+        "command": "Comando",
+        "reason": "Por qué no se puede reproducir",
+        "alternative": "Verificado en su lugar",
+        "passed": "pasó",
+        "exitCode": "código de salida {code}",
+        "timedOut": "tiempo agotado",
+        "setupFailed": "fallo en la preparación",
+        "notRun": "no ejecutado",
+        "attempts": "Intento {attempts} de {maxAttempts}",
+        "omittedTestPaths": "Se descartó {count} archivo de prueba declarado antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta. | Se descartaron {count} archivos de prueba declarados antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta."
       }
     },
     "inspector": {

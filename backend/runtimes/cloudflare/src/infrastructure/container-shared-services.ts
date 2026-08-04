@@ -15,11 +15,7 @@ import { CryptoIdGenerator, SystemClock } from './runtime'
 import { resolveWorkerRegistries } from './container-registries.js'
 import { buildAccountSettings } from './container-account-settings.js'
 import { cloudflareContentStorage } from './container-artifact-storage.js'
-import {
-  buildNotificationWebhookSupportForWorker,
-  buildResolvePackageRegistries,
-  selectEventPublisher,
-} from './container.js'
+import { buildResolvePackageRegistries, selectEventPublisher } from './container.js'
 import {
   buildApiKeyService,
   buildLocalModelEndpointService,
@@ -40,6 +36,7 @@ import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { CfGitHubWebhookIngest } from './gateways/GitHubGateways'
 import { logger } from './observability/logger'
+import { buildNotificationWebhookSupportForWorker } from './container-notification-deps'
 
 export interface WorkerSharedServicesInput {
   env: Env

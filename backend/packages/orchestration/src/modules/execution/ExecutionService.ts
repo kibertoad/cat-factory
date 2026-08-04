@@ -150,6 +150,9 @@ function buildPrReportController(
     // than reporting an environment nobody reclaimed as one nobody recorded.
     provisioningLogRepository: deps.provisioningLogRepository,
     appBaseUrl: deps.appBaseUrl,
+    // The BACKEND's own public URL, for direct links to captured artifacts' bytes. Distinct from
+    // the SPA origin above, which the two links deliberately do not share.
+    apiBaseUrl: deps.apiBaseUrl,
     logger: deps.logger,
   })
 }

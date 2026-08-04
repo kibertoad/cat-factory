@@ -1400,6 +1400,33 @@
         "failedSummary": "{failed} vérifications sur {total} échouaient encore après {attempts} tentatives sur {maxAttempts}, aucune demande de tirage n'a donc été ouverte.",
         "exitCode": "code de sortie {code}",
         "timedOut": "délai dépassé"
+      },
+      "reproduction": {
+        "heading": "Preuve de reproduction",
+        "status": {
+          "reproduced": "Reproduit",
+          "inconclusive": "Non démontré",
+          "declared_infeasible": "Non reproductible"
+        },
+        "verdict": {
+          "reproduced": "La vérification déclarée a échoué sur l’arbre d’avant le correctif et réussit sur celui-ci.",
+          "inconclusive": "La vérification n’a pas démontré le défaut de part et d’autre du correctif, le correctif n’est donc pas étayé.",
+          "declared_infeasible": "L’agent a déclaré que ce bogue ne peut pas être reproduit dans un test et a indiqué ce qu’il a vérifié à la place."
+        },
+        "tree": {
+          "base": "Arbre d’avant le correctif",
+          "final": "Arbre final"
+        },
+        "command": "Commande",
+        "reason": "Pourquoi c’est irreproductible",
+        "alternative": "Vérifié à la place",
+        "passed": "réussi",
+        "exitCode": "code de sortie {code}",
+        "timedOut": "délai dépassé",
+        "setupFailed": "échec de la préparation",
+        "notRun": "non exécuté",
+        "attempts": "Tentative {attempts} sur {maxAttempts}",
+        "omittedTestPaths": "{count} fichier de test déclaré a été écarté avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète. | {count} fichiers de test déclarés ont été écartés avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète."
       }
     },
     "inspector": {

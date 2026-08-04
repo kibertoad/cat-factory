@@ -112,6 +112,7 @@ describe('composeEnvironments', () => {
     const section = compose([deployed, uiTester()], {
       provisioning: read(provisioned(1_000), tornDown(3_000)),
       evidenceUrl: 'https://app.test/?run=exec_1&view=test-evidence',
+      artifactUrl: (id) => `https://api.test/workspaces/ws_1/artifacts/${id}/blob`,
     })
 
     expect(section.status).toBe('reported')
@@ -124,11 +125,36 @@ describe('composeEnvironments', () => {
     })
     expect(section.teardown).toBe('confirmed')
     expect(section.evidence.status).toBe('captured')
+    // Each captured artifact carries a DIRECT link to its bytes beside its id: the id is what an
+    // operator greps the store for, the link is what a reviewer (or a tool holding a key) opens.
     expect(section.evidence.screenshots).toEqual([
-      { view: 'login', artifactId: 'art_1', hasReference: true },
-      { view: 'dashboard', artifactId: 'art_2', hasReference: false },
+      {
+        view: 'login',
+        artifactId: 'art_1',
+        hasReference: true,
+        url: 'https://api.test/workspaces/ws_1/artifacts/art_1/blob',
+      },
+      {
+        view: 'dashboard',
+        artifactId: 'art_2',
+        hasReference: false,
+        url: 'https://api.test/workspaces/ws_1/artifacts/art_2/blob',
+      },
     ])
     expect(section.evidence.url).toBe('https://app.test/?run=exec_1&view=test-evidence')
+  })
+
+  it('lists an artifact by id alone when no backend URL is configured', () => {
+    // A deployment with no public backend URL must get the id and NO link — the report never
+    // emits a link to nowhere, and dropping the id in favour of one would leave a reviewer with
+    // nothing at all.
+    const section = compose([deployed, uiTester()], {
+      provisioning: read(provisioned(1_000), tornDown(3_000)),
+      evidenceUrl: null,
+    })
+
+    expect(section.evidence.screenshots.map((s) => s.url)).toEqual([null, null])
+    expect(section.evidence.screenshots.map((s) => s.artifactId)).toEqual(['art_1', 'art_2'])
   })
 
   it('reports an UNWIRED provisioning log as un-evidenced, never as "never torn down"', () => {
