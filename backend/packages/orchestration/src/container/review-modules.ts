@@ -4,7 +4,7 @@ import { RequirementReviewService } from '../modules/requirements/RequirementRev
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from '../modules/brainstorm/BrainstormService.js'
 import type { NotificationService } from '../modules/notifications/NotificationService.js'
-import { resolvePresetModelForKind } from '../modules/modelPresets/ModelPresetService.js'
+import { inlineModelResolutionDeps } from './inline-model-deps.js'
 import type { CoreDependencies, FragmentLibraryModule } from '../container.js'
 import type { BrainstormModule, ClarityModule, RequirementsModule } from './module-shapes.js'
 import { resolveBlockRunContext } from './blockRunContext.js'
@@ -55,26 +55,9 @@ export function createRequirementsModule(
     notificationService,
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    // The dedicated reviewer ref, else the document planner's (both the agents' default).
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    // In local mode, run the reviewer inline through the ambient Claude Code / Codex CLI on a
-    // subscription model instead of degrading to the routing default.
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    // Honour the workspace's model presets for the `requirements` kind too, so the
-    // reviewer resolves its model exactly like a pipeline step. Reuses the already
-    // wired model-preset repository (the workspace default preset); absent → only
-    // block-pin + routing default.
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     // The reviewer runs during a parked run, so its execution + initiator come from the
     // block's active run — threaded into the model scope so an inline subscription ref served
     // through a leased per-run activation (local container inline backend) can lease it.
@@ -154,16 +137,6 @@ export function createBrainstormModule(
   const { brainstormSessionRepository } = deps
   if (!brainstormSessionRepository) return undefined
 
-  const resolveWorkspaceModelDefault = deps.modelPresetRepository
-    ? (workspaceId: string, agentKind: string, modelPresetId?: string) =>
-        resolvePresetModelForKind(
-          deps.modelPresetRepository!,
-          workspaceId,
-          agentKind,
-          modelPresetId,
-        )
-    : undefined
-
   // The architecture stage's seed: the most refined requirements available — a settled
   // requirements review's incorporated doc, else the requirements-brainstorm's direction.
   const resolveRefinedRequirements = async (
@@ -193,15 +166,14 @@ export function createBrainstormModule(
     notificationService,
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     // Brainstorm stages are pipeline gate steps that run during a parked run, so their
     // execution + initiator come from the block's active run — threaded into the model scope
     // so an inline subscription ref served through a leased per-run activation (local container
     // inline backend) can lease it, exactly like the requirements/clarity reviewers.
     resolveRunContext: resolveBlockRunContext(deps),
-    resolveWorkspaceModelDefault,
   }
 
   return {
@@ -238,18 +210,9 @@ export function createClarityModule(
     notificationService,
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
   return { service }

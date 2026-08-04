@@ -221,6 +221,7 @@ export interface RunDispatcherDeps {
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   /** Resolve a task's merge preset (stays on the engine, shared with the merge subgraph). */
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRiskPolicy>
@@ -313,6 +314,7 @@ export class RunDispatcher {
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   private readonly resolveRiskPolicy: (
     workspaceId: string,
@@ -853,7 +855,11 @@ export class RunDispatcher {
         // Classify the resolved id through the shared predicate (same as the start gate)
         // when capabilities are wired; else fall back to the bare local-runner check.
         if (this.resolveProviderCapabilities) {
-          const caps = await this.resolveProviderCapabilities(workspaceId, instance.initiatedBy)
+          const caps = await this.resolveProviderCapabilities(
+            workspaceId,
+            instance.initiatedBy,
+            block.modelPresetId,
+          )
           if (!this.modelIdIsMetered(modelId, caps)) return true
         } else if (parseLocalModelId(modelId)) {
           return true
