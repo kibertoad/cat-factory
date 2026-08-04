@@ -1140,7 +1140,9 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   (`ExecutionInstance.initiatedByRole` / `.mode`), never re-resolved: the merge settles on the durable
   path, which has no request context to resolve a role from and must not let a preset edited mid-run
   re-govern a run already in flight. A sandbox is refused at BOTH exits — the auto-merge AND `mergePr`,
-  since the review card the first one raises is a merge button. **A PIN IS ONLY PINNED IF IT
+  since the review card the first one raises is a merge button. It is SCOPING, not a boundary: it
+  closes the PLATFORM's exits (which is a real escalation to close, because an initiator with no
+  stored PAT merges on the DEPLOYMENT credential), never a hand merge on the host. **A PIN IS ONLY PINNED IF IT
   PERSISTS**, and that is three hops each of which drops a field SILENTLY: `executionToDetail` and
   `rowToExecution` are an allow-list rather than a spread, and `buildResumedInstance` carries fields
   forward by NAME (drop the mode there and `restartFromStep`, which needs no failure, re-mints a

@@ -135,6 +135,27 @@ consulted, so reporting `exceeded_thresholds` (or `auto_merge_disabled`, on a pr
 happily have merged it) sends someone to edit a ceiling that had no part in the outcome. The review
 card it raises is worded the same way.
 
+## Why not just `autoMergeEnabled: false`?
+
+The first question anyone asks, because "Manual review only" already exists and sounds like it
+covers this. It does not, and the two halves of this feature miss it for different reasons.
+
+**`classRulesByRole` expresses something a preset structurally cannot.** A preset is pinned per
+TASK (`Block.mergePresetId`), so every one of its settings is uniform across WHO ran the task.
+`autoMergeEnabled: false` therefore forces an all-or-nothing choice on a task a product manager and
+an engineer both run: turn auto-merge off and the engineers lose it too, or leave it on and the PM's
+runs merge themselves. A second preset does not help, because the preset follows the task and both
+people run the SAME task. Scoping by the initiator is the only axis on which "auto-merge dependency
+bumps, but not when a member started them" is sayable at all.
+
+**`dryRunRoles` closes a narrower gap, and it is worth naming precisely: "manual review only" means
+NOT AUTOMATIC, not REVIEWED BY SOMEONE ELSE.** The merge route carries no permission gate of its
+own, so the only bar on it is the RBAC viewer write floor, `>= member` (ADR 0025). Under a
+manual-review-only preset a member starts a run, receives the `merge_review` card their own run
+raised, taps merge, and it lands. No second person was involved at any point. The delta the sandbox
+adds is exactly that: the initiator cannot be their own reviewer. Which is also why it had to be
+refused at both exits rather than only declining the auto-merge.
+
 ## The sandbox has to hold at BOTH exits
 
 `MergeResolver` declining to auto-merge is half a sandbox. The decision leaves a `merge_review`
@@ -142,8 +163,32 @@ card, and that card's action calls `mergePr` — so without a second guard, a ru
 authorised to merge lands its change one tap later, through the surface the mode exists to guard.
 `StepDecisionController.mergePr` therefore refuses a dry run's PR with `dry_run_not_mergeable`.
 
-What the mode does NOT claim: the PR is a real PR on the host, and anyone with write access there
-can merge it by hand. The guarantee is that the PLATFORM will not do it on a sandboxed run's behalf.
+### What the sandbox does and does not guarantee
+
+**It is not a boundary against a direct merge on the host.** The PR is a real PR, and anyone with
+write access on GitHub can merge it by hand. Nothing here can prevent that, and the mode does not
+claim to.
+
+**What it does close is a PRIVILEGE-ESCALATION path through the platform**, which is the part that
+makes it more than a speed bump for the people it is aimed at. The engine merges with the
+INITIATOR'S OWN token only when they stored a PAT and the workspace allows the preference;
+otherwise it falls back to the DEPLOYMENT credential (`runInitiatorToken.ts`). So a non-engineer
+with no repo write and no stored PAT cannot merge on GitHub, but tapping the review card merges as
+the App installation, which can. Refusing `mergePr` removes a capability that person did not
+otherwise have.
+
+**Its value is therefore conditional on a fact this platform does not check**: whether the
+sandboxed person has write access to the repo. Against someone who does, the mode is advisory, a
+declaration of intent rather than enforcement. Operators should read it that way, and a deployment
+that needs the stronger guarantee wants branch protection (the security model's checklist item 1),
+not this setting.
+
+**It is not separation of duties in general.** It scopes the tiers a preset names, and nothing
+more. An admin can still be the sole human on their own run's PR under any preset.
+
+**A sandboxed member cannot un-sandbox themselves.** `RiskPolicyController` mounts
+`requireWorkspacePermission('settings.manage')` on `*`, so editing `dryRunRoles` is admin-tier.
+Without that the setting would be theatre, since the obvious way around a sandbox is to delete it.
 
 ## Why the PR still opens
 
