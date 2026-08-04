@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { isDryRun, resolveRunMode } from './runMode.logic.js'
+import type { WorkspaceRole } from '@cat-factory/kernel'
+import { isDryRun, resolveRunMode, settleRunModeForStart } from './runMode.logic.js'
 
 // How a run's mode is settled at start: what the caller asked for, composed with the roles the
 // task's merge preset sandboxes. The composition is one-way by design, and these lock that.
@@ -75,5 +76,71 @@ describe('isDryRun', () => {
     expect(isDryRun(undefined)).toBe(false)
     expect(isDryRun('live')).toBe(false)
     expect(isDryRun('dry_run')).toBe(true)
+  })
+})
+
+describe('settleRunModeForStart', () => {
+  const logger = { debug() {}, info() {}, warn() {}, error() {}, child: () => logger }
+
+  const settle = (
+    over: Partial<Parameters<typeof settleRunModeForStart>[0]> & {
+      loadDryRunRoles?: () => Promise<readonly WorkspaceRole[] | undefined>
+    } = {},
+  ) =>
+    settleRunModeForStart({
+      requested: undefined,
+      role: 'member',
+      loadDryRunRoles: async () => [],
+      baseNotes: [],
+      logger,
+      fields: {},
+      ...over,
+    })
+
+  it('joins the sandbox advisory onto the notes the run already carries', async () => {
+    // A sandbox nobody ASKED for has to announce itself: from the board, a run that will never
+    // merge looks exactly like one that has not got there yet.
+    const { mode, notes } = await settle({
+      role: 'member',
+      loadDryRunRoles: async () => ['member'],
+      baseNotes: ['a frontend note'],
+    })
+    expect(mode).toBe('dry_run')
+    expect(notes[0]).toBe('a frontend note')
+    expect(notes.at(-1)).toContain('Sandboxed run')
+  })
+
+  it('adds no advisory to a sandbox the initiator asked for', async () => {
+    const { mode, notes } = await settle({ requested: 'dry_run', loadDryRunRoles: async () => [] })
+    expect(mode).toBe('dry_run')
+    expect(notes).toEqual([])
+  })
+
+  it('does not read the preset at all for an unattributed start', async () => {
+    // Only a pinned role can match a `dryRunRoles` entry, so on a schedule fire / public-API
+    // start / auth-disabled dev the answer cannot change the outcome. Reading it anyway is a
+    // preset resolution per scheduled run bought for nothing.
+    let reads = 0
+    const { mode } = await settle({
+      role: null,
+      loadDryRunRoles: async () => {
+        reads += 1
+        return ['viewer', 'member', 'admin']
+      },
+    })
+    expect(reads).toBe(0)
+    expect(mode).toBe('live')
+  })
+
+  it('reads the preset exactly once for an attributed start', async () => {
+    let reads = 0
+    await settle({
+      role: 'admin',
+      loadDryRunRoles: async () => {
+        reads += 1
+        return []
+      },
+    })
+    expect(reads).toBe(1)
   })
 })

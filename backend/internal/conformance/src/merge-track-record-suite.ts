@@ -6,6 +6,7 @@ import type {
   Pipeline,
   RepoFiles,
   RiskPolicy,
+  RunMode,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -65,6 +66,8 @@ type MergerRunDriver = (options: {
   assessment: { complexity: number; risk: number; impact: number; rationale: string }
   /** Created and pinned on the task before the run when supplied. */
   preset?: Record<string, unknown>
+  /** Requests a SANDBOXED run at start, exactly as the HTTP contract lets a caller. */
+  mode?: RunMode
 }) => Promise<{
   app: ConformanceApp
   wsId: string
@@ -94,6 +97,8 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
       assessment: { complexity: number; risk: number; impact: number; rationale: string }
       /** Created and pinned on the task before the run when supplied. */
       preset?: Record<string, unknown>
+      /** Requests a SANDBOXED run at start, exactly as the HTTP contract lets a caller. */
+      mode?: RunMode
     }): Promise<{
       app: ConformanceApp
       wsId: string
@@ -143,7 +148,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
       const start = await app.call<ExecutionInstance>(
         'POST',
         `/workspaces/${wsId}/blocks/task_login/executions`,
-        { pipelineId: pipeline.body.id },
+        { pipelineId: pipeline.body.id, ...(options.mode ? { mode: options.mode } : {}) },
       )
       expect(start.status).toBe(201)
       const ticked = await app.drive(wsId)
@@ -270,6 +275,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
     registerMergeEffortTagTests(harness, driveMergerRun, rollupFor)
     registerMergeClassFallbackTests(harness, driveMergerRun, rollupFor)
     registerRoleScopedPolicyTests(harness)
+    registerDryRunTests(driveMergerRun)
   })
 }
 
@@ -606,5 +612,67 @@ function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
     expect(res.status).toBe(201)
     expect(res.body.classRulesByRole).toEqual({})
     expect(res.body.dryRunRoles).toEqual([])
+  })
+}
+
+/**
+ * The sandboxed run mode, END TO END through a real store on both runtimes.
+ *
+ * This is the assertion the feature shipped without, and the one that catches the whole class of
+ * defect the unit tests structurally cannot. `mode` is settled at START, but the merge decision is
+ * made on the DURABLE path, which rebuilds the run from its persisted row and nothing else. So
+ * every hop between those two points has to carry it: the detail-JSON writer, the reader, and the
+ * re-drive that mints a fresh run id over the same work. A `MergeResolver` unit test hands the
+ * resolver an instance it built in memory and passes no matter which of those hops drops the
+ * field — which is exactly what happened, on both runtimes, with the feature reporting success.
+ *
+ * These drive the run through the real HTTP start, the real engine and the real repository, so
+ * they fail if `mode` fails to round-trip anywhere along that path.
+ */
+function registerDryRunTests(driveMergerRun: MergerRunDriver): void {
+  /** A sandboxed run whose scores and preset would otherwise have merged it outright. */
+  const driveSandboxed = () =>
+    driveMergerRun({
+      changedFiles: ['README.md'],
+      assessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'trivial docs tweak' },
+      preset: { classRules: { docs: 'always' } },
+      mode: 'dry_run',
+    })
+
+  it('opens the PR but refuses to merge it, surviving the persistence round-trip', async () => {
+    const run = await driveSandboxed()
+    // The PR is deliberately still opened: what makes the mode a sandbox is that the change
+    // cannot reach the default branch, not that the work stays invisible.
+    expect(run.status).toBe('pr_ready')
+    expect(run.decision.outcome).toBe('awaiting_review')
+    // …and the reason names the sandbox rather than a ceiling nobody consulted. `docs: 'always'`
+    // would have auto-merged this diff, so `class_auto_merge` here would mean the mode was lost
+    // somewhere between the start request and the merge decision.
+    expect(run.decision.reason).toBe('dry_run')
+  })
+
+  it('refuses the manual merge endpoint too, so the review card is not a way around it', async () => {
+    // Without this the sandbox is decorative: declining to AUTO-merge only to leave a card whose
+    // own button lands the change would let a run that was never authorised to merge do exactly
+    // that, one tap later. The refusal reads the mode off the run the block points at, so it is
+    // a second, independent proof that the mode persisted.
+    const run = await driveSandboxed()
+    const merged = await run.app.call('POST', `/workspaces/${run.wsId}/blocks/task_login/merge`, {})
+    expect(merged.status).toBe(409)
+    expect(
+      (merged.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
+    ).toBe('dry_run_not_mergeable')
+  })
+
+  it('leaves an ordinary live run merging exactly as before', async () => {
+    // The identity that keeps this feature additive: the same run, same preset, same scores, with
+    // no mode requested, must still auto-merge. A sandbox is never INFERRED.
+    const run = await driveMergerRun({
+      changedFiles: ['README.md'],
+      assessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'trivial docs tweak' },
+      preset: { classRules: { docs: 'always' } },
+    })
+    expect(run.status).toBe('done')
+    expect(run.decision.outcome).toBe('auto_merged')
   })
 }

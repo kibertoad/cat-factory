@@ -88,7 +88,12 @@ export function isDryRun(mode: RunMode | undefined): boolean {
 export async function settleRunModeForStart(input: {
   requested: RunMode | undefined
   role: WorkspaceRole | null | undefined
-  /** Reads the task's resolved preset for the roles it sandboxes; called at most once. */
+  /**
+   * Reads the task's resolved preset for the roles it sandboxes. Called at most once, and NOT AT
+   * ALL for a run with no pinned role: only a role can match a `dryRunRoles` entry, so on an
+   * unattributed start (a schedule fire, a public-API start, auth-disabled dev) the answer cannot
+   * change the outcome and asking for it is a preset read the start path does not owe.
+   */
   loadDryRunRoles: () => Promise<readonly WorkspaceRole[] | undefined>
   /** Notes the run already carries, which the advisory JOINS rather than replaces. */
   baseNotes: readonly string[]
@@ -98,7 +103,9 @@ export async function settleRunModeForStart(input: {
   const { mode, source } = resolveRunMode({
     requested: input.requested,
     role: input.role,
-    dryRunRoles: await input.loadDryRunRoles(),
+    // Only a pinned role can match an entry, so an unattributed start skips the read entirely
+    // (see `loadDryRunRoles`). Same answer, one fewer preset resolution per scheduled run.
+    dryRunRoles: input.role ? await input.loadDryRunRoles() : undefined,
   })
   if (source === 'role_policy') {
     input.logger.info('run sandboxed by role policy', { ...input.fields, role: input.role })

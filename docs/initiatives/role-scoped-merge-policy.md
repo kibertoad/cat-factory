@@ -62,6 +62,53 @@ governed it before role scoping existed. Guessing either way is wrong in a way t
 `admin` hands an unattributed run the widest rules in the preset, and `viewer` sandboxes a
 deployment's whole schedule the day it first authors a role entry.
 
+### A pin is only pinned if it is PERSISTED, and that is three hops, not one
+
+The gotcha this feature actually hit, and the reason the two fields are worth a section of their own:
+`mode` and `initiatedByRole` are settled at START, but every decision that reads them is made on the
+DURABLE path, which rebuilds the run from its stored row and nothing else. Three hops sit between
+those points, and each drops the fields silently rather than loudly:
+
+- **The detail-JSON writer and reader** (`executionToDetail` / `rowToExecution` in
+  `@cat-factory/server`'s `persistence/mappers.ts`) are an explicit ALLOW-LIST, not a spread. A run
+  field absent from both is written by `start()`, held in memory for that request, and gone by the
+  time anything asks. The first cut of this feature shipped exactly that way: the sandbox never
+  engaged and the role narrowing never applied, on both runtimes, with every unit test green.
+- **`buildResumedInstance`** (`retry.logic.ts`) mints a FRESH run id over the same work and carries
+  fields forward by NAME. Dropping the mode there is a live escape hatch rather than a degraded
+  feature, because `restartFromStep` has no `failed` precondition: start a dry run, restart from
+  step 0, get a live run over the same work through the ordinary affordance.
+
+**Why no test caught it**: a `MergeResolver` unit test hands the resolver an instance it built in
+memory, so it passes no matter which hop drops the field. The guard is the run-level conformance
+case in `merge-track-record-suite.ts`, which drives a `mode: 'dry_run'` start through real HTTP, a
+real engine and a real store on both runtimes, and asserts BOTH exits refuse. Anything new that a
+run pins at admission and a settlement path reads owes the same end-to-end assertion.
+
+**The two decodes are deliberately asymmetric.** An unrecognised `initiatedByRole` is dropped onto
+the base rules: the role layer is subtractive, so losing it returns the run to a policy an operator
+authored, never past it. An unrecognised `mode` FAILS CLOSED to `dry_run`, because a value that is
+present-but-unreadable means a mode was settled and we cannot tell which, and reading it as `live`
+would hand the run merge authority it may never have had. Absent still means `live` in both cases:
+that is what every run predating the fields actually was. A run wrongly held back is one human tap
+from merging; a run wrongly merged is not recoverable.
+
+### Starting a run is a decision about ATTRIBUTION, and it has two answers
+
+A start route either admits the run under the caller's tier or deliberately admits it under none.
+Both wrong answers are silent, because a run with no pinned role is indistinguishable from a
+schedule fire: it stays on the base rules and merges, reporting nothing. This feature shipped wired
+into `ExecutionController` alone, so the bug-hunt adopt route (a member-tier start, in another
+module) minted runs that escaped both halves of the policy.
+
+So the role is read through the ONE `runInitiatorRole(c)` accessor (never a hand-rolled read of the
+gate's context, which is a second place to get the dev-open `null` wrong), and
+`server/test/runAdmission.coverage.spec.ts` CLASSIFIES every start route as attributed or
+deliberately-unattributed-with-a-reason. A new start route fails there until someone writes down
+which it is. It cannot be a typecheck: `initiatedByRole` is optional and must stay optional, because
+schedules, loops and the public API legitimately pin nothing. A headless `/api/v1` start
+authenticates as an API KEY, which holds scopes rather than a tier, so there is no role to pin.
+
 ## The precedence ladder
 
 `MergeResolver.resolveMergerStep`, most-significant first:
@@ -121,17 +168,19 @@ sandbox has to be able to tell policy from a mis-click.
 
 ## Per-item status
 
-| Item                                                                        | Status  | PR  |
-| --------------------------------------------------------------------------- | ------- | --- |
-| Contracts: `classRulesByRole`, `dryRunRoles`, `RunMode`, decision reasons   | done    | -   |
-| Kernel: narrow-only lattice + `resolveRoleScopedMergeClassRule`; seeds      | done    | -   |
-| Orchestration: role pin, `resolveRunMode`, `MergeResolver`, `mergePr` guard | done    | -   |
-| Server: role threaded from the gate-published access; mode from the body    | done    | -   |
-| Cloudflare + Node: two preset columns, migrations, repos                    | done    | -   |
-| Conformance: preset round-trip + `unknown` refusal on both runtimes         | done    | -   |
-| SPA: merge-decision banner, conflict toast, API client                      | done    | -   |
-| SPA: preset AUTHORING controls for both fields                              | pending | -   |
-| SPA: a dry-run option on the start-run control                              | pending | -   |
+| Item                                                                         | Status  | PR  |
+| ---------------------------------------------------------------------------- | ------- | --- |
+| Contracts: `classRulesByRole`, `dryRunRoles`, `RunMode`, decision reasons    | done    | -   |
+| Kernel: narrow-only lattice + `resolveRoleScopedMergeClassRule`; seeds       | done    | -   |
+| Orchestration: role pin, `resolveRunMode`, `MergeResolver`, `mergePr` guard  | done    | -   |
+| Persistence: both fields on the run's detail JSON, fail-closed `mode` decode | done    | -   |
+| Re-drive: `buildResumedInstance` carries the pin across retry AND restart    | done    | -   |
+| Server: `runInitiatorRole` on every attributed start + the coverage guard    | done    | -   |
+| Cloudflare + Node: two preset columns, migrations, repos                     | done    | -   |
+| Conformance: preset round-trip, `unknown` refusal, run-level sandbox E2E     | done    | -   |
+| SPA: merge-decision banner, conflict toast, API client                       | done    | -   |
+| SPA: preset AUTHORING controls for both fields                               | pending | -   |
+| SPA: a dry-run option on the start-run control                               | pending | -   |
 
 The two pending rows are the authoring half. Both settings are already writable over
 `/workspaces/:ws/risk-policies` and a dry run is already requestable on the start endpoint, so the

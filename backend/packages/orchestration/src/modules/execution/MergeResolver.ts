@@ -44,6 +44,17 @@ interface MergeThresholds {
   classRulesByRole?: ClassRulesByRole
 }
 
+/**
+ * What the review card this resolver raises needs to know beyond the assessment itself: how the
+ * diff classified, the track-record row to link, and whether the run was SANDBOXED (which changes
+ * what the card says held the PR back, not merely whether it says so).
+ */
+interface ReviewCardContext {
+  changeClass: ChangeClass
+  recordId?: string
+  dryRun?: boolean
+}
+
 /** The assessment axes that exceed their preset ceiling (empty when all are within). */
 function exceededAxesOf(assessment: MergeAssessment, preset: MergeThresholds): MergeAxis[] {
   const axes: MergeAxis[] = []
@@ -267,12 +278,14 @@ export class MergeResolver {
     return { ...base, outcome: 'awaiting_review', reason, exceededAxes }
   }
 
-  /** The track-record context a review card carries so the human can tag in the same tap. */
-  private readonly trackContext = (ctx: {
-    changeClass: ChangeClass
-    recordId?: string
-    dryRun?: boolean
-  }) => ({
+  /**
+   * The track-record context a review card carries so the human can tag in the same tap.
+   *
+   * Takes only what it PROJECTS. `dryRun` rides the same {@link ReviewCardContext} the callers
+   * thread, but it changes the card's WORDING rather than its track-record link, so naming it
+   * here would advertise an input this function has no use for.
+   */
+  private readonly trackContext = (ctx: ReviewCardContext) => ({
     ...(ctx.changeClass !== 'unknown' ? { changeClass: ctx.changeClass } : {}),
     ...(ctx.recordId ? { mergeTrackRecordId: ctx.recordId } : {}),
   })
@@ -295,7 +308,7 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
-    track: { changeClass: ChangeClass; recordId?: string; dryRun?: boolean },
+    track: ReviewCardContext,
   ): Promise<void> {
     await this.raiseMergeReview(workspaceId, instance, block, assessment, track)
     await this.deps.blockRepository.update(workspaceId, block.id, {
@@ -310,7 +323,7 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
-    track: { changeClass: ChangeClass; recordId?: string; dryRun?: boolean },
+    track: ReviewCardContext,
   ): Promise<void> {
     if (!this.deps.notificationService) return
     // A sandboxed run's card must not describe the scores as the thing holding the PR back: they

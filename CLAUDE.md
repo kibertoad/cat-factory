@@ -1140,7 +1140,15 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   (`ExecutionInstance.initiatedByRole` / `.mode`), never re-resolved: the merge settles on the durable
   path, which has no request context to resolve a role from and must not let a preset edited mid-run
   re-govern a run already in flight. A sandbox is refused at BOTH exits — the auto-merge AND `mergePr`,
-  since the review card the first one raises is a merge button. Doc:
+  since the review card the first one raises is a merge button. **A PIN IS ONLY PINNED IF IT
+  PERSISTS**, and that is three hops each of which drops a field SILENTLY: `executionToDetail` and
+  `rowToExecution` are an allow-list rather than a spread, and `buildResumedInstance` carries fields
+  forward by NAME (drop the mode there and `restartFromStep`, which needs no failure, re-mints a
+  sandboxed run as live). A `MergeResolver` unit test hands in an instance built in memory and passes
+  through all three, so **anything a run pins at admission and a settlement path reads owes a
+  run-level conformance case**, not just unit coverage. Starting a run is likewise a decision about
+  ATTRIBUTION with exactly two answers: read the tier through the one `runInitiatorRole(c)` accessor,
+  or be named in `runAdmission.coverage.spec.ts` as deliberately unattributed with a reason. Doc:
   [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
 - **Merge track record**: a **best-effort side channel** persisting each decision to
   `merge_track_records`. Classification is pure backend TS over ONE VCS call, deliberately not in the

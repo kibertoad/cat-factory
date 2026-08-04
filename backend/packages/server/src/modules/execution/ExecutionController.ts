@@ -22,6 +22,7 @@ import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
+import { runInitiatorRole } from '../../http/runAdmission.js'
 import {
   activateForInteraction,
   personalGateForBlock,
@@ -57,11 +58,9 @@ export function executionController(): Hono<AppEnv> {
     )
     const instance = await container.executionService.start(workspaceId, blockId, pipelineId, {
       initiatedBy,
-      // The tier this run is admitted under, CONSUMED from what the auth gate already resolved —
-      // never re-derived here (workspace-rbac keeps membership resolution in exactly one place).
-      // Absent with auth disabled, which is the honest reading: dev-open has no roles to scope by,
-      // so such a run stays on the preset's base policy rather than being scoped to a guess.
-      initiatedByRole: c.get('workspaceAccess')?.role ?? null,
+      // The tier this run is admitted under (see `runInitiatorRole` for why it is read off the
+      // gate rather than re-derived, and why `null` is a real state rather than a lowest tier).
+      initiatedByRole: runInitiatorRole(c),
       // A REQUEST for a sandboxed run; the task's merge preset can still force one (see
       // `resolveRunMode`), so the engine settles the mode rather than trusting this.
       ...(mode ? { mode } : {}),
