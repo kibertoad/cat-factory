@@ -30,6 +30,8 @@ from .models import (
     ListDebugLogsResponse,
     ListDebugRunsResponse,
     ListDebugSearchQueriesResponse,
+    ListDebugToolCallsOrder,
+    ListDebugToolCallsResponse,
     ListPublicJobsResponse,
     LlmCallOutcome,
     Notification,
@@ -691,8 +693,8 @@ class DecisionsResource:
 
 
 class DebugResource:
-    """A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.
-
+    """A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls
+    it made, infra logs.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -895,6 +897,40 @@ class DebugResource:
         while True:
             page = self.list_search_queries(run_id, limit=limit, cursor=page_cursor, timeout=timeout)
             yield from page.queries
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_tool_calls(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> ListDebugToolCallsResponse:
+        """List a run's tool calls
+        The tool calls the run’s agents made, in the order they made them — which command,
+        against what, and what came back. The half of “how did this diff come about” that
+        neither the diff nor a prompt body answers. Arguments and results are retained only
+        when the deployment records agent context AND the workspace has not opted out;
+        `bodies` says which, so an empty `args` is never mistaken for a call that took none.
+        `GET /api/v1/debug/runs/{runId}/tool-calls` (operation `listDebugToolCalls`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/debug/runs/{_quote(run_id)}/tool-calls",
+            query={"limit": limit, "cursor": cursor, "jobId": job_id, "order": order},
+            timeout=timeout,
+        )
+        return ListDebugToolCallsResponse.from_dict(raw)
+
+    def list_tool_calls_all(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `toolCalls` across every page of `list_tool_calls()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `ListDebugToolCallsResponse.tool_calls`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_tool_calls(run_id, limit=limit, job_id=job_id, order=order, cursor=page_cursor, timeout=timeout)
+            yield from page.tool_calls
             if not page.next_cursor:
                 return
             if page.next_cursor == page_cursor:

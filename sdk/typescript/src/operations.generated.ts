@@ -22,6 +22,8 @@ import type {
   ListDebugLogsResponse,
   ListDebugRunsResponse,
   ListDebugSearchQueriesResponse,
+  ListDebugToolCallsOrder,
+  ListDebugToolCallsResponse,
   ListPublicJobsResponse,
   LlmCallOutcome,
   Notification,
@@ -102,6 +104,14 @@ export type DebugListRunsQuery = {
 export type DebugListSearchQueriesQuery = {
   limit?: number
   cursor?: string
+}
+
+/** Query parameters for `client.debug.listToolCalls()`. */
+export type DebugListToolCallsQuery = {
+  limit?: number
+  cursor?: string
+  jobId?: string
+  order?: ListDebugToolCallsOrder
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -679,7 +689,7 @@ export class DecisionsResource {
   }
 }
 
-/** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
 export class DebugResource {
   readonly #transport: Transport
 
@@ -877,6 +887,36 @@ export class DebugResource {
       cursor = page.nextCursor
     }
   }
+
+  /**
+   * List a run's tool calls
+   * The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.
+   * `GET /api/v1/debug/runs/{runId}/tool-calls` — operation `listDebugToolCalls`.
+   */
+  listToolCalls(runId: string, query: DebugListToolCallsQuery = {}, options: RequestOptions = {}): Promise<ListDebugToolCallsResponse> {
+    return this.#transport.request<ListDebugToolCallsResponse>({
+      method: 'GET',
+      path: `/api/v1/debug/runs/${encodePathSegment(runId)}/tool-calls`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `toolCalls` across every page of `listToolCalls()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listToolCallsAll(runId: string, query: DebugListToolCallsQuery = {}, options: RequestOptions = {}): AsyncGenerator<ListDebugToolCallsResponse['toolCalls'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listToolCalls(runId, { ...query, cursor }, options)
+      for (const item of page.toolCalls) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
 }
 
 /**
@@ -904,7 +944,7 @@ export abstract class CatFactoryResources {
   readonly usage: UsageResource
   /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
   readonly decisions: DecisionsResource
-  /** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource
 
   protected constructor(transport: Transport) {

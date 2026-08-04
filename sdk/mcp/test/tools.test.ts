@@ -20,13 +20,14 @@ function anyOfs(node: unknown): unknown[][] {
 
 describe('the generated tool table', () => {
   it('accounts for every published operation, exposed or omitted with a reason', () => {
-    // The spec has 42 operations. Two of them stream, and a tool call has no channel for that —
+    // The spec has 43 operations. Two of them stream, and a tool call has no channel for that —
     // so the arithmetic here is the guard that a future endpoint cannot quietly fail to become a
     // tool: generation fails on an unclassified stream, and this fails on a changed total that
     // nobody has looked at. (38 → 39: the pre-dispatch input gate's resolve, an ordinary
     // request/response operation, so it becomes a tool rather than an omission. 39 → 42: the
-    // three outbound-webhook management operations, likewise ordinary.)
-    expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(42)
+    // three outbound-webhook management operations, likewise ordinary. 42 → 43: the run's
+    // tool-call trajectory, an ordinary paginated read.)
+    expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(43)
     expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId)).toEqual([
       'streamPublicJobEvents',
       'streamPublicTaskRun',

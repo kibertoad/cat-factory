@@ -220,6 +220,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     idGenerator,
     clock,
     caches: options.caches,
+    logger,
   })
 
   // How a registered capability's declared credentials are resolved at dispatch, composed ONCE
@@ -254,7 +255,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
     resolveToolSecrets: toolSecretChain.resolver,
-    recordHarnessCalls: runServices.recordHarnessCalls,
+    ...runServices.executorTelemetry,
     recordSubscriptionQuotaUsage: (target, usage) =>
       runServices.subscriptionQuotaProvider.recordUsage(target, usage),
   })

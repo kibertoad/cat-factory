@@ -216,6 +216,38 @@ func (q *DebugListSearchQueriesQuery) values() map[string]string {
 	return out
 }
 
+// DebugListToolCallsQuery holds the query parameters for DebugService.ListToolCalls.
+type DebugListToolCallsQuery struct {
+	// Limit zero value means "not sent".
+	Limit *int
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// JobID zero value means "not sent".
+	JobID *string
+	// Order zero value means "not sent".
+	Order *ListDebugToolCallsOrder
+}
+
+func (q *DebugListToolCallsQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.JobID != nil {
+		out["jobId"] = fmt.Sprintf("%v", *q.JobID)
+	}
+	if q.Order != nil {
+		out["order"] = fmt.Sprintf("%v", *q.Order)
+	}
+	return out
+}
+
 // JobsListQuery holds the query parameters for JobsService.List.
 type JobsListQuery struct {
 	// Limit zero value means "not sent".
@@ -299,6 +331,11 @@ type ListDebugRunsResponseItem = DebugRunSummary
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
 type ListDebugSearchQueriesResponseItem = DebugSearchQuery
+
+// ListDebugToolCallsResponseItem is the element type of ListDebugToolCallsResponse.ToolCalls.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type ListDebugToolCallsResponseItem = ListDebugToolCallsResponseToolCall
 
 // ListPublicJobsResponseItem is the element type of ListPublicJobsResponse.Jobs.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
@@ -990,7 +1027,8 @@ func (s *DecisionsService) SetFindingStatus(ctx context.Context, runID string, i
 	return &out, nil
 }
 
-// DebugService a run's recorded telemetry: LLM calls, the context each agent was given, infra logs.
+// DebugService a run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it
+// made, infra logs.
 type DebugService struct {
 	client *Client
 }
@@ -1300,6 +1338,61 @@ func (s *DebugService) ListSearchQueriesAll(ctx context.Context, runID string, q
 			}
 			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
 				var zero ListDebugSearchQueriesResponseItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// ListToolCalls list a run's tool calls
+// The tool calls the run’s agents made, in the order they made them — which command, against
+// what, and what came back. The half of “how did this diff come about” that neither the diff nor
+// a prompt body answers. Arguments and results are retained only when the deployment records
+// agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is
+// never mistaken for a call that took none.
+// GET /api/v1/debug/runs/{runId}/tool-calls (operation listDebugToolCalls).
+func (s *DebugService) ListToolCalls(ctx context.Context, runID string, query *DebugListToolCallsQuery) (*ListDebugToolCallsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/debug/runs/%s/tool-calls", pathEscape(runID)),
+		Query:  query.values(),
+	}
+	var out ListDebugToolCallsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListToolCallsAll iterates every toolCalls across every page of ListToolCalls.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DebugService) ListToolCallsAll(ctx context.Context, runID string, query *DebugListToolCallsQuery) iter.Seq2[ListDebugToolCallsResponseItem, error] {
+	return func(yield func(ListDebugToolCallsResponseItem, error) bool) {
+		var page DebugListToolCallsQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListToolCalls(ctx, runID, &page)
+			if err != nil {
+				var zero ListDebugToolCallsResponseItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.ToolCalls {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero ListDebugToolCallsResponseItem
 				yield(zero, ErrRepeatedCursor)
 				return
 			}

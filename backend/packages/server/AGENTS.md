@@ -50,7 +50,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
   `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection; the one place
   that decides what of a dispatch may be persisted, so a new body field is opt-in, never
-  inherited). Every dispatcher of the `agent` kind (the executor, the bootstrapper and
+  inherited). A third, `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
+  gate ONCE and hands the same gated batch to the trajectory store and to any wired trace sink,
+  so the two can never end up with different answers about what a workspace permitted. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has

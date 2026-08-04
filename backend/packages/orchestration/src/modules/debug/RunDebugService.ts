@@ -1,6 +1,8 @@
 import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
+  AgentToolCall,
+  AgentToolCallRepository,
   AgentSearchQuery,
   Clock,
   ExecutionInstance,
@@ -19,6 +21,7 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   DebugRunSummary,
+  ToolCallOrder,
 } from '@cat-factory/contracts'
 import {
   deriveSignals,
@@ -66,6 +69,7 @@ export interface RunDebugServiceDependencies {
   agentContextSnapshotRepository?: AgentContextSnapshotRepository
   /** Per-search telemetry. Absent ⇒ the search reads return empty. */
   agentSearchQueryRepository?: AgentSearchQueryRepository
+  agentToolCallRepository?: AgentToolCallRepository
   /** The provisioning event log. Absent ⇒ the log reads return empty. */
   provisioningLogRepository?: ProvisioningLogRepository
   /**
@@ -158,12 +162,13 @@ export class RunDebugService {
    */
   async overview(workspaceId: string, execution: ExecutionInstance): Promise<DebugRunOverview> {
     const runId = execution.id
-    // Independent aggregates over four separate stores — issued together rather than in
+    // Independent aggregates over five separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
-    const [summaries, contextCount, searchCount, logCounts] = await Promise.all([
+    const [summaries, contextCount, searchCount, toolCallCount, logCounts] = await Promise.all([
       this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
+      this.deps.agentToolCallRepository?.countByExecution(workspaceId, runId) ?? 0,
       // Total + failures in one aggregate pass — the overview always wants both.
       this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? {
         total: 0,
@@ -182,6 +187,7 @@ export class RunDebugService {
         count: contextCount,
       },
       searchQueries: { available: !!this.deps.agentSearchQueryRepository, count: searchCount },
+      toolCalls: { available: !!this.deps.agentToolCallRepository, count: toolCallCount },
       provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCounts.total },
     }
     return {
@@ -335,6 +341,49 @@ export class RunDebugService {
       executionId: runId,
       limit: opts.limit + 1,
       cursor: opts.cursor,
+    })
+    return paginate(
+      rows,
+      opts.limit,
+      (row) => ({ createdAt: row.createdAt, id: row.id }),
+      (row) => row,
+    )
+  }
+
+  /**
+   * The run's tool calls, in one of two orders.
+   *
+   * `recent` is the keyset page every other fan-out list here serves: newest first on
+   * `(createdAt, id)`, resumable, for sweeping a long run. `trajectory` is the ORDERED read the
+   * sink exists for — oldest first by when each call actually started — and it answers a
+   * question about a bounded PREFIX, so it returns no cursor: an operator asking "what did this
+   * run do" wants the beginning, and a resumable walk of the same rows is what `recent` is.
+   *
+   * The ordering is computed HERE rather than left to the caller. A consumer holding a page of
+   * rows can see `jobId` and `seq` on each, and sorting by them is wrong in a way that looks
+   * right: `seq` restarts at zero on every dispatch, and a job id sorts a run's dispatches by
+   * agent-kind spelling and its re-runs `-10` before `-2`.
+   */
+  async listToolCalls(
+    workspaceId: string,
+    runId: string,
+    opts: { limit: number; cursor?: DebugCursor; jobId?: string; order?: ToolCallOrder },
+  ): Promise<DebugPage<AgentToolCall>> {
+    const repo = this.deps.agentToolCallRepository
+    if (!repo) return { items: [], nextCursor: null }
+    if (opts.order === 'trajectory') {
+      const items = await repo.listByExecution(workspaceId, {
+        executionId: runId,
+        limit: opts.limit,
+        ...(opts.jobId ? { jobId: opts.jobId } : {}),
+      })
+      return { items, nextCursor: null }
+    }
+    const rows = await repo.listPage(workspaceId, {
+      executionId: runId,
+      limit: opts.limit + 1,
+      ...(opts.cursor ? { cursor: opts.cursor } : {}),
+      ...(opts.jobId ? { jobId: opts.jobId } : {}),
     })
     return paginate(
       rows,

@@ -400,6 +400,80 @@ export const agentSearchQuerySchema = v.object({
 export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
 
 // ---------------------------------------------------------------------------
+// Tool-call trajectory: one row per tool invocation inside an agent's loop, in the
+// order the agent made them. Where `agent_context_snapshots` keeps what an agent was
+// GIVEN and `llm_call_metrics` what each model call cost, this keeps what the agent
+// DID with it — the "how" behind a diff, which was previously reconstructible only by
+// diffing consecutive prompts against each other.
+//
+// Bodies (`args`/`result`) ride the same double gate as the other two body-bearing
+// sinks (deployment `LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`),
+// which is why {@link agentToolCallSchema.bodies} exists: a withheld body and a tool
+// that genuinely took no arguments are different facts and must not render alike.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a tool call's `args`/`result` are empty.
+ *
+ * `stored` ⇒ the bodies were captured, so an empty one means the call really carried
+ * nothing. `withheld` ⇒ recording was off (deployment switch or workspace opt-out) or
+ * the producing harness image predates body capture, so nothing can be concluded from
+ * the empty strings. The distinction is the whole point of the field: without it an
+ * opted-out workspace's trajectory reads as a run whose every tool took no arguments.
+ */
+export const toolCallBodiesStateSchema = v.picklist(['stored', 'withheld'])
+export type ToolCallBodiesState = v.InferOutput<typeof toolCallBodiesStateSchema>
+
+/** One tool invocation an agent made during a run, in trajectory order. */
+export const agentToolCallSchema = v.object({
+  id: v.string(),
+  workspaceId: v.string(),
+  /** The run this call belongs to. */
+  executionId: v.string(),
+  /** The agent kind whose loop made the call (`coder`, `ci-fixer`, …). */
+  agentKind: v.string(),
+  /**
+   * The dispatch (container job) the call was made in. One run's step can dispatch more
+   * than once (a re-run, a gate's fixer rounds, a Ralph iteration), and {@link seq} is
+   * only monotonic WITHIN a dispatch, so the trajectory orders by `(jobId, seq)` — never
+   * by `seq` alone, which would interleave two dispatches into one nonsensical sequence.
+   */
+  jobId: v.string(),
+  /** The call's 0-based ordinal within its dispatch: the trajectory order itself. */
+  seq: v.number(),
+  /** The tool the agent invoked (`edit_file`, `bash`, `todo`, …). */
+  tool: v.string(),
+  /** Epoch ms the tool call started. */
+  startedAt: v.number(),
+  /** Epoch ms the tool call ended. */
+  endedAt: v.number(),
+  /** Whether the tool reported success (a failing call is kept: a stall is a trajectory). */
+  ok: v.boolean(),
+  /** Whether {@link args}/{@link result} were captured at all. */
+  bodies: toolCallBodiesStateSchema,
+  /**
+   * The tool's arguments as the agent supplied them, secret-scrubbed and capped at
+   * capture time. Serialised JSON for a structured tool call; `''` when `bodies` is
+   * `withheld`, or when the call genuinely took none.
+   */
+  args: v.string(),
+  /**
+   * What the tool returned, secret-scrubbed and capped at capture time. `''` when
+   * `bodies` is `withheld`, or when the tool returned nothing.
+   */
+  result: v.string(),
+  /**
+   * Characters dropped from {@link args} and {@link result} by the capture cap, so a
+   * reader can tell a short command from the head of a long one. 0 when nothing was cut.
+   */
+  argsDropped: v.number(),
+  resultDropped: v.number(),
+  /** When the call was recorded (epoch ms) — the keyset the pages order by. */
+  createdAt: v.number(),
+})
+export type AgentToolCall = v.InferOutput<typeof agentToolCallSchema>
+
+// ---------------------------------------------------------------------------
 // Platform-operator observability: deployment-level aggregate health, the dual of
 // the per-run detail above. Where the schemas above describe ONE run, these describe
 // the WHOLE deployment (scoped to an account) over a time window — run outcomes,

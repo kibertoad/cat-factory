@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshot,
   AgentContextSnapshotIndex,
   AgentSearchQuery,
+  AgentToolCall,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricSummary,
@@ -110,6 +111,32 @@ export const TELEMETRY_READ_METHODS = {
     },
     countByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
   },
+  agentToolCallRepository: {
+    /**
+     * Whole rows, bodies included: a tool call's args/result are capped at CAPTURE time (unlike
+     * a prompt body, which is stored whole and sliced at read time), so the page's byte size is
+     * `limit x 2 x MAX_TOOL_BODY_CHARS` and computable before the request. The row cap is lower
+     * than the search queries' for that reason — those rows carry no body at all — and matches
+     * the public debug endpoint's own ceiling, so the mothership can serve no page larger than
+     * the one a direct-db deployment would.
+     */
+    listPage: {
+      args: 'runQuery',
+      maxArgs: 1,
+      limit: 'query.limit',
+      maxLimit: 100,
+      timeoutMs: 10_000,
+    },
+    /** The ordered read; bounded by the same ceiling and for the same reason. */
+    listByExecution: {
+      args: 'runQuery',
+      maxArgs: 1,
+      limit: 'query.limit',
+      maxLimit: 100,
+      timeoutMs: 10_000,
+    },
+    countByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
+  },
 } as const satisfies Record<string, Record<string, TelemetryReadBound>>
 
 /**
@@ -181,6 +208,9 @@ export const TELEMETRY_READ_PAGE_SIZES = {
   metrics: 100,
   snapshots: 1,
   searchQueries: 500,
+  // Two capture-capped bodies per row, so a page is sized against that ceiling rather than the
+  // unbounded body a prompt page has to reckon with.
+  toolCalls: 100,
 } as const
 
 /**
@@ -265,6 +295,9 @@ export interface TelemetryReadResults {
   'agentContextSnapshotRepository.countByExecution': number
   'agentSearchQueryRepository.listPage': AgentSearchQuery[]
   'agentSearchQueryRepository.countByExecution': number
+  'agentToolCallRepository.listPage': AgentToolCall[]
+  'agentToolCallRepository.listByExecution': AgentToolCall[]
+  'agentToolCallRepository.countByExecution': number
 }
 
 /** The client half: performs one bounded telemetry read against the mothership. */

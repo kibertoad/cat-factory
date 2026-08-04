@@ -224,6 +224,55 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     expect(firstSpan(first!.body).traceId).toBe(firstSpan(second!.body).traceId)
   })
 
+  it("carries a tool call's arguments and result as span events, with its ordinal", async () => {
+    const { fetchImpl, calls } = capturingFetch()
+    const sink = new OtelTraceSink({ endpoint: COLLECTOR, fetchImpl })
+
+    await sink.recordToolSpans(
+      { workspaceId: 'ws1', executionId: 'exec1', agentKind: 'coder', jobId: 'exec1-coder-2' },
+      [
+        {
+          tool: 'run_command',
+          seq: 3,
+          startedAt: 1,
+          endedAt: 2,
+          ok: true,
+          bodies: 'stored',
+          args: '{"command":"pnpm build"}',
+          result: 'built in 4s',
+          argsDropped: 0,
+          resultDropped: 900,
+        },
+        // Withheld by the body gate: the metadata still exports, the bodies do not, and the span
+        // carries no empty event that would read as a call which took no arguments.
+        {
+          tool: 'read',
+          seq: 4,
+          startedAt: 3,
+          endedAt: 4,
+          ok: true,
+          bodies: 'withheld',
+          args: '',
+          result: '',
+          argsDropped: 0,
+          resultDropped: 0,
+        },
+      ],
+    )
+
+    const spans = spansOf(tracesOf(calls)[0]!.body)
+    const events = (spans[0]!.events ?? []) as { name: string; attributes?: unknown[] }[]
+    expect(events.map((e) => e.name)).toEqual(['gen_ai.tool.arguments', 'gen_ai.tool.result'])
+    const attrs = attrMap(spans[0]!.attributes as KeyValue[])
+    expect(attrs['cat_factory.tool_call.seq']).toBe(3)
+    // The DISPATCH rides with the ordinal: `seq` restarts at zero on every dispatch, so a run
+    // whose step ran twice would otherwise export two `seq: 0` spans nothing can tell apart.
+    expect(attrs['cat_factory.tool_call.job_id']).toBe('exec1-coder-2')
+    // What the cap dropped is stated, so a truncated result is legible AS truncated.
+    expect(attrs['cat_factory.tool_call.result_dropped_chars']).toBe(900)
+    expect(spans[1]!.events ?? []).toEqual([])
+  })
+
   it('emits one internal span per tool span, skipping when there is no run', async () => {
     const { fetchImpl, calls } = capturingFetch()
     const sink = new OtelTraceSink({ endpoint: COLLECTOR, fetchImpl })

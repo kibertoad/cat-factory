@@ -61,8 +61,32 @@ const TOOL_CONTEXT: LlmToolSpanContext = {
   agentKind: 'coder',
 }
 const TOOL_SPANS: LlmToolSpan[] = [
-  { tool: 'edit_file', startedAt: 2_100, endedAt: 2_200, ok: true },
-  { tool: 'run_command', startedAt: 2_300, endedAt: 2_400, ok: false },
+  // Bodies present on one and withheld on the other, so the pinning covers BOTH the events the
+  // transports emit for a captured call and the absence they must agree on for a gated one.
+  {
+    tool: 'edit_file',
+    seq: 0,
+    startedAt: 2_100,
+    endedAt: 2_200,
+    ok: true,
+    bodies: 'stored',
+    args: '{"path":"a.ts"}',
+    result: 'written',
+    argsDropped: 0,
+    resultDropped: 42,
+  },
+  {
+    tool: 'run_command',
+    seq: 1,
+    startedAt: 2_300,
+    endedAt: 2_400,
+    ok: false,
+    bodies: 'withheld',
+    args: '',
+    result: '',
+    argsDropped: 0,
+    resultDropped: 0,
+  },
 ]
 const RUN: LlmRunSpan = {
   workspaceId: 'ws1',
