@@ -194,6 +194,15 @@ export { TaskTypeRegistry, defaultTaskTypeRegistry } from './domain/task-type-re
 // descriptor's labels, once per dispatch, for every prompt-assembling path to render.
 export { describeCustomTaskType } from './domain/task-type-context.js'
 export type { CustomTaskFieldContext, CustomTaskTypeContext } from './domain/task-type-context.js'
+// The pure rules over a descriptor's fields, re-exported (not restated) from contracts so an org
+// package registering an operation imports its WHOLE vocabulary from kernel and needs no contracts
+// dependency, exactly as it does for `CustomTaskType` itself.
+export {
+  isDescriptorFieldVisible,
+  renderDescriptorFieldValue,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
 
 // Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
 // registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding
@@ -511,7 +520,7 @@ export {
   readManagedSection,
 } from './domain/pr-report.js'
 
-// The PRE-TOKEN INPUT GATE's pure check: is there anything in a task's authored input an agent
+// The PRE-DISPATCH INPUT GATE's pure check: is there anything in a task's authored input an agent
 // could act on? Runs before a run's first dispatch, so an unactionable task parks having spent
 // no tokens. See `domain/input-gate.ts`.
 export {
@@ -550,11 +559,18 @@ export {
   type ResolvedToolServer,
   type SkillVersionPin,
   type UnavailableToolServer,
+  MCP_HARNESS_TRANSPORTS,
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
+  MCP_TOOL_NAME_PATTERN,
+  TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
   isValidMcpServerId,
+  isValidMcpToolName,
+  mcpHarnessServesTransport,
+  mcpServableHarnesses,
   mcpServerSupportsHarness,
+  toolServerDeclaredBytes,
 } from './domain/agent-capabilities.js'
 
 export {

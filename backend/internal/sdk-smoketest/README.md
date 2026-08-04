@@ -2,7 +2,7 @@
 
 The **cross-SDK smoketest**: boots a real Node backend, then drives the same scenario through all
 four public-API SDK clients ([`sdk/`](../../../sdk)) and compares their observation reports field
-by field.
+by field. A second phase spawns the published **MCP server** against the same backend.
 
 ```sh
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
@@ -10,6 +10,9 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
 
 # while iterating on one client:
 DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=go
+
+# just the MCP facade (needs `pnpm build` first, for sdk/mcp/dist/bin.js):
+DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=mcp
 ```
 
 ## What it is for
@@ -64,6 +67,29 @@ A small `ENVIRONMENTAL` allow-list covers observations that may legitimately dif
 run had progressed when each client looked). Every entry there is a place a real divergence would
 go unreported, so the bar for adding one is "these two SDKs cannot be expected to observe the same
 value", never "these numbers move around".
+
+## The MCP phase
+
+`src/mcp.ts` spawns `sdk/mcp/dist/bin.js` as a real process and speaks the protocol to it. It is
+**graded, not compared**: there is one implementation, so every check is an absolute claim, and the
+phase reuses the parity module's problem vocabulary only so the two report the same way.
+
+It exists for the half of that package no unit test can reach: the part that only exists once there
+is a PROCESS:
+
+- **It starts from environment variables alone**, including `CAT_FACTORY_API_KEY_FILE` (the
+  mitigation for a long-lived key sitting in a host's plaintext config), and exits **1** with the
+  configuration named when it cannot work.
+- **Stdout stays free for JSON-RPC.** A single human-readable byte on it corrupts the stream, so the
+  ready banner is asserted on stderr and stdout is asserted empty on the failing path.
+- **The published `outputSchema`s are validated against real responses.** A tool declaring one is
+  obliged to return `structuredContent`, and the MCP client validates it, so this is the only check
+  in the repo that can see the generated schemas disagree with what the deployment actually answers.
+- **The env-only tool filters are honoured**, which only a process that read the environment can
+  demonstrate.
+
+A missing `dist/bin.js` is a **failure naming the build command**, not a skip: the artifact is ours
+rather than a language toolchain, so there is nothing to conclude from its absence.
 
 ## Notes
 

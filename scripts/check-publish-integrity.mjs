@@ -26,6 +26,12 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The workspace globs from pnpm-workspace.yaml, as a literal list (same convention as
 // check-package-catalog.mjs). Private packages are skipped at read time, so listing the
 // internal/deploy globs costs nothing and keeps the two scripts symmetric.
+//
+// `sdk/*` expands to the two npm members of the SDK family (`sdk/typescript`, `sdk/mcp`); the
+// Python, Go and Java clients have no package.json and drop out at read time. They belong here for
+// the reason this whole script exists: `@cat-factory/mcp-server` is one `bin` entry pointing at a
+// gitignored `dist`, which is exactly the shape the two packages that already reached npm as empty
+// shells had.
 const WORKSPACE_GLOBS = [
   'backend/packages/*',
   'backend/runtimes/*',
@@ -35,6 +41,7 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
+  'sdk/*',
 ]
 
 // @cat-factory/app is a source-published Nuxt layer (main: ./nuxt.config.ts, no dist, no

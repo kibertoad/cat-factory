@@ -1,4 +1,4 @@
-# Initiative: pre-token input gate
+# Initiative: pre-dispatch input gate
 
 **Status:** in progress (V1 landed) · **Owner:** core · **Started:** 2026-08-04
 

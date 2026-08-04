@@ -129,23 +129,43 @@ export const INTRODUCE_API_TASK_TYPE_DEFINITION: CustomTaskType = {
       maxLength: 120,
     },
     {
+      // A multi-select rather than a comma-separated string: the answer is a closed set, so the
+      // form should not ask a human to spell it, and the prompt fold joins the captions itself.
       key: 'operations',
       label: 'Operations',
-      type: 'text',
+      type: 'checkbox-group',
       required: true,
-      placeholder: 'create, read, list',
-      help: 'Which operations to expose, comma-separated.',
-      maxLength: 200,
+      help: 'Which operations to expose.',
+      options: [
+        { value: 'create', label: 'Create' },
+        { value: 'read', label: 'Read one' },
+        { value: 'list', label: 'List' },
+        { value: 'update', label: 'Update' },
+        { value: 'delete', label: 'Delete' },
+      ],
+      defaultValues: ['create', 'read', 'list'],
     },
     {
       key: 'resourceStyle',
       label: 'Resource style',
       type: 'select',
+      default: 'collection',
       options: [
         { value: 'collection', label: 'Collection + item (/orders, /orders/{id})' },
         { value: 'singleton', label: 'Singleton (/orders/current)' },
         { value: 'action', label: 'Action endpoint (/orders/{id}/refund)' },
       ],
+    },
+    {
+      // Only an ACTION endpoint has a verb to name, so the field appears when one is picked and is
+      // dropped again if it is not: a stale answer from a since-changed style never reaches an agent.
+      key: 'actionName',
+      label: 'Action name',
+      type: 'text',
+      placeholder: 'refund',
+      help: 'The verb the action endpoint exposes, as it should appear in the path.',
+      maxLength: 60,
+      showWhen: { key: 'resourceStyle', equals: 'action' },
     },
     {
       key: 'authRequirement',

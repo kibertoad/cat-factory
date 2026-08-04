@@ -172,7 +172,7 @@ claim to.
 **What it does close is a PRIVILEGE-ESCALATION path through the platform**, which is the part that
 makes it more than a speed bump for the people it is aimed at. The engine merges with the
 INITIATOR'S OWN token only when they stored a PAT and the workspace allows the preference;
-otherwise it falls back to the DEPLOYMENT credential (`runInitiatorToken.ts`). So a non-engineer
+otherwise it falls back to the DEPLOYMENT credential (`runInitiatorToken.ts`). So a non-developer
 with no repo write and no stored PAT cannot merge on GitHub, but tapping the review card merges as
 the App installation, which can. Refusing `mergePr` removes a capability that person did not
 otherwise have.
@@ -192,7 +192,7 @@ Without that the setting would be theatre, since the obvious way around a sandbo
 
 ## Why the PR still opens
 
-The deliverable a non-engineer needs to SEE is the diff. Withholding the push would leave them
+The deliverable a non-developer initiator needs to SEE is the diff. Withholding the push would leave them
 reading prose about work they cannot inspect, and would need new harness plumbing rather than
 composition. What makes the mode a sandbox is that the change cannot reach the default branch, not
 that it stays invisible.
