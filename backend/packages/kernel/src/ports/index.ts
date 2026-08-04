@@ -56,6 +56,8 @@ export type { Clock, IdGenerator } from './runtime.js'
 export {
   type LogFields,
   type LogLevel,
+  type LogRecord,
+  type LogSink,
   type Logger,
   type RecordedLogLine,
   createRecordingLogger,
@@ -302,6 +304,7 @@ export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
   DocumentRecord,
+  DocumentRef,
   DocumentRepository,
 } from './document-repositories.js'
 export type {

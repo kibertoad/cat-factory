@@ -223,7 +223,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
       {
         title: 'Pin an individual model',
         // A real description because the subject here is the CREDENTIAL refusal below: a
-        // title-only task is refused earlier, by the pre-token input gate's admission check, and
+        // title-only task is refused earlier, by the pre-dispatch input gate's admission check, and
         // this key has no `decide` scope to answer that park.
         description: 'Run the estimator against this service so the model pin can be exercised.',
       },

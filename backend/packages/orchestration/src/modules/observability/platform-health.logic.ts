@@ -3,6 +3,7 @@ import type {
   PlatformAlertReason,
   PlatformAlertSettings,
   PlatformAlertWindow,
+  PlatformFailureKindRule,
   PlatformObservability,
 } from '@cat-factory/contracts'
 
@@ -62,6 +63,17 @@ export interface PlatformAlertThresholds {
    * hiccup on a single tick is not an alert.
    */
   maxSweepFailures: number
+  /**
+   * Per-kind ceilings driving `failure_kind_rate_high`: "page when `evicted` exceeds 5% of the
+   * window's failures". EMPTY (the default) means no kind carries a rule, which is why this
+   * whole condition costs an opted-out deployment nothing.
+   *
+   * The list is REQUIRED here while every field of the settings/env override is optional, and
+   * that asymmetry is the point: this is the resolved configuration a pass is evaluated under,
+   * where "no rules" has to be a value rather than an absence, or a caller assembling a
+   * threshold bag by hand would silently disable the condition it was configuring.
+   */
+  failureKindRules: readonly PlatformFailureKindRule[]
 }
 
 /** Conservative defaults: quiet unless the deployment is genuinely unhealthy. */
@@ -78,6 +90,11 @@ export const DEFAULT_PLATFORM_ALERT_THRESHOLDS: PlatformAlertThresholds = {
   // where 10 of 10 are, and a single stray `agent` failure should not silence it.
   maxFailureKindShare: 0.8,
   maxSweepFailures: 3,
+  // No per-kind rules by default. Which kinds deserve their own ceiling, and where each sits, is
+  // a judgement about a particular deployment's substrate and workload — a shipped default here
+  // would be the platform guessing at that, and guessing loudly, since the condition exists to
+  // page. An operator names the kinds they care about; until then this reads exactly as before.
+  failureKindRules: [],
 }
 
 /**
@@ -125,6 +142,13 @@ export function resolveAccountAlertConfig(
       minStalledPriorRuns: t?.minStalledPriorRuns ?? deployment.thresholds.minStalledPriorRuns,
       maxFailureKindShare: t?.maxFailureKindShare ?? deployment.thresholds.maxFailureKindShare,
       maxSweepFailures: t?.maxSweepFailures ?? deployment.thresholds.maxSweepFailures,
+      // The one LIST, and it replaces rather than merges. An account's stored rules are the
+      // account's rules: merging per kind would let it retune a deployment rule but never drop
+      // one, and quietly reinstating a rule an operator deleted is the worse mistake for a pager
+      // than making them restate the ones they want. Absent still inherits, and an EMPTY list is
+      // a live setting ("no per-kind rules here"), which is why this reads `??` rather than a
+      // length check.
+      failureKindRules: t?.failureKindRules ?? deployment.thresholds.failureKindRules,
     },
   }
 }
@@ -139,6 +163,7 @@ export function resolveAccountAlertConfig(
 const RUN_EVIDENCED_REASONS: ReadonlySet<PlatformAlertReason> = new Set<PlatformAlertReason>([
   'failure_rate_high',
   'failure_kind_dominant',
+  'failure_kind_rate_high',
 ])
 
 /** Whether a fired reason set has failing runs behind it worth linking to. */
@@ -222,6 +247,12 @@ export function evaluatePlatformHealth(
         threshold: thresholds.maxFailureKindShare,
       })
     }
+    // The operator's own per-kind rules, on top of the same taxonomy. The dominant condition
+    // above asks whether ONE cause is swamping the rest, which is a question about the shape of
+    // the distribution; these ask whether a NAMED cause has REACHED what this deployment
+    // tolerates from it, which no single ceiling can express — 5% evictions is the substrate
+    // failing and 40% `rejected` is the product working.
+    alerts.push(...failureKindRuleAlerts(snapshot, thresholds, totalFailures))
   }
 
   // The watcher itself. A sweeper that has failed every pass makes every signal above stale
@@ -282,13 +313,73 @@ function trailingStall(
 }
 
 /**
- * The SORTED set of reason codes from a list of fired alerts — the platform-health card's
- * stable dedup identity. Sorted so the card content is a pure function of WHICH conditions
- * fire (never their order), so the notification service re-delivers only when the firing set
- * changes rather than on every sweep.
+ * Every per-kind rule that is firing, one alert each, in kind order.
+ *
+ * Two gates stand in front of each rule and they guard different mistakes. The shared
+ * `minRuns` (applied by the caller) says the WINDOW is too small to conclude anything from;
+ * the rule's own `minCount` says THIS KIND's occurrences are too few. A per-kind rule is
+ * meant to sit far below dominance, and at a 5% ceiling the run gate has stopped protecting
+ * anything: five terminal runs with one eviction is already 20%. Without the second gate, the
+ * threshold an operator sets to catch a substrate problem would page on the first blip.
+ *
+ * A rule whose kind is absent from the window's taxonomy simply does not fire, and that is the
+ * healthy answer rather than a silent gap: the taxonomy carries a slice for every kind that
+ * OCCURRED, so "no slice" is "it never happened".
+ */
+function failureKindRuleAlerts(
+  snapshot: PlatformObservability,
+  thresholds: PlatformAlertThresholds,
+  totalFailures: number,
+): PlatformAlert[] {
+  const rules = thresholds.failureKindRules
+  if (!rules || rules.length === 0) return []
+  // The taxonomy indexed once, rather than a `find` per rule inside the loop.
+  const counts = new Map(snapshot.failures.map((slice) => [slice.kind, slice.count]))
+  return [...rules]
+    .sort((a, b) => a.kind.localeCompare(b.kind))
+    .flatMap((rule) => {
+      const count = counts.get(rule.kind) ?? 0
+      if (count < (rule.minCount ?? 1)) return []
+      const share = count / totalFailures
+      if (share < rule.maxShare) return []
+      return [
+        {
+          reason: 'failure_kind_rate_high' as const,
+          kind: rule.kind,
+          value: share,
+          threshold: rule.maxShare,
+        },
+      ]
+    })
+}
+
+/**
+ * The SORTED set of reason codes from a list of fired alerts — one half of the platform-health
+ * card's stable dedup identity ({@link platformAlertFailureKinds} is the other). Sorted so the
+ * card content is a pure function of WHICH conditions fire (never their order), so the
+ * notification service re-delivers only when the firing set changes rather than on every sweep.
+ *
+ * DEDUPLICATED, because a reason code is no longer one condition: every per-kind rule fires
+ * under `failure_kind_rate_high`, so three firing rules would otherwise repeat it three times
+ * and make the identity churn as rules came and went — while naming none of the kinds, which is
+ * the one thing that actually changed.
  */
 export function platformAlertReasons(alerts: PlatformAlert[]): PlatformAlertReason[] {
-  return alerts.map((a) => a.reason).sort()
+  return [...new Set(alerts.map((a) => a.reason))].sort()
+}
+
+/**
+ * The SORTED, deduplicated failure kinds whose per-kind rule is firing — the rest of the card's
+ * dedup identity, and empty when no kind-scoped condition fired.
+ *
+ * It exists because the reason set alone cannot see a change of kind: evictions subsiding as
+ * timeouts take over is one reason code before and after, so a card keyed on reasons would go on
+ * describing the incident that ended. The NAMES rather than their shares, for the same reason
+ * the card carries no numbers anywhere: a share that moves every sweep would re-deliver the card
+ * for the whole length of an incident.
+ */
+export function platformAlertFailureKinds(alerts: PlatformAlert[]): string[] {
+  return [...new Set(alerts.flatMap((a) => (a.kind ? [a.kind] : [])))].sort()
 }
 
 /** Human-readable (English) fragment per reason, used to compose the card body below. */
@@ -298,7 +389,17 @@ const REASON_PHRASE: Record<PlatformAlertReason, string> = {
   backlog_high: 'a growing backlog of unfinished runs',
   throughput_stalled: 'no new runs at all, after a busy period',
   failure_kind_dominant: 'nearly every failure sharing one cause',
+  // The kind-less wording, used only when the caller supplied no kinds. The real card names
+  // them (see `platformHealthCardContent`), because "one failure kind" is precisely the detail
+  // an operator needs to know which system to go and look at.
+  failure_kind_rate_high: 'a failure kind at or over the rate an operator set for it',
   sweep_degraded: 'a background maintenance sweep failing repeatedly',
+}
+
+/** `a, b and c` — the card's list joiner, kept in one place so every list reads alike. */
+function joinPhrases(phrases: string[]): string {
+  if (phrases.length <= 1) return phrases[0] ?? 'a health threshold was crossed'
+  return `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}`
 }
 
 const WINDOW_PHRASE: Record<PlatformAlertWindow, string> = {
@@ -318,14 +419,22 @@ const WINDOW_PHRASE: Record<PlatformAlertWindow, string> = {
 export function platformHealthCardContent(
   reasons: PlatformAlertReason[],
   window: PlatformAlertWindow,
+  /**
+   * The kinds whose per-kind rule is firing ({@link platformAlertFailureKinds}), so the card
+   * NAMES them instead of saying "a failure kind". They belong in the body precisely because
+   * they are part of the dedup identity: a name that is stable for the length of an incident is
+   * content the card can carry, unlike the share behind it, which moves every sweep. Default
+   * empty, which reads as the kind-less phrasing above.
+   */
+  failureKinds: readonly string[] = [],
 ): { title: string; body: string } {
-  const phrases = reasons.map((r) => REASON_PHRASE[r])
-  const list =
-    phrases.length <= 1
-      ? (phrases[0] ?? 'a health threshold was crossed')
-      : `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}`
+  const phrases = reasons.map((r) =>
+    r === 'failure_kind_rate_high' && failureKinds.length > 0
+      ? `${joinPhrases([...failureKinds])} failures at or over the rate set for them`
+      : REASON_PHRASE[r],
+  )
   return {
     title: 'Platform health alert',
-    body: `The deployment shows ${list} over ${WINDOW_PHRASE[window]}. Open the operator dashboard for detail.`,
+    body: `The deployment shows ${joinPhrases(phrases)} over ${WINDOW_PHRASE[window]}. Open the operator dashboard for detail.`,
   }
 }

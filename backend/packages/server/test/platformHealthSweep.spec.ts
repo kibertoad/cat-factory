@@ -88,6 +88,10 @@ function makeContainer(opts: {
   openCardWorkspaces?: string[]
   /** The reason set stored on those open cards, if any; drives the state-change dedup. */
   openCardReasons?: string[]
+  /** The per-kind half of the stored identity on those cards. */
+  openCardFailureKinds?: string[]
+  /** Deployment thresholds, when a test needs something other than the shipped defaults. */
+  thresholds?: typeof DEFAULT_PLATFORM_ALERT_THRESHOLDS
   /** The account's stored alert overrides, layered over the deployment defaults. */
   accountSettings?: PlatformAlertSettings
   /** Failing runs the deep-link sample resolves to, keyed by workspace. */
@@ -122,7 +126,16 @@ function makeContainer(opts: {
     open.set(ws.id, {
       id: `ntf_seed_${ws.id}`,
       createdAt: SEEDED_CARD_CREATED_AT,
-      ...(opts.openCardReasons ? { payload: { platformAlerts: opts.openCardReasons } } : {}),
+      ...(opts.openCardReasons
+        ? {
+            payload: {
+              platformAlerts: opts.openCardReasons,
+              ...(opts.openCardFailureKinds
+                ? { platformAlertFailureKinds: opts.openCardFailureKinds }
+                : {}),
+            },
+          }
+        : {}),
     })
   }
   const summaries = { ...opts.summaries }
@@ -132,7 +145,7 @@ function makeContainer(opts: {
         enabled: opts.enabled ?? true,
         window: '1h' as PlatformAlertWindow,
         intervalMs: 60_000,
-        thresholds: DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+        thresholds: opts.thresholds ?? DEFAULT_PLATFORM_ALERT_THRESHOLDS,
       },
     },
     workspaceService: { list: async () => opts.workspaces },
@@ -601,6 +614,103 @@ describe('sweepPlatformHealth', () => {
       })
       expect(await sweepPlatformHealth(container, PASS_1_AT)).toEqual({ raised: 1, cleared: 0 })
       expect(raises).toHaveLength(1)
+    })
+  })
+})
+
+describe('sweepPlatformHealth: per-failure-kind rules', () => {
+  /** A deployment that pages when evictions pass 10% of the window's failures. */
+  const EVICTION_RULE = {
+    ...DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+    failureKindRules: [{ kind: 'evicted', maxShare: 0.1 }],
+  }
+  /** {@link UNHEALTHY}'s 8 failures, split so evictions are 25% and nothing is dominant. */
+  const withFailures = (failures: { kind: string; count: number }[]): PlatformObservability => ({
+    ...UNHEALTHY,
+    failures,
+  })
+  const EVICTING = withFailures([
+    { kind: 'agent', count: 4 },
+    { kind: 'job_failed', count: 2 },
+    { kind: 'evicted', count: 2 },
+  ])
+  const TIMING_OUT = withFailures([
+    { kind: 'agent', count: 4 },
+    { kind: 'job_failed', count: 2 },
+    { kind: 'timeout', count: 2 },
+  ])
+
+  it('carries the firing kinds on the card beside the reasons', async () => {
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': EVICTING },
+      thresholds: EVICTION_RULE,
+    })
+    await sweepPlatformHealth(container, PASS_1_AT)
+    expect(raises[0]!.reasons).toEqual(['failure_kind_rate_high', 'failure_rate_high'])
+    expect(raises[0]!.payload?.platformAlertFailureKinds).toEqual(['evicted'])
+  })
+
+  it('re-raises when the firing KIND changes under an unchanged reason set', async () => {
+    // The regression this exists for: evictions subsiding while timeouts cross the same rule
+    // is one reason code before and after, so a card compared on reasons alone would go on
+    // naming the incident that ended.
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: {
+        'acc-1': TIMING_OUT,
+      },
+      thresholds: {
+        ...DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+        failureKindRules: [
+          { kind: 'evicted', maxShare: 0.1 },
+          { kind: 'timeout', maxShare: 0.1 },
+        ],
+      },
+      openCardReasons: ['failure_kind_rate_high', 'failure_rate_high'],
+      openCardFailureKinds: ['evicted'],
+    })
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
+    expect(result).toEqual({ raised: 1, cleared: 0 })
+    expect(raises[0]!.payload?.platformAlertFailureKinds).toEqual(['timeout'])
+  })
+
+  it('does not re-raise while the same kind keeps firing', async () => {
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': EVICTING },
+      thresholds: EVICTION_RULE,
+      openCardReasons: ['failure_kind_rate_high', 'failure_rate_high'],
+      openCardFailureKinds: ['evicted'],
+    })
+    expect(await sweepPlatformHealth(container, PASS_1_AT)).toEqual({ raised: 0, cleared: 0 })
+    expect(raises).toEqual([])
+  })
+
+  it('leaves a card raised before any kind fired comparing equal', async () => {
+    // The field is omitted rather than sent empty when nothing is kind-scoped, so a card from
+    // before this shipped must not read as a changed firing set on the next pass.
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': UNHEALTHY },
+      openCardReasons: ['failure_rate_high'],
+    })
+    expect(await sweepPlatformHealth(container, PASS_1_AT)).toEqual({ raised: 0, cleared: 0 })
+    expect(raises).toEqual([])
+  })
+
+  it('names the kind on the outbound condition, which a receiver routes on', async () => {
+    const { container, alerts } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': EVICTING },
+      thresholds: EVICTION_RULE,
+    })
+    await sweepPlatformHealth(container, PASS_1_AT)
+    expect(alerts[0]!.event.conditions).toContainEqual({
+      reason: 'failure_kind_rate_high',
+      kind: 'evicted',
+      value: 0.25,
+      threshold: 0.1,
     })
   })
 })

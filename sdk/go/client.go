@@ -38,7 +38,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.6.0"
+const Version = "0.7.0"
 
 // Options configures a Client.
 type Options struct {
@@ -84,6 +84,8 @@ type Client struct {
 	Pipelines *PipelinesService
 	// The workspace's human-actionable inbox.
 	Notifications *NotificationsService
+	// The workspace's one outbound endpoint for pushed notifications, run events and alerts.
+	Webhook *WebhookService
 	// The period's metered budget position and per-model breakdown.
 	Usage *UsageService
 	// A parked run's human decisions.
@@ -136,6 +138,7 @@ func New(options Options) (*Client, error) {
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
 	client.Notifications = &NotificationsService{client: client}
+	client.Webhook = &WebhookService{client: client}
 	client.Usage = &UsageService{client: client}
 	client.Decisions = &DecisionsService{client: client}
 	client.Debug = &DebugService{client: client}

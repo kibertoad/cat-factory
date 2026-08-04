@@ -25,6 +25,7 @@ import type {
   ListPublicJobsResponse,
   LlmCallOutcome,
   Notification,
+  NotificationWebhook,
   PublicChooseFork,
   PublicDecisionList,
   PublicIncorporate,
@@ -32,6 +33,7 @@ import type {
   PublicJobAccepted,
   PublicJobStatus,
   PublicNotificationList,
+  PublicNotificationWebhook,
   PublicPipelineList,
   PublicReplyFinding,
   PublicResolveExceeded,
@@ -43,6 +45,7 @@ import type {
   PublicTask,
   PublicTaskList,
   PublicUsage,
+  PutNotificationWebhook,
   RunStatus,
   StartPublicTask,
   TaskStatus,
@@ -240,7 +243,7 @@ export class TasksResource {
 
   /**
    * Create a task under a service
-   * Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.
+   * Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.
    * `POST /api/v1/services/{serviceId}/tasks` — operation `createPublicTask`.
    */
   create(serviceId: string, body: CreatePublicTask, options: RequestOptions = {}): Promise<PublicTask> {
@@ -459,6 +462,55 @@ export class NotificationsResource {
   }
 }
 
+/** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+export class WebhookResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Remove the outbound webhook
+   * Deregister the endpoint; deliveries stop. Idempotent.
+   * `DELETE /api/v1/notification-webhook` — operation `deletePublicNotificationWebhook`.
+   */
+  delete(options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/notification-webhook`,
+      options,
+    })
+  }
+
+  /**
+   * Read the workspace's outbound webhook
+   * The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.
+   * `GET /api/v1/notification-webhook` — operation `getPublicNotificationWebhook`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicNotificationWebhook> {
+    return this.#transport.request<PublicNotificationWebhook>({
+      method: 'GET',
+      path: `/api/v1/notification-webhook`,
+      options,
+    })
+  }
+
+  /**
+   * Register or update the outbound webhook
+   * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
+   * `PUT /api/v1/notification-webhook` — operation `putPublicNotificationWebhook`.
+   */
+  set(body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+    return this.#transport.request<NotificationWebhook>({
+      method: 'PUT',
+      path: `/api/v1/notification-webhook`,
+      body,
+      options,
+    })
+  }
+}
+
 /** The billing period's metered budget position and the per-model breakdown behind it. */
 export class UsageResource {
   readonly #transport: Transport
@@ -481,7 +533,7 @@ export class UsageResource {
   }
 }
 
-/** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
+/** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
 export class DecisionsResource {
   readonly #transport: Transport
 
@@ -586,7 +638,7 @@ export class DecisionsResource {
 
   /**
    * Resolve a run parked on the task's input check
-   * Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.
+   * Settle a run the pre-dispatch input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/input-gate/resolve` — operation `resolvePublicRunInputGate`.
    */
   resolveInputGate(runId: string, body: PublicResolveInputGate, options: RequestOptions = {}): Promise<PublicDecisionList> {
@@ -846,9 +898,11 @@ export abstract class CatFactoryResources {
   readonly pipelines: PipelinesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
   readonly notifications: NotificationsResource
+  /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+  readonly webhook: WebhookResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
-  /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
+  /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
   readonly debug: DebugResource
@@ -859,6 +913,7 @@ export abstract class CatFactoryResources {
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
     this.notifications = new NotificationsResource(transport)
+    this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)

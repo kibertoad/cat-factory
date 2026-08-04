@@ -19,6 +19,7 @@ public abstract class Resources {
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
     private final NotificationsClient notifications;
+    private final WebhookClient webhook;
     private final UsageClient usage;
     private final DecisionsClient decisions;
     private final DebugClient debug;
@@ -29,6 +30,7 @@ public abstract class Resources {
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
         this.notifications = new NotificationsClient(transport);
+        this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
@@ -59,12 +61,17 @@ public abstract class Resources {
         return notifications;
     }
 
+    /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+    public WebhookClient webhook() {
+        return webhook;
+    }
+
     /** The billing period's metered budget position and the per-model breakdown behind it. */
     public UsageClient usage() {
         return usage;
     }
 
-    /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
+    /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
     public DecisionsClient decisions() {
         return decisions;
     }

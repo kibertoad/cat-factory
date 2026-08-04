@@ -18,7 +18,7 @@ import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 // They live together, and outside `ExecutionService`, because the ORDER is the design and the
 // family keeps growing: each is a reason to stop before dispatching, and each new one is another
 // place a future reader has to notice that everything below it costs money. Extracted when the
-// input gate joined them (docs/initiatives/pre-token-input-gate.md).
+// input gate joined them (docs/initiatives/pre-dispatch-input-gate.md).
 //
 // Deps arrive as bound callbacks and collaborators, so this module depends on no concrete
 // repository. Behaviour is identical to the inline preamble it replaces.
@@ -129,7 +129,7 @@ export async function runStepPreamble(
   const block = await deps.blockOf(workspaceId, instance.blockId)
   if (!block) return { kind: 'stop', result: { kind: 'noop' } }
 
-  // The PRE-TOKEN INPUT GATE. Evaluated at most once per run (the verdict on
+  // The PRE-DISPATCH INPUT GATE. Evaluated at most once per run (the verdict on
   // `instance.inputGate` is the guard) and only at step 0; a park here costs nothing because
   // nothing has run yet. `null` means proceed.
   const gated = await deps.inputGate.evaluate(workspaceId, instance, step, block)

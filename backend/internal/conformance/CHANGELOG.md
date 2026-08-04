@@ -1,10 +1,212 @@
 # @cat-factory/conformance
 
+## 0.26.0
+
+### Minor Changes
+
+- 8cbf1a7: Manage the outbound notification webhook over `/api/v1`, so the whole integration surface is
+  headless.
+
+  `GET|PUT|DELETE /api/v1/notification-webhook` (`admin` scope) register, read and remove the one
+  HTTPS endpoint a workspace pushes its notifications, run-lifecycle events and platform-health
+  alerts to. Until now that endpoint could only be registered over the session-authed
+  `/workspaces/:ws/notification-webhook`, so a deployment driven entirely by API keys had to put a
+  human in a browser to switch on the very channel that exists because there is no browser: the
+  delivery contract was headless and its enrolment was not.
+
+  The routes delegate to the same `NotificationWebhookService` the session controller calls, so the
+  SSRF guard on the endpoint, the keep-on-omit rule for every field and the one-row-per-workspace
+  invariant are identical whichever surface writes. The signing secret stays write-only: `PUT`
+  accepts one and the read reports only `hasSecret`, so an `admin` key can rotate it and can never
+  learn the stored one.
+
+  `PUT`'s `url` becomes optional, on both surfaces, so keep-on-omit is uniform across every field
+  rather than every field but one. A mandatory re-send made the routine edit (subscribe to a family)
+  carry a value the caller never meant to change, and a client re-sending a URL it cached before
+  someone else rotated the receiver would silently redirect the workspace's deliveries back to the
+  old endpoint while appearing to add a subscription. `url` is still required on the first `PUT`
+  against a workspace with nothing registered, refused with `details.reason: "webhook_url_required"`.
+  Relaxing a required field is additive, so no live caller changes.
+
+  Additive on `/api/v1` (OpenAPI `info.version` 1.5.0; main took 1.4.0 for its own additive change
+  while this branch was open). The four SDK clients gain a `webhook` resource
+  (`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/integrations@0.125.0
+  - @cat-factory/server@0.213.0
+  - @cat-factory/agents@0.110.4
+  - @cat-factory/gates@0.8.69
+  - @cat-factory/kernel@0.234.2
+  - @cat-factory/orchestration@0.201.2
+  - @cat-factory/prompt-fragments@0.15.60
+
+## 0.25.4
+
+### Patch Changes
+
+- ee6601e: Post a parked requirements review's questions to the ticket for webhook-dispatched runs too.
+
+  A run started by a per-ticket issue-intake schedule recorded no intake origin, so it read back as
+  UI-started and the clarification writeback refused it: the review parked, and the person who filed
+  the ticket was never told. The answer channel was already open (ticket-comment replies are ungated
+  by intake), but the finding ids an answer has to name are only ever rendered by the question
+  comment, so a ticket-driven run could park and stay parked with nothing pointing at the cause.
+
+  Such a run now carries `intakeOrigin: 'tracker'`, and the writeback gate asks the classification
+  (`isHeadlessIntake`) rather than comparing against the one origin that shipped first.
+
+  The vocabulary also gains `schedule` for cadence fires and the queue-drain push, so `ui` stops
+  being a catch-all for "nothing said" and becomes a positive claim that a human is watching in the
+  app. Every unattended start path now names itself; only the in-app start takes the default. The
+  field must stay optional for that one caller, so the rule is held by a coverage spec that
+  classifies each start path rather than by a typecheck.
+
+  `schedule` is classified NOT headless even though it is unattended. A fire works the schedule's
+  reused block, and queue-mode intake replace-links each pick onto it, so a question posted there
+  loses its reply channel on the next fire. The classification asks whether the run has a stable
+  place to hold a conversation, not whether a human was present.
+
+  No change to runs started in the app or through `/api/v1`. The workspace opt-in
+  (`writebackQuestionsOnPark`, off by default) and its per-task override still gate every post; their
+  copy now says "outside the app" rather than "through the API".
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/orchestration@0.201.1
+  - @cat-factory/server@0.212.1
+  - @cat-factory/agents@0.110.3
+  - @cat-factory/gates@0.8.68
+  - @cat-factory/integrations@0.124.1
+  - @cat-factory/kernel@0.234.1
+  - @cat-factory/prompt-fragments@0.15.59
+
+## 0.25.3
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/orchestration@0.201.0
+  - @cat-factory/server@0.212.0
+  - @cat-factory/integrations@0.124.0
+  - @cat-factory/agents@0.110.2
+  - @cat-factory/gates@0.8.67
+  - @cat-factory/prompt-fragments@0.15.58
+
+## 0.25.2
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/server@0.211.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/gates@0.8.66
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/prompt-fragments@0.15.57
+
+## 0.25.1
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/agents@0.110.0
+  - @cat-factory/server@0.210.0
+  - @cat-factory/orchestration@0.199.0
+  - @cat-factory/integrations@0.123.5
+  - @cat-factory/gates@0.8.65
+  - @cat-factory/prompt-fragments@0.15.56
+
+## 0.25.0
+
+### Minor Changes
+
+- e7e4404: Reusable operations, slice 2: one descriptor-driven form vocabulary behind both surfaces that have
+  one, and a custom task type's collected values are now checked against what it declares.
+
+  An initiative preset and a custom task type had grown the same feature twice, and the task type was
+  the poorer copy: four input types against eight, no defaults, no conditional visibility, no shared
+  validation, and two near-identical Vue renderers. So a form an org could express as a preset was
+  unexpressible as an operation, and nothing but the create form enforced a `required` marker or an
+  option list. `contracts/src/form-fields.ts` is now the union both draw on (the field shape, the
+  filled-value bag, and the pure visibility / validation / sanitization / prose-rendering rules), with
+  each surface declaring only which input types it admits. `password` is excluded for a task type by
+  construction rather than by convention: a collected value is folded into prompts, projected onto the
+  board snapshot and captured in telemetry, so a secret belongs in the capability-credential store.
+
+  `taskTypeFields.custom` widens from `string | number` to the shared bag (adding booleans and
+  multi-select `string[]`), and the prompt fold renders the new shapes through the same renderer the
+  form review uses, so a multi-select reads as its option captions rather than its stored enum values.
+  Rows are read back through an unvalidated JSON parse, so nothing existing breaks and there is nothing
+  to migrate. Two INTERNAL breaks ride along, in the bounds the shared bag carries that the old
+  untyped record did not: a bag KEY is now capped at 80 characters and a string VALUE at 2000, so a
+  value longer than that (only reachable through a bespoke `formPanel`, since a declared `maxLength`
+  cannot exceed the same bound) is refused on the way in.
+
+  `BoardService.addTask` now validates a registered type's bag against its descriptor and freezes only
+  the declared, currently-visible answers, so one rule covers the SPA, the internal API and (from the
+  public-API slice) a headless caller. An ABSENT bag is checked against an empty one, because a
+  required field is unanswered whether the caller sent `custom: {}` or no `custom` key at all: a check
+  the caller can opt out of by sending nothing is not a check. **Behaviour change for a deployment
+  that registers an operation with required fields**: any path creating such a task without its
+  parameters (an initiative item's `spawn`, a script) now gets a 422 where it previously created a
+  task whose operation brief was empty. Three cases still deliberately pass through unchecked: a
+  built-in type (schema-typed fields, already validated), a type this process does not register (a
+  supported row, since task types are node-local by design and degrading data must not brick
+  creation), and a descriptor declaring a bespoke `formPanel`, which owns its own bag.
+
+  The richer vocabulary brings new ways for a descriptor to break itself, so boot validation now
+  refuses a create form that structurally cannot be filled: a duplicate field key, an optionless
+  `select`/`checkbox-group`, or a `showWhen` gating a field on a key the type does not declare (which
+  would hide that field forever). Each is fully known from the registration and silent at run time,
+  unlike a `defaultFragmentIds` id, which stays a warning because a tenant-tier fragment is invisible
+  at boot. Both surfaces are held to that bar by one checker, so an initiative preset's create form is
+  validated at boot for the first time (all three facades pass the registry).
+
+  Behaviour change worth reviewing: a custom task type's `select` field renders as a dropdown rather
+  than a button row, since it is now the shared renderer, and a form with many options needed that
+  anyway. The path-invalid message moved from `initiative.create.pathInvalid` to `common.pathInvalid`,
+  carrying each locale's existing translation.
+
+  One unfilled value is now dropped rather than frozen, on both surfaces. Validation short-circuits on
+  a value that says nothing, so a `false` on a text field, a blank string or an empty multi-select
+  reached the freeze having passed no type check; sanitization now drops them, which stops a
+  wrong-typed answer reaching agents as the operation's own brief (`notes: false` rendered as
+  `Notes: No`). The one exception is an explicit `false` on a `checkbox`, which is the opt-OUT of a
+  default-ON toggle and the one unfilled value that is an answer.
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+  - @cat-factory/orchestration@0.198.0
+  - @cat-factory/agents@0.109.2
+  - @cat-factory/gates@0.8.64
+  - @cat-factory/integrations@0.123.4
+  - @cat-factory/prompt-fragments@0.15.55
+  - @cat-factory/server@0.209.1
+
 ## 0.24.0
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -27,7 +229,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.

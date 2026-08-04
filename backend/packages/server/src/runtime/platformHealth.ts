@@ -2,6 +2,7 @@ import {
   alertsHaveRunEvidence,
   distinctAccountIds,
   evaluatePlatformHealth,
+  platformAlertFailureKinds,
   platformAlertReasons,
   platformHealthCardContent,
   resolveAccountAlertConfig,
@@ -71,13 +72,33 @@ function nextTransition(card: Notification | undefined): number {
   return typeof stored === 'number' && Number.isFinite(stored) && stored > 0 ? stored + 1 : 1
 }
 
-/** Whether an open card's stored reason set already matches the one now firing. */
-function sameReasonSet(card: Notification | undefined, reasons: PlatformAlertReason[]): boolean {
-  const stored = card?.payload?.platformAlerts
+/** Whether two sorted identity lists are element-for-element the same. */
+function sameList(stored: unknown, next: readonly string[]): boolean {
+  if (next.length === 0)
+    return stored === undefined || (Array.isArray(stored) && stored.length === 0)
   return (
-    Array.isArray(stored) &&
-    stored.length === reasons.length &&
-    stored.every((r, i) => r === reasons[i])
+    Array.isArray(stored) && stored.length === next.length && stored.every((v, i) => v === next[i])
+  )
+}
+
+/**
+ * Whether an open card already shows exactly what is firing now — the check that makes the raise
+ * state-change-driven rather than every-pass.
+ *
+ * BOTH halves of the identity are compared, because the reason set alone stopped being able to
+ * see a change once one reason code could stand for several conditions: every per-kind rule fires
+ * as `failure_kind_rate_high`, so evictions subsiding while timeouts crossed their own rule is
+ * the same reason set before and after, and a card compared on reasons alone would keep naming
+ * the kind that had recovered for the length of the new incident.
+ */
+function sameFiringSet(
+  card: Notification | undefined,
+  reasons: PlatformAlertReason[],
+  failureKinds: string[],
+): boolean {
+  return (
+    sameList(card?.payload?.platformAlerts, reasons) &&
+    sameList(card?.payload?.platformAlertFailureKinds, failureKinds)
   )
 }
 
@@ -168,10 +189,15 @@ export async function sweepPlatformHealth(
       // numbers that tripped are exactly what an on-call receiver routes on.
       const alerts = evaluatePlatformHealth(snapshot, account.thresholds, worstSweep)
       const reasons = platformAlertReasons(alerts)
+      // The other half of the card's identity: which KINDS' own rules are firing. Empty unless a
+      // per-kind rule is among them.
+      const failureKinds = platformAlertFailureKinds(alerts)
       // The workspaces whose card would actually change state this pass. A healthy workspace
       // with no card, and an unhealthy one whose firing set is unchanged, are both no-ops.
       const changing = workspaceIds.filter((id) =>
-        reasons.length > 0 ? !sameReasonSet(openCards.get(id), reasons) : openCards.has(id),
+        reasons.length > 0
+          ? !sameFiringSet(openCards.get(id), reasons, failureKinds)
+          : openCards.has(id),
       )
       if (changing.length === 0) continue
       // The failing runs the card deep-links to, fetched ONCE for the account and only when
@@ -190,6 +216,7 @@ export async function sweepPlatformHealth(
             window: account.window,
             alerts,
             reasons,
+            failureKinds,
             evidence,
             observedAt: now,
             openCard: openCards.get(workspaceId),
@@ -227,8 +254,10 @@ interface SettleInput {
   window: PlatformAlertWindow
   /** The firing conditions with their observed values; EMPTY ⇒ the account has recovered. */
   alerts: PlatformAlert[]
-  /** The same conditions as the card's sorted reason set (its dedup identity). */
+  /** The same conditions as the card's sorted reason set (half of its dedup identity). */
   reasons: PlatformAlertReason[]
+  /** The kinds whose per-kind rule is firing: the other half, and empty when none is. */
+  failureKinds: string[]
   /** The account-wide failing-run sample, or undefined when there was none to read (or it failed). */
   evidence: PlatformFailedRunRef[] | undefined
   /**
@@ -260,10 +289,11 @@ interface SettleInput {
  * here".
  */
 async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<WorkspaceOutcome> {
-  const { workspaceId, accountId, window, alerts, reasons, evidence, observedAt, openCard } = input
+  const { workspaceId, accountId, window, alerts, reasons, failureKinds } = input
+  const { evidence, observedAt, openCard } = input
   if (reasons.length > 0) {
     const transition = nextTransition(openCard)
-    const { title, body } = platformHealthCardContent(reasons, window)
+    const { title, body } = platformHealthCardContent(reasons, window, failureKinds)
     const failingRuns = evidence ? failingRunsFor(evidence, workspaceId) : []
     const workspaceFailedTotal = evidence?.find(
       (r) => r.workspaceId === workspaceId,
@@ -277,6 +307,10 @@ async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<Wo
       payload: {
         platformWindow: window,
         platformAlerts: reasons,
+        // Omitted rather than sent empty when no per-kind rule fired, so the absence of the
+        // field and "no kind is over its rule" stay the same statement, and a card raised
+        // before this shipped keeps comparing equal to one raised after it.
+        ...(failureKinds.length > 0 ? { platformAlertFailureKinds: failureKinds } : {}),
         // Bookkeeping the card renders nothing of: the row is the sweep's only alert store, and
         // the outbound edge needs a transition identity neither the (incident-long) card id nor
         // the (recurring) reason set can give it. Writing it costs no extra inbox delivery,
@@ -305,13 +339,17 @@ async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<Wo
       // `evaluatePlatformHealth`'s emission order these would be deterministic but INCIDENTALLY
       // so: reordering its checks is a refactor with no behavioural intent, and it would silently
       // re-key every in-flight incident's deliveries. Sorting here is what makes the id a
-      // function of WHICH conditions fired rather than of the order they were tested in.
+      // function of WHICH conditions fired rather than of the order they were tested in. The KIND
+      // breaks the tie the reason no longer can, since per-kind rules all fire under one code.
       conditions: [...alerts]
-        .sort((a, b) => a.reason.localeCompare(b.reason))
+        .sort(
+          (a, b) => a.reason.localeCompare(b.reason) || (a.kind ?? '').localeCompare(b.kind ?? ''),
+        )
         .map((alert) => ({
           reason: alert.reason,
           value: alert.value,
           threshold: alert.threshold,
+          ...(alert.kind === undefined ? {} : { kind: alert.kind }),
         })),
       occurredAt: observedAt,
       failingRuns,

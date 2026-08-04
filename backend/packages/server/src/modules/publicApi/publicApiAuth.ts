@@ -31,6 +31,23 @@ export function bearerToken<E extends AppEnv>(c: Context<E>): string | undefined
   return c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
 }
 
+/**
+ * Render an auth `fail` as its response. Lives here rather than in each controller because the
+ * refusal shape is part of the surface's contract, not a per-route choice: every `/api/v1` handler
+ * emits the SAME `{ error: { code, message } }` at the SAME status, and a controller that spelt it
+ * out itself is one that can drift from the rest by a copy-paste.
+ *
+ * Hand-built rather than a thrown `DomainError` for the reason {@link KeyResult} exists: on this
+ * surface a refusal is DATA the contract handler returns, so the handler stays typed against its
+ * declared response schemas.
+ */
+export function refuse<E extends AppEnv>(
+  c: Context<E>,
+  fail: Extract<KeyResult, { fail: unknown }>['fail'],
+) {
+  return c.json({ error: { code: fail.code, message: fail.message } }, fail.status)
+}
+
 /** Resolve the caller's public-API key to a workspace scope, or the error to emit. */
 export async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
   const svc = c.get('container').publicApiKeys

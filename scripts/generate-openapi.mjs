@@ -35,7 +35,7 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.3.0'
+const API_VERSION = '1.6.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -53,6 +53,12 @@ const COMPONENT_SCHEMAS = {
   PublicTaskList: 'publicTaskListSchema',
   CreatePublicTask: 'createPublicTaskSchema',
   PublicTaskTicket: 'publicTaskTicketSchema',
+  // Both variants are hoisted beside the union, exactly as the parked-decision variants are:
+  // an un-hoisted member is emitted as an anonymous `Variant0`/`Variant1` in every generated
+  // client, which is not a name an integrator should have to read.
+  PublicTaskSourceDocument: 'publicTaskSourceDocumentSchema',
+  PublicTaskUploadedDocument: 'publicTaskUploadedDocumentSchema',
+  PublicTaskDocument: 'publicTaskDocumentSchema',
   StartPublicTask: 'startPublicTaskSchema',
   UpdatePublicTask: 'updatePublicTaskSchema',
   PublicRun: 'publicRunSchema',
@@ -60,6 +66,11 @@ const COMPONENT_SCHEMAS = {
   PublicPipelineList: 'publicPipelineListSchema',
   Notification: 'notificationSchema',
   PublicNotificationList: 'publicNotificationListSchema',
+  // The outbound webhook's own configuration, shared with the session-authed surface: the read
+  // wrapper, the projection inside it (also the write's response) and the write body.
+  NotificationWebhook: 'notificationWebhookSchema',
+  PublicNotificationWebhook: 'publicNotificationWebhookSchema',
+  PutNotificationWebhook: 'putNotificationWebhookSchema',
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
@@ -104,7 +115,7 @@ const OPERATION_DOCS = {
     tag: 'Tasks',
     summary: 'Create a task under a service',
     description:
-      'Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.',
+      'Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.',
   },
   listPublicServiceTasks: {
     tag: 'Tasks',
@@ -164,7 +175,7 @@ const OPERATION_DOCS = {
     tag: 'Decisions',
     summary: "Resolve a run parked on the task's input check",
     description:
-      'Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.',
+      'Settle a run the pre-dispatch input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.',
   },
   resolvePublicRunJudge: {
     tag: 'Decisions',
@@ -194,6 +205,23 @@ const OPERATION_DOCS = {
     tag: 'Notifications',
     summary: 'Dismiss a notification',
     description: 'Dismiss a notification without acting on it.',
+  },
+  getPublicNotificationWebhook: {
+    tag: 'Webhook',
+    summary: "Read the workspace's outbound webhook",
+    description:
+      'The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.',
+  },
+  putPublicNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Register or update the outbound webhook',
+    description:
+      'Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.',
+  },
+  deletePublicNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Remove the outbound webhook',
+    description: 'Deregister the endpoint; deliveries stop. Idempotent.',
   },
   getPublicUsage: {
     tag: 'Usage',
@@ -319,6 +347,8 @@ const TAG_DESCRIPTIONS = {
   Pipelines: 'The workspace’s pipelines (discover a pipelineId to start a task with).',
   Notifications:
     'The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).',
+  Webhook:
+    'The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.',
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Debug:

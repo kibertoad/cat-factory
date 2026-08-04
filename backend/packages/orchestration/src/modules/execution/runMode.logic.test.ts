@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { isDryRun } from '@cat-factory/contracts'
 import type { WorkspaceRole } from '@cat-factory/kernel'
-import { isDryRun, resolveRunMode, settleRunModeForStart } from './runMode.logic.js'
+import { resolveRunMode, settleRunModeForStart } from './runMode.logic.js'
 
 // How a run's mode is settled at start: what the caller asked for, composed with the roles the
 // task's merge preset sandboxes. The composition is one-way by design, and these lock that.

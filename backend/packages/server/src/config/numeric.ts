@@ -11,7 +11,9 @@
 // no noise (falling back to the default is the intended behaviour there), but a PRESENT
 // value that is not a finite number emits one structured warning naming the var and the
 // rejected value before returning `undefined`. The caller keeps its own `?? default`, so
-// this only reports the rejection — it never changes the resolved value.
+// this only reports the rejection — it never changes the resolved value. "One warning"
+// is per PROCESS rather than per call (`warnOnce.ts`), because the Worker re-derives the
+// config on every invocation and a standing typo would otherwise log on each one.
 //
 // Both facades share the same footgun (Node `config.ts` `num()` + the Worker's
 // `infrastructure/config/utils.ts` `num()`), so the message lives here in the shared
@@ -19,8 +21,8 @@
 // across runtimes, per "keep the runtimes symmetric".
 // ---------------------------------------------------------------------------
 
-import { logger } from '../observability/logger.js'
 import { DOCS } from './docs.js'
+import { configWarnings } from './warnOnce.js'
 
 /**
  * The single-line operator warning for a numeric env var set to a non-numeric value.
@@ -44,7 +46,9 @@ export function parseNumericEnv(name: string, value: string | undefined): number
   if (value === undefined || value.trim() === '') return undefined
   const n = Number(value)
   if (Number.isFinite(n)) return n
-  logger.warn(describeRejectedNumericEnv(name, value), {
+  // Once per process, not once per read: the Worker re-derives the whole config on every
+  // invocation, so an unconditional warn here is one line per request (see `warnOnce.ts`).
+  configWarnings.warnOnce(describeRejectedNumericEnv(name, value), {
     var: name,
     value,
     docsUrl: DOCS.envVars(),

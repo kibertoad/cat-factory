@@ -33,10 +33,18 @@ function makeService(body: { value: string }) {
     async listByWorkspace() {
       return [...store.values()]
     },
+    async listByRefs(_ws, refs) {
+      return refs.flatMap((ref) => {
+        const hit = store.get(ref.externalId)
+        return hit && hit.source === ref.source ? [hit] : []
+      })
+    },
     async listByBlock() {
       return []
     },
     async linkBlock() {},
+    async linkBlockMany() {},
+    async detachBlocks() {},
     async getRoleLink() {
       return null
     },
@@ -72,6 +80,7 @@ function makeService(body: { value: string }) {
     get: async () => ({ id: 'ws_1' }),
   } as unknown as WorkspaceRepository
   let now = 1000
+  let minted = 0
   const clock: Clock = { now: () => now }
   const service = new DocumentImportService({
     registry,
@@ -79,6 +88,7 @@ function makeService(body: { value: string }) {
     connectionService,
     workspaceRepository,
     clock,
+    idGenerator: { next: (prefix) => `${prefix ?? 'id'}_${++minted}` },
   })
   return {
     service,

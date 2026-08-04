@@ -876,8 +876,8 @@ deploy key). The layers, cheapest first:
 - Running this class of stack on the Cloudflare Worker or plain-Node facades (no host daemon).
 - Replacing acme's `dev-console` for its human developers: cat-factory consumes the same
   repos but drives its own engine.
-- Kargo preenv integration (shared-services' `deployment/docker-compose.kargo.yml` is a useful
-  reference shape only).
+- Integrating an external in-house ephemeral-environment provider (shared-services' deployment compose file is a
+  useful reference shape only).
 - Envoy vhost / `users.d` / Debezium _authoring_ for new consumers: the pilot uses the
   conventions acme repos already contain; generating those files is a possible future
   analyst skill, not this initiative.

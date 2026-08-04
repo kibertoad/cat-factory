@@ -1,5 +1,77 @@
 # @cat-factory/observability-otel
 
+## 0.9.3
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/kernel@0.234.2
+
+## 0.9.2
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/kernel@0.234.1
+
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+
+## 0.9.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+
+## 0.8.7
+
+### Patch Changes
+
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+
+## 0.8.6
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+
 ## 0.8.5
 
 ### Patch Changes

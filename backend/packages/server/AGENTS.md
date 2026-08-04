@@ -24,13 +24,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
   `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
-  the pre-token input gate, which parks on the shape of the TASK and so is invisible to the
+  the pre-dispatch input gate, which parks on the shape of the TASK and so is invisible to the
   step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
   on the surface shares (`GET /jobs`, `GET /services/:id/tasks`, every `/api/v1/debug/*` list) plus the coarse-status
   projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
   definition of a run's sort key so a cursor can never name a different value than the query
-  orders by). See
-  `docs/initiatives/headless-clarification-loop.md` and
+  orders by). Two collaborators own the create's ORDERING, which is the whole design and does not
+  read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
+  ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
+  (attach the requirements documents a task is built against, imported from a connected source or
+  uploaded whole, with the task rolled back if an attachment does not land). See
+  `docs/initiatives/headless-clarification-loop.md`,
+  `docs/initiatives/public-api-additions.md` and
   `backend/docs/adr/0030-public-api-surface.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
@@ -92,7 +97,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `requireWorkspacePermission`; the admin-tier controller middleware) and `optionalJsonBody`
   (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
   otherwise makes the transport require a body, which breaks body-less callers of a route that
-  merely gained an optional field); `config/`; the `AppConfig`
+  merely gained an optional field); `config/` (the runtime-neutral env parsers both facades
+  share; a rejected value is REPORTED through `config/warnOnce.ts`, once per process rather
+  than once per read, because the Worker re-derives its whole config on every invocation);
+  the `AppConfig`
   contract; `runtime/gateways.ts`; the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `runtime/` also holds the **runtime-neutral periodic sweeps** each facade drives from its own
@@ -103,8 +111,17 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `observability/logger.ts`: the **only place a logging library is named**: pino adapted onto the
   kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
   destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the
-  top of its boot path). Patterns and rules: [`backend/docs/logging.md`](../../docs/logging.md).
+  top of its boot path). It also owns the SECOND-destination seam: `setLogSink` installs a kernel
+  `LogSink` (the opt-in OTLP log exporter) that every emitted line is copied to, with the
+  `child`-bound fields folded in and behind the same level gate. Patterns and rules:
+  [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
+  typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
+  default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new
+  one until someone writes down which bucket it is in. They read through `loadCode`, which strips
+  comments first: a guard matching raw text is satisfied by a file that merely NAMES the literal
+  it should pass, which is exactly how one stayed green over a call site missing its value.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),

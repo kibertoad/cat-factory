@@ -1,6 +1,7 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-2 landed (the fold + the bundle; the shared field vocabulary); slices 3-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-3 landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker); slices 4-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -433,7 +434,7 @@ else could offer the way back). Mechanics:
 | 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ✅ done | [#1650](https://github.com/kibertoad/cat-factory/pull/1650) |
 | 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
 | 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ✅ done |                                                             |
-| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |                                                             |
+| 3   | **Picker grouping (D7)**: category captions in the type picker; `presentation.description` rendered; one chrome i18n key (the "Other" bucket)                                                                                                                                                                                                         | SPA    | 2          | ✅ done | [#1672](https://github.com/kibertoad/cat-factory/pull/1672) |
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
 | 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
@@ -558,6 +559,68 @@ final so neither ships a shape that changes a slice later.
   is boot-validated too; all three facades pass `initiativePresetRegistry`.
 - **One i18n key moved**: the path-invalid message is `common.pathInvalid` now that two surfaces
   render it, carrying each locale's existing translation verbatim.
+
+### What slice 3 surfaced (carry into the rest)
+
+- **The layout rule is a pure function** (`app/utils/taskTypePicker.ts` `buildTaskTypePickerRows`,
+  the `buildFragmentCategoryGroups` sibling) returning ROWS of `{ id, caption, choices }`, so the
+  built-ins are the first row rather than a separate template branch: one nested `v-for` renders
+  every choice through one button, and the ORDER is unit-tested without mounting the modal. Slice 7
+  filters the store's `customTaskTypes`, upstream of this, so a suppressed operation's category
+  caption disappears with its last type and needs no extra rule here.
+- **The `data-testid="task-type-<id>"` selector per choice survived the re-layout**, deliberately:
+  it is the picker's only external contract, and a deployment's own e2e suite is the consumer that
+  would notice it move (the in-repo specs created a typed task over REST and asserted the card badge,
+  so they would NOT have caught it). The new hooks follow the repeated-testid + discriminator shape
+  `pipeline-step` / `data-step-kind` established: each row is `data-testid="task-type-row"` plus
+  `data-task-type-row="<row id>"`, and the per-row caption keeps ONE id (`task-type-category`)
+  addressed THROUGH its row. A caption id that varied per row would have been unique but positional,
+  and `getByTestId('task-type-category')` alone is a strict-mode violation the moment a second
+  category exists.
+- **Category order is REGISTRATION order, not alphabetical.** Registration order is the only order
+  the deployment expressed; re-sorting would silently reshuffle a catalog its author arranged, and
+  the difference is invisible in a one-category example (the spec pins it with two).
+- **A blank caption reads as "no category".** The wire schema trims and length-checks it, but a
+  CODE-shipped consumer type is trusted and unvalidated, so a whitespace-only category is reachable
+  and must fall into the uncategorized bucket rather than render an empty heading.
+- **Captions fold on CASE and whitespace, and the fold is NOT a slug.** `API delivery` and
+  `api  DELIVERY` are one row (captioned as first written), because two headings differing only in
+  case read as two categories the author never declared. Slugifying to an id-safe `[a-z0-9-]` key
+  would have been tidier for the row id and is wrong: a caption is arbitrary Unicode written in the
+  deployment's own language, so stripping non-ASCII folds genuinely distinct captions together
+  (`Ámbito` / `Émbito` both reduce to `mbito`). The row id therefore carries the folded caption
+  verbatim and is read as an attribute VALUE, never as a testid suffix.
+- **The row gap must stay wider than a caption's own margin.** At `space-y-1.5` between rows and
+  `mb-1` under a caption, a heading sat 6px below the group above it and 4px above its own buttons:
+  proximity said nothing, so the grouping did not read. `space-y-3` is the fix, and the constraint is
+  stated at the markup because the numbers are individually unremarkable.
+- **The leftovers row is CAPTIONED, and that caption is the slice's one i18n key**
+  (`board.addTask.typeOther`). Left bare it sat one 6px gap under the last category's buttons with no
+  heading of its own, so its types read as more of that category (the `AgentPalette` "Custom agents"
+  bucket had already solved this). D7.3's "no locale entry for descriptor text" governs LABELS,
+  CAPTIONS and DESCRIPTIONS the deployment authored; a heading over the platform's own leftovers
+  bucket is chrome, and the util takes it as an argument rather than authoring English itself. It is
+  omitted when the leftovers are the ONLY row, where it would name a distinction nothing shows.
+- **`presentation.description` is rendered at last**, closing the last picker gap in fact 2: as each
+  custom button's `title` (the half that helps you CHOOSE, the `AgentPalette` precedent) and, for the
+  selected type, through the type field's own `UFormField` help slot (the half a touch device can
+  reach). The help slot is the seam 47 other fields in the SPA already use; the first cut was a
+  sibling `<p>` with a negative margin cancelling the modal's spacing, which is the same information
+  rendered by fighting the design system instead of using it. Built-in types have no descriptions, so
+  the help line is custom-only.
+- **`frontend/app/app/docs/consumer-extensions.md` was two slices stale** (it still listed the
+  four pre-slice-2 input types and knew nothing of `defaultFragmentIds`), because slice 2 swept the
+  layer README and missed the consumer doc beside it. Both are part of the sweep for anything
+  touching the custom-task-type surface, and so is the third file in that family: the
+  `CustomTaskTypeContribution` structural copy in `deploy/frontend/app/modular/acme-security.ts`,
+  which the doc POINTS AT as the worked example and which could not express `category`,
+  `defaultFragmentIds`, or the slice-2 field types. A copy missing an axis reads as an axis that does
+  not exist.
+- **The dogfood module is where the picker gets assembled-product coverage.** `acme:incident` now
+  declares a category, so `consumer-extension.spec.ts` asserts the rendered nesting (the consumer
+  choice inside its own captioned row, the built-in row still uncaptioned, the description in the
+  help slot on selection). The unit spec pins the ORDER; only the e2e catches a template regression
+  that flattens the rows or drops a caption while leaving every unit test green.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

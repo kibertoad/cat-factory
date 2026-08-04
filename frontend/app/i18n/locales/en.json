@@ -216,6 +216,10 @@
       "title": "Add a task",
       "newTaskIn": "New task in {container}",
       "typeLabel": "Type",
+      "typeOther": "Other",
+      "@typeOther": {
+        "description": "Heading over the trailing group in the task-type picker: the deployment's own registered task types that declared no category of their own. A NOUN-like group heading ('the other ones'), not the adjective describing a single type."
+      },
       "types": {
         "feature": "Feature",
         "bug": "Bug",
@@ -492,6 +496,7 @@
       "start": "Start",
       "blocked": "Blocked",
       "startPipeline": "Start {name}",
+      "startPipelineDryRun": "Start {name} as a dry run: opens a pull request, merges nothing",
       "pipelineFallback": "pipeline",
       "waitingOn": "Waiting on: {deps}",
       "blockedByDependenciesTitle": "Blocked by dependencies",
@@ -516,6 +521,13 @@
       "buildSteps": "Build steps",
       "reviewAndApprove": "Review & approve",
       "clickToViewStep": "Click to view step details & output"
+    },
+    "dryRunToast": {
+      "title": "Dry run started",
+      "body": "Running \"{name}\". Your role's runs merge nothing on this task."
+    },
+    "@dryRunToast": {
+      "description": "Toast shown when a run starts that the task's merge policy has sandboxed because of the initiator's workspace role: the pipeline runs and opens a pull request, and nothing merges. {name} is the pipeline name, kept verbatim. Not a choice the reader made, so word it as a statement of what the run will do rather than as a confirmation of a setting."
     },
     "epic": {
       "label": "Epic",
@@ -631,6 +643,7 @@
         "input_gate_not_parked": "Nothing to answer",
         "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task",
+        "document_already_linked": "Document already attached",
         "dry_run_not_mergeable": "Dry run cannot be merged"
       },
       "description": {
@@ -670,6 +683,7 @@
         "input_gate_not_parked": "This run is not waiting on its input check any more. Someone may have answered it already, or the run has moved on.",
         "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
+        "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "action": {
@@ -1155,7 +1169,9 @@
       "chooseApproach": "Choose approach",
       "triageFollowUps": "Decide follow-ups",
       "elapsedTooltip": "Elapsed time on this step",
-      "reviewFindings": "Review findings"
+      "reviewFindings": "Review findings",
+      "dryRun": "Dry run",
+      "dryRunHint": "This run opens a pull request and merges nothing."
     },
     "structure": {
       "title": "Structure",
@@ -1584,7 +1600,10 @@
       "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}",
       "@runBlocked": {
         "description": "Count-driven plural: {count} unfinished dependencies, {names} their comma-joined titles. Languages with more than two plural forms (e.g. Polish, Ukrainian: one/few/many) need the extra pipe-separated forms."
-      }
+      },
+      "dryRun": "Dry run: merge nothing",
+      "dryRunForced": "Dry run: your role's runs never merge here",
+      "dryRunHint": "This run opens a pull request and merges nothing."
     }
   },
   "observability": {
@@ -2855,7 +2874,7 @@
         },
         "questionsOnPark": {
           "label": "Post open questions on a parked headless run",
-          "help": "When a run started through the API pauses to clarify requirements, post its open questions — each with the id an answer names — on the linked issue. Tasks started in the app are unaffected."
+          "help": "When a run started outside the app pauses to clarify requirements (through the API, or dispatched from a tracker ticket), post its open questions on the linked issue, each with the id an answer names. Tasks started in the app are unaffected."
         }
       },
       "probeFailure": {
@@ -2977,6 +2996,22 @@
           "always": "Always auto-merge",
           "never": "Always require review"
         }
+      },
+      "roleRules": {
+        "heading": "Limits per initiator role",
+        "help": "What a run may do also depends on who started it. A role can be held to stricter rules than the ones above, or to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the class limits below add nothing. Dry runs still apply: they refuse a manual merge too.",
+        "sandboxLabel": "Dry runs only",
+        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so the class rules below cannot hold them to anything stricter.",
+        "noRules": "No class limits",
+        "ruleCount": "{count} class limited | {count} classes limited",
+        "@ruleCount": {
+          "description": "Count-based tally of how many change classes this role narrows (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        },
+        "inherit": "Same as this policy",
+        "redundant": "No effect: this policy is already at least as strict.",
+        "alreadyStrictest": "Already always reviewed",
+        "baseHint": "This policy compares the scores for every class, so a role can only narrow a class to review-only."
       }
     },
     "observabilityConnection": {
@@ -3619,7 +3654,28 @@
         "maxSweepFailures": "Consecutive failed passes of one background sweep."
       },
       "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing.",
-      "invalidNumbers": "These ceilings are not numbers"
+      "invalidNumbers": "These ceilings are not numbers",
+      "failureKinds": {
+        "label": "Per-failure-kind rules",
+        "description": "Page when one failure kind reaches the share of failures you allow it. The dominant-cause ceiling above asks whether one kind is swamping the rest; these ask whether a named kind has reached what this deployment tolerates from it.",
+        "overrideLabel": "Set this account's own per-kind rules",
+        "overrideHint": "Off, the account uses the rules the deployment configured. On, the list below replaces them entirely, and an empty list means no per-kind rules at all.",
+        "empty": "No rules. This account will not raise the per-kind alert.",
+        "kindLabel": "Failure kind",
+        "shareLabel": "Share of failures (%)",
+        "shareHint": "The rule fires at this share or above.",
+        "minCountLabel": "Minimum failures",
+        "minCountPlaceholder": "1",
+        "minCountHint": "How many failures of that kind the window needs before the rule can fire. A low share is a hair trigger without it: five runs with one eviction is already 20%.",
+        "addRule": "Add rule",
+        "allKindsCovered": "Every failure kind already has a rule.",
+        "removeRule": "Remove rule",
+        "duplicateKind": "Each failure kind may carry at most one rule.",
+        "tooManyRules": "At most {max} per-kind rules. Remove some before saving.",
+        "unknownKind": "{kind} (unrecognised)",
+        "invalidTitle": "These per-kind rules cannot be saved",
+        "invalidRows": "Check rules {rows}: the share must be above 0 and at most 100, a minimum count must be a whole number of 1 or more, and each kind may appear once."
+      }
     }
   },
   "providers": {
@@ -4131,7 +4187,8 @@
       "connectSourceNamed": "Connect {source}",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
       "emptyInitiative": "Attach a requirement, RFC or PRD so the planning agents read it while shaping this initiative.",
-      "attached": "Document attached"
+      "attached": "Document attached",
+      "uploadedHint": "Uploaded through the API, so there is no source page to open."
     },
     "templates": {
       "title": "Document templates & examples",
@@ -4634,7 +4691,10 @@
       "manualHeading": "Manual review only",
       "manualExplainer": "This policy never merges on its own, so every pull request waits for a human review whatever it scores.",
       "ciHeading": "CI fixes",
-      "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up."
+      "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up.",
+      "roleHeading": "Who started the run",
+      "roleSandboxed": "Runs started by {roles} open a pull request and never merge.",
+      "roleNarrowed": "Runs started by {roles} follow stricter rules for some change classes."
     }
   },
   "modelPreset": {
@@ -5463,7 +5523,10 @@
     "description": "Description",
     "overallProgress": "Overall progress",
     "dependencies": "Dependencies",
-    "noDependencies": "None"
+    "noDependencies": "None",
+    "dryRun": "Dry run",
+    "dryRunHint": "Run the pipeline and open a pull request, but merge nothing.",
+    "dryRunForcedHint": "This task's risk policy holds your role to dry runs."
   },
   "environments": {
     "title": "Ephemeral environment",

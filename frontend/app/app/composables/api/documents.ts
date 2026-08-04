@@ -13,7 +13,7 @@ import {
   spawnDocumentContract,
   unlinkDocumentForKindContract,
 } from '@cat-factory/contracts'
-import type { DocKind, DocumentLinkRole, DocumentSourceKind } from '~/types/domain'
+import type { DocKind, DocumentLinkRole, DocumentOrigin, DocumentSourceKind } from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** Document sources (Confluence, Notion, …): connect, import, search, board-spawn. */
@@ -73,7 +73,7 @@ export function documentsApi({ send, ws }: ApiContext) {
 
     linkDocument: (
       workspaceId: string,
-      body: { source: DocumentSourceKind; externalId: string; blockId: string },
+      body: { source: DocumentOrigin; externalId: string; blockId: string },
     ) => send(linkDocumentContract, { pathPrefix: ws(workspaceId), body }),
 
     // ---- workspace+DocKind template / exemplar links (WS1) ----------------
@@ -83,7 +83,7 @@ export function documentsApi({ send, ws }: ApiContext) {
     linkDocumentForKind: (
       workspaceId: string,
       body: {
-        source: DocumentSourceKind
+        source: DocumentOrigin
         externalId: string
         role: DocumentLinkRole
         docKind: DocKind
@@ -92,7 +92,7 @@ export function documentsApi({ send, ws }: ApiContext) {
 
     unlinkDocumentForKind: (
       workspaceId: string,
-      body: { source: DocumentSourceKind; externalId: string },
+      body: { source: DocumentOrigin; externalId: string },
     ) => send(unlinkDocumentForKindContract, { pathPrefix: ws(workspaceId), body }),
   }
 }

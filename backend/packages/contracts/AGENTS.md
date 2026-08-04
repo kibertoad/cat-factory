@@ -23,6 +23,17 @@ top-level files are the domain contracts.
   with that surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same:
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
+- `execution.ts`: the pipeline STEP and run shapes. `run-provenance.ts` beside it holds the
+  facts about a run rather than its work: `intakeOrigin` (how it entered: `ui`, `public-api`,
+  `tracker` or `schedule`, classified by `isHeadlessIntake`, which the clarification writeback
+  keys off), `mode` (whether it may land its work, read through `isDryRun`) and `diagnostics`
+  (where it actually ran).
+  All three ride the run's `detail` JSON, so a member is free to add and easy to forget to SET.
+  Two rules follow: **`ui` is a positive claim that a human is watching in the app**, so every
+  unattended start path names itself and only the in-app start may take the default
+  (`intakeOrigin.coverage.spec.ts` in `@cat-factory/server` classifies each one); and
+  **`isHeadlessIntake` is not "was anyone present"** but "is there a stable place to hold a
+  conversation", which is why `schedule` answers `false`.
 - `form-fields.ts`: ONE descriptor-driven form vocabulary (field shape, filled-value bag, and the
   pure visibility / validation / sanitization / prose-rendering rules) behind every surface where a
   DEPLOYMENT declares a form and the platform collects it: an initiative preset's create form
@@ -30,6 +41,12 @@ top-level files are the domain contracts.
   (`task-types.ts`). Each surface declares only which input types it admits (a task type excludes
   `password` by construction). Lives here because the SPA's submit button and the server's create
   check must agree about every one of those rules.
+- `agent-failure-kinds.ts`: the closed run FAILURE-KIND vocabulary plus `isAgentFailureKind`,
+  the predicate for a string that may name a RETIRED member. A leaf module (valibot only) so
+  every layer that must agree about the set can import it: the operator dashboard's breakdown,
+  a platform-health alert rule naming a member as the subject of a page, and the env parser
+  that asks whether an operator typed a real kind. The failure DIAGNOSTICS record built on
+  these kinds stays in `execution.ts`, with the step shapes it composes.
 - `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding

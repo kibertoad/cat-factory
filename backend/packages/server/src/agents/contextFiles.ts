@@ -4,6 +4,7 @@ import {
   type HarnessKind,
   assertContextReferencesFit,
   CONTEXT_BUDGET,
+  originHeaderLine,
   renderTaskContext,
 } from '@cat-factory/kernel'
 
@@ -30,8 +31,9 @@ function contextFileName(base: string, used: Set<string>): string {
 /**
  * Materialise the block's linked context (docs + tracker issues) into files the harness
  * writes under CONTEXT_DIR in the checkout, so a container agent reads them on demand.
- * Each file is prefixed with its title + source URL (the zero-cost slice of Anthropic's
- * contextual-retrieval).
+ * Each file is prefixed with its title and, where the document HAS an origin page, its source URL
+ * (the zero-cost slice of Anthropic's contextual-retrieval). An uploaded document has none, and
+ * says so by carrying no header line rather than an empty one.
  *
  * Bounded by {@link CONTEXT_BUDGET.maxContextFileBytes} so a large corpus can't bloat the job
  * body — and a corpus that does not fit REFUSES the dispatch
@@ -55,7 +57,7 @@ export function buildContextFiles(context: AgentRunContext): {
   // Write the file when it fits the byte budget; anything past it is recorded so the refusal
   // below can name it (and size the whole corpus against the budget in the same pass).
   const fit = (title: string, url: string, baseName: string, raw: string): void => {
-    const content = `# ${title}\nSource: ${url}\n\n${raw}`
+    const content = `# ${title}\n${originHeaderLine(url)}\n${raw}`
     const size = new TextEncoder().encode(content).length
     totalBytes += size
     if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) {

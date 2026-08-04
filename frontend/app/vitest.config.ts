@@ -15,6 +15,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./test/setup.ts'],
-    include: ['app/**/*.spec.ts'],
+    // `i18n/` carries the plural selectors (pure logic, no Nuxt runtime), tested beside them.
+    include: ['app/**/*.spec.ts', 'i18n/**/*.spec.ts'],
   },
 })

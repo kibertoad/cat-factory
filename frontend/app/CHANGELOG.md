@@ -1,10 +1,287 @@
 # @cat-factory/app
 
+## 0.220.0
+
+### Minor Changes
+
+- 3ac95cf: Reusable operations, slice 3: the create-task type picker groups a registered catalog instead of
+  flattening it into one row.
+
+  The picker was a single wrap of buttons, which is right for the handful of built-in types and wrong
+  the moment a deployment registers a catalog of reusable operations: an org with twenty of them turns
+  the row into a wall in which the everyday `feature` / `bug` choices are no longer findable. Custom
+  task types have declared `presentation.category` since slice 1 and nothing read it; now it lays the
+  picker out as rows. Built-ins come first in one uncaptioned row (the everyday loop stays where it has
+  always been), then one captioned row per category in REGISTRATION order (the only order the
+  deployment expressed, so not re-sorted alphabetically), then any uncategorized custom types under a
+  translated "Other" heading. Two categories differing only in case or spacing are one row, captioned
+  as the deployment first wrote it.
+
+  `presentation.description` is rendered for the first time too, though the schema has promised it to
+  the picker all along: as each custom button's tooltip, which is what helps you choose, and, once a
+  type is selected, as the type field's own help text, which is the half a touch device can reach.
+  Every label, caption and description a deployment authored is rendered verbatim, so no descriptor
+  string enters a locale catalog; the one key this slice adds is the platform's own "Other" heading,
+  which the layout rule takes as an argument rather than authoring itself.
+
+  The layout rule is a pure function (`utils/taskTypePicker.ts`, the `buildFragmentCategoryGroups`
+  sibling) rather than inline template logic, because the row ORDER is the behaviour worth pinning and
+  a rule inside an SFC is only reachable by mounting one. Deliberately absent: collapsing, an overflow
+  menu, and any alphabetical re-sort. Each would hide a choice behind a second interaction, and a
+  catalog needing them has outgrown what a create-task dialog should ask.
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+
+## 0.219.1
+
+### Patch Changes
+
+- ee6601e: Post a parked requirements review's questions to the ticket for webhook-dispatched runs too.
+
+  A run started by a per-ticket issue-intake schedule recorded no intake origin, so it read back as
+  UI-started and the clarification writeback refused it: the review parked, and the person who filed
+  the ticket was never told. The answer channel was already open (ticket-comment replies are ungated
+  by intake), but the finding ids an answer has to name are only ever rendered by the question
+  comment, so a ticket-driven run could park and stay parked with nothing pointing at the cause.
+
+  Such a run now carries `intakeOrigin: 'tracker'`, and the writeback gate asks the classification
+  (`isHeadlessIntake`) rather than comparing against the one origin that shipped first.
+
+  The vocabulary also gains `schedule` for cadence fires and the queue-drain push, so `ui` stops
+  being a catch-all for "nothing said" and becomes a positive claim that a human is watching in the
+  app. Every unattended start path now names itself; only the in-app start takes the default. The
+  field must stay optional for that one caller, so the rule is held by a coverage spec that
+  classifies each start path rather than by a typecheck.
+
+  `schedule` is classified NOT headless even though it is unattended. A fire works the schedule's
+  reused block, and queue-mode intake replace-links each pick onto it, so a question posted there
+  loses its reply channel on the next fire. The classification asks whether the run has a stable
+  place to hold a conversation, not whether a human was present.
+
+  No change to runs started in the app or through `/api/v1`. The workspace opt-in
+  (`writebackQuestionsOnPark`, off by default) and its per-task override still gate every post; their
+  copy now says "outside the app" rather than "through the API".
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+
+## 0.219.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+
+## 0.218.0
+
+### Minor Changes
+
+- eb4ca17: Make role-scoped merge policy authorable in the product. `classRulesByRole` and `dryRunRoles` have
+  been writable over `/workspaces/:ws/risk-policies` since the feature landed, and a dry run has been
+  requestable on the start endpoint, but neither had an in-app control: an operator configured the
+  whole capability through the API.
+
+  Workspace settings now edits both on each merge preset, directly under the base class rules they
+  narrow. The editor offers a role only the rules that would actually narrow the class it is on,
+  because composition is narrow-only and a looser role rule is discarded by the engine; a rule a
+  later base edit overtook stays visible and clearable, flagged as no longer doing anything. A
+  cleared rule is stored as an OMISSION and a role whose last rule is cleared drops out of the map,
+  so `{}` stays the identity the wire contract says it is. A role held to dry runs says on its own
+  row that the class rules below it can no longer add anything, since the sandbox already outranks
+  them. The merge-preset preview (the picker a task chooses its policy from) names both layers, so
+  picking a policy shows what it means for whoever is reading it.
+
+  The run controls with a menu to hang it on (the inspector's Run menu and the focus view's picker)
+  carry the dry-run request. Requesting one is an override of the live default and so is
+  `advanced`-tier; a sandbox the task's preset FORCES on the caller's role is stated in both tiers and
+  replaces the control, because there is nothing left to choose. Only an explicit request is sent:
+  re-sending a forced sandbox would file the run's mode under "the initiator asked for this" and cost
+  the run the advisory that explains a sandbox nobody chose. A live run's execution panel badges the
+  mode, since a sandboxed run otherwise looks exactly like one that has not reached its merge yet.
+
+  The board's one-tap starts (a task card's Start, and dropping a pipeline onto a task) have no menu
+  and so offer no request, but they state a forced sandbox before it happens: the card's button, and
+  a toast on the drop. Being sandboxed is not a setting the user can see anywhere else on those
+  surfaces, and a silent one is learned from a run that stops at the merge.
+
+  `narrowMergeClassRule` moves from `@cat-factory/kernel` to `@cat-factory/contracts` (it is no longer
+  re-exported from kernel), joined there by `dryRunForcedForRole` and `isDryRun`. All three are rules
+  the SPA and the engine must agree about: an authoring surface that offered a rule the engine
+  discards, or that read an absent role as a tier, would be reporting a policy that does not exist.
+  None of the three is re-exported from its old home, so each has exactly one import path: two paths
+  onto one rule is the shape that lets a second hand-written copy exist.
+
+### Patch Changes
+
+- Updated dependencies [eb4ca17]
+  - @cat-factory/contracts@0.231.0
+
+## 0.217.2
+
+### Patch Changes
+
+- 8ef3ad5: Give Hebrew its own plural selector, and fix Ukrainian's.
+
+  Only `pl` and `uk` overrode vue-i18n's built-in plural selector, so `he` ran on the default 2-form
+  rule: n === 1 took the singular and everything else took the plural. Hebrew has a distinct DUAL,
+  so every Hebrew count message was an approximation at n === 2, both for the lexical duals
+  ("יומיים" for two days, "פעמיים" for twice) and for the spelled-out numeral prose wants ("שתי
+  משימות" rather than "2 משימות"). All 84 `he` plural entries are re-authored with the dual form.
+
+  Note this is a THREE-form CLDR rule (one/two/other), not the four (one/two/many/other) the
+  localization doc claimed. The `many` bucket for round tens was retired from CLDR because modern
+  Hebrew does not inflect for it, and current ICU agrees; authoring a fourth form would have put a
+  duplicate of `other` in every entry for a translator to keep in sync forever.
+
+  Two pre-existing bugs surfaced while pinning the selectors against `Intl.PluralRules`:
+
+  - **Ukrainian shared Polish's rule**, but the two differ: Polish reserves `one` for exactly 1,
+    while Ukrainian gives it to every count ending in 1 except the teens. 21, 31, …, 101 were
+    rendering the `many` form ("21 репозиторіїв" for "21 репозиторій"), 89 of the first 1000 counts.
+  - **Three `pl`/`uk` entries carried only 2 of the 3 required forms**, so the selector indexed past
+    the end of the form array and vue-i18n threw out of `t()`. That blanked the surface rendering
+    the message for any count in the `many` bucket (0, 5-21, …), rather than picking a wrong form.
+    The missing forms are restored, and the selector now clamps so a short entry can never throw.
+
+  The form count an entry carries is load-bearing (one form too few re-points every remaining slot
+  onto a different count), and neither existing i18n gate can see it: the key exists and it moved
+  with `en`, which is all they check. `i18n/plural-forms.spec.ts` closes that gap.
+
+## 0.217.1
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+  - @cat-factory/contracts@0.230.1
+
+## 0.217.0
+
+### Minor Changes
+
+- e7e4404: Reusable operations, slice 2: one descriptor-driven form vocabulary behind both surfaces that have
+  one, and a custom task type's collected values are now checked against what it declares.
+
+  An initiative preset and a custom task type had grown the same feature twice, and the task type was
+  the poorer copy: four input types against eight, no defaults, no conditional visibility, no shared
+  validation, and two near-identical Vue renderers. So a form an org could express as a preset was
+  unexpressible as an operation, and nothing but the create form enforced a `required` marker or an
+  option list. `contracts/src/form-fields.ts` is now the union both draw on (the field shape, the
+  filled-value bag, and the pure visibility / validation / sanitization / prose-rendering rules), with
+  each surface declaring only which input types it admits. `password` is excluded for a task type by
+  construction rather than by convention: a collected value is folded into prompts, projected onto the
+  board snapshot and captured in telemetry, so a secret belongs in the capability-credential store.
+
+  `taskTypeFields.custom` widens from `string | number` to the shared bag (adding booleans and
+  multi-select `string[]`), and the prompt fold renders the new shapes through the same renderer the
+  form review uses, so a multi-select reads as its option captions rather than its stored enum values.
+  Rows are read back through an unvalidated JSON parse, so nothing existing breaks and there is nothing
+  to migrate. Two INTERNAL breaks ride along, in the bounds the shared bag carries that the old
+  untyped record did not: a bag KEY is now capped at 80 characters and a string VALUE at 2000, so a
+  value longer than that (only reachable through a bespoke `formPanel`, since a declared `maxLength`
+  cannot exceed the same bound) is refused on the way in.
+
+  `BoardService.addTask` now validates a registered type's bag against its descriptor and freezes only
+  the declared, currently-visible answers, so one rule covers the SPA, the internal API and (from the
+  public-API slice) a headless caller. An ABSENT bag is checked against an empty one, because a
+  required field is unanswered whether the caller sent `custom: {}` or no `custom` key at all: a check
+  the caller can opt out of by sending nothing is not a check. **Behaviour change for a deployment
+  that registers an operation with required fields**: any path creating such a task without its
+  parameters (an initiative item's `spawn`, a script) now gets a 422 where it previously created a
+  task whose operation brief was empty. Three cases still deliberately pass through unchecked: a
+  built-in type (schema-typed fields, already validated), a type this process does not register (a
+  supported row, since task types are node-local by design and degrading data must not brick
+  creation), and a descriptor declaring a bespoke `formPanel`, which owns its own bag.
+
+  The richer vocabulary brings new ways for a descriptor to break itself, so boot validation now
+  refuses a create form that structurally cannot be filled: a duplicate field key, an optionless
+  `select`/`checkbox-group`, or a `showWhen` gating a field on a key the type does not declare (which
+  would hide that field forever). Each is fully known from the registration and silent at run time,
+  unlike a `defaultFragmentIds` id, which stays a warning because a tenant-tier fragment is invisible
+  at boot. Both surfaces are held to that bar by one checker, so an initiative preset's create form is
+  validated at boot for the first time (all three facades pass the registry).
+
+  Behaviour change worth reviewing: a custom task type's `select` field renders as a dropdown rather
+  than a button row, since it is now the shared renderer, and a form with many options needed that
+  anyway. The path-invalid message moved from `initiative.create.pathInvalid` to `common.pathInvalid`,
+  carrying each locale's existing translation.
+
+  One unfilled value is now dropped rather than frozen, on both surfaces. Validation short-circuits on
+  a value that says nothing, so a `false` on a text field, a blank string or an empty multi-select
+  reached the freeze having passed no type check; sanitization now drops them, which stops a
+  wrong-typed answer reaching agents as the operation's own brief (`notes: false` rendered as
+  `Notes: No`). The one exception is an explicit `false` on a `checkbox`, which is the opt-OUT of a
+  default-ON toggle and the one unfilled value that is an answer.
+
+### Patch Changes
+
+- fe6a994: Complete the infrastructure-picker translations, and correct the localization status doc.
+
+  `docs/localization.md` still described the SPA as shipping five bundled locales; ten ship. The doc
+  also credited `i18n:check` with enforcing key parity, which it does not do, and said nothing about
+  RTL.
+
+  Auditing the catalogs against that claim turned up a real gap behind it: the execution-backend and
+  test-env-backend picker labels and descriptions were missing from `es`/`fr`/`pl`/`uk` (12 keys each)
+  and `he` (1), so those users saw English. `InfrastructureBackendPicker.vue` holds the keys as strings
+  in a table and resolves them through `t(item.label)`, which `vue-i18n-extract` cannot see, so
+  `i18n:check` never reported them. All ten catalogs are now at full key parity.
+
+  Three labels in the same pickers had also drifted from `en` (`runner-pool` still read "self-hosted"
+  after `en` became "Custom runner pool (HTTP)") and are retranslated to match.
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+
 ## 0.216.0
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -27,7 +304,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -10194,7 +10471,7 @@ details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
