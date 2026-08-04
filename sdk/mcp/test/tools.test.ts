@@ -68,14 +68,14 @@ describe('the generated tool table', () => {
     // validates cannot disagree.
     expect(body.type).toBe('object')
     expect(body.required).toEqual(['title'])
-    // Asserted as a SEPARATION rather than as an exact roster. What this test is about is that the
-    // two namespaces stay apart: the body carries the spec's body fields and the path id stays at
-    // the top level, where a model does not have to nest it. Pinning the exact field list instead
-    // would fail on every ADDITIVE contract change, which is the normal mode for this surface, so
-    // it would report a healthy new optional field as a broken tool table.
+    // A SUPERSET assertion, not an exact field list: `/api/v1` is additive forever, so pinning the
+    // set turns every new optional field into a red test in the facade rather than a reviewed
+    // change in the contracts, and the only possible fix is to retype the same list.
     expect(Object.keys(body.properties)).toEqual(
       expect.arrayContaining(['title', 'description', 'taskType']),
     )
+    // The SEPARATION is what remains worth pinning exactly, and it is what this test is named for:
+    // loosening the roster must not also stop the test noticing a path id leaking into the body.
     expect(Object.keys(body.properties)).not.toContain('serviceId')
   })
 
