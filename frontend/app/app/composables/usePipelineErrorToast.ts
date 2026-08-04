@@ -240,6 +240,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
     descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',
   },
+  ticket_already_linked: {
+    titleKey: 'errors.conflict.title.ticket_already_linked',
+    descriptionKey: 'errors.conflict.description.ticket_already_linked',
+  },
 }
 
 /**

@@ -254,17 +254,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                        |
-| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                        |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                 |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                     |
+| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                 |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                            |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket). |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                         |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                 |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                  |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                          |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                             |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                          |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                              |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -286,6 +286,43 @@ Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; th
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
 preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
 unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+
+#### Filing a task from a tracker ticket
+
+An intake integration usually already holds the ticket the work comes from. Name it on the create
+and the platform imports the issue and ATTACHES it to the new task, instead of you flattening it
+into `description`:
+
+```http
+POST /api/v1/services/svc_api/tasks
+{ "title": "Fix cat photo 404s", "taskType": "bug",
+  "ticket": { "source": "jira", "ref": "https://acme.atlassian.net/browse/PROJ-1" } }
+```
+
+`source` is a tracker this workspace has connected and enabled (`jira` / `github` / `linear`, or a
+`<ns>:<name>` source the deployment registered). `ref` is the issue's canonical key OR its full
+URL: the provider's own parser resolves either, so you can forward whichever form your webhook
+carried without knowing how the platform keys the issue.
+
+That link, not the ticket's text, is what the rest of the platform runs on. Every agent step
+re-reads the live issue as context (status, labels, description, comments), the run's clarification
+questions are written back onto the issue, a reply typed there resolves against the parked run, and
+the recurring intake sweep treats the issue as taken. `description` stays your own framing and is
+never overwritten.
+
+Two refusals matter:
+
+- **The ticket is resolved before the task is created**, so an unconfigured or disabled source, a
+  ref the provider cannot parse, or an issue the tracker will not serve refuses the whole request
+  and leaves the board untouched. The other order would hand you a `201` for a task that carries no
+  ticket and runs on its title alone.
+- **One task per ticket.** A ticket already linked comes back `409` with
+  `details.reason: "ticket_already_linked"` and `details.taskId` naming the task that holds it, so
+  a redelivered webhook follows the existing task rather than filing a duplicate. You need no
+  bookkeeping of your own to stay idempotent.
+
+The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
+and `409` already names the task for one that was.
 
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically

@@ -210,6 +210,27 @@ headless therefore has NO route to register the receiver that the run-lifecycle 
 `admin` scope; the sealed signing secret must stay write-only (never readable back), and the
 `runEvents` selector rides it.
 
+### D1: Ticket context on task creation ✅
+
+Not a park surface, so it sits outside the A/B/C ranking, but it is the same class of gap: an input
+the SPA has and the API did not. `POST /api/v1/services/:serviceId/tasks` now takes an optional
+`ticket` (`{ source, ref }`, key or URL), imports the issue and ATTACHES it, producing the same
+linkage the app's create-from-issue does. Before this a headless intake could only paste the issue
+into `description`, keeping the words and losing the identity: no writeback of the run's
+clarification questions, no reply path on the ticket, no dedupe.
+
+Two decisions worth keeping:
+
+- **The ticket resolves BEFORE the block is created.** The other order half-succeeds in the
+  direction that matters, handing back a `201` for a task that carries no ticket and runs on its
+  title alone.
+- **The linkage is NOT projected onto `publicTask`.** A `201` already means the ticket is attached
+  and the `409` (`ticket_already_linked`, `details.taskId`) already names the task holding it, so
+  the projection would buy only "which ticket is this task from" on a READ. That read is the list
+  endpoint too, and a per-task issue lookup there is a banned N+1: it needs a batched
+  `TaskRepository` block→issue method mirrored D1 ⇄ Drizzle with a conformance assertion. Worth
+  doing as its own slice if a consumer asks; not worth smuggling in behind a create.
+
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 
 `publicJob` carries a `result`; `publicRun` carries step states, the PR and the error, but no step

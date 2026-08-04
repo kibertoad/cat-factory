@@ -141,6 +141,18 @@ Only lines whose first non-space token is the trigger are interpreted; everythin
 a human can answer and discuss in one comment. An `answer`'s text continues onto following lines
 until the next trigger line. **A comment with no trigger line is ignored entirely, no guessing.**
 
+That grammar is line-oriented, so **each adapter owes the parser TEXT, not whatever shape its vendor
+happens to send.** Jira Cloud v3 sends a comment body as an Atlassian Document Format document
+rather than a string, and reading it as a string yields nothing: the delivery parses to `null`, gets
+acked like any shape we never act on, and the reply is gone with no record and no acknowledgement
+telling the reporter so. Jira's adapter therefore renders the body through the IMPORT path's own
+`adfToMarkdown` (one traversal, shared, rather than a second one drifting beside it), which
+preserves the line boundaries the grammar reads. Two consequences bind anything added here: an
+adapter for a rich-text tracker must name its normalisation the same way, and reading a vendor's
+rich text turns on ingest of the platform's OWN comments on that vendor, so the structural
+`isPlatformAuthoredComment` marker (D5, layer 1) is what stands between an ack and an ack-of-an-ack,
+not the author checks.
+
 Every mutation goes through the SAME service methods the SPA and `PublicDecisionController` call
 (`RequirementReviewService.replyToItem` / `setItemStatus`, then
 `executionService.requirementsReview.incorporate` / `proceed` / `resolveExceeded`), so the park's
@@ -161,8 +173,8 @@ matching D7 of the clarification-loop tracker:
    connection's `webhookReplyAllow` list (handles/emails/ids, comma-separated) when configured, else
    any non-bot author. An unauthorized reply is dropped silently: logged, no state change, **no
    follow-up comment**, because replying would confirm the hook exists and hand an attacker an
-   oracle. The platform's OWN comments are dropped first (a bot author), or the ack comment would
-   feed itself.
+   oracle. The platform's OWN comments are dropped first, by the structural marker check rather
+   than by the bot flag (see the consequence below), or the ack comment would feed itself.
 2. **Data, not instructions.** Reply text becomes `item.reply` (the same field the SPA writes) and
    reaches a model only through the existing incorporation prompt, which already renders answers as
    delimited untrusted input. Lengths are capped and `redactSecrets` runs before anything persists
@@ -317,9 +329,13 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
 - **A tracker comment is as exposed as a PR body.** Everything the ack renders crosses kernel's
   `hostMarkdown` (`inline`/`prose`) plus `redactSecrets`, exactly as `renderReviewQuestionsComment`
   does, and it renders the SAME finding ids, by importing that module rather than re-deriving them.
-- **Never let the ack feed itself.** The platform's own comments come back as deliveries; they are
-  dropped by the bot-author check before any parsing. Adding a new outbound comment means checking it
-  cannot be parsed as a command (the grammar's trigger is never emitted verbatim by the renderer).
+- **Never let the ack feed itself.** The platform's own comments come back as deliveries, and the
+  bot-author check does NOT catch them everywhere: Linear flags no bot on a comment author, and the
+  platform writes to Jira as the connected account, which is not an `app`. So the guard that holds
+  on every vendor is the structural one, `isPlatformAuthoredComment`: a body whose first non-blank
+  line opens with the renderers' `PLATFORM_COMMENT_MARKER` is ours and is never ingested. Each ack
+  carries a fresh comment id, so the ingest claim could not stop a loop. Adding a new outbound
+  comment means emitting that marker and checking the body cannot be parsed as a command.
 - **Adding a workspace-scoped table means one line in `WORKSPACE_SCOPED_TABLES`** (kernel
   `domain/workspace-cascade.ts`): both facades' delete cascade is driven from it, and a completeness
   test fails the build if a `workspace_id` table is missing.

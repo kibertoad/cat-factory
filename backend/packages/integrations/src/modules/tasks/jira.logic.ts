@@ -320,10 +320,39 @@ function renderChildren(node: AdfNode): string {
   return node.content.map((child) => renderNode(child as AdfNode)).join('')
 }
 
+/**
+ * The text of a LEAF node that carries it in `attrs` instead of in children: a mention, an
+ * emoji, a status lozenge, or a smart link (a URL Jira's editor upgrades to a card).
+ *
+ * They need naming explicitly because the default arm below walks CONTENT, and these have none,
+ * so an unlisted one renders as nothing at all rather than as something degraded, dropping a
+ * name, a link or a state out of the middle of a sentence with no trace that it was there.
+ * Returns null for a node that is not one of them, which is how the caller tells "an atom that
+ * rendered empty" from "not an atom".
+ */
+function atomicText(node: AdfNode): string | null {
+  const attrs = node.attrs ?? {}
+  const text = typeof attrs.text === 'string' ? attrs.text : null
+  switch (node.type) {
+    case 'mention':
+    case 'status':
+      return text
+    case 'emoji':
+      return text ?? (typeof attrs.shortName === 'string' ? attrs.shortName : null)
+    case 'inlineCard':
+    case 'blockCard':
+      return typeof attrs.url === 'string' ? attrs.url : null
+    default:
+      return null
+  }
+}
+
 /** Render the inline text of a node (no block markers), for headings/list items. */
 function renderInline(node: AdfNode): string {
   if (node.type === 'text') return node.text ?? ''
   if (node.type === 'hardBreak') return ' '
+  const atom = atomicText(node)
+  if (atom !== null) return atom
   return Array.isArray(node.content)
     ? node.content.map((child) => renderInline(child as AdfNode)).join('')
     : ''
@@ -336,6 +365,13 @@ function renderNode(node: AdfNode): string {
       return node.text ?? ''
     case 'hardBreak':
       return '\n'
+    case 'mention':
+    case 'status':
+    case 'emoji':
+    case 'inlineCard':
+      return atomicText(node) ?? ''
+    case 'blockCard':
+      return `${atomicText(node) ?? ''}\n\n`
     case 'paragraph':
       return `${renderChildren(node)}\n\n`
     case 'heading': {

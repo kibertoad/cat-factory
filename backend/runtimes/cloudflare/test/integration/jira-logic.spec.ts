@@ -47,6 +47,34 @@ describe('jira logic', () => {
     expect(md).toContain('- burstable')
   })
 
+  it('renders the leaf nodes that carry their text in `attrs`, mid-sentence', () => {
+    // A mention, an emoji, a status lozenge and a smart link have no children, so walking for
+    // content renders them as nothing at all: a name, a state or a URL vanishing out of the middle
+    // of a sentence with nothing to show it was ever there. That is a silent loss on the import
+    // path and, since a tracker reply is read through this same function, a loss of the very
+    // reference a human's answer was about.
+    const md = jiraLogic.adfToMarkdown({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Ask ' },
+            { type: 'mention', attrs: { id: 'acc-1', text: '@Ada' } },
+            { type: 'text', text: ' about ' },
+            { type: 'inlineCard', attrs: { url: 'https://acme.atlassian.net/browse/PROJ-9' } },
+            { type: 'text', text: ', currently ' },
+            { type: 'status', attrs: { text: 'BLOCKED' } },
+            { type: 'emoji', attrs: { shortName: ':warning:' } },
+          ],
+        },
+      ],
+    })
+    expect(md).toBe(
+      'Ask @Ada about https://acme.atlassian.net/browse/PROJ-9, currently BLOCKED:warning:',
+    )
+  })
+
   it('handles a null or plain-string description defensively', () => {
     expect(jiraLogic.adfToMarkdown(null)).toBe('')
     expect(jiraLogic.adfToMarkdown(undefined)).toBe('')

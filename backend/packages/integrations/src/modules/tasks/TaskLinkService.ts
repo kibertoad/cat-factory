@@ -125,6 +125,8 @@ export class TaskLinkService {
     if (issue.linkedBlockId) {
       throw new ConflictError(
         `Issue ${externalId} is already linked to task ${issue.linkedBlockId}; unlink it first`,
+        'ticket_already_linked',
+        { taskId: issue.linkedBlockId },
       )
     }
     // Resolve the container in the REQUEST workspace (like linkToBlock) so the new
