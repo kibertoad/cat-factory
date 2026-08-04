@@ -82,6 +82,104 @@ describe('taskTypeCreationDefaults', () => {
     expect(lines[0]?.fields?.taskType).toBe('org:introduce-api')
   })
 
+  // D8: the collected bag is checked against the descriptor at CREATION, so the form's `required`
+  // markers and option lists are the contract rather than client-side decoration.
+  describe('validatedFields', () => {
+    const FORM = {
+      ...OPERATION,
+      fields: [
+        { key: 'entity', label: 'Entity', type: 'text' as const, required: true, maxLength: 10 },
+        {
+          key: 'style',
+          label: 'Style',
+          type: 'select' as const,
+          options: [{ value: 'action', label: 'Action' }],
+        },
+        {
+          key: 'verb',
+          label: 'Verb',
+          type: 'text' as const,
+          showWhen: { key: 'style', equals: 'action' },
+        },
+      ],
+    }
+
+    it('accepts a filled form and freezes only the declared, visible answers', () => {
+      const { defaults } = build(FORM)
+      expect(
+        defaults.validatedFields('org:introduce-api', {
+          custom: { entity: 'Order', style: 'action', verb: 'refund' },
+        }),
+      ).toEqual({ custom: { entity: 'Order', style: 'action', verb: 'refund' } })
+      // A hidden field's stale answer is dropped rather than frozen unvalidated.
+      expect(
+        defaults.validatedFields('org:introduce-api', { custom: { entity: 'Order', verb: 'x' } }),
+      ).toEqual({ custom: { entity: 'Order' } })
+    })
+
+    it('refuses an ABSENT bag exactly as it refuses an empty one', () => {
+      // The two spellings of "nothing was collected" must refuse alike, or the check is opt-in: a
+      // headless caller would satisfy an operation's declared form by omitting `taskTypeFields`
+      // altogether, which is the door it exists to close. The SPA never gets here (its submit
+      // button mirrors the same rule), so this case is reachable only from the API.
+      const { defaults } = build(FORM)
+      const required = /Field "entity" is required/
+      expect(() => defaults.validatedFields('org:introduce-api', undefined)).toThrow(required)
+      expect(() => defaults.validatedFields('org:introduce-api', {})).toThrow(required)
+      expect(() => defaults.validatedFields('org:introduce-api', { custom: {} })).toThrow(required)
+      // A top-level built-in key on a custom type is not an answer to its form either.
+      expect(() => defaults.validatedFields('org:introduce-api', { severity: 'high' })).toThrow(
+        required,
+      )
+    })
+
+    it('refuses a bag that contradicts the descriptor, naming every problem', () => {
+      const { defaults } = build(FORM)
+      const call = () =>
+        defaults.validatedFields('org:introduce-api', {
+          custom: { style: 'archive', bogus: 'x' },
+        })
+      expect(call).toThrow(/task type 'org:introduce-api'/)
+      // The machine-readable half: a reason plus the problems list, for the SPA to render.
+      try {
+        call()
+      } catch (error) {
+        const details = (error as { details?: { reason?: string; problems?: string[] } }).details
+        expect(details?.reason).toBe('task_type_fields_invalid')
+        expect(details?.problems).toEqual([
+          'Unknown field "bogus".',
+          'Field "entity" is required.',
+          'Field "style" has a value outside its options.',
+        ])
+      }
+    })
+
+    it('drops the key entirely when every answer sanitizes away', () => {
+      // `custom` present must keep meaning "parameters were collected", which is what the
+      // dispatch-time projection reads it as.
+      const { defaults } = build({ ...FORM, fields: [FORM.fields[1]!] })
+      expect(defaults.validatedFields('org:introduce-api', { custom: {} })).toBeUndefined()
+      expect(
+        defaults.validatedFields('org:introduce-api', { severity: 'high', custom: {} }),
+      ).toEqual({ severity: 'high' })
+    })
+
+    it('passes through what it cannot or must not check', () => {
+      // A built-in type (schema-typed top-level fields), a type this process does not register (a
+      // supported row: task types are node-local), and a bespoke form panel that owns its own bag.
+      const { defaults } = build({ ...OPERATION, formPanel: 'org:api-form' })
+      expect(defaults.validatedFields('bug', { severity: 'high' })).toEqual({ severity: 'high' })
+      expect(
+        defaults.validatedFields('org:introduce-api', { custom: { anything: 'goes' } }),
+      ).toEqual({ custom: { anything: 'goes' } })
+      const unregistered = build().defaults
+      expect(
+        unregistered.validatedFields('org:unknown-op', { custom: { anything: 'goes' } }),
+      ).toEqual({ custom: { anything: 'goes' } })
+      expect(defaults.validatedFields('feature', undefined)).toBeUndefined()
+    })
+  })
+
   it('resolves the pipeline pin from the registered descriptor', () => {
     const { defaults } = build({ ...OPERATION, defaultPipelineId: 'pl_org_introduce_api' })
     expect(defaults.pipelineIdFor('org:introduce-api')).toBe('pl_org_introduce_api')

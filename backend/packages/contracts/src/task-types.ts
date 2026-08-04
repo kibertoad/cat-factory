@@ -1,4 +1,9 @@
 import * as v from 'valibot'
+import {
+  descriptorFieldEntries,
+  descriptorFieldOptionSchema,
+  type DescriptorFieldOption,
+} from './form-fields.js'
 import { namespacedIdSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -36,36 +41,42 @@ export const taskTypePresentationSchema = v.object({
 })
 export type TaskTypePresentation = v.InferOutput<typeof taskTypePresentationSchema>
 
-/** One choice of a `select` {@link taskTypeFieldDescriptorSchema}. */
-export const taskTypeFieldOptionSchema = v.object({
-  value: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-})
-export type TaskTypeFieldOption = v.InferOutput<typeof taskTypeFieldOptionSchema>
+/** One choice of a `select` / `checkbox-group` field (the shared {@link descriptorFieldOptionSchema}). */
+export const taskTypeFieldOptionSchema = descriptorFieldOptionSchema
+export type TaskTypeFieldOption = DescriptorFieldOption
 
 /**
- * One data-driven field on a custom task type's create-form — the descriptor-driven form
- * vocabulary (the `credentialFieldSchema` / `agentConfigDescriptorSchema` shape generalized):
- * a label + input kind + options. Its value lands in the sparse `taskTypeFields.custom` bag
- * keyed by {@link key}, so adding a field never needs a schema migration.
+ * Which of the shared descriptor-form input types a task-type field may declare.
+ *
+ * Everything the initiative-preset form admits EXCEPT `password`, excluded by construction rather
+ * than by convention: a collected task field value is folded into agent prompts, projected onto the
+ * board snapshot, and captured in agent-context telemetry, so it is the wrong home for a secret. A
+ * capability an operation's agents need credentials for declares them by NAME against the
+ * per-workspace capability-credential store, where the value never reaches a prompt.
+ */
+export const taskTypeFieldTypeSchema = v.picklist([
+  'text',
+  'textarea',
+  'number',
+  'select',
+  'checkbox',
+  'checkbox-group',
+  'path',
+])
+export type TaskTypeFieldType = v.InferOutput<typeof taskTypeFieldTypeSchema>
+
+/**
+ * One data-driven field on a custom task type's create-form: the SHARED descriptor-form vocabulary
+ * (`form-fields.ts`, which the initiative-preset form fills too), narrowed to the types above. Its
+ * value lands in the sparse `taskTypeFields.custom` bag keyed by `key`, so adding a field never
+ * needs a schema migration, and the shared `validateDescriptorFields` /
+ * `sanitizeDescriptorFields` / `renderDescriptorFieldValue` rules apply verbatim: one renderer, one
+ * validator, one prose projection across both surfaces.
  */
 export const taskTypeFieldDescriptorSchema = v.object({
-  /** Stable key the collected value is stored under in `taskTypeFields.custom`. */
-  key: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-  /** Human label shown next to the field. */
-  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  /** The control type: free text, multi-line text, a number, or one of {@link options}. */
-  type: v.picklist(['text', 'textarea', 'number', 'select']),
-  /** One-line helper text shown under the field. */
-  help: v.optional(v.pipe(v.string(), v.maxLength(300))),
-  /** Placeholder shown in an empty `text`/`textarea`/`number` input. */
-  placeholder: v.optional(v.pipe(v.string(), v.maxLength(200))),
-  /** The choices for a `select` descriptor; absent (and ignored) for the other types. */
-  options: v.optional(v.array(taskTypeFieldOptionSchema)),
-  /** Whether the field must be filled before the task can be created. */
-  required: v.optional(v.boolean()),
-  /** Max length for a `text`/`textarea` value (characters). */
-  maxLength: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10000))),
+  ...descriptorFieldEntries,
+  /** The control type; absent is treated as `text`. */
+  type: v.optional(taskTypeFieldTypeSchema),
 })
 export type TaskTypeFieldDescriptor = v.InferOutput<typeof taskTypeFieldDescriptorSchema>
 
