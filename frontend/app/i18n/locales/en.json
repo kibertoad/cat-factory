@@ -3904,13 +3904,9 @@
     },
     "addService": {
       "title": "Add a service from a repository",
-      "intro": "Pick an existing GitHub repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
-      "connectFirst": "Connect this workspace to GitHub first. Link an installation the App is already on, or install it.",
       "repository": "Repository",
-      "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
       "repoType": "Repository type",
       "repoTypeHint": "What this repo is: a backend service, a frontend app, a shared library, or a document repository (docs/spikes only).",
-      "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
       "searchPlaceholder": "Search repositories by owner or name…",
       "searchMinChars": "Type at least {min} character to search. | Type at least {min} characters to search.",
       "@searchMinChars": {
@@ -3918,7 +3914,6 @@
       },
       "noMatches": "No repositories found for {query}.",
       "clearSelection": "Clear selection",
-      "showingCount": "Showing {shown} of {total} repositories.",
       "repoLabel": {
         "private": " (private)",
         "monorepo": " · monorepo",
@@ -3938,7 +3933,6 @@
       "addedConfigure": "{title} added, configure it",
       "grantAccess": "Grant the App access to a repo",
       "grantAccessTitle": "Open the App's installation settings to grant it access to a repository",
-      "refreshList": "Refresh list",
       "done": "Done",
       "donePendingHint": "Add your selected services first, or clear the selection — otherwise those picks are discarded.",
       "add": "Add service",
@@ -6033,13 +6027,6 @@
         "tooLong": "Must be 100 characters or fewer."
       }
     },
-    "intro": {
-      "canCreate": "Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; for this account it can create the repository for you too.",
-      "manual": "Create an empty GitHub repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; you create the repository (one click below), so it needs no repo-creation permission."
-    },
-    "github": {
-      "prompt": "Connect this workspace to GitHub before bootstrapping; a run pushes into a repository. Link an installation the App is already on, or install it."
-    },
     "section": {
       "newRepo": "New repository"
     },
@@ -6068,9 +6055,7 @@
     },
     "createRepo": {
       "now": "Create repository",
-      "onGitHub": "Create on GitHub",
-      "titleNow": "Create the repository now",
-      "titleGitHub": "Open GitHub's new-repository page, prefilled"
+      "titleNow": "Create the repository now"
     },
     "grantAccess": {
       "label": "Grant the App access to this repo",
@@ -6112,7 +6097,6 @@
       "title": "Reference architectures",
       "add": "Add",
       "pickRepo": {
-        "label": "Pick an existing GitHub repo",
         "description": "Choose a repo you can access to fill in its owner and name, or enter them manually below.",
         "placeholder": "owner/name"
       },
@@ -6639,6 +6623,22 @@
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
       "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+    },
+    "addService": {
+      "intro": "Pick an existing {provider} repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
+      "introAny": "Pick an existing repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
+      "connectFirst": "Connect this workspace to a repository host first, then pick a repository to add.",
+      "repositoryHintApp": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then search again.",
+      "repositoryHintToken": "Repositories your {provider} token can reach. Don't see yours? Check the token's scope and your access to the project, then search again."
+    },
+    "bootstrap": {
+      "connectPrompt": "Connect this workspace to a repository host before bootstrapping; a run pushes into a repository.",
+      "createRepoOn": "Create on {provider}",
+      "createRepoTitle": "Open {provider}'s new-repository page",
+      "introCanCreate": "Create an empty {provider} repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; for this account it can create the repository for you too.",
+      "introManual": "Create an empty {provider} repository, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; you create the repository (one click below), so it needs no repo-creation permission.",
+      "introManualAny": "Create an empty repository on your repository host, then let a bootstrapper agent populate it in a sandbox container, either by adapting one of your reference architectures or from scratch following a freeform prompt. cat-factory pushes the initial commit into that repo; you create the repository yourself, so it needs no repo-creation permission.",
+      "archPickRepo": "Pick an existing {provider} repo"
     },
     "branchProtection": {
       "heading": "Default-branch protection",

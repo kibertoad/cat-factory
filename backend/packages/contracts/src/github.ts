@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { vcsProviderSchema } from './routes/auth.js'
+import { vcsConnectMethodSchema } from './routes/vcs.js'
 
 // ---------------------------------------------------------------------------
 // GitHub integration wire contracts. These describe the *projected* GitHub data
@@ -151,7 +152,7 @@ export const githubCheckRunSchema = v.object({
 })
 export type GitHubCheckRun = v.InferOutput<typeof githubCheckRunSchema>
 
-/** A workspace's GitHub App installation, as exposed to clients (no token). */
+/** A workspace's VCS connection (an App installation or a pasted PAT), as exposed to clients. */
 export const githubConnectionSchema = v.object({
   installationId: v.number(),
   accountLogin: v.string(),
@@ -162,6 +163,22 @@ export const githubConnectionSchema = v.object({
    * copy/icons on it. Absent on backends predating the column ⇒ treated as `'github'`.
    */
   provider: v.optional(vcsProviderSchema),
+  /**
+   * HOW the workspace authenticates: a GitHub-App installation (`app`) or a pasted personal
+   * access token (`pat`). Stated by whichever connect service built the record rather than
+   * inferred from {@link provider}: an App-only affordance (the installation settings page,
+   * the repo-access grant) exists for `app` alone, and a provider test would mis-serve the
+   * moment a second provider gains a PAT connect (or GitHub gains one).
+   *
+   * REQUIRED, unlike {@link provider}, and deliberately so: this is an internal wire shape,
+   * where a compatibility fallback is what the repo's own rules forbid. A response without it
+   * fails client-side validation outright, which is the honest outcome: a client cannot
+   * decide what to offer from a value it never received, and the alternative (an optional
+   * field defaulted at every reader) leaves the two `toConnection` mappers free to forget it.
+   * Clients still ask `method === 'app'` rather than `!== 'pat'`, so any value that is not an
+   * App installation withholds the App affordances.
+   */
+  method: vcsConnectMethodSchema,
   /**
    * Whether cat-factory can create repositories under this account itself — true
    * only for accounts served by the privileged App tier (ADR 0005). When false,

@@ -66,6 +66,11 @@ describe('[local] PAT GitHub linking', () => {
     expect(res.body.connection?.accountLogin).toBe('octocat')
     // The PAT carries `workflow` scope, so the connection isn't flagged as missing it.
     expect(res.body.connection?.canManageWorkflows).toBe(true)
+    // Local mode authenticates with a deployment PAT, so the synthetic connection is NOT an
+    // App installation: the SPA drops the App-only affordances (the installation settings
+    // page, the repo-access grant), which would otherwise link to a github.com page for an
+    // installation id that only exists here.
+    expect(res.body.connection?.method).toBe('pat')
   })
 
   it('lists repos the PAT can access via /user/repos, flagged unlinked', async () => {

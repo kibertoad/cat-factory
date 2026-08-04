@@ -3143,18 +3143,13 @@
     },
     "addService": {
       "title": "Einen Service aus einem Repository hinzufügen",
-      "intro": "Wählen Sie ein bestehendes GitHub-Repository, um es als Board-Service hinzuzufügen. Kein Bootstrapping: Das Repo wird unverändert mit einem neuen Service-Frame verknüpft, und Aufgaben, die Sie darauf ausführen, zielen auf dieses Repo.",
-      "connectFirst": "Verbinden Sie diesen Workspace zuerst mit GitHub. Verknüpfen Sie eine Installation, auf der die App bereits ist, oder installieren Sie sie.",
       "repository": "Repository",
-      "repositoryHint": "Repositorys, auf die die GitHub App zugreifen kann. Ihres nicht dabei? Gewähren Sie der App unten Zugriff und aktualisieren Sie dann.",
       "repoType": "Repository-Typ",
       "repoTypeHint": "Was dieses Repo ist: ein Backend-Service, eine Frontend-App, eine gemeinsame Bibliothek oder ein Dokumenten-Repository (nur Docs/Spikes).",
-      "noReposAvailable": "Noch keine Repositorys verfügbar. Gewähren Sie der App unten Zugriff auf eines und aktualisieren Sie dann.",
       "searchPlaceholder": "Repositorys nach Eigentümer oder Name durchsuchen…",
       "searchMinChars": "Geben Sie mindestens {min} Zeichen ein, um zu suchen. | Geben Sie mindestens {min} Zeichen ein, um zu suchen.",
       "noMatches": "Keine Repositorys für {query} gefunden.",
       "clearSelection": "Auswahl aufheben",
-      "showingCount": "{shown} von {total} Repositorys werden angezeigt.",
       "repoLabel": {
         "private": " (privat)",
         "monorepo": " · Monorepo",
@@ -3171,7 +3166,6 @@
       "addedConfigure": "{title} hinzugefügt, konfigurieren Sie es",
       "grantAccess": "Der App Zugriff auf ein Repo gewähren",
       "grantAccessTitle": "Öffnen Sie die Installationseinstellungen der App, um ihr Zugriff auf ein Repository zu gewähren",
-      "refreshList": "Liste aktualisieren",
       "done": "Fertig",
       "donePendingHint": "Füge zuerst die ausgewählten Services hinzu oder hebe die Auswahl auf – sonst werden diese Auswahlen verworfen.",
       "add": "Service hinzufügen",
@@ -4225,13 +4219,6 @@
         "tooLong": "Darf höchstens 100 Zeichen lang sein."
       }
     },
-    "intro": {
-      "canCreate": "Erstellen Sie ein leeres GitHub-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen — entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; für dieses Konto kann es das Repository auch für Sie erstellen.",
-      "manual": "Erstellen Sie ein leeres GitHub-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen — entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository (ein Klick unten), sodass keine Repo-Erstellungsberechtigung nötig ist."
-    },
-    "github": {
-      "prompt": "Verbinden Sie diesen Workspace mit GitHub, bevor Sie bootstrappen; ein Lauf pusht in ein Repository. Verknüpfen Sie eine Installation, auf der die App bereits ist, oder installieren Sie sie."
-    },
     "section": {
       "newRepo": "Neues Repository"
     },
@@ -4260,9 +4247,7 @@
     },
     "createRepo": {
       "now": "Repository erstellen",
-      "onGitHub": "Auf GitHub erstellen",
-      "titleNow": "Das Repository jetzt erstellen",
-      "titleGitHub": "GitHubs Seite für neue Repositorys vorausgefüllt öffnen"
+      "titleNow": "Das Repository jetzt erstellen"
     },
     "grantAccess": {
       "label": "Der App Zugriff auf dieses Repo gewähren",
@@ -4304,7 +4289,6 @@
       "title": "Referenzarchitekturen",
       "add": "Hinzufügen",
       "pickRepo": {
-        "label": "Ein bestehendes GitHub-Repo wählen",
         "description": "Wählen Sie ein Repo, auf das Sie Zugriff haben, um Owner und Name auszufüllen, oder geben Sie sie unten manuell ein.",
         "placeholder": "owner/name"
       },
@@ -6429,6 +6413,22 @@
       "title": "cat-factory mit {provider} verbinden",
       "titleAny": "cat-factory mit Ihren Repositorys verbinden",
       "intro": "cat-factory funktioniert, indem es Pull Requests in Ihren Repositorys öffnet. Verbinden Sie Ihren Repository-Anbieter, um fortzufahren."
+    },
+    "addService": {
+      "intro": "Wählen Sie ein bestehendes {provider}-Repository, um es als Board-Service hinzuzufügen. Kein Bootstrapping: Das Repo wird unverändert mit einem neuen Service-Frame verknüpft, und Aufgaben, die Sie darauf ausführen, zielen auf dieses Repo.",
+      "introAny": "Wählen Sie ein bestehendes Repository, um es als Board-Service hinzuzufügen. Kein Bootstrapping: Das Repo wird unverändert mit einem neuen Service-Frame verknüpft, und Aufgaben, die Sie darauf ausführen, zielen auf dieses Repo.",
+      "connectFirst": "Verbinden Sie diesen Workspace zuerst mit einem Repository-Host, und wählen Sie dann ein Repository zum Hinzufügen aus.",
+      "repositoryHintApp": "Repositorys, auf die die GitHub App zugreifen kann. Ihres nicht dabei? Gewähren Sie der App unten Zugriff und suchen Sie dann erneut.",
+      "repositoryHintToken": "Repositorys, die Ihr {provider}-Token erreichen kann. Ihres nicht dabei? Prüfen Sie den Geltungsbereich des Tokens und Ihren Zugriff auf das Projekt, und suchen Sie dann erneut."
+    },
+    "bootstrap": {
+      "connectPrompt": "Verbinden Sie diesen Workspace mit einem Repository-Host, bevor Sie bootstrappen; ein Lauf pusht in ein Repository.",
+      "createRepoOn": "Auf {provider} erstellen",
+      "createRepoTitle": "Seite für neue Repositorys bei {provider} öffnen",
+      "introCanCreate": "Erstellen Sie ein leeres {provider}-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; für dieses Konto kann es das Repository auch für Sie erstellen.",
+      "introManual": "Erstellen Sie ein leeres {provider}-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository (ein Klick unten), sodass keine Repo-Erstellungsberechtigung nötig ist.",
+      "introManualAny": "Erstellen Sie ein leeres Repository bei Ihrem Repository-Host und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository selbst, sodass keine Repo-Erstellungsberechtigung nötig ist.",
+      "archPickRepo": "Ein bestehendes {provider}-Repo wählen"
     },
     "branchProtection": {
       "heading": "Schutz des Standard-Branch",

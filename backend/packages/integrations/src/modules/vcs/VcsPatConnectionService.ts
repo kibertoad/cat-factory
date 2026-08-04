@@ -45,6 +45,9 @@ function toConnection(installation: GitHubInstallation): GitHubConnection {
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
     provider: installation.provider,
+    // A pasted token, so none of the GitHub-App affordances apply: there is no installation
+    // whose repo access can be edited, and nothing for the UI to link to.
+    method: 'pat',
     // A per-workspace PAT connect does not (yet) drive in-app repo creation — the connect +
     // browse + link flow is the value; provisioning is a later slice. GitLab has no
     // GitHub-App-style `workflows: write` gate (a PAT with `api` scope pushes CI config), so
