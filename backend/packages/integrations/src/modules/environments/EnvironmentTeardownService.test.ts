@@ -134,6 +134,24 @@ describe('EnvironmentTeardownService teardown-recorded hook', () => {
     ])
   })
 
+  it('fires the hook only after the CONFIRMATION row lands, not between the two', async () => {
+    // The regression guard for the ordering above, stated as the thing a reader would check: a
+    // consumer that re-reads the log the moment it is notified must be able to see the verdict.
+    const { rows, log } = fakeLog()
+    const service = makeService(probing({ state: 'gone' }), log)
+    let rowsWhenNotified: { operation: string; outcome: string }[] = []
+    service.setTeardownRecordedHook(async () => {
+      rowsWhenNotified = [...rows]
+    })
+
+    await service.teardown('ws_1', 'env_1')
+
+    expect(rowsWhenNotified).toContainEqual({
+      operation: 'teardown-verify',
+      outcome: 'success',
+    })
+  })
+
   it('notifies on a FAILED attempt too, and still surfaces the provider error', async () => {
     // Without this edge an environment the provider refuses to reclaim reads on the PR as one
     // nobody has got to yet: a settled run has no step settlement left to re-publish from.

@@ -292,32 +292,19 @@ export class EnvironmentTeardownService {
     error: string | null,
     confirmation: TeardownConfirmationResult | null,
   ): Promise<void> {
-    const target = {
-      workspaceId: record.workspaceId,
-      subsystem: 'environment',
-      targetId: record.id,
-      providerId: record.providerId,
-      blockId: record.blockId,
-      executionId: record.executionId,
-    } as const
-    await this.deps.provisioningLog?.record({
-      ...target,
-      operation: 'teardown',
-      outcome,
-      error,
-      detail: null,
-    })
+    await this.logRow(record, 'teardown', outcome, error, null)
     if (confirmation) {
-      await this.deps.provisioningLog?.record({
-        ...target,
-        operation: 'teardown-verify',
-        outcome: confirmation.confirmation === 'confirmed' ? 'success' : 'failure',
-        error: confirmation.reason,
+      await this.logRow(
+        record,
+        'teardown-verify',
+        confirmation.confirmation === 'confirmed' ? 'success' : 'failure',
+        confirmation.reason,
         // The machine-readable verdict, so a reader distinguishes "still standing" from "could
         // not check" without parsing the prose above it.
-        detail: JSON.stringify({ confirmation: confirmation.confirmation }),
-      })
+        JSON.stringify({ confirmation: confirmation.confirmation }),
+      )
     }
+
     const hook = this.teardownRecordedHook
     if (!hook) return
     await runBestEffort(this.log, 'environment.teardownRecordedHook', () => hook(record, outcome), {
@@ -325,6 +312,32 @@ export class EnvironmentTeardownService {
       environmentId: record.id,
       executionId: record.executionId,
       outcome,
+    })
+  }
+
+  /**
+   * Append ONE row of a teardown's story to the provisioning log. Deliberately private and
+   * reachable only from {@link recordTeardownOutcome}: a row written outside that method is a row
+   * the notification does not wait for, which is the ordering bug it exists to prevent.
+   */
+  private async logRow(
+    record: EnvironmentRecord,
+    operation: 'teardown' | 'teardown-verify',
+    outcome: ProvisioningOutcome,
+    error: string | null,
+    detail: string | null,
+  ): Promise<void> {
+    await this.deps.provisioningLog?.record({
+      workspaceId: record.workspaceId,
+      subsystem: 'environment',
+      operation,
+      targetId: record.id,
+      providerId: record.providerId,
+      blockId: record.blockId,
+      executionId: record.executionId,
+      outcome,
+      error,
+      detail,
     })
   }
 
