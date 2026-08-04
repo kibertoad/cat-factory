@@ -73,10 +73,19 @@ revocation via a per-user session-generation check.
   retention sweep; the viewer is read-only.
 - **Never audit secret material**: a credential change event carries provider + key name +
   actor, not the value; agent contexts and prompts are out of scope entirely.
-- **Generation check must not add a query**: fold it into the user/principal resolution the
-  request already performs; if a route authenticates without touching the user row, that
-  route needs a deliberate decision (cheap cached read via the `AppCaches` seam,
-  invalidated on generation bump).
+- **Generation check must not add a query**, and the code says there is nothing to fold it
+  into: `requireAuth` → `verifySession` verifies the HMAC and reads the claims, and never
+  touches the user row. That is what makes the current design fast and what makes revocation
+  cost something, so slice 5 must pick DELIBERATELY between a cached generation read through
+  the `AppCaches` seam (invalidated on bump — but the Worker's isolate-safe profile passes
+  through for our own mutable state, so it reads live there, a real per-request D1 read on the
+  hot path) and short session TTLs plus a bump, which adds no read and accepts a bounded
+  revocation window. Either way there is a user-row column behind it (D1 migration ⇄ Drizzle),
+  so this is not the one-line middleware change it reads as.
+- **SSO is the consumer that makes slice 5 load-bearing.** See
+  [`enterprise-sso-oidc.md`](./enterprise-sso-oidc.md): the whole offboarding promise of SSO is
+  "we disabled them in the IdP and they lost access", which a stateless session cannot keep on
+  its own. The two should land together.
 - **List reads are paginated from day one** (audit tables grow monotonically; the
   unbounded-SELECT lesson from the perf tracker applies before it hurts).
 - Public-API keys are a distinct principal type: represent them as `apiKeyRef` actors, and
