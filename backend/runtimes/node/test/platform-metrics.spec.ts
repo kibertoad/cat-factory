@@ -22,15 +22,26 @@ if (databaseUrl) {
         .onConflictDoNothing()
     },
     async run(row) {
-      await db.insert(agentRuns).values({
-        workspace_id: row.workspaceId,
-        id: row.id,
-        kind: row.kind,
-        status: row.status,
-        created_at: row.createdAt,
-        updated_at: row.updatedAt,
-        failure: row.failureKind ? JSON.stringify({ kind: row.failureKind, message: 'x' }) : null,
-      })
+      const failure = row.failureKind
+        ? JSON.stringify({ kind: row.failureKind, message: 'x' })
+        : null
+      // Upsert on the run's real primary key, so re-seeding an id MOVES that run's status the
+      // way the engine does instead of failing on the conflict (see `PlatformMetricsSeed.run`).
+      await db
+        .insert(agentRuns)
+        .values({
+          workspace_id: row.workspaceId,
+          id: row.id,
+          kind: row.kind,
+          status: row.status,
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+          failure,
+        })
+        .onConflictDoUpdate({
+          target: [agentRuns.workspace_id, agentRuns.id],
+          set: { status: row.status, updated_at: row.updatedAt, failure },
+        })
     },
   }
   definePlatformMetricsSuite(

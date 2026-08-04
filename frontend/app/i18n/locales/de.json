@@ -1114,7 +1114,9 @@
         "minStalledPriorRuns": "Läufe, die der frühere Teil des Fensters getragen haben muss. Null warnt bei jeder Stille.",
         "maxFailureKindShare": "Anteil der Fehler, den eine einzelne Ursache ausmachen darf, über 0 und bis 1.",
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
-      }
+      },
+      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
+      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen"
     }
   },
   "inspector": {

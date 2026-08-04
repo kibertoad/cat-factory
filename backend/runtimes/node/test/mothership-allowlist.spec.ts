@@ -220,13 +220,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     rollupRunDays: 'sweeper',
     deleteRunDaysOlderThan: 'sweeper',
   },
-  // The settled-gate projection: the ENGINE writes it, so `record` is the one method here a
-  // mothership-mode node would reach for. It is deliberately NOT proxied: the projection is
-  // per-run observability the dashboard reads, and a node that cannot record one loses a
-  // statistic rather than a run (the recorder is best-effort by construction). The read is
-  // admin-gated like every other dashboard rollup, and the prune is the sweep's.
+  // The settled-gate projection. `record` is the one method a mothership-mode node reaches for
+  // (the ENGINE writes it on the run path) and it IS proxied — see `REMOTE_PERSISTENCE_METHODS`.
+  // Only the two mothership-internal halves are classified here.
   gateOutcomeRepository: {
-    record: 'telemetry',
     statsSince: 'admin',
     deleteOlderThan: 'sweeper',
   },

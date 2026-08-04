@@ -269,7 +269,11 @@ function selectWorkerObservabilityDeps(args: {
   provisioningLogRepository: WorkerContainerAssemblyInput['provisioningLogRepository']
   agentContextObservability: AgentContextObservabilityService
   searchQueryObservability: SearchQueryObservabilityService
-}): Partial<CoreDependencies> {
+}): // `Partial` for the bulk (one entry is conditionally spread), INTERSECTED with the one
+// dependency `CoreDependencies` marks required. Without that intersection the spread erases the
+// guarantee and the facade typechecks with the engine's gate projection silently unwired, which
+// is the whole failure mode making it required was meant to catch.
+Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
   const {
     config,
     db,

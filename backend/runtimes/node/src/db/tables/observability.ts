@@ -183,3 +183,19 @@ export const platformRunDays = pgTable(
     index('idx_platform_run_days_day').on(t.day_start),
   ],
 )
+
+/**
+ * How far the daily-rollup SWEEP has covered. A fact about the sweep, so it cannot be derived
+ * from the rolled-up rows: `MAX(day_start)` cannot tell an idle account from a wedged pass, nor
+ * a brand-new account from a rollup that has never run, and those call for opposite responses.
+ *
+ * DEPLOYMENT-scoped (one row per rollup, no tenant dimension) because one pass covers every
+ * workspace, and carrying only a day boundary and a timestamp it holds no tenant data. Written
+ * in the same transaction as the rewrite it describes. NOT workspace-scoped, hence absent from
+ * `WORKSPACE_SCOPED_TABLES` and from the retention prune.
+ */
+export const platformRollupState = pgTable('platform_rollup_state', {
+  rollup: text('rollup').primaryKey(),
+  through_day: bigint('through_day', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})

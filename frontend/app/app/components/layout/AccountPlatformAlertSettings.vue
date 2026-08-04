@@ -120,12 +120,37 @@ onMounted(async () => {
     try {
       await store.load(props.accountId)
     } catch {
-      // The deployment-settings panel surfaces the load error; stay quiet here.
+      // The deployment-settings panel surfaces the error text; what matters HERE is that the
+      // rest of the account's config never arrived, which `loaded` below turns into a refusal
+      // to save rather than a silent write of a config that is missing everything.
     }
   }
   hydrate()
 })
 watch(() => store.view, hydrate)
+
+/**
+ * Whether the account's CURRENT config is in hand.
+ *
+ * Load-bearing because a save REPLACES the whole non-secret config and this panel only edits one
+ * key of it: saving on top of a failed load would carry nothing forward and silently wipe the
+ * model policy, the run-credential floor and every other sibling setting. The store only clears
+ * `available` for a 503 (the settings module is unwired), so any other load failure leaves the
+ * panel rendered with a null view, which is exactly the state this guards.
+ */
+const loaded = computed(() => !!store.view)
+
+/**
+ * Fields whose text is not a number. Reported rather than dropped: `fromDisplay` returning
+ * `undefined` means "inherit" everywhere else, so silently coercing a typo into it would answer
+ * a mis-typed ceiling by quietly restoring the deployment default.
+ */
+const invalidFields = computed(() =>
+  THRESHOLDS.filter((th) => {
+    const raw = values.value[th.field].trim()
+    return raw !== '' && !Number.isFinite(Number(raw))
+  }).map((th) => thresholdLabels.value[th.field]),
+)
 
 /** The overrides to persist: only the fields the admin actually filled in. */
 function collectThresholds(): PlatformAlertThresholdOverrides {
@@ -138,6 +163,18 @@ function collectThresholds(): PlatformAlertThresholdOverrides {
 }
 
 async function save() {
+  if (!loaded.value) {
+    toast.add({ title: t('settings.platformAlerts.notLoaded'), color: 'error' })
+    return
+  }
+  if (invalidFields.value.length > 0) {
+    toast.add({
+      title: t('settings.platformAlerts.invalidNumbers'),
+      description: invalidFields.value.join(', '),
+      color: 'error',
+    })
+    return
+  }
   const thresholds = collectThresholds()
   // Each key is omitted rather than nulled when it carries no override: an absent key is what
   // the backend reads as "inherit the deployment default", and a stored null would be a value.
@@ -148,8 +185,8 @@ async function save() {
   }
   saving.value = true
   try {
-    // `config` fully replaces the stored non-secret config, so carry the rest forward. An empty
-    // override sheet stores an empty object, which is the same thing as inheriting everything.
+    // `config` fully replaces the stored non-secret config, so carry the rest forward (guarded
+    // by `loaded` above, or "the rest" would be nothing).
     await store.save(props.accountId, {
       config: { ...store.view?.config, platformAlerts: settings },
     })
@@ -251,12 +288,26 @@ const hasOverrides = computed(
       </div>
     </div>
 
+    <!--
+      A save REPLACES the whole account config and this sheet edits one key of it, so with the
+      current config not in hand there is nothing to carry forward. Say so and disable the
+      button rather than letting a click wipe the sibling settings.
+    -->
+    <p
+      v-if="!loaded"
+      class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+      data-testid="account-platform-alerts-unloaded"
+    >
+      {{ t('settings.platformAlerts.notLoaded') }}
+    </p>
+
     <div class="flex gap-2">
       <UButton
         color="primary"
         size="xs"
         icon="i-lucide-save"
         :loading="saving"
+        :disabled="!loaded || invalidFields.length > 0"
         data-testid="account-platform-alerts-save"
         @click="save"
       >

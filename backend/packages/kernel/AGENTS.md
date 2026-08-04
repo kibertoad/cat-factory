@@ -139,9 +139,12 @@ else imports its **ports** and domain types from here.
   sub-select every other platform rollup uses, which is what a telemetry-store home would have
   cost them (a cross-store join, or a workspace-id list threaded through every read).
   `platform-metrics.ts` also owns the DAILY ROLLUP the long dashboard windows read: its
-  `dailyRollupWatermark` is a separate method from the rows on purpose, because an
-  un-materialised rollup and an idle quarter return the same empty series and only the watermark
-  can tell them apart.
+  `dailyRollupWatermark` is a separate method, reading the coverage the SWEEP recorded rather
+  than `max(day_start)` over the rows, and deployment-scoped rather than per account. An
+  un-materialised rollup and an idle quarter return the same empty series, and a value derived
+  from the rows cannot separate them in either direction (a quiet account looks like a lagging
+  sweep; a new account looks like a rollup that never ran), so the number comes from the thing
+  being asked about. `RUN_DAYS_ROLLUP` is the one key both facades write and read it under.
 - `ports/llm-metrics.ts`: besides the store's own `LlmCallMetric` / `LlmCallMetricRepository`,
   `InlineLlmCallRecorder` is the seam the inline feeder writes through, so all three producers
   (proxy, subscription harness, inline) land in one table. Its `InlineLlmCall` is deliberately

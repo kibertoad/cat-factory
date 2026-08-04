@@ -367,6 +367,12 @@ export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
  * materialises, because a fine-grained scan over a quarter of run history is exactly the
  * "load rows and reduce" cost the rollup exists to avoid. Which source answered is carried
  * on the projection ({@link platformTrendSourceSchema}) rather than left to be inferred.
+ *
+ * The rollup-backed windows are INCLUSIVE of the day their start falls in, so a `30d` window
+ * covers 30 or 31 calendar days depending on the time of day it is read, where the live windows
+ * are exact to the millisecond. A day is the smallest bucket that table can answer, and dropping
+ * the partial oldest day would under-report it by more than including it over-reports; `since`
+ * on the projection is still the exact window start, so a reader is never told otherwise.
  */
 export const platformObservabilityWindowSchema = v.picklist(['1h', '24h', '7d', '30d', '90d'])
 export type PlatformObservabilityWindow = v.InferOutput<typeof platformObservabilityWindowSchema>
@@ -470,8 +476,8 @@ export const platformObservabilitySchema = v.object({
    */
   source: platformTrendSourceSchema,
   /**
-   * On a `daily-rollup` window: the start (epoch ms, UTC midnight) of the most recent day the
-   * rollup has materialised for this account, or NULL when it has materialised nothing.
+   * On a `daily-rollup` window: the newest day (epoch ms, UTC midnight) the rollup SWEEP has
+   * covered, or NULL when no pass has ever completed.
    *
    * Null is the whole reason this field exists. A rollup that has never run and a deployment
    * that has never run anything both produce an empty series, and only one of them is a fact
@@ -479,6 +485,12 @@ export const platformObservabilitySchema = v.object({
    * confident zeros. A value well behind `generatedAt` says the same thing more quietly: the
    * sweep is behind, and the tail of the window is not missing work but missing data.
    * Always null on a `runs` window, where there is no rollup in the path to be behind.
+   *
+   * It is the SWEEP's recorded coverage, not the newest rolled-up row, and DEPLOYMENT-wide
+   * rather than per account. Deriving it from the rows cannot support either reading above: an
+   * account idle for a fortnight and a wedged pass share a newest row, and an account created
+   * yesterday and a rollup that never ran share an absence. Both pairs call for opposite
+   * operator responses, so the number has to come from the thing being asked about.
    */
   rolledUpThrough: v.nullable(v.number()),
   trend: v.object({
@@ -609,10 +621,12 @@ export const platformAlertThresholdOverridesSchema = v.object({
   minStalledPriorRuns: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1_000_000)),
   ),
-  /** Share (0..1] of the window's failures one kind must reach for `failure_kind_dominant`. */
-  maxFailureKindShare: v.optional(
-    v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1), v.notValue(0)),
-  ),
+  /**
+   * Share (0..1] of the window's failures one kind must reach for `failure_kind_dominant`.
+   * The floor excludes 0 on its own (a share of 0 is satisfied by any distribution, so it would
+   * page constantly), which is why there is no separate `notValue(0)` beside it.
+   */
+  maxFailureKindShare: v.optional(v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1))),
   /** Consecutive failed passes of one sweeper before `sweep_degraded` fires. */
   maxSweepFailures: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000))),
 })

@@ -1114,7 +1114,9 @@
         "minStalledPriorRuns": "Esecuzioni che la prima parte della finestra deve aver avuto. Zero avvisa a ogni silenzio.",
         "maxFailureKindShare": "Quota degli errori che una sola causa può rappresentare, sopra 0 e fino a 1.",
         "maxSweepFailures": "Passaggi falliti consecutivi di una scansione in background."
-      }
+      },
+      "notLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare.",
+      "invalidNumbers": "Questi limiti non sono numeri"
     }
   },
   "inspector": {

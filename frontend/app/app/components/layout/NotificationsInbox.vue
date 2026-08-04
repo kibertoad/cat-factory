@@ -452,6 +452,7 @@ function revealDecision(n: Notification) {
                   :is="canOpenFailingRun(run) ? 'button' : 'span'"
                   v-for="run in failingRuns(n)"
                   :key="run.executionId"
+                  :type="canOpenFailingRun(run) ? 'button' : undefined"
                   class="flex items-center gap-1 text-start text-[11px]"
                   :class="
                     canOpenFailingRun(run)

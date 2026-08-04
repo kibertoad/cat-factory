@@ -3405,7 +3405,9 @@
         "minStalledPriorRuns": "Exécutions que la première partie de la fenêtre doit avoir portées. Zéro alerte au moindre silence.",
         "maxFailureKindShare": "Part des échecs qu'une seule cause peut représenter, au-dessus de 0 et jusqu'à 1.",
         "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
-      }
+      },
+      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
+      "invalidNumbers": "Ces plafonds ne sont pas des nombres"
     }
   },
   "providers": {

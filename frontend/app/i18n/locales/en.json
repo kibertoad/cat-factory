@@ -3511,7 +3511,9 @@
         "minStalledPriorRuns": "Runs the earlier part of the window must have carried. Zero alerts on any silence.",
         "maxFailureKindShare": "Share of failures one cause may account for, above 0 and up to 1.",
         "maxSweepFailures": "Consecutive failed passes of one background sweep."
-      }
+      },
+      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing.",
+      "invalidNumbers": "These ceilings are not numbers"
     }
   },
   "providers": {

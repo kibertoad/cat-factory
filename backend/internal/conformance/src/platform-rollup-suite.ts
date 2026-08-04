@@ -115,25 +115,121 @@ export function defineRunDayAndFailureCases(
     expect(rows.find((r) => r.dayStart === 20 * day && r.status === 'done')?.count).toBe(2)
   })
 
-  it('reports the rollup watermark, and null before anything is materialised', async () => {
+  it('drops the bucket a run has MOVED OUT of, rather than leaving it beside the new one', async () => {
+    // The case an upsert-only rollup gets wrong, and the reason the pass DELETES its window
+    // before re-inserting it. A run's status mutates in place while `created_at` stays put, so a
+    // pass that ran mid-flight wrote a `(day, 'running')` bucket that the next pass's SELECT no
+    // longer produces — and `ON CONFLICT DO UPDATE` never touches a row the new result set
+    // omits. The orphan then survives until retention, and every long-window total counts that
+    // run twice: once running, once done.
     const repo = makeRepo()
     const seed = makeSeed()
     const { account, ws } = ids()
     await seed.workspace(ws, account)
     const day = 24 * 60 * 60_000
-    // NULL is the honest answer here and the reason the watermark is its own read: an account
-    // with runs but no rollup, and one with neither, both return an empty series.
-    expect(await repo.dailyRollupWatermark(account)).toBeNull()
+    const run = {
+      workspaceId: ws,
+      id: `${ws}-moves`,
+      kind: 'execution',
+      createdAt: 50 * day + 1_000,
+      updatedAt: 50 * day + 2_000,
+    }
+    // Pass 1 catches the run mid-flight.
+    await seed.run({ ...run, status: 'running' })
+    await repo.rollupRunDays(50 * day, 51 * day)
+    expect((await repo.dailyRunTotalsSince(account, 50 * day)).map((r) => r.status)).toEqual([
+      'running',
+    ])
+
+    // The run settles, and pass 2 re-rolls the same day.
+    await seed.run({ ...run, status: 'done', updatedAt: 50 * day + 9_000 })
+    await repo.rollupRunDays(50 * day, 51 * day)
+
+    const rows = await repo.dailyRunTotalsSince(account, 50 * day)
+    expect(rows.map((r) => r.status)).toEqual(['done'])
+    // The whole point: ONE run in the table, not one running plus one done.
+    expect(rows.reduce((n, r) => n + r.count, 0)).toBe(1)
+  })
+
+  it('leaves days OUTSIDE the recomputed window untouched when it rewrites', async () => {
+    // The delete is bounded by the same snapped window as the insert. A pass that recomputed a
+    // short trailing lookback must not take the history before it with the delete, which would
+    // make every sweep silently truncate the `90d` window down to the lookback.
+    const repo = makeRepo()
+    const seed = makeSeed()
+    const { account, ws } = ids()
+    await seed.workspace(ws, account)
+    const day = 24 * 60 * 60_000
+    await seed.run({
+      workspaceId: ws,
+      id: `${ws}-hist`,
+      kind: 'execution',
+      status: 'done',
+      createdAt: 60 * day + 1_000,
+      updatedAt: 60 * day + 2_000,
+    })
+    await seed.run({
+      workspaceId: ws,
+      id: `${ws}-recent`,
+      kind: 'execution',
+      status: 'done',
+      createdAt: 65 * day + 1_000,
+      updatedAt: 65 * day + 2_000,
+    })
+    await repo.rollupRunDays(60 * day, 66 * day)
+    // Re-roll ONLY the recent day, as a trailing-lookback pass would.
+    await repo.rollupRunDays(65 * day, 66 * day)
+
+    const rows = await repo.dailyRunTotalsSince(account, 0)
+    expect(rows.map((r) => r.dayStart)).toEqual([60 * day, 65 * day])
+  })
+
+  // The watermark is DEPLOYMENT-wide (one row, no tenant dimension) and FORWARD-ONLY, so unlike
+  // every other case here it cannot be isolated by minting a fresh account, and an absolute
+  // assertion would depend on which cases ran before it AND on what a previous run of the suite
+  // left in a reused database. Both cases below therefore anchor their day range strictly AHEAD
+  // of the current watermark, which makes them exact and order-independent at once.
+  const DAY = 24 * 60 * 60_000
+  const aheadOfWatermark = async (repo: PlatformMetricsRepository) => {
+    const now = (await repo.dailyRollupWatermark()) ?? 0
+    return Math.floor(now / DAY) * DAY + 10 * DAY
+  }
+
+  it('reports the SWEEP coverage as the watermark, not the newest rolled-up row', async () => {
+    // The watermark answers "how far has the sweep got", so a pass covering days with NO runs
+    // still advances it. Deriving it from `max(day_start)` would report the last day something
+    // happened, which reads as a lagging sweep on any quiet deployment, and the dashboard turns
+    // exactly that number into "the rollup is behind, this tail is missing data".
+    const repo = makeRepo()
+    const seed = makeSeed()
+    const { account, ws } = ids()
+    await seed.workspace(ws, account)
+    const base = await aheadOfWatermark(repo)
     await seed.run({
       workspaceId: ws,
       id: `${ws}-w1`,
       kind: 'execution',
       status: 'done',
-      createdAt: 30 * day + 1_000,
-      updatedAt: 30 * day + 2_000,
+      createdAt: base + 1_000,
+      updatedAt: base + 2_000,
     })
-    await repo.rollupRunDays(30 * day, 31 * day)
-    expect(await repo.dailyRollupWatermark(account)).toBe(30 * day)
+    // Cover three days; only the FIRST has a run in it.
+    await repo.rollupRunDays(base, base + 3 * DAY)
+    expect(await repo.dailyRollupWatermark()).toBe(base + 2 * DAY)
+    // The rows themselves still stop where the data does: the two reads answer two questions,
+    // and `max(day_start)` for this account is two days behind the watermark right here.
+    expect((await repo.dailyRunTotalsSince(account, base)).map((r) => r.dayStart)).toEqual([base])
+  })
+
+  it('never walks the watermark backwards when an older window is recomputed', async () => {
+    // A backfill or a replayed pass recomputes an OLD window. That is not a regression in
+    // coverage, and reporting it as one would present a healthy sweep as a stalled one.
+    const repo = makeRepo()
+    const base = await aheadOfWatermark(repo)
+    await repo.rollupRunDays(base, base + DAY)
+    expect(await repo.dailyRollupWatermark()).toBe(base)
+    await repo.rollupRunDays(base - 5 * DAY, base - 4 * DAY)
+    expect(await repo.dailyRollupWatermark()).toBe(base)
   })
 
   it('prunes rolled-up days older than the cutoff', async () => {

@@ -128,12 +128,14 @@ export type {
   PlatformRunOutcome,
   PlatformRunTrendPoint,
 } from './platform-metrics.js'
+export { RUN_DAYS_ROLLUP } from './platform-metrics.js'
 export type {
   GateOutcomeKind,
   GateOutcomeRecord,
   GateOutcomeRepository,
   PlatformGateOutcomeCount,
 } from './gate-outcomes.js'
+export { noopGateOutcomeRepository } from './gate-outcomes.js'
 export type {
   ReportActivityGroup,
   ReportRange,

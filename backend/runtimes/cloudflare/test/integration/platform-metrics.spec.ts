@@ -16,8 +16,12 @@ const seed: PlatformMetricsSeed = {
   },
   async run(row) {
     await env.DB.prepare(
+      // Upsert on the run's real primary key, so re-seeding an id MOVES that run's status the
+      // way the engine does instead of failing on the conflict (see `PlatformMetricsSeed.run`).
       `INSERT INTO agent_runs (workspace_id, id, kind, status, detail, created_at, updated_at, failure)
-       VALUES (?, ?, ?, ?, '{}', ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, '{}', ?, ?, ?)
+       ON CONFLICT(workspace_id, id) DO UPDATE SET
+         status = excluded.status, updated_at = excluded.updated_at, failure = excluded.failure`,
     )
       .bind(
         row.workspaceId,

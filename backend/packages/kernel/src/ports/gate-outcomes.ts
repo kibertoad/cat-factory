@@ -18,11 +18,24 @@
 // and a telemetry-store home would have forced either a cross-store join or a workspace-id
 // list threaded through the read (the one store rule in the initiative doc).
 
-/** How a gate ended. A gate still looping has no row: only terminal verdicts are recorded. */
+/**
+ * How a gate ended. A gate still looping has no row: only terminal verdicts are recorded.
+ *
+ * Deliberately TWO values rather than one per settling path, because the question the dashboard
+ * asks is "did the gate get the condition green, or does a human now own it", and every way a
+ * gate can end answers one or the other.
+ */
 export type GateOutcomeKind =
   /** The precheck ultimately passed and the run advanced. */
   | 'passed'
-  /** The attempt budget was spent (or no helper could be escalated to) and a human took over. */
+  /**
+   * The gate ended WITHOUT the precheck going green and a human owns the outcome. Reached two
+   * ways: the attempt budget was spent (or there was no helper to escalate to), or an
+   * investigate-don't-fix helper finished and handed off out-of-band (`post-release-health` →
+   * `on-call`, which raises `release_regression` and never reverts). The two are one bucket
+   * because they call for the same operator response; the run's own step detail is where the
+   * difference is legible.
+   */
   | 'exhausted'
 
 /** One settled gate, written by the engine as the gate reaches its terminal verdict. */
@@ -84,4 +97,20 @@ export interface GateOutcomeRepository {
   statsSince(accountId: string, sinceEpochMs: number): Promise<PlatformGateOutcomeCount[]>
   /** Prune settled gates older than `cutoff` (epoch ms). Returns the rows removed. */
   deleteOlderThan(cutoff: number): Promise<number>
+}
+
+/**
+ * The "this deployment keeps no settled-gate projection" implementation, for a caller that has
+ * nothing to record into (an engine unit test, a facade with no such store).
+ *
+ * It exists so `CoreDependencies.gateOutcomeRepository` can be REQUIRED. An un-wired projection
+ * reads downstream as "no gate ever escalated on this deployment", which is indistinguishable
+ * from a healthy one and is the same failure mode that made `logger` and `operationalMetrics`
+ * required rather than optional: a facade that forgets to wire it must fail to TYPECHECK, and a
+ * caller that genuinely has no store must say so in code.
+ */
+export const noopGateOutcomeRepository: GateOutcomeRepository = {
+  record: async () => {},
+  statsSince: async () => [],
+  deleteOlderThan: async () => 0,
 }

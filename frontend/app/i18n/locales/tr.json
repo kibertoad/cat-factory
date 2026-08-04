@@ -3417,7 +3417,9 @@
         "minStalledPriorRuns": "Pencerenin önceki bölümünün taşımış olması gereken çalıştırma sayısı. Sıfır her sessizlikte uyarır.",
         "maxFailureKindShare": "Tek bir nedenin kapsayabileceği hata payı; 0’ın üzerinde ve en fazla 1.",
         "maxSweepFailures": "Bir arka plan taramasının üst üste başarısız geçişi."
-      }
+      },
+      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin.",
+      "invalidNumbers": "Bu üst sınırlar sayı değil"
     }
   },
   "providers": {

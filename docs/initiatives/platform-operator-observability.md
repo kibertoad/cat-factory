@@ -88,11 +88,23 @@ an ordinary aggregate over columns.
 **7, the daily rollup.** `platform_run_days` (one row per workspace / UTC day / status / failure
 kind) is materialised by the retention sweep on both facades and serves the two NEW windows,
 `30d` and `90d`. It is REWRITTEN in place over a short trailing lookback rather than appended, so
-the still-accruing day is corrected on each pass and a missed pass self-heals. The projection SAYS
-which store answered (`source`) and how far the rollup reaches (`rolledUpThrough`), because an
-un-materialised rollup and an idle quarter produce the same empty series and are opposite facts.
-The dashboard renders "no rollup yet" / "the rollup is behind" / "complete through <date>" rather
-than 90 days of confident zeros. Coordinated with `storage-and-retention.md` §1b.
+the still-accruing day is corrected on each pass and a missed pass self-heals.
+
+Two things about that were wrong in the first cut and are worth carrying forward. An UPSERT is not
+a rewrite: `agent_runs.status` mutates in place while `created_at` stays put, so a pass that ran
+mid-day leaves a `(day, 'running')` bucket the next pass's `SELECT` no longer produces and
+`DO UPDATE` never touches, and the orphan then double-counts that run until retention. The pass
+therefore DELETEs its window and re-inserts it in one transaction. And the rollup's COVERAGE is a
+fact about the sweep, so it is recorded by the pass (`platform_rollup_state`, deployment-scoped,
+forward-only, written in that same transaction) rather than derived as `max(day_start)`, which
+reports the last day something HAPPENED and so reads a quiet account as a lagging sweep and a new
+account as a rollup that never ran.
+
+The projection SAYS which store answered (`source`) and how far the sweep has covered
+(`rolledUpThrough`), because an un-materialised rollup and an idle quarter produce the same empty
+series and are opposite facts. The dashboard renders "no rollup yet" / "the rollup is behind" /
+"complete through <date>" rather than 90 days of confident zeros. Coordinated with
+`storage-and-retention.md` §1b.
 
 **6, the settings surface.** The alert ceilings now layer per account:
 `config.platformAlerts` on the existing account-settings row (no migration), merged over the

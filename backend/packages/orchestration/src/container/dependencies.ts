@@ -455,10 +455,16 @@ export interface CoreDependencies {
   /**
    * Settled-gate projection (`gate_outcomes`): written by the engine's gate machine as each
    * polling gate reaches a terminal verdict, read by the platform dashboard for the gate /
-   * CI-fixer attempt statistics. Optional on the same terms as the rollup port above; absent ⇒
-   * nothing is projected and the dashboard reports no gate statistics.
+   * CI-fixer attempt statistics.
+   *
+   * REQUIRED, unlike the rollup port above, and for the reason `logger` and
+   * `operationalMetrics` are: this one is WRITTEN by the engine, and an un-wired writer reads
+   * downstream as "no gate on this deployment ever escalated", which is exactly what a healthy
+   * deployment looks like. The rollup port is a pure READ whose absence removes a page; this
+   * one's absence silently removes the truth from a page that still renders. A facade with no
+   * such store passes {@link noopGateOutcomeRepository}, which says so in code.
    */
-  gateOutcomeRepository?: GateOutcomeRepository
+  gateOutcomeRepository: GateOutcomeRepository
   /**
    * Cross-cutting usage-analytics rollup port (spend per model/agent kind, spend + run
    * activity per workspace/service/task type, spend trend) backing the Reports view.

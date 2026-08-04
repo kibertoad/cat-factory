@@ -125,7 +125,7 @@ export class PlatformObservabilityService {
     const repo = this.deps.platformMetricsRepository
     const [rows, rolledUpThrough] = await Promise.all([
       repo.dailyRunTotalsSince(accountId, since),
-      repo.dailyRollupWatermark(accountId),
+      repo.dailyRollupWatermark(),
     ])
     return {
       outcomes: summarizeOutcomes(rows),

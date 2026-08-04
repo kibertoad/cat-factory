@@ -94,6 +94,13 @@ export interface PlatformFailedRunRef {
   workspaceFailedTotal: number
 }
 
+/**
+ * The `platform_rollup_state.rollup` key the daily run rollup records its coverage under. One
+ * constant so the two facades cannot write and read different keys, which would present a
+ * perfectly healthy sweep as one that has never run.
+ */
+export const RUN_DAYS_ROLLUP = 'run_days'
+
 export interface PlatformMetricsRepository {
   /**
    * Runs CREATED at or after `sinceEpochMs`, grouped by `(kind, status)`, for the
@@ -146,16 +153,19 @@ export interface PlatformMetricsRepository {
    */
   dailyRunTotalsSince(accountId: string, sinceEpochMs: number): Promise<PlatformDailyRunCount[]>
   /**
-   * The most recent day the rollup has materialised for this account (epoch ms), or null when
-   * it has materialised nothing.
+   * The newest day the rollup SWEEP has covered (epoch ms, UTC midnight), or null when no pass
+   * has ever completed.
    *
-   * Its own read rather than `max(dayStart)` over the rows above, because the question it
-   * answers is about the SWEEP and the rows are about the RUNS: a window whose days all
-   * predate the account's first run returns no rows either way, and only this read can tell
-   * "nothing happened" from "nothing has been rolled up yet". Null therefore means the second
-   * which is the honest answer a series of zeros cannot give.
+   * Read from the sweep's own recorded coverage, NOT `max(dayStart)` over the rows above, and
+   * DEPLOYMENT-scoped rather than per account. Both of those are the same point: the question is
+   * about the SWEEP and the rows are about the RUNS. An account idle for a fortnight and a
+   * wedged pass produce the same newest row; an account created yesterday and a rollup that has
+   * never run produce the same absence. Deriving the watermark from data therefore answers a
+   * different question than the one the dashboard asks, and answers it in a way that reads as
+   * confident. The pass records what it covered, so null means "no pass has run" and a value
+   * means "covered through here" whether or not anything happened in between.
    */
-  dailyRollupWatermark(accountId: string): Promise<number | null>
+  dailyRollupWatermark(): Promise<number | null>
   /** Prune rolled-up daily buckets older than `cutoff` (epoch ms). Returns rows removed. */
   deleteRunDaysOlderThan(cutoff: number): Promise<number>
   /**

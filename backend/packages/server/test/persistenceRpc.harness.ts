@@ -301,6 +301,9 @@ function buildBoardConfigRepos() {
     // The workspace's outbound webhook endpoint. `get`/`delete` echo their workspaceId (arg0);
     // the record-based `put` binds on the record's `workspaceId` FIELD. The signing secret comes
     // back SEALED, so nothing decrypted crosses the machine API.
+    gateOutcomeRepository: {
+      record: async () => undefined,
+    },
     notificationWebhookRepository: {
       get: async (ws: string) => ({ ws }),
       put: async () => undefined,

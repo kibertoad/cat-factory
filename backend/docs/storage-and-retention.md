@@ -100,13 +100,23 @@ dashboard load and each alert sweep, is exactly the cost a rollup removes.
 the same retention sweep that bounds everything else on this page. Three properties are worth
 carrying over to any future rollup here:
 
-- **It is REWRITTEN, never appended.** A day's counts are not final until the day is over, so
-  each pass recomputes a short trailing window (`RUN_DAY_ROLLUP_LOOKBACK_MS`) and REPLACES those
-  buckets. That also makes a missed pass self-healing rather than leaving a day permanently
-  half-counted, which is indistinguishable from a quiet day once it is written.
-- **The read reports how far the rollup REACHES** (`dailyRollupWatermark`). An un-materialised
-  rollup and an idle quarter produce the same empty series and are opposite facts, so the
-  dashboard states which one it is showing instead of rendering confident zeros.
+- **It is REWRITTEN, never appended, and an upsert is not a rewrite.** A day's counts are not
+  final until the day is over, so each pass recomputes a short trailing window
+  (`RUN_DAY_ROLLUP_LOOKBACK_MS`) and REPLACES those buckets: it DELETEs the window and re-inserts
+  it, in one transaction. The delete is the load-bearing half. `agent_runs.status` mutates in
+  place while `created_at` stays put, so a pass that ran mid-day wrote a `(day, 'running')` bucket
+  that the next pass's `SELECT` no longer produces, and `ON CONFLICT DO UPDATE` never touches a
+  row the new result set omits. The orphan then sits beside the run's settled bucket until
+  retention, counting it twice. Rewriting also makes a missed pass self-healing rather than
+  leaving a day permanently half-counted, which is indistinguishable from a quiet day.
+- **The read reports how far the SWEEP has covered** (`dailyRollupWatermark`), from what the pass
+  recorded in `platform_rollup_state` rather than from the rolled-up rows. An un-materialised
+  rollup and an idle quarter produce the same empty series and are opposite facts, and
+  `max(day_start)` cannot tell them apart in either direction: it reports the last day something
+  happened, so a quiet deployment reads as a lagging sweep, and a brand-new account reads as a
+  rollup that has never run. The marker is deployment-scoped (one pass covers every workspace),
+  written in the same transaction as the rewrite it describes, and only ever moves forward so a
+  backfill cannot present a healthy sweep as a stalled one.
 - **Its retention is the LONGEST of any table here** (`PLATFORM_RUN_DAY_RETENTION_DAYS`,
   default 400). A rolled-up day is a handful of tiny rows, and a short window would take away
   the very questions the table exists to answer.

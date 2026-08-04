@@ -35,7 +35,7 @@ import type {
   ScheduleTemplate,
   StaleAgentRun,
 } from '@cat-factory/kernel'
-import { LIVE_EXECUTION_STATUSES } from '@cat-factory/kernel'
+import { LIVE_EXECUTION_STATUSES, RUN_DAYS_ROLLUP } from '@cat-factory/kernel'
 import { DAY_MS } from '@cat-factory/orchestration'
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { ExecutionRow } from '@cat-factory/server'
@@ -58,6 +58,7 @@ import {
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
+  platformRollupState,
   platformRunDays,
   workspaces,
 } from '../../db/schema.js'
@@ -781,31 +782,63 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
   }
 
   async rollupRunDays(fromEpochMs: number, toEpochMs: number): Promise<number> {
-    // One `INSERT … SELECT … GROUP BY`: the aggregation happens in Postgres and no run row is
-    // loaded. Bounds snap to day edges so a partially-covered day is never written with only
-    // the covered part's counts, which would then read as a complete day.
+    // The aggregation happens in Postgres and no run row is loaded. Bounds snap to day edges so
+    // a partially-covered day is never written with only the covered part's counts, which would
+    // then read as a complete day.
     const from = Math.floor(fromEpochMs / DAY_MS) * DAY_MS
     const to = Math.ceil(toEpochMs / DAY_MS) * DAY_MS
     if (to <= from) return 0
-    // DO UPDATE, not DO NOTHING: the current day is still accruing, so each pass CORRECTS its
-    // bucket. `failure_kind` is '' for a non-failed status because it is in the primary key
-    // (see migration 0079 for why a nullable key column would not deduplicate).
-    const res = await this.db.execute(sql`
-      INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
-      SELECT ${agentRuns.workspace_id},
-             (${agentRuns.created_at} / ${DAY_MS}::bigint) * ${DAY_MS}::bigint AS day_start,
-             ${agentRuns.status},
-             CASE WHEN ${agentRuns.status} = 'failed'
-                  THEN coalesce((${agentRuns.failure}::jsonb ->> 'kind'), 'unknown')
-                  ELSE '' END AS failure_kind,
-             count(*)::int AS run_count
-      FROM ${agentRuns}
-      WHERE ${agentRuns.created_at} >= ${from} AND ${agentRuns.created_at} < ${to}
-      GROUP BY 1, 2, 3, 4
-      ON CONFLICT (workspace_id, day_start, status, failure_kind)
-        DO UPDATE SET run_count = excluded.run_count
-    `)
-    return Number(res.rowCount ?? 0)
+    // DELETE the window, then INSERT it: an upsert alone is NOT a rewrite. A run's `status`
+    // MUTATES in place (`running` → `done`) while its `created_at` stays put, so a pass that ran
+    // while the day was in flight wrote a `(day, 'running')` bucket that a later pass's SELECT
+    // no longer produces — `DO UPDATE` never touches a row the new result set omits, and the
+    // orphan then sits in the table until retention, inflating every long-window total and trend
+    // by every run that happened to be mid-flight at a sweep. The delete is what makes "rewritten
+    // in place" true rather than "corrected where it still overlaps".
+    //
+    // Both statements ride ONE transaction so a concurrent dashboard read never observes the
+    // window mid-rewrite (it would see an empty stretch and render it as an idle period). The
+    // `ON CONFLICT` is kept as a belt on top of the braces: the `GROUP BY` makes the incoming
+    // keys unique, so it can only fire against a pass racing this one.
+    return await this.db.transaction(async (tx) => {
+      await tx
+        .delete(platformRunDays)
+        .where(and(gte(platformRunDays.day_start, from), lt(platformRunDays.day_start, to)))
+      // `failure_kind` is '' for a non-failed status because it is in the primary key (see
+      // migration 0079 for why a nullable key column would not deduplicate).
+      const res = await tx.execute(sql`
+        INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
+        SELECT ${agentRuns.workspace_id},
+               (${agentRuns.created_at} / ${DAY_MS}::bigint) * ${DAY_MS}::bigint AS day_start,
+               ${agentRuns.status},
+               CASE WHEN ${agentRuns.status} = 'failed'
+                    THEN coalesce((${agentRuns.failure}::jsonb ->> 'kind'), 'unknown')
+                    ELSE '' END AS failure_kind,
+               count(*)::int AS run_count
+        FROM ${agentRuns}
+        WHERE ${agentRuns.created_at} >= ${from} AND ${agentRuns.created_at} < ${to}
+        GROUP BY 1, 2, 3, 4
+        ON CONFLICT (workspace_id, day_start, status, failure_kind)
+          DO UPDATE SET run_count = excluded.run_count
+      `)
+      // The sweep's coverage, recorded INSIDE the same transaction as the rewrite it describes,
+      // so the watermark can never claim a day the rows do not have. `through_day` is the last
+      // day the pass actually covered (`to` is the exclusive end) and only ever moves FORWARD:
+      // a pass recomputing an OLD window (a backfill, a replay) must not walk it backwards and
+      // make a current rollup read as behind. `updated_at` is the pass's own upper bound, which
+      // is the caller's `now` before it was snapped to a day edge.
+      await tx
+        .insert(platformRollupState)
+        .values({ rollup: RUN_DAYS_ROLLUP, through_day: to - DAY_MS, updated_at: toEpochMs })
+        .onConflictDoUpdate({
+          target: platformRollupState.rollup,
+          set: {
+            through_day: sql`greatest(${platformRollupState.through_day}, ${to - DAY_MS})`,
+            updated_at: sql`greatest(${platformRollupState.updated_at}, ${toEpochMs})`,
+          },
+        })
+      return Number(res.rowCount ?? 0)
+    })
   }
 
   async dailyRunTotalsSince(
@@ -844,20 +877,12 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
     }))
   }
 
-  async dailyRollupWatermark(accountId: string): Promise<number | null> {
+  async dailyRollupWatermark(): Promise<number | null> {
     const [row] = await this.db
-      .select({ dayStart: sql<number | null>`max(${platformRunDays.day_start})` })
-      .from(platformRunDays)
-      .where(
-        inArray(
-          platformRunDays.workspace_id,
-          this.db
-            .select({ id: workspaces.id })
-            .from(workspaces)
-            .where(eq(workspaces.account_id, accountId)),
-        ),
-      )
-    return row?.dayStart != null ? Number(row.dayStart) : null
+      .select({ throughDay: platformRollupState.through_day })
+      .from(platformRollupState)
+      .where(eq(platformRollupState.rollup, RUN_DAYS_ROLLUP))
+    return row?.throughDay != null ? Number(row.throughDay) : null
   }
 
   async deleteRunDaysOlderThan(cutoff: number): Promise<number> {

@@ -110,7 +110,11 @@ export async function sweepPlatformHealth(
     try {
       // The account's own thresholds: the deployment env defaults with this account's stored
       // settings layered over them (slice 6's settings surface writes those). Read per account
-      // rather than per workspace, matching the scope the projection is computed at.
+      // rather than per workspace, matching the scope the projection is computed at, and
+      // necessarily BEFORE the change check below, since the thresholds are what decide which
+      // reasons fire. It is not the per-pass cost that reads like: `AccountSettingsService.resolve`
+      // goes through the app cache seam (invalidated on every settings write), so the steady state
+      // is a cache hit per account, not a row read and a decrypt.
       const account = resolveAccountAlertConfig(
         cfg,
         await readAccountAlertSettings(container, accountId, logger),

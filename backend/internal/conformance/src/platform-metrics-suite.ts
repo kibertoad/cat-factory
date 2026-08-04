@@ -26,7 +26,15 @@ export interface PlatformMetricsSeedRun {
 export interface PlatformMetricsSeed {
   /** Insert a workspace owned by `accountId` (idempotent per id). */
   workspace(id: string, accountId: string): Promise<void>
-  /** Insert one `agent_runs` row. */
+  /**
+   * Insert one `agent_runs` row, or UPDATE it in place when `(workspaceId, id)` already exists.
+   *
+   * Upsert rather than insert because a run's `status` genuinely mutates over its lifetime while
+   * its `created_at` stays put (`running` → `done`/`failed`), and the daily rollup has to survive
+   * exactly that. A seed that could only ever insert could not express the transition, which is
+   * why the rollup shipped counting a settled run twice: once under the status it was rolled up
+   * with mid-flight, once under the one it ended on.
+   */
   run(row: PlatformMetricsSeedRun): Promise<void>
 }
 
