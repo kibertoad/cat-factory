@@ -189,6 +189,7 @@
       "title": "Añadir una tarea",
       "newTaskIn": "Nueva tarea en {container}",
       "typeLabel": "Tipo",
+      "typeOther": "Otros",
       "types": {
         "feature": "Funcionalidad",
         "bug": "Error",

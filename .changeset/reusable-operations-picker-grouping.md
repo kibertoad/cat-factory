@@ -11,14 +11,16 @@ the row into a wall in which the everyday `feature` / `bug` choices are no longe
 task types have declared `presentation.category` since slice 1 and nothing read it; now it lays the
 picker out as rows. Built-ins come first in one uncaptioned row (the everyday loop stays where it has
 always been), then one captioned row per category in REGISTRATION order (the only order the
-deployment expressed, so not re-sorted alphabetically), then any uncategorized custom types in a
-trailing flat row.
+deployment expressed, so not re-sorted alphabetically), then any uncategorized custom types under a
+translated "Other" heading. Two categories differing only in case or spacing are one row, captioned
+as the deployment first wrote it.
 
 `presentation.description` is rendered for the first time too, though the schema has promised it to
-the picker all along: as each custom button's tooltip, which is what helps you choose, and as a hint
-line under the picker once a type is selected, which is the half a touch device can reach. Both are
-deployment-authored English rendered verbatim, so no descriptor string enters a locale catalog and
-this slice adds no i18n keys.
+the picker all along: as each custom button's tooltip, which is what helps you choose, and, once a
+type is selected, as the type field's own help text, which is the half a touch device can reach.
+Every label, caption and description a deployment authored is rendered verbatim, so no descriptor
+string enters a locale catalog; the one key this slice adds is the platform's own "Other" heading,
+which the layout rule takes as an argument rather than authoring itself.
 
 The layout rule is a pure function (`utils/taskTypePicker.ts`, the `buildFragmentCategoryGroups`
 sibling) rather than inline template logic, because the row ORDER is the behaviour worth pinning and

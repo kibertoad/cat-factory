@@ -189,6 +189,7 @@
       "title": "Dodaj zadanie",
       "newTaskIn": "Nowe zadanie w {container}",
       "typeLabel": "Typ",
+      "typeOther": "Inne",
       "types": {
         "feature": "Funkcja",
         "bug": "Błąd",

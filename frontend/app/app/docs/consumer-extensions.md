@@ -181,7 +181,7 @@ module). The SPA merges it into the create-task picker and the card-badge catalo
   through the pure `taskTypeMeta` read-model: the `agentKindMeta` twin). An UNREGISTERED
   namespaced type (a stale row after your extension is removed) degrades to the `feature`
   presentation, so a leftover string never breaks a card. `description` is rendered verbatim as
-  the picker button's tooltip and, once the type is selected, as a hint under the picker;
+  the picker button's tooltip and, once the type is selected, as the type field's help text;
   `category` groups the picker (below).
 - **`fields`** are descriptor-driven create-form inputs over the shared descriptor-form vocabulary
   (`text` / `textarea` / `number` / `select` / `checkbox` / `checkbox-group` / `path`, with
@@ -199,10 +199,16 @@ module). The SPA merges it into the create-task picker and the card-badge catalo
 
 **The picker is grouped, not flat** (`utils/taskTypePicker.ts`): the built-in types come first in
 one uncaptioned row, then one captioned row per declared `presentation.category` in registration
-order, then any uncategorized custom types. Declare a category once you ship more than a couple of
-types, or they pile up behind the everyday `feature` / `bug` choices. Every string in a row
-(labels, captions, descriptions) is your own English rendered verbatim: no descriptor text enters a
-locale catalog, only the chrome around it is i18n.
+order, then any uncategorized types under a translated "Other" heading. Declare a category once you
+ship more than a couple of types, or they pile up behind the everyday `feature` / `bug` choices.
+Categories differing only in case or spacing are ONE row, captioned as you first wrote it, so a
+stray `API delivery` / `API Delivery` pair does not split a category in half.
+
+Your own strings (labels, category captions, descriptions) are rendered verbatim and never enter a
+locale catalog; only the platform's own chrome around them is i18n, which is why the "Other" heading
+is the one caption you do not supply. Each row carries `data-testid="task-type-row"` plus
+`data-task-type-row="<id>"`, and each choice `data-testid="task-type-<taskType>"`, so your own e2e
+suite can address a row and the caption inside it.
 
 Together, `fields` + `defaultFragmentIds` + `defaultPipelineId` are what turns a task type from a
 badge into a **reusable operation**: a canned unit of work an org runs repeatedly with per-case

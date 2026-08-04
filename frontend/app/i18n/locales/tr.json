@@ -189,6 +189,7 @@
       "title": "Görev ekle",
       "newTaskIn": "{container} içinde yeni görev",
       "typeLabel": "Tür",
+      "typeOther": "Diğer",
       "types": {
         "feature": "Özellik",
         "bug": "Hata",

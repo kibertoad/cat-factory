@@ -216,6 +216,10 @@
       "title": "Add a task",
       "newTaskIn": "New task in {container}",
       "typeLabel": "Type",
+      "typeOther": "Other",
+      "@typeOther": {
+        "description": "Heading over the trailing group in the task-type picker: the deployment's own registered task types that declared no category of their own. A NOUN-like group heading ('the other ones'), not the adjective describing a single type."
+      },
       "types": {
         "feature": "Feature",
         "bug": "Bug",

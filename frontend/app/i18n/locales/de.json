@@ -2561,6 +2561,7 @@
       "title": "Eine Aufgabe hinzufügen",
       "newTaskIn": "Neue Aufgabe in {container}",
       "typeLabel": "Typ",
+      "typeOther": "Sonstige",
       "types": {
         "feature": "Feature",
         "bug": "Bug",
