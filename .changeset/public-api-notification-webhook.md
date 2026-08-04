@@ -31,5 +31,6 @@ old endpoint while appearing to add a subscription. `url` is still required on t
 against a workspace with nothing registered, refused with `details.reason: "webhook_url_required"`.
 Relaxing a required field is additive, so no live caller changes.
 
-Additive on `/api/v1` (OpenAPI `info.version` 1.5.0). The four SDK clients gain a `webhook`
-resource (`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
+Additive on `/api/v1` (OpenAPI `info.version` 1.5.0; main took 1.4.0 for its own additive change
+while this branch was open). The four SDK clients gain a `webhook` resource
+(`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
