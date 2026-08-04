@@ -26,29 +26,28 @@ import {
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
 import { stepOptionsSchema } from './entities.js'
+import {
+  companionVerdictSchema,
+  decisionSchema,
+  stepApprovalSchema,
+  stepReviewCommentSchema,
+} from './step-decisions.js'
 import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Run / execution runtime state: the shapes that describe an in-flight run and
-// its steps' live state — human decisions, subtasks, review comments, companion
-// verdicts, approvals, agent-run failures, the tester step-state machine,
-// per-step metrics, the pipeline STEP (the runtime instance of a pipeline's
-// step), and the execution instance itself. The gate (`gate.ts`) and
-// human-verdict-gate (`human-verdict-gates.ts`) step-state clusters live in
-// their own modules and are composed back into `PipelineStep` here.
+// its steps' live state — subtasks, agent-run failures, the tester step-state
+// machine, per-step metrics, the pipeline STEP (the runtime instance of a
+// pipeline's step), and the execution instance itself. The gate (`gate.ts`),
+// human-verdict-gate (`human-verdict-gates.ts`) and human-decision
+// (`step-decisions.ts`: an agent's question, review comments, a companion
+// verdict, the approval gate) clusters live in their own modules and are
+// composed back into `PipelineStep` here.
 // Split out of entities.ts (which keeps the board / pipeline-definition / model
 // / workspace shapes); re-exported from the package barrel, so consumers are
 // unaffected. Depends on entities.ts (for stepOptionsSchema); entities.ts does
 // NOT depend back on this file.
 // ---------------------------------------------------------------------------
-
-export const decisionSchema = v.object({
-  id: v.string(),
-  question: v.string(),
-  options: v.array(v.string()),
-  chosen: v.nullable(v.string()),
-})
-export type Decision = v.InferOutput<typeof decisionSchema>
 
 /** One entry of a running step's todo list — its label and current status. */
 export const stepSubtaskItemSchema = v.object({
@@ -76,87 +75,6 @@ export const stepSubtasksSchema = v.object({
   items: v.optional(v.array(stepSubtaskItemSchema)),
 })
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
-
-/**
- * One GitHub-review-style comment left on a specific block or item of an agent's
- * proposal — either by a human reviewing an approval gate, or by a quality
- * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
- * is the verbatim raw markdown of the block the comment targets (sliced from the
- * proposal by its source line range), so a "request changes" re-run can quote the
- * agent's own text back to it rather than a re-rendered approximation. It is
- * OPTIONAL because a comment may instead anchor to a structured item via
- * {@link anchorId} (e.g. a spec requirement / acceptance-criterion id), where the
- * reviewed output is rendered as discrete items rather than free prose and there is
- * no quoted source range — the shape a companion returns.
- */
-export const stepReviewCommentSchema = v.object({
-  /**
-   * Verbatim raw-markdown source of the commented prose block. Optional: a comment
-   * may instead anchor to a structured item via {@link anchorId}, where there is no
-   * prose source to quote.
-   */
-  quotedSource: v.optional(v.string()),
-  /**
-   * 0-based source line range [start, end) of the commented prose block, for
-   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
-   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
-   * there is no prose line range.
-   */
-  srcStart: v.optional(v.number()),
-  srcEnd: v.optional(v.number()),
-  /**
-   * Stable id of the structured item the comment targets (e.g. a spec
-   * requirement/criterion id), when the reviewed output is rendered as structured
-   * items rather than free prose. Absent for prose-range comments.
-   */
-  anchorId: v.optional(v.string()),
-  /** The reviewer's note on this block / item. */
-  body: v.string(),
-})
-export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
-
-/**
- * The standardized, stored verdict a quality companion produced for an output it
- * graded — shared by every companion site (the pipeline companion step and the
- * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
- * (rating + summary + comments); this is the persisted, self-describing record of how
- * that assessment was applied: the `rating`, the `threshold` it was judged against,
- * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
- */
-export const companionVerdictSchema = v.object({
-  /** Overall quality of the graded output (0..1, higher = better). */
-  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** The quality bar the rating had to reach to pass. */
-  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** Whether the rating met the threshold. */
-  passed: v.boolean(),
-  /** The companion's challenge / justification (its assessment summary). */
-  feedback: v.string(),
-})
-export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
-
-/**
- * A human approval gate raised after a step whose pipeline marked it
- * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
- * re-runs the same step on resolution), an approval gate fires once the step has
- * already produced its `proposal`; approving advances the run (carrying the —
- * possibly edited — proposal forward as context), requesting changes re-runs the
- * same step with the human's `feedback` (+ per-block `comments`), and rejecting
- * stops the run entirely (a terminal `rejected` failure the board can retry).
- */
-export const stepApprovalSchema = v.object({
-  /** Unique id of this gate; the durable run parks on it like a decision. */
-  id: v.string(),
-  /** `pending` while awaiting the human; terminal `approved`/`rejected`; `changes_requested` re-runs the step. */
-  status: v.picklist(['pending', 'approved', 'changes_requested', 'rejected']),
-  /** The agent's output the human is reviewing (editable before approval). */
-  proposal: v.string(),
-  /** When changes were requested, the human's freeform guidance fed into the re-run. */
-  feedback: v.optional(v.string()),
-  /** When changes were requested, per-block review comments fed into the re-run. */
-  comments: v.optional(v.array(stepReviewCommentSchema)),
-})
-export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
 
 /**
  * The agent flows that produce an "agent run" (a container-backed job whose

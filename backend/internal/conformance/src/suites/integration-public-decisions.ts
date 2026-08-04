@@ -33,6 +33,7 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
   describe('public API — parked decisions', () => {
     registerAdmissionTests(harness)
     registerAnsweringTests(harness)
+    registerApprovalAnsweringTests(harness)
     registerScopeAndCancelTests(harness)
   })
 }
@@ -147,8 +148,12 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     )
     expect(refused.status).toBe(403)
     expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
-    // The refusal names the exit route of THIS surface, not the jobs cancel.
-    expect(refused.body.error.message).toContain('POST /api/v1/tasks/:taskId/stop')
+    // An approval gate IS answerable over the public surface now, so the refusal must steer the
+    // operator there rather than describing the park as cancel-only — the same honesty rule the
+    // input-gate case below pins. (Which EXIT route a refusal names when a park is unanswerable
+    // is asserted on the `human-review` case, the one surface still in that position.)
+    expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
+    expect(refused.body.error.message).not.toContain('cancel')
 
     const decideAuth = await mintKey(app, wsId, 'decide')
     const started = await app.call(
@@ -189,6 +194,9 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
     // The refusal must NAME the surface, or an operator cannot tell which step to drop.
     expect(refused.body.error.message).toContain('human-review')
+    // And, for the ONE park the decision surface still cannot answer, it must name the exit route
+    // of THIS start surface rather than the jobs cancel, which 404s for a board task run.
+    expect(refused.body.error.message).toContain('POST /api/v1/tasks/:taskId/stop')
 
     // The control, in the same test so the two can never drift apart: the identical chain minus
     // the gate is still startable by a plain `write` key. Widening the park enumeration must not
@@ -391,6 +399,119 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
     const done = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
     expect(done.status).toBe('done')
     expect(done.inputGate?.status).toBe('passed')
+  })
+}
+
+/**
+ * The generic APPROVAL GATE — "pause a run until a human approves", the park any pipeline can
+ * carry and the one an integration meets first.
+ *
+ * Both halves belong here rather than only in a unit test. The gate's state rides the run's step
+ * (D1 ⇄ Drizzle `detail` JSON) and answering it wakes each facade's own durable driver, so a
+ * facade that persisted the approval differently, or never re-drove the run, would pass a pure
+ * projection test and strand every parked run in production.
+ */
+function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
+  it('lists a parked approval gate and advances the run when the public key approves', async () => {
+    const app = harness.makeApp({ confidence: 1 })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Gated architect',
+      agentKinds: ['architect', 'coder'],
+      gates: [true, false],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: gated.body.id,
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(parked.status).toBe('blocked')
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      decisions: {
+        kind: string
+        approvalId?: string
+        stepKind?: string
+        proposal?: string
+        exceeded?: boolean
+      }[]
+    }>('GET', `/api/v1/runs/${parked.id}/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+    const gate = listed.body.decisions.find((d) => d.kind === 'approval-gate')!
+    expect(gate).toBeDefined()
+    // The projection has to carry the id the answer is addressed by, the step whose output is
+    // being judged, and the proposal itself — without all three the caller is being asked to
+    // approve something it cannot see.
+    expect(gate.approvalId).toBe(parked.steps[0]!.approval!.id)
+    expect(gate.stepKind).toBe('architect')
+    expect(gate.proposal).toBe(parked.steps[0]!.output)
+    // An ordinary pipeline gate, not a companion at its rework cap: the caller answers with
+    // `approve`, not `resolve-exceeded`.
+    expect(gate.exceeded).toBe(false)
+
+    const approved = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/approvals/${gate.approvalId}/approve`,
+      {},
+      decideAuth,
+    )
+    expect(approved.status).toBe(200)
+    // Answered: the gate is settled, so it is no longer a decision anybody has to answer.
+    expect(approved.body.decisions.some((d) => d.kind === 'approval-gate')).toBe(false)
+
+    const advanced = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(advanced.steps[0]!.approval?.status).toBe('approved')
+    expect(advanced.steps[0]!.state).toBe('done')
+  })
+
+  it('reports a park a dedicated surface owns as ITS kind, never as an approval gate', async () => {
+    // The trap this pins. `step.approval` is the engine's generic parking mechanism, so an input
+    // gate, a review gate, a fork choice and a human-verdict gate all leave a PENDING approval on
+    // the step — and the engine refuses the generic approve/request-changes/reject verbs on every
+    // one of them. A projection that reported "pending approval ⇒ approval-gate" would hand a
+    // well-behaved integration a route the engine answers with a 409, forever.
+    //
+    // Driven through the input gate because it is the one such park a conformance run can reach
+    // without a live model: it holds the run before the first dispatch.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const task = await app.call<{ id: string }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/blk_auth/tasks`,
+      { title: 'Make the login better' },
+    )
+    expect(
+      (
+        await app.call(
+          'POST',
+          `/api/v1/tasks/${task.body.id}/start`,
+          { pipelineId: 'pl_simple' },
+          decideAuth,
+        )
+      ).status,
+    ).toBe(202)
+    await app.drive(wsId)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+
+    // The engine really did park it on an approval — this test would be vacuous otherwise.
+    expect(exec.steps.some((s) => s.approval?.status === 'pending')).toBe(true)
+
+    const listed = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'GET',
+      `/api/v1/runs/${exec.id}/decisions`,
+      undefined,
+      decideAuth,
+    )
+    expect(listed.status).toBe(200)
+    const kinds = listed.body.decisions.map((d) => d.kind)
+    expect(kinds).toContain('input-gate')
+    expect(kinds).not.toContain('approval-gate')
   })
 }
 

@@ -1,4 +1,4 @@
-// The SDK's PUBLIC shape: how the 38 `/api/v1` operations are grouped into resource clients
+// The SDK's PUBLIC shape: how the 63 `/api/v1` operations are grouped into resource clients
 // and what each method is called.
 //
 // This is a chosen table, not a derivation, for the same reason `OPERATION_DOCS` in
@@ -59,6 +59,30 @@ const SURFACE = {
   proceedPublicRunRequirements: { group: 'decisions', method: 'proceed' },
   reReviewPublicRunRequirements: { group: 'decisions', method: 'reReview' },
   resolvePublicRunRequirementsExceeded: { group: 'decisions', method: 'resolveExceeded' },
+  approvePublicRunStep: { group: 'decisions', method: 'approveStep' },
+  requestPublicRunStepChanges: { group: 'decisions', method: 'requestStepChanges' },
+  rejectPublicRunStep: { group: 'decisions', method: 'rejectStep' },
+  resolvePublicRunStepExceeded: { group: 'decisions', method: 'resolveStepExceeded' },
+  resolvePublicRunAgentDecision: { group: 'decisions', method: 'answerAgentDecision' },
+  replyPublicRunClarityFinding: { group: 'decisions', method: 'replyToClarityFinding' },
+  setPublicRunClarityFindingStatus: { group: 'decisions', method: 'setClarityFindingStatus' },
+  incorporatePublicRunClarity: { group: 'decisions', method: 'incorporateClarity' },
+  reReviewPublicRunClarity: { group: 'decisions', method: 'reReviewClarity' },
+  proceedPublicRunClarity: { group: 'decisions', method: 'proceedClarity' },
+  resolvePublicRunClarityExceeded: { group: 'decisions', method: 'resolveClarityExceeded' },
+  replyPublicRunBrainstormOption: { group: 'decisions', method: 'replyToBrainstormOption' },
+  setPublicRunBrainstormOptionStatus: { group: 'decisions', method: 'setBrainstormOptionStatus' },
+  incorporatePublicRunBrainstorm: { group: 'decisions', method: 'incorporateBrainstorm' },
+  reReviewPublicRunBrainstorm: { group: 'decisions', method: 'reReviewBrainstorm' },
+  proceedPublicRunBrainstorm: { group: 'decisions', method: 'proceedBrainstorm' },
+  resolvePublicRunBrainstormExceeded: { group: 'decisions', method: 'resolveBrainstormExceeded' },
+  resolvePublicRunPrReview: { group: 'decisions', method: 'resolvePrReview' },
+  dismissPublicRunPrReviewFinding: { group: 'decisions', method: 'dismissPrReviewFinding' },
+  challengePublicRunPrReviewFinding: { group: 'decisions', method: 'challengePrReviewFinding' },
+  confirmPublicRunHumanTest: { group: 'decisions', method: 'confirmHumanTest' },
+  requestPublicRunHumanTestFix: { group: 'decisions', method: 'requestHumanTestFix' },
+  approvePublicRunVisualConfirm: { group: 'decisions', method: 'approveVisualConfirmation' },
+  requestPublicRunVisualConfirmFix: { group: 'decisions', method: 'requestVisualConfirmationFix' },
 
   // ---- Run diagnostics (`read` scope; the surface an operator or an LLM debugs a run with) -
   listDebugRuns: { group: 'debug', method: 'listRuns', paginates: 'runs' },
@@ -105,7 +129,7 @@ export const GROUP_DOCS = {
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
+    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
   debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
 }
 

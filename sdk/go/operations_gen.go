@@ -747,10 +747,87 @@ func (s *UsageService) Get(ctx context.Context) (*PublicUsage, error) {
 	return &out, nil
 }
 
-// DecisionsService a parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token
-// input gate.
+// DecisionsService every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
+// verdicts, PR review findings and the human-verdict gates.
 type DecisionsService struct {
 	client *Client
+}
+
+// AnswerAgentDecision answer an agent-raised decision
+// Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice
+// folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the
+// offered options or a steer of your own. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/questions/{decisionId}/answer (operation
+// resolvePublicRunAgentDecision).
+func (s *DecisionsService) AnswerAgentDecision(ctx context.Context, runID string, decisionID string, body PublicResolveAgentDecision) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/questions/%s/answer", pathEscape(runID), pathEscape(decisionID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ApproveStep approve a parked step
+// Approve the proposal a gated step is holding up, optionally replacing it with an edited one
+// (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes
+// from the run's decision list; passing it back is what makes a racing app user and a racing
+// integration resolve the same gate. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve (operation
+// approvePublicRunStep).
+func (s *DecisionsService) ApproveStep(ctx context.Context, runID string, approvalID string, body PublicApproveStep) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/approve", pathEscape(runID), pathEscape(approvalID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ApproveVisualConfirmation approve a visual-confirmation gate
+// Approve the captured screenshots against the reference designs and advance the run. The images
+// themselves are not readable over this API — the decision carries only artifact ids — so
+// approving on the projection alone approves screenshots you have not seen. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/visual-confirmation/approve (operation
+// approvePublicRunVisualConfirm).
+func (s *DecisionsService) ApproveVisualConfirmation(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/visual-confirmation/approve", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ChallengePrReviewFinding challenge a PR review finding
+// Dispatch a read-only investigator to re-examine one finding against the full source, optionally
+// with a specific concern. It upholds, strengthens or retracts the finding, and the review
+// re-parks carrying the verdict. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge (operation
+// challengePublicRunPrReviewFinding).
+func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID string, findingID string, body PublicChallengePrReviewFinding) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/findings/%s/challenge", pathEscape(runID), pathEscape(findingID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ChooseFork choose an implementation approach
@@ -770,6 +847,40 @@ func (s *DecisionsService) ChooseFork(ctx context.Context, runID string, body Pu
 	return &out, nil
 }
 
+// ConfirmHumanTest confirm a human-test gate
+// Confirm the change works in the ephemeral environment: it is torn down and the run advances.
+// The decision carries the environment URL to exercise; confirming without exercising it approves
+// untested work. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/human-test/confirm (operation confirmPublicRunHumanTest).
+func (s *DecisionsService) ConfirmHumanTest(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/human-test/confirm", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DismissPrReviewFinding dismiss a PR review finding
+// Drop one finding from the parked review entirely. Curation rather than a resolution: the run
+// stays parked. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss (operation
+// dismissPublicRunPrReviewFinding).
+func (s *DecisionsService) DismissPrReviewFinding(ctx context.Context, runID string, findingID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/findings/%s/dismiss", pathEscape(runID), pathEscape(findingID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Incorporate incorporate the answers
 // Fold the recorded answers into one standardized requirements document. Asynchronous — the run
 // re-reviews in the background, so the response shows the review `incorporating`. Requires a
@@ -780,6 +891,44 @@ func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body P
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/requirements/incorporate", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// IncorporateBrainstorm incorporate brainstorm picks
+// Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session
+// `incorporating` while the durable driver folds and re-runs in the background. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate (operation
+// incorporatePublicRunBrainstorm).
+func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID string, stage string, body PublicIncorporate) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/incorporate", pathEscape(runID), pathEscape(stage)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// IncorporateClarity incorporate clarity answers
+// Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows
+// the review `incorporating` while the durable driver folds and re-reviews in the background.
+// Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/clarity/incorporate (operation
+// incorporatePublicRunClarity).
+func (s *DecisionsService) IncorporateClarity(ctx context.Context, runID string, body PublicIncorporate) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/incorporate", pathEscape(runID)),
 		Body:   body,
 	}
 	var out PublicDecisionList
@@ -823,6 +972,94 @@ func (s *DecisionsService) Proceed(ctx context.Context, runID string) (*PublicDe
 	return &out, nil
 }
 
+// ProceedBrainstorm proceed past a brainstorm
+// Settle the brainstorm with the last converged direction and advance the parked run. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed (operation
+// proceedPublicRunBrainstorm).
+func (s *DecisionsService) ProceedBrainstorm(ctx context.Context, runID string, stage string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/proceed", pathEscape(runID), pathEscape(stage)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ProceedClarity proceed past the clarity review
+// Settle the clarity phase with the last clarified report and advance the parked run. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/clarity/proceed (operation proceedPublicRunClarity).
+func (s *DecisionsService) ProceedClarity(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/proceed", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RejectStep reject a parked step
+// Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the
+// board can retry. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject (operation
+// rejectPublicRunStep).
+func (s *DecisionsService) RejectStep(ctx context.Context, runID string, approvalID string, body PublicRejectStep) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/reject", pathEscape(runID), pathEscape(approvalID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReplyToBrainstormOption respond to a brainstorm option
+// Pick or steer one of the options the brainstorm agent proposed, for the named stage
+// (`requirements` or `architecture`). A task may hold one live session per stage at once.
+// Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply (operation
+// replyPublicRunBrainstormOption).
+func (s *DecisionsService) ReplyToBrainstormOption(ctx context.Context, runID string, stage string, itemID string, body PublicReplyFinding) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/options/%s/reply", pathEscape(runID), pathEscape(stage), pathEscape(itemID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReplyToClarityFinding answer a clarity (bug-triage) finding
+// Record an answer to one clarity-review finding — the bug-report twin of the requirements loop.
+// Returns the run's updated decision list. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply (operation
+// replyPublicRunClarityFinding).
+func (s *DecisionsService) ReplyToClarityFinding(ctx context.Context, runID string, itemID string, body PublicReplyFinding) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/findings/%s/reply", pathEscape(runID), pathEscape(itemID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ReplyToFinding answer a review finding
 // Record an answer to one reviewer finding. Returns the run's updated decision list. Requires a
 // `decide`-scope key.
@@ -841,6 +1078,62 @@ func (s *DecisionsService) ReplyToFinding(ctx context.Context, runID string, ite
 	return &out, nil
 }
 
+// RequestHumanTestFix request a fix from a human-test gate
+// Submit findings against the tested environment and dispatch a fixer, which commits onto the PR
+// branch before the environment is rebuilt. The findings ARE the fixer prompt, so they cannot be
+// blank. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/human-test/request-fix (operation
+// requestPublicRunHumanTestFix).
+func (s *DecisionsService) RequestHumanTestFix(ctx context.Context, runID string, body PublicRequestGateFix) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/human-test/request-fix", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RequestStepChanges request changes on a parked step
+// Send the gated step back to re-run with your guidance folded in. Unlike the in-app twin this
+// takes freeform feedback only: anchored per-block comments address source line ranges of a
+// rendered proposal, which a headless caller never rendered. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes (operation
+// requestPublicRunStepChanges).
+func (s *DecisionsService) RequestStepChanges(ctx context.Context, runID string, approvalID string, body PublicRequestStepChanges) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/request-changes", pathEscape(runID), pathEscape(approvalID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RequestVisualConfirmationFix request a fix from a visual-confirmation gate
+// Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the
+// fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/visual-confirmation/request-fix (operation
+// requestPublicRunVisualConfirmFix).
+func (s *DecisionsService) RequestVisualConfirmationFix(ctx context.Context, runID string, body PublicRequestGateFix) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/visual-confirmation/request-fix", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ReReview re-review the incorporated document
 // Run one more reviewer pass over the incorporated document. On convergence the parked run
 // advances. Requires a `decide`-scope key.
@@ -850,6 +1143,74 @@ func (s *DecisionsService) ReReview(ctx context.Context, runID string) (*PublicD
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/requirements/re-review", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReReviewBrainstorm re-run a brainstorm pass
+// Run one more brainstorm pass against the converged direction. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review (operation
+// reReviewPublicRunBrainstorm).
+func (s *DecisionsService) ReReviewBrainstorm(ctx context.Context, runID string, stage string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/re-review", pathEscape(runID), pathEscape(stage)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReReviewClarity re-triage the clarified report
+// Run one more triage pass over the incorporated bug report. On convergence the parked run
+// advances. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/clarity/re-review (operation reReviewPublicRunClarity).
+func (s *DecisionsService) ReReviewClarity(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/re-review", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveBrainstormExceeded resolve a brainstorm at its iteration cap
+// Pick how a brainstorm that exhausted its pass budget proceeds: one more round, proceed with the
+// last converged direction, or stop and reset the task. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded (operation
+// resolvePublicRunBrainstormExceeded).
+func (s *DecisionsService) ResolveBrainstormExceeded(ctx context.Context, runID string, stage string, body PublicResolveExceeded) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/resolve-exceeded", pathEscape(runID), pathEscape(stage)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveClarityExceeded resolve a clarity review at its iteration cap
+// Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with
+// the last clarified report, or stop and reset the task. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/clarity/resolve-exceeded (operation
+// resolvePublicRunClarityExceeded).
+func (s *DecisionsService) ResolveClarityExceeded(ctx context.Context, runID string, body PublicResolveExceeded) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/resolve-exceeded", pathEscape(runID)),
+		Body:   body,
 	}
 	var out PublicDecisionList
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -905,6 +1266,80 @@ func (s *DecisionsService) ResolveJudge(ctx context.Context, runID string, body 
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/judge/resolve", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolvePrReview resolve a parked PR deep review
+// Record the curated finding selection and say what to do with it: `finish` completes the
+// read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed
+// PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least
+// one selected finding and act on the real pull request. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/pr-review/resolve (operation resolvePublicRunPrReview).
+func (s *DecisionsService) ResolvePrReview(ctx context.Context, runID string, body PublicResolvePrReview) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/resolve", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveStepExceeded resolve a companion gate at its rework cap
+// Pick how a quality companion that spent its automatic rework budget proceeds: one more round,
+// proceed with the output as it stands, or stop and reset the task. A gate in this state reports
+// `exceeded: true` and refuses the plain approve. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded (operation
+// resolvePublicRunStepExceeded).
+func (s *DecisionsService) ResolveStepExceeded(ctx context.Context, runID string, approvalID string, body PublicResolveExceeded) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/resolve-exceeded", pathEscape(runID), pathEscape(approvalID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetBrainstormOptionStatus dismiss or reopen a brainstorm option
+// Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options block
+// incorporation. Requires a `decide`-scope key.
+// PATCH /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId} (operation
+// setPublicRunBrainstormOptionStatus).
+func (s *DecisionsService) SetBrainstormOptionStatus(ctx context.Context, runID string, stage string, itemID string, body PublicSetFindingStatus) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/options/%s", pathEscape(runID), pathEscape(stage), pathEscape(itemID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetClarityFindingStatus dismiss or reopen a clarity finding
+// Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. Only `open`
+// findings block incorporation. Requires a `decide`-scope key.
+// PATCH /api/v1/runs/{runId}/decisions/clarity/findings/{itemId} (operation
+// setPublicRunClarityFindingStatus).
+func (s *DecisionsService) SetClarityFindingStatus(ctx context.Context, runID string, itemID string, body PublicSetFindingStatus) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/findings/%s", pathEscape(runID), pathEscape(itemID)),
 		Body:   body,
 	}
 	var out PublicDecisionList

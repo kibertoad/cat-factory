@@ -215,7 +215,10 @@ routes on and an empty title is honest about what could be read.
   more, and both start paths admit (for a `decide`-scope key; since
   [ADR 0034](./0034-public-api-stability.md) the board start applies the same parking rule as
   `POST /jobs`) a run that can park on one of the others. That tracker ranks the additions, and
-  records what was considered and rejected.
+  records what was considered and rejected. **Since largely closed**: the tracker's A1–A6 landed,
+  so every park a pipeline can carry is answerable except `human-review`, whose answer is a person
+  approving the pull request on the VCS host rather than an API call. The tracker stays the place
+  to look: it records the two park surfaces that enumeration missed.
 - **An incomplete surface must not ADVERTISE what it cannot do.** The `pipeline_requires_decide_scope`
   refusal originally told the operator a `decide` key answers the park through
   `/api/v1/runs/:runId/decisions`, which held for one of the five parks it named: selling a scope

@@ -14,24 +14,11 @@ import {
   type WorkRunner,
   assertFound,
 } from '@cat-factory/kernel'
-import {
-  type AgentKindRegistry,
-  companionTargets,
-  hasTrait,
-  INTERVIEW_GATE_TRAIT,
-  isCompanionKind,
-} from '@cat-factory/agents'
+import { type AgentKindRegistry, companionTargets, isCompanionKind } from '@cat-factory/agents'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/contracts'
-import {
-  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-  CLARITY_REVIEW_AGENT_KIND,
-  HUMAN_REVIEW_AGENT_KIND,
-  HUMAN_TEST_AGENT_KIND,
-  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  REQUIREMENTS_REVIEW_AGENT_KIND,
-  VISUAL_CONFIRM_AGENT_KIND,
-} from './ci.logic.js'
+import { HUMAN_REVIEW_AGENT_KIND } from './ci.logic.js'
+import { type DedicatedParkSurface, dedicatedParkSurface } from './step-park.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 import type { RunMergePolicy } from './RunMergePolicy.js'
@@ -81,90 +68,64 @@ export interface StepDecisionControllerDeps {
  * run state machine and this file keeps the decisions people make about it. The engine exposes
  * thin delegates, so no HTTP call site changed.
  */
+/**
+ * What to tell somebody who reached for the generic approve/request-changes/reject verbs on a park
+ * a dedicated surface owns: the window that DOES resolve it, and the verbs it offers.
+ *
+ * A total `Record` over {@link DedicatedParkSurface} on purpose — a park kind added to the shared
+ * classifier fails to compile until it has a sentence here, where a `switch` with a default would
+ * quietly hand the operator the generic wording for a surface they cannot find.
+ */
+const WRONG_SURFACE_MESSAGES: Record<DedicatedParkSurface, string> = {
+  'input-gate':
+    "Resolve this run's input check through its notice (fix the task and re-check, or proceed anyway), not the approval gate",
+  'requirements-review':
+    'Resolve the requirements review through its review window, not the approval gate',
+  'clarity-review': 'Resolve the clarity review through its review window, not the approval gate',
+  brainstorm: 'Resolve the brainstorm through its brainstorm window, not the approval gate',
+  'human-test':
+    'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
+  'visual-confirmation':
+    'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
+  interview: 'Resolve the interview through its interview window, not the approval gate',
+  'companion-cap':
+    'Resolve this companion review through its iteration-cap prompt, not the approval gate',
+  'follow-ups':
+    'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
+  // Approving here would advance the run PAST the coder step with the build never run (the park
+  // sits between the proposer and the Coder dispatch).
+  'fork-decision':
+    'Resolve the implementation-fork decision through its fork window (choose an approach), not the approval gate',
+}
+
 export class StepDecisionController {
   constructor(private readonly deps: StepDecisionControllerDeps) {}
 
   /**
    * Several gates park on a `step.approval` but are NOT generic prose approvals — they are
-   * driven by their own dedicated surface, never the generic
-   * approve/request-changes/reject resolvers (which would advance the run bypassing the
-   * loop). Guard those resolvers so a stray approve can't short-circuit any of them:
-   * the requirements/clarity review gates, the brainstorms, the human-testing and
-   * visual-confirmation gates, an interview-trait gate, a companion at its rework cap
-   * (`companion.exceeded`), the follow-up companion with undecided items, and a coder
-   * parked on the implementation-fork decision (whose approve would skip the build
-   * dispatch entirely).
+   * driven by their own dedicated surface, never the generic approve/request-changes/reject
+   * resolvers (which would advance the run bypassing the loop). Guard those resolvers so a stray
+   * approve can't short-circuit any of them.
    *
-   * The PRE-TOKEN INPUT GATE is checked off the INSTANCE rather than the step, because that is
-   * where its verdict lives: the gate guards a step's DISPATCH, so it parks whatever step 0
-   * happens to be and leaves nothing kind-specific behind for a step-only check to recognise.
-   * Approving it generically would mark that first step done and advance past the work the run
-   * exists to do: the same short-circuit as the fork park, one step earlier.
+   * WHICH parks those are is {@link dedicatedParkSurface}'s answer, shared with the public API's
+   * decision projection: the same distinction decides whether a caller is refused here and
+   * whether that caller was offered the generic verbs in the first place, and two copies of the
+   * list would drift into refusing a park one surface still advertises. This function owns only
+   * the REFUSAL — which sentence names the right window to go to instead.
    */
   private assertNotIterativeGate(instance: ExecutionInstance, step: PipelineStep): void {
-    if (instance.inputGate?.status === 'blocked') {
-      throw new ConflictError(
-        "Resolve this run's input check through its notice (fix the task and re-check, or " +
-          'proceed anyway), not the approval gate',
-        // `input_gate_parked`, NOT `input_gate_not_parked`: the gate IS holding this run, and the
-        // caller reached for the wrong surface. The sibling reason means the opposite and its copy
-        // would tell somebody staring at a live park that there is nothing left to answer.
-        'input_gate_parked',
-      )
-    }
-    if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the requirements review through its review window, not the approval gate',
-      )
-    }
-    if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the clarity review through its review window, not the approval gate',
-      )
-    }
-    if (
-      step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
-      step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND
-    ) {
-      throw new ConflictError(
-        'Resolve the brainstorm through its brainstorm window, not the approval gate',
-      )
-    }
-    if (step.agentKind === HUMAN_TEST_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the human-testing gate through its window (confirm / request a fix), not the approval gate',
-      )
-    }
-    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
-      throw new ConflictError(
-        'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
-      )
-    }
-    if (hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.deps.agentKindRegistry)) {
-      throw new ConflictError(
-        'Resolve the interview through its interview window, not the approval gate',
-      )
-    }
-    if (step.companion?.exceeded) {
-      throw new ConflictError(
-        'Resolve this companion review through its iteration-cap prompt, not the approval gate',
-      )
-    }
-    if (step.followUps?.enabled && step.followUps.items.some((i) => i.status === 'pending')) {
-      throw new ConflictError(
-        'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
-      )
-    }
-    if (
-      step.forkDecision?.status === 'awaiting_choice' ||
-      step.forkDecision?.status === 'answering'
-    ) {
-      // Approving here would advance the run PAST the coder step with the build never run
-      // (the park sits between the proposer and the Coder dispatch).
-      throw new ConflictError(
-        'Resolve the implementation-fork decision through its fork window (choose an approach), not the approval gate',
-      )
-    }
+    const surface = dedicatedParkSurface(instance, step, this.deps.agentKindRegistry)
+    if (!surface) return
+    throw new ConflictError(
+      WRONG_SURFACE_MESSAGES[surface],
+      // Only the input gate carries a machine-readable reason today: it is the one refusal the
+      // SPA maps to its own remedy copy (go and edit the task), the others being in-app routing
+      // a person reads. `input_gate_parked`, NOT `input_gate_not_parked`: the gate IS holding this
+      // run and the caller reached for the wrong surface, where the sibling reason means the
+      // opposite and its copy would tell somebody staring at a live park that there is nothing
+      // left to answer.
+      surface === 'input-gate' ? 'input_gate_parked' : undefined,
+    )
   }
   /**
    * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform

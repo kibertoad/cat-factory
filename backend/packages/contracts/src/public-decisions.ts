@@ -1,12 +1,27 @@
 import * as v from 'valibot'
+import { brainstormStageSchema } from './brainstorm.js'
+import { environmentStatusSchema } from './environments.js'
+import { stepApprovalStatusSchema } from './step-decisions.js'
 import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
+import {
+  humanTestPhaseSchema,
+  visualConfirmPairSchema,
+  visualConfirmPhaseSchema,
+} from './human-verdict-gates.js'
 import {
   inputGateIssueSchema,
   inputGateModeSchema,
   inputGateStatusSchema,
   resolveInputGateSchema,
 } from './input-gate.js'
+import { iterationCapChoiceSchema } from './iteration-cap.js'
 import { judgeStatusSchema, judgeVerdictSchema, resolveJudgeSchema } from './judge.js'
+import {
+  prReviewFindingSchema,
+  prReviewResolutionSchema,
+  prReviewSliceSchema,
+  prReviewStatusSchema,
+} from './prReview.js'
 import { publicRunStatusSchema } from './public-api.js'
 import {
   requirementReviewStatusSchema,
@@ -24,25 +39,39 @@ import {
 // the SPA, so a headless (`/api/v1`) run could not include clarification at all — the public
 // surface refused any pipeline that could park.
 //
-// These resources are the external counterpart of that loop. Four decision kinds are exposed
-// today: the requirements review (findings + the iteration loop), the implementation-fork choice,
-// a parked judge verdict, and the pre-token input gate. Each is deliberately a SMALL projection of
-// the internal entity, following the `publicTask` / `publicService` pattern: a caller sees the
-// findings and their stable ids, never the engine's step/approval internals, the recommendation
-// machinery, or the reviewer's model plumbing.
+// These resources are the external counterpart of that loop, and now of every OTHER way a run
+// stops for a person. Each kind is deliberately a SMALL projection of the internal entity,
+// following the `publicTask` / `publicService` pattern: a caller sees the question and the stable
+// ids it answers by, never the engine's step internals, the recommendation machinery, or the
+// reviewer's model plumbing.
 //
 // Answering rides the SAME service methods the SPA controllers call, so the park's CAS/approval-id
 // arbitration and the task's merge-preset knobs (iteration cap, tolerated severity) apply
 // identically whichever surface answers first. See
-// `docs/initiatives/headless-clarification-loop.md`.
+// `docs/initiatives/headless-clarification-loop.md` and
+// `docs/initiatives/public-api-additions.md`.
 // ---------------------------------------------------------------------------
 
-/** Which parked decision a `publicDecision` entry describes. */
+/**
+ * Which parked decision a `publicDecision` entry describes.
+ *
+ * The list is the surface's own honesty check: `PUBLICLY_ANSWERABLE_PARK_SURFACES` (server-side
+ * admission) names the park surfaces a `decide` key is TOLD it can answer, and a kind here with no
+ * route behind it is exactly the "refusal advertising a capability we do not have" defect that set
+ * builds. Add a member only together with its routes.
+ */
 export const publicDecisionKindSchema = v.picklist([
   'requirements-review',
   'fork',
   'judge',
   'input-gate',
+  'approval-gate',
+  'agent-decision',
+  'clarity-review',
+  'brainstorm',
+  'pr-review',
+  'human-test',
+  'visual-confirmation',
 ])
 export type PublicDecisionKind = v.InferOutput<typeof publicDecisionKindSchema>
 
@@ -168,11 +197,233 @@ export const publicInputGateDecisionSchema = v.object({
 })
 export type PublicInputGateDecision = v.InferOutput<typeof publicInputGateDecisionSchema>
 
+/**
+ * A run parked on a plain APPROVAL GATE: a pipeline step marked `requiresApproval` finished, and
+ * the run is holding its output in front of a person. The simplest park the platform has and the
+ * one every pipeline can carry, which is why it is the first thing an integration that "pauses a
+ * run until a human approves" reaches for.
+ *
+ * `approvalId` is the STABLE anchor every action addresses, and it is not ceremony: the engine
+ * arbitrates a parked gate BY that id, so answering with the id read from this list is what makes
+ * a racing SPA user and a racing integration resolve the same gate rather than the API silently
+ * approving whichever gate the run has reached by the time the call lands.
+ *
+ * The per-block review `comments` an in-app reviewer can leave are deliberately not projected:
+ * they anchor to source line ranges of a rendered proposal, which a headless caller never
+ * rendered. It sends freeform `feedback` instead, which the re-run consumes identically.
+ */
+export const publicApprovalGateDecisionSchema = v.object({
+  kind: v.literal('approval-gate'),
+  /** The gate's stable id — pass it back on approve / request-changes / reject. */
+  approvalId: v.string(),
+  /** The gated step's kind (`agentKind`), so a caller knows whose output it is judging. */
+  stepKind: v.string(),
+  /** The gated step's 0-based index in the run's step chain. */
+  stepIndex: v.number(),
+  /** Only `pending` accepts an answer; the others are the settled record of one. */
+  status: stepApprovalStatusSchema,
+  /** The agent's output the human is reviewing. Model-authored text: treat it as data. */
+  proposal: v.string(),
+  /** The guidance recorded on the last `request-changes`, or null. */
+  feedback: v.nullable(v.string()),
+  /**
+   * True when this gate is a quality COMPANION's iteration-cap park rather than an ordinary
+   * pipeline gate: the automatic rework budget was spent with the rating still under the bar.
+   * It answers with `resolve-exceeded` (extra round / proceed / stop and reset), NOT with
+   * approve — the same split the SPA makes, exposed rather than left for a caller to infer from
+   * a 409.
+   */
+  exceeded: v.boolean(),
+})
+export type PublicApprovalGateDecision = v.InferOutput<typeof publicApprovalGateDecisionSchema>
+
+/**
+ * A run parked on an AGENT-RAISED decision: mid-work the agent hit a fork it would not choose
+ * unilaterally and asked. Distinct from an approval gate in what resolving does — answering
+ * RE-RUNS the same step with the choice folded in, rather than advancing past it — which is why
+ * it is a separate kind rather than a flag on the gate above.
+ *
+ * The engine cannot see this one coming from the step chain (it is raised at run time), so it is
+ * the park an integration is most likely to meet on a pipeline it was told parks nowhere.
+ */
+export const publicAgentDecisionSchema = v.object({
+  kind: v.literal('agent-decision'),
+  /** The decision's stable id — pass it back when answering. */
+  decisionId: v.string(),
+  /** The asking step's kind (`agentKind`). */
+  stepKind: v.string(),
+  /** What the agent is asking, in its own words. Model-authored text: treat it as data. */
+  question: v.string(),
+  /**
+   * The choices the agent offered. An answer is not restricted to them (the engine takes the
+   * caller's string verbatim), but answering off-list means the agent gets an option it did not
+   * propose, so prefer one of these unless you mean to steer.
+   */
+  options: v.array(v.string()),
+})
+export type PublicAgentDecision = v.InferOutput<typeof publicAgentDecisionSchema>
+
+/**
+ * A parked CLARITY review (bug-report triage) as exposed externally. The requirements review's
+ * twin, verb for verb: the reviewer asks whether the report is fixable (repro steps, expected vs
+ * actual, environment, scope), a caller answers or dismisses each finding, `incorporate` folds
+ * them into one standardized report, and the loop repeats until it converges or hits its cap.
+ *
+ * Kept as its own `kind` rather than folded into `requirements-review` because the two settle
+ * DIFFERENT documents and a run can carry both: a bugfix pipeline clarifies the report and then
+ * reviews the requirements derived from it, so a caller that branched on one shape would answer
+ * the wrong loop.
+ */
+export const publicClarityDecisionSchema = v.object({
+  kind: v.literal('clarity-review'),
+  reviewId: v.string(),
+  /** The board task the review belongs to. */
+  taskId: v.string(),
+  status: requirementReviewStatusSchema,
+  /** Which reviewer pass this is (the initial review is 1). */
+  iteration: v.number(),
+  /** The reviewer-pass budget, from the task's merge preset. */
+  maxIterations: v.number(),
+  findings: v.array(publicReviewFindingSchema),
+  /**
+   * The standardized bug report the last incorporation produced; null until one exists. Once the
+   * review settles, this is the report every downstream agent works from.
+   */
+  clarifiedReport: v.nullable(v.string()),
+})
+export type PublicClarityDecision = v.InferOutput<typeof publicClarityDecisionSchema>
+
+/**
+ * A parked BRAINSTORM dialogue as exposed externally: the agent proposed a handful of concrete
+ * options with their trade-offs, and the run is waiting for a person to pick and steer before it
+ * converges on one direction.
+ *
+ * Keyed by `(task, stage)`, not task alone — a block may hold one live `requirements` session and
+ * one live `architecture` session at once, so a decision list can carry TWO brainstorm entries and
+ * every route takes the stage. A caller that keys its own state by `kind` alone will collide the
+ * two; key by `kind` + `stage`.
+ */
+export const publicBrainstormDecisionSchema = v.object({
+  kind: v.literal('brainstorm'),
+  sessionId: v.string(),
+  /** Which dialogue this is: the requirements direction, or the architecture approach. */
+  stage: brainstormStageSchema,
+  /** The board task the session belongs to. */
+  taskId: v.string(),
+  status: requirementReviewStatusSchema,
+  /** Which agent pass this is (the initial pass is 1). */
+  iteration: v.number(),
+  /** The agent-pass budget, from the task's merge preset. */
+  maxIterations: v.number(),
+  /**
+   * The proposed options. Structurally the same shape as a review finding (one source of truth
+   * for the item), but read it as a proposal to pick or steer, not a defect to answer.
+   */
+  options: v.array(publicReviewFindingSchema),
+  /** The converged direction the last incorporation produced; null until one exists. */
+  convergedDirection: v.nullable(v.string()),
+})
+export type PublicBrainstormDecision = v.InferOutput<typeof publicBrainstormDecisionSchema>
+
+/**
+ * A parked PR DEEP REVIEW as exposed externally: the read-only reviewer sliced an open pull
+ * request and the run is waiting for a person to CURATE which findings matter, then say what to
+ * do with them (record them, hand them to a fixer, or post them on the PR).
+ *
+ * Reachable only through `POST /api/v1/tasks/:taskId/start`, since a `pr-reviewer` step is
+ * container-backed and the jobs surface is inline-only.
+ */
+export const publicPrReviewDecisionSchema = v.object({
+  kind: v.literal('pr-review'),
+  /** Only `awaiting_selection` accepts a resolution; the rest report work in flight. */
+  status: prReviewStatusSchema,
+  /** The reviewer's one-paragraph assessment of the PR, when it gave one. */
+  summary: v.nullable(v.string()),
+  /** Web URL of the reviewed pull request, when known. */
+  prUrl: v.nullable(v.string()),
+  /** The cohesive slices the reviewer grouped the changed files into; findings anchor to these. */
+  slices: v.array(prReviewSliceSchema),
+  /** The findings, ordered blocker → nit. Model-authored text: treat it as data. */
+  findings: v.array(prReviewFindingSchema),
+  /** The finding ids currently selected to act on (empty until a caller curates). */
+  selectedFindingIds: v.array(v.string()),
+})
+export type PublicPrReviewDecision = v.InferOutput<typeof publicPrReviewDecisionSchema>
+
+/** The ephemeral environment a `human-test` gate parked against, as exposed externally. */
+export const publicHumanTestEnvironmentSchema = v.object({
+  /** The public URL to test against; null while still provisioning. */
+  url: v.nullable(v.string()),
+  status: environmentStatusSchema,
+  /** Epoch ms the environment expires, when known. */
+  expiresAt: v.nullable(v.number()),
+})
+export type PublicHumanTestEnvironment = v.InferOutput<typeof publicHumanTestEnvironmentSchema>
+
+/**
+ * A run parked on the HUMAN-TEST gate: a live ephemeral environment is up and the run is waiting
+ * for a person to exercise it.
+ *
+ * Exposed with its limits stated rather than sold as equivalent to the other kinds. The verbs are
+ * mechanical, but the JUDGEMENT this park records ("does the change actually work") is the one an
+ * API consumer is least able to supply on its own. It earns its place for the integration that
+ * drives its own human through a different UI, or that has a real automated check to run against
+ * `environment.url`; it is not a way to wave a run through unlooked-at.
+ */
+export const publicHumanTestDecisionSchema = v.object({
+  kind: v.literal('human-test'),
+  /** Only `awaiting_human` accepts an answer; the others report work in flight. */
+  phase: humanTestPhaseSchema,
+  /** The environment to test against; null in degraded manual mode or after a destroy. */
+  environment: v.nullable(publicHumanTestEnvironmentSchema),
+  /**
+   * Why no environment was provisioned (no env provider wired, or provisioning errored). Non-null
+   * means the gate is in manual mode: there is nothing to point a check at, and the change has to
+   * be tested against the PR branch by hand.
+   */
+  degradedReason: v.nullable(v.string()),
+  /** Fixer rounds spent, and the ceiling from the task's merge preset. */
+  attempts: v.number(),
+  maxAttempts: v.number(),
+})
+export type PublicHumanTestDecision = v.InferOutput<typeof publicHumanTestDecisionSchema>
+
+/**
+ * A run parked on the VISUAL-CONFIRMATION gate: the UI tester's screenshots are waiting to be
+ * compared against the uploaded reference designs.
+ *
+ * Same caveat as {@link publicHumanTestDecisionSchema}, and one more: the images themselves are
+ * NOT readable over `/api/v1`. `pairs` carries the artifact ids so a caller can see how many views
+ * were captured and which ones have a reference at all, but resolving an id to an image needs the
+ * app. That is stated rather than hidden: a caller approving on the strength of this projection
+ * alone is approving screenshots it has not seen.
+ */
+export const publicVisualConfirmDecisionSchema = v.object({
+  kind: v.literal('visual-confirmation'),
+  /** Only `awaiting_human` accepts an answer. */
+  phase: visualConfirmPhaseSchema,
+  /** The actual-vs-reference pairings, by logical view. Artifact ids are app-resolvable only. */
+  pairs: v.array(visualConfirmPairSchema),
+  /** Set when no screenshots could be gathered (no UI tester ran / no artifact storage). */
+  degradedReason: v.nullable(v.string()),
+  /** Fixer rounds spent, and the ceiling from the task's merge preset. */
+  attempts: v.number(),
+  maxAttempts: v.number(),
+})
+export type PublicVisualConfirmDecision = v.InferOutput<typeof publicVisualConfirmDecisionSchema>
+
 export const publicDecisionSchema = v.variant('kind', [
   publicRequirementsDecisionSchema,
   publicForkDecisionSchema,
   publicJudgeDecisionSchema,
   publicInputGateDecisionSchema,
+  publicApprovalGateDecisionSchema,
+  publicAgentDecisionSchema,
+  publicClarityDecisionSchema,
+  publicBrainstormDecisionSchema,
+  publicPrReviewDecisionSchema,
+  publicHumanTestDecisionSchema,
+  publicVisualConfirmDecisionSchema,
 ])
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
@@ -180,6 +431,11 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  * A run's currently-parked decisions. `parked` is the single flag a caller polls or reacts to:
  * true when the run is `blocked` awaiting one of the decisions listed. An empty list with
  * `parked: false` is the ordinary case for a run that is simply still working.
+ *
+ * `parked: true` with an EMPTY list is the deliberately loud case: the run is waiting on a
+ * surface this projection does not model, and the honest report of that is an empty list rather
+ * than a silent `parked: false`. The one park that is still expected to produce it is
+ * `human-review`, whose answer is a person approving the PR on the VCS host, not an API call.
  */
 export const publicDecisionListSchema = v.object({
   runId: v.string(),
@@ -222,13 +478,17 @@ export const publicIncorporateSchema = v.object({
 export type PublicIncorporateInput = v.InferOutput<typeof publicIncorporateSchema>
 
 /**
- * Resolve a review that hit its iteration cap: one more reviewer pass, proceed with the last
- * incorporated document, or stop and reset the task to an editable state. The same three choices
- * the SPA offers — there is deliberately no timed default (a parked run waits for an answer
- * indefinitely, so a silent auto-proceed would ship requirements nobody approved).
+ * Resolve an iteration cap: one more pass, proceed with what the last pass produced, or stop and
+ * reset the task to an editable state. The same three choices the SPA offers — there is
+ * deliberately no timed default (a parked run waits for an answer indefinitely, so a silent
+ * auto-proceed would ship work nobody approved).
+ *
+ * Shared by every capped loop the surface exposes: the three iterative reviews and a quality
+ * companion at its automatic-rework cap. They are ONE body because they are one question, and
+ * minting a per-loop DTO would put four identical types in four published SDKs.
  */
 export const publicResolveExceededSchema = v.object({
-  choice: v.picklist(['extra-round', 'proceed', 'stop-reset']),
+  choice: iterationCapChoiceSchema,
 })
 export type PublicResolveExceededInput = v.InferOutput<typeof publicResolveExceededSchema>
 
@@ -267,3 +527,94 @@ export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSch
  */
 export const publicResolveInputGateSchema = resolveInputGateSchema
 export type PublicResolveInputGateInput = v.InferOutput<typeof publicResolveInputGateSchema>
+
+/**
+ * Approve a parked gate, optionally replacing the agent's proposal with an edited one. The edit
+ * is what flows to every downstream step, so supplying it is how a caller corrects the output
+ * rather than bouncing the whole step; omit it to approve the text as written.
+ */
+export const publicApproveStepSchema = v.object({
+  proposal: v.optional(v.pipe(v.string(), v.maxLength(50000))),
+})
+export type PublicApproveStepInput = v.InferOutput<typeof publicApproveStepSchema>
+
+/**
+ * Request changes on a parked gate: the step re-runs with this guidance folded in.
+ *
+ * `feedback` is REQUIRED here where the SPA's twin accepts either freeform text or anchored
+ * per-block comments. An anchored comment carries the source line range of a rendered proposal, so
+ * a headless caller has nothing to anchor to; requiring the freeform half means a re-run always
+ * has something to act on rather than looping on an empty instruction.
+ */
+export const publicRequestStepChangesSchema = v.object({
+  feedback: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+})
+export type PublicRequestStepChangesInput = v.InferOutput<typeof publicRequestStepChangesSchema>
+
+/** Reject a parked gate: the run stops entirely (a terminal failure the board can retry). */
+export const publicRejectStepSchema = v.object({
+  reason: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+})
+export type PublicRejectStepInput = v.InferOutput<typeof publicRejectStepSchema>
+
+/**
+ * Resolve a companion gate parked at its automatic-rework cap. The SAME body as a review at its
+ * cap ({@link publicResolveExceededSchema}), aliased rather than re-declared: the two carry one
+ * question, and a structurally identical twin would be a second published type in four SDKs
+ * meaning exactly what the first one means.
+ */
+export const publicResolveStepExceededSchema = publicResolveExceededSchema
+export type PublicResolveStepExceededInput = v.InferOutput<typeof publicResolveStepExceededSchema>
+
+/**
+ * Answer an agent-raised decision. The choice is taken verbatim, so it may be one of the offered
+ * `options` or a steer of the caller's own — the engine re-runs the asking step with it either way.
+ */
+export const publicResolveAgentDecisionSchema = v.object({
+  choice: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000)),
+})
+export type PublicResolveAgentDecisionInput = v.InferOutput<typeof publicResolveAgentDecisionSchema>
+
+/**
+ * Resolve a parked PR deep review: the curated `findingIds` plus what to do with them. `finish`
+ * records the selection and completes the read-only review; `fix` hands the selected findings to a
+ * fixer that commits onto the reviewed PR's branch; `post` publishes them as inline PR review
+ * comments. `fix`/`post` need at least one selected finding, and both act on the real pull
+ * request — this is the one decision route with an effect outside the platform.
+ *
+ * Both fields are plainly OPTIONAL rather than carrying a schema `default`, unlike the internal
+ * twin. A default is "always present" on the way out and "may be omitted" on the way in, and the
+ * SDK emitters read a request field's default as the former — so declaring one here would emit
+ * four clients whose types insist on a value the API does not require. The fallbacks are applied
+ * where the call is made instead, and documented on each field so the wire contract still states
+ * what omitting it means.
+ */
+export const publicResolvePrReviewSchema = v.object({
+  /** Omitted reads as `finish`. */
+  action: v.optional(prReviewResolutionSchema),
+  /** Omitted reads as an empty selection, which only `finish` accepts. */
+  findingIds: v.optional(v.array(v.string())),
+})
+export type PublicResolvePrReviewInput = v.InferOutput<typeof publicResolvePrReviewSchema>
+
+/**
+ * Challenge one parked finding: a read-only investigator digs into it against the full source and
+ * either upholds, strengthens or retracts it. An omitted / blank `question` uses the generic
+ * "validate this finding" prompt.
+ */
+export const publicChallengePrReviewFindingSchema = v.object({
+  question: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+})
+export type PublicChallengePrReviewFindingInput = v.InferOutput<
+  typeof publicChallengePrReviewFindingSchema
+>
+
+/**
+ * Submit findings against a human-verdict gate (human-test or visual-confirmation) and request a
+ * fix. The findings ARE the prompt the fixer works from, so unlike the SPA's textarea there is no
+ * blank-is-fine case: an empty request would dispatch an agent with nothing to fix.
+ */
+export const publicRequestGateFixSchema = v.object({
+  findings: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
+})
+export type PublicRequestGateFixInput = v.InferOutput<typeof publicRequestGateFixSchema>

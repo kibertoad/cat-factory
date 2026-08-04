@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { stepReviewCommentSchema } from './execution.js'
+import { stepReviewCommentSchema } from './step-decisions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 
 // ---------------------------------------------------------------------------

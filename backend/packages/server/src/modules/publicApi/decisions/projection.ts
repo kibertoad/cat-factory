@@ -1,0 +1,459 @@
+import {
+  type AgentKindRegistry,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+} from '@cat-factory/agents'
+import { dedicatedParkSurface } from '@cat-factory/orchestration'
+import type {
+  BrainstormSession,
+  BrainstormStage,
+  ClarityReview,
+  Decision,
+  ExecutionInstance,
+  ForkDecisionStepState,
+  HumanTestStepState,
+  JudgeStepState,
+  PipelineStep,
+  PrReviewStepState,
+  PublicDecision,
+  PublicDecisionList,
+  RequirementReview,
+  RunInputGate,
+  StepApproval,
+  VisualConfirmStepState,
+} from '@cat-factory/contracts'
+import type { Context } from 'hono'
+import type { AppEnv } from '../../../http/env.js'
+import type { ScopedRun } from './scope.js'
+
+// The run → `PublicDecisionList` projection: what a parked run is currently asking a human, as
+// external resources. One `to*Decision` + one `isLive*` predicate per park kind, and the assembly
+// that decides which reads a given run even needs.
+//
+// Two rules hold across every kind here:
+//
+//  1. **A settled park is not a decision.** A predicate lists the park's own waiting state plus
+//     the in-flight states either side of it, so a poller sees progress rather than an empty list
+//     that reads as "nothing is happening" — but never a terminal state, which would put a
+//     question in front of a caller with nothing left to answer.
+//  2. **Project as data, never as prose.** Every one of these carries model-authored text
+//     (a proposal, a finding, an agent's question). It crosses the wire as its own field so a
+//     consumer can render it in its own surface; nothing here composes it into markdown.
+
+/** Project a live requirements review onto the external decision resource. */
+export function toRequirementsDecision(review: RequirementReview): PublicDecision {
+  return {
+    kind: 'requirements-review',
+    reviewId: review.id,
+    taskId: review.blockId,
+    status: review.status,
+    iteration: review.iteration ?? 1,
+    maxIterations: review.maxIterations ?? 1,
+    findings: review.items.map(toFinding),
+    incorporatedRequirements: review.incorporatedRequirements,
+  }
+}
+
+/** Project a live clarity (bug-triage) review — the requirements twin over its own document. */
+export function toClarityDecision(review: ClarityReview): PublicDecision {
+  return {
+    kind: 'clarity-review',
+    reviewId: review.id,
+    taskId: review.blockId,
+    status: review.status,
+    iteration: review.iteration ?? 1,
+    maxIterations: review.maxIterations ?? 1,
+    findings: review.items.map(toFinding),
+    clarifiedReport: review.clarifiedReport,
+  }
+}
+
+/** Project a live brainstorm session for one stage. */
+export function toBrainstormDecision(session: BrainstormSession): PublicDecision {
+  return {
+    kind: 'brainstorm',
+    sessionId: session.id,
+    stage: session.stage,
+    taskId: session.blockId,
+    status: session.status,
+    iteration: session.iteration ?? 1,
+    maxIterations: session.maxIterations ?? 1,
+    options: session.items.map(toFinding),
+    convergedDirection: session.convergedDirection,
+  }
+}
+
+/**
+ * The shared item projection for all three iterative-review kinds. They persist the SAME item
+ * shape (`requirementReviewItemSchema`) on purpose, so one projection is the honest expression of
+ * that rather than three copies waiting to drift. The internal `autoAnswerable` classification and
+ * the Requirement-Writer recommendation machinery stay off it: both drive in-app affordances.
+ */
+function toFinding(item: RequirementReview['items'][number]) {
+  return {
+    itemId: item.id,
+    category: item.category,
+    severity: item.severity,
+    title: item.title,
+    detail: item.detail,
+    status: item.status,
+    reply: item.reply,
+  }
+}
+
+/** Project a run's fork-decision step state onto the external decision resource. */
+export function toForkDecision(state: ForkDecisionStepState): PublicDecision {
+  return {
+    kind: 'fork',
+    status: state.status,
+    seamSummary: state.seamSummary ?? null,
+    forks: state.forks ?? [],
+  }
+}
+
+/**
+ * Project a run's JUDGE step state onto the external decision resource. The rubric body is
+ * deliberately omitted (see `publicJudgeDecisionSchema`) — a caller answers the findings.
+ */
+export function toJudgeDecision(stepKind: string, state: JudgeStepState): PublicDecision {
+  return {
+    kind: 'judge',
+    stepKind,
+    status: state.status,
+    rubricId: state.rubricId ?? null,
+    rubricName: state.rubricName ?? null,
+    threshold: state.threshold ?? null,
+    verdict: state.verdict ?? null,
+    bounces: state.bounces ?? 0,
+    maxBounces: state.maxBounces ?? 0,
+  }
+}
+
+/**
+ * Project a step's APPROVAL GATE. `exceeded` is read off the step's companion state rather than
+ * the approval itself, because that is where the engine records it — and it is what tells a caller
+ * to answer with `resolve-exceeded` instead of `approve`. Reading it as a plain boolean (rather
+ * than only when a companion exists) means an ordinary pipeline gate reports `false`, which is the
+ * true statement, not an omission.
+ */
+export function toApprovalDecision(
+  step: PipelineStep,
+  stepIndex: number,
+  approval: StepApproval,
+): PublicDecision {
+  return {
+    kind: 'approval-gate',
+    approvalId: approval.id,
+    stepKind: step.agentKind,
+    stepIndex,
+    status: approval.status,
+    proposal: approval.proposal,
+    feedback: approval.feedback ?? null,
+    exceeded: step.companion?.exceeded === true,
+  }
+}
+
+/** Project a decision an agent raised mid-work. */
+export function toAgentDecision(step: PipelineStep, decision: Decision): PublicDecision {
+  return {
+    kind: 'agent-decision',
+    decisionId: decision.id,
+    stepKind: step.agentKind,
+    question: decision.question,
+    options: decision.options,
+  }
+}
+
+/** Project a parked PR deep review's curation state. */
+export function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
+  return {
+    kind: 'pr-review',
+    status: state.status,
+    summary: state.summary ?? null,
+    prUrl: state.prUrl ?? null,
+    slices: state.slices ?? [],
+    findings: state.findings ?? [],
+    selectedFindingIds: state.selectedFindingIds ?? [],
+  }
+}
+
+/** Project a parked human-test gate: what to test against, and how much fix budget is left. */
+export function toHumanTestDecision(state: HumanTestStepState): PublicDecision {
+  const env = state.environment
+  return {
+    kind: 'human-test',
+    phase: state.phase,
+    environment: env
+      ? { url: env.url, status: env.status, expiresAt: env.expiresAt ?? null }
+      : null,
+    degradedReason: state.degradedReason ?? null,
+    attempts: state.attempts,
+    maxAttempts: state.maxAttempts,
+  }
+}
+
+/** Project a parked visual-confirmation gate: the pairings awaiting a verdict. */
+export function toVisualConfirmDecision(state: VisualConfirmStepState): PublicDecision {
+  return {
+    kind: 'visual-confirmation',
+    phase: state.phase,
+    pairs: state.pairs ?? [],
+    degradedReason: state.degradedReason ?? null,
+    attempts: state.attempts,
+    maxAttempts: state.maxAttempts,
+  }
+}
+
+/**
+ * Whether a judge state is something the caller can still act on. `awaiting_decision` is the
+ * park; `evaluating`/`bouncing` are in flight and worth surfacing so a poller sees progress
+ * rather than an empty list that reads as "nothing is happening". A `passed`/`failed`/`skipped`
+ * judge is settled and carries no question.
+ */
+function isLiveJudge(state: JudgeStepState): boolean {
+  return (
+    state.status === 'awaiting_decision' ||
+    state.status === 'evaluating' ||
+    state.status === 'bouncing'
+  )
+}
+
+/**
+ * Whether an iterative review (requirements / clarity / brainstorm — one lifecycle, one
+ * predicate) is something the caller can still act on. A settled review (`incorporated`) is
+ * history: it is the document downstream agents implement, not a question, so it is dropped from
+ * the list rather than presented as answerable. `incorporating`/`reviewing` ARE listed: the driver
+ * is mid-cycle and the caller should see that its answers are in flight.
+ */
+function isLiveReview(review: { status: RequirementReview['status'] }): boolean {
+  return review.status !== 'incorporated'
+}
+
+/**
+ * Whether the fork state is something the caller can still act on. `awaiting_choice` is the park;
+ * `proposing`/`answering` are in-flight and worth surfacing so a poller sees progress. A `chosen`,
+ * `single_path` or `skipped` state is settled and carries no question.
+ */
+function isLiveFork(state: ForkDecisionStepState): boolean {
+  return (
+    state.status === 'awaiting_choice' ||
+    state.status === 'proposing' ||
+    state.status === 'answering'
+  )
+}
+
+/**
+ * Whether a PR deep review still wants a human. `awaiting_selection` is the park; `reviewing`,
+ * `challenging`, `fixing` and `posting` are work in flight a poller should see. `done`/`skipped`
+ * are settled.
+ */
+function isLivePrReview(state: PrReviewStepState): boolean {
+  return state.status !== 'done' && state.status !== 'skipped'
+}
+
+/**
+ * Project the PRE-TOKEN INPUT GATE's verdict for an external caller. The issue CODES are the same
+ * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
+ * whoever filed the ticket) rather than parsing our prose.
+ */
+export function toInputGateDecision(gate: RunInputGate): PublicDecision {
+  return {
+    kind: 'input-gate',
+    status: gate.status,
+    mode: gate.mode,
+    issues: gate.issues,
+    checkedAt: gate.checkedAt,
+  }
+}
+
+/**
+ * Whether the gate's verdict is something the caller still has to act on. ONLY `blocked`, which is
+ * narrower than the other predicates here on purpose: `off`, `not_applicable` and `passed`
+ * are recorded facts about a run that was never held up, and `overridden` is a park somebody
+ * already answered. Listing any of them would put a decision in front of a caller with nothing to
+ * decide, and `parked` is read off the run's own status rather than from this list, so a settled
+ * verdict has nothing to add to it.
+ */
+function isLiveInputGate(gate: RunInputGate): boolean {
+  return gate.status === 'blocked'
+}
+
+/**
+ * Build the run's decision list: whatever it is currently asking a human, plus the run status so a
+ * caller can distinguish "parked, answer me" from "still working".
+ *
+ * The run is RE-READ rather than taken from the `ScopedRun` the caller was gated with, because
+ * every mutating route builds its response through here AFTER acting: a `proceed` that advanced the
+ * run, or an `incorporate` that flipped it out of `blocked`, must not report the pre-action status.
+ * A run that vanished between the gate and here (a concurrent delete) falls back to the gated
+ * snapshot rather than 500-ing on an action that already succeeded.
+ *
+ * Everything that rides the run's STEPS is read off the instance already in hand; only the
+ * separately-stored iterative reviews cost a round-trip, and those are bounded by what the run's
+ * own step chain can produce (see {@link liveDialogueDecisions}).
+ */
+export async function buildDecisionList<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  scoped: ScopedRun,
+): Promise<PublicDecisionList> {
+  const container = c.get('container')
+  const execution =
+    (await container.executionRepository.get(workspaceId, scoped.execution.id)) ?? scoped.execution
+
+  const decisions: PublicDecision[] = [
+    ...(await liveDialogueDecisions(c, workspaceId, scoped.blockId, execution)),
+    ...(await liveForkDecisions(c, workspaceId, execution)),
+    ...liveStepDecisions(execution, container.agentKindRegistry),
+  ]
+
+  // The input gate parks BEFORE the first dispatch, so when it is live it is the only thing the
+  // run is asking. Listed first for that reason: it is the earliest question, and the steps whose
+  // decisions follow have not run.
+  if (execution.inputGate && isLiveInputGate(execution.inputGate)) {
+    decisions.unshift(toInputGateDecision(execution.inputGate))
+  }
+
+  return {
+    runId: execution.id,
+    taskId: scoped.blockId,
+    status: execution.status,
+    // `blocked` IS the parked state — the run is waiting on a human and will not move until one
+    // of these decisions is answered. Read from the run itself rather than inferred from the
+    // decisions, so a run parked on a surface this projection doesn't model (`human-review`,
+    // whose answer is a person approving the PR on the VCS host) still reports `parked: true`
+    // with an empty list rather than silently claiming all is well.
+    parked: execution.status === 'blocked',
+    decisions,
+  }
+}
+
+/**
+ * The block-scoped iterative reviews a run can be parked on: requirements, clarity, and a
+ * brainstorm session per stage.
+ *
+ * Each of these lives in its OWN store, so each is a point read. Clarity and the brainstorms are
+ * fetched only when the run's step chain actually carries the kind that creates them: a run with
+ * no `clarity-review` step cannot be parked on a clarity review, and paying for the read on every
+ * poll of every run would make the cost of this endpoint a function of how many park kinds exist
+ * rather than of what the run can ask.
+ *
+ * Requirements is deliberately NOT step-gated. It has been read unconditionally since this surface
+ * shipped, which also serves a review run off-path from the block inspector; narrowing it now
+ * would take capability away from a live integration, and `/api/v1` does not do that.
+ */
+async function liveDialogueDecisions<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  blockId: string,
+  execution: ExecutionInstance,
+): Promise<PublicDecision[]> {
+  const container = c.get('container')
+  const decisions: PublicDecision[] = []
+  const kinds = new Set(execution.steps.map((s) => s.agentKind))
+
+  const requirements = container.requirements
+  if (requirements) {
+    const review = await requirements.service.getForBlock(workspaceId, blockId)
+    if (review && isLiveReview(review)) decisions.push(toRequirementsDecision(review))
+  }
+
+  const clarity = container.clarity
+  if (clarity && kinds.has(CLARITY_REVIEW_AGENT_KIND)) {
+    const review = await clarity.service.getForBlock(workspaceId, blockId)
+    if (review && isLiveReview(review)) decisions.push(toClarityDecision(review))
+  }
+
+  const brainstorm = container.brainstorm
+  if (brainstorm) {
+    for (const stage of liveBrainstormStages(kinds)) {
+      const session = await brainstorm.services[stage].getForBlock(workspaceId, blockId)
+      if (session && isLiveReview(session)) decisions.push(toBrainstormDecision(session))
+    }
+  }
+  return decisions
+}
+
+/**
+ * The brainstorm stages this run's step chain can park on. A block may hold one live session per
+ * stage at once, so this returns a LIST: a pipeline running both dialogues puts two brainstorm
+ * decisions in front of the caller, and collapsing them to one would hide whichever came second.
+ */
+function liveBrainstormStages(kinds: Set<string>): BrainstormStage[] {
+  const stages: BrainstormStage[] = []
+  if (kinds.has(REQUIREMENTS_BRAINSTORM_AGENT_KIND)) stages.push('requirements')
+  if (kinds.has(ARCHITECTURE_BRAINSTORM_AGENT_KIND)) stages.push('architecture')
+  return stages
+}
+
+/** The run's implementation-fork park, which the engine stores behind its own service read. */
+async function liveForkDecisions<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  execution: ExecutionInstance,
+): Promise<PublicDecision[]> {
+  const fork = await c.get('container').executionService.getForkDecision(workspaceId, execution.id)
+  return fork && isLiveFork(fork) ? [toForkDecision(fork)] : []
+}
+
+/**
+ * Every park that rides the run's own STEPS — no repository round-trip, since all of this state
+ * lives on the instance already in hand (the whole reason none of it has a side table).
+ *
+ * Scanned over the WHOLE step chain rather than `currentStep` alone: the engine parks a run by
+ * leaving the step waiting, and which index that is depends on the park (a companion gate sits on
+ * the companion's step, an approval gate on the producer's), so keying off the cursor would report
+ * an empty list for a run that is plainly stopped.
+ */
+function liveStepDecisions(
+  execution: ExecutionInstance,
+  registry: AgentKindRegistry,
+): PublicDecision[] {
+  const decisions: PublicDecision[] = []
+  execution.steps.forEach((step, index) => {
+    const approval = step.approval
+    if (approval?.status === 'pending' && isGenericApprovalPark(execution, step, registry)) {
+      decisions.push(toApprovalDecision(step, index, approval))
+    }
+    if (step.decision && step.decision.chosen == null) {
+      decisions.push(toAgentDecision(step, step.decision))
+    }
+    if (step.judge && isLiveJudge(step.judge)) {
+      decisions.push(toJudgeDecision(step.agentKind, step.judge))
+    }
+    if (step.prReview && isLivePrReview(step.prReview)) {
+      decisions.push(toPrReviewDecision(step.prReview))
+    }
+    if (step.humanTest && step.humanTest.phase !== 'passed') {
+      decisions.push(toHumanTestDecision(step.humanTest))
+    }
+    if (step.visualConfirm && step.visualConfirm.phase !== 'approved') {
+      decisions.push(toVisualConfirmDecision(step.visualConfirm))
+    }
+  })
+  return decisions
+}
+
+/**
+ * Whether a step's pending approval is an ORDINARY approval gate — the one the approve /
+ * request-changes / reject routes answer.
+ *
+ * `step.approval` is the engine's generic parking mechanism, so a review gate, a brainstorm, a
+ * human-verdict gate and a fork choice all carry a pending approval too. Reporting those as
+ * `approval-gate` would be the worst kind of wrong here: the caller would be offered verbs the
+ * engine refuses (`assertNotIterativeGate`), so a well-behaved integration would sit in a 409 loop
+ * against a park it was told it could answer. The classifier is the ENGINE's own, so what this
+ * surface offers and what the engine accepts cannot disagree.
+ *
+ * `companion-cap` is admitted rather than excluded: it IS answered here, by `resolve-exceeded`,
+ * and the projection flags it as `exceeded` so a caller reaches for that verb instead of approve.
+ */
+function isGenericApprovalPark(
+  execution: ExecutionInstance,
+  step: PipelineStep,
+  registry: AgentKindRegistry,
+): boolean {
+  const surface = dedicatedParkSurface(execution, step, registry)
+  return surface === null || surface === 'companion-cap'
+}
