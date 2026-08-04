@@ -198,6 +198,25 @@ export class D1TaskRepository implements TaskRepository {
       .run()
   }
 
+  async claimBlockLink(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string,
+  ): Promise<boolean> {
+    // `linked_block_id IS NULL OR = ?` is the claim: SQLite evaluates it while holding the row's
+    // write lock, so of two concurrent filings of one ticket exactly one updates a row. The
+    // `= ?` arm makes a re-claim by the holder idempotent rather than a refusal against itself.
+    const result = await this.db
+      .prepare(
+        'UPDATE tasks SET linked_block_id = ? WHERE workspace_id = ? AND source = ? AND external_id = ?' +
+          ' AND (linked_block_id IS NULL OR linked_block_id = ?)',
+      )
+      .bind(blockId, workspaceId, source, externalId, blockId)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
+
   async unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void> {
     await this.db
       .prepare(

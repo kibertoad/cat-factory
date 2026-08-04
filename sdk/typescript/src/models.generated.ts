@@ -21,6 +21,7 @@ export interface CreatePublicTask {
   /** Length 0..2000. */
   description?: string
   taskType?: 'feature' | 'bug' | 'document' | 'spike' | 'review' | 'ralph' | (string & {})
+  ticket?: PublicTaskTicket
   /** Length 1..200. */
   title: string
 }
@@ -866,6 +867,12 @@ export interface PublicTaskList {
   /** Always present; `null` when the server has no value for it. */
   nextCursor: string | null
   tasks: PublicTask[]
+}
+
+export interface PublicTaskTicket {
+  /** Length 1..500. */
+  ref: string
+  source: 'jira' | 'github' | 'linear' | (string & {})
 }
 
 export interface PublicUsage {

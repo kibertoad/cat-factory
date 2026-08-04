@@ -48,6 +48,7 @@ const COMPONENT_SCHEMAS = {
   PublicTask: 'publicTaskSchema',
   PublicTaskList: 'publicTaskListSchema',
   CreatePublicTask: 'createPublicTaskSchema',
+  PublicTaskTicket: 'publicTaskTicketSchema',
   StartPublicTask: 'startPublicTaskSchema',
   UpdatePublicTask: 'updatePublicTaskSchema',
   PublicRun: 'publicRunSchema',

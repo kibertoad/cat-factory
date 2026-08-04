@@ -89,6 +89,8 @@ class CreatePublicTask:
     description: str | None = None
     #: May be absent entirely.
     task_type: str | None = None
+    #: May be absent entirely.
+    ticket: PublicTaskTicket | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
@@ -98,11 +100,12 @@ class CreatePublicTask:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicTask":
         """Decode a `CreatePublicTask` from its JSON object."""
-        known = {"title", "description", "taskType"}
+        known = {"title", "description", "taskType", "ticket"}
         return cls(
             title=data.get("title"),
             description=data.get("description"),
             task_type=data.get("taskType"),
+            ticket=None if data.get("ticket") is None else PublicTaskTicket.from_dict(data.get("ticket")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -114,6 +117,8 @@ class CreatePublicTask:
             out["description"] = self.description
         if self.task_type is not None:
             out["taskType"] = self.task_type
+        if self.ticket is not None:
+            out["ticket"] = _encode(self.ticket)
         return out
 
 
@@ -3668,6 +3673,36 @@ class PublicTaskList:
         out: dict[str, Any] = dict(self.extra)
         out["tasks"] = [_encode(item) for item in self.tasks]
         out["nextCursor"] = self.next_cursor
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicTaskTicket:
+    """`PublicTaskTicket`, as carried on the wire."""
+
+    ref: str
+    source: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicTaskTicket":
+        """Decode a `PublicTaskTicket` from its JSON object."""
+        known = {"ref", "source"}
+        return cls(
+            ref=data.get("ref"),
+            source=data.get("source"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["ref"] = self.ref
+        out["source"] = self.source
         return out
 
 

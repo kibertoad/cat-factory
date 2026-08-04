@@ -25,7 +25,9 @@ type CreatePublicTask struct {
 	Description *string `json:"description,omitempty"`
 	// TaskType may be absent entirely.
 	TaskType *string `json:"taskType,omitempty"`
-	Title    string  `json:"title"`
+	// Ticket may be absent entirely.
+	Ticket *PublicTaskTicket `json:"ticket,omitempty"`
+	Title  string            `json:"title"`
 }
 
 // DebugAgentContextSnapshot is the `DebugAgentContextSnapshot` wire model.
@@ -1428,6 +1430,12 @@ type PublicTaskList struct {
 	// NextCursor always present; nil when the server has no value for it.
 	NextCursor *string      `json:"nextCursor"`
 	Tasks      []PublicTask `json:"tasks"`
+}
+
+// PublicTaskTicket is the `PublicTaskTicket` wire model.
+type PublicTaskTicket struct {
+	Ref    string `json:"ref"`
+	Source string `json:"source"`
 }
 
 // PublicUsage is the `PublicUsage` wire model.
