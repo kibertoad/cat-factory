@@ -355,7 +355,8 @@ jobs:
         run: |
           if grep -vE '^\s*#' deploy/backend/wrangler.toml | grep -q 'REPLACE_WITH_'; then
             echo "::error file=deploy/backend/wrangler.toml::An active binding still holds a REPLACE_WITH_ placeholder. Provision the resource and paste its id, or comment the binding out."
-            grep -nE 'REPLACE_WITH_' deploy/backend/wrangler.toml
+            # Only the LIVE lines: listing the commented examples too would read as more to fix.
+            grep -n 'REPLACE_WITH_' deploy/backend/wrangler.toml | grep -vE '^[0-9]+:[[:space:]]*#'
             exit 1
           fi
 
