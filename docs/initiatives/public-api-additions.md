@@ -233,6 +233,16 @@ Three decisions worth keeping:
   caller retries, and the leftover is the duplicate the whole feature exists to prevent. The
   app's create-from-issue shares the claim but deliberately NOT the rollback: a person is looking
   at the board and can see the leftover, where a rollback deletes a block out from under them.
+
+Worth stating rather than discovering: **naming a `ticket` does not work in mothership mode yet**,
+and not because of anything this slice did. Importing the issue reads the workspace's task
+connection and upserts the projection, and that whole write surface (`taskRepository.upsert` /
+`linkBlock`, `taskConnectionRepository.getByWorkspace`) is `pending` on the persistence
+allow-list, so a node with no main database answers `unknown_method`. `claimBlockLink` is
+classified `pending` beside its siblings for the same reason: proxying a claim whose surrounding
+import cannot be proxied buys nothing. A ticket-less create is unaffected. Moving the task-source
+writes as one slice is what turns this on, and it belongs to the mothership tracker, not here.
+
 - **The linkage is NOT projected onto `publicTask`.** A `201` already means the ticket is attached
   and the `409` (`ticket_already_linked`, `details.taskId`) already names the task holding it, so
   the projection would buy only "which ticket is this task from" on a READ. That read is the list
