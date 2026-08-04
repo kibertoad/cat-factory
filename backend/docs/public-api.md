@@ -226,10 +226,71 @@ Details, the design rules the four share, and the Java/Kotlin story:
 
 ### From an MCP host
 
-`@cat-factory/mcp-server` exposes this surface as **Model Context Protocol tools**, so a model in an
-MCP host can plan work on the board, start and watch runs, answer parked decisions and read a run's
-telemetry. It is a thin facade over the TypeScript client with its tool table generated from the
-same spec, so it inherits every convention on this page rather than re-stating them.
+This surface is also served as **Model Context Protocol tools**, so a model in an MCP host can plan
+work on the board, start and watch runs, answer parked decisions and read a run's telemetry. The tool
+table is generated from the same spec, over the same TypeScript client, so it inherits every
+convention on this page rather than re-stating them.
+
+Two ways in, same server behind both:
+
+| Path                                | Reach it with             | Use it when                                                          |
+| ----------------------------------- | ------------------------- | -------------------------------------------------------------------- |
+| **Hosted** `POST /api/v1/mcp`       | a URL and a key           | the host speaks HTTP MCP (claude.ai, Claude Desktop, a hosted agent) |
+| **stdio** `@cat-factory/mcp-server` | `npx`, a per-host process | the host spawns servers, or you want per-host tool filters           |
+
+#### Hosted (`POST /api/v1/mcp`)
+
+Nothing to install: point the host at the endpoint and authenticate exactly as every other call on
+this page does.
+
+```sh
+# Claude Code, for example:
+claude mcp add --transport http cat-factory $BASE/api/v1/mcp \
+  --header "Authorization: Bearer cf_live_…"
+```
+
+What to know about it:
+
+- **The key's SCOPE decides the tool list.** A `read`-scoped key is served only the tools that change
+  nothing, and the server's instructions say that a wider key would expose the rest, so a model asks
+  for one instead of reporting the platform as unable to write. Above `read` the whole table is
+  listed and each tool's own rung is enforced by the endpoint it calls: a `write` key calling
+  `tasks_delete` gets the same `insufficient_scope` refusal `DELETE /api/v1/tasks/{id}` would give
+  it, as tool content the model can read and act on.
+- **Every tool call is one `/api/v1` request under YOUR key.** Nothing is reachable here that the
+  same key could not reach with `curl`. Each one carries a `cat-factory-mcp/<version>` `User-Agent`,
+  so an audit trail shows that a model made the call, and it INHERITS the MCP request's
+  `X-Request-Id`: the tool call and the API call it caused share one correlation id, which is what
+  makes "which tool call produced this refusal" answerable. Supply your own `X-Request-Id` on the
+  MCP request and both halves are logged under it.
+- **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
+  server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
+  means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
+- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
+  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
+  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
+  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
+  each one.
+- **The endpoint is public surface** under the stability contract above, from its first release. It
+  is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
+  operation shape to describe, and describing it would mint an SDK method in four languages for a
+  protocol none of those clients speaks. This section is what carries the obligation instead, which
+  has one consequence worth stating: because the endpoint is absent from the spec, its arrival did
+  not move `info.version`, and a change to it will not either. The spec's version tracks the
+  described surface; THIS section is the changelog for the part it cannot describe.
+- **From a browser origin it needs `Mcp-Protocol-Version` allow-listed**, which the shipped CORS
+  configuration does. Worth knowing because a Streamable HTTP client sends that header on every
+  request after `initialize` and on none before it, so a deployment that narrows
+  `CORS_ALLOWED_ORIGINS` and strips the header sees the handshake succeed and every later call fail
+  in the browser only. Server-side hosts (a hosted connector, a CLI) never send a preflight.
+- **The per-host tool filters below are stdio-only.** A deployment-wide filter here would narrow what
+  an already-scoped key may do, which is a break rather than a convenience; per-workspace selection
+  is [tracked separately](../../docs/initiatives/mcp-maturation.md).
+
+#### stdio (`@cat-factory/mcp-server`)
+
+Needs no backend deployment of your own, and it is the only path for a host with no HTTP MCP
+support.
 
 ```jsonc
 {
@@ -248,14 +309,15 @@ same spec, so it inherits every convention on this page rather than re-stating t
 }
 ```
 
-The key's SCOPE is what decides what the model may do: mint the narrowest one that does the job. The
-server's own filters (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TOOLS`,
-`CAT_FACTORY_MCP_EXCLUDE_TOOLS`, `CAT_FACTORY_MCP_READ_ONLY`) narrow what one host can see, but they
-are a convenience rather than a boundary: the key still carries whatever scope it was minted with.
+Here too the key's SCOPE decides what the model may do: mint the narrowest one that does the job. This
+path adds per-host filters on top (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TOOLS`,
+`CAT_FACTORY_MCP_EXCLUDE_TOOLS`, `CAT_FACTORY_MCP_READ_ONLY`) that narrow what ONE host can see; they
+are a convenience rather than a boundary, since the key still carries whatever scope it was minted
+with.
 
-The two SSE endpoints are deliberately not tools (a tool call has no streaming channel), so watching
-a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's instructions say in
-so many words. The env-var table and a worked flow (create, start, poll, decide):
+The two SSE endpoints are deliberately not tools on either path (a tool call has no streaming
+channel), so watching a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's
+instructions say in so many words. The env-var table and a worked flow (create, start, poll, decide):
 [`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the

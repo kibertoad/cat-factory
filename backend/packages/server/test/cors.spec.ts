@@ -1,5 +1,39 @@
 import { describe, expect, it } from 'vitest'
-import { corsReflectsWhenUnset, parseAllowedOrigins, resolveCorsOrigin } from '../src/http/cors.js'
+import {
+  CORS_ALLOWED_HEADERS,
+  corsReflectsWhenUnset,
+  parseAllowedOrigins,
+  resolveCorsOrigin,
+} from '../src/http/cors.js'
+
+describe('CORS_ALLOWED_HEADERS', () => {
+  it('carries every header a cross-origin client of this backend actually sends', () => {
+    // Pinned as a SET rather than by membership: a header dropped from here fails in the browser
+    // only, on one client, with a message that names CORS rather than the request that broke — so
+    // the list is worth a test that refuses a silent removal.
+    expect([...CORS_ALLOWED_HEADERS].sort()).toEqual([
+      'Authorization',
+      'Content-Type',
+      'Mcp-Protocol-Version',
+      'X-Connection-Id',
+      'X-Personal-Password',
+      'X-Request-Id',
+    ])
+  })
+
+  it('admits the MCP protocol header, which arrives only AFTER a successful handshake', () => {
+    // The failure this prevents is the confusing one: a Streamable HTTP client sends no
+    // `Mcp-Protocol-Version` on `initialize` and one on everything after it, so an endpoint missing
+    // it from the allow-list negotiates perfectly from a browser origin and then has every real
+    // call dropped. Matched case-insensitively because that is how a preflight compares.
+    const lowered = CORS_ALLOWED_HEADERS.map((header) => header.toLowerCase())
+    expect(lowered).toContain('mcp-protocol-version')
+    // …and the session header is deliberately absent: the hosted endpoint is stateless and mints no
+    // session id, so a client never holds one to send back. Listing it would advertise a mode that
+    // does not exist.
+    expect(lowered).not.toContain('mcp-session-id')
+  })
+})
 
 describe('parseAllowedOrigins', () => {
   it('splits, trims and drops empties', () => {

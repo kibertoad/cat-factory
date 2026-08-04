@@ -8,6 +8,19 @@ It is a **facade**, not a client. Every tool is one call on
 [`@cat-factory/sdk`](../typescript), and the tool table is generated from the same
 [`docs/openapi.json`](../../docs/openapi.json) the four SDK clients are generated from.
 
+## Do you need this package?
+
+There are two ways to reach a cat-factory deployment over MCP, and they serve the same server.
+
+- **Hosted**, `POST /api/v1/mcp` on the deployment itself. Nothing to install: give the host a URL
+  and a key. This is the one to reach for if the host speaks HTTP MCP. See
+  [`backend/docs/public-api.md`](../../backend/docs/public-api.md#from-an-mcp-host).
+- **This package**, over stdio. It needs no backend deployment of your own, it is the only path for
+  a host that cannot speak HTTP MCP, and it is the only one with per-host tool filters.
+
+A deployment mounts the hosted endpoint from this package too (`handleMcpHttpRequest`, below), so
+the tool table, the instructions and the result rendering are the same bytes on both paths.
+
 ## Run it
 
 With Claude Code, in one line:
@@ -121,6 +134,41 @@ const { server, tools } = createCatFactoryMcpServer({ baseUrl, apiKey })
 await server.connect(myTransport)
 ```
 
+## Mounting it yourself
+
+Two exports for a deployment that wants to serve MCP from its own routes rather than have every caller
+spawn a process:
+
+```ts
+import { handleMcpHttpRequest, refuseMcpMethod } from '@cat-factory/mcp-server'
+
+app.all('/api/v1/mcp', async (c) => {
+  const refused = refuseMcpMethod(c.req.method) // 405 + Allow: POST for GET/DELETE
+  if (refused) return refused
+  const key = authenticate(c) // your gate: this package never decides who may call
+  return handleMcpHttpRequest(c.req.raw, {
+    baseUrl: new URL(c.req.url).origin,
+    apiKey: key.secret, // the CALLER's key, so every scope rule applies unchanged
+    readOnly: key.scope === 'read',
+    readOnlyReason: 'key-scope',
+  })
+})
+```
+
+It is **stateless**: one server per request, no session id minted, and a JSON response rather than an
+event stream. That is not a simplification but the only shape that survives the runtimes this has to
+serve — a Worker request lands on whichever isolate the edge picks, and a Node deployment scaled past
+one instance has the same problem without sticky routing, so a session-keyed server works on one
+process and fails intermittently in production.
+
+Everything `handleMcpHttpRequest` reaches is therefore written against Web standards and imports no
+Node built-in (`test/runtime-neutral.test.ts` enforces it, since the typecheck cannot): this package's
+own `bin` is a Node process, but the hosted half is bundled into deployments' Workers, where `node:fs`
+does not resolve at build time. That is also why `optionsFromEnv` takes its file reader as a
+dependency rather than importing `readFileSync`.
+
+For a transport neither of these covers, `createCatFactoryMcpServer` returns the bare `Server`.
+
 ## What "thin" means here
 
 The facade decides three things: which tools to list, how to render one result, and how to render
@@ -193,7 +241,9 @@ quietly stale.
   destructive.
 - **Read-only mode is a convenience, not a boundary.** It removes tools from this server; the key
   still carries whatever scope it was minted with. Mint a `read`-scoped key for the boundary. The
-  same goes for the two per-tool filters.
+  same goes for the two per-tool filters. (The hosted endpoint runs this the other way round: it
+  DERIVES read-only from the key's scope, and the instructions name that as the cause so a model asks
+  for a wider key rather than for a config edit.)
 - **A result that does not fit is REFUSED, not truncated.** The message names how many characters
   there were, the limit, and the way out from either side: `limit` / `cursor` on the list endpoints,
   `offset` on the debug text reads, or a bigger `CAT_FACTORY_MCP_MAX_RESULT_CHARS`. Half an object
@@ -222,8 +272,11 @@ Three layers of coverage, and the split is about what each CAN see:
   client whose `fetch` is stubbed, so a tool that lists but cannot be called fails a test rather than
   shipping. `test/stdio.test.ts` covers the executable's rules (connect before announcing, every
   human-readable byte off stdout, refuse rather than start) without spawning anything.
-- **The MCP phase of `backend/internal/sdk-smoketest`** spawns the built `dist/bin.js` as a real
-  process against a real backend. It is the only thing that can see the published output schemas
-  DISAGREE with what the deployment actually answers, because the client validates them.
+- **The two MCP phases of `backend/internal/sdk-smoketest`** drive both access paths against one real
+  backend: `--only=mcp` spawns the built `dist/bin.js` as a real process, `--only=mcp-hosted` connects
+  a real Streamable HTTP client to that deployment's `POST /api/v1/mcp`. Either one is the only thing
+  that can see the published output schemas DISAGREE with what the deployment actually answers,
+  because the client validates them; running both against one board is what would catch the two paths
+  answering differently.
 - **`pnpm check:publish`** covers the shape this package is most exposed to: one `bin` entry pointing
   at a gitignored `dist`, which is exactly how two other packages once reached npm as empty shells.
