@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Block, TaskTypeRegistry } from '@cat-factory/kernel'
-import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
+import type { Block, RecordedLogLine, TaskTypeRegistry } from '@cat-factory/kernel'
+import { createRecordingLogger, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import {
   clearRegisteredTaskTypeDefaultFragments,
   DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
@@ -19,7 +19,11 @@ describe('BoardService fragment pinning at creation', () => {
 
   afterEach(() => clearRegisteredTaskTypeDefaultFragments())
 
-  function build(serviceFragmentIds?: string[], taskTypeRegistry?: TaskTypeRegistry) {
+  function build(
+    serviceFragmentIds?: string[],
+    taskTypeRegistry?: TaskTypeRegistry,
+    logLines?: RecordedLogLine[],
+  ) {
     const frame: Block = {
       id: 'frame_svc',
       title: 'Service',
@@ -44,6 +48,7 @@ describe('BoardService fragment pinning at creation', () => {
       },
       serviceRepository: { getByFrameBlock: async () => null },
       ...(taskTypeRegistry ? { taskTypeRegistry } : {}),
+      ...(logLines ? { logger: createRecordingLogger(logLines) } : {}),
       idGenerator: { next: (prefix: string) => `${prefix}_new` },
       clock: { now: () => 0 },
       executionEventPublisher: {
@@ -193,6 +198,52 @@ describe('BoardService fragment pinning at creation', () => {
         taskType: 'feature',
       })
       expect(task.fragmentIds).toBeUndefined()
+    })
+
+    // Task types are node-local by design (the tracker's D11), so a process whose package predates
+    // a registration, or has none, still ACCEPTS a task of that type. Only the id SET freezes at
+    // creation, so that task never gains the operation's standing context and a later build does
+    // not go back for it: unlike the run-time projection, which self-heals, this one must SAY so.
+    it('warns when a namespaced type is not registered on this process', async () => {
+      const lines: RecordedLogLine[] = []
+      const task = await build(undefined, defaultTaskTypeRegistry(), lines).addTask(
+        WS,
+        'frame_svc',
+        { title: 'Expose orders', taskType: 'org:introduce-api' },
+      )
+      expect(task.fragmentIds).toBeUndefined()
+      const warning = lines.find((line) => line.level === 'warn')
+      expect(warning?.msg).toContain('does not register')
+      expect(warning?.fields?.taskType).toBe('org:introduce-api')
+    })
+
+    it('stays silent for a BUILT-IN type, which has no registration to miss', async () => {
+      const lines: RecordedLogLine[] = []
+      await build(undefined, defaultTaskTypeRegistry(), lines).addTask(WS, 'frame_svc', {
+        title: 'Feature',
+        taskType: 'feature',
+      })
+      expect(lines.filter((line) => line.level === 'warn')).toEqual([])
+    })
+
+    it('stays silent when the type IS registered, standing context or not', async () => {
+      const lines: RecordedLogLine[] = []
+      const registry = defaultTaskTypeRegistry()
+      registry.register({
+        taskType: 'org:no-standards',
+        presentation: {
+          label: 'No standards',
+          icon: 'i-lucide-plug',
+          color: '#0ea5e9',
+          description: 'An operation carrying no standing context.',
+        },
+      })
+      const task = await build(undefined, registry, lines).addTask(WS, 'frame_svc', {
+        title: 'Expose orders',
+        taskType: 'org:no-standards',
+      })
+      expect(task.fragmentIds).toBeUndefined()
+      expect(lines.filter((line) => line.level === 'warn')).toEqual([])
     })
   })
 })

@@ -25,4 +25,8 @@ picker grouping axis a later slice renders. Boot validation warns (never refuses
 merges per workspace at run time and is invisible at boot.
 
 Every existing prompt is byte-identical: the projection is absent whenever a block collected no
-custom values, which is every run of a built-in task type.
+custom values, which is every run of a built-in task type. It is also absent for an un-namespaced
+type, so a built-in carrying a stray `custom` bag renders no section: a custom type is namespaced by
+construction, so the raw-id fallback that honestly names a withdrawn operation would otherwise invent
+one. Seeding the standing context STATES a namespaced type this process does not register, since only
+the id set freezes at creation and that task never gains the operation's fragments later.

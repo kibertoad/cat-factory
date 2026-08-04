@@ -1,4 +1,8 @@
-import type { CustomTaskType, TaskTypeFieldDescriptor } from '@cat-factory/contracts'
+import {
+  type CustomTaskType,
+  type TaskTypeFieldDescriptor,
+  isNamespacedId,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // The RUN-TIME projection of a custom task type's collected form values: what a REUSABLE
@@ -16,6 +20,14 @@ import type { CustomTaskType, TaskTypeFieldDescriptor } from '@cat-factory/contr
 // under its raw key rather than dropped, and an unregistered type renders every key it holds. The
 // opposite (render only what the descriptor declares) silently deletes exactly the per-case brief
 // the operation was invoked with, and nothing downstream could tell.
+//
+// The one thing that is NOT drift is a BUILT-IN task type carrying a `custom` bag. A custom type is
+// namespaced by construction (`customTaskTypeSchema.taskType`), so `feature` will never have a
+// descriptor however current the build is, and the raw-id fallback that honestly names a WITHDRAWN
+// operation would instead invent one: a `## Task parameters (feature)` heading over keys nothing
+// declared, which reads to the model as a specification. So an un-namespaced type yields no
+// projection at all. That is not the value-authoritative rule bending, it is the rule not applying:
+// there was no operation, so there is no per-case brief to preserve.
 // ---------------------------------------------------------------------------
 
 /**
@@ -44,19 +56,36 @@ export interface CustomTaskTypeContext {
   fields: CustomTaskFieldContext[]
 }
 
-/** Render one collected value as prose: an option's caption where the descriptor declares one. */
+/**
+ * A collected value that says NOTHING, and so is left out rather than rendered as an empty line: a
+ * string holding only whitespace (an absent key is checked by the caller, which needs the narrowing).
+ * A `0` is a real answer and stays.
+ */
+function isBlank(value: string | number): boolean {
+  return typeof value === 'string' && value.trim() === ''
+}
+
+/**
+ * Render one collected value as prose: an option's caption where the descriptor declares one.
+ * Trimmed, because a `textarea` value routinely arrives with a trailing newline and the section
+ * renders one value per line.
+ */
 function renderValue(
   value: string | number,
   descriptor: TaskTypeFieldDescriptor | undefined,
 ): string {
   if (typeof value === 'number') return String(value)
-  return descriptor?.options?.find((option) => option.value === value)?.label ?? value
+  // Matched against the descriptor's options BEFORE trimming, so a stored enum value still finds
+  // its caption; only the fallback (the value itself) is what gets trimmed.
+  return descriptor?.options?.find((option) => option.value === value)?.label ?? value.trim()
 }
 
 /**
  * Join a block's collected custom-task-type values with the registered descriptor for its type.
  * Returns undefined when the bag is absent or empty, so a run without collected parameters carries
- * no context field and every existing prompt stays byte-identical.
+ * no context field and every existing prompt stays byte-identical. Also undefined when `taskType`
+ * is not namespaced: only a custom type has collected parameters, so a built-in carrying a bag is a
+ * malformed row rather than drift (see the header note).
  *
  * `descriptor` is the registration for `taskType`, or undefined when the deployment registers none
  * (see the drift note above: an absent registration costs labels and ordering, never values).
@@ -66,6 +95,7 @@ export function describeCustomTaskType(
   custom: Record<string, string | number> | undefined,
   descriptor: CustomTaskType | undefined,
 ): CustomTaskTypeContext | undefined {
+  if (!isNamespacedId(taskType)) return undefined
   const entries = Object.entries(custom ?? {})
   if (entries.length === 0) return undefined
   const declared = descriptor?.fields ?? []
@@ -75,12 +105,12 @@ export function describeCustomTaskType(
   // brief, and a bag's key order is whatever the create form happened to send.
   for (const field of declared) {
     const value = custom?.[field.key]
-    if (value === undefined || value === '') continue
+    if (value === undefined || isBlank(value)) continue
     fields.push({ key: field.key, label: field.label, value: renderValue(value, field) })
   }
   // Then whatever the descriptor does not declare, under its raw key.
   for (const [key, value] of entries) {
-    if (byKey.has(key) || value === '') continue
+    if (byKey.has(key) || isBlank(value)) continue
     fields.push({ key, value: renderValue(value, undefined) })
   }
   if (fields.length === 0) return undefined

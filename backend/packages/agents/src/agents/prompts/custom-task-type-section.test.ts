@@ -49,6 +49,23 @@ describe('customTaskTypeSection', () => {
     expect(customTaskTypeSection(ctx({ customTaskType: { ...PARAMS, fields: [] } }))).toBe('')
   })
 
+  it('continues a multi-line value as an indented block under its label', () => {
+    // A `textarea` field. Rendered inline, its second line leaves the bullet list and its last
+    // runs into the closing guidance, reading as part of the platform's own instruction.
+    const out = customTaskTypeSection(
+      ctx({
+        customTaskType: {
+          ...PARAMS,
+          fields: [{ key: 'notes', label: 'Notes', value: 'Due Friday.\nAsked for by billing.' }],
+        },
+      }),
+    )
+    expect(out).toContain('- Notes:\n  Due Friday.\n  Asked for by billing.')
+    expect(out).not.toContain('- Notes: Due Friday.')
+    // The closing guidance still reads as the platform's, separated from the requester's text.
+    expect(out).toContain('\n\nThese are the values this task was created with.')
+  })
+
   // The regression bar for anything touching this fold: a run with no custom fields must render
   // exactly what it rendered before the fold existed, on every emit point.
   it('leaves a prompt without parameters byte-identical', () => {

@@ -369,9 +369,10 @@ else could offer the way back). Mechanics:
 `org:introduce-api`, org-flavored, never shipped as product:
 
 - **Fragments** (registered via `registerPromptFragments` from
-  `registerExampleCustomAgents`): `org-api-guidelines`, `org-api-auth-requirements`,
-  `org-shared-services-map`, each with a `brief` so the two-tier standards fold is
-  exercised.
+  `registerExampleCustomAgents`): `org.api-guidelines`, `org.api-auth-requirements`,
+  `org.shared-services-map`, each with a `brief` so the two-tier standards fold is
+  exercised. Dotted, matching the catalog's own id convention (`node.best-practices`),
+  which is what `INTRODUCE_API_FRAGMENT_IDS` ships.
 - **Variants**: `org:architect-api` and `org:coder-api` (`promptAddition`s carrying the
   org's API design and implementation conventions; addition, not replacement, per the
   variant doctrine).
@@ -449,9 +450,13 @@ final so neither ships a shape that changes a slice later.
 
 - **The projection is a KERNEL domain helper, not builder code.**
   `describeCustomTaskType` (`kernel/src/domain/task-type-context.ts`, the `describeOwnService`
-  sibling) does the descriptor join; `AgentContextBuilder` only calls it. Both that file and
-  `BoardService` sit within ~25 lines of the size ratchet, so anything a later slice adds to
-  either belongs in a collaborator from the start.
+  sibling) does the descriptor join; `AgentContextBuilder` only calls it.
+- **`BoardService`'s creation-time task-type defaults are now a collaborator**, because this slice's
+  additions crossed the file's size budget: `board/taskTypeCreationDefaults.ts` owns the fragment
+  union (form picks or service standards ⊕ per-type defaults ⊕ a registered operation's standing
+  context) AND the default-pipeline pin, since both are one lookup against one registry read twice.
+  That bought `BoardService` ~70 lines of headroom, but `AgentContextBuilder` is still within ~55
+  lines of its own, so anything a later slice adds THERE belongs in a collaborator from the start.
 - **The registry reaches the builder through FOUR edits**, and missing any one compiles fine
   while the fold silently never resolves: `ExecutionServiceDependencies.taskTypeRegistry`, the
   `RunContextAdmissionDeps` `Pick`, the `AgentContextBuilder` deps literal in
@@ -462,9 +467,11 @@ final so neither ships a shape that changes a slice later.
 - **Kernel now re-exports `CustomTaskType` + `TaskTypeFieldDescriptor`** (`domain/types.ts`), so
   an org package registering an operation imports its whole vocabulary from kernel and needs no
   contracts dependency.
-- **`registerExampleCustomAgents` takes a 7th positional registry** (`taskTypeRegistry`). If an
-  eighth is ever needed, convert the whole signature to a deps object in that slice rather than
-  extending the list again.
+- **`registerExampleCustomAgents` now takes ONE deps object** (`ExampleRegistries`), converted in
+  this slice rather than growing to a seventh positional registry: `max-params` refuses the seventh,
+  and every entry is a registry, so transposing two in a positional list is a silent
+  misregistration that typechecks. A later slice needing an eighth seam ADDS A FIELD; do not
+  reintroduce positional arguments.
 - **The example's `operations` field ships as `text` in slice 1** and becomes a `checkbox-group`
   in slice 2, changing its value type from `string` to `string[]`. Internals are pre-1.0 and this
   is the worked example, so no migration; just do not treat the slice-1 shape as settled.
@@ -472,6 +479,20 @@ final so neither ships a shape that changes a slice later.
   the resolved projection (`[params]label|key=value;…[/params]`) the way `echoPreset` does, since
   what needs proving per runtime is that the sparse `custom` bag survives persistence and reaches
   dispatch. The rendering itself is pure and unit-tested in `@cat-factory/agents`.
+- **The value-authoritative rule stops at a NAMESPACED type, and slice 8 must keep it there.**
+  `describeCustomTaskType` returns nothing for an un-namespaced id: a custom type is namespaced by
+  construction, so `feature` has no descriptor however current the build is, and the raw-id fallback
+  that honestly names a WITHDRAWN operation would instead head a section `## Task parameters
+(feature)` over keys nothing declared. That is not drift costing a label, it is a fabricated
+  operation identity the model reads as a specification. `createTaskSchema.taskTypeFields` accepts
+  the bag for any type today (slice 2 owns creation validation), and D9's
+  `createPublicTaskSchema.fields` covers "custom + built-in", so the type-side check belongs there
+  and the guard here stays either way.
+- **The standing-context seeding STATES an unregistered type** (`BoardService.standingContextForTaskType`),
+  where the fold degrades silently on purpose. The asymmetry is deliberate and worth keeping in mind
+  for D11/D12: only the id SET freezes at creation, so a task created on a process whose package
+  lacks the registration never gains the operation's fragments and a later build does not go back
+  for it, while the projection self-heals the moment the descriptor is there.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

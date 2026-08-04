@@ -17,7 +17,7 @@ import type {
   ServiceConnection,
 } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
-import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
+import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   Clock,
@@ -66,7 +66,8 @@ import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { PublicBoardReads } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
-import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
+import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
+import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 
 export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 export type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
@@ -204,6 +205,11 @@ export class BoardService {
    * mount for a frame, and project it onto anything a mutation hands back.
    */
   private readonly mountProjection: ReturnType<typeof createMountProjection>
+  /**
+   * What a new task's TYPE implies for the row `addTask` writes (see taskTypeCreationDefaults.ts):
+   * the fragment set it owns from creation, and the pipeline its Run controls default to.
+   */
+  private readonly taskTypeDefaults: TaskTypeCreationDefaults
 
   constructor({
     workspaceRepository,
@@ -248,6 +254,10 @@ export class BoardService {
     this.mountProjection = createMountProjection({
       serviceRepository,
       workspaceMountRepository,
+    })
+    this.taskTypeDefaults = createTaskTypeCreationDefaults({
+      taskTypeRegistry,
+      logger: this.log,
     })
     this.layout = createBoardLayoutWrites({
       blockRepository,
@@ -691,27 +701,15 @@ export class BoardService {
     // Fold the (now canonical) PR reference + focus into the description, so the read-only
     // `pr-reviewer` knows WHICH PR to review from its prompt.
     block.description = buildReviewDescription(taskType, block.taskTypeFields, block.description)
-    // Best-practice fragments the task OWNS from creation. A task owns its selection outright —
-    // the engine folds these and does NOT re-union the service's fragments at run time, so a
-    // per-task removal actually takes effect. The SERVICE-inherited set is the create form's
-    // explicit list when provided (the user edited the pre-seeded picker) — including an empty
-    // list, meaning "the user cleared the inherited picks" — else the enclosing service's
-    // `serviceFragmentIds` (so a task created without the form, e.g. via the public API, still
-    // inherits its service's standards). Every task additionally always carries its TASK-TYPE
-    // defaults (`defaultFragmentIdsForTaskType` — the built-in document writing-style set plus any
-    // deployment-registered per-type defaults, e.g. custom documentation/review guidance). Deduped.
-    // A REGISTERED type's own `defaultFragmentIds` join that union: an operation's standing
-    // context (an org's API guidelines, its auth requirements) is part of the bundle, so every
-    // invocation carries it without per-task picking. Only the id SET freezes here: bodies
-    // live-resolve per run, so editing the guideline reaches tasks created before the edit.
-    const inheritedFragmentIds = input.fragmentIds ?? service?.serviceFragmentIds ?? []
-    const fragmentIds = [
-      ...new Set([
-        ...inheritedFragmentIds,
-        ...defaultFragmentIdsForTaskType(taskType),
-        ...(this.taskTypeRegistry?.get(taskType)?.defaultFragmentIds ?? []),
-      ]),
-    ]
+    // The best-practice fragments the task OWNS from creation: the create form's picks or the
+    // service's standing standards, unioned with the type's defaults and a registered operation's
+    // standing context. Derived by `taskTypeCreationDefaults.ts`, which owns the precedence rules
+    // and STATES a custom type this process does not register.
+    const fragmentIds = this.taskTypeDefaults.fragmentIdsFor({
+      taskType,
+      explicit: input.fragmentIds,
+      serviceFragmentIds: service?.serviceFragmentIds,
+    })
     if (fragmentIds.length) {
       block.fragmentIds = fragmentIds
     }
@@ -726,14 +724,11 @@ export class BoardService {
     // are treated as "not set" (workspace default preset / no pinned pipeline).
     if (input.riskPolicyId) block.riskPolicyId = input.riskPolicyId
     if (input.modelPresetId) block.modelPresetId = input.modelPresetId
-    // Pin the chosen pipeline, else fall back to the task type's default. A `document` task
-    // defaults to the document-authoring pipeline (`pl_document`) rather than the workspace's
-    // positional default (the full build pipeline), which makes no sense for a document — it
-    // produces no code and needs no spec/tests. Other task types get no type-default and fall
-    // through to the run-time picker's positional default.
+    // Pin the chosen pipeline, else fall back to the task type's own default (see
+    // `taskTypeCreationDefaults.ts`); absent, the run-time picker's positional default applies.
     if (input.pipelineId) block.pipelineId = input.pipelineId
     else {
-      const typeDefault = defaultPipelineIdForTaskType(taskType, this.taskTypeRegistry)
+      const typeDefault = this.taskTypeDefaults.pipelineIdFor(taskType)
       if (typeDefault) block.pipelineId = typeDefault
     }
     // Task-level agent-contributed config values (e.g. the Tester's environment),

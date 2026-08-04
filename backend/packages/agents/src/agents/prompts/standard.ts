@@ -367,12 +367,26 @@ export function initiativePresetSection(context: AgentRunContext): string {
  *
  * A field whose descriptor is gone renders under its raw key. The projection is
  * value-authoritative, and this must not second-guess it by hiding what it could not label.
+ *
+ * A MULTI-LINE value (a `textarea` field: the example operation's "anything else the design must
+ * honour") continues as an indented block under its label rather than inline, or its second line
+ * leaves the bullet list and its last one runs into the closing guidance below, reading as part of
+ * the platform's own instruction rather than as something the requester typed.
  */
 export function customTaskTypeSection(context: AgentRunContext): string {
   const custom = context.customTaskType
   if (!custom?.fields.length) return ''
   const lines = ['', `## Task parameters (${custom.label})`, '']
-  for (const field of custom.fields) lines.push(`- ${field.label ?? field.key}: ${field.value}`)
+  for (const field of custom.fields) {
+    const label = field.label ?? field.key
+    const valueLines = field.value.split('\n')
+    if (valueLines.length === 1) {
+      lines.push(`- ${label}: ${field.value}`)
+      continue
+    }
+    lines.push(`- ${label}:`)
+    for (const line of valueLines) lines.push(`  ${line}`)
+  }
   lines.push(
     '',
     'These are the values this task was created with. Treat them as the specifics of what to ' +

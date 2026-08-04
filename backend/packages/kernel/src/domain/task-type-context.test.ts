@@ -29,8 +29,40 @@ describe('describeCustomTaskType', () => {
   it('is absent when nothing was collected, so a prompt stays byte-identical', () => {
     expect(describeCustomTaskType('org:introduce-api', undefined, descriptor)).toBeUndefined()
     expect(describeCustomTaskType('org:introduce-api', {}, descriptor)).toBeUndefined()
-    // A bag holding only blanks says nothing either.
+    // A bag holding only blanks says nothing either — whitespace included, or the field would
+    // render as an empty-looking line claiming the requester answered it.
     expect(describeCustomTaskType('org:introduce-api', { entity: '' }, descriptor)).toBeUndefined()
+    expect(
+      describeCustomTaskType('org:introduce-api', { entity: '  \n ' }, descriptor),
+    ).toBeUndefined()
+    expect(describeCustomTaskType('org:introduce-api', { legacy: ' ' }, descriptor)).toBeUndefined()
+  })
+
+  it('keeps a zero, which is an answer rather than a blank', () => {
+    const context = describeCustomTaskType('org:introduce-api', { timeboxHours: 0 }, descriptor)
+    expect(context?.fields).toEqual([{ key: 'timeboxHours', value: '0' }])
+  })
+
+  it('trims a value, so a textarea’s trailing newline does not break the line format', () => {
+    const context = describeCustomTaskType(
+      'org:introduce-api',
+      { entity: '  Order  ', notes: 'Due Friday\n' },
+      descriptor,
+    )
+    expect(context?.fields).toEqual([
+      { key: 'entity', label: 'Entity', value: 'Order' },
+      { key: 'notes', label: 'Notes', value: 'Due Friday' },
+    ])
+  })
+
+  it('is absent for a BUILT-IN task type, whatever the bag holds', () => {
+    // Not drift: a custom type is namespaced by construction, so `feature` has no descriptor
+    // however current the build is. Rendering the raw id would head the section
+    // `## Task parameters (feature)` over keys nothing declared — an operation identity the model
+    // reads as a specification, where the raw-id fallback exists to name a WITHDRAWN one honestly.
+    expect(describeCustomTaskType('feature', { entity: 'Order' }, undefined)).toBeUndefined()
+    expect(describeCustomTaskType('bug', { foo: 'bar' }, undefined)).toBeUndefined()
+    expect(describeCustomTaskType('', { foo: 'bar' }, undefined)).toBeUndefined()
   })
 
   it('labels the values from the descriptor and renders an option caption', () => {

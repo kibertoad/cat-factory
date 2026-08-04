@@ -121,6 +121,15 @@ describe('AgentContextBuilder custom task-type parameters', () => {
     expect((await contextFor(task('bug', { severity: 'high' }))).customTaskType).toBeUndefined()
   })
 
+  it('is absent for a BUILT-IN type carrying a custom bag', async () => {
+    // `createTaskSchema.taskTypeFields` accepts the bag for any type (slice 2 owns the creation
+    // check), so this row is reachable. It is NOT drift: a built-in has no descriptor however
+    // current the build is, so the raw-id fallback would head the prompt section
+    // `## Task parameters (feature)` over keys nothing declared, inventing an operation.
+    const context = await contextFor(task('feature', { custom: { entity: 'Order' } }))
+    expect(context.customTaskType).toBeUndefined()
+  })
+
   it('still carries the bag when no registry is wired at all', async () => {
     const blocks = new Map<string, Block>([[FRAME.id, FRAME]])
     const block = task('org:introduce-api', { custom: { entity: 'Order' } })
