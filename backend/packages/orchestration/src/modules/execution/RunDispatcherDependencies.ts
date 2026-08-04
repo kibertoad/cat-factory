@@ -153,6 +153,7 @@ export interface RunDispatcherDeps {
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   /** Resolve a task's merge preset (stays on the engine, shared with the merge subgraph). */
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRiskPolicy>

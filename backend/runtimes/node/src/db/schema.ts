@@ -390,6 +390,10 @@ export const modelPresets = pgTable(
     is_default: integer('is_default').notNull().default(0),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
+    // The order this preset's runs prefer a model's routes in (JSON array of `ModelFlavor`,
+    // most preferred first). REORDERS, never filters: omitted routes are appended in the
+    // default order. NULL (or an empty array) -> the deployment's default order.
+    provider_preference: text('provider_preference'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [

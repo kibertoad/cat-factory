@@ -42,6 +42,7 @@ export interface AgentDispatchDeps {
   resolveProviderCapabilities?: (
     workspaceId: string,
     userId: string | null | undefined,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
   recordStepResult: (
@@ -323,6 +324,7 @@ export class AgentDispatchController {
           const caps = await this.deps.resolveProviderCapabilities(
             workspaceId,
             instance.initiatedBy,
+            block.modelPresetId,
           )
           if (!this.deps.modelIdIsMetered(modelId, caps)) return true
         } else if (parseLocalModelId(modelId)) {

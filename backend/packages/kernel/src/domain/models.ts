@@ -7,6 +7,7 @@ import {
   type OpenRouterModelMeta,
   type SubscriptionVendor,
   isLocalRunner,
+  orderedModelFlavorPreference,
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 import { providerCachesPrompts } from './cache-policy.js'
@@ -43,6 +44,17 @@ export const MODEL_FLAVORS = [
  * historical order so a Bedrock route changes nothing else about how a model resolves.
  */
 export const DEFAULT_PROVIDER_PREFERENCE: readonly ModelFlavor[] = MODEL_FLAVORS
+
+/**
+ * The full order a resolution walks, given a preset's own preference. Re-exported from
+ * `@cat-factory/contracts` rather than reimplemented, because the PRESET EDITOR renders the same
+ * fold: a second copy here would let the picker display an order the run does not take.
+ *
+ * A preference REORDERS, it never filters — see {@link orderedModelFlavorPreference} for why that
+ * is a total order over every route rather than the caller's list. A stored entry the current build
+ * no longer knows is filtered out at the persistence boundary (`isModelFlavor`).
+ */
+export const orderedProviderPreference = orderedModelFlavorPreference
 
 // How each subscription vendor authenticates and which harness runs it. Claude
 // Code is an Anthropic-API client that honours ANTHROPIC_BASE_URL +
@@ -801,6 +813,16 @@ export interface ProviderCapabilities {
    */
   bedrockModels?: Set<string>
   /**
+   * The order this resolution prefers a model's routes in, from the MODEL PRESET in force (its
+   * `providerPreference`). Absent/empty ⇒ {@link DEFAULT_PROVIDER_PREFERENCE}.
+   *
+   * It rides the capability set rather than a resolution parameter because every site that
+   * resolves a model already threads one, so a new call site cannot silently resolve under a
+   * different order than the one the picker displayed. It REORDERS and never filters: see
+   * {@link orderedProviderPreference}.
+   */
+  providerPreference?: readonly ModelFlavor[]
+  /**
    * The dynamic local-runner model ids (`"<provider>:<model>"`, e.g. `ollama:gemma3`) the
    * resolving USER has enabled. A local model needs no pooled key — the user's configured
    * endpoint carries the (optional) key — so usability is gated on the SPECIFIC model
@@ -958,16 +980,18 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
  * {@link isModelUsable}, and the start guard gates actual use).
  *
  * Both walks follow the SAME order, or an unconfigured deployment would show one route in
- * the picker and run another. A dual-mode model's subscription flavour ("subscriptions win")
- * is still preferred per-workspace by the executor + frontend rather than here; see
- * {@link DEFAULT_PROVIDER_PREFERENCE}.
+ * the picker and run another. That order is the preset's own {@link ProviderCapabilities.providerPreference}
+ * when one is in force, else {@link DEFAULT_PROVIDER_PREFERENCE}. A dual-mode model's subscription
+ * flavour ("subscriptions win") is still preferred per-workspace by the executor + frontend rather
+ * than here; see {@link DEFAULT_PROVIDER_PREFERENCE}.
  */
 function effectiveVariant(model: SelectableModel, caps: ProviderCapabilities): EffectiveVariant {
+  const order = orderedProviderPreference(caps.providerPreference)
   for (const eligible of [
     (h: FlavorHandler) => h.usable(model, caps),
     (h: FlavorHandler) => h.declared(model),
   ]) {
-    for (const flavor of DEFAULT_PROVIDER_PREFERENCE) {
+    for (const flavor of order) {
       const handler = FLAVOR_HANDLERS[flavor]
       if (eligible(handler)) return handler.build(model, caps)
     }

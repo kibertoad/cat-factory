@@ -11,6 +11,7 @@
 import {
   type AgentContextRecorder,
   type AgentExecutor,
+  type AppCaches,
   type Clock,
   type ExecutionEventPublisher,
   type ProvisioningSubsystem,
@@ -94,6 +95,13 @@ export interface WorkerExecutorDeps {
   config: AppConfig
   db: D1Database
   clock: Clock
+  /**
+   * The app cache bag, threaded so the executors' preset reads go through the same
+   * `modelPreset` slice the engine and the start guard use. Pass-through on the Worker's
+   * isolate-safe profile, so it changes nothing here today — wired anyway because the Node
+   * facade wires it and a slice only one facade knows about is how the two drift.
+   */
+  caches?: AppCaches
   resolveTransport: ResolveRunnerTransport | null
   agentKindRegistry: AgentKindRegistry
   subscriptions?: ProviderSubscriptionService
@@ -158,7 +166,7 @@ export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
     // Inline (non-sandbox) kinds honour the workspace's per-kind defaults too, so
     // the resolution precedence is uniform across every agent kind, not just the
     // container kinds.
-    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
@@ -185,6 +193,18 @@ function isTruthy(value: string | undefined): boolean {
   return value === 'true' || value === '1' || value === 'yes'
 }
 
+/** What {@link maybeWrapConsensus} needs: the executor to wrap plus the infra it resolves through. */
+export interface ConsensusWrapDeps {
+  standard: AgentExecutor
+  env: Env
+  config: AppConfig
+  db: D1Database
+  eventPublisher: ExecutionEventPublisher | undefined
+  agentKindRegistry: AgentKindRegistry
+  /** The app cache bag, so the panel's preset reads share the engine's `modelPreset` slice. */
+  caches?: AppCaches
+}
+
 /**
  * Wrap the standard executor with the optional consensus mechanism when
  * `CONSENSUS_ENABLED` is set: register the consensus capability traits (so the builder
@@ -192,14 +212,8 @@ function isTruthy(value: string | undefined): boolean {
  * a multi-model process, persisting + pushing the transcript. Off ⇒ returns `standard`
  * unchanged (no traits, no wrapping), so behaviour is identical to before.
  */
-export function maybeWrapConsensus(
-  standard: AgentExecutor,
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  eventPublisher: ExecutionEventPublisher | undefined,
-  agentKindRegistry: AgentKindRegistry,
-): AgentExecutor {
+export function maybeWrapConsensus(deps: ConsensusWrapDeps): AgentExecutor {
+  const { standard, env, config, db, eventPublisher, agentKindRegistry } = deps
   if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
   registerConsensusTraits(agentKindRegistry)
   return new ConsensusAgentExecutor({
@@ -207,7 +221,7 @@ export function maybeWrapConsensus(
     modelProviderResolver: buildModelProviderResolver(env, db),
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
-    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
     sessionRepository: new D1ConsensusSessionRepository({ db }),
     ...(eventPublisher ? { eventPublisher } : {}),
     agentKindRegistry,
@@ -443,7 +457,7 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     resolveBlockModel: config.agents.resolveBlockModel,
     // The workspace's per-agent-kind default model, consulted when a block pins none
     // (block-pinned > workspace per-kind default > env routing > env default).
-    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
+    resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
     resolveRepoTarget,
     // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
     // change out across the task's own repo + each connected involved-service repo.

@@ -1,6 +1,7 @@
 import type {
   GitHubRepo,
   ModelFamilyPolicy,
+  ModelPreset,
   RiskPolicy,
   WorkspaceSettings,
 } from '../domain/types.js'
@@ -269,6 +270,24 @@ export interface AppCaches {
    */
   riskPolicy: GroupCacheHandle<RiskPolicyCacheValue>
   /**
+   * A block's resolved MODEL preset (`modelPresetRepository.get(id)` for a task's selected preset,
+   * else `getDefault`), grouped by workspace id and keyed by the resolved id (`picked:<id>` /
+   * `default`) — the exact shape of {@link AppCaches.riskPolicy} one row over, and for the same
+   * reason: the row is slow-moving admin config that the run path re-reads constantly. Every
+   * dispatch reads it for the step's model AND the preset's route order, every INLINE call reads
+   * it again, and the start guard reads it once per capability resolution (twice per start, since
+   * the usable-model gate and the budget gate each resolve their own).
+   *
+   * Wrapped ({@link ModelPresetCacheValue}) so a selected-preset miss (a deleted id falling through
+   * to the default) or an unseeded workspace's null default caches as a value rather than a
+   * re-loaded null. Coherence is invalidation-driven: every `ModelPresetService` write
+   * (create/update/remove/reseed + the lazy first-use seed) drops the workspace group after the
+   * write commits, so a preset edit — a re-pointed model or a re-ordered route list — is visible on
+   * the very next dispatch. Pass-through on the Worker's isolate-safe profile (our own mutable D1
+   * state, no cross-isolate bus), so it caches only on the Node/local facades.
+   */
+  modelPreset: GroupCacheHandle<ModelPresetCacheValue>
+  /**
    * The signed-in caller's resolved workspace-RBAC access to one board (workspace-rbac
    * initiative), grouped by workspace id and keyed by user id — the three-read resolution
    * (`accessRowOf` + account roles + the member row) the shared auth gate runs on EVERY
@@ -311,6 +330,15 @@ export interface BudgetLimitCacheValue {
  */
 export interface RiskPolicyCacheValue {
   policy: RiskPolicy | null
+}
+
+/**
+ * Cache-friendly wrapper for a model-preset read (`null` ⇒ the preset id doesn't resolve — a
+ * deleted selected id or an unseeded workspace's absent default — so the caller falls through,
+ * exactly as an uncached read would).
+ */
+export interface ModelPresetCacheValue {
+  preset: ModelPreset | null
 }
 
 /**

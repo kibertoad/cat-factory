@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { modelFlavorSchema } from '@cat-factory/contracts'
+import { isModelFlavor, modelFlavorSchema } from '@cat-factory/contracts'
 import {
   DEFAULT_PROVIDER_PREFERENCE,
   MODEL_CATALOG,
   MODEL_FLAVORS,
   contextWindowFor,
   effectiveCatalog,
+  effectiveCatalogWith,
   isModelUsable,
+  orderedProviderPreference,
   resolveBedrockModelId,
   resolveModelRef,
   type ProviderCapabilities,
@@ -51,6 +53,94 @@ describe('the flavour vocabulary', () => {
     expect(order('bedrock')).toBeLessThan(order('openrouter'))
     // Cloudflare stays the always-available floor, below every route a key/account unlocks.
     expect(order('openrouter')).toBeLessThan(order('cloudflare'))
+  })
+
+  it('narrows a stored value through a predicate derived from the picklist', () => {
+    for (const flavor of modelFlavorSchema.options) expect(isModelFlavor(flavor)).toBe(true)
+    // A preference row persisted before a route was retired: the reader must not hand the value
+    // to a `Record<ModelFlavor, …>` lookup.
+    expect(isModelFlavor('vertex')).toBe(false)
+    expect(isModelFlavor('')).toBe(false)
+  })
+})
+
+describe('orderedProviderPreference', () => {
+  it('is the default order when the preset states none', () => {
+    expect(orderedProviderPreference()).toEqual(DEFAULT_PROVIDER_PREFERENCE)
+    expect(orderedProviderPreference([])).toEqual(DEFAULT_PROVIDER_PREFERENCE)
+  })
+
+  it('REORDERS rather than filters: an omitted route is appended, never dropped', () => {
+    const order = orderedProviderPreference(['bedrock', 'subscription'])
+    expect(order.slice(0, 2)).toEqual(['bedrock', 'subscription'])
+    // Every route still appears exactly once, so a model whose only route the preset omitted is
+    // merely less preferred rather than unresolvable.
+    expect([...order].sort()).toEqual([...MODEL_FLAVORS].sort())
+  })
+
+  it('keeps the omitted routes in default order relative to each other', () => {
+    expect(orderedProviderPreference(['cloudflare'])).toEqual([
+      'cloudflare',
+      ...DEFAULT_PROVIDER_PREFERENCE.filter((f) => f !== 'cloudflare'),
+    ])
+  })
+
+  it('keeps a repeat at its FIRST position (the write boundary refuses one)', () => {
+    expect(orderedProviderPreference(['openrouter', 'direct', 'openrouter']).slice(0, 2)).toEqual([
+      'openrouter',
+      'direct',
+    ])
+  })
+})
+
+describe('a preset preference changing which route a model resolves to', () => {
+  it('lifts Bedrock over a configured direct key when the preset says so', () => {
+    // Synthesised rather than found in the catalog: no entry declares both routes today (Bedrock
+    // lags every vendor we hold a direct key for), and the point under test is the ORDER, not the
+    // catalog. Same reason the direct-beats-bedrock case above loops over an empty set.
+    const dual: SelectableModel = {
+      id: 'test-dual',
+      label: 'Dual',
+      description: 'Declares both a direct and a bedrock route.',
+      direct: {
+        ref: { provider: 'openai', model: 'gpt-test' },
+        keyEnv: '',
+        providerLabel: 'OpenAI',
+      },
+      bedrock: { baseModelId: 'openai.gpt-test' },
+    }
+    const base = {
+      directProviders: new Set(['openai']),
+      bedrockModels: new Set(['eu.openai.gpt-test']),
+    }
+    const routeOf = (over: Partial<ProviderCapabilities>) =>
+      effectiveCatalogWith([dual], caps({ ...base, ...over })).find((o) => o.id === dual.id)!
+    expect(routeOf({}).flavor).toBe('direct')
+    const preferred = routeOf({ providerPreference: ['bedrock'] })
+    expect(preferred.flavor).toBe('bedrock')
+    // The operator's Region-correct id, not the catalog base: the preference changed the ROUTE,
+    // and Bedrock's own allow-list resolution still decides what that route calls.
+    expect(preferred.model).toBe('eu.openai.gpt-test')
+    expect(preferred.providerLabel).toBe('AWS Bedrock')
+    // `available` is deliberately not asserted: it comes from `isModelUsable`, which resolves an
+    // id against the STATIC catalog, so any synthesised entry reads as unavailable regardless of
+    // the order. Selectability under a preference is covered on real catalog entries below.
+  })
+
+  it('falls through to a route the preference omitted rather than failing to resolve', () => {
+    const cloudflareOnly = MODEL_CATALOG.find((m) => m.cloudflare && !m.bedrock)
+    expect(cloudflareOnly, 'the catalog must carry a Cloudflare-only entry').toBeDefined()
+    const ref = resolveModelRef(
+      cloudflareOnly!.id,
+      caps({ cloudflareEnabled: true, providerPreference: ['bedrock', 'direct'] }),
+    )
+    expect(ref?.provider).toBe(cloudflareOnly!.cloudflare!.provider)
+  })
+
+  it('does not change WHETHER a model is usable, only which route it takes', () => {
+    const cloudflareOnly = MODEL_CATALOG.find((m) => m.cloudflare && !m.bedrock)!
+    const c = caps({ cloudflareEnabled: true, providerPreference: ['bedrock'] })
+    expect(isModelUsable(cloudflareOnly.id, c)).toBe(true)
   })
 })
 

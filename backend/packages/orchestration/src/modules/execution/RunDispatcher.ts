@@ -169,6 +169,7 @@ export class RunDispatcher {
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   private readonly resolveRiskPolicy: (
     workspaceId: string,

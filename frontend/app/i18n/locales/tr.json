@@ -2330,7 +2330,8 @@
         "deleteTitle": "Hazır ayarı sil",
         "basePrefix": "Temel:",
         "overrideCount": "{count} geçersiz kılma | {count} geçersiz kılma",
-        "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun."
+        "empty": "Henüz hazır ayar yok. Modelleri ajanlarınıza eşlemek için bir tane oluşturun.",
+        "customRouteOrder": "özel rota sırası"
       },
       "editor": {
         "useBaseModel": "Temel modeli kullan",
@@ -2355,6 +2356,30 @@
       "confirmDelete": {
         "title": "Bu model ön ayarı silinsin mi?",
         "body": "\"{name}\" kaldırılacak. Onu kullanan görevler çalışma alanı varsayılanına döner."
+      },
+      "routes": {
+        "direct": "Modelin kendi sağlayıcı API'si",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter geçidi",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abonelik (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Bu sağlayıcı için bir API anahtarı gerekir.",
+        "bedrock": "AWS bölgenizde, hesabınızın izin verdiği modellerle çalışır.",
+        "openrouter": "Tek anahtar, çok sağlayıcı, kâr payıyla yeniden satılır.",
+        "cloudflare": "Her zaman kullanılabilir, istem önbelleği yok.",
+        "subscription": "Bağlı bir planda sabit ücretli kota."
+      },
+      "routeOrder": {
+        "label": "Rota sırası",
+        "defaultHint": "Bu hazır ayar dağıtımın varsayılanını izler. Bir rotayı tercih etmek için yukarı taşıyın.",
+        "customHint": "Bu hazır ayar rotaları bu sırayla tercih eder. Yalnızca daha alt bir rotadan erişilebilen bir model yine çalışır, sadece daha sonra denenir.",
+        "reset": "Varsayılan sırayı kullan",
+        "moveUp": "Bu rotayı daha çok tercih et",
+        "moveDown": "Bu rotayı daha az tercih et",
+        "subscriptionOverrideHint": "Bağlı bir abonelik, abonelik sunan modellerde hâlâ önceliklidir: motor bu sıralamadan bağımsız olarak onları plana yönlendirir. Abonelik girdisinin altındaki rotalar diğer tüm modeller için geçerlidir.",
+        "badgesUseDefaultPresetHint": "Yukarıda her modelin yanında gösterilen rota, bu ön ayarın değil, çalışma alanının varsayılan ön ayarının rotasıdır."
       }
     },
     "account": {
@@ -5814,7 +5839,7 @@
       "newDescription": "Yeni yerleşik model ön ayarları geldi. Bu panonun kütüphanesine ekleyin.",
       "add": "Ekle",
       "updatesHeading": "Güncellemeler mevcut",
-      "updatesDescription": "Bu yerleşik model ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "updatesDescription": "Bu yerleşik model ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın: varsayılan ve sıralama korunur, ancak ön ayardaki özel rota sırası temizlenir.",
       "versionAvailable": "Sürüm {from} → {to} mevcut.",
       "reseed": "Yeniden tohumla",
       "reseedAll": "Tümünü güncelle ({count})",
