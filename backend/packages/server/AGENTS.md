@@ -22,8 +22,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   on the surface shares (`GET /jobs`, `GET /services/:id/tasks`, every `/api/v1/debug/*` list) plus the coarse-status
   projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
   definition of a run's sort key so a cursor can never name a different value than the query
-  orders by). See
-  `docs/initiatives/headless-clarification-loop.md` and
+  orders by). Two collaborators own the create's ORDERING, which is the whole design and does not
+  read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
+  ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
+  (attach the requirements documents a task is built against, imported from a connected source or
+  uploaded whole, with the task rolled back if an attachment does not land). See
+  `docs/initiatives/headless-clarification-loop.md`,
+  `docs/initiatives/public-api-additions.md` and
   `backend/docs/adr/0030-public-api-surface.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their

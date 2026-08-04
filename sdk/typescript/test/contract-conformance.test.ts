@@ -74,6 +74,18 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicTaskTicketSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicTaskSourceDocument,
+  v.InferOutput<typeof contracts.publicTaskSourceDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskUploadedDocument,
+  v.InferOutput<typeof contracts.publicTaskUploadedDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskDocument,
+  v.InferOutput<typeof contracts.publicTaskDocumentSchema>
+>()
+expectMutuallyAssignable<
   sdk.StartPublicTask,
   v.InferOutput<typeof contracts.startPublicTaskSchema>
 >()
@@ -91,6 +103,18 @@ expectMutuallyAssignable<sdk.Notification, v.InferOutput<typeof contracts.notifi
 expectMutuallyAssignable<
   sdk.PublicNotificationList,
   v.InferOutput<typeof contracts.publicNotificationListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.NotificationWebhook,
+  v.InferOutput<typeof contracts.notificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicNotificationWebhook,
+  v.InferOutput<typeof contracts.publicNotificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PutNotificationWebhook,
+  v.InferOutput<typeof contracts.putNotificationWebhookSchema>
 >()
 expectMutuallyAssignable<sdk.PublicUsageRow, v.InferOutput<typeof contracts.publicUsageRowSchema>>()
 expectMutuallyAssignable<
@@ -155,6 +179,9 @@ const ASSERTED_COMPONENTS = [
   'PublicTask',
   'PublicTaskList',
   'PublicTaskTicket',
+  'PublicTaskSourceDocument',
+  'PublicTaskUploadedDocument',
+  'PublicTaskDocument',
   'CreatePublicTask',
   'StartPublicTask',
   'UpdatePublicTask',
@@ -163,6 +190,9 @@ const ASSERTED_COMPONENTS = [
   'PublicPipelineList',
   'Notification',
   'PublicNotificationList',
+  'NotificationWebhook',
+  'PublicNotificationWebhook',
+  'PutNotificationWebhook',
   'PublicUsageRow',
   'PublicUsageBudget',
   'PublicUsage',

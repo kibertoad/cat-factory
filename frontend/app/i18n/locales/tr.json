@@ -189,6 +189,7 @@
       "title": "Görev ekle",
       "newTaskIn": "{container} içinde yeni görev",
       "typeLabel": "Tür",
+      "typeOther": "Diğer",
       "types": {
         "feature": "Özellik",
         "bug": "Hata",
@@ -576,6 +577,7 @@
         "input_gate_not_parked": "Yanıtlanacak bir şey yok",
         "input_gate_parked": "Görevin girdi kontrolünden yanıtlayın",
         "ticket_already_linked": "Bu kayda ait bir görev zaten var",
+        "document_already_linked": "Belge zaten ekli",
         "dry_run_not_mergeable": "Prova çalışması birleştirilemez"
       },
       "description": {
@@ -612,6 +614,7 @@
         "input_gate_not_parked": "Bu çalışma artık giriş denetimini beklemiyor. Biri onu yanıtlamış ya da çalışma ilerlemiş olabilir.",
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
         "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
+        "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
         "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "action": {
@@ -4059,7 +4062,8 @@
       "connectSourceNamed": "{source} bağla",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
       "emptyInitiative": "Planlama ajanlarının bu girişimin planını hazırlarken okuyabilmesi için bir gereksinim, RFC veya PRD ekle.",
-      "attached": "Belge eklendi"
+      "attached": "Belge eklendi",
+      "uploadedHint": "API üzerinden yüklendiği için açılacak bir kaynak sayfa yok."
     },
     "templates": {
       "title": "Belge şablonları ve örnekleri",

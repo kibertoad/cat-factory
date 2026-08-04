@@ -161,4 +161,49 @@ test.describe('consumer extension (dogfood)', () => {
     await expect(badge).toHaveAttribute('data-task-type-badge', 'acme:incident')
     await expect(badge).toHaveAttribute('title', 'Incident')
   })
+
+  // Reusable-operations slice 3: the create-task picker GROUPS the deployment's registered types
+  // under their declared `presentation.category` instead of flattening them into the built-in row.
+  // The layout rule itself is unit-tested (`utils/taskTypePicker.spec.ts`); what only the assembled
+  // product can show is that the rendered picker actually nests — a template regression that put
+  // every choice back in one row, or dropped the caption, would leave those unit tests green.
+  test('the create-task picker groups a registered type under its category caption', async ({
+    page,
+    seededBoard,
+  }) => {
+    expect(seededBoard.workspaceId, 'board seeded').toBeTruthy()
+
+    // Open the modal from the Auth Service frame's header button (the create-task.spec path).
+    await taskCard(page, 'blk_auth').getByTestId('frame-add-task').first().click()
+    const modal = page.getByTestId('add-task-modal')
+    await expect(modal).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // The consumer type's button sits in a row of its OWN, captioned with the category the module
+    // declared. Asserting through the row (rather than on the caption testid, which repeats per
+    // row) is what proves the nesting: a flattened picker puts this button in the built-in row,
+    // which has no caption at all.
+    //
+    // The `has:` locator is built off `page`, never off `modal`: Playwright queries an inner
+    // locator's WHOLE selector chain starting at each outer candidate, so a modal-rooted one
+    // looks for an `add-task-modal` INSIDE each row, matches nothing, and the filter silently
+    // empties (the same rule the `inspector-section` filter above already follows).
+    const incidentRow = modal
+      .getByTestId('task-type-row')
+      .filter({ has: page.getByTestId('task-type-acme:incident') })
+    await expect(incidentRow).toHaveAttribute('data-task-type-row', 'category:incident response')
+    await expect(incidentRow.getByTestId('task-type-category')).toHaveText('Incident response')
+
+    // The built-in choices stay first and stay uncaptioned: the everyday loop is where it was.
+    const builtInRow = modal.locator('[data-task-type-row="built-in"]')
+    await expect(builtInRow.getByTestId('task-type-feature')).toBeVisible()
+    await expect(builtInRow.getByTestId('task-type-category')).toHaveCount(0)
+
+    // Picking the type renders its `presentation.description` verbatim, in the field's help slot:
+    // the half a touch device can reach (the per-button `title` covers the hover half).
+    await expect(modal.getByTestId('task-type-description')).toHaveCount(0)
+    await modal.getByTestId('task-type-acme:incident').click()
+    await expect(modal.getByTestId('task-type-description')).toHaveText(
+      'A production incident to triage and resolve.',
+    )
+  })
 })

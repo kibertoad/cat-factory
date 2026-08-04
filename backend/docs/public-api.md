@@ -58,12 +58,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                           |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park. |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                 |
+| Scope    | Adds                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).                            |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), and manage the [outbound webhook](#outbound-webhook-push). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -122,6 +122,7 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                  |
   | `no_review`                      | 404     | requirements decision routes: the run has no live requirements review                                        |
   | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
+  | `document_already_linked`        | 409     | task create: a named document is already attached to another live task (`details.taskId` names it)           |
 
 ### Pagination
 
@@ -288,17 +289,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                 |
-| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                            |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                         |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                 |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                  |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                          |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                             |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                          |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                              |
+| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                  |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                               |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                       |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                        |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                    |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -365,6 +366,75 @@ ticket taken (the write had landed) or files cleanly (it had not).
 
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
+
+#### Attaching requirements documents
+
+A task's `description` is capped at 2,000 characters because it is the task's own framing, echoed
+into every prompt. A specification is not that, and there was previously nowhere on this surface to
+put one: the 50,000-character `POST /jobs` brief drives inline pipelines that never touch a
+repository, and the app's own "attach a document" flow is session-authed. `documents` closes that
+gap. Each entry is attached to the new task as context, and the full text is what agents receive:
+materialised into the run's checkout under `.cat-context/` for a container agent to open, folded
+into the prompt for an inline one.
+
+Two forms, differing only in where the text comes from:
+
+```http
+POST /api/v1/services/svc_api/tasks
+{ "title": "Split payments at checkout",
+  "description": "From the payments squad.",
+  "documents": [
+    { "kind": "source", "source": "confluence", "ref": "https://acme.atlassian.net/wiki/spaces/ENG/pages/4242" },
+    { "kind": "upload", "title": "Checkout PRD", "content": "# Checkout PRD\n\n## Goal\n…" }
+  ] }
+```
+
+- **`kind: "source"`** NAMES a page in a document source this workspace has connected
+  (`confluence`, `notion`, `github`, `figma`, `zeplin`, `linear`). `ref` is the page's id or its
+  full URL, the same grammar the app's own import takes. The platform fetches and projects it, so
+  the page stays the source of truth and a later re-import picks up edits. The GitHub docs source
+  needs no separate connect step: it rides the workspace's installed App, so
+  `{ "source": "github", "ref": "acme/api:docs/checkout-prd.md" }` works wherever the App does.
+  A page the source serves but which turns out to be BLANK (a permission-limited Confluence page,
+  an empty Notion page) is not caught here: the create succeeds and the run's first step refuses
+  with `details.reason: "context_document_unreadable"`, naming the page.
+- **`kind: "upload"`** CARRIES the text (Markdown, up to 100,000 characters). For a caller that
+  generated the spec, holds it in a file, or whose deployment has connected no document source at
+  all. There is no page behind it, so nothing re-fetches it and it shows in the app with no source
+  link: the bytes you send are what every agent on the run reads.
+
+At most 10 documents per create, in the order agents should read them.
+
+Four refusals matter:
+
+- **Everything is resolved before the task is created.** An unconfigured source, a ref the provider
+  cannot parse, a page it will not serve, or an upload with no readable text refuses the whole
+  request and leaves the board untouched. The other order hands you a `201` for a task you believe
+  carries its spec, running on its title alone.
+- **An upload with no readable text is refused** (`422`) rather than stored. A body that renders to
+  nothing would reach the agent as an empty attachment, so it is caught while you still hold the
+  bytes and can fix them, rather than costing you the first step of a run.
+- **One task per document.** A document already attached to another live task comes back `409` with
+  `details.reason: "document_already_linked"` and `details.taskId` naming the task that holds it.
+  A document carries a single attachment, so a second attach would MOVE it: the earlier task would
+  lose a document it was created with, and nothing in its next run would say so. Attach a separate
+  copy (upload the text again), or detach it from the other task first. A link naming a task that
+  has since been deleted is not a holder, so a deleted task never strands its documents.
+- **A `201` means the task carries every document you named.** If an attachment fails to land after
+  the task is created, the task is taken back off the board and you get the error, so your retry
+  files it once and whole.
+
+A refused request leaves nothing behind to clean up: pages resolve onto the same row every time
+(they are keyed by their ref), and uploads are stored only once the whole list has resolved, so
+retrying in a loop cannot fill the workspace with copies of a spec that was never attached.
+
+The per-document cap bounds one attachment; the whole attached corpus (documents plus any linked
+tracker issues) is bounded by the run's materialised-context budget of ~256 KB. Overflowing it
+refuses the run's first dispatch with `details.reason: "context_documents_over_budget"`, naming
+what did not fit.
+
+Documents attached this way are ordinary workspace documents: they appear in the app alongside
+imported pages, and a human can detach or re-attach them there.
 
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
@@ -494,6 +564,12 @@ overview with precomputed signals, and budgeted drill-downs into model calls, ag
 searches, the agents' TOOL CALLS (what they actually did, in order) and provisioning logs. Same
 keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
+### Outbound webhook management
+
+`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
+pushes to, read what is registered, or unregister. Documented with the delivery contract it
+configures, in [Outbound webhook](#outbound-webhook-push) below.
+
 ## Outbound webhook (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
@@ -509,12 +585,13 @@ endpoint and subscribe it to any of three delivery families:
 
 ### Register the endpoint
 
-Session-authed, `integrations.manage` (workspace admin); there is deliberately no SPA panel and no
-`/api/v1` management route yet (tracked as slice C1 in the
-[additions tracker](../../docs/initiatives/public-api-additions.md)):
+`admin` scope. Enrolment is part of the API, so an integration installs its own receiver rather than
+asking someone to open a browser (there is deliberately no SPA panel; the session-authed
+`GET|PUT|DELETE $BASE/workspaces/$WS/notification-webhook`, behind `integrations.manage`, remains and
+drives the same service):
 
 ```sh
-curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: application/json' \
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
   -d '{
     "url": "https://hooks.example.com/cat-factory",
     "secret": "<16-200 chars, used to sign deliveries>",
@@ -523,12 +600,34 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
     "alertEvents": ["platform_health.firing", "platform_health.resolved"],
     "enabled": true
   }' \
-  "$BASE/workspaces/$WS/notification-webhook"
+  "$BASE/api/v1/notification-webhook"
 ```
 
+| Route                                 | Scope   | Notes                                                          |
+| ------------------------------------- | ------- | -------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
+| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
+| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
-at rest, never readable back. Omitting `secret` on a later `PUT` keeps the stored one, supplying it
-rotates. `DELETE` unregisters (idempotent, `204`).
+at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
+stored one, so a leaked key cannot be used to forge deliveries your receiver would verify. `DELETE`
+unregisters (idempotent, `204`).
+
+**`PUT` is keep-on-omit in every field**, `url` included: a body states what changes and leaves the
+rest alone, so subscribing an existing endpoint to a new family is a one-field call.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{"alertEvents": ["platform_health.firing"]}' "$BASE/api/v1/notification-webhook"
+```
+
+`url` is required only on the **first** `PUT`, when there is nothing registered to keep; a body that
+names none against an empty workspace is refused with `details.reason: "webhook_url_required"`. The
+uniformity is a safety property, not a convenience: a mandatory re-send would make every routine
+edit carry an endpoint the caller did not mean to change, and a client re-sending a `url` it cached
+before someone else rotated the receiver would quietly redirect every future delivery back to the
+old one while appearing to add a subscription.
 
 Three filters, and the first has the **opposite** empty semantics to the other two. All three are
 deliberate:

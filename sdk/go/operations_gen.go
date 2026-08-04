@@ -493,7 +493,10 @@ type TasksService struct {
 
 // Create create a task under a service
 // Create a task inside a service frame the key’s workspace owns. The task starts in the `planned`
-// state; start it with the start endpoint.
+// state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or
+// attach the requirements documents it is to be built against (named in a connected document
+// source, or uploaded inline): the only way to get spec-sized input onto a repository-touching
+// run.
 // POST /api/v1/services/{serviceId}/tasks (operation createPublicTask).
 func (s *TasksService) Create(ctx context.Context, serviceID string, body CreatePublicTask) (*PublicTask, error) {
 	req := requestSpec{
@@ -754,6 +757,61 @@ func (s *NotificationsService) List(ctx context.Context) (*PublicNotificationLis
 		Path:   "/api/v1/notifications",
 	}
 	var out PublicNotificationList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// WebhookService the workspace's one outbound endpoint: register, inspect or remove the receiver that
+// notifications, run-lifecycle events and health alerts are pushed to.
+type WebhookService struct {
+	client *Client
+}
+
+// Delete remove the outbound webhook
+// Deregister the endpoint; deliveries stop. Idempotent.
+// DELETE /api/v1/notification-webhook (operation deletePublicNotificationWebhook).
+func (s *WebhookService) Delete(ctx context.Context) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   "/api/v1/notification-webhook",
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
+// Get read the workspace's outbound webhook
+// The endpoint this workspace delivers notifications, run-lifecycle events and platform-health
+// alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never
+// returned; `hasSecret` reports only whether one is set.
+// GET /api/v1/notification-webhook (operation getPublicNotificationWebhook).
+func (s *WebhookService) Get(ctx context.Context) (*PublicNotificationWebhook, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/notification-webhook",
+	}
+	var out PublicNotificationWebhook
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Set register or update the outbound webhook
+// Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered.
+// Every omitted field keeps its stored value, so subscribing to run events is a one-field call
+// that re-sends neither the URL nor the secret. `url` is required only on the first call, when
+// there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying
+// `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be
+// `https:` and publicly routable unless the deployment widened its allow-list.
+// PUT /api/v1/notification-webhook (operation putPublicNotificationWebhook).
+func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (*NotificationWebhook, error) {
+	req := requestSpec{
+		Method: "PUT",
+		Path:   "/api/v1/notification-webhook",
+		Body:   body,
+	}
+	var out NotificationWebhook
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

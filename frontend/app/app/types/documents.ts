@@ -10,6 +10,7 @@
 
 export type {
   DocumentSourceKind,
+  DocumentOrigin,
   DocumentLinkRole,
   CredentialField,
   DocumentSourceDescriptor,

@@ -324,13 +324,17 @@ export class DrizzleTaskRepository implements TaskRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null> {
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
     const rows = await this.db
       .select()
       .from(tasks)
       .where(
         and(
           eq(tasks.workspace_id, workspaceId),
-          inArray(tasks.url, urlMatchCandidates(url)),
+          inArray(tasks.url, candidates),
           isNull(tasks.deleted_at),
         ),
       )

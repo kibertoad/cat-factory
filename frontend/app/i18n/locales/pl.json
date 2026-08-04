@@ -189,6 +189,7 @@
       "title": "Dodaj zadanie",
       "newTaskIn": "Nowe zadanie w {container}",
       "typeLabel": "Typ",
+      "typeOther": "Inne",
       "types": {
         "feature": "Funkcja",
         "bug": "Błąd",
@@ -576,6 +577,7 @@
         "input_gate_not_parked": "Nie ma na co odpowiadać",
         "input_gate_parked": "Odpowiedz w kontroli danych wejściowych zadania",
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
+        "document_already_linked": "Dokument jest już załączony",
         "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić"
       },
       "description": {
@@ -612,6 +614,7 @@
         "input_gate_not_parked": "Ten przebieg nie czeka już na kontrolę danych wejściowych. Ktoś mógł już na nią odpowiedzieć albo przebieg poszedł dalej.",
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
+        "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
         "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
       "action": {
@@ -4059,7 +4062,8 @@
       "connectSourceNamed": "Połącz {source}",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "emptyInitiative": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci planowania przeczytali je podczas tworzenia planu tej inicjatywy.",
-      "attached": "Dokument dołączony"
+      "attached": "Dokument dołączony",
+      "uploadedHint": "Przesłano przez API, więc nie ma strony źródłowej do otwarcia."
     },
     "templates": {
       "title": "Szablony i przykłady dokumentów",

@@ -497,6 +497,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     listByWorkspace: 'pending',
     linkBlock: 'pending',
+    // The batched siblings of the link write above, and the block-delete cascade's detach. They
+    // join `linkBlock` on the same surface rather than opening a new gap: all three are the
+    // document-link WRITE path, which is mothership-internal until the documents management
+    // slice proxies it. (`listByRefs`, the batched READ they pair with, IS allow-listed — the
+    // point read `get` already was.)
+    linkBlockMany: 'pending',
+    detachBlocks: 'pending',
     // WS1 role-link management surface (controller-driven, not the agent run path — the run-path
     // reads `getRoleLink`/`listRoleLinks` ARE allow-listed). Mothership-internal until a slice
     // proxies the documents management surface.

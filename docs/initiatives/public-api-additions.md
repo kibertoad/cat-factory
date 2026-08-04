@@ -1,8 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** investigation complete; A0 landed, the start-path scope question settled by
-[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–C2 not started · **Owner:**
-core · **Started:** 2026-08-02
+**Status:** investigation complete; A0, D1, D2 and C1 landed, the start-path scope question settled
+by [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–B2 and C2 not started ·
+**Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -211,13 +211,40 @@ scope work above, since A1–A4 make scope more load-bearing.
 ADR 0030 already calls this "trivial once wanted: the spec already ships as a repo file, so an
 endpoint is only packaging". It becomes materially more useful once A1–A4 widen the surface.
 
-### C1: Notification-webhook management under `/api/v1` ⬜
+### C1: Notification-webhook management under `/api/v1` ✅
 
-Managed today only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
-behind `integrations.manage`, and there is deliberately no SPA panel. A deployment whose operator is
-headless therefore has NO route to register the receiver that the run-lifecycle push exists to feed.
-`admin` scope; the sealed signing secret must stay write-only (never readable back), and the
-`runEvents` selector rides it.
+Was managed only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
+behind `integrations.manage`, with deliberately no SPA panel, so a deployment whose operator is
+headless had NO route to register the receiver that the run-lifecycle push exists to feed: the
+delivery contract was headless and its enrolment was not.
+
+`GET|PUT|DELETE /api/v1/notification-webhook` now serve the same three verbs at `admin` scope,
+delegating to the same `NotificationWebhookService` the session controller calls (so the SSRF guard,
+the keep-on-omit rule per field and the one-row-per-workspace invariant cannot differ by surface).
+The session routes stay: an operator with a browser keeps the surface they had.
+
+Three decisions worth keeping:
+
+- **`admin` on the READ too**, where `read` was arguable (the projection carries no secret). ADR 0034
+  decides it: a scope can be relaxed later without breaking a live key, never tightened, so between
+  two close readings the strict one is the reversible one.
+- **The read is WRAPPED (`{ webhook: … | null }`), the write is not.** A bare nullable body is an
+  honest wire shape and a poor generated one: Go decodes a `null` body into a zero-valued struct, so
+  "nothing registered" would reach a caller as an endpoint whose URL is the empty string. The write
+  always has an endpoint to describe, so wrapping its response would hand every client a null to
+  check that cannot occur.
+- **The secret stays write-only on this surface too.** An `admin` key can ROTATE the signing secret
+  and can never read the stored one, which is what stops a leaked key from becoming the ability to
+  forge deliveries a receiver would verify.
+- **`PUT`'s `url` became optional so keep-on-omit is uniform.** Publishing the endpoint is what
+  forced the question: three separate places in the first draft described the rule as covering every
+  field, because that is the mental model a partial `PUT` creates, while the schema required `url`.
+  Rather than trim the docs to the accident, the schema moved. A mandatory re-send made the routine
+  edit carry a value the caller never meant to change, and a client re-sending a URL cached before
+  someone else rotated the receiver would redirect every future delivery while looking like it only
+  added a subscription. The first `PUT` on an empty workspace still needs one
+  (`reason: 'webhook_url_required'`). Worth doing BEFORE the version shipped: relaxing a required
+  field stays legal afterwards, but the false doc would have been baked into four published SDKs.
 
 ### D1: Ticket context on task creation ✅
 
@@ -258,6 +285,68 @@ writes as one slice is what turns this on, and it belongs to the mothership trac
   endpoint too, and a per-task issue lookup there is a banned N+1: it needs a batched
   `TaskRepository` block→issue method mirrored D1 ⇄ Drizzle with a conformance assertion. Worth
   doing as its own slice if a consumer asks; not worth smuggling in behind a create.
+
+### D2: Requirements documents on task creation ✅
+
+The other half of D1, and the same class of gap: an input the app has and the API did not.
+`POST /api/v1/services/:serviceId/tasks` now takes an optional ordered `documents` list, each entry
+either a page NAMED in a connected document source (imported and attached, as D1 does for a ticket)
+or an `upload` CARRYING the text.
+
+Worth reading before extending it, because the shape was not obvious:
+
+- **The gap was never "documents are missing", it was SIZE.** `description` caps at 2,000
+  characters because it is a task's own framing, echoed into every prompt; the `POST /jobs` brief
+  takes 50,000 but drives inline pipelines that never touch a repository. So a headless caller
+  holding a PRD had no way to get it in front of a run that opens a pull request. That is why the
+  `upload` variant is the load-bearing half rather than a convenience: naming a Confluence page
+  only helps a caller whose spec is already on a wiki.
+- **`upload` is a `DocumentOrigin`, NOT a `DocumentSourceKind`, and the split is the design.**
+  Everything a provider does (connect, search, import a ref, `probeVersion` a stored copy against
+  the live page) is defined only for a connectable source, and there is no `upload` provider to
+  ask. Keeping the narrow union on those surfaces is what makes the absence a compile error rather
+  than an `undefined` at whichever call site reaches for the missing provider first; the wide union
+  covers only the stored row and its block/role links, where the origin is a label. A future
+  origin with no provider (a pasted-in artifact, a generated brief) copies this rather than
+  widening `DocumentSourceKind`.
+- **The readability refusal at the boundary is STRICTER than the run-time one, on purpose.**
+  `hasReadableContent` passes anything with a non-empty raw body, because a container agent opens
+  the materialised markdown and can at least see what is in it; only the excerpt-only inline
+  readers refuse a body that renders to nothing. `assertUploadReadable` refuses it for everyone,
+  because here the bytes are in hand and the caller can fix them, where the run-time refusal costs
+  a step already paid for. The run-time refusal stays: it is the one that covers a page whose
+  SOURCE went empty after import.
+- **An uploaded document has no URL, and every reader had to be taught the difference between
+  "no origin" and "a broken one".** `originSuffix` / `originHeaderLine` (kernel) are what the
+  prompt index, the inline injection and the `.cat-context/` file header all render through, so
+  none of them can emit `Title ()` or a bare `Source:` line. The SPA does the same by rendering a
+  non-anchor row.
+- **A `201` means the task carries every document named**, so an attachment that fails after the
+  block exists takes the task back off the board, exactly as a lost ticket claim does. The
+  documents themselves stay (a projected document is what a plain import produces anyway), so a
+  retry re-imports rather than accumulating half-written state. The attach runs BEFORE the ticket
+  claim on purpose: a block removed after a successful claim would leave the ticket pointing at a
+  task nobody can open, which then refuses every future filing of it.
+- **The rollback detaches by BLOCK, never by the refs it resolved.** A rollback can be running
+  BECAUSE the attach was refused (a named document belongs to another task), and clearing that
+  document by ref would strip the task that legitimately holds it — the same silent loss the guard
+  just refused, committed by the cleanup path. Asking "what is attached to the block being removed"
+  can only ever clear links this creation made.
+- **The uploads are WRITTEN LAST, after the whole list resolves.** An import is idempotent on its
+  `(source, externalId)` key, so a retry lands on the same row; every upload mints a fresh id, so
+  an eagerly-written one leaves an unreachable copy behind on each attempt. Writing them after the
+  refusable half means an integration retrying in a loop cannot fill a workspace with orphans.
+  Anything added here that MINTS rather than keys must go in the same pass.
+- **The corpus bound was deliberately NOT duplicated.** The contract caps one document
+  (100,000 characters) and the list (10 entries); the ~256 KB materialised-context budget is
+  enforced where it always was, at the first dispatch, because it also sizes in linked tracker
+  issues this endpoint cannot see. A second, partial "too much context" rule here would disagree
+  with it and read as an all-clear.
+
+Same mothership caveat as D1, and for the same reason: `documentRepository.upsert` / `linkBlock`
+are `pending` on the persistence allow-list, so naming `documents` on a node with no main database
+answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
+is one slice of the mothership tracker, not this one.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 

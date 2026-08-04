@@ -19,6 +19,55 @@ Adding a third source is just another provider: implement
 `DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
 `parseRef`, `fetchDocument`) and register it in `selectDocumentsDeps`.
 
+## A stored document need not come from a source
+
+Two vocabularies, and which one a surface takes says what it can do with the row:
+
+- **`DocumentSourceKind`** is what can be CONNECTED (the providers listed above). Connect, search,
+  import a ref and `probeVersion` are defined only for these, because each is a call to a provider.
+- **`DocumentOrigin`** is what a stored row may CARRY: any of the above, plus **`upload`**, a body
+  handed to the platform directly rather than fetched. `POST /api/v1/services/:id/tasks` mints these
+  when a headless caller attaches a spec it is holding (see
+  [`public-api.md`](./public-api.md#attaching-requirements-documents)). Downstream it is an
+  ordinary document: it lists with the rest, links to a block, can be tagged as a doc-kind
+  template, and is read by the same context path. The app has no upload UI, and the context
+  picker is keyed by source, so the SPA can detach one but not re-attach it elsewhere; that is a
+  UI gap, not a model one, and the `POST /documents/link` route already serves it.
+
+Keeping the narrow union on the provider surfaces is what makes the missing `upload` provider a
+COMPILE error (an exhaustive `Record<DocumentSourceKind, DocumentSourceDescriptor>` still has to
+name every member) rather than an `undefined` at whichever call site reaches for it first. Narrow a
+wide origin with `isConnectableSource` (`@cat-factory/contracts`), the predicate derived from the
+source picklist, never with an optional lookup.
+
+## A document is attached to at most ONE block
+
+`linkedBlockId` is a single column, so attaching a document that another block already holds would
+MOVE the link, not copy it: the earlier task silently loses a document it was created with, and
+nothing in its next run reports the absence. `DocumentLinkService.linkToBlock` therefore refuses
+with a `ConflictError` carrying `document_already_linked` and the holder's id, the same rule and the
+same shape as one-task-per-ticket. To put the same text on two tasks, attach two documents (import
+the page twice under different refs, or upload the body again).
+
+Two things keep that refusal from wedging anything:
+
+- **A link naming a block that no longer exists is not a holder.** The guard checks whether the
+  holder is still live, so a document whose task was deleted re-attaches on first use. That also
+  heals rows left by deletes made before the cascade below existed.
+- **Deleting a block detaches its documents.** `BoardService.removeBlock` runs
+  `documentRepository.detachBlocks` through the removal cascade (`removal-cascade.ts`). Nothing is
+  deleted, only unlinked: the document outlives the task it was attached to.
+
+Attaching a LIST of documents goes through `linkManyToBlock`, which asserts the block once, resolves
+the whole list in one `listByRefs` read and writes the links in one batched statement. Reach for it
+rather than looping the point method (the repo's no-N+1 rule).
+
+An `upload` has **no origin URL**, and empty is how it says so. Every renderer goes through kernel's
+`originSuffix` / `originHeaderLine`, so the prompt index, the inline injection and the materialised
+`.cat-context/` file omit the origin entirely rather than emitting `Title ()` or a bare `Source:`
+line, which read as a link that broke rather than as a document that never had one. The SPA does the
+same by rendering a non-anchor row.
+
 This integration is **always on**: tenants connect their own sources
 interactively through the app, so there is no enable flag to forget. The one
 thing it requires is a master key to encrypt the per-workspace credentials at

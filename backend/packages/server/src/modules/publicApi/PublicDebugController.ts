@@ -14,7 +14,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { authorize } from './publicApiAuth.js'
+import { authorize, refuse } from './publicApiAuth.js'
 import { decodeTimeCursor, encodeCursor } from './publicApiPaging.js'
 
 // The REMOTE DEBUGGING surface (`/api/v1/debug/*`) — the telemetry + provisioning-log reads an
@@ -111,12 +111,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The entry point for a caller that holds no run id: "which of my runs failed recently".
   buildHonoRoute(app, listDebugRunsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -134,12 +129,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's diagnostic map — aggregates only, so this is the call a client always makes first.
   buildHonoRoute(app, getDebugRunContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -151,12 +141,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's model calls. Bodies only when `bodyChars` asks for them, sliced in SQL.
   buildHonoRoute(app, listDebugLlmCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -185,12 +170,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // per-message rows via `?view=messages`.
   buildHonoRoute(app, getDebugLlmCallContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -205,12 +185,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's captured dispatches — identity and sizes, never bodies.
   buildHonoRoute(app, listDebugAgentContextContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -230,12 +205,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // One dispatch's prompts, folded fragments and injected files, each budgeted independently.
   buildHonoRoute(app, getDebugAgentContextContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -251,12 +221,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The web searches the run's agents performed (small rows, returned whole).
   buildHonoRoute(app, listDebugSearchQueriesContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -308,12 +273,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // telemetry at all.
   buildHonoRoute(app, listDebugLogsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId

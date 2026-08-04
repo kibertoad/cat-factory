@@ -189,6 +189,7 @@
       "title": "Ajouter une tâche",
       "newTaskIn": "Nouvelle tâche dans {container}",
       "typeLabel": "Type",
+      "typeOther": "Autres",
       "types": {
         "feature": "Fonctionnalité",
         "bug": "Bug",
@@ -576,6 +577,7 @@
         "input_gate_not_parked": "Rien à répondre",
         "input_gate_parked": "Répondez-y dans la vérification d'entrée de la tâche",
         "ticket_already_linked": "Ce ticket a déjà une tâche",
+        "document_already_linked": "Document déjà joint",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée"
       },
       "description": {
@@ -612,6 +614,7 @@
         "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé.",
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
+        "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "action": {
@@ -4059,7 +4062,8 @@
       "connectSourceNamed": "Connecter {source}",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
       "emptyInitiative": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification le lisent en rédigeant cette initiative.",
-      "attached": "Document joint"
+      "attached": "Document joint",
+      "uploadedHint": "Envoyé via l'API : aucune page source à ouvrir."
     },
     "templates": {
       "title": "Modèles et exemples de documents",

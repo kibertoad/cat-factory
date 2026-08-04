@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { DOC_KINDS } from '~/types/domain'
 import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
+import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
@@ -156,14 +157,13 @@ async function unlink(doc: SourceDocument) {
               v-if="template"
               class="mt-2 flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
             >
-              <a
-                :href="template.url"
-                target="_blank"
-                rel="noopener"
-                class="truncate text-sm font-medium text-white hover:underline"
+              <DocumentOriginLink
+                :url="template.url"
+                class="truncate text-sm font-medium text-white"
+                hover-class="hover:underline"
               >
                 {{ template.title }}
-              </a>
+              </DocumentOriginLink>
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -194,14 +194,13 @@ async function unlink(doc: SourceDocument) {
                 :key="`${doc.source}:${doc.externalId}`"
                 class="flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
               >
-                <a
-                  :href="doc.url"
-                  target="_blank"
-                  rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
+                <DocumentOriginLink
+                  :url="doc.url"
+                  class="truncate text-sm font-medium text-white"
+                  hover-class="hover:underline"
                 >
                   {{ doc.title }}
-                </a>
+                </DocumentOriginLink>
                 <UButton
                   color="neutral"
                   variant="ghost"
