@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
 import { changeClassSchema, RULEABLE_CHANGE_CLASSES } from './mergeTrackRecord.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
-import { WORKSPACE_ROLES, workspaceRoleSchema } from './workspace-members.js'
+import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -56,7 +56,9 @@ export const REQUIREMENT_CONCERN_RANK: Record<RequirementConcernLevel, number> =
  *  - `always`     — auto-merge regardless of the scores.
  *  - `never`      — always route to a human, regardless of the scores.
  */
-export const mergeClassRuleSchema = v.picklist(['thresholds', 'always', 'never'])
+export const MERGE_CLASS_RULES = ['thresholds', 'always', 'never'] as const
+
+export const mergeClassRuleSchema = v.picklist(MERGE_CLASS_RULES)
 export type MergeClassRule = v.InferOutput<typeof mergeClassRuleSchema>
 
 /**
@@ -86,7 +88,7 @@ export type MergeClassRules = v.InferOutput<typeof mergeClassRulesSchema>
  * with it, so a workspace can widen `dependency` to `always` for everyone and still hold a
  * non-engineer's runs to review on `source`.
  *
- * Composition is NARROW-ONLY (`narrowMergeClassRule` in kernel): a role entry may only make a
+ * Composition is NARROW-ONLY ({@link narrowMergeClassRule}): a role entry may only make a
  * class MORE restrictive than the base rule, never less. That is the whole safety property — an
  * allowlist authored per role can subtract capability but can never hand a role something the
  * preset itself withholds, so a role entry can be reviewed on its own without re-reading the base
@@ -122,6 +124,58 @@ export type ClassRulesByRole = v.InferOutput<typeof classRulesByRoleSchema>
  * cannot start runs at all (`viewer`, which holds no `runs.execute`) may be listed without effect.
  */
 export const dryRunRolesSchema = v.array(workspaceRoleSchema)
+export type DryRunRoles = v.InferOutput<typeof dryRunRolesSchema>
+
+/**
+ * How much review a rule DEMANDS, higher is stricter. The ordering is the point of the scale:
+ * `always` merges with nothing consulted, `thresholds` merges only within the score ceilings, and
+ * `never` merges nothing, so it is total and every pair has a strictest member.
+ *
+ * A plain rank rather than a `Record<MergeClassRule, number>` of opaque numbers used once: this is
+ * the only place the three rules are ORDERED, and {@link narrowMergeClassRule} is the only
+ * consumer, so the two are kept adjacent and a new rule fails the typecheck here first.
+ */
+const MERGE_CLASS_RULE_STRICTNESS: Record<MergeClassRule, number> = {
+  always: 0,
+  thresholds: 1,
+  never: 2,
+}
+
+/**
+ * Compose a base rule with a ROLE's rule, taking the STRICTER of the two.
+ *
+ * Narrow-only is the whole safety property of role-scoped rules, and it is enforced here rather
+ * than trusted to whoever authors a preset: a role entry can subtract capability but can never add
+ * it, so `{ source: 'always' }` under `viewer` on a preset whose base holds `source` at
+ * `thresholds` grants a viewer nothing. It reads as a mistake and behaves as a no-op, instead of
+ * quietly becoming the widest rule in the preset for its least-trusted tier.
+ *
+ * The consequence worth stating: a role entry is REVIEWABLE ON ITS OWN. Reading one tells you what
+ * that role at most may do, with no need to hold the base map in your head at the same time.
+ *
+ * It lives in contracts rather than in kernel because the SPA's preset editor has to agree with the
+ * engine about it: an authoring surface that offered a role a rule the engine will discard would be
+ * telling an operator they had written a policy that does nothing.
+ */
+export function narrowMergeClassRule(base: MergeClassRule, role: MergeClassRule): MergeClassRule {
+  return MERGE_CLASS_RULE_STRICTNESS[role] > MERGE_CLASS_RULE_STRICTNESS[base] ? role : base
+}
+
+/**
+ * Whether a preset's {@link dryRunRolesSchema} sandboxes a run started under `role`.
+ *
+ * The rule worth naming is the null case: an unattributed run (a schedule fire, a public-API start,
+ * auth-disabled dev) pins no role, cannot match an entry, and is therefore never force-sandboxed.
+ * Shared with the SPA so a start control can say "your runs on this task are sandboxed" using the
+ * same reading the engine makes at admission, rather than a restated `includes` that would have to
+ * re-decide what an absent role means.
+ */
+export function dryRunForcedForRole(
+  dryRunRoles: readonly WorkspaceRole[] | null | undefined,
+  role: WorkspaceRole | null | undefined,
+): boolean {
+  return !!role && !!dryRunRoles?.includes(role)
+}
 
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */

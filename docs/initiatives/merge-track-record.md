@@ -109,7 +109,7 @@ Precedence in `resolveMergerStep`, most-significant first:
 
 Two rungs were added above this ladder later, keyed on WHO started the run rather than on what the
 change is: a role-scoped narrowing of the class rule, and a sandboxed run mode that merges nothing.
-Both are in [role-scoped-merge-policy.md](./role-scoped-merge-policy.md), which is the authority on
+Both are in [ADR 0037](../../backend/docs/adr/0037-role-scoped-merge-policy.md), which is the authority on
 the composed precedence.
 
 Backwards compatibility is a non-goal (see CLAUDE.md), so the wire type gains the field as

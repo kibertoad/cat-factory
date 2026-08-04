@@ -1,4 +1,10 @@
+import { dryRunForcedForRole, isDryRun } from '@cat-factory/contracts'
 import type { Logger, RunMode, WorkspaceRole } from '@cat-factory/kernel'
+
+// `isDryRun` is re-exported so the merge path keeps ONE import for the run-mode vocabulary it
+// reads. The rule itself (absent ⇒ `live`) lives in contracts, because the SPA has to read a run's
+// mode the same way to badge a sandboxed run rather than one that simply has not merged yet.
+export { isDryRun }
 
 // ---------------------------------------------------------------------------
 // Pure resolution of a run's MODE — whether the run may land its work, or is a sandbox that
@@ -33,7 +39,9 @@ export interface RunModeResolution {
  * An unattributed run (no pinned role: a schedule fire, a public-API start, auth-disabled dev)
  * cannot match a role entry and so is never force-sandboxed. That is the same call the role-scoped
  * class rules make, for the same reason: absent is not a tier, and treating it as the lowest one
- * would sandbox every scheduled run in a deployment the day it first sandboxes a role.
+ * would sandbox every scheduled run in a deployment the day it first sandboxes a role. That reading
+ * is `dryRunForcedForRole` in contracts rather than an `includes` here, because the SPA's start
+ * control has to state the same thing before a run exists to read it off.
  */
 export function resolveRunMode(input: {
   requested: RunMode | undefined
@@ -41,7 +49,7 @@ export function resolveRunMode(input: {
   dryRunRoles: readonly WorkspaceRole[] | undefined
 }): RunModeResolution {
   const { requested, role, dryRunRoles } = input
-  if (role && dryRunRoles?.includes(role)) return { mode: 'dry_run', source: 'role_policy' }
+  if (dryRunForcedForRole(dryRunRoles, role)) return { mode: 'dry_run', source: 'role_policy' }
   if (requested === 'dry_run') return { mode: 'dry_run', source: 'requested' }
   return { mode: 'live', source: 'default' }
 }
@@ -63,15 +71,6 @@ export function runModeStartNotes(source: RunModeSource): string[] {
     "Sandboxed run: this task's merge policy holds your role to dry runs, so the pipeline will " +
       'open a pull request but nothing will be merged.',
   ]
-}
-
-/**
- * Whether a run is sandboxed. A helper rather than `=== 'dry_run'` scattered across the merge
- * path, so the several places that must refuse to land work all read the mode the same way — and
- * so a run persisted before the mode existed (absent ⇒ `live`) can never be mistaken for one.
- */
-export function isDryRun(mode: RunMode | undefined): boolean {
-  return mode === 'dry_run'
 }
 
 /**

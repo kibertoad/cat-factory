@@ -1075,7 +1075,9 @@
       "chooseApproach": "Choisir l'approche",
       "triageFollowUps": "Trancher les suivis",
       "elapsedTooltip": "Temps écoulé sur cette étape",
-      "reviewFindings": "Examiner les remarques"
+      "reviewFindings": "Examiner les remarques",
+      "dryRun": "Exécution à blanc",
+      "dryRunHint": "Cette exécution ouvre une pull request et ne fusionne rien."
     },
     "structure": {
       "title": "Structure",
@@ -1496,7 +1498,10 @@
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       },
-      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}",
+      "dryRun": "Exécution à blanc : ne rien fusionner",
+      "dryRunForced": "Exécution à blanc : les exécutions de votre rôle ne sont jamais fusionnées ici",
+      "dryRunHint": "Cette exécution ouvre une pull request et ne fusionne rien."
     }
   },
   "observability": {
@@ -2736,6 +2741,18 @@
           "always": "Toujours fusionner automatiquement",
           "never": "Toujours exiger une revue"
         }
+      },
+      "roleRules": {
+        "heading": "Limites selon le rôle qui lance l'exécution",
+        "help": "Ce qu'une exécution peut faire dépend aussi de qui l'a lancée. Un rôle peut être soumis à des règles plus strictes que celles ci-dessus, ou aux seules exécutions à blanc : le pipeline travaille et ouvre une pull request, mais rien n'est fusionné. Un rôle peut seulement durcir cette politique, jamais l'assouplir.",
+        "sandboxLabel": "Exécutions à blanc uniquement",
+        "sandboxNote": "Les exécutions lancées par ce rôle ouvrent une pull request et ne fusionnent rien : les règles par catégorie ci-dessous ne peuvent donc rien durcir de plus.",
+        "noRules": "Aucune limite par catégorie",
+        "ruleCount": "{count} catégorie limitée | {count} catégories limitées",
+        "inherit": "Comme cette politique",
+        "redundant": "Sans effet : cette politique est déjà au moins aussi stricte.",
+        "alreadyStrictest": "Déjà toujours relu",
+        "baseHint": "Cette politique compare les scores pour chaque catégorie : un rôle ne peut donc durcir une catégorie que jusqu'à la revue obligatoire."
       }
     },
     "observabilityConnection": {
@@ -5210,7 +5227,10 @@
     "description": "Description",
     "overallProgress": "Progression globale",
     "dependencies": "Dépendances",
-    "noDependencies": "Aucune"
+    "noDependencies": "Aucune",
+    "dryRun": "Exécution à blanc",
+    "dryRunHint": "Lancer le pipeline et ouvrir une pull request, sans rien fusionner.",
+    "dryRunForcedHint": "La politique de risque de cette tâche limite votre rôle aux exécutions à blanc."
   },
   "environments": {
     "title": "Environnement éphémère",
@@ -5899,7 +5919,10 @@
       "manualHeading": "Revue manuelle uniquement",
       "manualExplainer": "Cette politique ne fusionne jamais d'elle-même : chaque pull request attend une revue humaine, quelles que soient les notes.",
       "ciHeading": "Corrections CI",
-      "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner."
+      "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner.",
+      "roleHeading": "Qui a lancé l'exécution",
+      "roleSandboxed": "Les exécutions lancées par {roles} ouvrent une pull request et ne sont jamais fusionnées.",
+      "roleNarrowed": "Les exécutions lancées par {roles} suivent des règles plus strictes pour certaines catégories de changement."
     }
   },
   "modelPreset": {

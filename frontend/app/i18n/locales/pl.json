@@ -1075,7 +1075,9 @@
       "chooseApproach": "Wybierz podejście",
       "triageFollowUps": "Rozstrzygnij działania następcze",
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
-      "reviewFindings": "Przejrzyj ustalenia"
+      "reviewFindings": "Przejrzyj ustalenia",
+      "dryRun": "Uruchomienie próbne",
+      "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
     },
     "structure": {
       "title": "Struktura",
@@ -1496,7 +1498,10 @@
         "title": "Zarchiwizować tę usługę?",
         "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
       },
-      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}"
+      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}",
+      "dryRun": "Uruchomienie próbne: nic nie scalaj",
+      "dryRunForced": "Uruchomienie próbne: uruchomienia twojej roli nigdy nie są tu scalane",
+      "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
     }
   },
   "observability": {
@@ -2736,6 +2741,18 @@
           "always": "Zawsze scalaj automatycznie",
           "never": "Zawsze wymagaj przeglądu"
         }
+      },
+      "roleRules": {
+        "heading": "Ograniczenia według roli uruchamiającego",
+        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można objąć surowszymi regułami niż powyższe albo wyłącznie uruchomieniami próbnymi: potok pracuje i otwiera pull request, ale nic nie jest scalane. Rola może tę zasadę tylko zaostrzyć, nigdy poluzować.",
+        "sandboxLabel": "Tylko uruchomienia próbne",
+        "sandboxNote": "Uruchomienia rozpoczęte przez tę rolę otwierają pull request i niczego nie scalają, więc reguły kategorii poniżej nie mogą ich już bardziej ograniczyć.",
+        "noRules": "Brak ograniczeń kategorii",
+        "ruleCount": "{count} kategoria ograniczona | {count} kategorie ograniczone | {count} kategorii ograniczonych",
+        "inherit": "Tak jak w tej zasadzie",
+        "redundant": "Bez efektu: ta zasada jest już co najmniej tak samo surowa.",
+        "alreadyStrictest": "Już zawsze przeglądane",
+        "baseHint": "Ta zasada porównuje oceny w każdej kategorii, więc rola może zaostrzyć kategorię jedynie do wymogu przeglądu."
       }
     },
     "observabilityConnection": {
@@ -5210,7 +5227,10 @@
     "description": "Opis",
     "overallProgress": "Ogólny postęp",
     "dependencies": "Zależności",
-    "noDependencies": "Brak"
+    "noDependencies": "Brak",
+    "dryRun": "Uruchomienie próbne",
+    "dryRunHint": "Uruchom potok i otwórz pull request, ale niczego nie scalaj.",
+    "dryRunForcedHint": "Zasada ryzyka tego zadania ogranicza twoją rolę do uruchomień próbnych."
   },
   "environments": {
     "title": "Środowisko efemeryczne",
@@ -5899,7 +5919,10 @@
       "manualHeading": "Tylko recenzja ręczna",
       "manualExplainer": "Ta zasada nigdy nie scala samodzielnie, więc każdy pull request czeka na ludzką recenzję niezależnie od ocen.",
       "ciHeading": "Naprawy CI",
-      "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda."
+      "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda.",
+      "roleHeading": "Kto rozpoczął uruchomienie",
+      "roleSandboxed": "Uruchomienia rozpoczęte przez role {roles} otwierają pull request i nigdy nie są scalane.",
+      "roleNarrowed": "Uruchomienia rozpoczęte przez role {roles} podlegają surowszym regułom w części kategorii zmian."
     }
   },
   "modelPreset": {

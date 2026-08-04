@@ -5,7 +5,13 @@
 // task inspector's "Merge policy" dropdown selects from. Exactly one preset is the
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
 import { computed, reactive, ref, watch } from 'vue'
-import type { MergeClassRules, RiskPolicy, RequirementConcernLevel } from '~/types/merge'
+import type {
+  ClassRulesByRole,
+  DryRunRoles,
+  MergeClassRules,
+  RiskPolicy,
+  RequirementConcernLevel,
+} from '~/types/merge'
 import type { StepGating } from '@cat-factory/contracts'
 import {
   RISK_POLICY_AXES,
@@ -13,6 +19,7 @@ import {
   type RiskPolicyAxis,
 } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
+import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
 
 const { t } = useI18n()
 
@@ -78,6 +85,11 @@ interface Draft {
   // Per-change-class auto-merge rules. An OMITTED class means "use the score ceilings above",
   // so `{}` is the identity — the editor stores `thresholds` as an omission for that reason.
   classRules: MergeClassRules
+  // The ROLE layer over those rules: per-role narrowing (narrow-only, so `{}` is the identity)
+  // and the roles whose runs are sandboxed. Both replace the stored value wholesale on save,
+  // which is why clearing one in the editor is a plain omission.
+  classRulesByRole: ClassRulesByRole
+  dryRunRoles: DryRunRoles
   // Implementation-fork decision gating (edited 0..100, stored 0..1); disabled ⇒ off in `auto`.
   forkEnabled: boolean
   forkMinComplexity: number
@@ -115,6 +127,8 @@ function toDraft(p: RiskPolicy): Draft {
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     autoMergeEnabled: p.autoMergeEnabled,
     classRules: { ...p.classRules },
+    classRulesByRole: { ...p.classRulesByRole },
+    dryRunRoles: [...p.dryRunRoles],
     forkEnabled: p.forkDecision?.enabled ?? false,
     forkMinComplexity: Math.round((p.forkDecision?.minComplexity ?? 0.5) * 100),
     forkMinRisk: Math.round((p.forkDecision?.minRisk ?? 0.4) * 100),
@@ -158,6 +172,8 @@ async function save(p: RiskPolicy) {
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
       autoMergeEnabled: d.autoMergeEnabled,
       classRules: d.classRules,
+      classRulesByRole: d.classRulesByRole,
+      dryRunRoles: d.dryRunRoles,
       forkDecision: forkGating(d),
     })
     toast.add({
@@ -213,7 +229,12 @@ const draft = reactive<Draft>({
   maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
   autoMergeEnabled: true,
+  // The create row authors the numbers only. Class and role rules start at their identity and
+  // are edited on the saved preset, where each rule can be shown beside the base rule (and the
+  // track record) it narrows — neither reads as anything on a policy that does not exist yet.
   classRules: {},
+  classRulesByRole: {},
+  dryRunRoles: [],
   forkEnabled: false,
   forkMinComplexity: 50,
   forkMinRisk: 40,
@@ -363,6 +384,18 @@ async function create() {
         <MergeClassRulesEditor
           v-model="drafts[p.id]!.classRules"
           :auto-merge-enabled="drafts[p.id]!.autoMergeEnabled"
+          :disabled="busy === p.id"
+        />
+      </div>
+
+      <!-- The role layer over those rules: what a run may do depending on WHO started it, up to
+           and including a full sandbox. Directly under the base rules it narrows, since a role
+           rule is only readable against the rule it applies to. -->
+      <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+        <MergeRolePolicyEditor
+          v-model:class-rules-by-role="drafts[p.id]!.classRulesByRole"
+          v-model:dry-run-roles="drafts[p.id]!.dryRunRoles"
+          :class-rules="drafts[p.id]!.classRules"
           :disabled="busy === p.id"
         />
       </div>
