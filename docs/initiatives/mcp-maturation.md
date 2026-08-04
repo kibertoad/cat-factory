@@ -64,7 +64,7 @@ dump and never uses the word MCP).
 
 ## Slices
 
-- [x] **1. Honest wiring: every declared server is either served or stated.** ([#1662](https://github.com/kibertoad/cat-factory/pull/1662))
+- [x] **1. Honest wiring: every declared server is either served or stated.** ([#1664](https://github.com/kibertoad/cat-factory/pull/1664))
       The consuming-side defects, together because they are one property enforced at three layers.
       `servableOnThisRun` became transport-aware, so an `http` server on a Codex run is dropped
       WITH a stated reason (`transport_unsupported`, a new member of the unavailability vocabulary)
