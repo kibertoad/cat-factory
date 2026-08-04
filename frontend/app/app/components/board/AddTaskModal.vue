@@ -35,6 +35,7 @@ import type { ReviewTargetReason } from '@cat-factory/contracts'
 import { sanitizeDescriptorFields, validateDescriptorFields } from '@cat-factory/contracts'
 import { defaultDescriptorValues } from '~/utils/descriptorFields'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -183,15 +184,10 @@ const customFieldProblems = computed(() => {
   if (!custom || customFormPanel.value) return []
   return validateDescriptorFields(custom.fields ?? [], customFieldValues.value)
 })
-// The type picker: the built-in choices (i18n labels) + the custom types (their wire presentation).
-const typeChoices = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
-  ...TASK_TYPES.value,
-  ...customTaskTypes.value.map((tt) => ({
-    value: tt.taskType as TaskTypeChoice,
-    label: tt.presentation.label,
-    icon: tt.presentation.icon,
-  })),
-])
+// The type picker, laid out as rows (see `buildTaskTypePickerRows`): the built-in choices (i18n
+// labels) first, then the deployment's registered types under their declared `presentation.category`
+// captions, so a catalog of reusable operations reads as sections instead of one wall of buttons.
+const typeRows = computed(() => buildTaskTypePickerRows(TASK_TYPES.value, customTaskTypes.value))
 
 // Parse the PR-reference input into the contract fields: a bare positive integer (optionally
 // `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
@@ -768,25 +764,53 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </p>
 
         <UFormField :label="t('board.addTask.typeLabel')">
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="ty in typeChoices"
-              :key="ty.value"
-              :color="taskType === ty.value ? 'primary' : 'neutral'"
-              :variant="taskType === ty.value ? 'soft' : 'ghost'"
-              :icon="ty.icon"
-              size="xs"
-              :data-testid="`task-type-${ty.value}`"
-              @click="
-                () => {
-                  taskType = ty.value
-                }
-              "
-            >
-              {{ ty.label }}
-            </UButton>
+          <div class="space-y-1.5">
+            <!-- One row per picker group: the built-ins uncaptioned, then a caption per registered
+                 category. Captions are deployment-authored English rendered verbatim (as are the
+                 custom labels and their hover descriptions); only chrome is i18n here. -->
+            <div v-for="row in typeRows" :key="row.id">
+              <p
+                v-if="row.caption"
+                class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                data-testid="task-type-category"
+              >
+                {{ row.caption }}
+              </p>
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="ty in row.choices"
+                  :key="ty.value"
+                  :color="taskType === ty.value ? 'primary' : 'neutral'"
+                  :variant="taskType === ty.value ? 'soft' : 'ghost'"
+                  :icon="ty.icon"
+                  size="xs"
+                  :title="ty.description"
+                  :data-testid="`task-type-${ty.value}`"
+                  @click="
+                    () => {
+                      taskType = ty.value
+                    }
+                  "
+                >
+                  {{ ty.label }}
+                </UButton>
+              </div>
+            </div>
           </div>
         </UFormField>
+
+        <!-- What the selected operation is for, in the deployment's own words. The hover title
+             above helps you choose; this states the choice you made, which is the half a touch
+             device and a screen reader can reach. Built-in types carry no description (their
+             labels are localized and their meaning is fixed), so only a custom type is described
+             here. -->
+        <p
+          v-if="selectedCustomType?.presentation.description"
+          class="-mt-2 px-1 text-[11px] text-slate-400"
+          data-testid="task-type-description"
+        >
+          {{ selectedCustomType.presentation.description }}
+        </p>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
         <div

@@ -1,6 +1,7 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-2 landed (the fold + the bundle; the shared field vocabulary); slices 3-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-3 landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker); slices 4-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -433,7 +434,7 @@ else could offer the way back). Mechanics:
 | 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ✅ done | [#1650](https://github.com/kibertoad/cat-factory/pull/1650) |
 | 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
 | 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ✅ done |                                                             |
-| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |                                                             |
+| 3   | **Picker grouping (D7)**: category captions in the type picker; `presentation.description` rendered; no new i18n keys                                                                                                                                                                                                                                 | SPA    | 2          | ✅ done |                                                             |
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
 | 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
@@ -558,6 +559,38 @@ final so neither ships a shape that changes a slice later.
   is boot-validated too; all three facades pass `initiativePresetRegistry`.
 - **One i18n key moved**: the path-invalid message is `common.pathInvalid` now that two surfaces
   render it, carrying each locale's existing translation verbatim.
+
+### What slice 3 surfaced (carry into the rest)
+
+- **The layout rule is a pure function** (`app/utils/taskTypePicker.ts` `buildTaskTypePickerRows`,
+  the `buildFragmentCategoryGroups` sibling) returning ROWS of `{ id, caption, choices }`, so the
+  built-ins are the first row rather than a separate template branch: one nested `v-for` renders
+  every choice through one button, and the ORDER is unit-tested without mounting the modal. Slice 7
+  filters the store's `customTaskTypes`, upstream of this, so a suppressed operation's category
+  caption disappears with its last type and needs no extra rule here.
+- **The `data-testid="task-type-<id>"` selector per choice survived the re-layout**, deliberately:
+  it is the picker's only external contract, and a deployment's own e2e suite is the consumer that
+  would notice it move (the in-repo specs create a typed task over REST and assert the card badge,
+  so they would NOT have caught it). The caption and the description line got their own ids
+  (`task-type-category`, `task-type-description`).
+- **Category order is REGISTRATION order, not alphabetical.** Registration order is the only order
+  the deployment expressed; re-sorting would silently reshuffle a catalog its author arranged, and
+  the difference is invisible in a one-category example (the spec pins it with two).
+- **A blank caption reads as "no category".** The wire schema trims and length-checks it, but a
+  CODE-shipped consumer type is trusted and unvalidated, so a whitespace-only category is reachable
+  and must fall into the uncategorized bucket rather than render an empty heading.
+- **`presentation.description` is rendered at last**, closing the last picker gap in fact 2: as each
+  custom button's `title` (the half that helps you CHOOSE, the `AgentPalette` precedent) and as a
+  hint line under the picker for the selected type (the half a touch device and a screen reader can
+  reach). Built-in types have no descriptions to render, so the line is custom-only.
+- **No i18n keys were needed, and that is the design.** Every string in a picker row (label,
+  caption, description) is deployment-authored English rendered verbatim, per D7.3; the surrounding
+  chrome was already keyed. A slice that finds itself adding a locale entry for descriptor text has
+  taken a wrong turn.
+- **`frontend/app/app/docs/consumer-extensions.md` was two slices stale** (it still listed the
+  four pre-slice-2 input types and knew nothing of `defaultFragmentIds`), because slice 2 swept the
+  layer README and missed the consumer doc beside it. Both are part of the sweep for anything
+  touching the custom-task-type surface.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

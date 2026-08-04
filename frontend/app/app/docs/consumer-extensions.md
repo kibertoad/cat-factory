@@ -56,18 +56,18 @@ export default defineNuxtPlugin(() => {
 
 ## The landed seams
 
-| Seam                                | Slot key                  | Entry shape                                                                                      | Host                                                                      |
-| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| Run-detail windows                  | `resultViews`             | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView`                               |
-| Agent kinds (palette data)          | `agentKinds`              | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`                                      |
-| Custom task types                   | `taskTypes`               | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`)      |
-| Sidebar / command-palette / toolbar | `nav`                     | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`          | the three shells via `useNavContributions`                                |
-| Inspector body panels               | `inspectorPanels`         | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                      |
-| Top-level overlays                  | `appOverlays`             | `{ id: '<ns>:<name>', component }`                                                               | `<AppOverlayHost>` via `useAppOverlays().open(id)`                        |
-| External tools                      | `externalTools`           | `{ id, title, icon, url, description?, requiredMetadata?, gate?, advanced?, order? }`            | the "External tools" sidebar section + palette, via `useNavContributions` |
-| Custom workspace metadata fields    | `workspaceMetadataFields` | `{ key, label, description?, placeholder?, type?, options?, order? }`                            | the Metadata tab of Workspace settings                                    |
-| Multi-step wizards                  | (journeys)                | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                       |
-| Locale strings                      | (i18n)                    | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                           |
+| Seam                                | Slot key                  | Entry shape                                                                                               | Host                                                                      |
+| ----------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Run-detail windows                  | `resultViews`             | `{ id: '<ns>:<name>', component }`                                                                        | `StepResultViewHost` via `dispatchStepView`                               |
+| Agent kinds (palette data)          | `agentKinds`              | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }`          | agents store merge → `agentKindMeta`                                      |
+| Custom task types                   | `taskTypes`               | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, defaultFragmentIds?, formPanel? }` | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`)      |
+| Sidebar / command-palette / toolbar | `nav`                     | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`                   | the three shells via `useNavContributions`                                |
+| Inspector body panels               | `inspectorPanels`         | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                             | `<PanelsOutlet>` in `InspectorPanel`                                      |
+| Top-level overlays                  | `appOverlays`             | `{ id: '<ns>:<name>', component }`                                                                        | `<AppOverlayHost>` via `useAppOverlays().open(id)`                        |
+| External tools                      | `externalTools`           | `{ id, title, icon, url, description?, requiredMetadata?, gate?, advanced?, order? }`                     | the "External tools" sidebar section + palette, via `useNavContributions` |
+| Custom workspace metadata fields    | `workspaceMetadataFields` | `{ key, label, description?, placeholder?, type?, options?, order? }`                                     | the Metadata tab of Workspace settings                                    |
+| Multi-step wizards                  | (journeys)                | `registerJourney` + step modules                                                                          | `<JourneyHost>` / `<JourneyOutlet>`                                       |
+| Locale strings                      | (i18n)                    | `i18n/locales/*.json` in the deployment                                                                   | `@nuxtjs/i18n` layer deep-merge                                           |
 
 A `nav` entry may also declare `advanced: true`, which hides it in **basic** interface mode
 (the shipped default) exactly as it does for the first-party destinations: see
@@ -173,20 +173,42 @@ Values are readable anywhere in the SPA via `useWorkspaceSettingsStore().setting
 
 Model a proprietary work item (an "incident", "pentest", "compliance-audit") as a first-class
 task type, the create-task twin of an agent kind. Contribute `{ taskType: '<ns>:<name>',
-presentation: { label, icon, color, description }, fields?, defaultPipelineId?, formPanel? }` to
-the `taskTypes` slot (see `acme:incident` in the example module). The SPA merges it into the
-create-task picker and the card-badge catalog:
+presentation: { label, icon, color, description, category? }, fields?, defaultPipelineId?,
+defaultFragmentIds?, formPanel? }` to the `taskTypes` slot (see `acme:incident` in the example
+module). The SPA merges it into the create-task picker and the card-badge catalog:
 
 - **`presentation`** drives the create-task picker entry and the `TaskCard` type badge (resolved
   through the pure `taskTypeMeta` read-model: the `agentKindMeta` twin). An UNREGISTERED
   namespaced type (a stale row after your extension is removed) degrades to the `feature`
-  presentation, so a leftover string never breaks a card.
-- **`fields`** are descriptor-driven create-form inputs (`text` / `textarea` / `number` /
-  `select`); their values land in the task's sparse `taskTypeFields.custom` bag (no migration).
+  presentation, so a leftover string never breaks a card. `description` is rendered verbatim as
+  the picker button's tooltip and, once the type is selected, as a hint under the picker;
+  `category` groups the picker (below).
+- **`fields`** are descriptor-driven create-form inputs over the shared descriptor-form vocabulary
+  (`text` / `textarea` / `number` / `select` / `checkbox` / `checkbox-group` / `path`, with
+  defaults and `showWhen` visibility; `password` is excluded by construction because a task field
+  value reaches prompts and telemetry). Their values land in the task's sparse
+  `taskTypeFields.custom` bag (no migration). A BACKEND-registered descriptor is enforced
+  server-side on create as well (required answers, option lists, lengths); a code-shipped one is
+  known only to the SPA, so the create form is its only check (see the Validation note below).
 - **`formPanel`** optionally names a bespoke create-form section component you contribute to the
   `taskTypeFormPanels` slot (paired by that id, like `resultViews`); shown INSTEAD of `fields`. An
   unpaired id degrades to the descriptor fields.
 - **`defaultPipelineId`** pre-selects the type's pipeline in the picker.
+- **`defaultFragmentIds`** seed the type's standing context (best-practice fragment ids) onto every
+  new task of it, beside whatever it inherits from its service.
+
+**The picker is grouped, not flat** (`utils/taskTypePicker.ts`): the built-in types come first in
+one uncaptioned row, then one captioned row per declared `presentation.category` in registration
+order, then any uncategorized custom types. Declare a category once you ship more than a couple of
+types, or they pile up behind the everyday `feature` / `bug` choices. Every string in a row
+(labels, captions, descriptions) is your own English rendered verbatim: no descriptor text enters a
+locale catalog, only the chrome around it is i18n.
+
+Together, `fields` + `defaultFragmentIds` + `defaultPipelineId` are what turns a task type from a
+badge into a **reusable operation**: a canned unit of work an org runs repeatedly with per-case
+input, whose collected values reach every agent's prompt. See
+[`docs/initiatives/reusable-operations.md`](../../../../docs/initiatives/reusable-operations.md)
+and the `org:introduce-api` worked example in `backend/internal/example-custom-agent`.
 
 The **same type can be delivered from the backend** instead of code-shipped: register it on the
 deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's
