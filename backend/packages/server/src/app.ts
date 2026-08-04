@@ -101,6 +101,7 @@ import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
+import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
 
 /**
@@ -202,6 +203,11 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
   // budget. See backend/docs/debug-api.md.
   app.route('/', publicDebugController())
+  // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
+  // half of the push channel, so a deployment with no browser session can register the receiver
+  // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
+  // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
+  app.route('/', publicNotificationWebhookController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())

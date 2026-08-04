@@ -1,8 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** investigation complete; A0 landed, the start-path scope question settled by
-[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–C2 not started · **Owner:**
-core · **Started:** 2026-08-02
+**Status:** investigation complete; A0, D1 and C1 landed, the start-path scope question settled by
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–B2 and C2 not started ·
+**Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -211,13 +211,40 @@ scope work above, since A1–A4 make scope more load-bearing.
 ADR 0030 already calls this "trivial once wanted: the spec already ships as a repo file, so an
 endpoint is only packaging". It becomes materially more useful once A1–A4 widen the surface.
 
-### C1: Notification-webhook management under `/api/v1` ⬜
+### C1: Notification-webhook management under `/api/v1` ✅
 
-Managed today only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
-behind `integrations.manage`, and there is deliberately no SPA panel. A deployment whose operator is
-headless therefore has NO route to register the receiver that the run-lifecycle push exists to feed.
-`admin` scope; the sealed signing secret must stay write-only (never readable back), and the
-`runEvents` selector rides it.
+Was managed only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
+behind `integrations.manage`, with deliberately no SPA panel, so a deployment whose operator is
+headless had NO route to register the receiver that the run-lifecycle push exists to feed: the
+delivery contract was headless and its enrolment was not.
+
+`GET|PUT|DELETE /api/v1/notification-webhook` now serve the same three verbs at `admin` scope,
+delegating to the same `NotificationWebhookService` the session controller calls (so the SSRF guard,
+the keep-on-omit rule per field and the one-row-per-workspace invariant cannot differ by surface).
+The session routes stay: an operator with a browser keeps the surface they had.
+
+Three decisions worth keeping:
+
+- **`admin` on the READ too**, where `read` was arguable (the projection carries no secret). ADR 0034
+  decides it: a scope can be relaxed later without breaking a live key, never tightened, so between
+  two close readings the strict one is the reversible one.
+- **The read is WRAPPED (`{ webhook: … | null }`), the write is not.** A bare nullable body is an
+  honest wire shape and a poor generated one: Go decodes a `null` body into a zero-valued struct, so
+  "nothing registered" would reach a caller as an endpoint whose URL is the empty string. The write
+  always has an endpoint to describe, so wrapping its response would hand every client a null to
+  check that cannot occur.
+- **The secret stays write-only on this surface too.** An `admin` key can ROTATE the signing secret
+  and can never read the stored one, which is what stops a leaked key from becoming the ability to
+  forge deliveries a receiver would verify.
+- **`PUT`'s `url` became optional so keep-on-omit is uniform.** Publishing the endpoint is what
+  forced the question: three separate places in the first draft described the rule as covering every
+  field, because that is the mental model a partial `PUT` creates, while the schema required `url`.
+  Rather than trim the docs to the accident, the schema moved. A mandatory re-send made the routine
+  edit carry a value the caller never meant to change, and a client re-sending a URL cached before
+  someone else rotated the receiver would redirect every future delivery while looking like it only
+  added a subscription. The first `PUT` on an empty workspace still needs one
+  (`reason: 'webhook_url_required'`). Worth doing BEFORE the version shipped: relaxing a required
+  field stays legal afterwards, but the false doc would have been baked into four published SDKs.
 
 ### D1: Ticket context on task creation ✅
 
