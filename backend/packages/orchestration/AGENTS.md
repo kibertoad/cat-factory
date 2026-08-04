@@ -113,6 +113,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `promptMessages.ts` owns the lenient `?view=messages` parse of a stored prompt delta into
   independently-budgeted per-message rows. Every bound lives in the contract or the SQL, never
   here. See `backend/docs/debug-api.md`.
+- `pipelines/pipelineAdoption.ts`: reconciling a workspace's stored pipeline rows with the CODE
+  catalog. `adoptForRun` resolves a run's pipeline and MATERIALISES a catalog built-in the board was
+  never seeded with (a reusable operation pins its pipeline by id, so an older board would otherwise
+  refuse to start a task it created); `resolveDefinition` is the read-only twin for a question about
+  a prospective run. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
+  `PipelineService.reseed` shares its row builder. See
+  `backend/docs/pipeline-catalog-lifecycle.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

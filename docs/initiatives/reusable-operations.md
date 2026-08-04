@@ -1,8 +1,8 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-4 landed (the fold + the bundle; the shared field vocabulary; the grouped
-picker; the canned-pipeline lifecycle); slices 5-8 pending · **Owner:** orchestration ·
-**Started:** 2026-08-04
+**Status:** slices 1-4b landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker; the canned-pipeline lifecycle + adoption on start); slices 5-8 pending ·
+**Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -308,6 +308,36 @@ regeneration (`pnpm gen:sdk`, `check:sdk`).
    the scenario if its Node boot can register the example package, otherwise the discovery
    read alone is smoke-tested and this tracker records why.
 
+### D10b. Adoption: a run materialises the operation's pipeline, so no board is stuck
+
+D10's advisory-plus-reseed is the adoption path for a HUMAN browsing the pipeline library. It is not
+one for an operation, because an operation PINS its pipeline by id: `pipelineIdFor` resolves the pin
+off the task-type registry, which knows nothing about rows, so on a board older than the registration
+a task of the operation is creatable and then refuses to start with a bare 404. Nothing in the create
+flow says "reseed first", and nothing should: the board not having a row is the platform's bookkeeping,
+not the user's problem.
+
+So run resolution ADOPTS: `pipelineAdoption.adoptForRun` returns the stored row, else materialises the
+catalog entry and returns that. The mechanics, the `builtin`-only restriction that keeps it from
+resurrecting a deletion, and the read-only `resolveDefinition` twin live in
+[`pipeline-catalog-lifecycle.md`](../../backend/docs/pipeline-catalog-lifecycle.md).
+
+Two rejected alternatives, both of which look cheaper:
+
+- **Resolve from the catalog without persisting.** The run would then use a pipeline the board's own
+  library does not list, cannot open in the builder, and cannot attach a schedule to. That is the
+  "absent renders as empty" failure in its worst form: the library actively says "you do not have
+  this" while a run is executing it.
+- **Auto-seed registered built-ins into existing workspaces at boot or on board load.** Still
+  rejected, for the reason already recorded below: `seedPipelines` must never gain a filter or a
+  write-behind. Adoption is the same write, made where the need is PROVEN (someone started a run)
+  rather than speculatively for every registered pipeline on every board load.
+
+Version does NOT enter the reference anywhere. The operation names an id, the run uses whatever
+definition the workspace holds, and `version` exists solely as the drift signal between the code
+catalog and the copied row (fact 4). Adoption inserts at the current catalog version, so a board that
+adopts later simply starts current.
+
 ### D10. Canned-pipeline lifecycle: use the catalog lifecycle, verified
 
 The mechanism exists (fact 4); the decision is the REGISTRATION SHAPE plus verification:
@@ -437,6 +467,7 @@ else could offer the way back). Mechanics:
 | 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ✅ done |                                                             |
 | 3   | **Picker grouping (D7)**: category captions in the type picker; `presentation.description` rendered; one chrome i18n key (the "Other" bucket)                                                                                                                                                                                                         | SPA    | 2          | ✅ done | [#1672](https://github.com/kibertoad/cat-factory/pull/1672) |
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ✅ done | [#1691](https://github.com/kibertoad/cat-factory/pull/1691) |
+| 4b  | **Adoption on start (D10b)**: `PipelineRepository.insertIfAbsent` (both runtimes); `pipelineAdoption` collaborator (`adoptForRun` / `resolveDefinition`); run resolution + the personal-credential gate read through it; `reseed`'s absent branch shares the row builder + the idempotent insert; conformance (adopt once under concurrent starts)    | SYSTEM | 4          | ✅ done |                                                             |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
 | 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
 | 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
@@ -650,18 +681,57 @@ final so neither ships a shape that changes a slice later.
   targets (`seedPlan` pins them by id), so they want the same shape for the same reason and today a
   workspace can delete one. That is the initiative-presets examples' own scope, not this slice's;
   named here so the mixed shapes inside one worked-example package don't read as intentional contrast.
-- **A task of an operation is creatable before its pipeline is adopted, and only startable after.**
+- **A task of an operation was creatable before its pipeline was adopted, and only startable after.**
   `pipelineIdFor` resolves the pin off the REGISTRY with no check that the workspace stores the row
-  (`taskTypeCreationDefaults.ts`), which is the right disposition: refusing creation would punish a
-  board for not having reseeded, and falling through to the positional default would silently run the
-  operation on the wrong pipeline. So the advisory is the adoption PATH, not a nicety. Not pinned by a
-  test yet, and **slice 8 owns the door where it bites**: `tasks.create({ taskType }) + tasks.start()`
-  against a board that never adopted the operation's pipeline is the headless spelling of it.
+  (`taskTypeCreationDefaults.ts`), which is the right disposition for CREATION: refusing it would
+  punish a board for not having reseeded, and falling through to the positional default would silently
+  run the operation on the wrong pipeline. What was wrong was leaving the advisory as the only way
+  across, which slice 4b fixes by adopting at run resolution (D10b).
 - **The `builtinPipelineName` humanisation nit is now REACHABLE** (fact 4): a board predating the
   operation sees its pipeline offered as "org introduce api". Still unfixed per D10, and the fix is
   not a better humaniser: `pipelineCatalogVersions` is a `Record<string, number>`, so a real name
   needs a sibling map on the snapshot (internal, so additive and cheap) plus the store/composable
   reads. Worth doing when a slice is already in that snapshot.
+
+### What slice 4b surfaced (carry into the rest)
+
+- **The question that produced this slice was "why pin a VERSION to an operation", and the answer is
+  that nothing does.** `defaultPipelineId` is a bare id, `block.pipelineId` is a bare id, and a run
+  uses whatever definition the workspace's row currently holds. `version` only ever compares the code
+  catalog against the copied row. Worth keeping stated plainly, because "the operation names a
+  version" is the natural misreading of a lifecycle built out of version numbers, and it would lead a
+  later slice to add a pin nothing needs.
+- **The adoption gap was not in the reference, it was in the two different sources that answer
+  "what is pipeline X".** Creation asked the registry, the run asked the rows, and nothing reconciled
+  them. Any future surface that resolves a pipeline id must pick one deliberately: `adoptForRun` when
+  it is about to run one, `resolveDefinition` when it is answering a question about a prospective run.
+  A bare `pipelineRepository.get` on a run-adjacent path is now the smell.
+- **The read-only twin exists because of a real bug, not for symmetry.** `individualVendorsForBlock`
+  backs the personal-credential gate on the START request and did `pipeline?.agentKinds ?? []`, so an
+  un-adopted pipeline resolved to no kinds, the gate concluded the run needed no personal
+  subscription, and the run then adopted and started ungated. Any `?? []` over a pipeline read is
+  worth the same suspicion: the degradation is silent and permissive.
+- **`insertIfAbsent` is conflict-TARGETED, and the D1 half must not become `INSERT OR IGNORE`.** Two
+  tasks of one operation started at once both resolve "no row" and both insert. Both write the same
+  catalog definition, so losing is a no-op, but a blanket ignore would also swallow an unrelated
+  constraint failure on SQLite only, which passes the Postgres suite. The conformance assertion drives
+  the race through HTTP (two concurrent starts, then exactly one row) rather than through a repository
+  probe, so it covers the wiring too.
+- **`reseed` and adoption now share `adoptedCatalogRow`.** They materialise the same catalog entry, so
+  two builders would eventually disagree about labels or archive state. Reseed's absent branch also
+  moved onto `insertIfAbsent`, which fixed a pre-existing race of its own (two concurrent reseeds of
+  an un-adopted built-in).
+- **`ExecutionServiceDependencies.pipelineRegistry` is the FIFTH edit of the four-edit trap slice 1
+  named**, with the same failure mode: optional, so a facade that forgets it typechecks, and the
+  BUILT-IN half of adoption keeps working, so only a DEPLOYMENT's own registered pipeline is
+  unadoptable. `container/execution-service.ts` reads `runtime.pipelineRegistry`, never an injected
+  argument, so the engine and `PipelineService` adopt from one instance.
+- **Still not adopted anywhere else, deliberately**: `InitiativeService.assertPipelineExists` (a policy
+  edit naming an un-adopted pipeline) and `RecurringPipelineService` (attaching a schedule to one)
+  still refuse. Both are AUTHORING paths where the SPA only ever offers stored pipelines, so the
+  refusal is only reachable headlessly, and adopting on an authoring write would materialise rows for
+  pipelines nobody ran. Slice 8 should decide the public-API spelling explicitly rather than inherit
+  this by accident.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

@@ -28,6 +28,7 @@ import type {
   ModelPresetCacheValue,
   ModelPresetRepository,
   ModelRef,
+  PipelineRegistry,
   PipelineRepository,
   PrVerificationReportPublisher,
   ProviderCapabilities,
@@ -101,6 +102,16 @@ export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
+  /**
+   * The app-owned pipeline registry, so run resolution can ADOPT a catalog built-in the workspace
+   * was never seeded with (`pipelines/pipelineAdoption.ts`). Optional, because the BUILT-IN catalog
+   * lives in code and stays adoptable without it; a facade must still thread it, or a DEPLOYMENT's
+   * own registered pipeline (a reusable operation's canned pipeline) is unadoptable and a task
+   * pinning it 404s on any board older than the registration. Read the resolved
+   * `runtime.pipelineRegistry`, never a facade's own optional argument, so the engine and
+   * `PipelineService` share ONE instance.
+   */
+  pipelineRegistry?: PipelineRegistry
   executionRepository: ExecutionRepository
   /**
    * Resolves the owning account of a workspace so a service that pins no cloud

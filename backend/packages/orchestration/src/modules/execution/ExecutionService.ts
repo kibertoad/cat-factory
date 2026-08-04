@@ -98,6 +98,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
+import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
 // The engine's injected-collaborator contract lives next door (a ~350-line declaration block
@@ -148,10 +149,27 @@ function buildPrReportController(
   })
 }
 
+/**
+ * How a run resolves its pipeline: the workspace's stored row, else the catalog entry the board was
+ * never seeded with, ADOPTED so every other surface can see what ran
+ * (`pipelines/pipelineAdoption.ts`). A reusable operation pins its pipeline by id, so a board older
+ * than the registration would otherwise refuse to start a task it happily created.
+ *
+ * A sibling factory rather than an inline call for the reason {@link buildPrReportController} is
+ * one: the constructor is at its per-function line budget, and a budget is a split trigger.
+ */
+function buildPipelineAdoption(deps: ExecutionServiceDependencies): PipelineAdoption {
+  return createPipelineAdoption({
+    pipelineRepository: deps.pipelineRepository,
+    pipelineRegistry: deps.pipelineRegistry,
+    logger: deps.logger,
+  })
+}
+
 export class ExecutionService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
-  private readonly pipelineRepository: PipelineRepository
+  private readonly pipelineAdoption: PipelineAdoption
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
@@ -323,7 +341,7 @@ export class ExecutionService {
     const runInitiatorScopeFn = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
-    this.pipelineRepository = pipelineRepository
+    this.pipelineAdoption = buildPipelineAdoption(dependencies)
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
     this.clock = clock
@@ -366,7 +384,7 @@ export class ExecutionService {
     const runContext = buildRunContextAndAdmission(dependencies)
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
-    this.postMergeBoard = this.buildPostMergeBoard()
+    this.postMergeBoard = this.buildPostMergeBoard(pipelineRepository)
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
@@ -497,7 +515,7 @@ export class ExecutionService {
       events: this.events,
       executionRepository: this.executionRepository,
       idGenerator: this.idGenerator,
-      pipelineRepository: this.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       runStateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       workRunner: this.workRunner,
@@ -582,12 +600,12 @@ export class ExecutionService {
     })
   }
 
-  private buildPostMergeBoard(): PostMergeBoardController {
+  private buildPostMergeBoard(pipelineRepository: PipelineRepository): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
     // structurally incompatible with the interface even from inside it.
     const host: PostMergeBoardHost = {
       blockRepository: this.blockRepository,
-      pipelineRepository: this.pipelineRepository,
+      pipelineRepository,
       admission: this.admission,
       board: this.board,
       events: this.events,
@@ -682,7 +700,11 @@ export class ExecutionService {
     hasPersonalSubscription: HasPersonalSubscription = () => false,
   ): Promise<SubscriptionVendor[]> {
     const block = await this.requireBlock(workspaceId, blockId)
-    const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
+    // Through adoption's READ-ONLY resolve, not the bare row: this runs on the start REQUEST, and a
+    // board that has not adopted the pipeline yet has no row, so a row-only read answered "no
+    // agent kinds" and the gate concluded the run needed no personal credential. It would then
+    // adopt and start ungated.
+    const pipeline = await this.pipelineAdoption.resolveDefinition(workspaceId, pipelineId)
     return this.resolveIndividualVendors(
       workspaceId,
       block.modelId,

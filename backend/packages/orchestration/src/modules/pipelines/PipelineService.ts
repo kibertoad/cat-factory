@@ -28,6 +28,7 @@ import type {
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { adoptedCatalogRow } from './pipelineAdoption.js'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
@@ -427,14 +428,12 @@ export class PipelineService {
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const labels = existing?.labels ?? seed.labels
-    const pipeline: Pipeline = {
-      ...seed,
-      ...(labels && labels.length ? { labels } : { labels: undefined }),
-      ...(existing?.archived ? { archived: true } : { archived: undefined }),
-    }
+    const pipeline = adoptedCatalogRow(seed, existing)
+    // The absent branch goes through `insertIfAbsent` because it races the run path's adopt-on-
+    // start (and a second reseed): both write this same catalog row, so losing is a no-op rather
+    // than a duplicate-key 500 on whichever caller arrives second.
     if (existing) await this.pipelineRepository.update(workspaceId, pipeline)
-    else await this.pipelineRepository.insert(workspaceId, pipeline)
+    else await this.pipelineRepository.insertIfAbsent(workspaceId, pipeline)
     return pipeline
   }
 

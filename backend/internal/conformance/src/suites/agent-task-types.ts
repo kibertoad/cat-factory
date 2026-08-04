@@ -223,98 +223,7 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
       expect(unregistered.body.taskTypeFields?.custom?.anything).toBe('goes')
     })
 
-    // D10: an operation's canned pipeline registers as a READ-ONLY VERSIONED catalog template, and
-    // that shape is what makes the operation distributable: the org rolls the pipeline out to
-    // boards that predate it and then rolls UPDATES out to the same boards. Driven as three apps
-    // over ONE store (the board exists, the org ships the operation, the org bumps it) because the
-    // sequencing IS the feature: a workspace created after the registration is seeded with the
-    // pipeline at creation and would prove nothing about adoption.
-    it('rolls an operation’s canned pipeline out to a board seeded before it, then updates it', async () => {
-      const PIPELINE_ID = 'pl_conf_introduce_api'
-      const TASK_TYPE = 'conf:introduce-api'
-
-      // 1. The board is seeded while the org's package does not yet exist, so it holds neither the
-      //    operation nor its pipeline, and the catalog cannot claim a pipeline nothing registers.
-      const before = harness.makeApp()
-      const { workspace } = await before.createWorkspace()
-      const wsId = workspace.id
-      const seeded = await before.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      expect(seeded.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
-      expect(seeded.body.pipelineCatalogVersions).not.toHaveProperty(PIPELINE_ID)
-
-      // 2. The org ships the operation. Its pipeline is advertised in the catalog versions with NO
-      //    stored row: precisely the state the SPA's new-pipeline advisory offers to materialise,
-      //    and reachable only because the registration is `builtin` with a `version` (a versionless
-      //    one is version 0 to the advisory and un-reseedable once stored).
-      const taskTypeRegistry = defaultTaskTypeRegistry()
-      taskTypeRegistry.register({
-        taskType: TASK_TYPE,
-        presentation: {
-          label: 'Introduce API',
-          icon: 'i-lucide-plug',
-          color: '#0ea5e9',
-          description: 'Expose functionality over HTTP.',
-        },
-        fields: [{ key: 'entity', label: 'Entity', type: 'text', required: true }],
-        defaultPipelineId: PIPELINE_ID,
-      })
-      const v1 = new PipelineRegistry()
-      v1.register({
-        id: PIPELINE_ID,
-        name: 'Introduce API',
-        builtin: true,
-        version: 1,
-        agentKinds: ['architect', 'coder'],
-      })
-      const shipped = harness.makeApp(undefined, { pipelineRegistry: v1, taskTypeRegistry })
-      const advertised = await shipped.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      expect(advertised.body.pipelineCatalogVersions?.[PIPELINE_ID]).toBe(1)
-      expect(advertised.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
-
-      // 3. One reseed MATERIALISES it as an INSERT into a board that never held the row, the half
-      //    of the reseed path a workspace created after the registration never exercises. It lands
-      //    read-only, so the operation's pipeline cannot be reshaped out from under the type that
-      //    pins it. Deviating is a clone.
-      const reseed = `/workspaces/${wsId}/pipelines/${PIPELINE_ID}/reseed`
-      const added = await shipped.call<Pipeline>('POST', reseed)
-      expect(added.status).toBe(200)
-      expect(added.body.builtin).toBe(true)
-      expect(added.body.version).toBe(1)
-      const edit = await shipped.call('PATCH', `/workspaces/${wsId}/pipelines/${PIPELINE_ID}`, {
-        name: 'Mine',
-      })
-      expect(edit.status).toBe(422)
-
-      // The rollout's point: the operation is now invocable on this board, its task pinning the
-      // pipeline the board just adopted.
-      const task = await shipped.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
-        title: 'Expose orders',
-        taskType: TASK_TYPE,
-        taskTypeFields: { custom: { entity: 'Order' } },
-      })
-      expect(task.status).toBe(201)
-      expect(task.body.pipelineId).toBe(PIPELINE_ID)
-
-      // 4. The org tightens the operation and bumps the version. The catalog moves ahead of the
-      //    stored copy (the drift signal the advisory reads to offer an update), and the SAME
-      //    reseed adopts the new definition.
-      const v2 = new PipelineRegistry()
-      v2.register({
-        id: PIPELINE_ID,
-        name: 'Introduce API',
-        builtin: true,
-        version: 2,
-        agentKinds: ['architect', 'coder', 'tester-api'],
-      })
-      const upgraded = harness.makeApp(undefined, { pipelineRegistry: v2, taskTypeRegistry })
-      const drifted = await upgraded.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      expect(drifted.body.pipelineCatalogVersions?.[PIPELINE_ID]).toBe(2)
-      expect(drifted.body.pipelines.find((p) => p.id === PIPELINE_ID)?.version).toBe(1)
-      const adopted = await upgraded.call<Pipeline>('POST', reseed)
-      expect(adopted.status).toBe(200)
-      expect(adopted.body.version).toBe(2)
-      expect(adopted.body.agentKinds).toEqual(['architect', 'coder', 'tester-api'])
-    })
+    registerOperationPipelineTests(harness)
 
     it('folds nothing for a built-in task type, so its prompt is unchanged', async () => {
       // The regression bar for the fold: a run that collected no parameters must carry none.
@@ -336,5 +245,182 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
       const exec = (await app.drive(wsId)).find((e) => e.blockId === created.body.id)!
       expect(exec.steps[0]?.output).toContain('[params][/params]')
     })
+  })
+}
+
+/**
+ * The lifecycle of the pipeline an operation BUNDLES (D10 / D10b): how the org's canned pipeline
+ * reaches a workspace, and how a later version of it does. Registered from the suite above, into the
+ * same `describe`; split out purely to keep each function within the per-function line budget (the
+ * `registerPipelineCatalogTests` precedent in `core-planning.ts`).
+ */
+function registerOperationPipelineTests(harness: ConformanceHarness): void {
+  // D10: an operation's canned pipeline registers as a READ-ONLY VERSIONED catalog template, and
+  // that shape is what makes the operation distributable: the org rolls the pipeline out to
+  // boards that predate it and then rolls UPDATES out to the same boards. Driven as three apps
+  // over ONE store (the board exists, the org ships the operation, the org bumps it) because the
+  // sequencing IS the feature: a workspace created after the registration is seeded with the
+  // pipeline at creation and would prove nothing about adoption.
+  it('rolls an operation’s canned pipeline out to a board seeded before it, then updates it', async () => {
+    const PIPELINE_ID = 'pl_conf_introduce_api'
+    const TASK_TYPE = 'conf:introduce-api'
+
+    // 1. The board is seeded while the org's package does not yet exist, so it holds neither the
+    //    operation nor its pipeline, and the catalog cannot claim a pipeline nothing registers.
+    const before = harness.makeApp()
+    const { workspace } = await before.createWorkspace()
+    const wsId = workspace.id
+    const seeded = await before.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(seeded.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+    expect(seeded.body.pipelineCatalogVersions).not.toHaveProperty(PIPELINE_ID)
+
+    // 2. The org ships the operation. Its pipeline is advertised in the catalog versions with NO
+    //    stored row: precisely the state the SPA's new-pipeline advisory offers to materialise,
+    //    and reachable only because the registration is `builtin` with a `version` (a versionless
+    //    one is version 0 to the advisory and un-reseedable once stored).
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      taskType: TASK_TYPE,
+      presentation: {
+        label: 'Introduce API',
+        icon: 'i-lucide-plug',
+        color: '#0ea5e9',
+        description: 'Expose functionality over HTTP.',
+      },
+      fields: [{ key: 'entity', label: 'Entity', type: 'text', required: true }],
+      defaultPipelineId: PIPELINE_ID,
+    })
+    const v1 = new PipelineRegistry()
+    v1.register({
+      id: PIPELINE_ID,
+      name: 'Introduce API',
+      builtin: true,
+      version: 1,
+      agentKinds: ['architect', 'coder'],
+    })
+    const shipped = harness.makeApp(undefined, { pipelineRegistry: v1, taskTypeRegistry })
+    const advertised = await shipped.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(advertised.body.pipelineCatalogVersions?.[PIPELINE_ID]).toBe(1)
+    expect(advertised.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    // 3. One reseed MATERIALISES it as an INSERT into a board that never held the row, the half
+    //    of the reseed path a workspace created after the registration never exercises. It lands
+    //    read-only, so the operation's pipeline cannot be reshaped out from under the type that
+    //    pins it. Deviating is a clone.
+    const reseed = `/workspaces/${wsId}/pipelines/${PIPELINE_ID}/reseed`
+    const added = await shipped.call<Pipeline>('POST', reseed)
+    expect(added.status).toBe(200)
+    expect(added.body.builtin).toBe(true)
+    expect(added.body.version).toBe(1)
+    const edit = await shipped.call('PATCH', `/workspaces/${wsId}/pipelines/${PIPELINE_ID}`, {
+      name: 'Mine',
+    })
+    expect(edit.status).toBe(422)
+
+    // The rollout's point: the operation is now invocable on this board, its task pinning the
+    // pipeline the board just adopted.
+    const task = await shipped.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Expose orders',
+      taskType: TASK_TYPE,
+      taskTypeFields: { custom: { entity: 'Order' } },
+    })
+    expect(task.status).toBe(201)
+    expect(task.body.pipelineId).toBe(PIPELINE_ID)
+
+    // 4. The org tightens the operation and bumps the version. The catalog moves ahead of the
+    //    stored copy (the drift signal the advisory reads to offer an update), and the SAME
+    //    reseed adopts the new definition.
+    const v2 = new PipelineRegistry()
+    v2.register({
+      id: PIPELINE_ID,
+      name: 'Introduce API',
+      builtin: true,
+      version: 2,
+      agentKinds: ['architect', 'coder', 'tester-api'],
+    })
+    const upgraded = harness.makeApp(undefined, { pipelineRegistry: v2, taskTypeRegistry })
+    const drifted = await upgraded.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(drifted.body.pipelineCatalogVersions?.[PIPELINE_ID]).toBe(2)
+    expect(drifted.body.pipelines.find((p) => p.id === PIPELINE_ID)?.version).toBe(1)
+    const adopted = await upgraded.call<Pipeline>('POST', reseed)
+    expect(adopted.status).toBe(200)
+    expect(adopted.body.version).toBe(2)
+    expect(adopted.body.agentKinds).toEqual(['architect', 'coder', 'tester-api'])
+  })
+
+  // The other half of D10's rollout: a board does not have to ADOPT the operation's pipeline
+  // before it can invoke the operation. An operation pins its pipeline by id off the task-type
+  // registry, which knows nothing about rows, so on a board older than the registration a task
+  // of the operation was creatable and then refused to start. Starting now materialises the
+  // catalog row rather than running off the code copy, because a run must never use a pipeline
+  // the board's own library cannot show, open in the builder, or attach a schedule to.
+  it('adopts an operation’s canned pipeline on first run, once, under concurrent starts', async () => {
+    const PIPELINE_ID = 'pl_conf_adopt_on_start'
+    const TASK_TYPE = 'conf:adopt-on-start'
+
+    // 1. The board is seeded before the org's package exists.
+    const before = harness.makeApp()
+    const { workspace } = await before.createWorkspace()
+    const wsId = workspace.id
+
+    // 2. The org ships the operation. Nobody reseeds, so the board still holds no row for it.
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      taskType: TASK_TYPE,
+      presentation: {
+        label: 'Adopt on start',
+        icon: 'i-lucide-plug',
+        color: '#0ea5e9',
+        description: 'Expose functionality over HTTP.',
+      },
+      defaultPipelineId: PIPELINE_ID,
+    })
+    const registry = new PipelineRegistry()
+    registry.register({
+      id: PIPELINE_ID,
+      name: 'Adopt on start',
+      builtin: true,
+      version: 3,
+      agentKinds: ['coder'],
+    })
+    const app = harness.makeApp(undefined, { pipelineRegistry: registry, taskTypeRegistry })
+    const unadopted = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(unadopted.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    // 3. Two tasks of the operation, both pinning the un-adopted pipeline, started AT ONCE. Both
+    //    resolve "no row" and both adopt, which is the race a plain insert would 500 the loser on.
+    const tasks = await Promise.all(
+      ['Expose orders', 'Expose refunds'].map((title) =>
+        app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title,
+          taskType: TASK_TYPE,
+        }),
+      ),
+    )
+    expect(tasks.map((t) => t.body.pipelineId)).toEqual([PIPELINE_ID, PIPELINE_ID])
+    const starts = await Promise.all(
+      tasks.map((t) =>
+        app.call('POST', `/workspaces/${wsId}/blocks/${t.body.id}/executions`, {
+          pipelineId: PIPELINE_ID,
+        }),
+      ),
+    )
+    expect(starts.map((s) => s.status)).toEqual([201, 201])
+
+    // 4. Adoption persisted the catalog row ONCE, at its catalog version, and read-only: the
+    //    board's library now shows exactly what ran, which is the whole reason this writes.
+    const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    const stored = after.body.pipelines.filter((p) => p.id === PIPELINE_ID)
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.builtin).toBe(true)
+    expect(stored[0]?.version).toBe(3)
+    expect(after.body.pipelineCatalogVersions?.[PIPELINE_ID]).toBe(3)
+
+    // 5. An id that is neither stored nor in the live catalog is still a 404. Adoption widens what
+    //    resolves to the catalog, never to anything a caller names.
+    const bogus = await app.call('POST', `/workspaces/${wsId}/blocks/blk_auth/executions`, {
+      pipelineId: 'pl_conf_never_registered',
+    })
+    expect(bogus.status).toBe(404)
   })
 }

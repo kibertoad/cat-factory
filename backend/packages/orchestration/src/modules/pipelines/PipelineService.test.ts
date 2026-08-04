@@ -35,6 +35,8 @@ function pipelineRepo(store = new Map<string, Pipeline>()): PipelineRepository {
     listByWorkspace: async () => [...store.values()],
     get: async (_ws, id) => store.get(id) ?? null,
     insert: async (_ws, p) => void store.set(p.id, p),
+    // First write wins, matching the conflict-targeted `ON CONFLICT DO NOTHING` both stores use.
+    insertIfAbsent: async (_ws, p) => void (store.has(p.id) || store.set(p.id, p)),
     update: async (_ws, p) => void store.set(p.id, p),
     delete: async (_ws, id) => void store.delete(id),
   }
