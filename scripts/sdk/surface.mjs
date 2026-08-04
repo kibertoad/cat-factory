@@ -74,6 +74,27 @@ const SURFACE = {
   },
 }
 
+/**
+ * The operations the MCP facade (`sdk/mcp`) deliberately does NOT expose as a tool, each with the
+ * reason a caller should read. Generation FAILS on a streaming operation that is not named here,
+ * and on an entry naming an operation the spec no longer has.
+ *
+ * Exposure is the default and the absences are the exception, which is the opposite of how
+ * {@link SURFACE} works, and deliberately so: an endpoint added to `/api/v1` should become a tool
+ * without anyone deciding twice, but an endpoint that CANNOT be one has to say why, or its
+ * absence reads as an oversight and a caller writes it off as unsupported.
+ */
+export const MCP_OMITTED_OPERATIONS = {
+  streamPublicJobEvents:
+    'A tool call returns one result, so it has no channel to stream an open-ended event feed ' +
+    'over. Poll `jobs_get` instead, or consume the SSE endpoint through an SDK.',
+  streamPublicTaskRun:
+    'A tool call returns one result, so it has no channel to stream a run over. Poll ' +
+    '`tasks_get_run` instead (a parked run waits for a human indefinitely, so a bounded "wait ' +
+    'for the run to finish" tool would be a timeout dressed up as an answer), or consume the ' +
+    'SSE endpoint through an SDK.',
+}
+
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',

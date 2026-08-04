@@ -5,6 +5,7 @@ import type {
   ExecutionRepository,
   MachineNodeRepository,
   NotificationChannel,
+  PlatformAlertSink,
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
@@ -191,6 +192,14 @@ export interface ServerContainer extends Core {
    * deliver. Absent ⇒ the management surface 503s and no webhook deliveries are attempted.
    */
   notificationWebhooks?: NotificationWebhookService
+  /**
+   * The outbound PLATFORM-HEALTH push, built by `buildNotificationWebhookSupport` beside the
+   * management service and the notification channel from the same row and cipher. The
+   * platform-health sweep hands it each firing/resolved edge, which is what an on-call
+   * integration is wired to. Absent ⇒ no endpoint feature is wired on this facade; the in-app
+   * card is unaffected, since the sweep's own state lives in that card rather than out here.
+   */
+  platformAlertSink?: PlatformAlertSink
   /**
    * Whether the opt-in Cloudflare Workers AI provider lib is registered for this
    * deployment (binding on the Worker, REST account/token on Node). When false, the

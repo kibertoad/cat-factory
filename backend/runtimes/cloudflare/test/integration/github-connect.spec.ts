@@ -20,12 +20,17 @@ describe('github connect', () => {
     expect(connected.status).toBe(201)
     expect(connected.body.installationId).toBe(installationId)
     expect(connected.body.accountLogin).toBe('acme')
+    // The App-only affordances the SPA offers (the installation settings page, the
+    // repo-access grant) key off this, so the connect response and the read must agree
+    // that this is an installation rather than a pasted token.
+    expect(connected.body.method).toBe('app')
 
     const read = await app.call<{ connection: GitHubConnection | null }>(
       'GET',
       `/workspaces/${workspace.id}/github/connection`,
     )
     expect(read.body.connection?.installationId).toBe(installationId)
+    expect(read.body.connection?.method).toBe('app')
   })
 
   it('discovers the App installations, annotating which are already bound', async () => {

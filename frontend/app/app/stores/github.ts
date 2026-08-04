@@ -10,7 +10,6 @@ import type {
   GitHubRepo,
   RepoTreeEntry,
   VcsConnectOption,
-  VcsProvider,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
@@ -19,7 +18,7 @@ import { useServicesStore } from '~/stores/services'
 import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
 import { createGitHubConnectionActions } from '~/stores/github/connection'
 import { createGitHubRepoActions } from '~/stores/github/repoActions'
-import { createVcsConnectActions } from '~/stores/github/vcsConnect'
+import { createVcsConnectActions, createVcsProviderViews } from '~/stores/github/vcsConnect'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -63,26 +62,6 @@ export const useGitHubStore = defineStore('github', () => {
   const syncing = ref(false)
 
   const connected = computed(() => connection.value !== null)
-  /**
-   * The provider backing the current connection. Presentation (labels, icons, host/URL shapes)
-   * keys off this; a connection from a backend predating the discriminator is a GitHub App one.
-   */
-  const provider = computed<VcsProvider>(() => connection.value?.provider ?? 'github')
-  /** Whether the deployment can serve a GitHub App connect / a per-workspace GitLab PAT connect. */
-  const canConnectGitHubApp = computed(() =>
-    connectOptions.value.some((o) => o.provider === 'github' && o.method === 'app'),
-  )
-  const canConnectGitLabPat = computed(() =>
-    connectOptions.value.some((o) => o.provider === 'gitlab' && o.method === 'pat'),
-  )
-  /**
-   * The single provider this deployment can connect, or null when it offers several (or none) —
-   * what the connect copy keys off so a one-provider deployment never says "choose a provider".
-   */
-  const soleConnectProvider = computed<VcsProvider | null>(() => {
-    const providers = new Set(connectOptions.value.map((o) => o.provider))
-    return providers.size === 1 ? [...providers][0]! : null
-  })
   /** Whether cat-factory can create repos under the connected account itself. */
   const canCreateRepos = computed(() => connection.value?.canCreateRepos === true)
   /**
@@ -219,6 +198,9 @@ export const useGitHubStore = defineStore('github', () => {
   const connectionActions = createGitHubConnectionActions(context)
   const repoActions = createGitHubRepoActions(context)
   const vcsConnectActions = createVcsConnectActions(context)
+  // The derived "which provider" questions, beside the connect actions that populate what they
+  // read (see `createVcsProviderViews` for why `provider` and `surfaceProvider` differ).
+  const providerViews = createVcsProviderViews(context)
 
   /**
    * Drop the per-workspace projection + connection state (called on workspace switch)
@@ -254,10 +236,7 @@ export const useGitHubStore = defineStore('github', () => {
     loading,
     syncing,
     connected,
-    provider,
-    canConnectGitHubApp,
-    canConnectGitLabPat,
-    soleConnectProvider,
+    ...providerViews,
     canCreateRepos,
     missingWorkflowsPermission,
     repoFor,

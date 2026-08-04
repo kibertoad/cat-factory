@@ -1,0 +1,17 @@
+-- Platform-health alert events on the workspace's outbound webhook (migration 0061, extended by
+-- 0072 with run events). The endpoint that already receives notification cards and run lifecycle
+-- can now also receive the deployment watching ITSELF: `platform_health.firing` when the
+-- platform-health sweep's set of tripped conditions changes, `platform_health.resolved` when it
+-- observes the account recover. That is the family an on-call system is paged by.
+--
+-- The `platform_health` NOTIFICATION type could already be named in the `types` filter, and for a
+-- human overseer it still should be. It is not safe to page on, though: a card is re-delivered
+-- when a human acts on it or dismisses it, and on the wire that is indistinguishable from the
+-- sweep dismissing the card because the deployment recovered — so a pager would close its incident
+-- whenever somebody tidied their inbox. These edges come from the sweep's own verdict instead.
+--
+-- `alert_events` is a JSON array, and EMPTY means NONE, like `run_events` and unlike the sibling
+-- `types` column: every existing row defaults to '[]' and therefore keeps byte-for-byte its
+-- current behaviour, rather than an endpoint registered for parked decisions suddenly paging an
+-- on-call rotation.
+ALTER TABLE notification_webhooks ADD COLUMN alert_events TEXT NOT NULL DEFAULT '[]';

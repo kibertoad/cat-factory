@@ -50,9 +50,11 @@ packages:
   - 'deploy/node'
   - 'deploy/local'
   # The four public-API SDK clients live together under `sdk/`; only the TypeScript one is an
-  # npm package, so it is the only member here. Python/Go/Java are built and published by their
-  # own toolchains (see sdk/README.md).
+  # npm package, so it is the only client member here. Python/Go/Java are built and published by
+  # their own toolchains (see sdk/README.md). `sdk/mcp` is not a fifth client: it is the MCP
+  # facade over the published operations, built on the TypeScript one.
   - 'sdk/typescript'
+  - 'sdk/mcp'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

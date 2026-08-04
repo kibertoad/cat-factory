@@ -1,17 +1,14 @@
 <script setup lang="ts">
-// GitHub integration panel: connect the workspace's App installation, manage the
-// connection (disconnect / resync), and browse the projected repos, branches,
-// pull requests and issues the backend caches in D1. Mirrors the document-source
-// connect/import surface, but for GitHub. Writes (new branch, open/merge PR,
-// comment) go straight to the repo via the backend's installation token.
+// Source-control panel: connect the workspace, manage the connection (disconnect / resync),
+// and browse the projected repos, branches, pull requests and issues the backend caches.
+// Mirrors the document-source connect/import surface. Writes (new branch, open/merge PR,
+// comment) go straight to the repo via the backend's connection credential.
 import type { GitHubPullRequest, GitHubRepo, VcsProvider } from '~/types/domain'
-// Explicit import: the auto-import name for a component nested under a
-// like-named directory (github/GitHubConnect) doesn't match the `<GitHubConnect>`
-// tag, so it silently renders as an empty element. Importing it directly binds
-// the tag unambiguously.
-import GitHubConnect from './GitHubConnect.vue'
+// Explicit imports: the auto-import name for a component nested under a like-named directory
+// (github/BranchProtectionPreflight) doesn't match the tag used below, so it would silently
+// render as an empty element. Importing by path binds each tag unambiguously.
 import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
-import GitLabConnect from '~/components/vcs/GitLabConnect.vue'
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
@@ -33,9 +30,7 @@ const back = useIntegrationBack(open)
 // Provider-aware chrome: once connected, the panel is titled for the provider the workspace
 // actually connected; before that it names the sole connectable provider, or stays neutral when
 // the deployment serves several. Brand names are verbatim in every locale (see `~/utils/vcs`).
-const chromeProvider = computed(() =>
-  github.connected ? github.provider : github.soleConnectProvider,
-)
+const chromeProvider = computed(() => github.surfaceProvider)
 const panelTitle = computed(() =>
   chromeProvider.value ? VCS_PROVIDER_LABELS[chromeProvider.value] : t('vcs.panel.title'),
 )
@@ -283,26 +278,7 @@ async function merge(pr: GitHubPullRequest) {
     <template #body>
       <div class="space-y-5">
         <!-- not connected: connect -->
-        <template v-if="!github.connected">
-          <!-- One connect surface per method the deployment actually serves: the App
-               installation picker only where a GitHub App is configured, the PAT box only
-               where the per-workspace GitLab connect is wired. -->
-          <template v-if="github.canConnectGitHubApp">
-            <p class="text-sm text-slate-400">{{ t('github.panel.connectIntro') }}</p>
-            <GitHubConnect />
-          </template>
-          <USeparator
-            v-if="github.canConnectGitHubApp && github.canConnectGitLabPat"
-            :label="t('vcs.connect.or')"
-          />
-          <GitLabConnect v-if="github.canConnectGitLabPat" />
-          <p
-            v-if="!github.canConnectGitHubApp && !github.canConnectGitLabPat"
-            class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
-          >
-            {{ t('vcs.connect.noneConfigured') }}
-          </p>
-        </template>
+        <VcsConnectSurfaces v-if="!github.connected" :app-intro="t('github.panel.connectIntro')" />
 
         <!-- connected: manage + browse -->
         <template v-else>

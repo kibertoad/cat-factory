@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// CI drift guard for the four generated SDK clients (twin of `scripts/generate-sdks.mjs`).
+// CI drift guard for the four generated SDK clients and the MCP facade's tool table (twin of
+// `scripts/generate-sdks.mjs`).
 //
 // Two independent checks, because they catch different mistakes:
 //
@@ -92,7 +93,8 @@ async function main() {
     process.exit(1)
   }
   console.log(
-    'The four SDK clients are up to date with docs/openapi.json, and their versions agree.',
+    'The four SDK clients and the MCP facade are up to date with docs/openapi.json, and their ' +
+      'versions agree.',
   )
 }
 

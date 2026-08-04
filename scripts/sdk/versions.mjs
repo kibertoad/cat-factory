@@ -5,7 +5,9 @@
 // `scripts/runner-images.mjs` is shared between the image-tag guard and its sync.
 //
 // Every SDK declares its version twice — once for its package manager, once as the constant its
-// transport stamps into `User-Agent` — in separate files in separate languages. The MANIFEST is
+// transport stamps into `User-Agent` — in separate files in separate languages. The MCP facade
+// (`sdk/mcp`) is in the table for the same reason, even though it is a facade rather than a
+// client: it stamps a version into that header too. The MANIFEST is
 // always the source and the CONSTANT is always derived, because the manifest is what a release
 // actually bumps: changesets owns the TypeScript one, and a human edits the other two (which is
 // the whole publish trigger, see `.github/workflows/sdk-release.yml`).
@@ -23,6 +25,14 @@ export const VERSION_SOURCES = [
     sdk: 'typescript',
     manifest: { path: 'sdk/typescript/package.json', pattern: /"version":\s*"([^"]+)"/ },
     constant: { path: 'sdk/typescript/src/http.ts', pattern: /SDK_VERSION\s*=\s*'([^']+)'/ },
+  },
+  {
+    // Not a client, but the same invariant: the MCP facade stamps its version into the SDK's
+    // `User-Agent` so a deployment's audit trail can tell a model's call from an integration's,
+    // and a stamp that has drifted from the package attributes calls to a release never cut.
+    sdk: 'mcp',
+    manifest: { path: 'sdk/mcp/package.json', pattern: /"version":\s*"([^"]+)"/ },
+    constant: { path: 'sdk/mcp/src/server.ts', pattern: /MCP_SERVER_VERSION\s*=\s*'([^']+)'/ },
   },
   {
     sdk: 'python',

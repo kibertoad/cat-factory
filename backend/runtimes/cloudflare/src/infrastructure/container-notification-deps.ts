@@ -78,10 +78,11 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
 }
 
 /**
- * Build the outbound notification-webhook feature (management service + delivery channel) when the
- * shared encryption key is present — the signing secret must be sealable. Both halves come from
- * one builder so they can't drift onto different repositories/ciphers. Null when no key is set;
- * then the management surface 503s and no deliveries are attempted.
+ * Build the outbound notification-webhook feature — the management service plus its three delivery
+ * halves (notification cards, run lifecycle, platform-health alerts) — when the shared encryption
+ * key is present, since the signing secret must be sealable. They all come from one builder so
+ * they can't drift onto different repositories/ciphers. Null when no key is set; then the
+ * management surface 503s and no deliveries are attempted.
  */
 export function buildNotificationWebhookSupportForWorker(
   env: Env,
@@ -112,6 +113,11 @@ export function buildNotificationWebhookSupportForWorker(
       }),
     onRunEventError: (error, ctx) =>
       logger.warn('run lifecycle webhook delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
+    onPlatformAlertError: (error, ctx) =>
+      logger.warn('platform health webhook delivery failed', {
         err: error instanceof Error ? error.message : String(error),
         ...ctx,
       }),
