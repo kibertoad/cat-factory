@@ -33,6 +33,7 @@ from .models import (
     ListPublicJobsResponse,
     LlmCallOutcome,
     Notification,
+    NotificationWebhook,
     PublicChooseFork,
     PublicDecisionList,
     PublicIncorporate,
@@ -40,6 +41,7 @@ from .models import (
     PublicJobAccepted,
     PublicJobStatus,
     PublicNotificationList,
+    PublicNotificationWebhook,
     PublicPipelineList,
     PublicReplyFinding,
     PublicResolveExceeded,
@@ -51,6 +53,7 @@ from .models import (
     PublicTask,
     PublicTaskList,
     PublicUsage,
+    PutNotificationWebhook,
     RunStatus,
     StartPublicTask,
     TaskStatus,
@@ -428,6 +431,62 @@ class NotificationsResource:
             timeout=timeout,
         )
         return PublicNotificationList.from_dict(raw)
+
+
+class WebhookResource:
+    """The workspace's one outbound endpoint: register, inspect or remove the receiver that
+    notifications, run-lifecycle events and health alerts are pushed to.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def delete(self, timeout: float | None = None) -> None:
+        """Remove the outbound webhook
+        Deregister the endpoint; deliveries stop. Idempotent.
+        `DELETE /api/v1/notification-webhook` (operation `deletePublicNotificationWebhook`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/notification-webhook",
+            query=None,
+            timeout=timeout,
+        )
+
+    def get(self, timeout: float | None = None) -> PublicNotificationWebhook:
+        """Read the workspace's outbound webhook
+        The endpoint this workspace delivers notifications, run-lifecycle events and
+        platform-health alerts to, or `{ "webhook": null }` when none is registered. The
+        signing secret is never returned; `hasSecret` reports only whether one is set.
+        `GET /api/v1/notification-webhook` (operation `getPublicNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/notification-webhook",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicNotificationWebhook.from_dict(raw)
+
+    def set(self, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
+        """Register or update the outbound webhook
+        Register the HTTPS endpoint deliveries are POSTed to, or update the one already
+        registered. Every omitted field keeps its stored value, so subscribing to run events
+        is a one-field call that re-sends neither the URL nor the secret. `url` is required
+        only on the first call, when there is nothing registered to keep; omitting it
+        otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret;
+        omitting it keeps the current one. The endpoint must be `https:` and publicly
+        routable unless the deployment widened its allow-list.
+        `PUT /api/v1/notification-webhook` (operation `putPublicNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/notification-webhook",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return NotificationWebhook.from_dict(raw)
 
 
 class UsageResource:
@@ -848,6 +907,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),
         "notifications": NotificationsResource(transport),
+        "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),

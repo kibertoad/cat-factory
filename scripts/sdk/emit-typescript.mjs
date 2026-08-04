@@ -3,7 +3,7 @@
 // Only the DATA and the CALL SHAPE are generated. The transport, the error hierarchy, the SSE
 // reader and the retry policy are hand-written under `sdk/typescript/src/` and are what the
 // generated layer calls into — so a spec change never rewrites a line of behaviour, and a
-// behaviour change never has to be re-applied across 38 operations.
+// behaviour change never has to be re-applied across 42 operations.
 
 import { camel, pascal } from './ir.mjs'
 import { GROUP_DOCS, GROUPS, groupOperations } from './surface.mjs'

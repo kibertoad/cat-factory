@@ -116,6 +116,15 @@ function costlyTools(exposed: ToolSelection['exposed']): string | null {
   if (exposes('tasks_delete')) {
     lines.push('A deleted task does not come back.')
   }
+  // The webhook pair is the one whose damage is INVISIBLE from here: the tool answers 200 either
+  // way, and what broke is a receiver somewhere else that simply stops hearing from this workspace.
+  if (['webhook_set', 'webhook_delete'].some(exposes)) {
+    lines.push(
+      'Changing the outbound webhook redirects or cuts off where this workspace pushes its ' +
+        'notifications, run events and health alerts, and the signing secret it replaces cannot ' +
+        'be read back. Read `webhook_get` first.',
+    )
+  }
   // Only where there IS something else. A filter can narrow this server down to the spending tools
   // alone (an allow-list naming just `tasks_start` is the realistic one), and a closing sentence
   // about everything else would then be describing tools the model cannot see, which teaches it

@@ -1,5 +1,67 @@
 # @cat-factory/contracts
 
+## 0.234.0
+
+### Minor Changes
+
+- 8cbf1a7: Manage the outbound notification webhook over `/api/v1`, so the whole integration surface is
+  headless.
+
+  `GET|PUT|DELETE /api/v1/notification-webhook` (`admin` scope) register, read and remove the one
+  HTTPS endpoint a workspace pushes its notifications, run-lifecycle events and platform-health
+  alerts to. Until now that endpoint could only be registered over the session-authed
+  `/workspaces/:ws/notification-webhook`, so a deployment driven entirely by API keys had to put a
+  human in a browser to switch on the very channel that exists because there is no browser: the
+  delivery contract was headless and its enrolment was not.
+
+  The routes delegate to the same `NotificationWebhookService` the session controller calls, so the
+  SSRF guard on the endpoint, the keep-on-omit rule for every field and the one-row-per-workspace
+  invariant are identical whichever surface writes. The signing secret stays write-only: `PUT`
+  accepts one and the read reports only `hasSecret`, so an `admin` key can rotate it and can never
+  learn the stored one.
+
+  `PUT`'s `url` becomes optional, on both surfaces, so keep-on-omit is uniform across every field
+  rather than every field but one. A mandatory re-send made the routine edit (subscribe to a family)
+  carry a value the caller never meant to change, and a client re-sending a URL it cached before
+  someone else rotated the receiver would silently redirect the workspace's deliveries back to the
+  old endpoint while appearing to add a subscription. `url` is still required on the first `PUT`
+  against a workspace with nothing registered, refused with `details.reason: "webhook_url_required"`.
+  Relaxing a required field is additive, so no live caller changes.
+
+  Additive on `/api/v1` (OpenAPI `info.version` 1.5.0; main took 1.4.0 for its own additive change
+  while this branch was open). The four SDK clients gain a `webhook` resource
+  (`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
+
+## 0.233.0
+
+### Minor Changes
+
+- ee6601e: Post a parked requirements review's questions to the ticket for webhook-dispatched runs too.
+
+  A run started by a per-ticket issue-intake schedule recorded no intake origin, so it read back as
+  UI-started and the clarification writeback refused it: the review parked, and the person who filed
+  the ticket was never told. The answer channel was already open (ticket-comment replies are ungated
+  by intake), but the finding ids an answer has to name are only ever rendered by the question
+  comment, so a ticket-driven run could park and stay parked with nothing pointing at the cause.
+
+  Such a run now carries `intakeOrigin: 'tracker'`, and the writeback gate asks the classification
+  (`isHeadlessIntake`) rather than comparing against the one origin that shipped first.
+
+  The vocabulary also gains `schedule` for cadence fires and the queue-drain push, so `ui` stops
+  being a catch-all for "nothing said" and becomes a positive claim that a human is watching in the
+  app. Every unattended start path now names itself; only the in-app start takes the default. The
+  field must stay optional for that one caller, so the rule is held by a coverage spec that
+  classifies each start path rather than by a typecheck.
+
+  `schedule` is classified NOT headless even though it is unattended. A fire works the schedule's
+  reused block, and queue-mode intake replace-links each pick onto it, so a question posted there
+  loses its reply channel on the next fire. The classification asks whether the run has a stable
+  place to hold a conversation, not whether a human was present.
+
+  No change to runs started in the app or through `/api/v1`. The workspace opt-in
+  (`writebackQuestionsOnPark`, off by default) and its per-task override still gate every post; their
+  copy now says "outside the app" rather than "through the API".
+
 ## 0.232.0
 
 ### Minor Changes

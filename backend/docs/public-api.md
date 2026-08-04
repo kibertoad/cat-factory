@@ -58,12 +58,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                           |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park. |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                 |
+| Scope    | Adds                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).                            |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), and manage the [outbound webhook](#outbound-webhook-push). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -494,6 +494,12 @@ overview with precomputed signals, and budgeted drill-downs into model calls, ag
 searches and provisioning logs. Same keys, `read` scope. Fully documented in
 [`debug-api.md`](./debug-api.md).
 
+### Outbound webhook management
+
+`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
+pushes to, read what is registered, or unregister. Documented with the delivery contract it
+configures, in [Outbound webhook](#outbound-webhook-push) below.
+
 ## Outbound webhook (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
@@ -509,12 +515,13 @@ endpoint and subscribe it to any of three delivery families:
 
 ### Register the endpoint
 
-Session-authed, `integrations.manage` (workspace admin); there is deliberately no SPA panel and no
-`/api/v1` management route yet (tracked as slice C1 in the
-[additions tracker](../../docs/initiatives/public-api-additions.md)):
+`admin` scope. Enrolment is part of the API, so an integration installs its own receiver rather than
+asking someone to open a browser (there is deliberately no SPA panel; the session-authed
+`GET|PUT|DELETE $BASE/workspaces/$WS/notification-webhook`, behind `integrations.manage`, remains and
+drives the same service):
 
 ```sh
-curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: application/json' \
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
   -d '{
     "url": "https://hooks.example.com/cat-factory",
     "secret": "<16-200 chars, used to sign deliveries>",
@@ -523,12 +530,34 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
     "alertEvents": ["platform_health.firing", "platform_health.resolved"],
     "enabled": true
   }' \
-  "$BASE/workspaces/$WS/notification-webhook"
+  "$BASE/api/v1/notification-webhook"
 ```
 
+| Route                                 | Scope   | Notes                                                          |
+| ------------------------------------- | ------- | -------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
+| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
+| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
-at rest, never readable back. Omitting `secret` on a later `PUT` keeps the stored one, supplying it
-rotates. `DELETE` unregisters (idempotent, `204`).
+at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
+stored one, so a leaked key cannot be used to forge deliveries your receiver would verify. `DELETE`
+unregisters (idempotent, `204`).
+
+**`PUT` is keep-on-omit in every field**, `url` included: a body states what changes and leaves the
+rest alone, so subscribing an existing endpoint to a new family is a one-field call.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{"alertEvents": ["platform_health.firing"]}' "$BASE/api/v1/notification-webhook"
+```
+
+`url` is required only on the **first** `PUT`, when there is nothing registered to keep; a body that
+names none against an empty workspace is refused with `details.reason: "webhook_url_required"`. The
+uniformity is a safety property, not a convenience: a mandatory re-send would make every routine
+edit carry an endpoint the caller did not mean to change, and a client re-sending a `url` it cached
+before someone else rotated the receiver would quietly redirect every future delivery back to the
+old one while appearing to add a subscription.
 
 Three filters, and the first has the **opposite** empty semantics to the other two. All three are
 deliberate:

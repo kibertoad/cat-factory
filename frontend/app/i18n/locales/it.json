@@ -2600,6 +2600,7 @@
       "title": "Aggiungi un'attività",
       "newTaskIn": "Nuova attività in {container}",
       "typeLabel": "Tipo",
+      "typeOther": "Altri",
       "types": {
         "feature": "Feature",
         "bug": "Bug",

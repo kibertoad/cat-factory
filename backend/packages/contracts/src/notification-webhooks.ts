@@ -80,17 +80,32 @@ export const notificationWebhookSchema = v.object({
 export type NotificationWebhook = v.InferOutput<typeof notificationWebhookSchema>
 
 /**
- * Register or update the workspace's notification webhook. `secret` is write-only: omit it to keep
- * the stored one, pass a new value to rotate it. An `https:` URL is required — deliveries carry a
- * signed payload describing internal work, and plaintext HTTP would leak it on the wire.
+ * Register or update the workspace's notification webhook. EVERY field is keep-on-omit: what the
+ * body leaves out retains its stored value, so subscribing an existing endpoint to a new event
+ * family is a one-field write.
+ *
+ * That uniformity is the point, and `url` is optional for it. A mandatory re-send would make the
+ * common edit carry a value the caller did not intend to change, and a caller re-sending a URL it
+ * cached before someone else rotated the endpoint would silently redirect the workspace's
+ * deliveries back to the old receiver while appearing to only add a subscription. The first `PUT`
+ * on a workspace with nothing registered still needs one, and the service refuses with
+ * `reason: 'webhook_url_required'` rather than storing a half-endpoint.
+ *
+ * When supplied it must be `https:`: deliveries carry a signed payload describing internal work,
+ * and plaintext HTTP would leak it on the wire.
+ *
+ * `secret` is write-only: omit it to keep the stored one, pass a new value to rotate it.
  */
 export const putNotificationWebhookSchema = v.object({
-  url: v.pipe(
-    v.string(),
-    v.trim(),
-    v.url(),
-    v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
-    v.maxLength(2000),
+  /** Omit ⇒ keep the registered endpoint (required only when registering the first one). */
+  url: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.url(),
+      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.maxLength(2000),
+    ),
   ),
   /** Omit ⇒ deliver the default parking types. */
   types: v.optional(v.array(notificationTypeSchema)),
@@ -103,6 +118,26 @@ export const putNotificationWebhookSchema = v.object({
   secret: v.optional(v.pipe(v.string(), v.trim(), v.minLength(16), v.maxLength(200))),
 })
 export type PutNotificationWebhookInput = v.InferOutput<typeof putNotificationWebhookSchema>
+
+/**
+ * What `GET /api/v1/notification-webhook` answers: the registered endpoint, or `null` when the
+ * workspace has none. Both the session surface and the public one project the SAME
+ * {@link notificationWebhookSchema}, because the projection is already the client-facing shape
+ * with the secret reduced to a boolean, and a second near-identical DTO would be one more thing
+ * to keep in step for no caller-visible gain.
+ *
+ * The WRAPPER, though, is public-surface-only, and it is not decoration. A bare nullable body is
+ * an honest wire shape but a poor generated one: the SDK emitters model a null at the top level of
+ * a response far less faithfully than a null on a FIELD (Go decodes a `null` body into a
+ * zero-valued struct, so "no endpoint registered" would arrive as an endpoint whose URL is the
+ * empty string). Wrapping keeps "none is registered" a value every client reads the same way, and
+ * leaves room to add a sibling field later without changing the response type.
+ */
+export const publicNotificationWebhookSchema = v.object({
+  /** The registered endpoint, or `null` when the workspace has none. */
+  webhook: v.nullable(notificationWebhookSchema),
+})
+export type PublicNotificationWebhook = v.InferOutput<typeof publicNotificationWebhookSchema>
 
 /**
  * The JSON body of one webhook delivery. Deliberately a thin envelope over the SAME
