@@ -22,10 +22,19 @@ reporting the platform as unable to write); above `read` the whole table is list
 rung is enforced by the endpoint it calls, arriving as tool content the model can act on; and the
 endpoint is stateless with JSON responses, so `GET` and `DELETE` are answered `405`.
 
+Two things a caller and an operator each notice. A tool's `/api/v1` call INHERITS the MCP request's
+`X-Request-Id`, so the tool call and the API call it caused share one correlation id and a log holding
+both lines can be joined on it (supply your own on the MCP request and both halves land under it).
+And `Mcp-Protocol-Version` joins the shared CORS allow-list both facades serve, without which a
+cross-origin BROWSER host would negotiate successfully and then have every later call dropped by the
+browser, since a Streamable HTTP client sends that header on every request after `initialize` and on
+none before it.
+
 The endpoint joins the PUBLIC surface under the stability contract from this release. It is
 deliberately absent from `docs/openapi.json`: a JSON-RPC endpoint has no operation shape to describe,
 and describing it would mint an SDK method in four languages for a protocol none of those clients
-speaks. `backend/docs/public-api.md` carries the obligation instead.
+speaks. `backend/docs/public-api.md` carries the obligation instead, which also means the endpoint's
+arrival does not move the spec's `info.version`: that version tracks the described surface.
 
 `@cat-factory/mcp-server` gains `handleMcpHttpRequest` / `refuseMcpMethod`, so any deployment of this
 API can mount the endpoint, plus a `readOnlyReason` option that lets the instructions name the right

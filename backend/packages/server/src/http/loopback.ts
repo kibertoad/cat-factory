@@ -1,5 +1,6 @@
 import type { Context, ExecutionContext, Hono } from 'hono'
 import type { AppEnv } from './env.js'
+import { REQUEST_ID_HEADER, requestIdOf } from './requestLogging.js'
 
 // Re-entering this app's own HTTP surface from inside a request.
 //
@@ -29,9 +30,30 @@ export type AppLoopback<E extends AppEnv> = (request: Request, c: Context<E>) =>
  * the inner request cannot build a container at all on the Worker; `executionCtx` is what keeps the
  * isolate alive for post-response work, so an inner handler's telemetry write would otherwise be
  * silently discarded exactly where `makeWaitUntil` was added to prevent that.
+ *
+ * The CORRELATION ID is forwarded for the same reason: `mountRequestLogging` adopts an inbound
+ * `X-Request-Id` rather than always minting one, so passing the outer request's along is what puts
+ * the MCP call and the `/api/v1` calls it caused on one greppable id. Without it the inner request
+ * mints its own and the only question worth asking of these logs — which tool call produced this
+ * 422 — has no answer.
  */
 export function appLoopback<E extends AppEnv>(app: Hono<E>): AppLoopback<E> {
-  return async (request, c) => app.fetch(request, c.env, executionCtxOf(c))
+  return async (request, c) => app.fetch(withRequestId(request, c), c.env, executionCtxOf(c))
+}
+
+/**
+ * The request with the caller's correlation id bound, or unchanged when there is none to bind.
+ *
+ * Rebuilt rather than mutated: a `Request`'s header guard is permissive for a constructed one and
+ * not for every runtime's inbound one, and this receives whichever the caller passed. An id the
+ * inner request already carries WINS, so a future loopback caller that wants its own can set one.
+ */
+function withRequestId<E extends AppEnv>(request: Request, c: Context<E>): Request {
+  const requestId = requestIdOf(c)
+  if (!requestId || request.headers.has(REQUEST_ID_HEADER)) return request
+  const headers = new Headers(request.headers)
+  headers.set(REQUEST_ID_HEADER, requestId)
+  return new Request(request, { headers })
 }
 
 /**

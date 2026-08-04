@@ -296,6 +296,24 @@ Recorded so the next iteration does not re-propose them.
   `executionCtx` (without it an inner handler's post-response telemetry write is silently dropped, the
   exact failure `makeWaitUntil` exists to prevent). Hono's `c.executionCtx` THROWS when absent, so
   reading it is a try/catch.
+- **And forward the CORRELATION ID, which is the third handle and the easiest to forget.**
+  `mountRequestLogging` ADOPTS an inbound `X-Request-Id` rather than always minting one, so a
+  loopback that omits it leaves the inner `/api/v1` request logging under an id of its own: both
+  lines are present and nothing joins them, which is the one question a log of this endpoint exists
+  to answer. An id the inner request already carries wins, so a future loopback caller can still set
+  its own.
+- **A cross-origin BROWSER host needs `Mcp-Protocol-Version` in `CORS_ALLOWED_HEADERS`.** A
+  Streamable HTTP client sends it on every request AFTER `initialize` and on none before, so leaving
+  it out fails in the shape that reads as success: the handshake preflight asks only for headers
+  already listed and passes, then every real call is dropped by the browser with a CORS message that
+  names no route. The session header stays out on purpose — this endpoint is stateless and mints no
+  session id, so listing it would advertise a mode that does not exist. Server-side hosts send no
+  preflight at all, which is why the whole class was invisible until someone asked about a browser.
+- **A JSON-RPC BATCH is the endpoint's one unbounded dimension.** The transport accepts an array of
+  calls in one `POST` and each becomes its own loopback `/api/v1` request, so one authenticated
+  request fans out in proportion to its length, inside a single Worker invocation. Not a bypass (each
+  inner call re-runs the key gate and its own scope rung, and an in-process dispatch is not a
+  subrequest), but it is the shape to look at first if this endpoint ever needs a limit.
 - **Recursion is prevented by construction rather than by a guard.** The tool table is generated from
   the OpenAPI spec, and the endpoint is deliberately not in it, so no tool can name a path that
   re-enters the endpoint. That argument is what a future composed or hand-authored tool would break.

@@ -1,6 +1,7 @@
 // The `./http` entry point, NOT the package root: the root re-exports the stdio boot, whose
 // transport imports `node:process`, and this package is bundled into the Worker facade.
 import { handleMcpHttpRequest, refuseMcpMethod } from '@cat-factory/mcp-server/http'
+import { describeError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import type { AppLoopback } from '../../http/loopback.js'
@@ -57,6 +58,8 @@ export function publicMcpController<E extends AppEnv>(loopback: AppLoopback<E>):
       baseUrl: new URL(c.req.url).origin,
       // Forwarded verbatim, so the tools authenticate as the CALLER rather than as the deployment.
       // That is what keeps the workspace scoping and the per-tool scope ladder applying unchanged.
+      // Non-empty by construction: the gate above authenticated THIS value, so the fallback is
+      // unreachable rather than a default standing in for a missing key.
       apiKey: bearerToken(c) ?? '',
       fetch: (input, init) => loopback(new Request(input, init), c),
       // A `read` key can only be REFUSED by a write tool, so listing the writes would spend a model's
@@ -65,8 +68,10 @@ export function publicMcpController<E extends AppEnv>(loopback: AppLoopback<E>):
       ...(auth.scope === 'read' ? { readOnly: true, readOnlyReason: 'key-scope' as const } : {}),
       onTransportError: (error) => {
         // The transport has already answered by the time this fires, so a drop here leaves a caller
-        // reporting a broken endpoint and nothing on this side to read.
-        log.warn('Hosted MCP transport error', { error: error.message })
+        // reporting a broken endpoint and nothing on this side to read. Through `describeError`
+        // rather than `error.message`: it binds the kind alongside the message and scrubs through
+        // `redactSecrets`, and the request this fault interrupted was carrying a live API key.
+        log.warn('Hosted MCP transport error', describeError(error))
       },
     })
   })

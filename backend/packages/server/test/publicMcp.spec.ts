@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { handleError } from '../src/http/errorHandler.js'
 import { appLoopback } from '../src/http/loopback.js'
+import { mountRequestLogging } from '../src/http/requestLogging.js'
 import { publicMcpController } from '../src/modules/publicApi/PublicMcpController.js'
 
 // The hosted MCP endpoint's own decisions, driven without a database.
@@ -38,27 +39,34 @@ interface Built {
   app: Hono<AppEnv>
   /** Every `Authorization` header the stub API route saw, in order. */
   seenAuth: string[]
+  /** Every `X-Request-Id` the stub API route saw, in order. */
+  seenRequestIds: string[]
 }
 
 function build(options: { unconfigured?: boolean } = {}): Built {
   const app = new Hono<AppEnv>()
   const seenAuth: string[] = []
+  const seenRequestIds: string[] = []
   const container = (options.unconfigured
     ? {}
     : { publicApiKeys: keyService() }) as unknown as ServerContainer
+  // Mounted FIRST, as both facades do: it is what mints the outer correlation id and what ADOPTS
+  // the one the loopback forwards, so a test without it could not see the two halves join up.
+  mountRequestLogging(app)
   app.use('*', async (c, next) => {
     c.set('container', container)
     await next()
   })
   // Stands in for `PublicApiController`'s services route: enough to prove the loopback arrives here,
-  // carrying the caller's own credential.
+  // carrying the caller's own credential and the caller's own correlation id.
   app.get('/api/v1/services', (c) => {
     seenAuth.push(c.req.header('authorization') ?? '(none)')
+    seenRequestIds.push(c.req.header('x-request-id') ?? '(none)')
     return c.json({ services: [{ serviceId: 'blk_svc', name: 'Billing', taskCount: 0 }] })
   })
   app.route('/', publicMcpController(appLoopback(app)))
   app.onError(handleError)
-  return { app, seenAuth }
+  return { app, seenAuth, seenRequestIds }
 }
 
 const MCP_HEADERS = {
@@ -83,16 +91,25 @@ async function rpc(
   key: string | null,
   method: string,
   params?: Record<string, unknown>,
-): Promise<{ status: number; body: RpcReply }> {
+  extraHeaders: Record<string, string> = {},
+): Promise<{ status: number; body: RpcReply; requestId: string | null }> {
   const response = await app.fetch(
     new Request('https://cat-factory.test/api/v1/mcp', {
       method: 'POST',
-      headers: { ...MCP_HEADERS, ...(key ? { authorization: `Bearer ${key}` } : {}) },
+      headers: {
+        ...MCP_HEADERS,
+        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        ...extraHeaders,
+      },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, ...(params ? { params } : {}) }),
     }),
   )
   const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
+  return {
+    status: response.status,
+    body: text ? JSON.parse(text) : null,
+    requestId: response.headers.get('x-request-id'),
+  }
 }
 
 const INIT = {
@@ -135,6 +152,41 @@ describe('the hosted MCP endpoint', () => {
     // The property that keeps the endpoint from being a privilege escalation: the loopback
     // authenticates as whoever called, so every scope and workspace rule applies unchanged.
     expect(seenAuth).toEqual(['Bearer writer.secret'])
+  })
+
+  it('carries the caller’s correlation id onto the API call the tool makes', async () => {
+    const { app, seenRequestIds } = build()
+    await rpc(app, 'writer.secret', 'initialize', INIT)
+    // An id the caller supplied, so the assertion names a value rather than comparing two
+    // unknowns — and it covers the adopt path a load balancer in front of the deployment uses.
+    const called = await rpc(
+      app,
+      'writer.secret',
+      'tools/call',
+      {
+        name: 'services_list',
+        arguments: {},
+      },
+      { 'x-request-id': 'req_from_the_host' },
+    )
+    expect(called.requestId).toBe('req_from_the_host')
+    // The whole point: one greppable id spanning the MCP call and the `/api/v1` call it caused.
+    // Without the forward the inner request mints its own, and "which tool call produced this 422"
+    // becomes unanswerable in a log that contains both lines.
+    expect(seenRequestIds).toEqual(['req_from_the_host'])
+  })
+
+  it('mints one id for an MCP call that arrived without one, and shares THAT', async () => {
+    const { app, seenRequestIds } = build()
+    await rpc(app, 'writer.secret', 'initialize', INIT)
+    const called = await rpc(app, 'writer.secret', 'tools/call', {
+      name: 'services_list',
+      arguments: {},
+    })
+    // A minted id is just as much a correlation id as a supplied one, so the inner call must get it
+    // too: forwarding only what a caller happened to send would leave the common case uncorrelated.
+    expect(called.requestId).toBeTruthy()
+    expect(seenRequestIds).toEqual([called.requestId])
   })
 
   it('narrows the tool list to the reading half for a read-scoped key', async () => {

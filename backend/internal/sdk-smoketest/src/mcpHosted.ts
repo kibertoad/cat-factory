@@ -57,6 +57,11 @@ const HOSTED_EXPECTED: Record<string, unknown> = {
   readKeyHasNoWrites: true,
   readKeyToldWhy: true,
   withheldToolNamesWhatIsAvailable: true,
+  // The scope→tool-list mapping as a RELATION between the two keys rather than as two absolute
+  // observations. `readKeyHasNoWrites` above would also hold if the read key were served an empty
+  // table (or if the admin key were), which is the failure mode a broken filter actually produces:
+  // the counts are what tell "narrowed correctly" apart from "narrowed to nothing".
+  readKeyListsStrictlyFewer: true,
 }
 
 /** Drive the hosted endpoint end to end and report what it did. */
@@ -170,6 +175,14 @@ export async function runHostedMcpPhase(context: HostedMcpContext): Promise<Host
       await session.close()
     }
   })
+
+  // Derived in code from the two recorded counts rather than asserted inside either step, which is
+  // the only place both are known. Guarded on both being numbers so a step that failed above reports
+  // as the failure it was instead of as a false comparison between two undefineds.
+  const wide = observations.hostedToolCount
+  const narrow = observations.readKeyToolCount
+  observations.readKeyListsStrictlyFewer =
+    typeof wide === 'number' && typeof narrow === 'number' && narrow > 0 && narrow < wide
 
   return { observations, failures }
 }

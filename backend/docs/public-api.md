@@ -258,15 +258,31 @@ What to know about it:
   `tasks_delete` gets the same `insufficient_scope` refusal `DELETE /api/v1/tasks/{id}` would give
   it, as tool content the model can read and act on.
 - **Every tool call is one `/api/v1` request under YOUR key.** Nothing is reachable here that the
-  same key could not reach with `curl`, and every call appears in the deployment's request log
-  attributed to the MCP facade.
+  same key could not reach with `curl`. Each one carries a `cat-factory-mcp/<version>` `User-Agent`,
+  so an audit trail shows that a model made the call, and it INHERITS the MCP request's
+  `X-Request-Id`: the tool call and the API call it caused share one correlation id, which is what
+  makes "which tool call produced this refusal" answerable. Supply your own `X-Request-Id` on the
+  MCP request and both halves are logged under it.
 - **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
   server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
   means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
+- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
+  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
+  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
+  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
+  each one.
 - **The endpoint is public surface** under the stability contract above, from its first release. It
   is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
   operation shape to describe, and describing it would mint an SDK method in four languages for a
-  protocol none of those clients speaks. This section is what carries the obligation instead.
+  protocol none of those clients speaks. This section is what carries the obligation instead, which
+  has one consequence worth stating: because the endpoint is absent from the spec, its arrival did
+  not move `info.version`, and a change to it will not either. The spec's version tracks the
+  described surface; THIS section is the changelog for the part it cannot describe.
+- **From a browser origin it needs `Mcp-Protocol-Version` allow-listed**, which the shipped CORS
+  configuration does. Worth knowing because a Streamable HTTP client sends that header on every
+  request after `initialize` and on none before it, so a deployment that narrows
+  `CORS_ALLOWED_ORIGINS` and strips the header sees the handshake succeed and every later call fail
+  in the browser only. Server-side hosts (a hosted connector, a CLI) never send a preflight.
 - **The per-host tool filters below are stdio-only.** A deployment-wide filter here would narrow what
   an already-scoped key may do, which is a break rather than a convenience; per-workspace selection
   is [tracked separately](../../docs/initiatives/mcp-maturation.md).
