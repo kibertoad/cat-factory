@@ -1,9 +1,11 @@
 import type { RiskPolicyRepository } from '@cat-factory/kernel'
 import type {
+  ClassRulesByRole,
   MergeClassRules,
   RiskPolicy,
   RequirementConcernLevel,
   StepGating,
+  WorkspaceRole,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -25,6 +27,8 @@ interface RiskPolicyRow {
   auto_merge_enabled: number
   fork_decision: string | null
   class_rules: string | null
+  class_rules_by_role: string | null
+  dry_run_roles: string | null
   version: number | null
   is_default: number
   created_at: number
@@ -51,6 +55,12 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     // The column is NOT NULL DEFAULT '{}', but tolerate a null defensively: an empty rule map is
     // the identity (every class falls back to the score ceilings).
     classRules: row.class_rules ? (JSON.parse(row.class_rules) as MergeClassRules) : {},
+    // Both columns are NOT NULL DEFAULT '{}' / '[]', but tolerate a null as above: the empty
+    // value is the identity for each (no role narrows anything, nobody is sandboxed).
+    classRulesByRole: row.class_rules_by_role
+      ? (JSON.parse(row.class_rules_by_role) as ClassRulesByRole)
+      : {},
+    dryRunRoles: row.dry_run_roles ? (JSON.parse(row.dry_run_roles) as WorkspaceRole[]) : [],
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
@@ -120,8 +130,9 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             max_tester_quality_iterations,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
-            auto_merge_enabled, fork_decision, class_rules, version, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
+            version, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -139,6 +150,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            auto_merge_enabled = excluded.auto_merge_enabled,
            fork_decision = excluded.fork_decision,
            class_rules = excluded.class_rules,
+           class_rules_by_role = excluded.class_rules_by_role,
+           dry_run_roles = excluded.dry_run_roles,
            version = excluded.version,
            is_default = excluded.is_default`,
       )
@@ -161,6 +174,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.autoMergeEnabled ? 1 : 0,
         preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
         JSON.stringify(preset.classRules ?? {}),
+        JSON.stringify(preset.classRulesByRole ?? {}),
+        JSON.stringify(preset.dryRunRoles ?? []),
         preset.version ?? null,
         preset.isDefault ? 1 : 0,
         preset.createdAt,

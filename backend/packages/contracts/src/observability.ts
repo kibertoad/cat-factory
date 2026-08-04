@@ -162,6 +162,18 @@ export const llmExportInsightSchema = v.object({
   transportOverheadRatio: v.nullable(v.number()),
   errors: v.number(),
   warnings: v.number(),
+  /**
+   * Estimated money these tokens cost, in the run overview's `costCurrency`, priced per input
+   * CLASS (a cache read at ~0.1x fresh input, a cache write at ~1.25x). A LIST-PRICE estimate,
+   * not a bill: a subscription-harness run spent no per-token money and this reports what the
+   * same tokens would have cost metered.
+   *
+   * `null` ⇒ the deployment could not price it (no rate for that model, or no price table
+   * wired). Never `0` for that case, which would claim the work was free — and never a partial
+   * sum: a total containing one unpriceable cell reports null rather than a smaller number
+   * that looks complete.
+   */
+  costEstimate: v.nullable(v.number()),
 })
 export type LlmExportInsight = v.InferOutput<typeof llmExportInsightSchema>
 
@@ -189,6 +201,18 @@ export const llmExportTotalsSchema = v.object({
   errors: v.number(),
   warnings: v.number(),
   truncatedCalls: v.number(),
+  /**
+   * Estimated money these tokens cost, in the run overview's `costCurrency`, priced per input
+   * CLASS (a cache read at ~0.1x fresh input, a cache write at ~1.25x). A LIST-PRICE estimate,
+   * not a bill: a subscription-harness run spent no per-token money and this reports what the
+   * same tokens would have cost metered.
+   *
+   * `null` ⇒ the deployment could not price it (no rate for that model, or no price table
+   * wired). Never `0` for that case, which would claim the work was free — and never a partial
+   * sum: a total containing one unpriceable cell reports null rather than a smaller number
+   * that looks complete.
+   */
+  costEstimate: v.nullable(v.number()),
 })
 export type LlmExportTotals = v.InferOutput<typeof llmExportTotalsSchema>
 
@@ -235,6 +259,18 @@ export const llmPhaseInsightSchema = v.object({
   errors: v.number(),
   warnings: v.number(),
   truncatedCalls: v.number(),
+  /**
+   * Estimated money these tokens cost, in the run overview's `costCurrency`, priced per input
+   * CLASS (a cache read at ~0.1x fresh input, a cache write at ~1.25x). A LIST-PRICE estimate,
+   * not a bill: a subscription-harness run spent no per-token money and this reports what the
+   * same tokens would have cost metered.
+   *
+   * `null` ⇒ the deployment could not price it (no rate for that model, or no price table
+   * wired). Never `0` for that case, which would claim the work was free — and never a partial
+   * sum: a total containing one unpriceable cell reports null rather than a smaller number
+   * that looks complete.
+   */
+  costEstimate: v.nullable(v.number()),
 })
 export type LlmPhaseInsight = v.InferOutput<typeof llmPhaseInsightSchema>
 
@@ -253,6 +289,17 @@ export const llmMetricsExportSchema = v.object({
   totals: llmExportTotalsSchema,
   insights: v.array(llmExportInsightSchema),
   calls: v.array(llmCallMetricSchema),
+  /**
+   * True when the run had more calls than the export's row cap, so `calls` (and every figure
+   * folded from it) covers only the newest slice.
+   *
+   * Stated rather than left to be inferred from `calls.length`: a reader who does not know the
+   * cap cannot tell a complete bundle from a truncated one, and a bundle handed to a model for
+   * "why did this run spend so much?" is exactly where a partial total gets quoted as a whole.
+   * The money figures decline to answer at all when this is true (`costEstimate` is null);
+   * the token counts remain the partial sums they always were, now labelled as such.
+   */
+  truncated: v.boolean(),
 })
 export type LlmMetricsExport = v.InferOutput<typeof llmMetricsExportSchema>
 

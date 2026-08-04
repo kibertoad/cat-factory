@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
 import { changeClassSchema, RULEABLE_CHANGE_CLASSES } from './mergeTrackRecord.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
+import { WORKSPACE_ROLES, workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -76,6 +77,51 @@ export const mergeClassRulesSchema = v.partial(
   ),
 )
 export type MergeClassRules = v.InferOutput<typeof mergeClassRulesSchema>
+
+/**
+ * ROLE-SCOPED per-class rules: the rules above, narrowed by WHO started the run.
+ *
+ * A partial map from {@link workspaceRoleSchema} to that role's own {@link mergeClassRulesSchema}.
+ * The base `classRules` say what the WORK may do; this says what a given tier of person may do
+ * with it, so a workspace can widen `dependency` to `always` for everyone and still hold a
+ * non-engineer's runs to review on `source`.
+ *
+ * Composition is NARROW-ONLY (`narrowMergeClassRule` in kernel): a role entry may only make a
+ * class MORE restrictive than the base rule, never less. That is the whole safety property — an
+ * allowlist authored per role can subtract capability but can never hand a role something the
+ * preset itself withholds, so a role entry can be reviewed on its own without re-reading the base
+ * map. `unknown` stays unruleable here for the same reason it is in the base map.
+ *
+ * A role with no entry is exactly the base rules, so `{}` is the identity. So is a run with no
+ * pinned role (a schedule fire, a public-API start, auth-disabled dev): see
+ * {@link ExecutionInstance.initiatedByRole} for why those are left on the base policy rather than
+ * guessed onto a tier.
+ */
+export const classRulesByRoleSchema = v.partial(
+  // STRICT for the same reason the base map is: a caller who thinks they authored a rule for a
+  // role must not be told it worked when the role name was a typo.
+  v.strictObject(
+    Object.fromEntries(WORKSPACE_ROLES.map((r) => [r, mergeClassRulesSchema])) as {
+      [K in (typeof WORKSPACE_ROLES)[number]]: typeof mergeClassRulesSchema
+    },
+  ),
+)
+export type ClassRulesByRole = v.InferOutput<typeof classRulesByRoleSchema>
+
+/**
+ * The roles whose runs are FORCED into dry-run mode ({@link RunMode}) by this preset: every run
+ * such a role starts does the work and opens its PR, but nothing merges — not automatically, and
+ * not through the manual merge endpoint either.
+ *
+ * This is the "sandboxed run for a non-engineer" setting. It is expressed on the preset rather
+ * than on the role catalog because it is a POLICY about a body of work (this service's tasks),
+ * not a capability of the person: the same product manager may be trusted to land copy changes on
+ * one service and nothing at all on another, and the preset is already what a task selects.
+ *
+ * Empty on every built-in, so the default is byte-for-byte the historical behaviour. A role that
+ * cannot start runs at all (`viewer`, which holds no `runs.execute`) may be listed without effect.
+ */
+export const dryRunRolesSchema = v.array(workspaceRoleSchema)
 
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */
@@ -184,6 +230,17 @@ export const riskPolicySchema = v.object({
    * A rule NEVER overrides `autoMergeEnabled: false`: that master switch wins first.
    */
   classRules: mergeClassRulesSchema,
+  /**
+   * Per-ROLE narrowing of `classRules` ({@link classRulesByRoleSchema}), keyed on the workspace
+   * role the run's initiator held when it was admitted. Narrow-only, so an empty map is the
+   * identity and a role entry can never widen what `classRules` already allows.
+   */
+  classRulesByRole: classRulesByRoleSchema,
+  /**
+   * Roles whose runs are forced into dry-run mode ({@link dryRunRolesSchema}) — the work happens
+   * and the PR opens, but nothing merges. Empty on the built-ins.
+   */
+  dryRunRoles: dryRunRolesSchema,
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   /**
@@ -229,6 +286,10 @@ export const createRiskPolicySchema = v.object({
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
   /** Per-change-class auto-merge rules; absent ⇒ every class uses the score ceilings. */
   classRules: v.optional(mergeClassRulesSchema, {}),
+  /** Per-role narrowing of `classRules`; absent ⇒ every role uses the rules above unchanged. */
+  classRulesByRole: v.optional(classRulesByRoleSchema, {}),
+  /** Roles whose runs are forced into dry-run mode; absent ⇒ nobody is sandboxed. */
+  dryRunRoles: v.optional(dryRunRolesSchema, []),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -253,6 +314,10 @@ export const updateRiskPolicySchema = v.object({
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
   /** Replaces the whole rule map (not merged), so clearing a class is a plain omission. */
   classRules: v.optional(mergeClassRulesSchema),
+  /** Replaces the whole per-role map (not merged), so clearing a role is a plain omission. */
+  classRulesByRole: v.optional(classRulesByRoleSchema),
+  /** Replaces the whole list, so un-sandboxing a role is a plain omission. */
+  dryRunRoles: v.optional(dryRunRolesSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
@@ -289,6 +354,21 @@ export const mergeDecisionThresholdsSchema = v.object({
    * `unknown` (rules never match it) or the preset left the class on `thresholds`.
    */
   classRule: v.optional(mergeClassRuleSchema),
+  /**
+   * The workspace role the run's initiator held when the run was ADMITTED, when one was pinned.
+   * Absent for an unattributed run (a schedule fire, a public-API start, auth-disabled dev), which
+   * is a real and different state from "started by a viewer" — see
+   * {@link ExecutionInstance.initiatedByRole}. Recorded so the banner can attribute a narrowed
+   * decision to the tier it was narrowed for rather than implying the scores did it.
+   */
+  initiatorRole: v.optional(workspaceRoleSchema),
+  /**
+   * The rule after the initiator's role narrowed it, recorded ONLY when the narrowing actually
+   * changed the outcome (`roleRule` more restrictive than `classRule`). Absent when the role left
+   * the class alone, so its presence always means "this decision would have gone differently for
+   * someone else".
+   */
+  roleRule: v.optional(mergeClassRuleSchema),
 })
 export type MergeDecisionThresholds = v.InferOutput<typeof mergeDecisionThresholdsSchema>
 
@@ -313,6 +393,15 @@ export const mergeDecisionSchema = v.object({
    *    explicit operator policy keyed on the DETERMINISTIC backend classification.
    *  - `class_requires_review`: review; the preset's rule for the change class is `never`,
    *    regardless of how low the scores were.
+   *  - `role_requires_review`: review; the preset's rule for the change class is permissive
+   *    enough, but the initiator's ROLE narrows that class to `never`. Kept distinct from
+   *    `class_requires_review` because the two need opposite fixes: one is a policy about the
+   *    KIND of change (edit the class rule), the other about WHO started it (a teammate on a
+   *    higher tier can merge this PR as it stands).
+   *  - `dry_run`: review; the run was a DRY RUN, so no outcome of the assessment could have
+   *    merged it. The master switch above every other reason, including `auto_merge_disabled`:
+   *    a preset that would otherwise auto-merge must not report a dry run's PR as "held back by
+   *    the scores", which would send someone editing thresholds that were never consulted.
    */
   reason: v.picklist([
     'within_thresholds',
@@ -324,6 +413,8 @@ export const mergeDecisionSchema = v.object({
     'merge_partial',
     'class_auto_merge',
     'class_requires_review',
+    'role_requires_review',
+    'dry_run',
   ]),
   /** The merger's assessment (absent only when it produced no parseable one). */
   assessment: v.optional(mergeAssessmentSchema),

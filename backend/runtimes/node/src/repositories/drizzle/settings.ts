@@ -31,6 +31,9 @@ import type {
   TrackerCommentIngestStatus,
   TrackerSettings,
   TrackerSettingsRepository,
+  TutorialDecision,
+  TutorialProgress,
+  TutorialProgressRepository,
   UserSettings,
   UserSettingsRepository,
   WorkspaceAgentSettings,
@@ -57,6 +60,7 @@ import {
   reviewQuestionPosts,
   trackerCommentIngests,
   trackerSettings,
+  tutorialProgress,
   userSettings,
   workspaceAgentSettings,
   workspaceSettings,
@@ -110,6 +114,67 @@ export class DrizzleUserSettingsRepository implements UserSettingsRepository {
         target: userSettings.user_id,
         set: { spend_monthly_limit: settings.spendMonthlyLimit ?? null, updated_at: Date.now() },
       })
+  }
+}
+
+/**
+ * Parse a stored JSON id array LENIENTLY: anything that is not an array of strings reads as empty.
+ *
+ * The row is composed by a browser, so an unparseable value means a client wrote something
+ * unexpected. Throwing would take down the workspace snapshot this is read as part of, over a
+ * tutorial-progress list; forgetting the walkthroughs costs a re-offer, not the board. Byte-for-byte
+ * the D1 repository's rule, per the runtime-symmetry requirement that both stores map a row the
+ * same way.
+ */
+function parseTourIds(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    // silent-catch-ok: a malformed list degrades to "no tours remembered"; the fallback IS the
+    // report, and there is nothing an operator would do about one row of client-authored JSON.
+    return []
+  }
+}
+
+/** The stored decision, narrowed against the closed vocabulary; anything else = never answered. */
+function parseTutorialDecision(raw: string | null): TutorialDecision | null {
+  return raw === 'accepted' || raw === 'declined' ? raw : null
+}
+
+/** Postgres-backed per-user tutorial progress (mirror of D1 migration 0080). */
+export class DrizzleTutorialProgressRepository implements TutorialProgressRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(userId: string): Promise<TutorialProgress | null> {
+    const [row] = await this.db
+      .select()
+      .from(tutorialProgress)
+      .where(eq(tutorialProgress.user_id, userId))
+    return row
+      ? {
+          decision: parseTutorialDecision(row.decision),
+          completedTourIds: parseTourIds(row.completed_tour_ids),
+          nudgedTourIds: parseTourIds(row.nudged_tour_ids),
+        }
+      : null
+  }
+
+  async upsert(userId: string, progress: TutorialProgress): Promise<void> {
+    const values = {
+      decision: progress.decision,
+      completed_tour_ids: JSON.stringify(progress.completedTourIds),
+      nudged_tour_ids: JSON.stringify(progress.nudgedTourIds),
+      updated_at: Date.now(),
+    }
+    await this.db
+      .insert(tutorialProgress)
+      .values({ user_id: userId, ...values })
+      .onConflictDoUpdate({ target: tutorialProgress.user_id, set: values })
+  }
+
+  async remove(userId: string): Promise<void> {
+    await this.db.delete(tutorialProgress).where(eq(tutorialProgress.user_id, userId))
   }
 }
 

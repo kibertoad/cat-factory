@@ -33,6 +33,7 @@ const NO_GATES: NavGates = {
   boardHasOpenDecision: false,
   boardHasPendingApproval: false,
   boardHasFinishedRun: false,
+  boardHasFailedRun: false,
 }
 
 const ALL_GATES: NavGates = {
@@ -51,6 +52,7 @@ const ALL_GATES: NavGates = {
   boardHasOpenDecision: true,
   boardHasPendingApproval: true,
   boardHasFinishedRun: true,
+  boardHasFailedRun: true,
 }
 
 const slots = (): AppSlots => ({

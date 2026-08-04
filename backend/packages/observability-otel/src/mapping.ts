@@ -687,6 +687,9 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'cache.miss': 'cat_factory.platform.cache_misses',
   'auth.throttle.limited': 'cat_factory.platform.auth_throttle_limited',
   'auth.throttle.store_unavailable': 'cat_factory.platform.auth_throttle_store_unavailable',
+  'tutorial.tour_started': 'cat_factory.platform.tutorial_tours_started',
+  'tutorial.tour_completed': 'cat_factory.platform.tutorial_tours_completed',
+  'tutorial.tour_abandoned': 'cat_factory.platform.tutorial_tours_abandoned',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -712,6 +715,11 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'cache.miss': '{read}',
   'auth.throttle.limited': '{refusal}',
   'auth.throttle.store_unavailable': '{failure}',
+  // A walkthrough, not a run: three counters over the same unit so a dashboard can divide
+  // completed by started and read the result as a rate.
+  'tutorial.tour_started': '{walkthrough}',
+  'tutorial.tour_completed': '{walkthrough}',
+  'tutorial.tour_abandoned': '{walkthrough}',
 }
 
 /**

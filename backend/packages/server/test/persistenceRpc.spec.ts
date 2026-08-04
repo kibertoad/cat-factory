@@ -7,6 +7,7 @@ import {
   makeRegistry,
   OTHER_ACCOUNT,
   remote,
+  remoteRegistry,
   USER,
 } from './persistenceRpc.harness.js'
 
@@ -179,6 +180,37 @@ describe('member-display read surface (co-membership scoped)', () => {
     await expect(remoteUsers().userRepository.getIdentity('password', 'a@b.co')).rejects.toThrow(
       /not callable/,
     )
+  })
+})
+
+describe('per-user tutorial progress (selfUser scoped)', () => {
+  const OTHER_USER = 'usr_other'
+
+  it('forwards every method for the caller`s OWN user id', async () => {
+    // The whole surface, because all three are equally reachable from a mothership-mode laptop:
+    // the board-load read, the mirror write, and the user`s own "Reset progress".
+    const repos = remoteRegistry([ACCOUNT], USER)
+    await expect(repos.tutorialProgressRepository!.get!(USER)).resolves.toMatchObject({
+      userId: USER,
+    })
+    await expect(
+      repos.tutorialProgressRepository!.upsert!(USER, { decision: null }),
+    ).resolves.toMatchObject({ userId: USER })
+    await expect(repos.tutorialProgressRepository!.remove!(USER)).resolves.toMatchObject({
+      userId: USER,
+    })
+  })
+
+  it('refuses every method for ANOTHER user`s id (404, no existence leak)', async () => {
+    // The refusal that matters: a machine token is scoped to whole ACCOUNTS, so without the
+    // `selfUser` pin a node could read — or RESET — the tutorial state of anyone in the same
+    // account. The write half is the sharper case, which is why it is asserted alongside the read.
+    const repos = remoteRegistry([ACCOUNT], USER)
+    for (const method of ['get', 'upsert', 'remove'] as const) {
+      await expect(
+        repos.tutorialProgressRepository![method]!(OTHER_USER, { decision: null }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    }
   })
 })
 

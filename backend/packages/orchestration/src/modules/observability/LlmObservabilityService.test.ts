@@ -537,6 +537,13 @@ describe('LlmObservabilityService storeAgentContext gating', () => {
 })
 
 describe('LlmObservabilityService.exportForExecution', () => {
+  const rates = () => ({
+    inputPerMillion: 1_000_000,
+    cacheReadPerMillion: 100_000,
+    cacheWritePerMillion: 1_250_000,
+    outputPerMillion: 5_000_000,
+  })
+
   it('builds an export stamped with the service clock', async () => {
     const repo = new MemoryRepo()
     const service = new LlmObservabilityService({
@@ -549,6 +556,79 @@ describe('LlmObservabilityService.exportForExecution', () => {
     expect(out.executionId).toBe('exec')
     expect(out.generatedAt).toBe(1700)
     expect(out.totals.calls).toBe(1)
+    // A run that fits under the cap is a COMPLETE bundle, and says so.
+    expect(out.truncated).toBe(false)
+  })
+
+  it('prices a complete bundle from the same table the rollups use', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input())
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.totals.costEstimate).not.toBeNull()
+    expect(out.insights[0]?.costEstimate).not.toBeNull()
+  })
+
+  it('declines to price a TRUNCATED bundle rather than costing the slice as the run', async () => {
+    // A run longer than the export's row cap. Pricing the newest 1000 calls would produce a
+    // smaller number that still reads as the run's total — exactly the partial-sum failure the
+    // null rule exists to prevent, and the one a model handed this bundle would quote.
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input())
+    const seed = repo.recorded[0]!
+    for (let i = 1; i <= 1000; i++) {
+      repo.recorded.push({ ...seed, id: `call_${i}`, createdAt: seed.createdAt + i })
+    }
+
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.truncated).toBe(true)
+    expect(out.calls).toHaveLength(1000)
+    expect(out.totals.costEstimate).toBeNull()
+    expect(out.insights.every((i) => i.costEstimate === null)).toBe(true)
+    // The token counts stay the partial sums they always were — now LABELLED as partial
+    // rather than silently passing for the whole run.
+    expect(out.totals.calls).toBe(1000)
+  })
+})
+
+// The currency is what a surface LABELS its money with, so "which currency" and "is anything
+// priced at all" have to be answered by the same object that does the pricing. A deployment
+// that wired rates but no currency code is a real state, and it is not EUR by default.
+describe('LlmObservabilityService.rollupCurrency', () => {
+  const rates = () => null
+  function service(deps: { modelRates?: typeof rates; costCurrency?: string }) {
+    return new LlmObservabilityService({
+      llmCallMetricRepository: new MemoryRepo(),
+      idGenerator,
+      clock,
+      ...deps,
+    })
+  }
+
+  it('is the configured currency when rates are wired', () => {
+    expect(service({ modelRates: rates, costCurrency: 'USD' }).rollupCurrency).toBe('USD')
+  })
+
+  it('is null when rates are wired but no currency was configured', () => {
+    // Never a guessed default: a right number under a wrong symbol is a wrong number.
+    expect(service({ modelRates: rates }).rollupCurrency).toBeNull()
+  })
+
+  it('is null when the deployment prices nothing, even if a currency is configured', () => {
+    // There is no amount for the code to denominate, so stating one would announce money
+    // that is not there.
+    expect(service({ costCurrency: 'EUR' }).rollupCurrency).toBeNull()
   })
 })
 

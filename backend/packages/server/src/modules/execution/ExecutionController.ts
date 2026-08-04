@@ -22,6 +22,7 @@ import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
+import { runInitiatorRole } from '../../http/runAdmission.js'
 import {
   activateForInteraction,
   personalGateForBlock,
@@ -42,7 +43,7 @@ export function executionController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const blockId = c.req.valid('param').blockId
-    const { pipelineId } = c.req.valid('json')
+    const { pipelineId, mode } = c.req.valid('json')
     // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
     // subscription: resolve the initiator + an activation closure (throws 428 when a
     // password is needed). The password rides on the X-Personal-Password header. A run
@@ -57,6 +58,12 @@ export function executionController(): Hono<AppEnv> {
     )
     const instance = await container.executionService.start(workspaceId, blockId, pipelineId, {
       initiatedBy,
+      // The tier this run is admitted under (see `runInitiatorRole` for why it is read off the
+      // gate rather than re-derived, and why `null` is a real state rather than a lowest tier).
+      initiatedByRole: runInitiatorRole(c),
+      // A REQUEST for a sandboxed run; the task's merge preset can still force one (see
+      // `resolveRunMode`), so the engine settles the mode rather than trusting this.
+      ...(mode ? { mode } : {}),
       activate,
     })
     return c.json(instance, 201)
@@ -300,9 +307,14 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
             errors: 0,
             warnings: 0,
             truncatedCalls: 0,
+            // Null, not 0: this branch is "no telemetry sink is wired", and a zero here would
+            // report a run that spent nothing rather than one nothing was recorded for.
+            costEstimate: null,
           },
           insights: [],
           calls: [],
+          // An empty bundle is complete, not a slice: there was nothing to cap.
+          truncated: false,
         }
     c.header('content-disposition', `attachment; filename="llm-metrics-${executionId}.json"`)
     return c.json(exported, 200)

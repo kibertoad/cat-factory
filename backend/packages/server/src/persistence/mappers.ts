@@ -13,7 +13,9 @@ import type {
   PriorStepOutput,
   ResolvedFrontendBinding,
   RunDiagnostics,
+  RunMode,
   Workspace,
+  WorkspaceRole,
 } from '@cat-factory/contracts'
 import {
   blockLevelSchema,
@@ -29,6 +31,7 @@ import {
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
+  workspaceRoleSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
@@ -884,6 +887,10 @@ interface ExecutionDetail {
   initiatedBy: string | null
   /** How the run entered the system (see {@link ExecutionInstance.intakeOrigin}). */
   intakeOrigin?: IntakeOrigin
+  /** The role the initiator held at admission (see {@link ExecutionInstance.initiatedByRole}). */
+  initiatedByRole?: WorkspaceRole
+  /** Whether the run may land its work (see {@link ExecutionInstance.mode}). */
+  mode?: RunMode
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
   /** Successful outputs a restart discarded, oldest→newest (see {@link ExecutionInstance.outputHistory}). */
@@ -999,6 +1006,22 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // safe reading: a run whose intake we can't prove was headless never pushes its parked
     // questions out to a tracker issue.
     ...(is(intakeOriginSchema, detail.intakeOrigin) ? { intakeOrigin: detail.intakeOrigin } : {}),
+    // The tier the run was admitted under. Absent (legacy, a schedule fire, a public-API start,
+    // auth-disabled dev) stays ABSENT rather than being guessed onto a role, which is the whole
+    // design of the role-scoped rules: such a run falls through to the preset's BASE policy, the
+    // one that governed it before role scoping existed. An unrecognised value is dropped onto
+    // that same reading, deliberately unlike `mode` below: the role layer is subtractive, so
+    // losing it returns the run to a policy an operator authored, never past it.
+    ...(is(workspaceRoleSchema, detail.initiatedByRole)
+      ? { initiatedByRole: detail.initiatedByRole }
+      : {}),
+    // Whether the run may land its work. This one FAILS CLOSED, and the asymmetry with every
+    // other tolerant decode here is the point: absent means `live` because that is what every
+    // run predating the mode actually was, but a value that is PRESENT and unreadable means a
+    // mode was settled and we cannot tell which. Dropping it would hand a run merge authority it
+    // may never have had, so an unrecognised value reads as the sandbox. A run wrongly held back
+    // is a human tap away from merging; a run wrongly merged is not recoverable.
+    ...(detail.mode === undefined ? {} : { mode: detail.mode === 'live' ? 'live' : 'dry_run' }),
     // Epoch-ms creation time, read from the ROW COLUMN — the value chronological reads order by,
     // so a keyset cursor minted from this entity names exactly the position the query resumes at.
     createdAt: row.created_at,
@@ -1043,6 +1066,13 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Only persisted for a headless (`public-api`) run — `ui` is the read-time default, so
     // storing it would put a redundant key on every ordinary run's detail JSON.
     intakeOrigin: instance.intakeOrigin === 'public-api' ? 'public-api' : undefined,
+    // The tier the run was ADMITTED under, and whether it may land its work. Both are settled
+    // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
+    // nothing else — so a field missing here is a merge policy that silently never applies.
+    initiatedByRole: instance.initiatedByRole ?? undefined,
+    // Stored only when sandboxed: `live` is the read-time default and every run that predates the
+    // mode is exactly that, so persisting it would put a redundant key on every ordinary run.
+    mode: instance.mode === 'dry_run' ? 'dry_run' : undefined,
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,

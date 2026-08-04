@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   balanceFences,
+  boundOutput,
   capList,
   cell,
+  codeCell,
+  dropOpenFence,
   inline,
+  inlineCode,
   MAX_CELL_CHARS,
   MAX_LIST_ITEMS,
   MAX_PROSE_CHARS,
+  outputBlock,
   prose,
 } from './host-markdown.logic.js'
 
@@ -100,5 +105,111 @@ describe('capList', () => {
 
   it('passes a list within budget through untouched', () => {
     expect(capList([1, 2, 3])).toEqual({ items: [1, 2, 3], dropped: 0 })
+  })
+})
+
+// The CAPTURED-OUTPUT helpers. What these assert is one property in four spellings: a log that
+// the platform did not write cannot escape the container the platform put it in. A test runner,
+// a linter and a compiler all print backticks as a matter of course, so every one of these was
+// a real spill waiting on the right assertion message.
+
+describe('outputBlock', () => {
+  it('sizes the fence past the longest backtick run the output carries', () => {
+    // A fixed ``` fence closes on the log's own run, spilling the rest of the log, every section
+    // rendered below it, and the machine-readable JSON block into the body as prose.
+    const block = outputBlock('error in ```const x = 1``` at line 3')
+    expect(block.startsWith('````\n')).toBe(true)
+    expect(block.endsWith('\n````')).toBe(true)
+    // The whole log survives inside the block rather than half of it becoming markdown.
+    expect(block).toContain('```const x = 1```')
+  })
+
+  it('stays ahead of a run longer than the fence it would normally use', () => {
+    const block = outputBlock('a `````` b')
+    expect(block.split('\n')[0]).toBe('```````')
+  })
+
+  it('opens and closes with the same fence when the output has no backticks at all', () => {
+    expect(outputBlock('plain failure')).toBe('```\nplain failure\n```')
+  })
+
+  it('normalises CRLF and drops trailing blank lines so the closer sits tight', () => {
+    expect(outputBlock('one\r\ntwo\n\n\n')).toBe('```\none\ntwo\n```')
+  })
+})
+
+describe('boundOutput', () => {
+  it('keeps the END of a long log, where the failure is actually reported', () => {
+    const text = `${'x'.repeat(50)}THE ASSERTION`
+    const bounded = boundOutput(text, 20)
+    // A prefix cut would discard exactly the half a reviewer opened the report for.
+    expect(bounded.text.endsWith('THE ASSERTION')).toBe(true)
+    expect(bounded.text).toHaveLength(20)
+    expect(bounded).toMatchObject({ dropped: text.length - 20, total: text.length })
+  })
+
+  it('reports a clean zero for a log already inside the budget', () => {
+    expect(boundOutput('short', 20)).toEqual({ text: 'short', dropped: 0, total: 5 })
+  })
+
+  it('treats a log exactly at the budget as uncut', () => {
+    expect(boundOutput('12345', 5).dropped).toBe(0)
+  })
+})
+
+describe('codeCell / inlineCode', () => {
+  it('sizes the span past a backtick the value carries', () => {
+    // The inline twin of the fence hazard: a hand-written `` `${cell(v)}` `` closes early and
+    // spills the tail into the row as prose, where the auto-link triggers are live again.
+    expect(inlineCode('pnpm why `pkg`')).toBe('`` pnpm why `pkg` ``')
+  })
+
+  it('pads BOTH sides when a value touches a backtick, since one side alone is not stripped', () => {
+    // CommonMark removes a single leading and trailing space only when the span has both, so a
+    // one-sided pad would reach the reader as a visible space.
+    expect(inlineCode('`quoted`')).toBe('`` `quoted` ``')
+    expect(inlineCode('trailing`')).toBe('`` trailing` ``')
+    expect(inlineCode('no ticks')).toBe('`no ticks`')
+  })
+
+  it('escapes a pipe for a TABLE cell but not outside one', () => {
+    // In a table the parser splits the row before inline parsing, so `\|` reaches the span as a
+    // literal pipe. Outside one nothing splits, and a backslash escape is not honoured inside a
+    // code span, so the same escape would reach the reader as the two characters it is.
+    expect(codeCell('a | b')).toBe('`a \\| b`')
+    expect(inlineCode('a | b')).toBe('`a | b`')
+  })
+
+  it('folds newlines to spaces rather than cell’s <br>, which a span renders literally', () => {
+    expect(inlineCode('one\ntwo')).toBe('`one two`')
+  })
+
+  it('caps to the cell budget like its plain-text siblings', () => {
+    expect(codeCell('x'.repeat(MAX_CELL_CHARS * 2)).length).toBeGreaterThan(MAX_CELL_CHARS)
+    expect(inlineCode('y'.repeat(MAX_CELL_CHARS * 2))).toContain('truncated')
+  })
+
+  it('renders an empty value as nothing rather than a stray pair of ticks', () => {
+    expect(inlineCode('')).toBe('')
+    expect(codeCell('')).toBe('')
+  })
+})
+
+describe('dropOpenFence', () => {
+  it('removes a block a hard cut landed inside, back to the line that opened it', () => {
+    // The budget backstop cannot use `balanceFences`: closing ADDS characters to text already
+    // over the limit, by an amount sized to the longest run in the block.
+    const cut = dropOpenFence('## Report\n\ntext\n\n```\nhalf a log that never')
+    expect(cut).toBe('## Report\n\ntext')
+    expect(cut.length).toBeLessThan('## Report\n\ntext\n\n```\nhalf a log that never'.length)
+  })
+
+  it('leaves a document whose fences all close alone', () => {
+    const balanced = '## Report\n\n```\nwhole log\n```\n\nmore'
+    expect(dropOpenFence(balanced)).toBe(balanced)
+  })
+
+  it('leaves fence-free text untouched', () => {
+    expect(dropOpenFence('no fences here')).toBe('no fences here')
   })
 })

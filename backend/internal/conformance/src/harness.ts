@@ -469,6 +469,13 @@ export interface ConformanceAppOptions {
    */
   appBaseUrl?: string
   /**
+   * The deployment's own public BACKEND base URL, so the suite can assert that the report links
+   * captured artifacts to their bytes rather than listing opaque ids — and that the link is built
+   * from THIS config rather than from the SPA origin beside it, which is a different host the
+   * moment the SPA is served separately.
+   */
+  apiBaseUrl?: string
+  /**
    * Inject explicit built-in gate providers (e.g. a faked `CiStatusProvider`). A facade
    * build resets the deployment-global gate providers up-front then re-wires from config;
    * each harness threads these into that per-build wiring so a faked provider survives a

@@ -49,6 +49,13 @@ export function createNavGates(): NavGates {
   const hasFinishedRun = computed(() =>
     execution.instances.some((e) => e.status === 'done' && isTaskBlock(e.blockId)),
   )
+  // Mirrors what the CARD renders, exactly as the park gates do: `TaskCard` shows the shared
+  // failure banner on `agentRun.status === 'failed'`, which is the anchor the diagnose tour
+  // points at. Kept apart from `hasFinishedRun` because the two states render disjoint
+  // controls — see `NavGates.boardHasFailedRun`.
+  const hasFailedRun = computed(() =>
+    execution.instances.some((e) => e.status === 'failed' && isTaskBlock(e.blockId)),
+  )
   // Not the store's raw pending counts: those answer "is anything parked", while the tour
   // these gate anchors on the card affordance a park RENDERS. See `hasActionablePark`.
   const hasOpenDecision = computed(() =>
@@ -118,6 +125,9 @@ export function createNavGates(): NavGates {
     },
     get boardHasFinishedRun() {
       return hasFinishedRun.value
+    },
+    get boardHasFailedRun() {
+      return hasFailedRun.value
     },
   }
 }

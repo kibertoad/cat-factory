@@ -58,7 +58,7 @@ export const reproTestOutcome = defineStructuredOutput(
      * the harness runs against the pre-fix tree and the final tree to PROVE the reproduction —
      * the `outcome` field above has always been the model's own claim, and this is the field that
      * makes it checkable. Empty ⇒ no proof can be attempted (the engine records `absent`).
-     * See `docs/initiatives/bugfix-reproduction-proof.md`.
+     * See `backend/docs/adr/0033-bugfix-reproduction-proof.md`.
      */
     command: v.fallback(v.optional(v.string()), undefined),
     /**

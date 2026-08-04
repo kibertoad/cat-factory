@@ -195,8 +195,9 @@ function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineSt
 /**
  * Build the replacement `ExecutionInstance` a retry or a restart installs for a block: a FRESH run
  * id over the re-planned steps, carrying forward everything that describes the WORK rather than
- * the attempt — the initiator, how the run entered the system, and the prior-attempt failure +
- * successful-output trails.
+ * the attempt — the initiator, the authority the run was admitted under (its pinned role and
+ * mode), how the run entered the system, and the prior-attempt failure + successful-output
+ * trails.
  *
  * Both callers had this identically inline, which is precisely how a field comes to be carried
  * forward on one path and silently dropped on the other (a retried headless run reverting to `ui`
@@ -230,6 +231,17 @@ export function buildResumedInstance(input: {
     // property of the work, not of this attempt — a headless run stays headless whether its failed
     // attempt is retried through the public API or the SPA.
     ...(previous.intakeOrigin != null ? { intakeOrigin: previous.intakeOrigin } : {}),
+    // The merge policy the run was ADMITTED under travels with it, for the same reason and with
+    // more at stake. A re-drive is the same work under the same authority: the role is what the
+    // operator granted when they let this run start, and re-resolving it here is impossible
+    // anyway (a retry can be driven by a different user, or by a sweeper with no user at all).
+    //
+    // Dropping either is a live escape hatch rather than a degraded feature. `restartFromStep`
+    // has no `failed` precondition, so start-a-dry-run then restart-from-step-0 would mint a
+    // LIVE run over the same work — the sandbox exactly one restart deep, through the ordinary
+    // affordance. A dry run stays a dry run; only a fresh start can settle a new mode.
+    ...(previous.initiatedByRole != null ? { initiatedByRole: previous.initiatedByRole } : {}),
+    ...(previous.mode != null ? { mode: previous.mode } : {}),
     // Preserve the error trail: the failure this attempt clears is appended to the history so it
     // stays viewable after the top banner disappears on restart.
     failureHistory: carryForwardFailures(previous),

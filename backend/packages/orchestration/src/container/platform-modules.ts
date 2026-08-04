@@ -24,7 +24,7 @@ import {
   createEnvironmentHandlerSeeder,
   createSharedStackSeeder,
 } from '@cat-factory/integrations'
-import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
+import { DEFAULT_SPEND_PRICING, ratesFor } from '@cat-factory/spend'
 import {
   createDocumentsModule,
   createEnvironmentsModule,
@@ -82,6 +82,11 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     boardService,
     foundationalBuiltins,
   } = input
+  // The price table the run-telemetry rollups are costed against: the DEPLOYMENT base table,
+  // deliberately, and its own currency. A workspace may override the budget's currency without
+  // overriding the prices (`mergeSpendPricing` keeps the base `prices`), so labelling these
+  // amounts with a workspace's currency would put the wrong symbol on unchanged EUR figures.
+  const rollupPricing = dependencies.spendPricing ?? DEFAULT_SPEND_PRICING
   const llmObservability = modules.build('llmObservability', () =>
     dependencies.llmCallMetricRepository
       ? new LlmObservabilityService({
@@ -95,6 +100,8 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
           // The trace fan-out is best-effort; without this a sink that rejects every export
           // (a revoked Langfuse key) leaves the deployment exporting nothing, silently.
           logger: dependencies.logger,
+          modelRates: (provider, model) => ratesFor(rollupPricing, { provider, model }),
+          costCurrency: rollupPricing.currency,
         })
       : undefined,
   )
@@ -156,6 +163,13 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
         agentContextSnapshotRepository: dependencies.agentContextSnapshotRepository,
         agentSearchQueryRepository: dependencies.agentSearchQueryRepository,
         provisioningLogRepository: dependencies.provisioningLogRepository,
+        // Bound to the SAME priced fold the board rollups read, so the debug overview and a
+        // step's metrics bar can never quote different money for one run.
+        priceRollup: llmObservability
+          ? (workspaceId, executionId) =>
+              llmObservability.summarizeByExecution(workspaceId, executionId)
+          : undefined,
+        costCurrency: llmObservability?.rollupCurrency ?? null,
       }),
   )
   // Built before the shared-stacks + environments modules so a compose stack recipe's

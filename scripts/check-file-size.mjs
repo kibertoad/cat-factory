@@ -135,10 +135,13 @@ const LEGACY_ALLOWANCES = new Map([
   // The binary-artifact storage pair (`cloudflareContentStorage` + its resolver — already
   // standalone, because the retention cron needs them outside the container) then moved to
   // `container-artifact-storage.ts` — ratcheted 1500 -> 1470.
-  // The outbound-webhook wiring (one cohesive decision: endpoint guard, sealing cipher and the
-  // three delivery halves all follow from the deployment having an ENCRYPTION_KEY) then moved to
-  // `container-notification-webhook.ts` — ratcheted 1470 -> 1430.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1430],
+  // The facade's whole NOTIFICATION DELIVERY wiring (the Slack transport, the outbound
+  // notification-webhook feature, and the composition of everything that is not the in-app push)
+  // then moved to `container-notification-deps.ts` — ratcheted 1470 -> 1345. That extraction
+  // SUPERSEDED this branch's narrower one (`container-notification-webhook.ts`, which moved only
+  // the webhook builder): both hoisted the same builder out, so the file was deleted rather than
+  // kept beside its replacement, and the platform-alert error hook moved onto the surviving one.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1345],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
