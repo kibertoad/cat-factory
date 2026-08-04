@@ -89,7 +89,7 @@ The implementation job (`POST /run`) is the canonical sequence:
 7. **prove the reproduction**, when the job body carries `reproduction`: the declared check is
    run against the pre-fix tree and the tree the PR will open from, in two freshly-created
    symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
-   [bugfix reproduction proof](../../../docs/initiatives/bugfix-reproduction-proof.md)). Unlike
+   [bugfix reproduction proof](../../docs/adr/0033-bugfix-reproduction-proof.md)). Unlike
    step 6 this NEVER gates the PR: a failed verification is fed back to the agent while budget
    remains, then recorded as `inconclusive`. It runs BEFORE step 6 so validation stays the last
    thing to touch the tree,

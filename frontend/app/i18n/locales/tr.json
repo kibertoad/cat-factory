@@ -1406,6 +1406,33 @@
         "failedSummary": "{maxAttempts} denemenin {attempts} tanesinden sonra {total} denetimden {failed} tanesi hâlâ başarısızdı, bu yüzden çekme isteği açılmadı.",
         "exitCode": "çıkış kodu {code}",
         "timedOut": "zaman aşımı"
+      },
+      "reproduction": {
+        "heading": "Yeniden üretim kanıtı",
+        "status": {
+          "reproduced": "Yeniden üretildi",
+          "inconclusive": "Kanıtlanmadı",
+          "declared_infeasible": "Yeniden üretilemez"
+        },
+        "verdict": {
+          "reproduced": "Bildirilen kontrol düzeltme öncesi ağaçta başarısız oldu ve bu ağaçta geçiyor.",
+          "inconclusive": "Kontrol, düzeltmenin iki yanında da kusuru gösteremedi; bu nedenle düzeltme kanıtlanmış değil.",
+          "declared_infeasible": "Aracı, bu hatanın bir testte yeniden üretilemeyeceğini bildirdi ve bunun yerine neyi doğruladığını belirtti."
+        },
+        "tree": {
+          "base": "Düzeltme öncesi ağaç",
+          "final": "Son ağaç"
+        },
+        "command": "Komut",
+        "reason": "Neden yeniden üretilemiyor",
+        "alternative": "Bunun yerine doğrulandı",
+        "passed": "geçti",
+        "exitCode": "çıkış kodu {code}",
+        "timedOut": "zaman aşımı",
+        "setupFailed": "hazırlık başarısız",
+        "notRun": "çalıştırılmadı",
+        "attempts": "{maxAttempts} denemeden {attempts}. deneme",
+        "omittedTestPaths": "Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu. | Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu."
       }
     },
     "inspector": {

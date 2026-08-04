@@ -1406,6 +1406,33 @@
         "failedSummary": "{maxAttempts} 回中 {attempts} 回試行しても {total} 件中 {failed} 件の検査が失敗したままだったため、プルリクエストは開かれませんでした。",
         "exitCode": "終了コード {code}",
         "timedOut": "タイムアウト"
+      },
+      "reproduction": {
+        "heading": "再現の証跡",
+        "status": {
+          "reproduced": "再現済み",
+          "inconclusive": "未証明",
+          "declared_infeasible": "再現不可"
+        },
+        "verdict": {
+          "reproduced": "宣言されたチェックは修正前のツリーで失敗し、このツリーでは成功しています。",
+          "inconclusive": "チェックは修正の前後で不具合を示せなかったため、修正の裏付けはありません。",
+          "declared_infeasible": "エージェントはこの不具合をテストで再現できないと宣言し、代わりに検証した内容を示しました。"
+        },
+        "tree": {
+          "base": "修正前のツリー",
+          "final": "最終ツリー"
+        },
+        "command": "コマンド",
+        "reason": "再現できない理由",
+        "alternative": "代わりに検証した内容",
+        "passed": "成功",
+        "exitCode": "終了コード {code}",
+        "timedOut": "タイムアウト",
+        "setupFailed": "セットアップ失敗",
+        "notRun": "未実行",
+        "attempts": "{maxAttempts} 回中 {attempts} 回目の試行",
+        "omittedTestPaths": "宣言されたテストファイル {count} 件が証跡の実行前に除外されたため、修正前のツリーは不完全な再現から再構築されました。 | 宣言されたテストファイル {count} 件が証跡の実行前に除外されたため、修正前のツリーは不完全な再現から再構築されました。"
       }
     },
     "inspector": {

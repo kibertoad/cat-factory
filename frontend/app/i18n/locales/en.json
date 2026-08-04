@@ -1482,6 +1482,37 @@
         "failedSummary": "{failed} of {total} checks were still failing after {attempts} of {maxAttempts} attempts, so no pull request was opened.",
         "exitCode": "exit {code}",
         "timedOut": "timed out"
+      },
+      "reproduction": {
+        "heading": "Reproduction proof",
+        "status": {
+          "reproduced": "Reproduced",
+          "inconclusive": "Unproven",
+          "declared_infeasible": "Not reproducible"
+        },
+        "verdict": {
+          "reproduced": "The declared check failed on the pre-fix tree and passes on this one.",
+          "inconclusive": "The check did not demonstrate the defect across the fix, so the fix is not evidenced.",
+          "declared_infeasible": "The agent declared this bug cannot be reproduced in a test, and stated what it verified instead."
+        },
+        "@verdict": "One sentence explaining each reproduction verdict; shown beside the status chip. 'pre-fix tree' means the code as it stood before the change.",
+        "tree": {
+          "base": "Pre-fix tree",
+          "final": "Final tree"
+        },
+        "@tree": "Labels for the two checkouts the same command was run against: the code before the change, and the code after it.",
+        "command": "Command",
+        "reason": "Why it cannot be reproduced",
+        "alternative": "Verified instead",
+        "passed": "passed",
+        "exitCode": "exit {code}",
+        "timedOut": "timed out",
+        "setupFailed": "setup failed",
+        "@setupFailed": "The tree's setup command (a dependency install) failed, so the check never ran there.",
+        "notRun": "not run",
+        "attempts": "Attempt {attempts} of {maxAttempts}",
+        "omittedTestPaths": "{count} declared test file was dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction. | {count} declared test files were dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction.",
+        "@omittedTestPaths": "Plural form required. A dropped file can leave the pre-fix tree without the reproduction, which makes the check pass there and wrongly reads as 'the test does not capture the defect'."
       }
     },
     "inspector": {

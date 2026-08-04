@@ -220,6 +220,16 @@ export interface CoreDependencies {
    */
   appBaseUrl?: string
   /**
+   * Base URL of THIS BACKEND as the outside world reaches it (`PUBLIC_URL` on Node,
+   * `WORKER_PUBLIC_URL` on the Worker). The PR verification report builds direct links to stored
+   * artifacts' bytes from it, so a reviewer gets a screenshot rather than an opaque id.
+   *
+   * Kept apart from {@link appBaseUrl} rather than reused: the two coincide on a same-origin
+   * deployment and diverge the moment the SPA is served from its own host, and a link built from
+   * the wrong one is worse than no link at all. Absent ⇒ those rows carry ids only.
+   */
+  apiBaseUrl?: string
+  /**
    * The structured logger every domain service emits through (`backend/docs/logging.md`).
    * A facade injects its pino-backed instance from `@cat-factory/server`; a test or harness
    * that does not care passes `noopLogger` explicitly.

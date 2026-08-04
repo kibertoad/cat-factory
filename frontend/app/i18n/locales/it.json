@@ -1864,6 +1864,33 @@
         "failedSummary": "{failed} controlli su {total} fallivano ancora dopo {attempts} tentativi su {maxAttempts}, quindi non è stata aperta alcuna richiesta di modifica.",
         "exitCode": "codice di uscita {code}",
         "timedOut": "tempo scaduto"
+      },
+      "reproduction": {
+        "heading": "Prova di riproduzione",
+        "status": {
+          "reproduced": "Riprodotto",
+          "inconclusive": "Non dimostrato",
+          "declared_infeasible": "Non riproducibile"
+        },
+        "verdict": {
+          "reproduced": "Il controllo dichiarato è fallito sull’albero precedente alla correzione e passa su questo.",
+          "inconclusive": "Il controllo non ha dimostrato il difetto ai due lati della correzione, quindi la correzione non è comprovata.",
+          "declared_infeasible": "L’agente ha dichiarato che questo bug non è riproducibile in un test e ha indicato che cosa ha verificato al suo posto."
+        },
+        "tree": {
+          "base": "Albero precedente alla correzione",
+          "final": "Albero finale"
+        },
+        "command": "Comando",
+        "reason": "Perché non è riproducibile",
+        "alternative": "Verificato al suo posto",
+        "passed": "superato",
+        "exitCode": "codice di uscita {code}",
+        "timedOut": "tempo scaduto",
+        "setupFailed": "preparazione fallita",
+        "notRun": "non eseguito",
+        "attempts": "Tentativo {attempts} di {maxAttempts}",
+        "omittedTestPaths": "{count} file di test dichiarato è stato scartato prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta. | {count} file di test dichiarati sono stati scartati prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta."
       }
     },
     "inspector": {

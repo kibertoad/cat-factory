@@ -552,6 +552,12 @@ export interface ExecutionServiceDependencies {
    */
   appBaseUrl?: string
   /**
+   * Optional: this deployment's own externally-reachable BACKEND base URL, from which the
+   * verification report builds direct links to stored artifacts' bytes. Absent → those rows carry
+   * their artifact ids and no link.
+   */
+  apiBaseUrl?: string
+  /**
    * Optional: the per-workspace settings row, read by the verification-report hook for the
    * `publishPrVerificationReport` opt-out. Absent ⇒ the default (on).
    */

@@ -1406,6 +1406,33 @@
         "failedSummary": "{failed} מתוך {total} בדיקות עדיין נכשלו אחרי {attempts} מתוך {maxAttempts} ניסיונות, ולכן לא נפתחה בקשת משיכה.",
         "exitCode": "קוד יציאה {code}",
         "timedOut": "חריגת זמן"
+      },
+      "reproduction": {
+        "heading": "הוכחת שחזור",
+        "status": {
+          "reproduced": "שוחזר",
+          "inconclusive": "לא הוכח",
+          "declared_infeasible": "לא ניתן לשחזור"
+        },
+        "verdict": {
+          "reproduced": "הבדיקה שהוצהרה נכשלה בעץ שלפני התיקון ועוברת בעץ הזה.",
+          "inconclusive": "הבדיקה לא הדגימה את התקלה משני צדי התיקון, ולכן התיקון אינו מבוסס בראיות.",
+          "declared_infeasible": "הסוכן הצהיר שלא ניתן לשחזר את התקלה הזו בבדיקה, וציין מה בדק במקום זאת."
+        },
+        "tree": {
+          "base": "העץ שלפני התיקון",
+          "final": "העץ הסופי"
+        },
+        "command": "פקודה",
+        "reason": "מדוע לא ניתן לשחזר",
+        "alternative": "נבדק במקום זאת",
+        "passed": "עבר",
+        "exitCode": "קוד יציאה {code}",
+        "timedOut": "פג הזמן",
+        "setupFailed": "ההכנה נכשלה",
+        "notRun": "לא הורץ",
+        "attempts": "ניסיון {attempts} מתוך {maxAttempts}",
+        "omittedTestPaths": "{count} קובץ בדיקה שהוצהר הושמט לפני הרצת ההוכחה, ולכן העץ שלפני התיקון נבנה משחזור חלקי. | {count} קובצי בדיקה שהוצהרו הושמטו לפני הרצת ההוכחה, ולכן העץ שלפני התיקון נבנה משחזור חלקי."
       }
     },
     "inspector": {
