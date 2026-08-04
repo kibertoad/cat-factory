@@ -32,7 +32,16 @@ function instance(
   } as ExecutionInstance
 }
 
-const INPUTS = { block: BLOCK, issues: [], runUrl: null, now: 1_700_000_000_000 }
+const INPUTS = {
+  block: BLOCK,
+  issues: [],
+  runUrl: null,
+  // No provisioning log wired by default: the lifecycle section then reports itself as
+  // un-evidenced, which is the honest reading of "nobody looked". The lifecycle's own cases live
+  // in `prReport.environments.test.ts`.
+  environments: { provisioning: { status: 'unwired' as const }, evidenceUrl: null },
+  now: 1_700_000_000_000,
+}
 
 /** A tester summary whose transcript fence was never closed (a killed/truncated tool dump). */
 const TEST_REPORT_WITH_OPEN_FENCE = {

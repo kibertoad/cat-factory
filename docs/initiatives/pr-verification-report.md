@@ -150,6 +150,44 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 - **Wire the logger.** This is the one engine path designed to swallow its failures, so an
   unwired logger means a revoked token or a rejected body leaves no trace anywhere and the report
   just stops appearing.
+- **The environment lifecycle's LAST leg happens after the run does.** An environment is reclaimed
+  by the TTL sweep (or by a human on the human-test gate), routinely long after the final step
+  settled, so the settlement hook structurally cannot observe it: before slice 13 the report said
+  "still live" forever about environments the platform had destroyed on schedule. The teardown
+  service therefore carries a best-effort hook fired from the ONE place that records a teardown
+  attempt, late-bound in the composition root to `ExecutionService.refreshVerificationReport`. It
+  fires on a FAILED attempt as much as a successful one: with no settlement left, an environment
+  the provider refuses to reclaim would otherwise sit on the PR as one nobody has got to yet
+  rather than as the thing an operator has to go and do. Any future leg that completes outside a
+  run needs the same treatment; a memo on the compose path would defeat it.
+- **The step's environment PROJECTION is not a teardown signal.** It is written by the run's own
+  polls and never refreshed once the run settles, so it keeps a stale `ready` forever. The
+  provisioning event log is what dates the lifecycle, and `confirmed` requires POSITIVE evidence
+  from the log or from projections that all show gone: "nothing looks live" is also true of a run
+  that projected nothing at all.
+- **The teardown verdict is decided by environment IDENTITY, never by a tally.** Comparing a count
+  of teardown rows against a count of ready frames reads as correct until a run REPLACES an
+  environment mid-flight (the provisioning service supersedes a frame's prior environment under
+  the same run), at which point the superseded one's teardown balances the books while its
+  replacement is still standing. So the log's `targetId`s are followed individually, `confirmed`
+  means every id the run stood up was reclaimed, and the verdict is latest-attempt-wins per id so
+  a retried sweep neither reports one wedged environment as many nor a recovered one as stuck.
+  Rows carrying no `targetId` (a provision that failed before a record existed, a stack recipe's
+  per-STEP rows) inform the failure count and never the identity sets.
+- **An empty timeline has four causes and they are not interchangeable** (`PrReportTimelineGap`):
+  no log wired, a read that FAILED, a read too large to be complete, and a run that stood nothing
+  up. Only the first is a statement about how the deployment is configured, so reporting a timed-out
+  query as "this deployment retains no provisioning event log" is a fabricated fact about somebody's
+  setup. The truncation member exists because the identity accounting above needs a WHOLE history:
+  rows arrive newest first, so an environment whose bring-up fell off the end reads as one that
+  never existed and therefore never needed reclaiming, which is a confident wrong answer where
+  "too long to date" is an honest one.
+- **Attribution is a separate axis from capture.** A tester's screenshots are reported whatever it
+  ran against, because they exist and a reviewer should reach them; whether they are EVIDENCE about
+  the ephemeral environment rides the section's status, which keeps `local` (it ran somewhere else)
+  apart from `undeclared` (it did not say). Guessing either way turns an unknown into a claim in
+  the one section whose whole job is provenance.
+
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).
@@ -172,6 +210,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) | 🟨 in-progress |      |
 | 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                            | ⬜ todo        |      |
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                     | ⬜ todo        |      |
+| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish     | 🟩 done        | this |
 
 ### Phase-2 notes (read before starting slice 9)
 

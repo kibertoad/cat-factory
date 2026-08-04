@@ -520,6 +520,7 @@ export function createEnvironmentsModule(
     secretCipher,
     clock: deps.clock,
     ...(provisioningLog ? { provisioningLog } : {}),
+    logger: deps.logger,
   })
   const provisioningService = buildEnvironmentProvisioningService({
     deps,
