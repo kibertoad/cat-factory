@@ -57,6 +57,9 @@ export class NotificationWebhookService {
       // default for a brand-new endpoint is NONE: an operator registering a receiver for parked
       // decisions must not silently start getting a lifecycle event per run.
       runEvents: input.runEvents ?? existing?.runEvents ?? [],
+      // Same rule as `runEvents`, for the same reason plus a sharper one: this family pages an
+      // on-call rotation, so it is never acquired by editing an unrelated field.
+      alertEvents: input.alertEvents ?? existing?.alertEvents ?? [],
       enabled: input.enabled ?? existing?.enabled ?? true,
       // Omitted `secret` keeps the stored one; a supplied one rotates it.
       secretSealed: input.secret
@@ -80,6 +83,7 @@ function toWire(record: NotificationWebhookRecord): NotificationWebhook {
     url: record.url,
     types: record.types,
     runEvents: record.runEvents,
+    alertEvents: record.alertEvents,
     enabled: record.enabled,
     hasSecret: record.secretSealed != null,
     updatedAt: record.updatedAt,

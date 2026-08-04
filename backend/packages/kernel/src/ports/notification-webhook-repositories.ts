@@ -1,4 +1,5 @@
 import type { NotificationType } from '../domain/types.js'
+import type { PlatformAlertEventKind } from './platform-alert.js'
 import type { RunLifecycleEventKind } from './run-lifecycle.js'
 
 // Persistence port for a workspace's outbound notification webhook — the delivery endpoint a
@@ -31,6 +32,14 @@ export interface NotificationWebhookRecord {
    * prior behaviour.
    */
   runEvents: RunLifecycleEventKind[]
+  /**
+   * The PLATFORM-HEALTH transitions delivered to the same endpoint
+   * (`platform_health.firing` / `platform_health.resolved`). EMPTY means NONE, for the same
+   * reason as {@link runEvents}: this is the family an ON-CALL receiver subscribes to, and an
+   * endpoint registered to hear about parked decisions must never start paging somebody because
+   * the deployment shipped a new event family.
+   */
+  alertEvents: PlatformAlertEventKind[]
   /** Whether deliveries are currently attempted. */
   enabled: boolean
   /**

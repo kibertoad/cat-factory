@@ -173,6 +173,11 @@ function selectNodeNotificationWebhookSupport(
         err: error instanceof Error ? error.message : String(error),
         ...ctx,
       }),
+    onPlatformAlertError: (error, ctx) =>
+      logger.warn('platform health webhook delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
 }
 

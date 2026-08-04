@@ -11,6 +11,12 @@ Official clients for the cat-factory **public API** (`/api/v1`) in four language
 | [Go](./go)                 | `.../cat-factory/sdk/go`        | the module proxy (a `sdk/go/vX.Y.Z` tag) |
 | [Java + Kotlin](./java)    | `ai.catfactory:cat-factory-sdk` | Maven Central                            |
 
+Beside them, [`sdk/mcp`](./mcp) is a **Model Context Protocol facade**, not a fifth client: the same
+operations projected as MCP tools over the TypeScript client, so an MCP host can drive a workspace
+directly. It rides this generator for the same reason the clients do (it must not be able to drift
+from the surface it exposes) and re-implements none of their behaviour. See
+[its README](./mcp/README.md).
+
 There is **no separate Kotlin SDK**, and that is a decision rather than an omission; see
 [Java and Kotlin](#java-and-kotlin) below.
 
@@ -20,7 +26,7 @@ There is **no separate Kotlin SDK**, and that is a decision rather than an omiss
 
 ```
 Valibot route contracts ──► docs/openapi.json ──► sdk/{typescript,python,go,java}/
-   (backend/packages/         (pnpm gen:openapi)     (pnpm gen:sdk)
+   (backend/packages/         (pnpm gen:openapi)     (pnpm gen:sdk)   sdk/mcp/  (tool table)
     contracts)
 ```
 
@@ -52,7 +58,10 @@ resource client each operation is mounted on, and what the method is called), an
 language renders it.
 
 **Adding an endpoint to `/api/v1` requires an entry in `surface.mjs`.** Generation fails without
-one, so a new endpoint cannot ship as an un-callable hole in four SDKs.
+one, so a new endpoint cannot ship as an un-callable hole in four SDKs. It becomes an MCP tool from
+that same entry, with no second decision — except for a STREAMING endpoint, which a tool call has
+no channel for and which must therefore be named in `MCP_OMITTED_OPERATIONS` with the reason a
+caller should read. Generation fails on an unclassified one.
 
 ## Design rules the four share
 

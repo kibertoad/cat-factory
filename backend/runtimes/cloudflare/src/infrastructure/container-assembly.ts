@@ -43,7 +43,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, RunLifecycleSink } from '@cat-factory/kernel'
+import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -168,6 +168,12 @@ export interface WorkerContainerAssemblyInput {
     channel: NotificationChannel
     /** The run-lifecycle half — same endpoint, same secret, same guard. */
     runLifecycleSink: RunLifecycleSink
+    /**
+     * The platform-health half — the edges an on-call system is paged by. From the same builder
+     * as the other three, so this facade cannot wire the management surface and leave the alerts
+     * undelivered.
+     */
+    platformAlertSink: PlatformAlertSink
   } | null
   localModelEndpoints: LocalModelEndpointService | undefined
   userSecrets: UserSecretService | undefined
@@ -840,6 +846,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     publicApiKeys,
     // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
     notificationWebhooks: notificationWebhookSupport?.service,
+    // The on-call push the cron `scheduled` handler's health sweep hands its edges to.
+    platformAlertSink: notificationWebhookSupport?.platformAlertSink,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
     // The Bedrock allow-list gating `bedrock`-flavour selectability (see the sibling read in
