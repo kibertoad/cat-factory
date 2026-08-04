@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slice 1 landed.** Source: the 2026-08-04 review of both MCP surfaces.
+Status: **in progress; slices 1 and 2 landed.** Source: the 2026-08-04 review of both MCP surfaces.
 
 ## Goal
 
@@ -88,20 +88,8 @@ dump and never uses the word MCP).
       Image bumped to 1.89.0, carrying the harness-side test backfill: the `toolServersSection`
       prompt contract, the transport matrix, Codex `config.toml` end to end (asserted from INSIDE
       the run, since the per-run home is wiped in `finally`), and the `allowedTools` boundary.
-- [ ] **2. The published server: guarded, filterable, structured.** Extend
-      `check-publish-integrity.mjs` and `check-package-catalog.mjs` to `sdk/*`, add an MCP runner
-      to `backend/internal/sdk-smoketest` so CI drives the real binary against a real backend,
-      and cover `bin.ts` (stderr-only rule, exit codes, `CAT_FACTORY_API_KEY_FILE` as the
-      plaintext-config mitigation until slice 6). Then the protocol depth the generator already
-      has the data for: per-tool allow/deny beside the group filter (today excluding the
-      PR-merging `notifications_act` costs the whole `notifications` group), `outputSchema` +
-      `structuredContent` from the response schemas already in the IR, compact JSON instead of
-      `JSON.stringify(value, null, 2)` (the indentation inflates every read for free), and
-      `destructiveHint`/`idempotentHint` on the four real-money tools (`tasks_start`,
-      `tasks_retry`, `jobs_create`, `notifications_act`). Docs ride along: `sdk/AGENTS.md` learns
-      the MCP package exists (the generated table, the `MCP_OMITTED_OPERATIONS` rule), the README
-      gains a `claude mcp add` snippet and one worked flow (create, start, poll, decide), and the
-      server instructions gain polling guidance for the SSE-shaped gaps.
+- [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped. Two
+      decisions it had to make on the way, and the cost it leaves behind, are below.
 - [ ] **3. Hosted MCP endpoint.** Mount the existing server behind
       `StreamableHTTPServerTransport` on BOTH facades, behind the public-API key auth and scope
       ladder, with a conformance assertion so the facades cannot drift. This is the adoption
@@ -161,13 +149,13 @@ carries it; "done" means that slice has landed.
 | No cap on server count/size, unlike the context-file corpus                       | Slice 1 (done)                |
 | Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1 (done)                |
 | Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1 (done)                |
-| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                       |
-| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                       |
+| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2 (done)                |
+| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2 (done)                |
 | API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
-| Tool filtering is group-coarse, startup-only                                      | Slice 2                       |
-| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                       |
-| `destructiveHint` unset on the four spending tools                                | Slice 2                       |
-| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                       |
+| Tool filtering is group-coarse, startup-only                                      | Slice 2 (done)                |
+| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2 (done)                |
+| `destructiveHint` unset on the four spending tools                                | Slice 2 (done)                |
+| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2 (done)                |
 | stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
 | No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
 | Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
@@ -253,3 +241,47 @@ Recorded so the next iteration does not re-propose them.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
   the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
   internal-first soft launch for an endpoint whose whole point is external callers.
+
+## Slice 2's two decisions, and what they cost
+
+- **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a successful
+  result with no `structuredContent` for a tool that declares a schema, and VALIDATES the content it
+  gets. `/api/v1` is additive forever, so every assertion that validation could turn against a newer
+  deployment is dropped on the way out: no `required`, no `enum`, no closed `anyOf`, no bounds, and
+  for a union not even `type` (every union on the surface has object variants today, so
+  `type: 'object'` would be accurate about the spec as it stands and would still be the assertion a
+  future string-or-array variant is rejected by). The known members of a vocabulary go in the field's
+  description, where a new member cannot invalidate them. `emit-mcp.mjs` carries this as an
+  `INPUT`/`OUTPUT` mode rather than a second renderer.
+- **The result cap became a REFUSAL rather than a truncation**, forced by the same obligation: half an
+  object cannot satisfy the schema it was cut out of. It is also the better trade on its own terms,
+  since the old `[TRUNCATED]` note spent the whole cap delivering "this is not valid JSON, narrow
+  instead of reading on".
+- **What it costs, for whoever revisits it:** the declared output schemas are about 41 KB of JSON
+  across the table, taking `tools/list` from roughly 20 KB to roughly 31 KB on the wire, and the text
+  block still accompanies `structuredContent` as the protocol recommends. The compact-JSON change
+  offsets part of it on the result side. Two levers if real transcripts show the tool-list read
+  dominating, cheapest first: the notification `payload` object is inlined by three tools at ~3.9 KB
+  each (29% of the total) and a model cannot act on thirty mutually exclusive payload shapes anyway,
+  so rendering it as `{}` reclaims ~12 KB on its own; `debug_get_run` is the single largest entry at
+  ~5.9 KB. Dropping the declarations entirely (keeping `structuredContent`) is the full reversal.
+
+## Gotchas slice 2 surfaced
+
+- **A declared `outputSchema` is a CONTRACT the caller enforces, not a hint.** The MCP client throws
+  when a schema-carrying tool answers successfully without `structuredContent`, and ajv-validates the
+  content against the schema. Anything that shortens, samples or partially renders a result is
+  therefore incompatible with declaring one, which is what turned the cap into a refusal. Slice 3's
+  hosted endpoint inherits this: the same tool table, the same obligation.
+- **`sdk/*` was outside two guards, and the fix is the GLOB, not another entry.** Both
+  `check-publish-integrity.mjs` and `check-package-catalog.mjs` named `sdk/typescript` or nothing;
+  they now expand `sdk/*`, so the next SDK-family member is covered without anyone remembering. The
+  Python/Go/Java clients have no `package.json` and drop out at read time.
+- **The MCP phase of `sdk-smoketest` is graded, not compared.** There is one implementation, so it
+  does not join `compareReports`; it reuses that module's problem vocabulary only so both phases
+  report the same way. It is also the only check that can see a generated output schema disagree with
+  what the deployment really answers, which makes it the natural home for slice 3's hosted-endpoint
+  assertions too.
+- **`pnpm build` on Windows executes zero tasks** (the root script's quoted `--filter` globs survive
+  into turbo verbatim), so a local `pnpm check:publish` reports every package as an empty shell. Run
+  `pnpm exec turbo run build --filter=./backend/** --filter=./sdk/**` instead.
