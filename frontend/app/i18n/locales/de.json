@@ -1703,7 +1703,9 @@
         "merge_failed": "Die Bewertungen lagen innerhalb der {preset}-Schwellenwerte, aber der automatische Merge konnte nicht abgeschlossen werden (zum Beispiel Branch-Schutz oder ein Konflikt), daher wartet der PR darauf, dass ein Mensch mergt.",
         "merge_partial": "Einige der Pull Requests der Aufgabe wurden gemergt, aber ein späterer nicht, daher wartet die Änderung darauf, dass ein Mensch den Multi-Repo-Merge abschließt oder zurückrollt.",
         "class_auto_merge": "Diese Vorlage führt diese Änderungskategorie immer automatisch zusammen, daher wurden die Bewertungen nicht verglichen.",
-        "class_requires_review": "Diese Vorlage gibt diese Änderungskategorie unabhängig von den Bewertungen immer an einen Menschen."
+        "class_requires_review": "Diese Vorlage gibt diese Änderungskategorie unabhängig von den Bewertungen immer an einen Menschen.",
+        "role_requires_review": "Diese Vorgabe lässt Läufe, die ein {role} startet, für diese Art von Änderung unabhängig von den Bewertungen immer von einem Menschen prüfen. Ein Teammitglied mit höherer Berechtigung kann diesen PR unverändert zusammenführen.",
+        "dry_run": "Dies war ein Probelauf, daher blieb der Pull Request für einen Menschen offen und die Bewertungen wurden nicht verglichen. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "scores": "Bewertungen",
       "axis": {
@@ -1862,6 +1864,33 @@
         "failedSummary": "{failed} von {total} Prüfungen schlugen nach {attempts} von {maxAttempts} Versuchen weiterhin fehl, daher wurde kein Pull Request geöffnet.",
         "exitCode": "Exit-Code {code}",
         "timedOut": "Zeitüberschreitung"
+      },
+      "reproduction": {
+        "heading": "Reproduktionsnachweis",
+        "status": {
+          "reproduced": "Reproduziert",
+          "inconclusive": "Unbelegt",
+          "declared_infeasible": "Nicht reproduzierbar"
+        },
+        "verdict": {
+          "reproduced": "Die deklarierte Prüfung schlug im Stand vor dem Fix fehl und besteht in diesem Stand.",
+          "inconclusive": "Die Prüfung hat den Defekt über den Fix hinweg nicht nachgewiesen, der Fix ist also nicht belegt.",
+          "declared_infeasible": "Der Agent hat erklärt, dass sich dieser Fehler nicht in einem Test reproduzieren lässt, und angegeben, was er stattdessen geprüft hat."
+        },
+        "tree": {
+          "base": "Stand vor dem Fix",
+          "final": "Endgültiger Stand"
+        },
+        "command": "Befehl",
+        "reason": "Warum nicht reproduzierbar",
+        "alternative": "Stattdessen geprüft",
+        "passed": "bestanden",
+        "exitCode": "Exit-Code {code}",
+        "timedOut": "Zeitüberschreitung",
+        "setupFailed": "Setup fehlgeschlagen",
+        "notRun": "nicht ausgeführt",
+        "attempts": "Versuch {attempts} von {maxAttempts}",
+        "omittedTestPaths": "{count} deklarierte Testdatei wurde vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut. | {count} deklarierte Testdateien wurden vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut."
       }
     },
     "inspector": {
@@ -3226,6 +3255,9 @@
     "contextError": "Der bereitgestellte Kontext konnte nicht geladen werden.",
     "summary": {
       "calls": "Aufrufe",
+      "cost": "Geschätzte Kosten",
+      "costHint": "Zu Listenpreisen berechnet, jede Eingabeklasse mit ihrem eigenen Satz: Ein Cache-Lesevorgang kostet etwa ein Zehntel frischer Eingabe, ein Cache-Schreibvorgang etwa ein Viertel mehr. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
+      "costIncomplete": "Nicht angezeigt: Mindestens eine Phase lief auf einem Modell, für das diese Installation keinen Satz kennt, daher wäre eine Gesamtsumme unvollständig. Die berechneten Phasen sind unten aufgeführt.",
       "tokensInOut": "Tokens (ein / aus)",
       "transportOverhead": "Transport-Overhead",
       "modelExecution": "Modellausführung",
@@ -3245,8 +3277,10 @@
         "phase": "Phase",
         "turns": "Runden",
         "tokensInOut": "Tokens (ein / aus)",
+        "cost": "Kosten",
         "carryCost": "Mitschleppkosten"
       },
+      "costHint": "Geschätzte Kosten der Token dieser Phase zu Listenpreisen. Ein Strich bedeutet, dass diese Installation keinen Satz für das ausgeführte Modell kennt.",
       "carryCostHint": "Wie stark jede Phase die nachfolgenden Runden belastet hat: ihr Kontext einmal für jede spätere Runde gezählt, die ihn erneut senden musste. Vergleichen Sie die Phasen eines Laufs miteinander; für sich allein sagt die Zahl nichts aus. Eine spät laufende Phase schleppt wenig mit, wie viel sie auch verbraucht hat; lesen Sie diese Spalte daher zusammen mit den Tokens daneben.",
       "unattributed": "Nicht zugeordnet",
       "unattributedHint": "von einem Kanal erfasst, der keine Phase meldet"
@@ -3254,6 +3288,7 @@
     "metricsBar": {
       "calls": "{count} Aufruf | {count} Aufrufe",
       "inputCompletionTokens": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",
+      "costHint": "Geschätzte Kosten der Token dieses Schritts zu Listenpreisen, jede Eingabeklasse mit ihrem eigenen Satz. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
       "fresh": "{tokens} frisch",
       "freshHint": "Eingabe, die von Grund auf verarbeitet wurde, ohne Anteil aus dem Cache",
       "cacheRead": "{tokens} aus dem Cache gelesen",
@@ -5111,7 +5146,8 @@
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
-        "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe"
+        "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
+        "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5144,7 +5180,8 @@
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
-        "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf."
+        "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
+        "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -6280,6 +6317,12 @@
       "minor": "Kleine Anmerkungen",
       "major": "Echte Nacharbeit",
       "classHistory": "{merged} in dieser Kategorie zusammengeführt, {autoShare} automatisch"
+    },
+    "role": {
+      "admin": "Administrator",
+      "member": "Mitglied",
+      "viewer": "Betrachter",
+      "unattributed": "ein automatischer Start"
     }
   },
   "vcs": {
@@ -6393,7 +6436,10 @@
       "finishedRun": "Ein erfolgreich abgeschlossener Lauf",
       "integrationsManage": "Berechtigung, Integrationen zu verwalten",
       "settingsManage": "Berechtigung, Workspace-Einstellungen zu verwalten",
-      "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek"
+      "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek",
+      "failedRun": "Ein fehlgeschlagener Lauf",
+      "infrastructure": "Ein mit diesem Workspace verbundenes Ausführungs-Backend",
+      "advancedTier": "Der erweiterte Oberflächenmodus"
     },
     "overlay": {
       "next": "Weiter",
@@ -6405,7 +6451,9 @@
       "announcement": "Schritt {current} von {total}. {title}. {body}",
       "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
       "searching": "Suche das hervorgehobene Element...",
-      "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren"
+      "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren",
+      "nextUp": "Als Nächstes",
+      "takeNext": "Diese Tour starten"
     },
     "tours": {
       "boardBasics": {
@@ -6528,7 +6576,7 @@
           },
           "finish": {
             "title": "Das ist der Kreislauf",
-            "body": "Aufgabe planen, Pipeline wählen, starten, zusehen. Wenn ein Lauf etwas von dir braucht, hält er an und sagt es, was die nächste Tour behandelt."
+            "body": "Aufgabe planen, Pipeline wählen, starten, zusehen. Die Touren nach dieser lesen einen echten Lauf, sie werden also frei, sobald du wirklich einen gestartet hast."
           }
         }
       },
@@ -6683,7 +6731,100 @@
             "body": "Manche Einträge gehören dir und nicht dem Board, etwa ein persönliches Zugriffstoken oder ein persönlicher Plan, und werden nur für Läufe genutzt, die du startest. Der Hub markiert, was was ist, und Meine Einrichtung sammelt das, was dir gehört."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Einen Fehler lesen",
+        "description": "Ein Lauf ist mit einem Fehler stehen geblieben. Finde heraus, was kaputt ist und was dagegen zu tun ist.",
+        "steps": {
+          "intro": {
+            "title": "Läufe scheitern, das ist normal",
+            "body": "Ein fehlgeschlagener Lauf ist keine Sackgasse. Das Board behält den Fehler, die Ursache ist meist eine Zeile, und die meisten Ursachen behebt eine Einstellung und nicht eine neu geschriebene Aufgabe."
+          },
+          "banner": {
+            "title": "Was schiefgegangen ist",
+            "body": "Die Karte tauscht ihren Fortschrittsbalken gegen dieses Banner. Es nennt die Ursache, die Details enthalten die Rohausgabe, und manche Ursachen bieten einen Knopf direkt zu der Einstellung, die sie behebt."
+          },
+          "retry": {
+            "title": "Noch einmal ausführen",
+            "body": "Wiederholen führt die Arbeit erneut aus. Frühere Fehler bleiben unter „Frühere Fehler“ an der Aufgabe, du kannst Versuche also vergleichen, statt die Spur zu verlieren."
+          },
+          "finish": {
+            "title": "Ein Fehler ist eine Information",
+            "body": "Ursache beheben, wiederholen, vergleichen. Wenn derselbe Fehler immer wiederkommt, sind die Details das, was du der Person zeigst, die eine Berechtigung erweitern oder das Fehlende verbinden kann."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Wo Läufe stattfinden",
+        "description": "Die Maschinen, auf denen Agenten laufen, die Umgebungen, in denen sie testen, und die Zugangsdaten, die sie nutzen dürfen.",
+        "steps": {
+          "intro": {
+            "title": "Agenten brauchen einen Ort zum Laufen",
+            "body": "Jeder Container-Schritt läuft auf einem Ausführungs-Backend, Tests kommen in einer Umgebung hoch, und manche Fähigkeiten brauchen Zugangsdaten. Alle drei werden in einem Fenster konfiguriert."
+          },
+          "open": {
+            "title": "Infrastruktur öffnen",
+            "body": "Alles darüber, wo und wie Läufe ausgeführt werden, steht hier."
+          },
+          "tabs": {
+            "title": "Ein Tab pro Thema",
+            "body": "Agent-Container ist der Ort, an dem die Arbeit ausgeführt wird. Testumgebungen ist das, woraus ein Service hochgefahren wird. Die Liste der Zugangsdaten zeigt, welche Schlüssel die Fähigkeiten deiner Agenten tatsächlich auflösen können und welche noch fehlen."
+          },
+          "finish": {
+            "title": "Fehler verweisen hierher",
+            "body": "Wenn ein Lauf beim Bereitstellen scheitert, ist das das Fenster, das sein Banner dich zu öffnen bittet. Besser vorher zu wissen als danach."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Review durch ein Gremium",
+        "description": "Lass mehrere Modelle dieselbe Arbeit prüfen statt nur eines, bei den Aufgaben, die es wert sind.",
+        "steps": {
+          "intro": {
+            "title": "Ein Reviewer oder mehrere",
+            "body": "Ein Review-Schritt führt normalerweise einen Agenten aus. Er kann stattdessen ein Gremium mehrerer Modelle ausführen und ihre Aussagen vergleichen, was bei schwererer Arbeit findet, was ein einzelner Reviewer übersieht."
+          },
+          "open": {
+            "title": "Modellkonfiguration öffnen",
+            "body": "Gremien bestehen aus Modellen, also werden sie direkt daneben eingerichtet."
+          },
+          "groups": {
+            "title": "Ein Gremium definieren",
+            "body": "Eine Gruppe nennt die Modelle im Gremium und wie anspruchsvoll eine Aufgabe sein muss, bevor es eingesetzt wird. Ein Schritt wählt dann eine Gruppe, statt Modelle einzeln zu nennen."
+          },
+          "finish": {
+            "title": "Kosten folgen dem Aufwand",
+            "body": "Ein Gremium kostet so viele Modellaufrufe, wie es Mitglieder hat. Deshalb kann eine Gruppe auf die Aufgaben begrenzt werden, deren Schätzung ihre Schwelle erreicht. Kleine Arbeit behält einen einzelnen Reviewer."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Die Services, die du schon betreibst",
+        "description": "Sag den Agenten, welche gemeinsam genutzten Systeme es gibt und wie ihre APIs aussehen.",
+        "steps": {
+          "intro": {
+            "title": "Baue nicht neu, was du hast",
+            "body": "Agenten entwerfen im Dunkeln, solange sie nicht wissen, was deine Organisation schon betreibt. Dieser Katalog nennt diese Systeme und trägt ihre API-Kontrakte."
+          },
+          "open": {
+            "title": "Grundlegende Services öffnen",
+            "body": "Der Katalog gemeinsamer Fähigkeiten, der jedem Board in diesem Workspace zur Verfügung steht."
+          },
+          "catalog": {
+            "title": "Registrieren, hochladen oder synchronisieren",
+            "body": "Füge einen Service von Hand hinzu, lade seine API-Dokumente hoch, oder verknüpfe ein Repository und lass sie synchronisieren. Entwürfe verweisen dann auf das hier Registrierte, statt eine Schnittstelle zu erfinden."
+          },
+          "finish": {
+            "title": "Entwurfsschritte lesen das",
+            "body": "Ein Entwurf, der angibt, welche davon er nutzt, bekommt im nächsten Schritt ihre vollen Kontrakte. Einer, der nichts angibt, bekommt nichts: dass das hier aktuell bleibt, ist also die Bedingung dafür, dass es funktioniert."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Neue Tour verfügbar",
+      "start": "Zeig mir",
+      "dismiss": "Ausblenden"
     }
   },
   "externalTools": {

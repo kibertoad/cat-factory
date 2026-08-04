@@ -623,7 +623,8 @@
         "binary_output_service_invalid": "Binary output service can't be resolved",
         "binary_output_generator_invalid": "Binary output generator can't be resolved",
         "foundational_service_not_inherited": "This board registered that service",
-        "ticket_already_linked": "This issue already has a task"
+        "ticket_already_linked": "This issue already has a task",
+        "dry_run_not_mergeable": "Dry run cannot be merged"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -659,7 +660,8 @@
         "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again.",
         "binary_output_generator_invalid": "A step that generates binary outputs selects a generative integration this deployment doesn't register, or none of the selected integrations produces a content type the step must deliver. Generative integrations are registered in the deployment's code, not in this workspace: register it or fix the step's selection, then start again.",
         "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead.",
-        "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first."
+        "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
+        "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1319,7 +1321,9 @@
         "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge.",
         "merge_partial": "Some of the task's pull requests merged, but a later one could not, so the change is waiting for a human to finish or revert the multi-repo merge.",
         "class_auto_merge": "This preset always auto-merges this class of change, so the scores were not compared.",
-        "class_requires_review": "This preset always sends this class of change to a human, whatever the scores."
+        "class_requires_review": "This preset always sends this class of change to a human, whatever the scores.",
+        "role_requires_review": "This preset holds runs started by a {role} to human review for this class of change, whatever the scores. A teammate on a higher tier can merge this PR as it stands.",
+        "dry_run": "This was a dry run, so the pull request was left open for a human and the scores were not compared. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "scores": "Scores",
       "axis": {
@@ -1478,6 +1482,37 @@
         "failedSummary": "{failed} of {total} checks were still failing after {attempts} of {maxAttempts} attempts, so no pull request was opened.",
         "exitCode": "exit {code}",
         "timedOut": "timed out"
+      },
+      "reproduction": {
+        "heading": "Reproduction proof",
+        "status": {
+          "reproduced": "Reproduced",
+          "inconclusive": "Unproven",
+          "declared_infeasible": "Not reproducible"
+        },
+        "verdict": {
+          "reproduced": "The declared check failed on the pre-fix tree and passes on this one.",
+          "inconclusive": "The check did not demonstrate the defect across the fix, so the fix is not evidenced.",
+          "declared_infeasible": "The agent declared this bug cannot be reproduced in a test, and stated what it verified instead."
+        },
+        "@verdict": "One sentence explaining each reproduction verdict; shown beside the status chip. 'pre-fix tree' means the code as it stood before the change.",
+        "tree": {
+          "base": "Pre-fix tree",
+          "final": "Final tree"
+        },
+        "@tree": "Labels for the two checkouts the same command was run against: the code before the change, and the code after it.",
+        "command": "Command",
+        "reason": "Why it cannot be reproduced",
+        "alternative": "Verified instead",
+        "passed": "passed",
+        "exitCode": "exit {code}",
+        "timedOut": "timed out",
+        "setupFailed": "setup failed",
+        "@setupFailed": "The tree's setup command (a dependency install) failed, so the check never ran there.",
+        "notRun": "not run",
+        "attempts": "Attempt {attempts} of {maxAttempts}",
+        "omittedTestPaths": "{count} declared test file was dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction. | {count} declared test files were dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction.",
+        "@omittedTestPaths": "Plural form required. A dropped file can leave the pre-fix tree without the reproduction, which makes the check pass there and wrongly reads as 'the test does not capture the defect'."
       }
     },
     "inspector": {
@@ -1557,6 +1592,9 @@
     "contextError": "Could not load the provided context.",
     "summary": {
       "calls": "Calls",
+      "cost": "Estimated cost",
+      "costHint": "Priced at list rates, each input class at its own: a cache read costs about a tenth of fresh input, a cache write about a quarter more. A subscription run pays nothing per token, so this is what the same tokens would have cost metered.",
+      "costIncomplete": "Not shown: at least one phase ran on a model this deployment has no rate for, so a run total would be incomplete. The priced phases are listed below.",
       "tokensInOut": "Tokens (in / out)",
       "transportOverhead": "Transport overhead",
       "modelExecution": "Model execution",
@@ -1576,8 +1614,10 @@
         "phase": "Phase",
         "turns": "Turns",
         "tokensInOut": "Tokens (in / out)",
+        "cost": "Cost",
         "carryCost": "Carry cost"
       },
+      "costHint": "Estimated cost of this phase's tokens at list rates. A dash means this deployment has no rate for the model that ran.",
       "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing. A phase that runs late carries little however much it spent, so read this column alongside the tokens beside it.",
       "unattributed": "Unattributed",
       "unattributedHint": "recorded by a channel that reports no phase"
@@ -1585,6 +1625,7 @@
     "metricsBar": {
       "calls": "{count} call | {count} calls",
       "inputCompletionTokens": "Total input / completion tokens. Input counts cached tokens too: they still occupy the context window, exactly as Claude Code's own context gauge counts them.",
+      "costHint": "Estimated cost of this step's tokens at list rates, each input class priced at its own. A subscription run pays nothing per token, so this is what the same tokens would have cost metered.",
       "fresh": "{tokens} fresh",
       "freshHint": "Input processed from scratch, with nothing served from the cache",
       "cacheRead": "{tokens} cache read",
@@ -6485,6 +6526,12 @@
       "@classHistory": {
         "description": "'{autoShare}' is already a formatted percentage; do not add a % sign."
       }
+    },
+    "role": {
+      "admin": "admin",
+      "member": "member",
+      "viewer": "viewer",
+      "unattributed": "an automated start"
     }
   },
   "vcs": {
@@ -6607,7 +6654,10 @@
       "finishedRun": "A run that finished successfully",
       "integrationsManage": "Permission to manage integrations",
       "settingsManage": "Permission to manage workspace settings",
-      "library": "The context fragment library enabled on this deployment"
+      "library": "The context fragment library enabled on this deployment",
+      "failedRun": "A run that failed",
+      "infrastructure": "An execution backend connected to this workspace",
+      "advancedTier": "The advanced interface mode"
     },
     "overlay": {
       "next": "Next",
@@ -6625,7 +6675,9 @@
         "description": "Shown on a tour's final card when steps were skipped. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of skipped steps."
       },
       "searching": "Looking for the highlighted control...",
-      "clickHint": "Click the highlighted control to continue"
+      "clickHint": "Click the highlighted control to continue",
+      "nextUp": "Next up",
+      "takeNext": "Take this one"
     },
     "tours": {
       "boardBasics": {
@@ -6751,7 +6803,7 @@
           },
           "finish": {
             "title": "That is the loop",
-            "body": "Plan a task, pick a pipeline, start it, watch it. When a run needs something from you it pauses and says so, which the next tour covers."
+            "body": "Plan a task, pick a pipeline, start it, watch it. The walkthroughs after this one read a real run, so they unlock once you have actually started one."
           }
         }
       },
@@ -6906,7 +6958,100 @@
             "body": "Some entries belong to you rather than to the board, such as a personal access token or plan, and are used only for runs you start. The hub marks which is which, and My setup collects the ones that are yours."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Read a failure",
+        "description": "A run stopped with an error. Find out what broke, and what to do about it.",
+        "steps": {
+          "intro": {
+            "title": "Runs fail, and that is normal",
+            "body": "A failed run is not a dead end. The board keeps the error, the cause is usually one line, and most causes are fixed by a setting rather than by rewriting the task."
+          },
+          "banner": {
+            "title": "What went wrong",
+            "body": "The card swaps its progress bar for this banner. It names the cause, the details hold the raw output, and some causes offer a button straight to the setting that fixes them."
+          },
+          "retry": {
+            "title": "Run it again",
+            "body": "Retry re-runs the work. Earlier errors stay on the task under Previous errors, so you can compare attempts instead of losing the trail."
+          },
+          "finish": {
+            "title": "A failure is information",
+            "body": "Fix the cause, retry, compare. If the same error keeps coming back, the details are what to bring to whoever can widen a permission or connect what is missing."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Where runs happen",
+        "description": "The machines agents run on, the environments they test in, and the credentials they may use.",
+        "steps": {
+          "intro": {
+            "title": "Agents need somewhere to run",
+            "body": "Every container step runs on an execution backend, tests come up in an environment, and some capabilities need a credential. All three are configured in one window."
+          },
+          "open": {
+            "title": "Open Infrastructure",
+            "body": "Everything about where and how runs execute lives here."
+          },
+          "tabs": {
+            "title": "One tab per concern",
+            "body": "Agent containers is where runs execute. Test environments is what a service is brought up from. The credential list shows which keys the capabilities your agents use can actually resolve, and which are still missing."
+          },
+          "finish": {
+            "title": "Failures point back here",
+            "body": "When a run fails while provisioning, this is the window its banner is asking you to open. Worth knowing before that happens rather than after."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Review by panel",
+        "description": "Have several models review the same work instead of one, on the tasks that warrant it.",
+        "steps": {
+          "intro": {
+            "title": "One reviewer, or several",
+            "body": "A review step normally runs one agent. It can instead run a panel of several models and compare what they say, which catches what a single reviewer misses on heavier work."
+          },
+          "open": {
+            "title": "Open Model configuration",
+            "body": "Panels are made of models, so they are set up beside them."
+          },
+          "groups": {
+            "title": "Define a panel",
+            "body": "A group names the models on the panel and how demanding a task has to be before it is used. A step then selects a group instead of naming models one by one."
+          },
+          "finish": {
+            "title": "Cost follows effort",
+            "body": "A panel costs as many model calls as it has members, which is why a group can be limited to the tasks whose estimate clears its bar. Small work keeps a single reviewer."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "The services you already run",
+        "description": "Tell the agents which shared systems exist, and what their APIs look like.",
+        "steps": {
+          "intro": {
+            "title": "Do not rebuild what you have",
+            "body": "Agents design in the dark unless they know what your organisation already runs. This catalog names those systems and carries their API contracts."
+          },
+          "open": {
+            "title": "Open Foundational services",
+            "body": "The catalog of shared capabilities available to every board in this workspace."
+          },
+          "catalog": {
+            "title": "Register, upload, or sync",
+            "body": "Add a service by hand, upload its API documents, or link a repository and let them sync. Designs then reference what is registered here instead of inventing an interface."
+          },
+          "finish": {
+            "title": "Design steps read this",
+            "body": "A design that declares which of these it uses gets their full contracts in the next step. One that declares nothing gets nothing, so keeping this current is what makes it work."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "New walkthrough available",
+      "start": "Show me",
+      "dismiss": "Dismiss"
     }
   },
   "externalTools": {

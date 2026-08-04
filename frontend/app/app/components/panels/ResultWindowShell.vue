@@ -25,7 +25,9 @@ import { useModalBehavior } from '@modular-vue/core'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
 import StepValidationReport from '~/components/panels/StepValidationReport.vue'
+import StepReproductionReport from '~/components/panels/StepReproductionReport.vue'
 import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
+import { REPRODUCTION_STATUS_KEYS } from '~/utils/reproduction'
 import {
   BINARY_OUTPUT_STATE_KEYS,
   binaryOutputHasWarnings,
@@ -145,6 +147,34 @@ watch(
     if (report && !report.passed) validationOpen.value = true
   },
   { immediate: true },
+)
+/**
+ * The step's BUGFIX REPRODUCTION PROOF — resolved off the active step for the same reason as the
+ * three sections around it: the engine writes it onto whichever step OPENED the pull request, which
+ * is a property of the dispatch rather than of the step's own kind, so no window may be able to opt
+ * out of showing it. Absent for every run that declared no reproducing check, and the section
+ * disappears.
+ */
+const reproductionReport = computed(() => activeStep.value?.reproduction ?? null)
+const reproductionOpen = ref(false)
+// Anything short of proof opens expanded: an `inconclusive` verdict and a structural infeasibility
+// declaration are both things a reviewer has to read and weigh, where `reproduced` is the one
+// answer a collapsed one-line row states completely.
+watch(
+  reproductionReport,
+  (report) => {
+    if (report && report.status !== 'reproduced') reproductionOpen.value = true
+  },
+  { immediate: true },
+)
+/**
+ * The verdict's copy, icon and tone, from the EXHAUSTIVE lookup keyed off the contracts union
+ * rather than a t() call over a key assembled at runtime: the typed-key check cannot see such a
+ * key, so a fourth verdict would ship as a blank chip on the surface whose whole job is saying what
+ * was and was not proven.
+ */
+const reproductionKeys = computed(() =>
+  reproductionReport.value ? REPRODUCTION_STATUS_KEYS[reproductionReport.value.status] : null,
 )
 /**
  * The step's BINARY-OUTPUT record — the third universal trailing section, and here for the same
@@ -354,6 +384,53 @@ const panelClass = computed(() => [
           </button>
           <div v-if="validationOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
             <StepValidationReport :report="validationReport" />
+          </div>
+        </section>
+
+        <!-- Shared trailing section: the bugfix reproduction proof (the declared check run against
+             the pre-fix tree and the final one). Collapsed when it proved the fix, expanded when it
+             did not — an inconclusive verdict or an infeasibility declaration is the one a reviewer
+             opened the window to read. -->
+        <section
+          v-if="reproductionReport"
+          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          data-testid="result-window-reproduction"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            :aria-expanded="reproductionOpen"
+            data-testid="result-window-reproduction-toggle"
+            @click="reproductionOpen = !reproductionOpen"
+          >
+            <UIcon
+              :name="reproductionKeys!.icon"
+              class="h-3.5 w-3.5 shrink-0"
+              :class="reproductionKeys!.proven ? 'text-emerald-400' : 'text-amber-400'"
+            />
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              {{ t('panels.stepDetail.reproduction.heading') }}
+            </span>
+            <span
+              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium"
+              :class="
+                reproductionKeys!.proven
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'bg-amber-500/15 text-amber-300'
+              "
+            >
+              {{ t(reproductionKeys!.chip) }}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+              {{ t(reproductionKeys!.verdict) }}
+            </span>
+            <UIcon
+              :name="reproductionOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+            />
+          </button>
+          <div v-if="reproductionOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
+            <StepReproductionReport :report="reproductionReport" />
           </div>
         </section>
 

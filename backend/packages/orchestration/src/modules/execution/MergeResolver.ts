@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRepository,
   ChangeClass,
+  ClassRulesByRole,
   ExecutionInstance,
   MergeAssessment,
   MergeAxis,
@@ -9,7 +10,8 @@ import type {
   MergeDecision,
 } from '@cat-factory/kernel'
 import { parseMergeAssessment } from '@cat-factory/contracts'
-import { resolveMergeClassRule } from '@cat-factory/kernel'
+import { resolveRoleScopedMergeClassRule } from '@cat-factory/kernel'
+import { isDryRun } from './runMode.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 
@@ -34,6 +36,23 @@ interface MergeThresholds {
    * so a preset with no rules behaves exactly as it did before this existed.
    */
   classRules?: MergeClassRules
+  /**
+   * Per-role narrowing of {@link classRules}, applied against the role the run pinned at start.
+   * Narrow-only, so an absent map (or an absent role) leaves the decision exactly where the base
+   * rules put it.
+   */
+  classRulesByRole?: ClassRulesByRole
+}
+
+/**
+ * What the review card this resolver raises needs to know beyond the assessment itself: how the
+ * diff classified, the track-record row to link, and whether the run was SANDBOXED (which changes
+ * what the card says held the PR back, not merely whether it says so).
+ */
+interface ReviewCardContext {
+  changeClass: ChangeClass
+  recordId?: string
+  dryRun?: boolean
 }
 
 /** The assessment axes that exceed their preset ceiling (empty when all are within). */
@@ -125,7 +144,24 @@ export class MergeResolver {
       changeClass: 'unknown' as ChangeClass,
       fileCount: 0,
     }
-    const classRule = resolveMergeClassRule(preset.classRules, classification.changeClass)
+    // The class rule, then that rule NARROWED by the tier the run was admitted under. Narrowing is
+    // subtractive by construction (see `narrowMergeClassRule`), so this can only ever move the
+    // decision toward review — it cannot hand a role something the preset withholds, and a run
+    // with no pinned role comes back exactly as it did before role scoping existed.
+    const {
+      base: classRule,
+      effective: effectiveRule,
+      narrowedByRole,
+    } = resolveRoleScopedMergeClassRule({
+      rules: preset.classRules,
+      byRole: preset.classRulesByRole,
+      role: instance.initiatedByRole,
+      changeClass: classification.changeClass,
+    })
+    // Whether this run may land ANYTHING. Read off the run rather than re-derived from the preset:
+    // the mode was settled and pinned at start, so a preset edited mid-flight cannot un-sandbox a
+    // run a human is already reviewing (nor sandbox one that has been merging all along).
+    const dryRun = isDryRun(instance.mode)
 
     const thresholds: MergeDecision['thresholds'] = {
       presetName: preset.name,
@@ -134,6 +170,10 @@ export class MergeResolver {
       maxImpact: preset.maxImpact,
       autoMergeEnabled: preset.autoMergeEnabled,
       ...(classRule !== 'thresholds' ? { classRule } : {}),
+      ...(instance.initiatedByRole ? { initiatorRole: instance.initiatedByRole } : {}),
+      // Recorded only when the role CHANGED the outcome, so its presence always means "this
+      // would have gone differently for someone else" rather than "a role was involved".
+      ...(narrowedByRole ? { roleRule: effectiveRule } : {}),
     }
     const base = {
       assessment: assessment ?? undefined,
@@ -150,17 +190,23 @@ export class MergeResolver {
     const exceededAxes = assessment ? exceededAxesOf(assessment, preset) : []
 
     // Auto-merge precedence, most-significant first:
-    //   1. `autoMergeEnabled: false` — the master switch. "Manual review only" stays manual and
+    //   1. A DRY RUN merges nothing, whatever else says. It outranks even `autoMergeEnabled`
+    //      because it is a property of the RUN rather than of the policy: the person who started
+    //      it was never authorised to land this work, so no preset can consent on their behalf.
+    //   2. `autoMergeEnabled: false` — the master switch. "Manual review only" stays manual and
     //      a class rule can NEVER override it.
-    //   2. The class rule: `always` merges regardless of the scores (and regardless of the
-    //      rationale backstop — an explicit operator policy keyed on a DETERMINISTIC backend
-    //      classification outranks the agent's self-report); `never` always routes to a human.
-    //   3. The existing credibility + threshold comparison.
+    //   3. The class rule AS NARROWED BY THE INITIATOR'S ROLE: `always` merges regardless of the
+    //      scores (and regardless of the rationale backstop — an explicit operator policy keyed on
+    //      a DETERMINISTIC backend classification outranks the agent's self-report); `never`
+    //      always routes to a human. A role entry can only push this arm toward `never`.
+    //   4. The existing credibility + threshold comparison.
     const within =
+      !dryRun &&
       preset.autoMergeEnabled &&
-      (classRule === 'always' || (classRule !== 'never' && credible && exceededAxes.length === 0))
+      (effectiveRule === 'always' ||
+        (effectiveRule !== 'never' && credible && exceededAxes.length === 0))
     const mergeReason: MergeDecision['reason'] =
-      classRule === 'always' ? 'class_auto_merge' : 'within_thresholds'
+      effectiveRule === 'always' ? 'class_auto_merge' : 'within_thresholds'
 
     const record = (decision: 'auto_merged' | 'pending_review') =>
       this.deps.mergeTrackRecord?.recordDecision(workspaceId, {
@@ -192,6 +238,7 @@ export class MergeResolver {
         await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
           changeClass: classification.changeClass,
           recordId: pending?.id,
+          dryRun,
         })
         return { ...base, outcome: 'awaiting_review', reason: 'merge_failed', exceededAxes }
       }
@@ -201,26 +248,44 @@ export class MergeResolver {
     await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
       changeClass: classification.changeClass,
       recordId: pending?.id,
+      dryRun,
     })
-    // Classify WHY review is needed, most-specific first, so the banner is precise. A
-    // missing/unparseable assessment (`no_assessment`) is distinct from one that returned
-    // scores but no rationale (`no_rationale`): the latter DID produce visible scores, so
-    // the banner must not claim there was no assessment at all. The class rule sits just under
-    // the master switch, matching the precedence the auto-merge branch above applies.
-    const reason: MergeDecision['reason'] = !preset.autoMergeEnabled
-      ? 'auto_merge_disabled'
-      : classRule === 'never'
-        ? 'class_requires_review'
-        : assessment === null
-          ? 'no_assessment'
-          : !credible
-            ? 'no_rationale'
-            : 'exceeded_thresholds'
+    // Classify WHY review is needed, most-specific first, so the banner is precise, in the SAME
+    // order the auto-merge branch above applies. A missing/unparseable assessment
+    // (`no_assessment`) is distinct from one that returned scores but no rationale
+    // (`no_rationale`): the latter DID produce visible scores, so the banner must not claim there
+    // was no assessment at all.
+    //
+    // `dry_run` tops the ladder for the reason it tops the precedence: a sandboxed run's scores
+    // were never consulted, so reporting it as `exceeded_thresholds` (or as `auto_merge_disabled`,
+    // on a preset that would happily have merged it) sends someone to edit a ceiling that had no
+    // part in the outcome. `role_requires_review` is likewise kept apart from
+    // `class_requires_review` even though both mean "the rule says never": one is fixed by editing
+    // the class rule, the other by a teammate on a higher tier merging the PR as it stands.
+    const reason: MergeDecision['reason'] = dryRun
+      ? 'dry_run'
+      : !preset.autoMergeEnabled
+        ? 'auto_merge_disabled'
+        : effectiveRule === 'never'
+          ? narrowedByRole
+            ? 'role_requires_review'
+            : 'class_requires_review'
+          : assessment === null
+            ? 'no_assessment'
+            : !credible
+              ? 'no_rationale'
+              : 'exceeded_thresholds'
     return { ...base, outcome: 'awaiting_review', reason, exceededAxes }
   }
 
-  /** The track-record context a review card carries so the human can tag in the same tap. */
-  private readonly trackContext = (ctx: { changeClass: ChangeClass; recordId?: string }) => ({
+  /**
+   * The track-record context a review card carries so the human can tag in the same tap.
+   *
+   * Takes only what it PROJECTS. `dryRun` rides the same {@link ReviewCardContext} the callers
+   * thread, but it changes the card's WORDING rather than its track-record link, so naming it
+   * here would advertise an input this function has no use for.
+   */
+  private readonly trackContext = (ctx: ReviewCardContext) => ({
     ...(ctx.changeClass !== 'unknown' ? { changeClass: ctx.changeClass } : {}),
     ...(ctx.recordId ? { mergeTrackRecordId: ctx.recordId } : {}),
   })
@@ -243,7 +308,7 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
-    track: { changeClass: ChangeClass; recordId?: string },
+    track: ReviewCardContext,
   ): Promise<void> {
     await this.raiseMergeReview(workspaceId, instance, block, assessment, track)
     await this.deps.blockRepository.update(workspaceId, block.id, {
@@ -258,14 +323,24 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
-    track: { changeClass: ChangeClass; recordId?: string },
+    track: ReviewCardContext,
   ): Promise<void> {
     if (!this.deps.notificationService) return
-    const body = assessment
-      ? `The merger scored this PR outside the task's auto-merge thresholds ` +
-        `(complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
-        `impact ${pct(assessment.impact)}). ${assessment.rationale}`
-      : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
+    // A sandboxed run's card must not describe the scores as the thing holding the PR back: they
+    // were never consulted, and a card blaming them sends the reader to edit a ceiling that had
+    // no part in the outcome. Report the assessment as the INFORMATION it is on a dry run, and
+    // say plainly why nothing merged.
+    const scores = assessment
+      ? `complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
+        `impact ${pct(assessment.impact)}`
+      : null
+    const body = track.dryRun
+      ? `This was a dry run, so its PR was left open for a human regardless of the assessment.` +
+        (scores && assessment ? ` The merger scored it ${scores}. ${assessment.rationale}` : '')
+      : assessment
+        ? `The merger scored this PR outside the task's auto-merge thresholds ` +
+          `(${scores}). ${assessment.rationale}`
+        : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
     await this.deps.notificationService.raise(workspaceId, {
       type: 'merge_review',
       blockId: block.id,

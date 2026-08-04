@@ -9,7 +9,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
-  LlmCallMetricSummary,
+  LlmRollupCell,
   Logger,
   PipelineStep,
   RunLifecycleEventKind,
@@ -457,7 +457,10 @@ export class RunStateMachine {
     try {
       const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
       if (summaries.length === 0) return
-      const cellsByKind = new Map<string, LlmCallMetricSummary[]>()
+      // Labelled once per emit from the SAME service that priced the cells, so the amount and
+      // its currency can never come from different tables.
+      const costCurrency = this.llmObservability.rollupCurrency ?? undefined
+      const cellsByKind = new Map<string, LlmRollupCell[]>()
       for (const cell of summaries) {
         const bucket = cellsByKind.get(cell.agentKind)
         if (bucket) bucket.push(cell)
@@ -467,6 +470,27 @@ export class RunStateMachine {
         const cells = cellsByKind.get(step.agentKind)
         if (!cells) continue
         const s = foldRollupTotals(cells)
+        // Costliest phase first, so the board surface shows the slice worth attacking rather
+        // than whichever one the store happened to return first.
+        const byPhase = foldRollupsByPhase(cells)
+          .map((p) => ({
+            phase: p.phase,
+            calls: p.calls,
+            promptTokens: p.promptTokens,
+            cacheReadTokens: p.cacheReadTokens,
+            cacheWriteTokens: p.cacheWriteTokens,
+            completionTokens: p.completionTokens,
+            carryCostTokens: p.carryCostTokens,
+            errors: p.errors,
+            costEstimate: p.costEstimate,
+          }))
+          .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls)
+        // The currency labels EVERY amount in this payload, so it is stated whenever any of
+        // them exists — the step's own total OR one of its phases. Keying it on the total
+        // alone withheld the label from exactly the mixed-model step whose total is null
+        // BECAUSE one phase ran unpriced, leaving its priced phases with money and no
+        // denomination. Absent still means there is nothing here to mislabel.
+        const priced = s.costEstimate != null || byPhase.some((p) => p.costEstimate != null)
         step.metrics = {
           calls: s.calls,
           promptTokens: s.promptTokens,
@@ -481,20 +505,9 @@ export class RunStateMachine {
           errors: s.errors,
           warnings: s.warnings,
           carryCostTokens: s.carryCostTokens,
-          // Costliest phase first, so the board surface shows the slice worth attacking
-          // rather than whichever one the store happened to return first.
-          byPhase: foldRollupsByPhase(cells)
-            .map((p) => ({
-              phase: p.phase,
-              calls: p.calls,
-              promptTokens: p.promptTokens,
-              cacheReadTokens: p.cacheReadTokens,
-              cacheWriteTokens: p.cacheWriteTokens,
-              completionTokens: p.completionTokens,
-              carryCostTokens: p.carryCostTokens,
-              errors: p.errors,
-            }))
-            .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls),
+          costEstimate: s.costEstimate,
+          costCurrency: priced ? costCurrency : undefined,
+          byPhase,
         }
       }
     } catch (error) {

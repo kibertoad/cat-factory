@@ -143,7 +143,8 @@ const AiPresetMismatchDialog = defineAsyncComponent(
 )
 // The in-app tutorial: the launch prompt (auto-opened once for a user who never answered
 // it), the catalogue of every tour the deployment ships (opened from the sidebar's Help
-// section or the palette, at any time), and the coach-mark overlay that runs a tour. All
+// section or the palette, at any time), the coach-mark overlay that runs a tour, and the
+// contextual offer that raises the ONE walkthrough this board just made takeable. All
 // mount only while their store flag is set, so they cost the initial bundle nothing.
 const TutorialPrompt = defineAsyncComponent(
   () => import('~/components/tutorial/TutorialPrompt.vue'),
@@ -154,6 +155,7 @@ const TutorialCatalogue = defineAsyncComponent(
 const TutorialOverlay = defineAsyncComponent(
   () => import('~/components/tutorial/TutorialOverlay.vue'),
 )
+const TutorialNudge = defineAsyncComponent(() => import('~/components/tutorial/TutorialNudge.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -332,6 +334,18 @@ if (!tutorialOfferSettled()) {
   )
   if (tutorialOfferSettled()) stopTutorialOffer()
 }
+// The CONTEXTUAL offer: a different mechanism from the launch one above, so it sits outside that
+// watcher's `settled` guard. It has no decision to settle and nothing to defer, because it fires
+// on a tour becoming TAKEABLE rather than on the app starting. It reads `workspace.ready` itself
+// rather than being gated here, because readiness is not a precondition for CALLING it but the
+// definition of its baseline: the gates it watches are board state, so a baseline taken before
+// the snapshot lands makes the board's own hydration look like a transition (see `resolveNudge`).
+// It honours an explicit decline itself, too (see `newlyAvailableTour`).
+useTutorialNudge()
+// The mirror to the signed-in user's server row (so progress follows the PERSON, not the browser)
+// plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
+// simply has nothing to talk to, and the browser-persisted store carries on alone.
+useTutorialSync()
 
 // Probe the GitHub integration as soon as a board is active (re-probe per board —
 // connections are per workspace). The result drives the onboarding gate below
@@ -518,6 +532,11 @@ watch(
       <TutorialPrompt v-if="tutorial.promptOpen" />
       <TutorialCatalogue v-if="tutorial.catalogueOpen" />
       <TutorialOverlay v-if="tutorial.touring" />
+      <!-- Mounted off the PENDING id rather than off whether it may currently be SHOWN: the
+           component holds a suppressed offer (a tour is running, a tutorial window is open) and
+           renders it once the way is clear, which is the whole reason the offer survives the
+           moment it was raised in. -->
+      <TutorialNudge v-if="tutorial.pendingNudgeId" />
     </template>
 
     <!-- Backend unreachable / bootstrap failed -->

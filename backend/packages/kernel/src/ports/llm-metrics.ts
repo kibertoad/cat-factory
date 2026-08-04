@@ -175,21 +175,53 @@ export interface LlmCallRollupTotals {
    * on any real run — every store aggregates it as a 64-bit sum.
    */
   carryCostTokens: number
+  /**
+   * Estimated money this cell's tokens cost, in the deployment's spend currency, derived from
+   * each class at its own rate (a cache read is ~0.1x fresh input, a cache write ~1.25x).
+   *
+   * NULL means the reader could not price it, which is a different fact from `0` and must stay
+   * one: a deployment with no pricing wired and a cell that genuinely cost nothing render the
+   * same only if this collapses. The stores never compute it — pricing is configuration, not
+   * SQL — so a cell arrives null and is filled in by `priceRollupCells` at the seam that holds
+   * the price table. A fold whose terms are not ALL priced stays null rather than reporting a
+   * partial sum as a total.
+   */
+  costEstimate: number | null
 }
 
 /**
- * One `(agentKind, phase)` cell of a run's model activity — the finest grain the store
- * aggregates, and the only one it computes. Attached to the matching pipeline step for
- * at-a-glance board display (folded up to the kind) and grouped by phase for the burn
- * breakdown (`docs/initiatives/token-burn-instrumentation.md`). Computed by SQL
- * aggregation — it never reads the heavy prompt/response text columns.
+ * One `(agentKind, phase)` cell of a run's model activity — the grain every CONSUMER reads.
+ * Attached to the matching pipeline step for at-a-glance board display (folded up to the kind)
+ * and grouped by phase for the burn breakdown
+ * (`docs/initiatives/token-burn-instrumentation.md`).
  *
  * `phase` is `''` for a call nothing could attribute (an older harness image, an inline
  * call, the un-phased proxy path). That is a REAL cell of the breakdown, never dropped.
+ *
+ * Distinct from {@link LlmCallMetricSummary}, which is what the STORE returns: a cell that has
+ * been through `priceRollupCells` no longer has one `(provider, model)` answer, so it does not
+ * carry the fields. That is a typecheck rather than a convention, because a collapsed cell's
+ * model would look readable and name whichever contributor happened to arrive first.
  */
-export interface LlmCallMetricSummary extends LlmCallRollupTotals {
+export interface LlmRollupCell extends LlmCallRollupTotals {
   agentKind: string
   phase: string
+}
+
+/**
+ * One `(agentKind, phase, provider, model)` cell — the finest grain the store aggregates, and
+ * the only one it computes. Computed by SQL aggregation: it never reads the heavy
+ * prompt/response text columns.
+ *
+ * The MODEL is part of the grain because money is: a cost is `(model, token classes)` and
+ * nothing coarser can price a step whose calls were not all served by one model — which is the
+ * NORMAL case on a harness CLI, since it serves some of its own turns with a cheaper model.
+ * Every consumer still reads the {@link LlmRollupCell} view; it just gets one that was priced
+ * before the model was folded away (`priceRollupCells`), rather than one that never could be.
+ */
+export interface LlmCallMetricSummary extends LlmRollupCell {
+  provider: string
+  model: string
 }
 
 /** The most recent call's chain tip for delta prompt storage. */

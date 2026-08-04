@@ -194,40 +194,71 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                                                                          | Status         | PR   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- | ---- |
-| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                | 🟩 done        | this |
-| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                            | 🟩 done        | this |
-| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                             | 🟩 done        | this |
-| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                      | 🟩 done        | this |
-| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                           | 🟩 done        | this |
-| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                     | 🟩 done        | this |
-| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                         | 🟩 done        | this |
-| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                         | 🟩 done        | this |
-| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                      | 🟩 done        | this |
-| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                | 🟩 done        | this |
-| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                   | ⬜ todo        |      |
-| 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) | 🟨 in-progress |      |
-| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                            | ⬜ todo        |      |
-| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                     | ⬜ todo        |      |
-| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish     | 🟩 done        | this |
+| #   | Slice                                                                                                                                                                                                    | Status  | PR   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---- |
+| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                                          | 🟩 done | this |
+| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                                                      | 🟩 done | this |
+| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                                                       | 🟩 done | this |
+| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                                                | 🟩 done | this |
+| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                                                     | 🟩 done | this |
+| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                                               | 🟩 done | this |
+| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                                                   | 🟩 done | this |
+| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                                                   | 🟩 done | this |
+| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                                                | 🟩 done | this |
+| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                                          | 🟩 done | this |
+| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                                             | 🟩 done | this |
+| 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](../../backend/docs/adr/0033-bugfix-reproduction-proof.md) | 🟩 done | this |
+| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                                                      | ⬜ todo |      |
+| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ todo |      |
+| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done | this |
 
-### Phase-2 notes (read before starting slice 9)
+### Phase-2 notes (slices 9 + 10, as landed)
 
-- Slice 9 **touches the executor-harness**, so it carries the full image-bump ritual:
-  bump `@cat-factory/executor-harness`'s `version` AND the three pinned tags
-  (`deploy/backend/package.json` `image:publish`, `deploy/backend/wrangler.toml`
-  `[[containers]] image`, `RECOMMENDED_HARNESS_IMAGE` in
-  `backend/runtimes/local/src/harnessImage.ts`), or run `pnpm sync:image-tags`. A reused tag
-  does NOT roll out (see CLAUDE.md "Releases & changesets").
-- Raw command output is unbounded and secret-bearing: it must go through `redactSecrets` and a
-  size budget before it can ride the report JSON, mirroring what
-  `AgentContextObservabilityService.record` already does for context snapshots. Prefer
-  referencing a stored artifact over inlining megabytes into a PR body.
-- Slice 10 pairs naturally with the existing `repro-test` agent kind (bug-triage phase G),
-  whose `{ outcome, testPaths, notes }` assessment already names the reproduction tests: the
-  missing half is the before/after evidence. **This is now its own initiative**: see
-  [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) for the design decisions
-  (the proof is a harness phase, not a step; symmetric worktrees defend against a false
-  "reproduced"; the declaration seam stays `repro-test` rather than making the coder
-  structured) and the phase checklist. Read it before touching this row.
+- **Slice 9 needed NO harness change and no image bump**, contrary to what this note said while
+  it was a plan. The harness has captured each check's exit code and a scrubbed output tail on
+  `step.validation` since pre-PR validation shipped; what was missing was purely the RENDERING.
+  The remaining harness ritual (bump the version + the three pinned tags, or
+  `pnpm sync:image-tags`) applies the next time the image's `src/**` actually changes.
+- **The output budget is the report's, not the producer's.** The harness already trims each tail
+  to what a REPAIR PROMPT needs, and a pull-request body is a far tighter budget than a model's
+  context window, so the report re-bounds every log to `PR_REPORT_MAX_OUTPUT_CHARS` (2k) at
+  compose time, from the END (a failure is reported at the tail; a prefix cut discards exactly the
+  half a reviewer opened the report for) and records the cut in `truncations`.
+- **A PASSING validation command's log is deliberately dropped, and the section says so.** Ten
+  green logs would cost the budget that makes the failing one readable, and an unexplained `null`
+  tail would read as "the command printed nothing". The rendered section states the rule in as
+  many words: that is the difference between a stated policy and a silent omission.
+- **Captured output needs a SIZED fence, not a ``` fence.** Test runners and linters legitimately
+  print backticks, and a fixed three-tick fence closes on the first such run and spills the rest of
+  the log — plus every section below it, including the machine-readable JSON block — into the body
+  as prose. Kernel gained `hostMarkdown.outputBlock` (fence one tick longer than the longest run in
+  the body) and `hostMarkdown.boundOutput`; the harness's own `fencedOutput` is the same rule at
+  its own boundary, and the two are deliberately independent copies because the image can depend on
+  no workspace package.
+- Slice 10 landed through its own initiative,
+  [`bugfix-reproduction-proof.md`](../../backend/docs/adr/0033-bugfix-reproduction-proof.md) (the proof is a harness phase,
+  not a step; symmetric worktrees defend against a false "reproduced"; the declaration seam stays
+  `repro-test` rather than making the coder structured). Read that tracker before touching the
+  reproduction section: its Phase-B notes hold the renderer's non-obvious obligations, above all
+  that an ABSENT `final` run is normal for an inconclusive verdict and that the producer's own
+  `note` is rendered VERBATIM rather than re-derived from `base.passed`.
+
+### Evidence reachability (landed with slices 9 + 10)
+
+The environment-evidence rows used to carry an opaque artifact id and nothing else, so reaching a
+captured screenshot meant knowing the app well enough to find the run. Each row now carries a
+DIRECT link to the artifact's bytes on the deployment's own authenticated blob endpoint
+(`GET /workspaces/:ws/artifacts/:id/blob`), built from a new `apiBaseUrl` core dependency
+(`PUBLIC_URL` on Node/local, `WORKER_PUBLIC_URL` on the Worker).
+
+Three things about it are deliberate:
+
+- **It is a separate config from `appBaseUrl`.** The two coincide on a same-origin deployment and
+  diverge the moment the SPA is served from its own host, and a link built from the wrong one is
+  worse than no link. They also answer different questions: the app deep link beside it opens a
+  panel a human BROWSES, this one returns bytes to anything holding a credential.
+- **The id stays beside the link**, and an unconfigured `apiBaseUrl` yields the id with no link
+  rather than a link to nowhere. The id is what an operator greps the store for.
+- **The endpoint stays authenticated.** The report may land on a public repository, so the bytes
+  are not made reachable by an unguessable URL: a reader without workspace access gets a 401, which
+  is the honest outcome and the same one the app deep link already produces.

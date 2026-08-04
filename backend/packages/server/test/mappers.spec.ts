@@ -367,6 +367,54 @@ describe('rowToExecution', () => {
     // …and it is never written back out, so the redundant copy dies with the next write.
     expect(JSON.parse(executionToDetail(rowToExecution(base))).createdAt).toBeUndefined()
   })
+
+  // -------------------------------------------------------------------------
+  // The merge-policy pair the run PINS at admission. Both are read back on the durable path,
+  // which rebuilds the run from this JSON and nothing else — so a field that fails to round-trip
+  // here is not a degraded feature, it is a merge policy that silently never applies. These
+  // shipped absent from `executionToDetail`'s allow-list once, and every behavioural test for
+  // the feature passed anyway: they all hand-build the instance in memory.
+  // -------------------------------------------------------------------------
+
+  it('round-trips the pinned initiator role and sandboxed mode through detail', () => {
+    const pinned = { ...rowToExecution(base), initiatedByRole: 'member', mode: 'dry_run' } as const
+    const back = rowToExecution({ ...base, detail: executionToDetail(pinned) })
+    expect(back.initiatedByRole).toBe('member')
+    expect(back.mode).toBe('dry_run')
+  })
+
+  it('stores neither for an unattributed live run, the way every legacy run reads', () => {
+    // `live` and "no role" are the read-time defaults, so an ordinary run carries no extra key
+    // and a run written before either field existed decodes to exactly the same entity.
+    const stored = JSON.parse(executionToDetail(rowToExecution(base))) as Record<string, unknown>
+    expect(stored.mode).toBeUndefined()
+    expect(stored.initiatedByRole).toBeUndefined()
+    const back = rowToExecution(base)
+    expect(back.mode).toBeUndefined()
+    expect(back.initiatedByRole).toBeUndefined()
+  })
+
+  it('drops an unrecognised role onto the base policy rather than guessing a tier', () => {
+    // The role layer is subtractive, so losing it returns the run to the preset's own rules —
+    // a policy an operator authored, never past it. Guessing is what the design forbids.
+    const detail = JSON.stringify({ ...JSON.parse(base.detail), initiatedByRole: 'superuser' })
+    expect(rowToExecution({ ...base, detail }).initiatedByRole).toBeUndefined()
+  })
+
+  it('FAILS CLOSED on an unreadable mode instead of dropping it to live', () => {
+    // The asymmetry with the role above is deliberate. A mode that is present-but-unreadable
+    // means one was settled and we cannot tell which; reading it as `live` would hand the run
+    // merge authority it may never have had. Held-back is one human tap from merging; merged is
+    // not recoverable.
+    for (const bad of ['LIVE', 'sandbox', '', 0, null, {}]) {
+      const detail = JSON.stringify({ ...JSON.parse(base.detail), mode: bad })
+      expect(rowToExecution({ ...base, detail }).mode).toBe('dry_run')
+    }
+    // An explicitly-stored `live` still reads as live, and absent still means live.
+    const live = JSON.stringify({ ...JSON.parse(base.detail), mode: 'live' })
+    expect(rowToExecution({ ...base, detail: live }).mode).toBe('live')
+    expect(rowToExecution(base).mode).toBeUndefined()
+  })
 })
 
 describe('rowToWorkspace / rowToPipeline', () => {

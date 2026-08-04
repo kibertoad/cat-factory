@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PipelineStep, StepPhaseMetrics } from '~/types/execution'
-import { foldRunPhaseMetrics, totalInputTokens } from './observability'
+import { foldRunPhaseMetrics, formatCost, sumCosts, totalInputTokens } from './observability'
 
 describe('totalInputTokens', () => {
   it('sums all three input classes, so the headline matches Claude Code’s context gauge', () => {
@@ -83,5 +83,48 @@ describe('foldRunPhaseMetrics', () => {
     expect(folded[0]).not.toBe(row)
     folded[0]!.calls = 999
     expect(row.calls).toBe(3)
+  })
+})
+
+describe('formatCost', () => {
+  it('omits the figure entirely when nothing priced it', () => {
+    // Null, never "0.00": a deployment that cannot price a model and a step that cost nothing
+    // are opposite facts, and rendering both as zero states the wrong one confidently.
+    expect(formatCost(null, 'EUR')).toBeNull()
+    expect(formatCost(undefined, 'EUR')).toBeNull()
+    // A genuine zero still renders — it is a real, priced answer.
+    expect(formatCost(0, 'EUR')).toBe('0.00 EUR')
+  })
+
+  it('keeps more decimals under a unit, where most steps land', () => {
+    expect(formatCost(0.0037, 'EUR')).toBe('0.0037 EUR')
+    expect(formatCost(12.5, 'EUR')).toBe('12.50 EUR')
+  })
+
+  it('shows a threshold rather than rounding a real cost down to zero', () => {
+    // `0.0000` makes a priced-but-tiny step read as free — the same claim the null case is
+    // careful not to make. A cheap step is not a free one.
+    expect(formatCost(0.00001, 'EUR')).toBe('<0.0001 EUR')
+    expect(formatCost(0.0001, 'EUR')).toBe('0.0001 EUR')
+  })
+
+  it('labels the amount with the currency it was priced in rather than assuming one', () => {
+    // The price table's currency is operator-configured; the built-in one is EUR, not USD.
+    expect(formatCost(1, 'USD')).toBe('1.00 USD')
+    expect(formatCost(1)).toBe('1.00')
+  })
+})
+
+describe('sumCosts', () => {
+  it('adds the parts it can price', () => {
+    expect(sumCosts([1, 2, 0.5])).toBe(3.5)
+    expect(sumCosts([])).toBe(0)
+  })
+
+  it('declines to answer when any part is unpriced, rather than under-reporting', () => {
+    // A total that silently dropped its unpriceable term is a smaller number that still reads
+    // as complete — strictly worse than no number.
+    expect(sumCosts([1, null, 2])).toBeNull()
+    expect(sumCosts([undefined])).toBeNull()
   })
 })

@@ -1,5 +1,111 @@
 # @cat-factory/conformance
 
+## 0.22.0
+
+### Minor Changes
+
+- 889a497: Couple workspace RBAC to the per-class merge rules, and add a sandboxed run mode.
+
+  A merge preset now carries `classRulesByRole` — the per-change-class auto-merge rules narrowed by
+  the workspace role the run's initiator held — and `dryRunRoles`, the roles whose runs are forced
+  into dry-run mode: the pipeline runs in full and opens its pull request, but nothing merges. A run
+  can also request `mode: 'dry_run'` at start. Both settings default empty, so every existing preset
+  resolves to exactly its previous behaviour.
+
+  Narrowing is subtractive by construction: a role entry can make a class stricter than the base
+  rules but can never widen one, so a role allowlist is reviewable on its own and no preset edit can
+  turn one into a privilege grant. A role that authored nothing for a class, and a run with no role to
+  pin at all (a schedule fire, a public-API start, auth-disabled dev), both fall through to the base
+  rules rather than being treated as a tier.
+
+  The initiator's role and the run's mode are PINNED on the run at admission rather than re-resolved
+  at merge time: the merge settles on the durable driver's path, which has no request context to
+  resolve a role from, and a preset edited mid-run must not retroactively re-govern a run already in
+  flight. The sandbox is enforced at both exits — the auto-merge and the manual merge endpoint, which
+  refuses a dry run's PR with a new `dry_run_not_mergeable` conflict reason, since the review card the
+  first one raises is itself a merge button.
+
+  Two new `MergeDecision` reasons ship with it, kept apart from the existing ones because each points
+  at a different fix: `role_requires_review` (a teammate on a higher tier can merge this PR as it
+  stands) and `dry_run` (the scores were never consulted, so no threshold explains this outcome).
+
+  Wire and schema changes: `RiskPolicy` gains two required fields, `ExecutionInstance` gains optional
+  `initiatedByRole` and `mode`, and `merge_threshold_presets` gains a `class_rules_by_role` and a
+  `dry_run_roles` column on both runtimes (both with empty defaults, so existing rows need no
+  backfill).
+
+  Not yet built: the SPA controls for AUTHORING either preset field and for choosing a dry run on the
+  start-run button. Both are already writable over `/workspaces/:ws/risk-policies` and the start
+  endpoint respectively, so the capability is reachable today through the API.
+
+- 3605630: Finish the in-app-tutorial initiative (now [ADR 0033](backend/docs/adr/0033-in-app-tutorials.md)):
+  make the walkthroughs reach the user who needs one, and measure whether they do.
+
+  The catalogue already made every tour REACHABLE; nothing brought one up. Starting any tour saves the
+  launch-prompt answer, which is what stops that prompt returning, so after a user's first tour the
+  product never mentioned the tutorial again unless they went looking, and the two tours whose windows
+  are transient (answer a parked run, review and merge) were the least likely to be found while they
+  applied. So: the finish card now hands off to the one walkthrough the user's own last action
+  unlocked, and a contextual offer catches a tour's declared requirements flipping from blocked to
+  ready. Four new tours ship with it, the first of which closes the biggest hole in the arc: reading a
+  FAILED run (the state a first run reaches most often, and the only one that had no walkthrough),
+  plus where runs execute, review-by-panel, and the shared-services catalog.
+
+  Progress now follows the USER rather than the browser, through a new per-user `tutorial_progress`
+  table on both facades (`remote` in mothership mode, self-scoped). The browser-persisted store stays
+  what the SPA reads and stays fully functional with no accounts, no store wired, or offline; the
+  server row is a best-effort mirror. Both id lists are grow-only sets, UNIONED on both sides, because
+  two browsers signed in as one person each hold a full copy and each write it back: a
+  last-writer-wins replace on either side silently drops what the other learned. "Reset progress" is
+  therefore a DELETE. Each push carries the whole local state and reconciles the merged row it gets
+  back, so a merge that lost a concurrent writer's ids re-pushes instead of waiting for a local change
+  that may never come; a merge whose RESULT would exceed `MAX_TUTORIAL_TOUR_IDS` is refused with
+  `details.reason: 'tutorial_progress_too_large'` rather than truncated, since the row rides every
+  workspace snapshot.
+
+  Three new operational counters (`tutorial.tour_started` / `_completed` / `_abandoned`, dimensioned
+  by tour) answer the question the initiative could not answer about itself. They ride the existing
+  `OperationalMetrics` port because there is deliberately only one counter seam; the tour dimension is
+  bounded twice, by the wire schema's shape rule and by a per-process distinct-value cap that folds
+  the rest onto a visible `other` bucket, since a dimension whose values come from a browser is
+  otherwise an unbounded-cardinality hole in an operator's metrics backend.
+
+  New internal routes (not `/api/v1`, so no SDK surface): `GET|PUT|DELETE /tutorial/progress` and
+  `POST /tutorial/events`, root-mounted beside `/user-settings`. Root-mounted specifically so they sit
+  outside the workspace-RBAC viewer write floor, which a read-only viewer taking a walkthrough would
+  otherwise trip. The workspace snapshot gains an optional `tutorialProgress`, and `NavGates` gains
+  `boardHasFailedRun`; a deployment that builds its own gates object must add that field.
+
+### Patch Changes
+
+- Updated dependencies [f1a6cb3]
+- Updated dependencies [cc17221]
+- Updated dependencies [889a497]
+- Updated dependencies [3605630]
+  - @cat-factory/orchestration@0.195.0
+  - @cat-factory/contracts@0.224.0
+  - @cat-factory/kernel@0.226.0
+  - @cat-factory/agents@0.108.0
+  - @cat-factory/server@0.207.0
+  - @cat-factory/gates@0.8.58
+  - @cat-factory/integrations@0.122.1
+  - @cat-factory/prompt-fragments@0.15.49
+
+## 0.21.2
+
+### Patch Changes
+
+- Updated dependencies [bbc51fa]
+- Updated dependencies [36b1853]
+  - @cat-factory/orchestration@0.194.0
+  - @cat-factory/integrations@0.122.0
+  - @cat-factory/server@0.206.0
+  - @cat-factory/contracts@0.223.0
+  - @cat-factory/kernel@0.225.0
+  - @cat-factory/agents@0.107.1
+  - @cat-factory/gates@0.8.57
+  - @cat-factory/prompt-fragments@0.15.48
+
 ## 0.21.1
 
 ### Patch Changes

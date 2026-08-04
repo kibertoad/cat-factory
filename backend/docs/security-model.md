@@ -243,6 +243,17 @@ With that scoping, the pipeline properties are:
   built-in): `autoMergeEnabled: false` routes _every_ PR to a human `merge_review` regardless of
   scores, and per-class `classRules` put floors under the model's opinion (e.g. "schema-class
   changes always get a human"). A class rule can never override `autoMergeEnabled: false`.
+- **Who STARTED the run is part of the policy, pinned at admission.** A preset also carries
+  `classRulesByRole` (the per-class rules narrowed by the initiator's workspace role) and
+  `dryRunRoles` (roles whose runs open a PR but never merge, at either exit: the auto-merge AND the
+  `mergePr` endpoint the review card calls). Both are MECHANISMS in the same sense as the class
+  computation: the role and the mode are recorded on the run when it is admitted and read back from
+  the stored row, so nothing the agent returns, and no preset edit made while the run works, can
+  change the authority it runs under. Narrowing is subtractive by construction
+  (`narrowMergeClassRule`), so a role entry can never widen what the base rules allow, and a run
+  with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
+  rules rather than being guessed onto a tier. Full model:
+  [`role-scoped-merge-policy.md`](../../docs/initiatives/role-scoped-merge-policy.md).
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint
@@ -302,6 +313,13 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **The merger's judgment**, or any other LLM verdict, for anything the preset and class rules
   don't floor. Judgments are defeatable by the same injection you're worried about.
 - **Intra-container separation** between agent and harness (Layer 2's stated limit).
+- **The sandboxed run mode (`dryRunRoles`) against someone who has repo write.** It refuses both of
+  the PLATFORM's merge exits; it cannot stop a human merging the PR by hand on the host, and a PR is
+  deliberately still opened. It is a real control in one specific shape: the engine falls back to
+  the DEPLOYMENT credential for an initiator with no stored PAT, so a non-engineer who cannot merge
+  on GitHub can still cause a merge by tapping the review card, and the mode closes that escalation.
+  Against anyone holding write access on the host it is advisory. Branch protection, the first item
+  on the hardening checklist below, is the mechanism; this is scoping on top of it.
 - **The absence of a secret in the prompt.** Injected `.cat-context/` files and job bodies carry
   non-secret projections by design (`context.toolServers` never carries credential values; tool
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
@@ -394,7 +412,7 @@ is possible at all:
 8. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
    reads.
 
-## Known gaps (honest list, with candidate fixes)
+## Known gaps
 
 - **On a hosted deployment, loopback local-model endpoints still reach the server itself.** With
   `LOCAL_MODELS_ALLOW_LAN` off, the remaining grant is `localhost` / `127.0.0.0/8` / `[::1]`,
@@ -416,6 +434,17 @@ is possible at all:
 - **Job tokens are installation-wide on the standard dispatch path.** The repo-scoped mint exists
   (delegation path) and could be applied at engine dispatch. Until it is, item 3 above is the
   mitigation.
+- **Outside the reserved-key floor, what a capability credential may read from the deployment's
+  environment is unbounded until an operator sets `allowKeys`.** `isReservedPlatformEnvKey` refuses
+  the platform's own configuration with no configuration required and cannot be widened, but every
+  other variable the deployment exports (`AWS_PROFILE`, a personal token, a vendor key belonging to
+  something else) resolves for any tool server or generative integration that names it. The bound is
+  `EnvToolSecretResolverOptions.allowKeys` and, like the account-level `allowInitiatorPat` floor, it
+  ships UNSET: on a single-tenant deployment whose integrations are all its own, an allow-list is
+  friction with nothing to buy. It binds for exactly the two cases Layer 2 names, a deployment
+  installing third-party agent packages and a mothership-mode node, and for those it is the
+  operator's to set. Storing the value in the per-workspace credential store instead keeps it off
+  the environment path entirely, which is the narrower answer wherever it is available.
 - **An initiator's personal PAT is still unbounded once it IS used.** The platform stores it sealed
   and never logs it, but it cannot narrow it: `repository_ids` scoping is an App-token mechanism
   with no PAT equivalent. What changed is that an account or a workspace can now decline to use it

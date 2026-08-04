@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param cacheWriteTokens the {@code cacheWriteTokens} field.
  * @param calls the {@code calls} field.
  * @param completionTokens the {@code completionTokens} field.
+ * @param costEstimate Always present; {@code null} when the server has no value for it.
  * @param errors the {@code errors} field.
  * @param maxOutputTokens Always present; {@code null} when the server has no value for it.
  * @param outputHeadroomRatio Always present; {@code null} when the server has no value for it.
@@ -40,6 +41,9 @@ public record DebugLlmAgentKindRollup(
     @JsonProperty("calls") Double calls,
 
     @JsonProperty("completionTokens") Double completionTokens,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("costEstimate") @Nullable Double costEstimate,
 
     @JsonProperty("errors") Double errors,
 
@@ -83,6 +87,7 @@ public record DebugLlmAgentKindRollup(
         private @Nullable Double cacheWriteTokens;
         private @Nullable Double calls;
         private @Nullable Double completionTokens;
+        private @Nullable Double costEstimate;
         private @Nullable Double errors;
         private @Nullable Double maxOutputTokens;
         private @Nullable Double outputHeadroomRatio;
@@ -127,6 +132,12 @@ public record DebugLlmAgentKindRollup(
         /** Set {@code completionTokens}. */
         public Builder completionTokens(@Nullable Double completionTokens) {
             this.completionTokens = completionTokens;
+            return this;
+        }
+
+        /** Set {@code costEstimate}. */
+        public Builder costEstimate(@Nullable Double costEstimate) {
+            this.costEstimate = costEstimate;
             return this;
         }
 
@@ -192,7 +203,7 @@ public record DebugLlmAgentKindRollup(
 
         /** Build the {@link DebugLlmAgentKindRollup}. */
         public DebugLlmAgentKindRollup build() {
-            return new DebugLlmAgentKindRollup(agentKind, cacheHitRate, cacheReadTokens, cacheWriteTokens, calls, completionTokens, errors, maxOutputTokens, outputHeadroomRatio, overheadMs, peakCompletionTokens, promptTokens, transportOverheadRatio, truncatedCalls, upstreamMs, warnings);
+            return new DebugLlmAgentKindRollup(agentKind, cacheHitRate, cacheReadTokens, cacheWriteTokens, calls, completionTokens, costEstimate, errors, maxOutputTokens, outputHeadroomRatio, overheadMs, peakCompletionTokens, promptTokens, transportOverheadRatio, truncatedCalls, upstreamMs, warnings);
         }
     }
 }

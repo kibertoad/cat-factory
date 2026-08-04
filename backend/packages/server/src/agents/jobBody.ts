@@ -343,7 +343,7 @@ function buildCodingRepoLegs(
  * check commands, and the run's declared bugfix reproduction. Extracted together because they
  * share one gate and one rationale — see
  * [pre-PR validation](../../../../docs/initiatives/pre-pr-validation.md) and
- * [reproduction proof](../../../../docs/initiatives/bugfix-reproduction-proof.md).
+ * [reproduction proof](../../../../docs/adr/0033-bugfix-reproduction-proof.md).
  *
  * Both are forwarded ONLY when this dispatch actually OPENS a PR: that is the whole point of
  * "pre-PR" for the checks (an in-place fixer pushing onto an existing PR head is already covered

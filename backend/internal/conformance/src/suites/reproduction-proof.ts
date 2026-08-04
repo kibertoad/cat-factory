@@ -3,7 +3,7 @@ import type { AgentRunContext, ExecutionInstance, Pipeline } from '@cat-factory/
 import type { ReproductionReport } from '@cat-factory/contracts'
 import type { ConformanceHarness } from '../harness.js'
 
-// BUGFIX REPRODUCTION PROOF conformance (docs/initiatives/bugfix-reproduction-proof.md).
+// BUGFIX REPRODUCTION PROOF conformance (backend/docs/adr/0033-bugfix-reproduction-proof.md).
 //
 // A bugfix run's PR should carry machine-captured evidence that a reproducing check failed on the
 // pre-fix code and passes on the final tree — and, when reproduction is genuinely infeasible, an

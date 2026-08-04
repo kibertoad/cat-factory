@@ -36,6 +36,52 @@ export function totalInputTokens(m: {
   return m.promptTokens + (m.cacheReadTokens ?? 0) + (m.cacheWriteTokens ?? 0)
 }
 
+/**
+ * Smallest amount {@link formatCost} will print as a figure. Below it, four decimals round to
+ * `0.0000`, which is the same "free" claim a null renders as `0.00` — so such an amount is
+ * shown as a threshold instead.
+ */
+const MIN_RENDERED_COST = 0.0001
+
+/**
+ * Format an estimated cost for display, or null when there is nothing honest to show.
+ *
+ * Null in ⇒ null out, and the caller renders the tokens WITHOUT a money figure: a cost the
+ * deployment could not price and a cost of zero are different facts, and `0.00` claims the
+ * second one. Small amounts keep more decimals because most steps land well under a unit and
+ * rounding them all to `0.00` would make the whole column useless; an amount too small even
+ * for those decimals is rendered as `<0.0001` rather than rounded down to the zero this
+ * function exists to avoid printing.
+ */
+export function formatCost(amount: number | null | undefined, currency?: string): string | null {
+  if (amount == null) return null
+  const value = formatCostAmount(amount)
+  // The currency is a bare ISO code beside the number rather than a locale symbol: the amounts
+  // come from a deployment-configured table whose code is whatever an operator set, and a
+  // symbol we guessed for an unrecognised code would be a wrong label on a right number.
+  return currency ? `${value} ${currency}` : value
+}
+
+function formatCostAmount(amount: number): string {
+  if (amount > 0 && amount < MIN_RENDERED_COST) return `<${MIN_RENDERED_COST}`
+  // Four decimals under a unit, where most steps land; two above it, where they read as money.
+  return amount.toFixed(amount > 0 && amount < 1 ? 4 : 2)
+}
+
+/**
+ * Sum costs across rows the way the backend folds do: NULL contaminates rather than being
+ * skipped as zero, so a total that could not price one of its parts declines to answer instead
+ * of reporting a smaller number that reads as complete.
+ */
+export function sumCosts(values: readonly (number | null | undefined)[]): number | null {
+  let total = 0
+  for (const value of values) {
+    if (value == null) return null
+    total += value
+  }
+  return total
+}
+
 /** Compact duration: 850 → "850ms", 1500 → "1.5s", 90_000 → "1m 30s". */
 export function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`
@@ -78,6 +124,7 @@ const EMPTY_PHASE: Omit<StepPhaseMetrics, 'phase'> = {
   completionTokens: 0,
   carryCostTokens: 0,
   errors: 0,
+  costEstimate: 0,
 }
 
 /**
@@ -116,6 +163,9 @@ export function foldRunPhaseMetrics(steps: readonly PipelineStep[]): StepPhaseMe
         completionTokens: prev.completionTokens + row.completionTokens,
         carryCostTokens: prev.carryCostTokens + row.carryCostTokens,
         errors: prev.errors + row.errors,
+        // Same contaminating sum the backend fold uses: one unpriced phase makes the run's
+        // figure unknown rather than quietly smaller.
+        costEstimate: sumCosts([prev.costEstimate, row.costEstimate]),
       })
     }
   }

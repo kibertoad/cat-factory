@@ -18,6 +18,19 @@ const { t } = useI18n()
 const tutorial = useTutorialStore()
 const { catalogue } = useTutorialTours()
 const { stateOf, launch } = useTutorialLaunch()
+const { resetServerProgress } = useTutorialServer()
+
+/**
+ * Forget everything, on BOTH sides. The local clear alone would be undone by the next board load:
+ * the snapshot brings the server row back and the store MERGES it, which is exactly right for every
+ * other reconciliation and exactly wrong for the one action whose whole point is to erase the
+ * record. `useTutorialServer` rather than `useTutorialSync` because this must not install a second
+ * set of mirror watchers each time the catalogue mounts.
+ */
+function reset() {
+  tutorial.resetProgress()
+  resetServerProgress()
+}
 
 const open = computed({
   get: () => tutorial.catalogueOpen,
@@ -131,7 +144,7 @@ const statusColor = (row: TutorialCatalogueRow) =>
           icon="i-lucide-rotate-ccw"
           :title="t('tutorial.catalogue.resetHint')"
           data-testid="tutorial-catalogue-reset"
-          @click="tutorial.resetProgress()"
+          @click="reset()"
         >
           {{ t('tutorial.catalogue.reset') }}
         </UButton>

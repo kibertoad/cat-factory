@@ -8,6 +8,7 @@ import {
   testerQualityConfigSchema,
   writebackOverrideSchema,
 } from './entities.js'
+import { runModeSchema } from './execution.js'
 import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
@@ -370,6 +371,14 @@ export type OrganizePipelineInput = v.InferOutput<typeof organizePipelineSchema>
 
 export const startExecutionSchema = v.object({
   pipelineId: v.pipe(v.string(), v.minLength(1)),
+  /**
+   * Ask for a SANDBOXED run ({@link runModeSchema}): the pipeline runs in full and opens its PR,
+   * but nothing merges. Absent ⇒ `live`, the historical behaviour.
+   *
+   * A request, not the last word: the task's merge preset can force the initiator's role into
+   * dry-run regardless (`dryRunRoles`), and asking for `live` never escapes that.
+   */
+  mode: v.optional(runModeSchema),
 })
 export type StartExecutionInput = v.InferOutput<typeof startExecutionSchema>
 

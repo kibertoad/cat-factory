@@ -566,7 +566,8 @@
         "binary_output_service_invalid": "İkili çıktı hizmeti çözümlenemiyor",
         "binary_output_generator_invalid": "İkili çıktı üreticisi çözümlenemiyor",
         "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti",
-        "ticket_already_linked": "Bu kayda ait bir görev zaten var"
+        "ticket_already_linked": "Bu kayda ait bir görev zaten var",
+        "dry_run_not_mergeable": "Prova çalışması birleştirilemez"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -599,7 +600,8 @@
         "binary_output_service_invalid": "İkili çıktılar üreten bir adım, bu çalışma alanının kataloğunda çözümlenemeyen bir temel hizmet seçiyor: kimlik bilinmiyor ya da seçilen depolama hizmeti asset-storage yeteneğini taşımıyor. Adımın seçimini düzeltin veya hizmeti kaydedin, sonra yeniden başlatın.",
         "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu dağıtımın kaydetmediği bir üretken entegrasyon seçiyor ya da seçilen entegrasyonların hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor. Üretken entegrasyonlar bu çalışma alanında değil, dağıtımın kodunda kaydedilir: entegrasyonu kaydedin veya adımın seçimini düzeltin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
-        "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın."
+        "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
+        "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1243,7 +1245,9 @@
         "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
         "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor.",
         "class_auto_merge": "Bu ön ayar bu değişiklik kategorisini her zaman otomatik birleştirir, bu yüzden puanlar karşılaştırılmadı.",
-        "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir."
+        "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir.",
+        "role_requires_review": "Bu ön ayar, bir {role} tarafından başlatılan çalışmaları bu tür değişiklikler için puanlardan bağımsız olarak insan incelemesine yönlendirir. Daha yetkili bir ekip arkadaşı bu PR’ı olduğu gibi birleştirebilir.",
+        "dry_run": "Bu bir prova çalışmasıydı; bu nedenle pull request bir insan için açık bırakıldı ve puanlar karşılaştırılmadı. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "scores": "Puanlar",
       "axis": {
@@ -1402,6 +1406,33 @@
         "failedSummary": "{maxAttempts} denemenin {attempts} tanesinden sonra {total} denetimden {failed} tanesi hâlâ başarısızdı, bu yüzden çekme isteği açılmadı.",
         "exitCode": "çıkış kodu {code}",
         "timedOut": "zaman aşımı"
+      },
+      "reproduction": {
+        "heading": "Yeniden üretim kanıtı",
+        "status": {
+          "reproduced": "Yeniden üretildi",
+          "inconclusive": "Kanıtlanmadı",
+          "declared_infeasible": "Yeniden üretilemez"
+        },
+        "verdict": {
+          "reproduced": "Bildirilen kontrol düzeltme öncesi ağaçta başarısız oldu ve bu ağaçta geçiyor.",
+          "inconclusive": "Kontrol, düzeltmenin iki yanında da kusuru gösteremedi; bu nedenle düzeltme kanıtlanmış değil.",
+          "declared_infeasible": "Aracı, bu hatanın bir testte yeniden üretilemeyeceğini bildirdi ve bunun yerine neyi doğruladığını belirtti."
+        },
+        "tree": {
+          "base": "Düzeltme öncesi ağaç",
+          "final": "Son ağaç"
+        },
+        "command": "Komut",
+        "reason": "Neden yeniden üretilemiyor",
+        "alternative": "Bunun yerine doğrulandı",
+        "passed": "geçti",
+        "exitCode": "çıkış kodu {code}",
+        "timedOut": "zaman aşımı",
+        "setupFailed": "hazırlık başarısız",
+        "notRun": "çalıştırılmadı",
+        "attempts": "{maxAttempts} denemeden {attempts}. deneme",
+        "omittedTestPaths": "Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu. | Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu."
       }
     },
     "inspector": {
@@ -1478,6 +1509,9 @@
     "contextError": "Sağlanan bağlam yüklenemedi.",
     "summary": {
       "calls": "Çağrılar",
+      "cost": "Tahmini maliyet",
+      "costHint": "Liste fiyatlarıyla, her girdi sınıfı kendi tarifesiyle hesaplanır: önbellekten okuma taze girdinin yaklaşık onda biri, önbelleğe yazma ise yaklaşık dörtte bir fazlası kadardır. Abonelikle yapılan bir çalıştırma token başına ücret ödemez; bu, aynı tokenların kullandıkça öde ile kaça mal olacağıdır.",
+      "costIncomplete": "Gösterilmiyor: en az bir aşama, bu kurulumun ücretini bilmediği bir modelde çalıştı; bu yüzden çalışma toplamı eksik olurdu. Ücreti bilinen aşamalar aşağıda listeleniyor.",
       "tokensInOut": "Token (giriş / çıkış)",
       "transportOverhead": "Taşıma yükü",
       "modelExecution": "Model yürütme",
@@ -1497,8 +1531,10 @@
         "phase": "Aşama",
         "turns": "Tur",
         "tokensInOut": "Token (giriş / çıkış)",
+        "cost": "Maliyet",
         "carryCost": "Taşıma maliyeti"
       },
+      "costHint": "Bu aşamanın tokenlarının liste fiyatlarına göre tahmini maliyeti. Tire, bu kurulumda çalışan model için bir tarife bulunmadığını gösterir.",
       "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez. En sonda çalışan bir aşama ne kadar harcarsa harcasın az taşır; bu sütunu yanındaki token sayılarıyla birlikte okuyun.",
       "unattributed": "Atanmamış",
       "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi"
@@ -1506,6 +1542,7 @@
     "metricsBar": {
       "calls": "{count} çağrı | {count} çağrı",
       "inputCompletionTokens": "Toplam giriş / çıkış token'i. Giriş, önbelleğe alınmış token'ları da sayar: bunlar hâlâ bağlam penceresini kaplar, tıpkı Claude Code'un kendi bağlam göstergesinin saydığı gibi.",
+      "costHint": "Bu adımın tokenlarının liste fiyatlarına göre, her girdi sınıfı kendi tarifesiyle hesaplanan tahmini maliyeti. Abonelikle yapılan bir çalıştırma token başına ücret ödemez; bu, aynı tokenların kullandıkça öde ile kaça mal olacağıdır.",
       "fresh": "{tokens} yeni",
       "freshHint": "Önbellekten hiçbir şey sunulmadan sıfırdan işlenen giriş",
       "cacheRead": "{tokens} önbellekten okundu",
@@ -6280,6 +6317,12 @@
       "minor": "Küçük notlar",
       "major": "Ciddi yeniden çalışma",
       "classHistory": "Bu kategoride {merged} birleştirildi, {autoShare} otomatik"
+    },
+    "role": {
+      "admin": "yönetici",
+      "member": "üye",
+      "viewer": "izleyici",
+      "unattributed": "otomatik bir başlatma"
     }
   },
   "vcs": {
@@ -6393,7 +6436,10 @@
       "finishedRun": "Başarıyla tamamlanmış bir çalıştırma",
       "integrationsManage": "Entegrasyonları yönetme izni",
       "settingsManage": "Çalışma alanı ayarlarını yönetme izni",
-      "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi"
+      "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi",
+      "failedRun": "Başarısız olmuş bir çalıştırma",
+      "infrastructure": "Bu çalışma alanına bağlı bir yürütme arka ucu",
+      "advancedTier": "Gelişmiş arayüz modu"
     },
     "overlay": {
       "next": "İleri",
@@ -6405,7 +6451,9 @@
       "announcement": "Adım {current} / {total}. {title}. {body}",
       "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
-      "clickHint": "Devam etmek için vurgulanan denetime tıklayın"
+      "clickHint": "Devam etmek için vurgulanan denetime tıklayın",
+      "nextUp": "Sırada",
+      "takeNext": "Bunu yap"
     },
     "tours": {
       "boardBasics": {
@@ -6528,7 +6576,7 @@
           },
           "finish": {
             "title": "Döngü bu",
-            "body": "Görevi planlayın, hattı seçin, başlatın, izleyin. Bir çalışma sizden bir şey istediğinde durur ve söyler; bir sonraki tur bunu anlatıyor."
+            "body": "Görevi planlayın, hattı seçin, başlatın, izleyin. Bundan sonraki turlar gerçek bir çalışmayı okur; dolayısıyla gerçekten bir çalışma başlattığınızda açılırlar."
           }
         }
       },
@@ -6683,7 +6731,100 @@
             "body": "Bazı girdiler panoya değil size aittir; kişisel bir erişim jetonu ya da abonelik gibi, yalnızca sizin başlattığınız çalıştırmalarda kullanılır. Merkez hangisinin hangisi olduğunu işaretler, Kurulumum ise sizin olanları bir arada tutar."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Bir hatayı okumak",
+        "description": "Bir çalışma hatayla durdu. Neyin bozulduğunu ve ne yapılacağını öğrenin.",
+        "steps": {
+          "intro": {
+            "title": "Çalışmalar başarısız olur, bu normaldir",
+            "body": "Başarısız bir çalışma çıkmaz sokak değildir. Pano hatayı saklar, neden genellikle tek satırdır ve nedenlerin çoğu görevi yeniden yazmakla değil bir ayarla düzelir."
+          },
+          "banner": {
+            "title": "Ne ters gitti",
+            "body": "Kart, ilerleme çubuğunu bu uyarıyla değiştirir. Nedeni adlandırır, ayrıntılar ham çıktıyı tutar ve bazı nedenler onu düzelten ayara giden bir düğme sunar."
+          },
+          "retry": {
+            "title": "Yeniden çalıştırmak",
+            "body": "Yeniden dene işi baştan çalıştırır. Önceki hatalar „Önceki hatalar” altında görevde kalır; böylece izi kaybetmek yerine denemeleri karşılaştırabilirsiniz."
+          },
+          "finish": {
+            "title": "Hata bir bilgidir",
+            "body": "Nedeni düzeltin, yeniden deneyin, karşılaştırın. Aynı hata dönüp duruyorsa, bir izni genişletebilecek ya da eksik bağlantıyı kurabilecek kişiye götürülecek şey bu ayrıntılardır."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Çalışmalar nerede gerçekleşir",
+        "description": "Ajanların üzerinde koştuğu makineler, test ettikleri ortamlar ve kullanabilecekleri kimlik bilgileri.",
+        "steps": {
+          "intro": {
+            "title": "Ajanların koşacak bir yere ihtiyacı var",
+            "body": "Her konteyner adımı bir yürütme arka ucunda koşar, testler bir ortamda ayağa kalkar ve bazı yetenekler kimlik bilgisi ister. Üçü de tek pencerede yapılandırılır."
+          },
+          "open": {
+            "title": "Altyapıyı açın",
+            "body": "Çalışmaların nerede ve nasıl yürütüldüğüne dair her şey burada."
+          },
+          "tabs": {
+            "title": "Her konu için bir sekme",
+            "body": "Ajan konteynerleri, işin yürütüldüğü yerdir. Test ortamları, bir servisin neyden ayağa kaldırıldığıdır. Kimlik bilgisi listesi, ajanlarınızın kullandığı yeteneklerin gerçekten hangi anahtarları çözebildiğini ve hangilerinin hâlâ eksik olduğunu gösterir."
+          },
+          "finish": {
+            "title": "Hatalar buraya işaret eder",
+            "body": "Bir çalışma kaynak hazırlarken başarısız olduğunda, uyarısının açmanızı istediği pencere budur. Olduktan sonra değil, olmadan önce bilmeye değer."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Kurul incelemesi",
+        "description": "Hak eden görevlerde aynı işi tek model yerine birkaç model incelesin.",
+        "steps": {
+          "intro": {
+            "title": "Bir inceleyici ya da birkaçı",
+            "body": "Bir inceleme adımı normalde tek ajan koşar. Bunun yerine birkaç modelden oluşan bir kurul koşup söylediklerini karşılaştırabilir; bu, ağır işlerde tek bir inceleyicinin kaçırdığını yakalar."
+          },
+          "open": {
+            "title": "Model yapılandırmasını açın",
+            "body": "Kurullar modellerden oluşur, bu yüzden onların yanında kurulur."
+          },
+          "groups": {
+            "title": "Bir kurul tanımlayın",
+            "body": "Bir grup, kuruldaki modelleri ve kullanılması için görevin ne kadar zorlu olması gerektiğini belirtir. Adım sonra modelleri tek tek saymak yerine bir grup seçer."
+          },
+          "finish": {
+            "title": "Maliyet çabayı izler",
+            "body": "Bir kurul, üye sayısı kadar model çağrısına mal olur; bu yüzden bir grup, tahmini eşiğini geçen görevlerle sınırlanabilir. Küçük iş tek inceleyiciyle kalır."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Zaten çalıştırdığınız servisler",
+        "description": "Ajanlara hangi paylaşılan sistemlerin var olduğunu ve API’lerinin nasıl göründüğünü söyleyin.",
+        "steps": {
+          "intro": {
+            "title": "Elinizde olanı yeniden kurmayın",
+            "body": "Kurumunuzun neyi zaten çalıştırdığını bilmedikçe ajanlar karanlıkta tasarlar. Bu katalog o sistemleri adlandırır ve API sözleşmelerini taşır."
+          },
+          "open": {
+            "title": "Temel servisleri açın",
+            "body": "Bu çalışma alanındaki her panonun kullanabileceği paylaşılan yetenekler kataloğu."
+          },
+          "catalog": {
+            "title": "Kaydedin, yükleyin ya da senkronize edin",
+            "body": "Bir servisi elle ekleyin, API belgelerini yükleyin ya da bir depo bağlayıp senkronize olmalarını sağlayın. Tasarımlar sonra bir arayüz uydurmak yerine burada kayıtlı olana atıf yapar."
+          },
+          "finish": {
+            "title": "Tasarım adımları bunu okur",
+            "body": "Bunlardan hangilerini kullandığını bildiren bir tasarım, sonraki adımda onların tam sözleşmelerini alır. Hiçbir şey bildirmeyen hiçbir şey almaz: bunu güncel tutmak, işin işlemesinin koşuludur."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Yeni tur mevcut",
+      "start": "Göster",
+      "dismiss": "Kapat"
     }
   },
   "externalTools": {
