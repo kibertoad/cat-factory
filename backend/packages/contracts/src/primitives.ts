@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 
 // Shared scalar schemas. Picklists mirror the frontend's `app/types/domain.ts`
 // unions exactly, so a payload that validates here drops straight into the Pinia
@@ -262,12 +263,17 @@ export const taskTypeFieldsSchema = v.object({
 
   // --- Custom-task-type fields ----------------------------------------------
   /**
-   * Values for the descriptor-driven fields a CUSTOM (deployment-registered) task type
-   * declares (see `customTaskTypeSchema.fields`), keyed by each field descriptor's `key`.
-   * Sparse and additive like the built-in fields above — never migrated, never touches them.
-   * String or number per the descriptor's input `type`; the built-in types leave this absent.
+   * Values for the descriptor-driven fields a CUSTOM (deployment-registered) task type declares
+   * (see `customTaskTypeSchema.fields`), keyed by each field descriptor's `key`. Sparse and
+   * additive like the built-in fields above: never migrated, never touches them; the built-in
+   * types leave it absent.
+   *
+   * The SHARED descriptor-form value bag (`form-fields.ts`), so a value is a string, a number, a
+   * boolean (`checkbox`) or a `string[]` (`checkbox-group`), exactly as an initiative preset's
+   * inputs are. Widening it from `string | number` is a pure widening: every existing row parses
+   * unchanged, so there is nothing to migrate.
    */
-  custom: v.optional(v.record(v.string(), v.union([v.string(), v.number()]))),
+  custom: v.optional(descriptorFieldValuesSchema),
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
 

@@ -106,6 +106,40 @@ describe('describeCustomTaskType', () => {
     ])
   })
 
+  it('renders the widened value shapes as the form itself reads them', () => {
+    // The shared descriptor-form vocabulary answers with booleans and multi-selects too, and the
+    // fold goes through the SAME renderer the form review uses: captions over enum values, a
+    // multi-select joined, a toggle as Yes/No. An empty multi-select says nothing and is left out.
+    const withShapes: CustomTaskType = {
+      ...descriptor,
+      fields: [
+        ...(descriptor.fields ?? []),
+        {
+          key: 'operations',
+          label: 'Operations',
+          type: 'checkbox-group',
+          options: [
+            { value: 'create', label: 'Create' },
+            { value: 'list', label: 'List' },
+          ],
+        },
+        { key: 'breaking', label: 'Breaking change', type: 'checkbox' },
+        { key: 'skipped', label: 'Skipped', type: 'checkbox-group' },
+      ],
+    }
+    const context = describeCustomTaskType(
+      'org:introduce-api',
+      { operations: ['create', 'list'], breaking: false, skipped: [] },
+      withShapes,
+    )
+    expect(context?.fields).toEqual([
+      { key: 'operations', label: 'Operations', value: 'Create, List' },
+      // An explicit `false` on a default-ON toggle is the opt-OUT, which is exactly what such a
+      // field records, so it renders rather than vanishing.
+      { key: 'breaking', label: 'Breaking change', value: 'No' },
+    ])
+  })
+
   it('degrades to raw keys and the raw id when no descriptor is registered', () => {
     // The state on a node whose build predates the registration, and after a type is withdrawn.
     const context = describeCustomTaskType(

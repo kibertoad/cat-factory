@@ -98,7 +98,8 @@
       "confirm": "Discard",
       "keep": "Keep editing"
     },
-    "edit": "Edit"
+    "edit": "Edit",
+    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes)."
   },
   "access": {
     "noBoardWrite": "Read-only access: you can view this board but can't edit it.",
@@ -325,6 +326,10 @@
       "continue": "Continue",
       "submit": "Add task",
       "addFailedTitle": "Could not add task",
+      "customFieldsInvalid": "This task type's form has changed since you opened it, so the answers no longer match what it asks for. Close and reopen the dialog to fill in the current fields.",
+      "@customFieldsInvalid": {
+        "description": "Shown when the server refuses a created task because the collected values for a deployment-registered custom task type contradict the type's declared form (a required answer missing, a value outside its options). In practice this means the deployment re-registered the type while the dialog was open."
+      },
       "linkFailed": "Task added, but {count} attachment could not be linked | Task added, but {count} attachments could not be linked",
       "@linkFailed": {
         "description": "Count-based: how many context attachments (docs/issues) failed to link after the task was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
@@ -6163,7 +6168,6 @@
       "titlePlaceholder": "e.g. Migrate the API to the new auth model",
       "goalField": "Goal",
       "goalPlaceholder": "Describe the goal, constraints and rough scope. The planner refines this into a multi-phase plan.",
-      "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes).",
       "hint": "Nothing runs yet: after creating, run the Initiative Planning pipeline on the block. It analyses the codebase and drafts the multi-phase plan for your approval.",
       "submit": "Create initiative",
       "failedTitle": "Could not create the initiative",

@@ -130,12 +130,25 @@ apply and dropped what this harness cannot serve (see
 - **Tool servers** become a per-run `--mcp-config` file plus `--strict-mcp-config` for claude-code
   (so an ambient run never picks up the developer's personal servers), and `[mcp_servers.*]` blocks
   in the per-run `CODEX_HOME/config.toml` for Codex: stdio only, and skipped entirely under
-  ambient auth, which has no per-run home to write into. `--allowedTools` is passed ONLY when a
+  ambient auth, which has no per-run home to write into. Both stdio-only skips are now BACKSTOPS
+  rather than decisions: the backend knows which transports each harness reaches and drops an
+  `http` server from a Codex dispatch with a stated reason, so the prompt names the gap instead of
+  advertising a tool this side then silently omitted. `--allowedTools` is passed ONLY when a
   server actually narrows its tools, and then carries the CLI's built-in tool names alongside the
   `mcp__*` patterns: an allow-list is whole-session, not MCP-scoped, so a bare list of MCP
   patterns would leave the agent unable to read, edit or build anything. Whether the CLI gates on
   that list at all is permission-mode dependent, so treat the narrowing as scoping rather than
-  enforcement; the prompt states it either way.
+  enforcement; the prompt states it either way. An `allowedTools` entry that is not a single tool
+  name is DROPPED at the boundary, the comma above all: the list is joined into one argument with
+  commas, so `search_issues,get_issue` in one entry would become a pattern matching nothing.
+- **An `mcp__*` call is exempt from the no-edit progress bound**, like a read or a subagent
+  dispatch: reaching a wired tool server is what the prompt tells the agent to do, so counting it
+  would abort an edits-expected run for following its own instructions. It is neutral rather than
+  edit-satisfying, and bounded by its own consecutive-call cap
+  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`) for the same reason the web cap exists. Every exempt family
+  ALSO shares one backstop (`JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS`), because each per-family cap
+  resets on any call outside its own family: a run alternating a web search with a tool-server
+  lookup trips neither, and having made no action call it never reaches the no-edit bound either.
 - **An `http` tool server must be `https`, or loopback.** Its headers carry a resolved credential,
   so the job boundary refuses a cleartext off-box URL (the backend refuses the same at
   registration). `secretKeys` names which `env`/`headers` entries are credentials, so exactly those
@@ -227,6 +240,8 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_MAX_CONSECUTIVE_MCP_CALLS` | `40` | Consecutive tool-server (`mcp__*`) calls with no other tool call between before the run counts as a lookup loop. The counter-bound the no-edit exemption above owes; a per-kind `tuning.guardLimits` entry can only RAISE it. |
+| `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` | `200` | Consecutive calls of ANY no-edit-exempt family (reads, searches, web, tool servers, subagent dispatches) with no action call between them. The backstop above the per-family caps, since each of those resets on a call outside its own family; sized as a backstop rather than a research judgement, and reset by any `bash`/edit. |
 | `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic (a likely onboarding/auth wedge) WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |
 | `DEPENDENCY_INSTALL_TIMEOUT_MS` | a third of `JOB_MAX_DURATION_MS` (20m at its default) | Watchdog for the pre-agent dependency install; a timeout is reported as a failed install (exit 124), never a failed job. Derived from the job ceiling rather than fixed, and an explicit value is clamped by the same share: the agent is what waits on this, so setup can never consume the run it is preparing for. |
 | `DEPENDENCY_INSTALL_HEARTBEAT_MS` | `30000` (30s) | How often the dependency install feeds the job inactivity watchdog. A cold install is activity-silent and `JOB_INACTIVITY_MS` is tighter than its own watchdog, so without this a healthy install aborts the run as "likely hung". |

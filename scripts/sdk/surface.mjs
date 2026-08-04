@@ -96,6 +96,35 @@ export const MCP_OMITTED_OPERATIONS = {
     'SSE endpoint through an SDK.',
 }
 
+/**
+ * The MCP tool annotations that cannot be derived from the HTTP method, per operation.
+ *
+ * `readOnlyHint` follows from the method and is emitted for every tool. These two do not: the
+ * protocol's defaults for an UNSET hint are already the cautious ones (`destructiveHint` defaults
+ * to true, `idempotentHint` to false), so a mutating tool that says nothing is treated as the
+ * worst case and needs no entry. What an entry buys is the hint being STATED, which is what a host
+ * showing a confirmation dialog reads, and it is worth stating exactly where the consequence is
+ * real money or a merged pull request.
+ *
+ * Deliberately NOT a blanket pass over the mutating operations: setting `destructive: false` on a
+ * cheap write would LOWER a host's caution below its own default, which is a guess dressed as
+ * information. An operation absent from this table keeps the protocol's cautious default.
+ *
+ * Generation fails on an entry naming an operation the spec no longer has, and on one naming a GET
+ * (a read changes nothing, so neither hint means anything about it).
+ */
+export const MCP_TOOL_HINTS = {
+  // The four that spend: each begins a real agent run against a real repository, or merges a real
+  // pull request. Not idempotent: a second call starts a second run.
+  startPublicTask: { destructive: true, idempotent: false },
+  retryPublicTask: { destructive: true, idempotent: false },
+  createPublicJob: { destructive: true, idempotent: false },
+  actPublicNotification: { destructive: true, idempotent: false },
+  // Destructive AND idempotent, which is the pair `readOnlyHint` alone cannot express: deleting a
+  // task twice leaves the board in the same state, and the first call is still irreversible.
+  deletePublicTask: { destructive: true, idempotent: true },
+}
+
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',

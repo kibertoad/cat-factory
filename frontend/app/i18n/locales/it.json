@@ -2688,6 +2688,7 @@
       "continue": "Continua",
       "submit": "Aggiungi attività",
       "addFailedTitle": "Impossibile aggiungere l'attività",
+      "customFieldsInvalid": "Il modulo di questo tipo di attività è cambiato da quando lo hai aperto, quindi le risposte non corrispondono più a quanto richiesto. Chiudi e riapri la finestra per compilare i campi attuali.",
       "linkFailed": "Attività aggiunta, ma {count} allegato non è stato collegato | Attività aggiunta, ma {count} allegati non sono stati collegati",
       "review": {
         "prUrl": "Pull request",
@@ -4831,7 +4832,6 @@
       "titlePlaceholder": "es. Migrare l'API al nuovo modello di autenticazione",
       "goalField": "Obiettivo",
       "goalPlaceholder": "Descrivi l'obiettivo, i vincoli e l'ambito approssimativo. Il pianificatore lo affina in un piano multi-fase.",
-      "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate).",
       "hint": "Non viene eseguito ancora nulla: dopo la creazione, esegui la pipeline di Pianificazione dell'iniziativa sul blocco. Analizza il codebase e redige il piano multi-fase per la tua approvazione.",
       "submit": "Crea iniziativa",
       "failedTitle": "Impossibile creare l'iniziativa",
@@ -5044,7 +5044,8 @@
       "confirm": "Ignora",
       "keep": "Continua a modificare"
     },
-    "edit": "Modifica"
+    "edit": "Modifica",
+    "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate)."
   },
   "access": {
     "noBoardWrite": "Accesso in sola lettura: puoi visualizzare questa board ma non modificarla.",

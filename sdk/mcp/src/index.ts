@@ -14,9 +14,22 @@ export {
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
 } from './server.ts'
-export { type CatFactoryMcpOptions, ENV_VARS, optionsFromEnv, selectTools } from './config.ts'
+export {
+  type CatFactoryMcpOptions,
+  ENV_VARS,
+  type EnvReadDeps,
+  optionsFromEnv,
+  selectTools,
+  type ToolSelection,
+} from './config.ts'
 export { buildInstructions } from './instructions.ts'
 export { DEFAULT_MAX_RESULT_CHARS, renderError, renderResult, type ToolResult } from './result.ts'
+export {
+  bootStdioServer,
+  type StdioBootDeps,
+  type StdioBootResult,
+  startupFailureMessage,
+} from './stdio.ts'
 export {
   CAT_FACTORY_OMITTED_OPERATIONS,
   CAT_FACTORY_TOOL_GROUPS,
