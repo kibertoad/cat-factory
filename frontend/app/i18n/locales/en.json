@@ -2962,6 +2962,40 @@
         "removeFailed": "Could not remove the registry entry"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Capability credentials",
+      "intro": "The secrets this deployment's tool servers and generative integrations ask for by name. Values are stored for this board only, sealed at rest, and handed straight to the agent's process: they never reach a prompt or a log. Values are write-only, so a stored one is replaced by typing a new one and never read back.",
+      "credentialNoun": "{key} credential",
+      "required": "Required",
+      "optional": "Optional",
+      "stored": "Stored",
+      "storedAt": "Last set {date}",
+      "notStoredWithFallback": "Nothing stored for this board. This deployment also reads the key from its own environment, so the capability may still be working.",
+      "notStored": "Nothing stored for this board, and this deployment has no environment fallback, so the capability cannot authenticate.",
+      "setValue": "Value",
+      "replaceValue": "Replace the stored value",
+      "save": "Save",
+      "remove": "Remove credential",
+      "noneDeclared": "None of this deployment's registered capabilities asks for a credential.",
+      "subject": {
+        "toolServer": "Tool server",
+        "binaryGenerator": "Generative integration"
+      },
+      "incomplete": {
+        "title": "This list may be incomplete",
+        "body": "The generative integrations could not be read, so a credential one of them asks for may be missing below. Stored keys that nothing asks for stay hidden until the list can be read again."
+      },
+      "orphaned": {
+        "heading": "Stored but not asked for",
+        "body": "Nothing this deployment has registered asks for these keys, which is what a retired integration or a renamed variable leaves behind. They stay sealed until you remove them."
+      },
+      "toast": {
+        "loadFailed": "Could not load capability credentials",
+        "saved": "Saved {key}",
+        "saveFailed": "Could not save the credential",
+        "removeFailed": "Could not remove the credential"
+      }
+    },
     "apiTokens": {
       "title": "API access tokens",
       "intro": "Create tokens that external systems present to the cat-factory API. Each token authenticates as this workspace on the /api/v1 endpoints. The secret is shown only once, when you create it, and cannot be recovered, so store it right away.",

@@ -789,7 +789,7 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
     if (to <= from) return 0
     // DO UPDATE, not DO NOTHING: the current day is still accruing, so each pass CORRECTS its
     // bucket. `failure_kind` is '' for a non-failed status because it is in the primary key
-    // (see migration 0078 for why a nullable key column would not deduplicate).
+    // (see migration 0079 for why a nullable key column would not deduplicate).
     const res = await this.db.execute(sql`
       INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
       SELECT ${agentRuns.workspace_id},

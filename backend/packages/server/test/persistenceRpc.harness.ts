@@ -458,11 +458,16 @@ function buildReviewAndIntegrationRepos() {
       delete: async () => undefined,
     },
     // The per-workspace CAPABILITY CREDENTIAL store: the settings CRUD and the dispatch-time read
-    // are the same three methods. Same shape as the sealed connections above — the blob is opaque
-    // here, which is the point: no plaintext crosses the machine API.
+    // are the same methods. Same shape as the sealed connections above — the blob is opaque
+    // here, which is the point: no plaintext crosses the machine API. The rev-guarded
+    // `compareAndSwap` binds on the record's `workspaceId` FIELD like `upsert`; `deleteIfRev`
+    // echoes the workspace so the surface table can prove the call reached it (the real method
+    // returns a boolean, same trick as `executionRepository.exists`).
     capabilityCredentialRepository: {
       get: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
+      compareAndSwap: async () => true,
+      deleteIfRev: async (ws: string) => ({ ws }),
       delete: async () => undefined,
     },
     // The Kaizen screen read surface: grading history + per-run status + the verified-combo

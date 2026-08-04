@@ -329,9 +329,12 @@ Rules worth knowing before declaring one:
   capability-credential store (sealed, `secrets.manage`-gated, edited over
   `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY, so a
   tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
-  as it did before the store existed. The surface is a CHECKLIST, not a blank form: it projects
-  the credentials this deployment's registered capabilities declare, so an operator never has to
-  read the deployment's source to learn what to fill in. See
+  as it did before the store existed. The surface is a CHECKLIST, not a blank form: the
+  Infrastructure window's "Capability credentials" tab projects the credentials this deployment's
+  registered capabilities declare, so an operator never has to read the deployment's source to
+  learn what to fill in. It appears only for a caller holding `secrets.manage` and only when
+  something is declared, stored or unreadable, and it saves ONE key at a time
+  (`PUT /workspaces/:ws/capability-credentials/:key`) because it holds no values to re-send. See
   [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md).
 
 - **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own

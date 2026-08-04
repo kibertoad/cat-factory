@@ -15,6 +15,10 @@
 //   - "Package registries" — the private npm registries a checkout installs from (formerly an
 //     Integrations-hub row). What a container can resolve its dependencies from is part of the
 //     execution environment, not an optional external system a workspace links in.
+//   - "Capability credentials" — the sealed per-workspace values behind the secrets a registered
+//     tool server (MCP) or generative binary integration declares. What an agent's tools
+//     authenticate as belongs beside where those agents run, and it is `secrets.manage`-only, so
+//     the tab is HIDDEN rather than disabled for anyone without that permission.
 // Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
@@ -31,12 +35,15 @@ import LocalContainerPoolSettings from '~/components/settings/LocalContainerPool
 import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
 import ComposeEnvironmentSetupSection from '~/components/settings/ComposeEnvironmentSetupSection.vue'
 import PackageRegistriesPanel from '~/components/settings/PackageRegistriesPanel.vue'
+import CapabilityCredentialsPanel from '~/components/settings/CapabilityCredentialsPanel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
 const auth = useAuthStore()
 const packageRegistries = usePackageRegistriesStore()
+const capabilityCredentials = useCapabilityCredentialsStore()
+const { canManageSecrets } = useWorkspaceAccess()
 
 const open = computed({
   get: () => ui.infrastructureOpen,
@@ -63,12 +70,14 @@ const TAB_LABELS = computed<Record<InfrastructureTab, string>>(() => ({
   environment: t('settings.providerConnection.tabs.testEnvironments'),
   'shared-stacks': t('settings.sharedStacks.tab'),
   'package-registries': t('settings.packageRegistries.tab'),
+  'capability-credentials': t('settings.capabilityCredentials.tab'),
 }))
 const TAB_ICONS: Record<InfrastructureTab, string> = {
   'runner-pool': 'i-lucide-server-cog',
   environment: 'i-lucide-cloud',
   'shared-stacks': 'i-lucide-layers',
   'package-registries': 'i-lucide-package',
+  'capability-credentials': 'i-lucide-key-round',
 }
 
 // `slot` mirrors `value` — the template names one `<template #…>` per tab value.
@@ -79,6 +88,12 @@ const tabs = computed(() =>
     // The module's own probe (the backend 503s with no encryption key), same gate as the
     // Integrations-hub row this replaced — an unconfigured backend shows no dead tab.
     packageRegistries: packageRegistries.available === true,
+    // Two gates, and neither implies the other. `canManageSecrets` hides the tab from a member
+    // who may not manage secrets (the view NAMES the deployment's credential keys, which is why
+    // the backend gates the read too), and `hasSurface` hides a tab with nothing in it — the
+    // panel is a checklist projected from the deployment's registered capabilities, so a build
+    // that registers none has no credential to type.
+    capabilityCredentials: canManageSecrets.value && capabilityCredentials.hasSurface,
   }).map((value) => ({
     value,
     label: TAB_LABELS.value[value],
@@ -102,6 +117,11 @@ watch(
     // Swallowed here on purpose: the PANEL reports a load failure, and it can only do that
     // once the tab it lives in exists, so a probe failure has to leave the window itself alone.
     void packageRegistries.ensureLoaded().catch(() => {})
+    // Same split as the registries probe: swallowed here (a failed probe means no tab, and the
+    // window must still open), reported by the panel, which can only do that once its tab exists.
+    // Not probed at all without the permission — the backend would refuse it, and asking would
+    // put a 403 in every member's console on every open.
+    if (canManageSecrets.value) void capabilityCredentials.ensureLoaded().catch(() => {})
     activeTab.value = openInfrastructureTab(tabValues.value, ui.infrastructureTab)
   },
   { immediate: true },
@@ -175,6 +195,9 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #package-registries>
             <PackageRegistriesPanel />
+          </template>
+          <template #capability-credentials>
+            <CapabilityCredentialsPanel />
           </template>
         </UTabs>
 

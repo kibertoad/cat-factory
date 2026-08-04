@@ -1,6 +1,9 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import * as v from 'valibot'
 import {
+  capabilityCredentialKeySchema,
   capabilityCredentialsViewSchema,
+  setCapabilityCredentialSchema,
   upsertCapabilityCredentialsSchema,
 } from '../capability-credentials.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -29,10 +32,25 @@ export const setCapabilityCredentialsContract = defineApiContract({
   responsesByStatusCode: { 200: capabilityCredentialsViewSchema, ...errorResponses },
 })
 
-// A per-KEY delete beside the whole-set PUT, because the two are different operations for an
-// operator: the PUT replaces the set (what a form submit does), while removing one orphaned
-// credential must not require re-sending every other value — which the client cannot do, since
-// it never received them.
+// A per-KEY write beside the whole-set PUT. The set-replacing PUT is the API caller's operation
+// (declare the whole set in one call); a UI filling in a CHECKLIST edits one key at a time and
+// cannot use it, because it never received the other values: re-sending the set would mean
+// re-typing every secret, and sending only the edited key would delete the rest. The key is
+// held to the credential-key schema here, so a reserved name is refused before the store sees it.
+export const setCapabilityCredentialContract = defineApiContract({
+  method: 'put',
+  requestPathParamsSchema: withObjectKeys(v.object({ key: capabilityCredentialKeySchema })),
+  pathResolver: ({ key }) => `/capability-credentials/${key}`,
+  requestBodySchema: setCapabilityCredentialSchema,
+  responsesByStatusCode: { 200: capabilityCredentialsViewSchema, ...errorResponses },
+})
+
+// A per-KEY delete for the same reason, and the operation that makes an ORPHANED credential
+// removable at all: removing one stored key must not require re-sending every other value.
+// Deliberately LOOSE on the key (a bare string, not the credential-key schema the PUT holds):
+// what a delete targets is whatever is ALREADY STORED, and an orphan written before a rule
+// tightened (or under a rule a newer build added) must stay removable, or the invalid row is
+// exactly the one nothing can clean up.
 export const deleteCapabilityCredentialContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: keyParams,

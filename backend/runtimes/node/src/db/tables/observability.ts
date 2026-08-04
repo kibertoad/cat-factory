@@ -127,7 +127,7 @@ export const agentSearchQueries = telemetry.table(
 )
 
 // ---------------------------------------------------------------------------
-// Platform-operator observability projections (mirrors D1 migration 0078). Both are read by
+// Platform-operator observability projections (mirrors D1 migration 0079). Both are read by
 // the account-scoped dashboard rollups; see the D1 migration for the full rationale.
 // ---------------------------------------------------------------------------
 

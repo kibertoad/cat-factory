@@ -170,7 +170,7 @@ export class D1PlatformMetricsRepository implements PlatformMetricsRepository {
         // DO UPDATE, not DO NOTHING: the current day is still accruing, so each pass must
         // CORRECT its bucket rather than leave the first pass's partial count standing.
         // `failure_kind` is '' for a non-failed status because it is part of the primary key
-        // and SQLite does not treat two NULLs there as equal (see migration 0078).
+        // and SQLite does not treat two NULLs there as equal (see migration 0079).
         `INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
          SELECT workspace_id,
                 CAST(created_at / ? AS INTEGER) * ? AS day_start,
