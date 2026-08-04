@@ -379,9 +379,11 @@ export function customTaskTypeSection(context: AgentRunContext): string {
   const lines = ['', `## Task parameters (${custom.label})`, '']
   for (const field of custom.fields) {
     const label = field.label ?? field.key
-    const valueLines = field.value.split('\n')
+    // Split on either ending: a browser posts a textarea's newlines as CRLF, and a stray `\r` left
+    // mid-prompt is a character the model has to read past on every turn.
+    const valueLines = field.value.split(/\r?\n/)
     if (valueLines.length === 1) {
-      lines.push(`- ${label}: ${field.value}`)
+      lines.push(`- ${label}: ${valueLines[0]}`)
       continue
     }
     lines.push(`- ${label}:`)

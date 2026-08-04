@@ -66,6 +66,19 @@ describe('customTaskTypeSection', () => {
     expect(out).toContain('\n\nThese are the values this task was created with.')
   })
 
+  it('splits CRLF too, leaving no stray carriage return in the prompt', () => {
+    const out = customTaskTypeSection(
+      ctx({
+        customTaskType: {
+          ...PARAMS,
+          fields: [{ key: 'notes', label: 'Notes', value: 'One.\r\nTwo.' }],
+        },
+      }),
+    )
+    expect(out).toContain('- Notes:\n  One.\n  Two.')
+    expect(out).not.toContain('\r')
+  })
+
   // The regression bar for anything touching this fold: a run with no custom fields must render
   // exactly what it rendered before the fold existed, on every emit point.
   it('leaves a prompt without parameters byte-identical', () => {
