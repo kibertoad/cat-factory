@@ -52,7 +52,23 @@ test('creating a docs-refresh initiative auto-plans and spawns a decorated docum
   // Disable the default one-shot decision gate (so the analyst step doesn't park), and feed the
   // planner the plan above. Skip-interview preset + gate-less planning pipeline ⇒ nothing else to
   // drive: the run advances analyst → planner → committer on its own. Set BEFORE the run starts.
-  await setFakeProfile(request, workspaceId, { decisionOnSteps: [], initiativePlan: DOCS_PLAN })
+  //
+  // `confidence: 0.2` is what makes the assertion below observable at all, and it is not a
+  // timing knob. `pl_document_quick` ends in a `merger`, so at the default (high) confidence the
+  // spawned task AUTO-MERGES and lands `done`, and a `done` task deliberately renders NO card
+  // (see `DraggableTask`: a merged task stops being a unit of work). The spawned run is entirely
+  // unattended and faster than the coarse, debounced board refresh that is the ONLY delivery
+  // path for a spawned block, so whether the card was ever painted came down to which of the two
+  // won, and CI lost it. A severe merger assessment instead raises `merge_review` and settles the
+  // task at `pr_ready`: a TERMINAL state whose card stays on the board, so the decoration this
+  // spec is about can be asserted on state that no longer moves. Confidence only shapes the
+  // merger, so the planning run itself is unaffected (its committer leaves the initiative block
+  // `in_progress` either way).
+  await setFakeProfile(request, workspaceId, {
+    decisionOnSteps: [],
+    initiativePlan: DOCS_PLAN,
+    confidence: 0.2,
+  })
 
   // Create the initiative from the built-in docs-refresh preset. Its anchor card arrives on the
   // board live via `initiative-added` (a fresh workspace has exactly one initiative card).
@@ -75,7 +91,14 @@ test('creating a docs-refresh initiative auto-plans and spawns a decorated docum
   // spawn-with-decoration: the loop spawns the readme item as a first-class DOCUMENT task (the
   // preset's `seedPlan` stamped `taskType: 'document'`), which lands on the board live. The seed
   // has no document tasks, so this locator is unique to the spawned, decorated task.
-  await expect(page.locator('[data-testid="task-card"][data-task-type="document"]')).toBeVisible({
+  const documentTask = page.locator('[data-testid="task-card"][data-task-type="document"]')
+  await expect(documentTask).toBeVisible({ timeout: RUN_TERMINAL_TIMEOUT })
+
+  // The other half of the decoration: the item was routed to `pl_document_quick`, whose merger
+  // declines the auto-merge at this confidence and parks the task at `pr_ready`. Asserting that
+  // settled status proves the spawned task ran the DECORATED pipeline through to its end, not
+  // merely that some card carrying the right `taskType` appeared.
+  await expect(documentTask).toHaveAttribute('data-status', 'pr_ready', {
     timeout: RUN_TERMINAL_TIMEOUT,
   })
 })

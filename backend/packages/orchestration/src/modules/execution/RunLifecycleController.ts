@@ -8,7 +8,6 @@ import type {
   ExecutionRepository,
   IdGenerator,
   Logger,
-  PipelineRepository,
   PipelineStep,
   SubscriptionActivationRepository,
   WorkRunner,
@@ -24,6 +23,7 @@ import {
 } from '@cat-factory/kernel'
 import { companionFor } from '@cat-factory/agents'
 import { DEFAULT_COMPANION_MAX_ATTEMPTS, pipelineHasVisualStep } from '@cat-factory/contracts'
+import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import { isTesterKind } from './ci.logic.js'
 import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp.logic.js'
@@ -50,7 +50,14 @@ export interface RunLifecycleDeps {
   events: ExecutionEventPublisher
   executionRepository: ExecutionRepository
   idGenerator: IdGenerator
-  pipelineRepository: PipelineRepository
+  /**
+   * Resolves a run's pipeline id against the workspace, ADOPTING a catalog built-in the board was
+   * never seeded with (see `pipelines/pipelineAdoption.ts`). This controller's ONLY pipeline read,
+   * which is why it no longer takes the repository. Required rather than optional: a reusable
+   * operation pins its pipeline by id, so a missing collaborator here does not degrade, it 404s
+   * the very runs the pin exists to launch.
+   */
+  pipelineAdoption: PipelineAdoption
   runStateMachine: RunStateMachine
   workRunner: WorkRunner
   subscriptionActivations?: SubscriptionActivationRepository
@@ -111,8 +118,11 @@ export class RunLifecycleController {
     const { initiatedBy, activate, origin = 'manual', intakeOrigin, gatesOverride } = options
     await this.deps.requireWorkspace(workspaceId)
     const block = await this.deps.requireBlock(workspaceId, blockId)
+    // Adopts a catalog built-in this board was never seeded with, so a task whose type PINS one
+    // (a reusable operation) is runnable on a board older than the operation. `assertFound` still
+    // 404s an id that is neither stored nor in the live catalog.
     const pipeline = assertFound(
-      await this.deps.pipelineRepository.get(workspaceId, pipelineId),
+      await this.deps.pipelineAdoption.adoptForRun(workspaceId, pipelineId),
       'Pipeline',
       pipelineId,
     )

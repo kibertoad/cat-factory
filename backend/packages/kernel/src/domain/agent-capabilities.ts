@@ -140,6 +140,20 @@ export interface McpSecretRef {
    * agent was told it does not have. Set false for a genuinely optional credential.
    */
   required?: boolean
+  /**
+   * One line telling the OPERATOR what value to put here and where to get it (a vendor's token
+   * page, the scopes it needs). Rendered beside the key in the capability-credential checklist.
+   *
+   * The checklist can only ever say what the DECLARATION says. Without this it names a variable
+   * and the capability that wants it, which for a house server the operator wrote is enough and
+   * for `SLACK_MCP_TOKEN` is not: nothing on the surface says whether that is a bot token, a user
+   * token, or which scopes it needs, so the operator goes back to the deployment's source — the
+   * exact trip the checklist exists to remove. The generative-integration half of this vocabulary
+   * has carried the field since it landed; a tool server's credential simply had nowhere to put it.
+   *
+   * Non-secret and operator-facing: it is rendered in the SPA, so it must name no value.
+   */
+  usage?: string
 }
 
 /**
@@ -424,11 +438,40 @@ export function isValidMcpToolName(name: string): boolean {
  * CLI inside the run container rather than by the backend.
  */
 export function isAllowedMcpHttpUrl(raw: string): boolean {
+  const parsed = parseMcpHttpUrl(raw)
+  if (!parsed) return false
+  return parsed.scheme === 'https' || isLoopbackHost(parsed.host)
+}
+
+/**
+ * Whether an HTTP tool server's URL names LOOPBACK — a server running beside the agent, inside the
+ * run container.
+ *
+ * Its own exported predicate because "allowed" and "loopback" answer different questions and only
+ * one caller wants the second. The OPERABILITY PROBE cannot reach a loopback endpoint meaningfully:
+ * the backend's `127.0.0.1` is a different machine from the container's, so a probe would report on
+ * whatever happens to listen on the backend's own port, and a SUCCESS there is the more misleading
+ * of the two outcomes. So the probe refuses such a server by name rather than attempting it.
+ *
+ * True for an `https` loopback url too. The scheme is what {@link isAllowedMcpHttpUrl} rules on;
+ * where the server LIVES is this question, and a sidecar with a self-signed certificate is no more
+ * reachable from the backend than a cleartext one.
+ */
+export function isLoopbackMcpHttpUrl(raw: string): boolean {
+  const parsed = parseMcpHttpUrl(raw)
+  return parsed ? isLoopbackHost(parsed.host) : false
+}
+
+/**
+ * Split an http(s) URL into its scheme and bare host, or undefined when it is neither.
+ *
+ * Hand-parsed rather than handed to `new URL`, because the userinfo rule is the whole point: strip it
+ * FIRST and from the LAST `@`, or `http://127.0.0.1@evil.example` reads as loopback while the request
+ * goes to evil.example.
+ */
+function parseMcpHttpUrl(raw: string): { scheme: string; host: string } | undefined {
   const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
-  if (!match) return false
-  if (match[1]!.toLowerCase() === 'https') return true
-  // Plain http from here: the host must be loopback. Strip userinfo FIRST and from the LAST `@`,
-  // or `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example.
+  if (!match) return undefined
   const authority = match[2]!
   const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
   const closingBracket = hostPort.indexOf(']')
@@ -437,5 +480,9 @@ export function isAllowedMcpHttpUrl(raw: string): boolean {
       ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
       : (hostPort.split(':')[0] ?? '')
   ).toLowerCase()
+  return { scheme: match[1]!.toLowerCase(), host }
+}
+
+function isLoopbackHost(host: string): boolean {
   return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }

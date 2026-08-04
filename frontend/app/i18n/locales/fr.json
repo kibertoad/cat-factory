@@ -2842,6 +2842,48 @@
         "removeFailed": "Impossible de supprimer l'entrée du registre"
       }
     },
+    "toolServers": {
+      "heading": "Serveurs d’outils (MCP)",
+      "intro": "Les serveurs MCP que ce déploiement enregistre pour ses agents. Tester un serveur résout les identifiants de ce tableau et parle le protocole avec lui : le résultat est donc celui qu’obtiendrait une exécution.",
+      "transport": {
+        "stdio": "Dans le conteneur",
+        "http": "Distant"
+      },
+      "declaredBy": "Attribué à : {kinds}",
+      "declaredByNone": "Aucun agent ne reçoit ce serveur, donc aucune exécution ne le démarrera.",
+      "servableHarnesses": "Fonctionne avec : {harnesses}",
+      "servableHarnessesNone": "Aucune CLI d’agent ne peut servir ce transport, donc ce serveur ne s’applique à aucune exécution.",
+      "allowedTools": "Restreint à : {tools}",
+      "credentials": "Identifiants : {keys}",
+      "test": "Tester",
+      "notProbeable": {
+        "stdio": "Il s’exécute dans le conteneur de l’agent et ne peut donc pas être testé d’ici.",
+        "containerLocal": "Il écoute à côté de l’agent, dans son propre conteneur, qui n’est pas joignable d’ici.",
+        "urlNotAllowed": "Cette adresse n’est pas autorisée pour un serveur d’outils (https, ou http simple sur localhost uniquement)."
+      },
+      "status": {
+        "ok": "A répondu",
+        "credentialsMissing": "Aucun identifiant",
+        "credentialRefused": "Identifiant refusé",
+        "unreachable": "Aucune réponse",
+        "httpError": "Requête rejetée",
+        "protocolError": "Pas un serveur MCP",
+        "notProbeable": "Non testable d’ici"
+      },
+      "okDetail": "{name} {version}, protocole {protocol}, {count} outils.",
+      "toolsIncomplete": "Le serveur expose plus d’outils qu’un test n’en lit : ce nombre est donc un minimum.",
+      "unmatchedTools": "Ce serveur n’expose aucun outil nommé {tools} : l’agent se voit donc annoncer un outil qu’il ne peut pas appeler.",
+      "allowedToolsUnchecked": "La liste d’outils était trop longue pour être lue en entier, les noms restreints n’ont donc pas pu être vérifiés.",
+      "unresolvedCredentials": "Rien n’a été résolu pour {keys}. Renseignez la valeur ci-dessous, ou définissez-la dans l’environnement du déploiement.",
+      "refusedCredentials": "{keys} désigne une variable qui appartient à la configuration de la plateforme elle-même : elle n’est jamais résolue. Modifiez la déclaration dans le code du déploiement.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Afficher les détails",
+      "hideDetails": "Masquer les détails",
+      "toast": {
+        "loadFailed": "Impossible de charger les serveurs d’outils",
+        "probeFailed": "Impossible de tester le serveur d’outils"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Identifiants des capacités",
       "intro": "Les secrets que les serveurs d'outils et les intégrations génératives de ce déploiement réclament par leur nom. Les valeurs ne sont enregistrées que pour ce tableau, chiffrées au repos, et remises directement au processus de l'agent : elles n'apparaissent ni dans un prompt ni dans un journal. Les valeurs sont en écriture seule, une valeur enregistrée se remplace donc en en saisissant une nouvelle et n'est jamais relue.",

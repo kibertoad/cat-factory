@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2 and 3 landed.** Source: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3 and 4 landed.** Source: the 2026-08-04 review of both MCP
 surfaces.
 
 ## Goal
@@ -100,25 +100,31 @@ dump and never uses the word MCP).
       reach `/api/v1` through `http/loopback.ts` under the CALLER's forwarded key, so nothing is
       reachable there that the same key could not reach with `curl`. The three decisions the slice
       owed, and the two things it turned out not to need, are below.
-- [ ] **4. Tool-server operability.** A probe seam that speaks `initialize` + `tools/list` to a
-      declared server, surfaced as the same `/test` shape every neighbouring connection type has,
-      plus a Test button beside the capability-credential checklist. The probe is also the first
-      thing that can validate `allowedTools` names against reality (today a typo narrows the
-      allow-list to a pattern matching nothing while the prompt still advertises the name).
-      Dispatch telemetry starts recording what the CLI actually reached (server started, N tools)
-      on a typed snapshot field instead of the raw `extras` dump the SPA renders, and an
-      unavailable server becomes a stated chip on the run surface rather than a line only the
-      agent's own prompt and a backend warn ever see. A body-level capability handshake closes
-      the blind-run case the harness CHANGELOG documents (a runner-pool image older than the
-      backend parses the body without `mcpServers` and runs with the prompt still promising
-      tools). `McpSecretRef` gains the `usage` note the checklist contract already carries but
-      the tool-server branch never populates. And the job-body observation seam
-      ([capability-credential-store.md](./capability-credential-store.md) slice 3, re-scoped
-      there as exactly this) lands here, giving tool servers their first cross-runtime
-      conformance assertion. Operator docs close the loop: a "add the Slack MCP server" runbook
-      with a worked example beyond `org-advisories`, and the `MCP_*` naming convention documented
-      in `docs/environment-variables.md` where operators actually look.
-- [ ] **5. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
+- [x] **4. Tool-server operability: the PROBE.** The half of the original slice 4 that answers
+      "does this declared server actually work". Split from the run-surface half below because they
+      are two properties settled from two different sources (a live request now, versus what a past
+      run recorded), and because one PR carrying both would have been twice the reviewable size.
+      Landed: `GET /workspaces/:ws/tool-servers` (the inventory, which existed in no form at all) and
+      `POST /workspaces/:ws/tool-servers/:id/test`, both `secrets.manage`-gated INCLUDING the read; a
+      hand-rolled Streamable-HTTP client; the `allowedTools` reconciliation, gated on a COMPLETE tool
+      list so a paginated tail cannot make a working tool read as missing; `McpSecretRef.usage`,
+      declared in kernel and populated into the checklist the contract already had a field for; the
+      Test button and the inventory rendered above the credential checklist; and the operator docs
+      (the Slack runbook, the `MCP_*` convention). Its four decisions are below.
+- [ ] **5. Run-surface observability for tool servers.** The other half: what a RUN did, as opposed
+      to what a probe can ask now. Dispatch telemetry starts recording what the CLI actually reached
+      (server started, N tools) on a typed snapshot field instead of the raw `extras` dump the SPA
+      renders, and an unavailable server becomes a stated chip on the run surface rather than a line
+      only the agent's own prompt and a backend warn ever see. A body-level capability handshake
+      closes the blind-run case the harness CHANGELOG documents (a runner-pool image older than the
+      backend parses the body without `mcpServers` and runs with the prompt still promising tools);
+      that is a second image bump. And the job-body observation seam
+      ([capability-credential-store.md](./capability-credential-store.md) slice 3, re-scoped there as
+      exactly this) lands here, giving tool servers their first cross-runtime conformance assertion.
+      It comes AFTER the probe on purpose: the chip and the snapshot field both need a wire vocabulary
+      for a tool server, and slice 4 is where that vocabulary now exists (`@cat-factory/contracts`'s
+      `tool-servers.ts`), so this slice extends one rather than inventing a second.
+- [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
       enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
       the word MCP (i18n). Registration stays code-first on purpose: the deployment declares WHAT
@@ -126,14 +132,14 @@ dump and never uses the word MCP).
       and supplies values, so the trust boundary does not move. Capability credentials join the
       public API in the same slice, so provisioning stops being SPA-only. This supersedes ADR
       0029's "no per-workspace tool-server UI" non-goal, already half-stale since the credential
-      store landed; the ADR's consequences section is updated in the same PR.
-- [ ] **6. OAuth, both directions.** Consuming: authorization-code + refresh for remote `http`
+      store landed and now further so, since slice 4 gave the SPA a read-only tool-server surface; the ADR's consequences section is updated in the same PR.
+- [ ] **7. OAuth, both directions.** Consuming: authorization-code + refresh for remote `http`
       servers, tokens sealed in the per-workspace capability-credential store, the grant flow in
       the same panel. This is the biggest capability unlock on the consuming side: the modern
       vendor MCP ecosystem is OAuth-first, and a static env var or header template cannot reach
       it. Serving: the MCP authorization spec on the hosted endpoint (resource metadata; dynamic
       client registration as scoped), so a host connects without a long-lived key in plaintext
-      config. Deliberately last: the consuming half wants slice 5's per-workspace surface for
+      config. Deliberately last: the consuming half wants slice 6's per-workspace surface for
       grants, and the serving half needs slice 3's endpoint to exist.
 
 ## Findings inventory
@@ -151,22 +157,24 @@ carries it; "done" means that slice has landed.
 | Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1 (done)                |
 | `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2 (done)                |
 | No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2 (done)                |
-| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
+| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 7   |
 | Tool filtering is group-coarse, startup-only                                      | Slice 2 (done)                |
 | Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2 (done)                |
 | `destructiveHint` unset on the four spending tools                                | Slice 2 (done)                |
 | `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2 (done)                |
-| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
-| No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                       |
-| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                       |
-| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                       |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 4                       |
-| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                       |
-| Capability credentials absent from the public API                                 | Slice 5                       |
-| No OAuth for remote tool servers                                                  | Slice 6                       |
-| No MCP authorization on the serving side                                          | Slice 6                       |
+| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3 (done)                |
+| No probe/health check; `allowedTools` never checked against reality               | Slice 4 (done)                |
+| No inventory: a registration attached to no kind is invisible                     | Slice 4 (done)                |
+| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4 (done)                |
+| The credential checklist's READ was documented as gated and was not               | Slice 4 (done)                |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5                       |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5                       |
+| Older harness image silently drops `mcpServers` (blind run)                       | Slice 5                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 5                       |
+| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
+| Capability credentials absent from the public API                                 | Slice 6                       |
+| No OAuth for remote tool servers                                                  | Slice 7                       |
+| No MCP authorization on the serving side                                          | Slice 7                       |
 | `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
 | No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
 | Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)           |
@@ -218,7 +226,11 @@ Recorded so the next iteration does not re-propose them.
 - **`registry.all()` walks are in more places than validation.** Slice 1 fixed the two found (boot
   validation, the credential checklist) and introduced
   `AgentKindRegistry.kindsWithCapabilities()`; anything new that enumerates "kinds with
-  capabilities" must use it, or the same hole reopens.
+  capabilities" must use it, or the same hole reopens. Slice 4 added its COMPLEMENT,
+  `allToolServers()`, for the one question that walk cannot answer: which registrations no kind
+  declares at all.
+- **Slice 4's harness edits: there were none.** The probe is entirely backend, so no image bump. That
+  is not a general property of this initiative, and slice 5's handshake is where the next one lands.
 - **A new unavailability reason owes prose in `UNAVAILABLE_REASONS`** (the exhaustive `Record` in
   `prompts/capabilities.ts`), phrased for the AGENT rather than an operator: it needs to know the
   tool is absent and that trying harder will not produce it. Two reasons deliberately render the
@@ -243,6 +255,125 @@ Recorded so the next iteration does not re-propose them.
   internal-first soft launch for an endpoint whose whole point is external callers. It carries that
   obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
   decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 4's five decisions
+
+- **The MCP client is hand-rolled, not `@modelcontextprotocol/sdk`'s.** The same argument slice 3
+  recorded about the serving side, pointed the other way: the backend's HTTP layer is typed against
+  the Web platform alone so it cannot break on workerd, and the SDK's client transport carries an
+  OAuth provider, a reconnecting SSE stream, resumption tokens and a zod-validated message layer,
+  every one of which a probe needs to NOT do. Three POSTs plus a body reader is smaller than the
+  adapter that would hold that machinery back, and it keeps the SDK out of a module every facade
+  bundles. What it deliberately KEEPS is what makes the answer trustworthy: both body shapes a
+  compliant server may answer with (JSON, or one SSE event), the `mcp-session-id` a server may mint
+  (and the DELETE that ends it, so a press of Test leaves no session behind), and redirects, each hop
+  re-validated against `isAllowedMcpHttpUrl`.
+- **A credential stops at the DECLARED ORIGIN, redirect or not.** Hand-rolling the redirect loop means
+  hand-rolling what a real client does at a hop, and the first draft of this got it exactly backwards:
+  it forwarded the credential headers on the reasoning that the agent's own client would. It would
+  not. The Web platform REMOVES `Authorization` when a redirect crosses origins (fetch's CORS
+  non-wildcard request-header rule), so an SDK client reaches a cross-origin hop unauthenticated and
+  answers 401 — meaning a forwarding probe both reports on a request no run makes and becomes the one
+  path that hands a workspace's token to whatever a hijacked or lapsed vendor host redirects to. So a
+  cross-origin hop is REFUSED while a credential is riding, naming the origin change, because the fix
+  is the declaration naming the final url and a stripped-credential 401 would name the token instead.
+  A server with no credential is followed across origins as usual: the rule is about the secret, not
+  about redirects. Same-origin hops (a versioned path) are the ordinary case and carry it.
+  **When you hand-roll a transport, check each divergence from the platform's own fetch semantics in
+  the direction of the SECRET**: the method rewrite is the other one here, and re-POSTing is right
+  because a GET to an MCP endpoint means "open the stream", so it is documented at the site rather
+  than left to read as an oversight.
+- **A `stdio` server and a loopback url are REFUSED BY NAME, never approximated.** The backend is not
+  the run container: a `stdio` server is a child of the harness inside it (and the Worker has no
+  process model at all), and the backend's `127.0.0.1` is a different machine from the container's. A
+  probe that reached for the nearest thing it could talk to would answer about the wrong process, and
+  a SUCCESS would be the more misleading of the two outcomes. So `not_probeable` carries its own
+  three-member reason vocabulary, because "nothing to fix, verify from a run" and "change the
+  declaration" are different instructions.
+- **The `allowedTools` verdict is WITHHELD when the tool list is a prefix.** `tools/list` is
+  paginated and the probe reads a bounded number of pages, so a name's absence from what came back is
+  not evidence of its absence from the server. Reporting it as unmatched would send an operator to
+  edit a correct declaration, which is worse than the silence the probe was built to end. Hence
+  `checked: false` beside an empty `unmatched`, and `toolCount` stated beside `toolsComplete` so a
+  count off a truncated read reads as the floor it is.
+- **The credential checklist's READ was not actually gated, and this slice fixed it.** Its
+  controller, the SPA's tab gate and the store's 403 branch all documented a `secrets.manage`-gated
+  read; the mount was `requireWorkspacePermission`, which passes GET/HEAD through by design, so every
+  member's GET was answered in full. The fix is a second, explicitly-named middleware
+  (`requireWorkspacePermissionIncludingReads`) rather than an option on the first, so the choice is
+  legible at the mount and a controller cannot acquire it by a default changing underneath it. Both
+  reads now carry a `defineWorkspaceRbacSuite` case, since the ordinary mount makes this failure
+  invisible to every existing assertion.
+
+## Gotchas slice 4 surfaced
+
+- **The probe needed the composed chain on the CONTAINER, which nothing read before.** Every other
+  consumer of `ToolSecretResolver` is an executor and is HANDED it; a probe is a read path, and a
+  probe resolving off the deployment's environment directly would report one tenant's working server
+  as every tenant's. So `ServerContainer.toolSecretResolver` joins `toolSecretEnvironmentFallback`
+  (resolver and description together, per the rule that surface already established) and both facade
+  coverage guards pin the new link. Absent, the probe answers `credentials_missing`, the same
+  disposition the dispatch path gives the same state, rather than succeeding against an endpoint it
+  reached unauthenticated.
+- **An orphan REGISTRATION is invisible to every other check, and needed a new enumerator.** Boot
+  validation reaches a definition THROUGH the kind that declares it, so `registerToolServer` with no
+  `assignToolServers` beside it passes every rule while its credentials sit in the operator's
+  checklist as keys no dispatch will ever ask for. `AgentKindRegistry.allToolServers()` is the
+  complement of `kindsWithCapabilities()`, and the inventory unions the two so such a server is
+  reported with an empty `declaredBy` rather than filtered out.
+- **A declared TARGET is a place a credential can legitimately be, in both transports.**
+  `isAllowedMcpHttpUrl` rules on the scheme and host only, so `https://user:token@mcp.example` is an
+  accepted declaration, and the inventory renders that url in a browser: it goes through
+  `stripUrlCredentials` first. A `stdio` command line carries `--api-key=…` just as easily and is the
+  likelier of the two for a deployment that has not found `secretKeys` yet, so the joined argv goes
+  through `redactSecrets`. Stored credential values are WRITE-ONLY, which is what makes this row the
+  one place on the surface where a pasted secret could be read back. The same reasoning covers the
+  probe's own error prose, scrubbed at the emit site because a fetch failure routinely echoes the
+  request url and a 4xx body from an auth proxy echoes tokens as a matter of routine — and PREVIEWED
+  there as well as scrubbed, because an auth proxy answers a 4xx with an HTML page and that string is
+  both rendered in a browser and logged.
+- **One deadline over three round trips also aborts the BODY, and that changes the cause.** The signal
+  handed to `fetch` errors the response stream too, so a server that answers 200 and then stalls
+  leaves a partial buffer behind — which read as `protocol_error` ("the url names something else") for
+  what is the plain slow endpoint `unreachable` is documented to cover. Every "the body yielded no
+  frame" path now checks `signal.aborted` FIRST (`bodyFailure`), and the deadline prose is authored
+  once so a rejected request and an aborted read cannot describe one expiry two ways. A hand-rolled
+  client that reports causes owes this check anywhere a partial read can be mistaken for a bad one.
+- **Two halves of one surface must resolve an id the SAME way.** An `McpServerDefinition` reaches the
+  surface from two places (a registry entry, a kind's inline declaration) and one id can name both, so
+  the list and the probe each having their own lookup meant the row could describe one endpoint while
+  the Test button probed another, both labelled with the id the operator recognises. There is now one
+  `resolveDeclaredToolServers` and both halves ask it.
+- **`isLoopbackMcpHttpUrl` is deliberately a SEPARATE predicate from `isAllowedMcpHttpUrl`.** They
+  answer different questions and only the probe wants the second: "may this url be dispatched" is
+  about the scheme, "does this server live beside the agent" is about the host, and an `https`
+  loopback sidecar is allowed and equally unreachable from here. Folding them would have made the
+  probe's refusal read as a policy rejection.
+- **The probe's protocol version is a literal, and drift is benign.** Negotiation belongs to the
+  SERVER: it answers with the requested version when it speaks it and with one of its own when it
+  does not, so a probe advertising something older than the spec's latest still completes a handshake,
+  and the version REPORTED is always the one the server chose. That is why it is not pinned against
+  the SDK's `LATEST_PROTOCOL_VERSION`: the pin would cost the backend a direct dependency on the SDK
+  to protect against a drift with no consequence.
+- **A `'*'` middleware mount in a routed Hono sub-app is NOT scoped to that controller, and CI is
+  what said so.** `app.route('/workspaces/:workspaceId', sub)` re-registers each of `sub`'s entries
+  under the prefix, so `sub.use('*', gate)` becomes `ALL /workspaces/:workspaceId/*` on the shared
+  app and matches every SIBLING controller's routes too; Hono then runs whichever matching entry was
+  registered first, which makes the blast radius depend on the order in `app.ts`. Every existing
+  admin controller mounts that way and it has stayed invisible because the gate lets GET through and
+  the siblings it can reach are all admin-tier. Gating READS turned it into an outage on the first
+  real run: `GET /workspaces/:ws/github/repos`, which a plain member may read, answered 403, and the
+  branch-protection RBAC test caught it. Both `IncludingReads` mounts now name their own patterns
+  (`/thing` AND `/thing/*` — Hono's `*` does not match the bare prefix), pinned by a controller test
+  that mounts a sibling route in the WORST order and asserts it stays open. **The pre-existing `'*'`
+  mounts are left alone deliberately**: they are latent rather than live, and un-leaking ~15
+  controllers would loosen authorization across the whole workspace surface, which needs its own
+  change and its own conformance work rather than a drive-by in this slice.
+- **The tab is earned by EITHER surface now.** A tool server that declares no credential has no
+  checklist row, and gating the "Capability credentials" tab on the checklist alone would have left
+  exactly the server an operator most wants to test unreachable, while a credential belonging to a
+  generative integration has no tool-server row. Two questions, one tab, and neither list is a subset
+  of the other.
 
 ## Slice 3's three decisions, and the two it did not need
 
@@ -273,7 +404,7 @@ Recorded so the next iteration does not re-propose them.
 - **It did not need a deployment-wide filter.** The stdio filters exist because a stdio server is
   per-host; a hosted one is per-DEPLOYMENT, so the same knob would narrow what an already-scoped key
   may do for every caller at once, which is a break rather than a convenience. Per-workspace selection
-  is slice 5's job and has a tenant to attribute the decision to.
+  is slice 6's job and has a tenant to attribute the decision to.
 - **It did not need an OpenAPI entry, and must not have one.** A JSON-RPC endpoint has no operation
   shape to describe, and the generator's own rule (an `/api/v1` operation MUST have a
   `scripts/sdk/surface.mjs` entry) would mint an SDK method in four languages plus an MCP tool for the

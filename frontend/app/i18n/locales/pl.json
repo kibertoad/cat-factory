@@ -2842,6 +2842,48 @@
         "removeFailed": "Nie udało się usunąć wpisu rejestru"
       }
     },
+    "toolServers": {
+      "heading": "Serwery narzędzi (MCP)",
+      "intro": "Serwery MCP, które ta instalacja rejestruje dla swoich agentów. Test rozwiązuje dane uwierzytelniające tej tablicy i rozmawia z serwerem protokołem, więc wynik jest taki, jaki otrzymałby przebieg.",
+      "transport": {
+        "stdio": "W kontenerze",
+        "http": "Zdalny"
+      },
+      "declaredBy": "Przypisany do: {kinds}",
+      "declaredByNone": "Żaden agent nie otrzymuje tego serwera, więc żaden przebieg go nie uruchomi.",
+      "servableHarnesses": "Działa z: {harnesses}",
+      "servableHarnessesNone": "Żadne CLI agenta nie obsługuje tego transportu, więc ten serwer nie dotyczy żadnego przebiegu.",
+      "allowedTools": "Zawężone do: {tools}",
+      "credentials": "Dane uwierzytelniające: {keys}",
+      "test": "Testuj",
+      "notProbeable": {
+        "stdio": "Działa w kontenerze agenta, więc nie można go przetestować z tego miejsca.",
+        "containerLocal": "Nasłuchuje obok agenta w jego własnym kontenerze, który jest tu nieosiągalny.",
+        "urlNotAllowed": "Pod tym adresem serwer narzędzi nie może być osiągany (https albo zwykłe http tylko na localhost)."
+      },
+      "status": {
+        "ok": "Odpowiedział",
+        "credentialsMissing": "Brak danych uwierzytelniających",
+        "credentialRefused": "Dane uwierzytelniające odrzucone",
+        "unreachable": "Brak odpowiedzi",
+        "httpError": "Odrzucił żądanie",
+        "protocolError": "To nie serwer MCP",
+        "notProbeable": "Nie można testować z tego miejsca"
+      },
+      "okDetail": "{name} {version}, protokół {protocol}, {count} narzędzi.",
+      "toolsIncomplete": "Serwer ma więcej narzędzi, niż jeden test odczytuje, więc ta liczba to minimum.",
+      "unmatchedTools": "Ten serwer nie udostępnia narzędzia o nazwie {tools}, więc agent dowiaduje się o narzędziu, którego nie może wywołać.",
+      "allowedToolsUnchecked": "Lista narzędzi była zbyt długa, by odczytać ją w całości, więc zawężonych nazw nie dało się sprawdzić.",
+      "unresolvedCredentials": "Nic nie rozwiązano dla {keys}. Wpisz wartość poniżej albo ustaw ją w środowisku instalacji.",
+      "refusedCredentials": "{keys} nazywa zmienną należącą do konfiguracji samej platformy, więc nigdy nie jest rozwiązywana. Zmień deklarację w kodzie instalacji.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Pokaż szczegóły",
+      "hideDetails": "Ukryj szczegóły",
+      "toast": {
+        "loadFailed": "Nie udało się wczytać serwerów narzędzi",
+        "probeFailed": "Nie udało się przetestować serwera narzędzi"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Poświadczenia funkcji",
       "intro": "Sekrety, o które serwery narzędzi i integracje generatywne tego wdrożenia proszą po nazwie. Wartości są zapisywane tylko dla tej tablicy, szyfrowane w spoczynku i przekazywane wprost do procesu agenta: nigdy nie trafiają do promptu ani do logu. Wartości można tylko zapisywać, więc zapisaną zastępuje się, wpisując nową, i nigdy nie jest odczytywana.",

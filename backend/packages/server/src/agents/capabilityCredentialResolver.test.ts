@@ -3,6 +3,7 @@ import { createRecordingLogger } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildToolSecretChain,
+  toolSecretContainerFields,
   composeToolSecretResolvers,
   createWorkspaceToolSecretResolver,
   resetToolSecretChainReports,
@@ -199,5 +200,32 @@ describe('the composed capability-credential chain', () => {
     buildToolSecretChain(input)
     buildToolSecretChain(input)
     expect(logger.lines.filter((line) => line.level === 'error')).toHaveLength(1)
+  })
+})
+
+// The projection every facade surfaces the chain through. Both facades used to assemble the pair by
+// hand, which is the shape that lets the runtimes drift about it; this is the one function, so what
+// has to hold is that it keeps the resolver and the description TOGETHER and keeps the third state
+// of the description ABSENT rather than undefined.
+describe('toolSecretContainerFields', () => {
+  const resolver: ToolSecretResolver = { resolve: async () => ({}) }
+
+  it('carries the resolver and the description together', () => {
+    expect(toolSecretContainerFields({ resolver, environmentFallback: false })).toEqual({
+      toolSecretResolver: resolver,
+      toolSecretEnvironmentFallback: false,
+    })
+  })
+
+  it('OMITS the description a deployment’s own resolver made undescribable', () => {
+    // Absent, not present-and-undefined. The credential checklist renders THREE states off this
+    // (the environment may answer / it cannot / the chain cannot be described here), and a spread
+    // key holding `undefined` would make the third read as one of the first two — which sends an
+    // operator either hunting for a value that already resolves or leaving a blank row that never
+    // will. `exactOptionalPropertyTypes` is what makes the distinction load-bearing rather than
+    // cosmetic, so it is asserted on the KEY and not on the value.
+    const fields = toolSecretContainerFields({ resolver })
+    expect(Object.hasOwn(fields, 'toolSecretEnvironmentFallback')).toBe(false)
+    expect(fields.toolSecretResolver).toBe(resolver)
   })
 })

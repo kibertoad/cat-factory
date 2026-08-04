@@ -606,6 +606,48 @@
         "removeFailed": "Impossibile rimuovere la voce del registry"
       }
     },
+    "toolServers": {
+      "heading": "Server di strumenti (MCP)",
+      "intro": "I server MCP che questa installazione registra per i suoi agenti. Provarne uno risolve le credenziali di questa bacheca e parla il protocollo con il server, quindi il risultato è quello che otterrebbe un’esecuzione.",
+      "transport": {
+        "stdio": "Nel container",
+        "http": "Remoto"
+      },
+      "declaredBy": "Assegnato a: {kinds}",
+      "declaredByNone": "Nessun agente riceve questo server, quindi nessuna esecuzione lo avvierà.",
+      "servableHarnesses": "Funziona con: {harnesses}",
+      "servableHarnessesNone": "Nessuna CLI di agente può servire questo trasporto, quindi questo server non si applica a nessuna esecuzione.",
+      "allowedTools": "Limitato a: {tools}",
+      "credentials": "Credenziali: {keys}",
+      "test": "Prova",
+      "notProbeable": {
+        "stdio": "Gira dentro il container dell’agente, quindi non può essere provato da qui.",
+        "containerLocal": "Ascolta accanto all’agente nel suo container, che non è raggiungibile da qui.",
+        "urlNotAllowed": "Questo indirizzo non è consentito per un server di strumenti (https, oppure http semplice solo su localhost)."
+      },
+      "status": {
+        "ok": "Ha risposto",
+        "credentialsMissing": "Nessuna credenziale",
+        "credentialRefused": "Credenziale rifiutata",
+        "unreachable": "Nessuna risposta",
+        "httpError": "Richiesta respinta",
+        "protocolError": "Non è un server MCP",
+        "notProbeable": "Non provabile da qui"
+      },
+      "okDetail": "{name} {version}, protocollo {protocol}, {count} strumenti.",
+      "toolsIncomplete": "Il server ha più strumenti di quanti una prova ne legga, quindi questo numero è un minimo.",
+      "unmatchedTools": "Questo server non espone alcuno strumento chiamato {tools}, quindi all’agente viene annunciato uno strumento che non può invocare.",
+      "allowedToolsUnchecked": "L’elenco degli strumenti era troppo lungo per leggerlo tutto, quindi i nomi limitati non hanno potuto essere verificati.",
+      "unresolvedCredentials": "Nulla è stato risolto per {keys}. Inseriscilo qui sotto, oppure impostalo nell’ambiente dell’installazione.",
+      "refusedCredentials": "{keys} nomina una variabile che appartiene alla configurazione della piattaforma stessa, quindi non viene mai risolta. Modifica la dichiarazione nel codice dell’installazione.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Mostra dettagli",
+      "hideDetails": "Nascondi dettagli",
+      "toast": {
+        "loadFailed": "Impossibile caricare i server di strumenti",
+        "probeFailed": "Impossibile provare il server di strumenti"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Credenziali delle capacità",
       "intro": "I segreti che i server di strumenti e le integrazioni generative di questo deployment richiedono per nome. I valori vengono salvati solo per questa board, cifrati a riposo, e consegnati direttamente al processo dell'agente: non finiscono mai in un prompt né in un log. I valori sono di sola scrittura, quindi uno salvato si sostituisce digitandone uno nuovo e non viene mai riletto.",

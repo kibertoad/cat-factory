@@ -15,10 +15,11 @@
 //   - "Package registries" — the private npm registries a checkout installs from (formerly an
 //     Integrations-hub row). What a container can resolve its dependencies from is part of the
 //     execution environment, not an optional external system a workspace links in.
-//   - "Capability credentials" — the sealed per-workspace values behind the secrets a registered
-//     tool server (MCP) or generative binary integration declares. What an agent's tools
-//     authenticate as belongs beside where those agents run, and it is `secrets.manage`-only, so
-//     the tab is HIDDEN rather than disabled for anyone without that permission.
+//   - "Capability credentials" — the deployment's tool servers (MCP) with a Test button each, above
+//     the sealed per-workspace values behind the secrets a registered tool server or generative
+//     binary integration declares. What an agent's tools authenticate as belongs beside where those
+//     agents run, and it is `secrets.manage`-only (the READ included, since both halves name the
+//     deployment's credential keys), so the tab is HIDDEN rather than disabled for anyone else.
 // Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
@@ -43,6 +44,7 @@ const store = useProviderConnectionsStore()
 const auth = useAuthStore()
 const packageRegistries = usePackageRegistriesStore()
 const capabilityCredentials = useCapabilityCredentialsStore()
+const toolServers = useToolServersStore()
 const { canManageSecrets } = useWorkspaceAccess()
 
 const open = computed({
@@ -93,7 +95,14 @@ const tabs = computed(() =>
     // the backend gates the read too), and `hasSurface` hides a tab with nothing in it — the
     // panel is a checklist projected from the deployment's registered capabilities, so a build
     // that registers none has no credential to type.
-    capabilityCredentials: canManageSecrets.value && capabilityCredentials.hasSurface,
+    //
+    // EITHER surface earns the tab. A tool server that declares no credential has nothing on the
+    // checklist, and gating the tab on the checklist alone would leave the one server an operator
+    // most wants to test unreachable — while a credential whose capability is a generative
+    // integration has no tool-server row. Two questions, one tab, and neither is a subset of the
+    // other.
+    capabilityCredentials:
+      canManageSecrets.value && (capabilityCredentials.hasSurface || toolServers.hasSurface),
   }).map((value) => ({
     value,
     label: TAB_LABELS.value[value],
@@ -121,7 +130,10 @@ watch(
     // window must still open), reported by the panel, which can only do that once its tab exists.
     // Not probed at all without the permission — the backend would refuse it, and asking would
     // put a 403 in every member's console on every open.
-    if (canManageSecrets.value) void capabilityCredentials.ensureLoaded().catch(() => {})
+    if (canManageSecrets.value) {
+      void capabilityCredentials.ensureLoaded().catch(() => {})
+      void toolServers.ensureLoaded().catch(() => {})
+    }
     activeTab.value = openInfrastructureTab(tabValues.value, ui.infrastructureTab)
   },
   { immediate: true },

@@ -606,6 +606,48 @@
         "removeFailed": "Der Registry-Eintrag konnte nicht entfernt werden"
       }
     },
+    "toolServers": {
+      "heading": "Werkzeugserver (MCP)",
+      "intro": "Die MCP-Server, die diese Installation für ihre Agenten registriert. Ein Test löst die Zugangsdaten dieses Boards auf und spricht das Protokoll mit dem Server, das Ergebnis entspricht also dem, was ein Lauf erhält.",
+      "transport": {
+        "stdio": "Im Container",
+        "http": "Extern"
+      },
+      "declaredBy": "Zugewiesen an: {kinds}",
+      "declaredByNone": "Kein Agent erhält diesen Server, daher startet ihn kein Lauf.",
+      "servableHarnesses": "Läuft mit: {harnesses}",
+      "servableHarnessesNone": "Keine Agenten-CLI kann diesen Transport bedienen, daher greift dieser Server in keinem Lauf.",
+      "allowedTools": "Eingeschränkt auf: {tools}",
+      "credentials": "Zugangsdaten: {keys}",
+      "test": "Testen",
+      "notProbeable": {
+        "stdio": "Läuft im Container des Agenten und kann von hier aus nicht getestet werden.",
+        "containerLocal": "Lauscht neben dem Agenten in dessen eigenem Container, der von hier aus nicht erreichbar ist.",
+        "urlNotAllowed": "Unter dieser Adresse darf ein Werkzeugserver nicht erreicht werden (https oder einfaches http nur auf localhost)."
+      },
+      "status": {
+        "ok": "Hat geantwortet",
+        "credentialsMissing": "Keine Zugangsdaten",
+        "credentialRefused": "Zugangsdaten abgelehnt",
+        "unreachable": "Keine Antwort",
+        "httpError": "Anfrage abgewiesen",
+        "protocolError": "Kein MCP-Server",
+        "notProbeable": "Von hier nicht testbar"
+      },
+      "okDetail": "{name} {version}, Protokoll {protocol}, {count} Werkzeuge.",
+      "toolsIncomplete": "Der Server hat mehr Werkzeuge, als ein Test liest, diese Zahl ist also ein Mindestwert.",
+      "unmatchedTools": "Dieser Server bietet kein Werkzeug namens {tools}, dem Agenten wird also ein Werkzeug angekündigt, das er nicht aufrufen kann.",
+      "allowedToolsUnchecked": "Die Werkzeugliste war zu lang, um sie vollständig zu lesen, daher konnten die eingeschränkten Namen nicht geprüft werden.",
+      "unresolvedCredentials": "Für {keys} wurde nichts aufgelöst. Trage den Wert unten ein oder setze ihn in der Umgebung der Installation.",
+      "refusedCredentials": "{keys} benennt eine Variable, die zur Konfiguration der Plattform selbst gehört, und wird daher nie aufgelöst. Ändere die Deklaration im Code der Installation.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Details anzeigen",
+      "hideDetails": "Details verbergen",
+      "toast": {
+        "loadFailed": "Die Werkzeugserver konnten nicht geladen werden",
+        "probeFailed": "Der Werkzeugserver konnte nicht getestet werden"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Zugangsdaten für Fähigkeiten",
       "intro": "Die Secrets, die die Tool-Server und generativen Integrationen dieser Installation namentlich anfordern. Werte gelten nur für dieses Board, werden verschlüsselt gespeichert und direkt an den Prozess des Agenten übergeben: Sie erscheinen weder in einem Prompt noch in einem Log. Werte lassen sich nur schreiben, nie auslesen, ein gespeicherter Wert wird also durch Eingabe eines neuen ersetzt.",

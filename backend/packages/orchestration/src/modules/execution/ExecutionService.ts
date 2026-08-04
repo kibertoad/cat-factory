@@ -81,12 +81,7 @@ import type {
   BrainstormSession,
   BrainstormStage,
 } from '@cat-factory/kernel'
-import type {
-  BlockRepository,
-  ExecutionRepository,
-  PipelineRepository,
-  WorkspaceRepository,
-} from '@cat-factory/kernel'
+import type { BlockRepository, ExecutionRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
@@ -99,6 +94,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
+import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
 // The engine's injected-collaborator contract lives next door (a ~350-line declaration block
@@ -149,10 +145,39 @@ function buildPrReportController(
   })
 }
 
+/**
+ * The engine's logger, normalised. A helper rather than a `this.log` read, because a collaborator
+ * built mid-constructor captures the logger by VALUE into its own dependency literal, and `this.log`
+ * is assigned partway down: reading the field from a factory that runs before that line hands the
+ * collaborator `undefined` and turns its first best-effort warn into a `TypeError`. One normalisation
+ * site, reachable from anywhere in the construction sequence.
+ */
+function engineLogger(deps: ExecutionServiceDependencies): Logger {
+  return deps.logger ?? noopLogger
+}
+
+/**
+ * How a run resolves its pipeline: the workspace's stored row, else the catalog entry the board was
+ * never seeded with, ADOPTED so every other surface can see what ran
+ * (`pipelines/pipelineAdoption.ts`). A reusable operation pins its pipeline by id, so a board older
+ * than the registration would otherwise refuse to start a task it happily created.
+ *
+ * A sibling factory rather than an inline call for the reason {@link buildPrReportController} is
+ * one: the constructor is at its per-function line budget, and a budget is a split trigger.
+ */
+function buildPipelineAdoption(deps: ExecutionServiceDependencies): PipelineAdoption {
+  return createPipelineAdoption({
+    pipelineRepository: deps.pipelineRepository,
+    pipelineRegistry: deps.pipelineRegistry,
+    operationalMetrics: deps.operationalMetrics,
+    logger: deps.logger,
+  })
+}
+
 export class ExecutionService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
-  private readonly pipelineRepository: PipelineRepository
+  private readonly pipelineAdoption: PipelineAdoption
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
@@ -282,7 +307,6 @@ export class ExecutionService {
     const {
       workspaceRepository,
       blockRepository,
-      pipelineRepository,
       executionRepository,
       idGenerator,
       clock,
@@ -324,7 +348,7 @@ export class ExecutionService {
     const runInitiatorScopeFn = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
-    this.pipelineRepository = pipelineRepository
+    this.pipelineAdoption = buildPipelineAdoption(dependencies)
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
     this.clock = clock
@@ -367,7 +391,7 @@ export class ExecutionService {
     const runContext = buildRunContextAndAdmission(dependencies)
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
-    this.postMergeBoard = this.buildPostMergeBoard()
+    this.postMergeBoard = this.buildPostMergeBoard(dependencies)
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
@@ -466,7 +490,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
-    this.log = logger ?? noopLogger
+    this.log = engineLogger(dependencies)
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.stepDecisions = new StepDecisionController({
@@ -498,7 +522,7 @@ export class ExecutionService {
       events: this.events,
       executionRepository: this.executionRepository,
       idGenerator: this.idGenerator,
-      pipelineRepository: this.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       runStateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       workRunner: this.workRunner,
@@ -583,15 +607,19 @@ export class ExecutionService {
     })
   }
 
-  private buildPostMergeBoard(): PostMergeBoardController {
+  private buildPostMergeBoard(deps: ExecutionServiceDependencies): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
-    // structurally incompatible with the interface even from inside it.
+    // structurally incompatible with the interface even from inside it. The repository and the
+    // logger come off `deps` rather than off `this`, because this runs partway through the
+    // constructor: neither is an engine field by then (see {@link engineLogger}).
     const host: PostMergeBoardHost = {
       blockRepository: this.blockRepository,
-      pipelineRepository: this.pipelineRepository,
+      pipelineRepository: deps.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       admission: this.admission,
       board: this.board,
       events: this.events,
+      logger: engineLogger(deps),
     }
     return new PostMergeBoardController(host, {
       // A system-initiated auto-start has no human present to unlock a personal credential, so it
@@ -683,7 +711,11 @@ export class ExecutionService {
     hasPersonalSubscription: HasPersonalSubscription = () => false,
   ): Promise<SubscriptionVendor[]> {
     const block = await this.requireBlock(workspaceId, blockId)
-    const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
+    // Through adoption's READ-ONLY resolve, not the bare row: this runs on the start REQUEST, and a
+    // board that has not adopted the pipeline yet has no row, so a row-only read answered "no
+    // agent kinds" and the gate concluded the run needed no personal credential. It would then
+    // adopt and start ungated.
+    const pipeline = await this.pipelineAdoption.resolveDefinition(workspaceId, pipelineId)
     return this.resolveIndividualVendors(
       workspaceId,
       block.modelId,

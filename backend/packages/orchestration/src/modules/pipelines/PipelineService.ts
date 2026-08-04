@@ -15,6 +15,7 @@ import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
+  noopOperationalMetrics,
   retiredPipelines,
   seedPipelines,
   ValidationError,
@@ -28,6 +29,11 @@ import type {
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import {
+  adoptedCatalogRow,
+  createPipelineAdoption,
+  type PipelineAdoption,
+} from './pipelineAdoption.js'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
@@ -118,6 +124,7 @@ export class PipelineService {
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly agentKindRegistry?: AgentKindRegistry
   private readonly gateRegistry?: GateRegistry
+  private readonly adoption: PipelineAdoption
 
   constructor({
     workspaceRepository,
@@ -137,6 +144,15 @@ export class PipelineService {
     this.pipelineRegistry = pipelineRegistry
     this.agentKindRegistry = agentKindRegistry
     this.gateRegistry = gateRegistry
+    // The same collaborator the engine resolves runs through, so an admission read and the run it
+    // admits can never disagree about what a pipeline id means. `noopOperationalMetrics` rather
+    // than a threaded sink because this instance only ever answers the READ half: adoption's
+    // counter belongs to the write, which happens on the engine's own instance.
+    this.adoption = createPipelineAdoption({
+      pipelineRepository,
+      pipelineRegistry,
+      operationalMetrics: noopOperationalMetrics,
+    })
   }
 
   /**
@@ -172,21 +188,24 @@ export class PipelineService {
   }
 
   /**
-   * One pipeline by id, or null when the workspace has no such pipeline.
+   * The definition a run under this id WOULD use, or null when nothing defines it: the stored row,
+   * else the catalog built-in the workspace has not adopted yet (`pipelineAdoption`). Reads only.
    *
-   * The point-read behind a rule that only ever asks about ONE pipeline: the public API's start
-   * paths resolve a caller-supplied `pipelineId` before deciding whether to admit it, and did so by
-   * listing the workspace's whole catalog and filtering in JS. That is a full table read on the hot
-   * start path to answer a question the repository already indexes, and it grows with a workspace's
-   * catalog rather than with the request.
+   * This is what an ADMISSION check must ask, and asking the bare row instead is a real hole rather
+   * than a nicety. The public API's start paths resolve a caller-supplied `pipelineId` to decide
+   * whether to admit it, and a row-only read answers `null` for a pipeline `ExecutionService.start`
+   * then ADOPTS and runs: the decide-scope refusal was skipped for want of a pipeline to inspect,
+   * and a `write`-only key could set in motion exactly the parked run that scope exists to withhold.
+   * So admission and the run resolve through one answer, differing only in that this one never
+   * writes. (It replaced a `get` that returned the stored row; nothing wants that read any more.)
    *
    * Deliberately returns null rather than throwing, unlike the mutating paths that go through
    * `assertFound`: an unknown id is not this method's error to raise. Both callers hand the id on to
    * `ExecutionService.start`, which owns the "no such pipeline" refusal and its message.
    */
-  async get(workspaceId: string, id: string): Promise<Pipeline | null> {
+  async resolveForRun(workspaceId: string, id: string): Promise<Pipeline | null> {
     await this.requireWorkspace(workspaceId)
-    return this.pipelineRepository.get(workspaceId, id)
+    return this.adoption.resolveDefinition(workspaceId, id)
   }
 
   async create(workspaceId: string, input: CreatePipelineInput): Promise<Pipeline> {
@@ -440,14 +459,12 @@ export class PipelineService {
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const labels = existing?.labels ?? seed.labels
-    const pipeline: Pipeline = {
-      ...seed,
-      ...(labels && labels.length ? { labels } : { labels: undefined }),
-      ...(existing?.archived ? { archived: true } : { archived: undefined }),
-    }
+    const pipeline = adoptedCatalogRow(seed, existing)
+    // The absent branch goes through `insertIfAbsent` because it races the run path's adopt-on-
+    // start (and a second reseed): both write this same catalog row, so losing is a no-op rather
+    // than a duplicate-key 500 on whichever caller arrives second.
     if (existing) await this.pipelineRepository.update(workspaceId, pipeline)
-    else await this.pipelineRepository.insert(workspaceId, pipeline)
+    else await this.pipelineRepository.insertIfAbsent(workspaceId, pipeline)
     return pipeline
   }
 
