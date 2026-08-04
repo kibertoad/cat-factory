@@ -29,7 +29,11 @@ what the SPA reads and stays fully functional with no accounts, no store wired, 
 server row is a best-effort mirror. Both id lists are grow-only sets, UNIONED on both sides, because
 two browsers signed in as one person each hold a full copy and each write it back: a
 last-writer-wins replace on either side silently drops what the other learned. "Reset progress" is
-therefore a DELETE.
+therefore a DELETE. Each push carries the whole local state and reconciles the merged row it gets
+back, so a merge that lost a concurrent writer's ids re-pushes instead of waiting for a local change
+that may never come; a merge whose RESULT would exceed `MAX_TUTORIAL_TOUR_IDS` is refused with
+`details.reason: 'tutorial_progress_too_large'` rather than truncated, since the row rides every
+workspace snapshot.
 
 Three new operational counters (`tutorial.tour_started` / `_completed` / `_abandoned`, dimensioned
 by tour) answer the question the initiative could not answer about itself. They ride the existing

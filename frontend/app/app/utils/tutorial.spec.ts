@@ -8,6 +8,7 @@ import {
   newlyAvailableTour,
   nextTourAfter,
   readyTourIds,
+  resolveNudge,
   resolveTourCatalogue,
   resolveTours,
   sortTours,
@@ -294,6 +295,57 @@ describe('newlyAvailableTour', () => {
     )
     const offer = newlyAvailableTour({ catalogue, previouslyReady: new Set(), ...open })
     expect(offer?.id).toBe('earlier')
+  })
+})
+
+describe('resolveNudge', () => {
+  const entries = (...tours: TutorialTour[]) => resolveTourCatalogue(tours, gates(true))
+  const open = { declined: false, isCompleted: () => false, wasNudged: () => false }
+  const catalogue = entries(withSteps('a', [step('one')]), withSteps('b', [step('one')]))
+
+  it('seeds nothing and offers nothing before the board is up', () => {
+    // The bug this function exists to make impossible. Every board-state requirement reads a store
+    // the workspace snapshot fills, so BEFORE it lands nothing is ready — and a baseline taken
+    // then would make the hydration itself a transition, greeting every board load with an offer
+    // about a walkthrough that has been available for weeks.
+    expect(resolveNudge({ boardReady: false, catalogue, previouslyReady: null, ...open })).toEqual({
+      baseline: null,
+      offer: null,
+    })
+  })
+
+  it('seeds the standing state on the first resolution once the board is up, silently', () => {
+    const { baseline, offer } = resolveNudge({
+      boardReady: true,
+      catalogue,
+      previouslyReady: null,
+      ...open,
+    })
+    expect([...(baseline ?? [])]).toEqual(['a', 'b'])
+    expect(offer).toBeNull()
+  })
+
+  it('offers what crossed into ready once a baseline is held', () => {
+    const { baseline, offer } = resolveNudge({
+      boardReady: true,
+      catalogue,
+      previouslyReady: new Set(['a']),
+      ...open,
+    })
+    expect(offer?.id).toBe('b')
+    // Advanced even though it produced an offer, so a tour flickering ready → blocked → ready
+    // (which live run gates do) cannot re-offer itself.
+    expect([...(baseline ?? [])]).toEqual(['a', 'b'])
+  })
+
+  it('DISCARDS the baseline when the board goes away, so the next one re-seeds', () => {
+    // A board switch re-inits the workspace store, and the incoming board legitimately satisfies a
+    // different set of tours. Carrying the old baseline across would report every one of them as
+    // having just become takeable.
+    expect(
+      resolveNudge({ boardReady: false, catalogue, previouslyReady: new Set(['a']), ...open })
+        .baseline,
+    ).toBeNull()
   })
 })
 

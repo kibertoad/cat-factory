@@ -175,12 +175,13 @@ test.describe('the tutorial catalogue', () => {
     await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
 
     // Broken off past the first step, so the row now offers the position back — the whole
-    // reason a stray Esc is survivable.
+    // reason a stray Esc is survivable. The badge must read PAUSED specifically: a mere
+    // "a badge is present" assertion passes for `completed` too, and the difference between
+    // those two is exactly what decides whether the row offers Resume or Repeat.
     await page.getByTestId('nav-tutorial').click()
-    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toHaveText(
-      /completed/i,
-      { timeout: LIVE_TIMEOUT },
-    )
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toHaveText(/paused/i, {
+      timeout: LIVE_TIMEOUT,
+    })
 
     // ...and Reset really clears it, which is what makes this demoable to the next person.
     await page.getByTestId('tutorial-catalogue-reset').click()
@@ -224,26 +225,36 @@ test.describe('tutorial offers that come to the user', () => {
     await expect(page.getByTestId('tutorial-next-tour')).toBeHidden()
     await expect(page.getByTestId('tutorial-abridged')).toBeHidden()
 
-    // And the finished tour is recorded, which is what makes the handoff a course rather than a loop.
+    // And the finished tour is recorded as COMPLETED, which is what makes the handoff a course
+    // rather than a loop: taking the offer had to write the completion before launching the next.
     await tooltip.getByTestId('tutorial-skip').click()
     await page.getByTestId('nav-tutorial').click()
     await expect(page.getByTestId('tutorial-catalogue')).toBeVisible({ timeout: LIVE_TIMEOUT })
-    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toBeVisible({
-      timeout: LIVE_TIMEOUT,
-    })
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toHaveText(
+      /completed/i,
+      { timeout: LIVE_TIMEOUT },
+    )
   })
 
   test('raises the contextual offer when a run parks, with no reload', async ({
     page,
     request,
-    seededBoard,
   }) => {
     test.slow()
-    const { workspaceId } = seededBoard
+    // NOT the `seededBoard` fixture: it pre-answers the launch prompt with "no thanks", and a
+    // decline is the one state in which this mechanism deliberately says nothing at all ("no
+    // thanks" answered the question about guided tours, not about when it was asked). So this
+    // spec seeds its own board as a user who ACCEPTED, which is the returning user the
+    // contextual offer exists for.
+    const snapshot = await createSeededWorkspace(request)
+    const workspaceId = snapshot.workspace.id
+    await pinWorkspace(page, workspaceId, { tutorial: 'accepted' })
+    await openBoard(page)
     const pipeline = await createSimplePipeline(request, workspaceId)
 
-    // Nothing is waiting, so nothing has become newly takeable: the offer fires on a TRANSITION,
-    // and this asserts the seeded baseline does not itself trigger one.
+    // Nothing is waiting, so nothing has become newly takeable: the offer fires on a TRANSITION
+    // off a baseline seeded once the board is up, and this asserts that arriving on a board which
+    // already satisfies most of the catalog is not itself treated as a transition.
     await expect(page.getByTestId('tutorial-nudge')).toBeHidden()
 
     await startRun(request, workspaceId, 'task_login', pipeline.id)
@@ -251,9 +262,12 @@ test.describe('tutorial offers that come to the user', () => {
 
     // LIVE: the park flipped `answer-park` from blocked to ready, and the offer names it — the whole
     // point of the mechanism, since this is the tour whose window is transient and whose cost
-    // (a run parked indefinitely) is the one the tutorial exists to prevent.
+    // (a run parked indefinitely) is the one the tutorial exists to prevent. The TITLE is asserted,
+    // not just the card: an offer raised for whichever tour happened to be next would be the
+    // mechanism firing on a board load rather than on the moment.
     const nudge = page.getByTestId('tutorial-nudge')
     await expect(nudge).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(nudge).toContainText('Answer a waiting run')
     await nudge.getByTestId('tutorial-nudge-start').click()
     await expect(page.getByTestId('tutorial-tooltip')).toBeVisible({ timeout: LIVE_TIMEOUT })
     // Suppressed while a tour runs: the card would compete with the coach mark for the same

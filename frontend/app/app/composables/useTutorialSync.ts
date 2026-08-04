@@ -18,9 +18,17 @@ export function useTutorialServer() {
   const api = useApi()
 
   /**
-   * Push the local state to the server. The endpoint MERGES, so a retry, a racing write from
-   * another tab, and a stale copy are all harmless — which is what makes fire-and-forget correct
-   * here rather than merely convenient.
+   * Push the WHOLE local state to the server, and reconcile against what comes back.
+   *
+   * Whole state, never a delta, which is what makes fire-and-forget correct here rather than merely
+   * convenient: a retry, a racing tab and a stale copy are all the same well-formed write.
+   *
+   * The response is the merged row, and feeding it back through the store is what closes the one
+   * hole a merge with no revision guard leaves: two concurrent merges CAN lose a writer's ids (a
+   * union is idempotent under retry, not commutative under concurrency), and the answer then comes
+   * back missing something local, which flips `serverPushNeeded` on again and re-pushes. So the
+   * repair is automatic and bounded to one extra round, rather than waiting on a local change that
+   * may never come. `markServerPushed` runs FIRST for that reason: it has to be able to go back on.
    */
   function push() {
     void api
@@ -29,11 +37,16 @@ export function useTutorialServer() {
         completedTourIds: [...tutorial.completedTourIds],
         nudgedTourIds: [...tutorial.nudgedTourIds],
       })
-      .then(() => tutorial.markServerPushed())
+      .then((merged) => {
+        tutorial.markServerPushed()
+        tutorial.mergeServerProgress(merged)
+      })
       .catch(() => {
         // silent-catch-ok: the local store is authoritative for this session and the next board
         // load re-runs the whole reconciliation, so there is nothing to report and nothing a user
-        // could act on. (The SPA has no logger seam — see CLAUDE.md's silent-catch scope.)
+        // could act on. Deliberately NOT re-armed here either: a refusal (the merged row would
+        // exceed its cap) would otherwise retry forever. (The SPA has no logger seam — see
+        // CLAUDE.md's silent-catch scope.)
       })
   }
 
@@ -86,16 +99,15 @@ export function useTutorialSync() {
     { immediate: true },
   )
 
-  // Every later local change is mirrored. Watching the STATE rather than wrapping each action keeps
-  // this a single seam as the store grows: a new action that records a completion is covered by
-  // being a state change, where a hand-wired call per action is one more place to forget.
+  // Every later local change is mirrored. Watching the store's LOCAL revision counter rather than
+  // wrapping each action keeps this a single seam as the store grows (a new action that records a
+  // completion is covered by being a local change, where a hand-wired call per action is one more
+  // place to forget) — and rather than watching the STATE, because adopting the server's own ids in
+  // `mergeServerProgress` is a state change too, so that would post the server's row back at it on
+  // every fresh-browser board load. A reset bumps nothing on purpose: its server side is a DELETE.
   watch(
-    () => [tutorial.decision, tutorial.completedTourIds.length, tutorial.nudgedTourIds.length],
-    (_next, previous) => {
-      // Skip the watcher's own first run: nothing has changed yet, and pushing here would write
-      // this browser's copy before the snapshot has had a chance to bring the server's.
-      if (previous !== undefined) push()
-    },
+    () => tutorial.localRev,
+    () => push(),
   )
 
   /**
@@ -117,9 +129,7 @@ export function useTutorialSync() {
    */
   watch(
     () => [tutorial.activeTourId, tutorial.completedTourIds.length] as const,
-    ([activeId, completedCount], previous) => {
-      if (previous === undefined) return
-      const [previousId, previousCount] = previous
+    ([activeId, completedCount], [previousId, previousCount]) => {
       if (activeId === previousId) return
       if (previousId !== null) {
         const finished = completedCount > previousCount

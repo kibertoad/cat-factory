@@ -3,7 +3,10 @@ import { computed, ref } from 'vue'
 import { createTutorialPrompt } from '~/stores/tutorial.prompt'
 import { createTutorialRecord } from '~/stores/tutorial.record'
 
-export type { TutorialDecision } from '~/stores/tutorial.record'
+// `TutorialDecision` is deliberately NOT re-exported from here even though it used to live here:
+// both store modules are auto-import sources, so two exports of one name make Nuxt drop one of them
+// with a build warning. It is reachable unqualified anywhere in the layer, from `tutorial.record.ts`
+// where it is declared beside the state it describes.
 
 /**
  * The in-app tutorial state: the launch-prompt decision, per-tour completion, and the

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_TUTORIAL_TOUR_IDS } from '@cat-factory/contracts'
 import type { TutorialProgress } from '@cat-factory/contracts'
 import type { TutorialProgressRepository } from '@cat-factory/kernel'
 import { TutorialProgressService } from './TutorialProgressService.js'
@@ -60,6 +61,27 @@ describe('TutorialProgressService', () => {
     // Re-answering replaces: a decision is a preference, not an accumulating fact.
     expect((await svc.merge('u1', { decision: 'declined' })).decision).toBe('declined')
     expect((await svc.merge('u1', { decision: null })).decision).toBeNull()
+  })
+
+  it('refuses a merge whose RESULT would exceed the per-list cap', async () => {
+    // The wire schema caps each REQUEST, which bounds nothing about the stored row: a union of
+    // capped requests is uncapped. The row rides every workspace snapshot for this user, so an
+    // unbounded one is paid on every board load. Refused, not truncated, so a client bug reads as
+    // a refusal rather than as a tail that was never sent.
+    const { svc, rows } = service()
+    const ids = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => `tour-${from + i}`)
+    await svc.merge('u1', { completedTourIds: ids(0, MAX_TUTORIAL_TOUR_IDS) })
+    await expect(
+      svc.merge('u1', { completedTourIds: ids(MAX_TUTORIAL_TOUR_IDS, 1) }),
+    ).rejects.toMatchObject({ details: { reason: 'tutorial_progress_too_large' } })
+    // Refused as a whole: the stored row is exactly what the accepted write left.
+    expect(rows.get('u1')?.completedTourIds).toHaveLength(MAX_TUTORIAL_TOUR_IDS)
+    // The OTHER list is unaffected by its sibling being full, and re-sending what is already
+    // stored still succeeds — the cap is on the union, not on the request.
+    await expect(
+      svc.merge('u1', { completedTourIds: ids(0, 5), nudgedTourIds: ['answer-park'] }),
+    ).resolves.toMatchObject({ nudgedTourIds: ['answer-park'] })
   })
 
   it('resets by DELETING the row, not by writing defaults', async () => {

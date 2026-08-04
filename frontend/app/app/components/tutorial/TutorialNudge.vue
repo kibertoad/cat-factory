@@ -57,9 +57,14 @@ function take(tourId: string) {
     leave-active-class="motion-safe:transition motion-safe:duration-150"
     leave-to-class="opacity-0 translate-y-2"
   >
+    <!-- `end-4`, not `right-4`: the layer ships a RTL locale, so a physical side would pin this to
+         the wrong corner in Hebrew. `bottom-20` rather than `bottom-4` because `UApp`'s toaster
+         defaults to `bottom-right` and this card is PERSISTENT where a toast is transient, so the
+         card yields the lane rather than sitting under it. A tall toast stack can still reach up
+         this far, which is acceptable in a way the standing overlap was not: it clears itself. -->
     <div
       v-if="offered && !suppressed"
-      class="fixed right-4 bottom-4 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-2xl backdrop-blur"
+      class="fixed end-4 bottom-20 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-2xl backdrop-blur"
       role="status"
       aria-live="polite"
       data-testid="tutorial-nudge"

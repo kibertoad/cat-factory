@@ -43,28 +43,60 @@ export function createTutorialRecord() {
    * snapshot fan-out, which is synchronous and store-only. `useTutorialSync` watches it.
    */
   const serverPushNeeded = ref(false)
+  /**
+   * Counts LOCAL changes to this record, and nothing else. Session-lived.
+   *
+   * The mirror watches this rather than the state itself, and the distinction is the whole reason
+   * it exists: adopting the server's ids in {@link mergeServerProgress} also changes the state, so
+   * a watcher over the state pushes the server's own row straight back at it on every fresh-browser
+   * board load. Counting only what the USER did means a write happens exactly when this browser has
+   * something to say.
+   */
+  const localRev = ref(0)
+  /**
+   * The local `decision` has changed and has not been mirrored yet, so it must survive a snapshot.
+   *
+   * Without this, a failed mirror write silently UNDOES the user's answer: they click "No thanks",
+   * the push fails, and the next snapshot re-adopts the older `accepted` from the server row,
+   * re-arming every contextual offer they just declined. The server row wins on `decision` because
+   * it is the shared record of the latest answer, but only where this browser is not itself holding
+   * a newer one that the server has not seen.
+   */
+  const decisionDirty = ref(false)
 
   const isCompleted = (tourId: string) => completedTourIds.value.includes(tourId)
   const wasNudged = (tourId: string) => nudgedTourIds.value.includes(tourId)
 
   /** Record a finished walkthrough. Idempotent: the same tour taken twice is still one entry. */
   function markCompleted(tourId: string) {
-    if (!isCompleted(tourId)) completedTourIds.value = [...completedTourIds.value, tourId]
+    if (isCompleted(tourId)) return
+    completedTourIds.value = [...completedTourIds.value, tourId]
+    localRev.value += 1
   }
 
   /** Spend the contextual offer for a tour. Idempotent, so an offer can never be made twice. */
   function markNudged(tourId: string) {
-    if (!wasNudged(tourId)) nudgedTourIds.value = [...nudgedTourIds.value, tourId]
+    if (wasNudged(tourId)) return
+    nudgedTourIds.value = [...nudgedTourIds.value, tourId]
+    localRev.value += 1
+  }
+
+  /** Record an answer to the launch prompt, and ask the mirror to carry it. */
+  function answer(next: TutorialDecision) {
+    if (decision.value === next) return
+    decision.value = next
+    decisionDirty.value = true
+    localRev.value += 1
   }
 
   /** Starting a tour IS accepting the tutorial, however the user got there. */
   function acceptOffer() {
-    decision.value = 'accepted'
+    answer('accepted')
   }
 
   /** The explicit "no thanks": saved, so the launch prompt never auto-opens again. */
   function declineOffer() {
-    decision.value = 'declined'
+    answer('declined')
   }
 
   /**
@@ -74,14 +106,17 @@ export function createTutorialRecord() {
    * A union rather than a replace, in the same direction and for the same reason the server merges:
    * both lists are grow-only sets of things that HAPPENED, so neither side is ever right to un-say
    * one. A replace here would lose a tour finished while the mirror write was failing; a replace on
-   * the server would lose a tour finished on another machine. Only `decision` is taken from the
-   * server when it HAS one, because that is a preference someone re-answers rather than an
-   * accumulating fact, and the server row is the shared record of the latest answer — while a server
-   * row with no answer is not evidence that the local answer never happened.
+   * the server would lose a tour finished on another machine. `decision` is taken from the server
+   * when it HAS one and this browser is not holding an un-mirrored answer of its own
+   * ({@link decisionDirty}), because it is a preference someone re-answers rather than an
+   * accumulating fact — while a server row with no answer is not evidence that the local answer
+   * never happened.
    *
    * The return value closes the loop: `true` means this browser knows something the server does not,
    * so the merged state is worth pushing back. Recomputing that comparison at the call site would be
-   * a second copy of the union rule.
+   * a second copy of the union rule. It is also what makes the server's un-guarded merge safe: the
+   * PUT's response goes through here too, so a merge that lost a concurrent writer's ids comes back
+   * missing something local, and the re-push is automatic rather than hoped for.
    */
   function mergeServerProgress(remote: RemoteTutorialRecord | null): boolean {
     // No server copy at all (no accounts, no store wired, or the read degraded) is NOT a reason to
@@ -91,20 +126,28 @@ export function createTutorialRecord() {
     const union = (mine: string[], theirs: readonly string[]) => [...new Set([...theirs, ...mine])]
     const completed = union(completedTourIds.value, remote.completedTourIds)
     const nudged = union(nudgedTourIds.value, remote.nudgedTourIds)
+    const keepLocalDecision = decisionDirty.value || remote.decision === null
     const localOnly =
       completed.length > remote.completedTourIds.length ||
       nudged.length > remote.nudgedTourIds.length ||
-      (remote.decision === null && decision.value !== null)
+      (keepLocalDecision && decision.value !== remote.decision)
     completedTourIds.value = completed
     nudgedTourIds.value = nudged
-    if (remote.decision !== null) decision.value = remote.decision
+    if (!keepLocalDecision) decision.value = remote.decision
     if (localOnly) serverPushNeeded.value = true
     return localOnly
   }
 
-  /** The mirror has caught up; stop asking for a push. */
+  /**
+   * The mirror has caught up: this browser's state is on the server, including its answer.
+   *
+   * Called BEFORE the response is reconciled, so that a response missing something local can flip
+   * {@link serverPushNeeded} back on and re-trigger the watcher. Clearing it after would look
+   * identical and would swallow exactly the retry that matters.
+   */
   function markServerPushed() {
     serverPushNeeded.value = false
+    decisionDirty.value = false
   }
 
   /**
@@ -115,11 +158,18 @@ export function createTutorialRecord() {
    * the first-launch experience back, which a cleared completion list alone does not restore. The
    * spent contextual offers go too, or a board that has already run something would never make
    * those offers again to the colleague the app was just handed to.
+   *
+   * Deliberately does NOT bump {@link localRev}, and cancels any pending mirror write. The server
+   * side of a reset is a DELETE, and a PUT of the freshly-emptied state racing it would re-create
+   * the row the DELETE just removed — leaving "reset it" distinguishable from "never touched the
+   * tutorial", which is the one thing the reset has to get right.
    */
   function reset() {
     completedTourIds.value = []
     nudgedTourIds.value = []
     decision.value = null
+    serverPushNeeded.value = false
+    decisionDirty.value = false
   }
 
   return {
@@ -127,6 +177,7 @@ export function createTutorialRecord() {
     completedTourIds,
     nudgedTourIds,
     serverPushNeeded,
+    localRev,
     isCompleted,
     wasNudged,
     markCompleted,

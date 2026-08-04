@@ -224,20 +224,29 @@ earlier RESUMES. **Per-run overlay state resets with the script**, not by the co
 the handoff completes one tour and starts the next in ONE tick, so `touring` never goes false for a
 render and the finished tour's skips would otherwise be counted against the new one.
 
-**A CONTEXTUAL offer catches a tour becoming takeable** (`newlyAvailableTour` +
+**A CONTEXTUAL offer catches a tour becoming takeable** (`resolveNudge` over `newlyAvailableTour` +
 `useTutorialNudge` + `TutorialNudge.vue`): a corner card, not a modal, since the whole point is the
 moment. The trigger is deliberately not a per-surface hook — every tour already declares, as its
 `requires`, the predicate that means "you can take this now", so ONE rule over the resolved
 catalogue covers the catalog and inherits `navRequirementDrift` unchanged. Four rules bind it. It
-fires on a TRANSITION into `ready`, with the first resolution SEEDING the baseline and offering
-nothing (on the standing state it would greet every board load with an offer about a walkthrough
-available for weeks; the transition rule is also why the permission-gated platform tours, ready from
-the first render, never reach it). Only the launch-offer arc, for the same reason `offeredAtLaunch`
-exists. Never twice per tour (`nudgedTourIds`, persisted) and never after an explicit decline —
-"no thanks" answered the question about guided tours, not about when it was asked. And the offer is
-HELD rather than dropped while a tour or a tutorial window is up, because the two most valuable
-moments (a run parked, a run failed) routinely arrive then; it is marked spent when RAISED, so
-holding it cannot become nagging.
+fires on a TRANSITION into `ready`, never on the standing state, which would greet every board load
+with an offer about a walkthrough available for weeks. Only the launch-offer arc, for the same reason
+`offeredAtLaunch` exists. Never twice per tour (`nudgedTourIds`, persisted) and never after an
+explicit decline — "no thanks" answered the question about guided tours, not about when it was
+asked. And the offer is HELD rather than dropped while a tour or a tutorial window is up, because
+the two most valuable moments (a run parked, a run failed) routinely arrive then; it is marked spent
+when RAISED, so holding it cannot become nagging.
+
+**The BASELINE that transition is measured against is the subtle half, and it is seeded from a
+resolution taken once `workspace.ready` is set.** Every requirement that can newly become true is
+BOARD STATE, read off stores the workspace snapshot fills, so a baseline taken when the composable
+mounts records "nothing is takeable" and the board's own hydration then reads as a transition —
+which is the every-board-load greeting the transition rule exists to prevent, arriving through the
+mechanism meant to be its cure. `workspace.ready` is also re-set per board, which is what makes
+switching boards RE-SEED rather than offer everything the incoming board happens to satisfy. That
+whole three-state rule (not ready / ready with no baseline / ready with one) is pure in
+`resolveNudge`, so it is unit-tested rather than inferred from a watcher; the composable holds only
+the ref, because a pure function cannot.
 
 **The catalogue lists the tours it CANNOT start, and says what would unlock each.** That is the
 reason a tour's preconditions are declared (`TutorialRequirement`: an id, a copy key, and the
@@ -265,11 +274,22 @@ whether to appear against the merged state rather than this browser's copy alone
 grow-only sets and are UNIONED on BOTH sides, because two browsers signed in as one person each hold
 a full copy and each write it back: a last-writer-wins replace on either side silently drops what the
 other learned, and the symptom is a finished walkthrough going back to "not started" days later.
-Only `decision` is replaced (a preference, not an accumulating fact). "Reset progress" is therefore a
-DELETE, which is also why the catalogue calls `useTutorialServer` and not just the store — a local
-clear alone would be undone by the next snapshot re-merging the row. Every write is fire-and-forget:
-the endpoint merges, so a retry or a racing tab is harmless, and a failed mirror must cost a re-offer
-on another machine rather than the walkthrough someone is taking.
+Only `decision` is replaced (a preference, not an accumulating fact), and then only where this browser
+is not holding an answer the mirror has not carried yet: without that exception a failed push lets the
+next snapshot re-adopt the older server answer, so "No thanks" silently comes back as accepted and
+every contextual offer re-arms. "Reset progress" is a DELETE, which is also why the catalogue calls
+`useTutorialServer` and not just the store — a local clear alone would be undone by the next snapshot
+re-merging the row.
+
+Three rules make fire-and-forget honest rather than merely convenient. Every push carries the WHOLE
+local state, so a retry, a racing tab and a stale copy are all the same well-formed write. The
+RESPONSE (the merged row) is reconciled back through the store, which is what closes the hole the
+server's un-rev-guarded merge leaves: two concurrent merges can lose a writer's ids, because a union
+is idempotent under retry but not commutative under concurrency, and the loser's answer comes back
+missing something local and re-pushes automatically. And the mirror watches the store's LOCAL
+revision counter rather than its state, because adopting the server's own ids is a state change too:
+watching the state posts the server's row straight back at it on every fresh-browser board load, and
+a reset (whose server side is the DELETE) would race a push of the freshly-emptied state.
 
 **The funnel is counted** (`POST /tutorial/events` → the kernel `OperationalMetrics` counters
 `tutorial.tour_started` / `_completed` / `_abandoned`, dimensioned by tour). The events are DERIVED

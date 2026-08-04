@@ -95,6 +95,17 @@ standing state instead of the transition would greet every board load with an of
 walkthrough available for weeks; the transition rule also means the permission-gated platform tours,
 ready from the first render, never reach it at all.
 
+**Why the baseline is seeded from board READINESS and not from the first resolution.** A transition
+rule is only as good as what it is measured against, and this one was measured against nothing: the
+requirements that can newly become true are all board state, read off stores the workspace snapshot
+fills, so a baseline taken when the offer's watcher mounts records "nothing is takeable" and the
+board's own hydration reads as a transition. That is the every-board-load greeting the rule exists
+to prevent, arriving through the mechanism meant to be its cure, and the review that caught it also
+caught that the assembled test asserting otherwise could not fail (the fixture it used declines the
+tutorial, which switches the whole mechanism off). So the baseline is taken once `workspace.ready`
+is set, the three-state rule is pure in `resolveNudge` and unit-tested, and a board SWITCH discards
+the baseline rather than reporting everything the incoming board satisfies as newly available.
+
 **Why the failure path is part of the delivery loop.** `boardHasFinishedRun` deliberately excludes
 failures, because a result view and a merge control are not what a failed run renders. That left the
 state a first run reaches most often as the only one on the whole arc with no walkthrough, and it is
@@ -151,6 +162,23 @@ miss counts as an unexpected skip).
   contextual offer (raised, suppressed, then reloaded before it was shown) is lost rather than
   re-armed, because re-arming turns one missed moment into a prompt that keeps returning on a board
   whose gates flip constantly.
+- **The merge is NOT rev-guarded, which is a deliberate exception to the one-JSON-blob rule.** That
+  rule exists where the row IS the data and a lost update is data loss; this row is a mirror of a
+  client-authoritative store. A union is idempotent under RETRY but not commutative under
+  CONCURRENCY, so two simultaneous merges can still drop a writer's ids, and the exception is only
+  defensible because the repair is automatic: the response is the merged row, the client reconciles
+  against it, and an answer missing something local re-pushes. Anything that stops the client
+  reconciling the response turns this back into the bug the rule is about.
+- **A grow-only set needs a ceiling on the RESULT, not just on the request.** The wire schema caps
+  each write at `MAX_TUTORIAL_TOUR_IDS`, which bounds nothing about a row built from unioned writes,
+  and this row rides every workspace snapshot for its user, so the cost is paid per board load rather
+  than per write. Merges that would cross it are refused (`tutorial_progress_too_large`), not
+  truncated, because a real catalog is a few dozen ids and a silently dropped tail is
+  indistinguishable from a client that never sent one.
+- **`POST /tutorial/events` is bounded by sign-in and nothing else.** A signed-in user can inflate
+  the aggregate counts. What they cannot do is cost the operator's backend anything structural, since
+  the `tour` dimension is separately capped and nothing is stored or per-user. A throttle becomes
+  worth its complexity the moment these counters gate a decision instead of informing one.
 - **`offeredAtLaunch` still defaults to OFFERED**, so prompt crowding returns for a deployment
   shipping four tours of its own. That remains the right default (nothing may fall out of the offer
   by omission) and the contextual offer is the answer to it.

@@ -306,12 +306,12 @@ export function readyTourIds(catalogue: readonly TutorialCatalogueEntry[]): Set<
  * Three rules, and the first is the one that is easy to get wrong:
  *
  *  - It fires on a TRANSITION into `ready`, never on the standing state, which is why the caller
- *    must SEED `previouslyReady` from the first resolution without offering anything. Fired on
- *    the standing state it would nudge about everything already available on every board load,
- *    which is the launch prompt with none of its manners. The transition rule also means the
- *    permission-gated platform tours (ready from the first render on any board) naturally never
- *    reach it, and only the board-state tours — a run parked, a run failed, a PR ready to
- *    merge — can.
+ *    must SEED `previouslyReady` from a resolution taken once the board is UP (see
+ *    {@link resolveNudge}, which owns that half). Fired on the standing state it would nudge
+ *    about everything already available on every board load, which is the launch prompt with
+ *    none of its manners. The transition rule also means the permission-gated platform tours
+ *    (ready from the first render on any board) naturally never reach it, and only the
+ *    board-state tours — a run parked, a run failed, a PR ready to merge — can.
  *  - Only the launch-offer arc, for the reason `offeredAtLaunch` exists: a tour declared as
  *    reference material someone comes and gets is not one to interrupt them with. Reusing that
  *    declaration rather than inventing a second opt-out keeps a consumer deployment's tour
@@ -342,6 +342,48 @@ export function newlyAvailableTour(input: {
       !input.wasNudged(entry.tour.id),
   )
   return candidate?.tour ?? null
+}
+
+/**
+ * One step of the contextual offer's state machine: the baseline to carry forward, and the tour
+ * to offer (if any) from this resolution of the catalogue.
+ *
+ * Pure, and separate from {@link newlyAvailableTour}, because the BASELINE is the part that was
+ * wrong when this shipped and the part a reactive wrapper cannot be trusted with. A transition
+ * rule is only as good as what it is measured against, and the gates every tour's `requires`
+ * reads are BOARD STATE: they are all false until the workspace snapshot has been fanned out
+ * into the stores. So a baseline seeded from the first resolution after mount records "nothing is
+ * takeable", and the board's own hydration then reads as a transition — which turns the whole
+ * mechanism into exactly the every-board-load greeting the transition rule exists to prevent
+ * ("here is a walkthrough", about a run that finished a fortnight ago).
+ *
+ * Hence `boardReady`. Three states, and the third is why this is a function rather than an `if`:
+ *
+ *  - Board not up ⇒ no baseline and no offer. Also DISCARDS any baseline already held, so
+ *    switching boards re-seeds against the new board rather than treating everything the new
+ *    board happens to satisfy as something that just changed.
+ *  - Board up, no baseline yet ⇒ SEED it and offer nothing. This is the standing state, and
+ *    saying nothing about it is the whole point.
+ *  - Board up, baseline held ⇒ advance the baseline and offer whatever crossed into `ready`.
+ *
+ * The baseline advances on EVERY resolution, including ones that produce an offer, so a tour
+ * flickering ready → blocked → ready (which live run gates do) cannot re-offer itself.
+ */
+export function resolveNudge(input: {
+  boardReady: boolean
+  catalogue: readonly TutorialCatalogueEntry[]
+  previouslyReady: ReadonlySet<string> | null
+  declined: boolean
+  isCompleted: (tourId: string) => boolean
+  wasNudged: (tourId: string) => boolean
+}): { baseline: Set<string> | null; offer: TutorialTour | null } {
+  if (!input.boardReady) return { baseline: null, offer: null }
+  const baseline = readyTourIds(input.catalogue)
+  if (input.previouslyReady === null) return { baseline, offer: null }
+  return {
+    baseline,
+    offer: newlyAvailableTour({ ...input, previouslyReady: input.previouslyReady }),
+  }
 }
 
 /**

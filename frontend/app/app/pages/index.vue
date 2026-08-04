@@ -336,10 +336,11 @@ if (!tutorialOfferSettled()) {
 }
 // The CONTEXTUAL offer: a different mechanism from the launch one above, so it sits outside that
 // watcher's `settled` guard. It has no decision to settle and nothing to defer, because it fires
-// on a tour becoming TAKEABLE rather than on the app starting — which is also why it is
-// unconditional here rather than gated on the board being ready: the gates it reads are empty
-// until the board loads, so the first resolution is exactly the baseline it needs. It honours an
-// explicit decline itself (see `newlyAvailableTour`).
+// on a tour becoming TAKEABLE rather than on the app starting. It reads `workspace.ready` itself
+// rather than being gated here, because readiness is not a precondition for CALLING it but the
+// definition of its baseline: the gates it watches are board state, so a baseline taken before
+// the snapshot lands makes the board's own hydration look like a transition (see `resolveNudge`).
+// It honours an explicit decline itself, too (see `newlyAvailableTour`).
 useTutorialNudge()
 // The mirror to the signed-in user's server row (so progress follows the PERSON, not the browser)
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it

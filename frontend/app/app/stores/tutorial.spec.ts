@@ -385,6 +385,7 @@ describe('useTutorialStore server reconciliation', () => {
     // answer. A server row with no answer is not evidence that the local answer never happened.
     const tutorial = useTutorialStore()
     tutorial.decline()
+    tutorial.markServerPushed()
     tutorial.mergeServerProgress({
       decision: null,
       completedTourIds: [],
@@ -393,11 +394,34 @@ describe('useTutorialStore server reconciliation', () => {
     expect(tutorial.decision).toBe('declined')
     expect(tutorial.serverPushNeeded).toBe(true)
 
+    tutorial.markServerPushed()
     tutorial.mergeServerProgress({
       decision: 'accepted',
       completedTourIds: [],
       nudgedTourIds: [],
     })
+    expect(tutorial.decision).toBe('accepted')
+  })
+
+  it('holds an UN-MIRRORED local answer against the server, so a failed push cannot undo it', () => {
+    // The mirror is best-effort, so a decline can be sitting in this browser and nowhere else. If
+    // the snapshot re-adopted the older server answer, "No thanks" would silently come back as
+    // "accepted" and every contextual offer the user just declined would re-arm.
+    const tutorial = useTutorialStore()
+    tutorial.decline()
+    expect(
+      tutorial.mergeServerProgress({
+        decision: 'accepted',
+        completedTourIds: [],
+        nudgedTourIds: [],
+      }),
+    ).toBe(true)
+    expect(tutorial.decision).toBe('declined')
+
+    // Once the answer HAS been mirrored, the shared record is authoritative again: another machine
+    // re-answering is a real change, and this browser has nothing newer to defend.
+    tutorial.markServerPushed()
+    tutorial.mergeServerProgress({ decision: 'accepted', completedTourIds: [], nudgedTourIds: [] })
     expect(tutorial.decision).toBe('accepted')
   })
 
@@ -419,6 +443,67 @@ describe('useTutorialStore server reconciliation', () => {
     tutorial.mergeServerProgress({ decision: null, completedTourIds: [], nudgedTourIds: [] })
     expect(tutorial.serverPushNeeded).toBe(true)
     tutorial.markServerPushed()
+    expect(tutorial.serverPushNeeded).toBe(false)
+  })
+
+  it('re-arms the push when a merge RESPONSE comes back missing something local', () => {
+    // What makes the server's un-guarded merge safe. Two concurrent merges can lose one writer's
+    // ids, and the loser finds out because the response it gets back is a row without them. The
+    // ordering is the load-bearing part: the push is marked done FIRST, so re-arming flips the flag
+    // and re-triggers the mirror rather than being swallowed by a later clear.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    tutorial.markServerPushed()
+    expect(tutorial.serverPushNeeded).toBe(false)
+    tutorial.mergeServerProgress({
+      decision: 'accepted',
+      completedTourIds: ['first-task'],
+      nudgedTourIds: [],
+    })
+    expect(tutorial.serverPushNeeded).toBe(true)
+  })
+})
+
+describe('useTutorialStore local revision (what the mirror watches)', () => {
+  it('counts only what the USER did, never what the server told us', () => {
+    // The mirror watches this instead of the state, because adopting the server's own ids is a
+    // state change too: watching the state posts the server's row straight back at it on every
+    // fresh-browser board load.
+    const tutorial = useTutorialStore()
+    const before = tutorial.localRev
+    tutorial.mergeServerProgress({
+      decision: 'accepted',
+      completedTourIds: ['board-basics', 'first-task'],
+      nudgedTourIds: ['answer-park'],
+    })
+    expect(tutorial.completedTourIds).toEqual(['board-basics', 'first-task'])
+    expect(tutorial.localRev).toBe(before)
+
+    tutorial.startTour('run-task')
+    tutorial.completeTour()
+    expect(tutorial.localRev).toBeGreaterThan(before)
+  })
+
+  it('does not bump on a re-recorded completion, an unchanged answer, or a reset', () => {
+    const tutorial = useTutorialStore()
+    // Two real changes: the accept `startTour` writes, and the completion.
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    const settled = tutorial.localRev
+    expect(settled).toBe(2)
+
+    // Repeating the same tour changes nothing that is persisted: the answer is already 'accepted'
+    // and the completion is already recorded, so there is nothing for the mirror to carry.
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    expect(tutorial.localRev).toBe(settled)
+
+    // A reset's server side is a DELETE. A push of the freshly-emptied state racing it would
+    // re-create the row the DELETE removed, leaving "reset it" distinguishable from "never touched
+    // the tutorial" — the one thing the reset has to get right.
+    tutorial.resetProgress()
+    expect(tutorial.localRev).toBe(settled)
     expect(tutorial.serverPushNeeded).toBe(false)
   })
 })
