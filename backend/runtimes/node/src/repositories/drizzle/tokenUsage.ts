@@ -167,54 +167,14 @@ export class DrizzleTokenUsageRepository implements TokenUsageRepository {
     workspaceIds: string[],
     epochMs: number,
   ): Promise<Map<string, ScopedSpendWindow>> {
-    return this.meteredSpendByScope(tokenUsage.workspace_id, workspaceIds, epochMs)
+    return meteredSpendByScope(this.db, tokenUsage.workspace_id, workspaceIds, epochMs)
   }
 
   async meteredSpendByAccountSince(
     accountIds: string[],
     epochMs: number,
   ): Promise<Map<string, ScopedSpendWindow>> {
-    return this.meteredSpendByScope(tokenUsage.account_id, accountIds, epochMs)
-  }
-
-  /**
-   * One `GROUP BY` over the scope column for the whole id set, with the window's oldest row
-   * carried out beside the sum in the SAME pass (a second `MIN(created_at)` scan would double
-   * the sweep's cost for a column already in the aggregate).
-   */
-  private async meteredSpendByScope(
-    column: typeof tokenUsage.workspace_id | typeof tokenUsage.account_id,
-    ids: string[],
-    epochMs: number,
-  ): Promise<Map<string, ScopedSpendWindow>> {
-    const out = new Map<string, ScopedSpendWindow>()
-    if (ids.length === 0) return out
-    // ONE grouped read per chunk (never a per-scope point-read loop), matching the
-    // chunked-IN convention the board repository sets.
-    for (let i = 0; i < ids.length; i += 500) {
-      const rows = await this.db
-        .select({
-          key: column,
-          cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-          firstSeenAt: sql<string>`min(${tokenUsage.created_at})::bigint`,
-        })
-        .from(tokenUsage)
-        .where(
-          and(
-            inArray(column, ids.slice(i, i + 500)),
-            gte(tokenUsage.created_at, epochMs),
-            eq(tokenUsage.billing, 'metered'),
-          ),
-        )
-        .groupBy(column)
-      for (const row of rows) {
-        // A grouped row always has both a key and a `min()`; the guard is for the nullable
-        // account column, whose NULL group is a real row here and belongs to no account.
-        if (row.key == null || row.firstSeenAt == null) continue
-        out.set(row.key, { costEstimate: row.cost ?? 0, firstSeenAt: Number(row.firstSeenAt) })
-      }
-    }
-    return out
+    return meteredSpendByScope(this.db, tokenUsage.account_id, accountIds, epochMs)
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -224,4 +184,51 @@ export class DrizzleTokenUsageRepository implements TokenUsageRepository {
       .returning({ id: tokenUsage.id })
     return deleted.length
   }
+}
+
+/**
+ * One `GROUP BY` over the scope column for the whole id set, with the window's oldest row
+ * carried out beside the sum in the SAME pass (a second `MIN(created_at)` scan would double the
+ * sweep's cost for a column already in the aggregate).
+ *
+ * A module-level function rather than a private method deliberately: a `private` in TypeScript
+ * is still a public property on the prototype at runtime, so the mothership drift guard reflects
+ * it and demands it be classified as part of the machine-API surface. It is an implementation
+ * detail of the two port methods above and belongs in neither the allow-list nor the non-remote
+ * map, so it is kept off the prototype entirely.
+ */
+async function meteredSpendByScope(
+  db: DrizzleDb,
+  column: typeof tokenUsage.workspace_id | typeof tokenUsage.account_id,
+  ids: string[],
+  epochMs: number,
+): Promise<Map<string, ScopedSpendWindow>> {
+  const out = new Map<string, ScopedSpendWindow>()
+  if (ids.length === 0) return out
+  // ONE grouped read per chunk (never a per-scope point-read loop), matching the chunked-IN
+  // convention the board repository sets.
+  for (let i = 0; i < ids.length; i += 500) {
+    const rows = await db
+      .select({
+        key: column,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+        firstSeenAt: sql<string>`min(${tokenUsage.created_at})::bigint`,
+      })
+      .from(tokenUsage)
+      .where(
+        and(
+          inArray(column, ids.slice(i, i + 500)),
+          gte(tokenUsage.created_at, epochMs),
+          eq(tokenUsage.billing, 'metered'),
+        ),
+      )
+      .groupBy(column)
+    for (const row of rows) {
+      // A grouped row always has both a key and a `min()`; the guard is for the nullable account
+      // column, whose NULL group is a real row here and belongs to no account.
+      if (row.key == null || row.firstSeenAt == null) continue
+      out.set(row.key, { costEstimate: row.cost ?? 0, firstSeenAt: Number(row.firstSeenAt) })
+    }
+  }
+  return out
 }

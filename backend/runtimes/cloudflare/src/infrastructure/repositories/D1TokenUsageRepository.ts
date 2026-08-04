@@ -165,52 +165,14 @@ export class D1TokenUsageRepository implements TokenUsageRepository {
     workspaceIds: string[],
     epochMs: number,
   ): Promise<Map<string, ScopedSpendWindow>> {
-    return this.meteredSpendByScope('workspace_id', workspaceIds, epochMs)
+    return meteredSpendByScope(this.db, 'workspace_id', workspaceIds, epochMs)
   }
 
   async meteredSpendByAccountSince(
     accountIds: string[],
     epochMs: number,
   ): Promise<Map<string, ScopedSpendWindow>> {
-    return this.meteredSpendByScope('account_id', accountIds, epochMs)
-  }
-
-  /**
-   * One `GROUP BY` over the scope column per id chunk, carrying the window's oldest row out
-   * beside the sum in the SAME pass. `column` is one of two literals chosen here, never a
-   * caller-supplied string, so the interpolation cannot carry anything but those two names.
-   */
-  private async meteredSpendByScope(
-    column: 'workspace_id' | 'account_id',
-    ids: string[],
-    epochMs: number,
-  ): Promise<Map<string, ScopedSpendWindow>> {
-    const out = new Map<string, ScopedSpendWindow>()
-    if (ids.length === 0) return out
-    for (const chunk of chunkForIn(ids)) {
-      const { results } = await this.db
-        .prepare(
-          `SELECT ${column} AS scope_key,
-                  COALESCE(SUM(cost_estimate), 0) AS cost_estimate,
-                  MIN(created_at)                 AS first_seen_at
-           FROM token_usage
-           WHERE ${column} IN (${chunk.map(() => '?').join(', ')})
-             AND created_at >= ? AND billing = 'metered'
-           GROUP BY ${column}`,
-        )
-        .bind(...chunk, epochMs)
-        .all<{ scope_key: string | null; cost_estimate: number; first_seen_at: number | null }>()
-      for (const row of results ?? []) {
-        // A grouped row always has both a key and a `MIN()`; the guard is for the nullable
-        // account column, whose NULL group is a real row here and belongs to no account.
-        if (row.scope_key == null || row.first_seen_at == null) continue
-        out.set(row.scope_key, {
-          costEstimate: row.cost_estimate ?? 0,
-          firstSeenAt: row.first_seen_at,
-        })
-      }
-    }
-    return out
+    return meteredSpendByScope(this.db, 'account_id', accountIds, epochMs)
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -221,4 +183,47 @@ export class D1TokenUsageRepository implements TokenUsageRepository {
       .run()
     return meta.changes ?? 0
   }
+}
+
+/**
+ * One `GROUP BY` over the scope column per id chunk, carrying the window's oldest row out beside
+ * the sum in the SAME pass. `column` is one of two literals chosen by the callers above, never a
+ * caller-supplied string, so the interpolation cannot carry anything but those two names.
+ *
+ * A module-level function rather than a private method, mirroring the Drizzle twin: a `private`
+ * in TypeScript is still a public property on the prototype at runtime, which puts an
+ * implementation detail into the reflected persistence surface.
+ */
+async function meteredSpendByScope(
+  db: D1Database,
+  column: 'workspace_id' | 'account_id',
+  ids: string[],
+  epochMs: number,
+): Promise<Map<string, ScopedSpendWindow>> {
+  const out = new Map<string, ScopedSpendWindow>()
+  if (ids.length === 0) return out
+  for (const chunk of chunkForIn(ids)) {
+    const { results } = await db
+      .prepare(
+        `SELECT ${column} AS scope_key,
+                COALESCE(SUM(cost_estimate), 0) AS cost_estimate,
+                MIN(created_at)                 AS first_seen_at
+         FROM token_usage
+         WHERE ${column} IN (${chunk.map(() => '?').join(', ')})
+           AND created_at >= ? AND billing = 'metered'
+         GROUP BY ${column}`,
+      )
+      .bind(...chunk, epochMs)
+      .all<{ scope_key: string | null; cost_estimate: number; first_seen_at: number | null }>()
+    for (const row of results ?? []) {
+      // A grouped row always has both a key and a `MIN()`; the guard is for the nullable account
+      // column, whose NULL group is a real row here and belongs to no account.
+      if (row.scope_key == null || row.first_seen_at == null) continue
+      out.set(row.scope_key, {
+        costEstimate: row.cost_estimate ?? 0,
+        firstSeenAt: row.first_seen_at,
+      })
+    }
+  }
+  return out
 }
