@@ -300,6 +300,9 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
             errors: 0,
             warnings: 0,
             truncatedCalls: 0,
+            // Null, not 0: this branch is "no telemetry sink is wired", and a zero here would
+            // report a run that spent nothing rather than one nothing was recorded for.
+            costEstimate: null,
           },
           insights: [],
           calls: [],

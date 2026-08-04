@@ -33,6 +33,8 @@ const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join
 const CARRY_COST_SUBQUERY_SQL = `SELECT
        agent_kind,
        phase,
+       provider,
+       model,
        prompt_tokens,
        cache_read_tokens,
        cache_write_tokens,
@@ -52,6 +54,8 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
 interface SummaryRow {
   agent_kind: string
   phase: string
+  provider: string
+  model: string
   calls: number
   prompt_tokens: number
   cache_read_tokens: number
@@ -71,6 +75,8 @@ function rowToSummary(r: SummaryRow): LlmCallMetricSummary {
   return {
     agentKind: r.agent_kind,
     phase: r.phase,
+    provider: r.provider,
+    model: r.model,
     calls: r.calls,
     promptTokens: r.prompt_tokens,
     cacheReadTokens: r.cache_read_tokens,
@@ -87,6 +93,9 @@ function rowToSummary(r: SummaryRow): LlmCallMetricSummary {
     // other by contract, and the carry cost is the one column a driver may hand back as
     // something other than a plain number (it is the 64-bit sum).
     carryCostTokens: Number(r.carry_cost_tokens),
+    // Unpriced at the store: a price table is configuration, not SQL. `priceRollupCells` fills
+    // this in at the seam that holds one, and null until then says exactly that.
+    costEstimate: null,
   }
 }
 
@@ -551,6 +560,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         `SELECT
            agent_kind                                                   AS agent_kind,
            phase                                                        AS phase,
+           provider                                                     AS provider,
+           model                                                        AS model,
            COUNT(*)                                                     AS calls,
            COALESCE(SUM(prompt_tokens), 0)                              AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens), 0)                          AS cache_read_tokens,
@@ -565,7 +576,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
            COALESCE(SUM(CASE WHEN ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL}) THEN 1 ELSE 0 END), 0) AS warnings,
            COALESCE(SUM(input_tokens * turns_after), 0)                 AS carry_cost_tokens
          FROM (${CARRY_COST_SUBQUERY_SQL})
-         GROUP BY agent_kind, phase`,
+         GROUP BY agent_kind, phase, provider, model`,
       )
       .bind(workspaceId, executionId)
       .all<SummaryRow>()

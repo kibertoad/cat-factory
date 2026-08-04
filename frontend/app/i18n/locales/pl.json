@@ -1476,6 +1476,8 @@
     "contextError": "Nie udało się załadować dostarczonego kontekstu.",
     "summary": {
       "calls": "Wywołania",
+      "cost": "Szacowany koszt",
+      "costHint": "Wyliczony według cennika, każda klasa wejścia po własnej stawce: odczyt z pamięci podręcznej kosztuje około jednej dziesiątej świeżego wejścia, a zapis około jedną czwartą więcej. Uruchomienie w ramach subskrypcji nie płaci za tokeny, więc jest to kwota, jaką te same tokeny kosztowałyby w rozliczeniu za użycie.",
       "tokensInOut": "Tokeny (we / wy)",
       "transportOverhead": "Narzut transportu",
       "modelExecution": "Wykonanie modelu",
@@ -1495,8 +1497,10 @@
         "phase": "Faza",
         "turns": "Tury",
         "tokensInOut": "Tokeny (we / wy)",
+        "cost": "Koszt",
         "carryCost": "Koszt przenoszenia"
       },
+      "costHint": "Szacowany koszt tokenów tej fazy według cennika. Myślnik oznacza, że ta instalacja nie ma stawki dla uruchomionego modelu.",
       "carryCostHint": "Jak bardzo każda faza obciążyła kolejne tury: jej kontekst policzony raz za każdą późniejszą turę, która musiała go wysłać ponownie. Porównuj fazy jednego przebiegu ze sobą; sama liczba nic nie znaczy. Faza wykonywana na końcu przenosi niewiele, choć by zużyła dużo, dlatego czytaj tę kolumnę razem z tokenami obok.",
       "unattributed": "Bez przypisania",
       "unattributedHint": "zarejestrowane przez kanał, który nie podaje fazy"
@@ -1504,6 +1508,7 @@
     "metricsBar": {
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
       "inputCompletionTokens": "Łączna liczba tokenów wejścia / wyjscia. Wejście liczy takze tokeny z pamięci podręcznej: nadal zajmują okno kontekstu, dokładnie tak, jak liczy je wskaźnik kontekstu w Claude Code.",
+      "costHint": "Szacowany koszt tokenów tego kroku według cennika, każda klasa wejścia po własnej stawce. Uruchomienie w ramach subskrypcji nie płaci za tokeny, więc jest to kwota, jaką te same tokeny kosztowałyby w rozliczeniu za użycie.",
       "fresh": "{tokens} świeżych",
       "freshHint": "Wejście przetworzone od zera, bez żadnej części obsłużonej z pamięci podręcznej",
       "cacheRead": "{tokens} odczytane z pamięci podręcznej",

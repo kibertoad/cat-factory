@@ -4,6 +4,7 @@ import type {
   Clock,
   GroupCacheHandle,
   IdGenerator,
+  TokenUsageRecord,
   TokenUsageRepository,
   UserSettingsRepository,
   WorkspaceSettings,
@@ -179,5 +180,80 @@ describe('SpendService.periodUsage', () => {
     expect(seen).toHaveLength(2)
     expect(seen[0]).toBe(seen[1])
     expect(usage.periodStart).toBe(seen[0])
+  })
+})
+
+describe('SpendService.record — per-class pricing', () => {
+  function recordingRepo(): { repo: TokenUsageRepository; rows: TokenUsageRecord[] } {
+    const rows: TokenUsageRecord[] = []
+    return {
+      rows,
+      repo: {
+        record: async (row: TokenUsageRecord) => {
+          rows.push(row)
+        },
+        totalsSinceForWorkspace: async () => zeroTotals,
+        totalsSinceForAccount: async () => zeroTotals,
+        totalsSinceForUser: async () => zeroTotals,
+        usageBreakdownForWorkspace: async () => [],
+      } as unknown as TokenUsageRepository,
+    }
+  }
+
+  const service = (repo: TokenUsageRepository) =>
+    new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+
+  it('prices a cache read far below fresh input instead of at the fresh rate', async () => {
+    // The #1261 shape: a run that is almost entirely cache reads. Metering its whole input at
+    // the fresh rate is what made such a run exhaust a budget it had barely touched.
+    const { repo, rows } = recordingRepo()
+    const cost = await service(repo).record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+      inputClasses: { promptTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 },
+    })
+    // 1M cache reads at 0.1x the 4.6/Mtok input rate.
+    expect(cost).toBeCloseTo(0.46, 6)
+    expect(rows[0]?.costEstimate).toBeCloseTo(0.46, 6)
+    // The stored VOLUME is unchanged — only what it costs moved.
+    expect(rows[0]?.inputTokens).toBe(1_000_000)
+  })
+
+  it('prices a cache write ABOVE fresh input', async () => {
+    const { repo, rows } = recordingRepo()
+    await service(repo).record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+      inputClasses: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000_000 },
+    })
+    // 1.25x 4.6. Lumping writes in with reads would have said 0.46 — a 12x under-count on
+    // the DEAREST class, which is exactly why the two are kept apart.
+    expect(rows[0]?.costEstimate).toBeCloseTo(5.75, 6)
+  })
+
+  it('falls back to the fresh rate for a producer that reports no split', async () => {
+    // Absent classes are not zeroed classes: the row is priced entirely as fresh, which
+    // OVER-states a cached call. That direction is deliberate — a budget safeguard that
+    // undercounts stops safeguarding.
+    const { repo, rows } = recordingRepo()
+    await service(repo).record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+    })
+    expect(rows[0]?.costEstimate).toBeCloseTo(4.6, 6)
   })
 })

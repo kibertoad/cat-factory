@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { LlmCallMetricSummary } from '../ports/llm-metrics.js'
 import {
+  type LlmRateResolver,
   foldRollupTotals,
   foldRollupsByAgentKind,
   foldRollupsByPhase,
+  priceRollupCells,
   rollupInputTokens,
 } from './llm-rollup.js'
 
@@ -11,6 +13,8 @@ function cell(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSumma
   return {
     agentKind: 'coder',
     phase: 'agent',
+    provider: 'anthropic',
+    model: 'claude-opus-5',
     calls: 1,
     promptTokens: 10,
     cacheReadTokens: 5,
@@ -24,6 +28,7 @@ function cell(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSumma
     errors: 0,
     warnings: 0,
     carryCostTokens: 34,
+    costEstimate: null,
     ...overrides,
   }
 }
@@ -107,5 +112,59 @@ describe('foldRollupsByAgentKind / foldRollupsByPhase', () => {
 describe('rollupInputTokens', () => {
   it('is the sum of the three orthogonal input classes', () => {
     expect(rollupInputTokens(foldRollupTotals([cell()]))).toBe(17)
+  })
+})
+
+describe('priceRollupCells', () => {
+  const rates: LlmRateResolver = (provider, model) =>
+    provider === 'anthropic' && model === 'claude-opus-5'
+      ? {
+          inputPerMillion: 1_000_000,
+          cacheReadPerMillion: 100_000,
+          cacheWritePerMillion: 1_250_000,
+          outputPerMillion: 5_000_000,
+        }
+      : null
+
+  it('prices each class at its own rate rather than the fresh one', () => {
+    const [priced] = priceRollupCells(
+      [cell({ promptTokens: 1, cacheReadTokens: 1, cacheWriteTokens: 1, completionTokens: 1 })],
+      rates,
+    )
+    // 1 + 0.1 + 1.25 + 5. Pricing the three input classes as one lumped `3` at the fresh rate
+    // would say 8 — the over-count that exhausted budgets on cache-read-dominated runs.
+    expect(priced?.costEstimate).toBeCloseTo(7.35, 10)
+  })
+
+  it('collapses the model dimension, summing the costs it priced separately', () => {
+    const priced = priceRollupCells(
+      [
+        cell({ promptTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, completionTokens: 0 }),
+        cell({ promptTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, completionTokens: 0 }),
+      ],
+      rates,
+    )
+    expect(priced).toHaveLength(1)
+    expect(priced[0]?.calls).toBe(2)
+    expect(priced[0]?.costEstimate).toBeCloseTo(3, 10)
+  })
+
+  it('leaves a cell null when the deployment cannot price its model', () => {
+    // Null, never 0: an unpriced model and a free one are opposite facts.
+    const [priced] = priceRollupCells([cell({ provider: 'mystery', model: 'x' })], rates)
+    expect(priced?.costEstimate).toBeNull()
+  })
+
+  it('contaminates a fold with one unpriced cell rather than under-reporting the total', () => {
+    const priced = priceRollupCells(
+      [
+        cell({ promptTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, completionTokens: 0 }),
+        cell({ provider: 'mystery', model: 'x', phase: 'validation-repair' }),
+      ],
+      rates,
+    )
+    expect(foldRollupTotals(priced).costEstimate).toBeNull()
+    // The priced cell still reports its own cost — only the TOTAL declines to answer.
+    expect(priced.find((p) => p.phase === 'agent')?.costEstimate).toBeCloseTo(1, 10)
   })
 })

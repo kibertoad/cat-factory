@@ -457,6 +457,9 @@ export class RunStateMachine {
     try {
       const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
       if (summaries.length === 0) return
+      // Labelled once per emit from the SAME service that priced the cells, so the amount and
+      // its currency can never come from different tables.
+      const costCurrency = this.llmObservability.rollupCurrency ?? undefined
       const cellsByKind = new Map<string, LlmCallMetricSummary[]>()
       for (const cell of summaries) {
         const bucket = cellsByKind.get(cell.agentKind)
@@ -481,6 +484,10 @@ export class RunStateMachine {
           errors: s.errors,
           warnings: s.warnings,
           carryCostTokens: s.carryCostTokens,
+          costEstimate: s.costEstimate,
+          // Only where there is an amount to label: a currency beside a null cost states a
+          // denomination for a number that isn't there.
+          costCurrency: s.costEstimate == null ? undefined : costCurrency,
           // Costliest phase first, so the board surface shows the slice worth attacking
           // rather than whichever one the store happened to return first.
           byPhase: foldRollupsByPhase(cells)
@@ -493,6 +500,7 @@ export class RunStateMachine {
               completionTokens: p.completionTokens,
               carryCostTokens: p.carryCostTokens,
               errors: p.errors,
+              costEstimate: p.costEstimate,
             }))
             .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls),
         }

@@ -688,6 +688,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       .select({
         agentKind: llmCallMetrics.agent_kind,
         phase: llmCallMetrics.phase,
+        provider: llmCallMetrics.provider,
+        model: llmCallMetrics.model,
         completionTokens: llmCallMetrics.completion_tokens,
         promptTokens: llmCallMetrics.prompt_tokens,
         cacheReadTokens: llmCallMetrics.cache_read_tokens,
@@ -718,6 +720,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       .select({
         agentKind: ranked.agentKind,
         phase: ranked.phase,
+        provider: ranked.provider,
+        model: ranked.model,
         calls: sql<number>`count(*)::int`,
         promptTokens: sql<number>`coalesce(sum(${ranked.promptTokens}), 0)::int`,
         cacheReadTokens: sql<number>`coalesce(sum(${ranked.cacheReadTokens}), 0)::int`,
@@ -739,10 +743,12 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         >`coalesce(sum(${ranked.inputTokens}::bigint * ${ranked.turnsAfter}), 0)::bigint`,
       })
       .from(ranked)
-      .groupBy(ranked.agentKind, ranked.phase)
+      .groupBy(ranked.agentKind, ranked.phase, ranked.provider, ranked.model)
     return rows.map((r) => ({
       agentKind: r.agentKind,
       phase: r.phase,
+      provider: r.provider,
+      model: r.model,
       calls: Number(r.calls),
       promptTokens: Number(r.promptTokens),
       cacheReadTokens: Number(r.cacheReadTokens),
@@ -756,6 +762,9 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       errors: Number(r.errors),
       warnings: Number(r.warnings),
       carryCostTokens: Number(r.carryCostTokens),
+      // Unpriced at the store: a price table is configuration, not SQL. `priceRollupCells`
+      // fills this in at the seam that holds one, and null until then says exactly that.
+      costEstimate: null,
     }))
   }
 

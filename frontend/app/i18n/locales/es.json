@@ -1476,6 +1476,8 @@
     "contextError": "No se pudo cargar el contexto proporcionado.",
     "summary": {
       "calls": "Llamadas",
+      "cost": "Coste estimado",
+      "costHint": "Calculado a precios de lista, cada clase de entrada con su propia tarifa: una lectura de caché cuesta alrededor de una décima parte de la entrada nueva y una escritura de caché aproximadamente un cuarto más. Una ejecución por suscripción no paga nada por token, así que esto es lo que habrían costado los mismos tokens con pago por uso.",
       "tokensInOut": "Tokens (entrada / salida)",
       "transportOverhead": "Sobrecarga de transporte",
       "modelExecution": "Ejecución del modelo",
@@ -1495,8 +1497,10 @@
         "phase": "Fase",
         "turns": "Turnos",
         "tokensInOut": "Tokens (entrada / salida)",
+        "cost": "Coste",
         "carryCost": "Coste de arrastre"
       },
+      "costHint": "Coste estimado de los tokens de esta fase a precios de lista. Un guion indica que esta instalación no tiene tarifa para el modelo que se ejecutó.",
       "carryCostHint": "Cuánto cargó cada fase sobre los turnos posteriores: su contexto contado una vez por cada turno que tuvo que reenviarlo. Compara entre sí las fases de una ejecución; por sí sola la cifra no significa nada. Una fase que se ejecuta al final arrastra poco por mucho que haya gastado, así que lee esta columna junto a los tokens de al lado.",
       "unattributed": "Sin atribuir",
       "unattributedHint": "registrado por un canal que no informa de la fase"
@@ -1504,6 +1508,7 @@
     "metricsBar": {
       "calls": "{count} llamada | {count} llamadas",
       "inputCompletionTokens": "Tokens totales de entrada / salida. La entrada tambien cuenta los tokens en caché: siguen ocupando la ventana de contexto, igual que los cuenta el medidor de contexto de Claude Code.",
+      "costHint": "Coste estimado de los tokens de este paso a precios de lista, cada clase de entrada con su propia tarifa. Una ejecución por suscripción no paga nada por token, así que esto es lo que habrían costado los mismos tokens con pago por uso.",
       "fresh": "{tokens} frescos",
       "freshHint": "Entrada procesada desde cero, sin nada servido desde la caché",
       "cacheRead": "{tokens} leídos de caché",

@@ -1,6 +1,6 @@
 # Initiative: per-class token telemetry + cost surfacing
 
-**Status:** in progress (Slice 2) · **Owner:** core · **Started:** 2026-07-20
+**Status:** in progress (Slice 3) · **Owner:** core · **Started:** 2026-07-20
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -95,10 +95,11 @@ runtimes symmetric"):
 
 ## Per-slice checklist
 
-| #   | Slice            | Scope                                                                                                                                             | Status  | PR  |
-| --- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | Read/write split | The full change set above: contracts + kernel ports + HarnessCallMetric + population sites + both telemetry DBs + rollup + frontend + conformance | ✅ done |     |
-| 2   | Cost surfacing   | `ModelPrice` cache tiers; per-call/step cost compute; observability-panel cost headline; subscription = illustrative                              | ⬜ todo |     |
+| #   | Slice             | Scope                                                                                                                                             | Status  | PR  |
+| --- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | Read/write split  | The full change set above: contracts + kernel ports + HarnessCallMetric + population sites + both telemetry DBs + rollup + frontend + conformance | ✅ done |     |
+| 2   | Cost surfacing    | `ModelPrice` cache tiers; per-call/step cost compute; observability-panel cost headline; subscription = illustrative                              | ✅ done |     |
+| 3   | Usage-tab classes | Carry the stored classes onto `token_usage` + the usage breakdown, so an operator can reconcile a ledger cost against the tokens behind it        | ⬜ todo |     |
 
 ## Conventions / gotchas carried between iterations
 
@@ -114,9 +115,14 @@ runtimes symmetric"):
   (`harnessInline.ts`, which previously summed the buckets into one figure) and the container
   `inline` job (whose `InlineResult.usage` folds the split out of its per-call metrics). A new
   inline runner that reports one lumped input count leaves that path blind again.
-- **Telemetry ≠ spend ledger.** `llm_call_metrics` (3-day, per-run) is separate from the durable
-  `token_usage` ledger (`SpendService`, ~395-day, with cost). This initiative touches ONLY the
-  telemetry surface. Cost here is display-time estimation, not the billed spend gate.
+- **Telemetry ≠ spend ledger, but ONE price table serves both.** `llm_call_metrics` (3-day,
+  per-run) is separate from the durable `token_usage` ledger (`SpendService`, ~395-day, with
+  cost), and they stay separate stores. Slice 2 revised the "telemetry only" scope above: the
+  ledger was pricing every input token at the FRESH rate, so the same cache-dominated run this
+  initiative exists to describe was ALSO being metered at roughly ten times its cost and
+  exhausting budgets it had barely touched. That is a spend-gate defect, not a display one, and
+  fixing it in the telemetry layer alone would have left the two surfaces disagreeing about the
+  same run. So `estimateClassedCost` prices both, from `DEFAULT_MODEL_PRICES`.
 - **Backwards-compat is a non-goal.** Drop `cached_prompt_tokens` cleanly rather than dual-writing;
   the 3-day retention window makes the break invisible within days.
 
@@ -171,3 +177,48 @@ cacheWrite }`), so the inline path reads it straight off rather than re-deriving
   render as the breakdown beneath it. `frontend/app/app/utils/observability.spec.ts` pins this.
   Any new token surface follows the same shape: **total in the headline, classes in the
   breakdown.**
+
+### Carried out of Slice 2
+
+- **The MODEL had to join the rollup grain, and that is what makes cost foldable.** Cost is a
+  function of `(model, token classes)`, so a `(agentKind, phase)` cell cannot be priced after the
+  fact: a step's calls are routinely served by more than one model (a harness CLI answers some of
+  its own turns with a cheaper one), and any single rate would be wrong for every mixed step. The
+  stores now group by `(agentKind, phase, provider, model)` and `priceRollupCells` prices each
+  cell and folds the model away, so every existing consumer still reads the same
+  `(agentKind, phase)` shape — it just gets one that was priced while the model was still
+  attached. `LlmCallRollupTotals.costEstimate` then merges by addition like every other sum, and
+  the per-kind, per-phase and run-total views agree by construction, exactly as their token
+  figures already did.
+- **`null` cost CONTAMINATES a fold; a null ceiling does not.** `maxNullable` lets a known
+  ceiling win over an unknown one because both describe a real ceiling somebody requested. A
+  total that dropped the one cell it could not price is a different thing: a smaller number that
+  still reads as complete, and indistinguishable from a genuinely cheaper run. So `addCost`
+  returns null if either side is null, and the surfaces omit the figure rather than render
+  `0.00`. `EMPTY.costEstimate` is `0` for the same reason — it is the fold's IDENTITY, not an
+  "unpriced" marker; starting it at null would make every fold null.
+- **The amount and its CURRENCY travel together, from the same table.** The built-in price table
+  is EUR (list prices converted at ~0.92), not USD, and a deployment can configure another, so a
+  bare number is unreadable and a guessed symbol is a wrong label on a right number. The rollup
+  costs are denominated in the DEPLOYMENT base currency deliberately: `mergeSpendPricing` applies
+  a workspace's `spendCurrency` override while keeping the base `prices`, so labelling these
+  amounts with a workspace's currency would put the wrong symbol on unchanged EUR figures.
+- **The two cache tiers are DERIVED by default, not restated per entry.** `CACHE_READ_MULTIPLIER`
+  (0.1) and `CACHE_WRITE_MULTIPLIER` (1.25) fill in a `ModelPrice` that names neither, because
+  Anthropic, OpenAI, DeepSeek and Google all bill a cache hit at 0.1x base input: fifty copies of
+  that number would be fifty chances to get one wrong, not a source of accuracy. An entry
+  overrides where a vendor departs from it. The write multiplier is the 5-minute-TTL rate the
+  harnesses actually request, not the 1-hour 2x worst case.
+- **An absent input SPLIT is priced as all-fresh, which over-states rather than under-states.**
+  `RecordUsageInput.inputClasses` is optional because not every producer can report the split,
+  and the fallback deliberately errs high: a budget safeguard that undercounts stops
+  safeguarding. Only the proxy supplies the split today, through the SAME `readInputTokenClasses`
+  the metric path uses — the ledger previously metered off `prompt_tokens`, which is the whole
+  prompt on the inclusive shapes and fresh-only on the exclusive ones, so it managed to
+  over-price an OpenAI-style cached call AND lose Anthropic's cache reads from its volume figure.
+- **Both rollup consumers read ONE priced fold.** The board rollup
+  (`RunStateMachine.attachStepMetrics`) and the debug overview (`RunDebugService`) used to reach
+  the repository independently; the debug service now takes the observability service's bound
+  `summarizeByExecution` instead of a rate table of its own, so the two cannot quote different
+  money for one run. The metrics EXPORT prices per CALL rather than per cell, which is strictly
+  finer and agrees, because it holds the rows.

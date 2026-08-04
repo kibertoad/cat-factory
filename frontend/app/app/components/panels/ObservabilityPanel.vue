@@ -10,9 +10,11 @@ import type {
 import { agentKindMeta } from '~/utils/catalog'
 import {
   foldRunPhaseMetrics,
+  formatCost,
   formatMs,
   formatTokens,
   pct,
+  sumCosts,
   totalInputTokens,
 } from '~/utils/observability'
 
@@ -164,6 +166,22 @@ const phaseRows = computed(() => foldRunPhaseMetrics(instance.value?.steps ?? []
 const phaseCarryTotal = computed(() =>
   phaseRows.value.reduce((acc, p) => acc + p.carryCostTokens, 0),
 )
+/**
+ * The currency the engine priced this run in. Read off the step rollups rather than assumed,
+ * because the amounts come from a deployment-configured table whose currency an operator sets;
+ * absent ⇒ nothing priced the run, and every amount below is null too.
+ */
+const costCurrency = computed(
+  () => instance.value?.steps?.find((s) => s.metrics?.costCurrency)?.metrics?.costCurrency,
+)
+/**
+ * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
+ * the capped call list the token totals beside it use, which would silently under-report a run
+ * longer than the page. Null when any phase could not be priced (see `sumCosts`).
+ */
+const runCost = computed(() =>
+  formatCost(sumCosts(phaseRows.value.map((p) => p.costEstimate)), costCurrency.value),
+)
 /** Share of the run's carry cost a phase accounts for (0..100), or null when nothing carried. */
 function carryShare(carryCostTokens: number): number | null {
   return phaseCarryTotal.value > 0 ? pct(carryCostTokens / phaseCarryTotal.value) : null
@@ -314,6 +332,17 @@ function exportJson() {
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
                 </div>
+                <div v-if="runCost">
+                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                    {{ t('observability.summary.cost') }}
+                  </dt>
+                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                    {{ runCost }}
+                    <span class="mt-0.5 block text-[11px] text-slate-500">
+                      {{ t('observability.summary.costHint') }}
+                    </span>
+                  </dd>
+                </div>
                 <div>
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
                     {{ t('observability.summary.tokensInOut') }}
@@ -437,6 +466,11 @@ function exportJson() {
                       <th class="py-1 px-3 text-end font-normal">
                         {{ t('observability.phase.columns.tokensInOut') }}
                       </th>
+                      <th v-if="runCost" class="py-1 px-3 text-end font-normal">
+                        <span :title="t('observability.phase.costHint')">
+                          {{ t('observability.phase.columns.cost') }}
+                        </span>
+                      </th>
                       <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
                            with tokens, and the two orders genuinely differ: a phase that runs
                            late carries almost nothing however much it spent (nothing after it
@@ -475,6 +509,11 @@ function exportJson() {
                       <td class="py-1.5 px-3 text-end tabular-nums text-slate-300">
                         {{ formatTokens(totalInputTokens(p)) }}↑
                         {{ formatTokens(p.completionTokens) }}↓
+                      </td>
+                      <td v-if="runCost" class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                        <!-- An em dash, not 0: this phase's model had no rate, and a zero here
+                             would read as a phase that cost nothing. -->
+                        {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}
                       </td>
                       <td class="py-1.5 ps-3 text-end tabular-nums text-slate-300">
                         {{ formatTokens(p.carryCostTokens) }}

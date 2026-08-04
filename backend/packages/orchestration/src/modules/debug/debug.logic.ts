@@ -294,6 +294,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
     transportOverheadRatio: transportOverheadRatio(s.upstreamMs, s.overheadMs),
     errors: s.errors,
     warnings: s.warnings,
+    costEstimate: s.costEstimate,
   }))
   const phases = foldRollupsByPhase(summaries)
   // Denominator for each phase's share of the carry cost. Folded from the phase rows
@@ -315,6 +316,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
       errors: p.errors,
       warnings: p.warnings,
       truncatedCalls: p.truncatedCalls,
+      costEstimate: p.costEstimate,
     }))
     // Expensive slice first: the caller reading this is asking which phase to attack, and a
     // store-order list buries the answer behind whichever phase happened to run first.
@@ -338,6 +340,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
       errors: runTotals.errors,
       warnings: runTotals.warnings,
       truncatedCalls: runTotals.truncatedCalls,
+      costEstimate: runTotals.costEstimate,
     },
     byAgentKind,
     byPhase,

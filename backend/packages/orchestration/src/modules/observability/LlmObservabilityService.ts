@@ -5,6 +5,7 @@ import {
   createStoreAgentContextGate,
   noopLogger,
   normalizeCallPhase,
+  priceRollupCells,
   redactSecrets,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -16,6 +17,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmRateResolver,
   LlmTraceSink,
   WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
@@ -64,6 +66,22 @@ export interface LlmObservabilityServiceDependencies {
    * unit test constructing this service standalone gets.
    */
   logger?: Logger
+  /**
+   * Per-1M rates for a `(provider, model)`, from the deployment's spend price table. Wired
+   * here — rather than at each of the two rollup consumers — because both must agree on what a
+   * run cost, and the store cannot answer it: a price table is configuration, not SQL.
+   *
+   * Absent ⇒ every rollup cell reports a NULL cost, which is the honest reading for a
+   * deployment with no pricing wired and is distinct from a run that cost nothing.
+   */
+  modelRates?: LlmRateResolver
+  /**
+   * ISO 4217 currency {@link LlmObservabilityServiceDependencies.modelRates} is denominated in,
+   * so a surface can LABEL the money it renders instead of assuming one. Travels with the rates
+   * because it is a property of the same table: swapping the table's currency without the label
+   * renders a correct number under the wrong symbol, which is worse than no number.
+   */
+  costCurrency?: string
 }
 
 /**
@@ -183,6 +201,8 @@ export class LlmObservabilityService {
    */
   private readonly bodiesEnabled: StoreAgentContextGate
   private readonly log: Logger
+  private readonly modelRates: LlmRateResolver | undefined
+  private readonly costCurrency: string | undefined
 
   constructor({
     llmCallMetricRepository,
@@ -193,6 +213,8 @@ export class LlmObservabilityService {
     workspaceSettingsRepository,
     workspaceSettingsCache,
     logger,
+    modelRates,
+    costCurrency,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
@@ -204,6 +226,16 @@ export class LlmObservabilityService {
       cache: workspaceSettingsCache,
     })
     this.log = (logger ?? noopLogger).child({ service: 'llmObservability' })
+    this.modelRates = modelRates
+    this.costCurrency = costCurrency
+  }
+
+  /**
+   * The currency this service's rollup costs are denominated in, or null when nothing prices
+   * them. Read by the rollup consumers so the amount and its label come from ONE place.
+   */
+  get rollupCurrency(): string | null {
+    return this.modelRates ? (this.costCurrency ?? null) : null
   }
 
   /**
@@ -377,9 +409,24 @@ export class LlmObservabilityService {
     return this.repository.listByExecution(workspaceId, executionId, limit)
   }
 
-  /** Per-agent-kind aggregates for a run, for the board step rollups. */
-  summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetricSummary[]> {
-    return this.repository.summarizeByExecution(workspaceId, executionId)
+  /**
+   * Per-`(agentKind, phase)` aggregates for a run, PRICED — the board step rollups and the
+   * per-phase burn breakdown.
+   *
+   * The store groups one grain finer (it also splits by `(provider, model)`), because cost is a
+   * function of the model and can only be computed while the model is still attached. This is
+   * the ONE place that fold happens, so the board rollup and the debug overview cannot report
+   * different money for the same run.
+   */
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<LlmCallMetricSummary[]> {
+    const cells = await this.repository.summarizeByExecution(workspaceId, executionId)
+    // No rates wired ⇒ collapse the model dimension anyway, so every consumer sees the same
+    // `(agentKind, phase)` shape regardless of whether this deployment can price it. The cost
+    // stays null, which says "not priced here" rather than "cost nothing".
+    return priceRollupCells(cells, this.modelRates ?? (() => null))
   }
 
   /**
@@ -389,7 +436,10 @@ export class LlmObservabilityService {
    */
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
     const calls = await this.listByExecution(workspaceId, executionId)
-    return buildLlmMetricsExport(executionId, calls, this.clock.now())
+    // Priced from the SAME table the rollups use. The export costs each call individually
+    // (it holds the rows), which is strictly finer than the rollup's per-cell arithmetic and
+    // agrees with it: both price a class at its own tier.
+    return buildLlmMetricsExport(executionId, calls, this.clock.now(), this.modelRates)
   }
 }
 

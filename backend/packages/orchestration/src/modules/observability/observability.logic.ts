@@ -1,4 +1,8 @@
-import { LLM_WARNING_FINISH_REASONS, type LlmCallMetric } from '@cat-factory/kernel'
+import {
+  LLM_WARNING_FINISH_REASONS,
+  type LlmCallMetric,
+  type LlmRateResolver,
+} from '@cat-factory/kernel'
 import type { LlmExportInsight, LlmMetricsExport } from '@cat-factory/contracts'
 
 // Pure classification + headroom helpers for LLM observability, kept out of the
@@ -195,6 +199,7 @@ export function buildLlmMetricsExport(
   executionId: string,
   storedCalls: LlmCallMetric[],
   generatedAt: number,
+  rates?: LlmRateResolver,
 ): LlmMetricsExport {
   // The export is a self-contained analysis bundle, so rebuild each call's full
   // prompt from the stored deltas before assembling it.
@@ -232,6 +237,7 @@ export function buildLlmMetricsExport(
       transportOverheadRatio: transportOverheadRatio(upstreamMs, overheadMs),
       errors: kindCalls.filter((c) => !c.ok).length,
       warnings: kindCalls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
+      costEstimate: costOfCalls(kindCalls, rates),
     }
   })
 
@@ -258,10 +264,38 @@ export function buildLlmMetricsExport(
       errors: calls.filter((c) => !c.ok).length,
       warnings: calls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
       truncatedCalls: calls.filter((c) => c.finishReason === 'length').length,
+      costEstimate: costOfCalls(calls, rates),
     },
     insights,
     calls,
   }
+}
+
+/**
+ * Price a set of calls, EACH at its own model's rates and each input class at its own tier.
+ *
+ * Per call rather than per summed group because one agent kind's calls are routinely served by
+ * more than one model — a harness CLI answers some of its own turns with a cheaper one — so a
+ * group total priced at any single model's rate would be wrong for every group but the uniform
+ * ones.
+ *
+ * Returns null when nothing prices them, or when ANY call's model has no rate: a total that
+ * silently omitted the calls it could not price is a smaller number that still reads as
+ * complete.
+ */
+function costOfCalls(calls: LlmCallMetric[], rates?: LlmRateResolver): number | null {
+  if (!rates) return null
+  let total = 0
+  for (const call of calls) {
+    const r = rates(call.provider, call.model)
+    if (!r) return null
+    total +=
+      (call.promptTokens / 1_000_000) * r.inputPerMillion +
+      (call.cacheReadTokens / 1_000_000) * r.cacheReadPerMillion +
+      (call.cacheWriteTokens / 1_000_000) * r.cacheWritePerMillion +
+      (call.completionTokens / 1_000_000) * r.outputPerMillion
+  }
+  return total
 }
 
 function sum<T>(items: T[], pick: (item: T) => number): number {

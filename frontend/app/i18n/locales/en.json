@@ -1555,6 +1555,8 @@
     "contextError": "Could not load the provided context.",
     "summary": {
       "calls": "Calls",
+      "cost": "Estimated cost",
+      "costHint": "Priced at list rates, each input class at its own: a cache read costs about a tenth of fresh input, a cache write about a quarter more. A subscription run pays nothing per token, so this is what the same tokens would have cost metered.",
       "tokensInOut": "Tokens (in / out)",
       "transportOverhead": "Transport overhead",
       "modelExecution": "Model execution",
@@ -1574,8 +1576,10 @@
         "phase": "Phase",
         "turns": "Turns",
         "tokensInOut": "Tokens (in / out)",
+        "cost": "Cost",
         "carryCost": "Carry cost"
       },
+      "costHint": "Estimated cost of this phase's tokens at list rates. A dash means this deployment has no rate for the model that ran.",
       "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing. A phase that runs late carries little however much it spent, so read this column alongside the tokens beside it.",
       "unattributed": "Unattributed",
       "unattributedHint": "recorded by a channel that reports no phase"
@@ -1583,6 +1587,7 @@
     "metricsBar": {
       "calls": "{count} call | {count} calls",
       "inputCompletionTokens": "Total input / completion tokens. Input counts cached tokens too: they still occupy the context window, exactly as Claude Code's own context gauge counts them.",
+      "costHint": "Estimated cost of this step's tokens at list rates, each input class priced at its own. A subscription run pays nothing per token, so this is what the same tokens would have cost metered.",
       "fresh": "{tokens} fresh",
       "freshHint": "Input processed from scratch, with nothing served from the cache",
       "cacheRead": "{tokens} cache read",
