@@ -276,6 +276,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'selfUser', arg: 0 } },
     upsert: { scope: { kind: 'selfUser', arg: 0 } },
   },
+  // Per-user in-app tutorial progress: the same self-scoped shape as `userSettingsRepository`
+  // above, and remote for the same reason — it is per-PERSON state whose entire purpose is to
+  // follow them across machines, so a `local-sqlite` copy would be one more browser profile
+  // rather than a fix, and a mothership-mode laptop reading only its own copy would re-ask the
+  // launch question and re-make every contextual offer. `selfUser` requires args[0] to equal the
+  // token's userId, and every call site here passes the CALLER's own id (the controller reads it
+  // off the session, the snapshot passes the viewer's), so the rule matches by construction.
+  // No secrets, no admin gating: `remove` is the user's own "Reset progress".
+  tutorialProgressRepository: {
+    get: { scope: { kind: 'selfUser', arg: 0 } },
+    upsert: { scope: { kind: 'selfUser', arg: 0 } },
+    remove: { scope: { kind: 'selfUser', arg: 0 } },
+  },
   riskPolicyRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     // The merge lifecycle resolves a task's merge-threshold preset at run time

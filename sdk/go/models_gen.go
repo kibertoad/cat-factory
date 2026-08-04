@@ -156,7 +156,9 @@ type DebugLlmAgentKindRollup struct {
 	CacheWriteTokens float64  `json:"cacheWriteTokens"`
 	Calls            float64  `json:"calls"`
 	CompletionTokens float64  `json:"completionTokens"`
-	Errors           float64  `json:"errors"`
+	// CostEstimate always present; nil when the server has no value for it.
+	CostEstimate *float64 `json:"costEstimate"`
+	Errors       float64  `json:"errors"`
 	// MaxOutputTokens always present; nil when the server has no value for it.
 	MaxOutputTokens *float64 `json:"maxOutputTokens"`
 	// OutputHeadroomRatio always present; nil when the server has no value for it.
@@ -223,13 +225,15 @@ type DebugLlmPhaseRollup struct {
 	CarryCostShare   *float64 `json:"carryCostShare"`
 	CarryCostTokens  float64  `json:"carryCostTokens"`
 	CompletionTokens float64  `json:"completionTokens"`
-	Errors           float64  `json:"errors"`
-	OverheadMS       float64  `json:"overheadMs"`
-	Phase            string   `json:"phase"`
-	PromptTokens     float64  `json:"promptTokens"`
-	TruncatedCalls   float64  `json:"truncatedCalls"`
-	UpstreamMS       float64  `json:"upstreamMs"`
-	Warnings         float64  `json:"warnings"`
+	// CostEstimate always present; nil when the server has no value for it.
+	CostEstimate   *float64 `json:"costEstimate"`
+	Errors         float64  `json:"errors"`
+	OverheadMS     float64  `json:"overheadMs"`
+	Phase          string   `json:"phase"`
+	PromptTokens   float64  `json:"promptTokens"`
+	TruncatedCalls float64  `json:"truncatedCalls"`
+	UpstreamMS     float64  `json:"upstreamMs"`
+	Warnings       float64  `json:"warnings"`
 }
 
 // DebugLlmTotals is the `DebugLlmTotals` wire model.
@@ -240,9 +244,11 @@ type DebugLlmTotals struct {
 	CacheWriteTokens float64  `json:"cacheWriteTokens"`
 	Calls            float64  `json:"calls"`
 	CompletionTokens float64  `json:"completionTokens"`
-	Errors           float64  `json:"errors"`
-	OverheadMS       float64  `json:"overheadMs"`
-	PromptTokens     float64  `json:"promptTokens"`
+	// CostEstimate always present; nil when the server has no value for it.
+	CostEstimate *float64 `json:"costEstimate"`
+	Errors       float64  `json:"errors"`
+	OverheadMS   float64  `json:"overheadMs"`
+	PromptTokens float64  `json:"promptTokens"`
 	// TransportOverheadRatio always present; nil when the server has no value for it.
 	TransportOverheadRatio *float64 `json:"transportOverheadRatio"`
 	TruncatedCalls         float64  `json:"truncatedCalls"`
@@ -358,7 +364,9 @@ type DebugRunOverviewDiagnosticsLastDispatchRepo struct {
 type DebugRunOverviewLlm struct {
 	ByAgentKind []DebugLlmAgentKindRollup `json:"byAgentKind"`
 	ByPhase     []DebugLlmPhaseRollup     `json:"byPhase"`
-	Totals      DebugLlmTotals            `json:"totals"`
+	// CostCurrency always present; nil when the server has no value for it.
+	CostCurrency *string        `json:"costCurrency"`
+	Totals       DebugLlmTotals `json:"totals"`
 }
 
 // DebugRunOverviewSinks is the `DebugRunOverviewSinks` wire model.

@@ -145,7 +145,7 @@ introduces three kinds whose names invite confusion:
   (`reproduced`); anything else is `inconclusive`, and a concession is recorded as
   `declared_infeasible` with the agent's stated alternative verification. Opted in per task via
   the `coder.reproductionProof` tri-state, published on the run's PR report. See
-  [`docs/initiatives/bugfix-reproduction-proof.md`](./initiatives/bugfix-reproduction-proof.md).
+  [`backend/docs/adr/0033-bugfix-reproduction-proof.md`](../backend/docs/adr/0033-bugfix-reproduction-proof.md).
 
 ### Bug hunt vs bug intake vs bug triage
 

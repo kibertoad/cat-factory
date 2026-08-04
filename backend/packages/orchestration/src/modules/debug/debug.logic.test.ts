@@ -43,6 +43,8 @@ function summary(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSu
   return {
     agentKind: 'coder',
     phase: 'agent',
+    provider: 'anthropic',
+    model: 'claude-opus-5',
     calls: 2,
     promptTokens: 100,
     cacheReadTokens: 40,
@@ -56,6 +58,7 @@ function summary(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSu
     errors: 0,
     warnings: 0,
     carryCostTokens: 300,
+    costEstimate: null,
     ...overrides,
   }
 }

@@ -156,6 +156,17 @@ The failure classes and where each one's evidence lives:
   `phase: ""` is the unattributed slice (an older harness image, an inline call, the un-phased
   proxy path) and is always present rather than dropped, so "we could not attribute this" never
   reads as "nothing was spent here". `/llm-calls?phase=` drills into any row, `""` included.
+- **"what did it cost?": every rollup row carries `costEstimate`**, denominated in
+  `llm.costCurrency` (once, on the `llm` object: it is a property of the deployment's price
+  table, not of a row). Each input class is priced at its own tier, so a cache read costs about
+  a tenth of fresh input and a cache write about a quarter more, and a cache-dominated run
+  reports what it actually cost rather than ten times it. It is a LIST-PRICE estimate, not a
+  bill: a subscription-harness run pays nothing per token and this reports what the same tokens
+  would have cost metered.
+  `costEstimate: null` means the deployment could not price that slice (no rate for the model
+  that ran, or no price table wired) and `costCurrency: null` means it prices nothing at all.
+  Neither is ever reported as `0`, and a total containing one unpriceable cell is null rather
+  than a smaller number that still reads as complete.
 
 ### 3. Grep for the cause (`?contains=`)
 

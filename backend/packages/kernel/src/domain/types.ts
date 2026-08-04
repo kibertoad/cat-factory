@@ -403,6 +403,9 @@ export type {
   MergeDecisionThresholds,
   MergeClassRule,
   MergeClassRules,
+  // Role-scoped narrowing of the per-class rules, plus the sandboxed run mode.
+  ClassRulesByRole,
+  RunMode,
   // Merge track record (per-class human evidence behind the auto-merge policy).
   ChangeClass,
   ReviewEffort,
@@ -423,6 +426,12 @@ export type {
   PrReportTestOutcome,
   PrReportTestConcern,
   PrReportTests,
+  // Captured command output: the platform's own pre-PR check run, and the bugfix
+  // reproduction proof across the pre-fix and final trees.
+  PrReportValidation,
+  PrReportValidationCommand,
+  PrReportReproduction,
+  PrReportReproductionPhase,
   PrReportEnvironment,
   PrReportEnvironments,
   // The environment-lifecycle proof: the dated up/down timeline plus the evidence captured
@@ -523,6 +532,12 @@ export type {
   // Per-user settings (the user-tier spend budget).
   UserSettings,
   UpdateUserSettingsInput,
+  // Per-user in-app tutorial progress + the funnel event vocabulary.
+  TutorialProgress,
+  TutorialDecision,
+  UpdateTutorialProgressInput,
+  TutorialEvent,
+  RecordTutorialEventInput,
   // Slack integration shapes (Slack as an extra notification transport).
   SlackConnection,
   SlackRoute,

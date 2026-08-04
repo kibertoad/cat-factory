@@ -7,6 +7,7 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
+import StepReproductionReport from '~/components/panels/StepReproductionReport.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
@@ -581,6 +582,19 @@ async function copyOutput() {
               <!-- container agent's effort self-assessment (how hard it was, what reduced its
                    effectiveness, key obstacles). Only when the agent reported one. -->
               <StepEffortReport v-if="step.effortReport" :report="step.effortReport" />
+
+              <!-- the bugfix REPRODUCTION PROOF: the declared reproducing check run against the
+                   pre-fix tree and the final one, with both captured outputs, or the agent's
+                   structural declaration that the bug cannot be reproduced. This panel is the
+                   half that matters most: the engine records the proof on whichever step OPENED
+                   the pull request, and in every built-in pipeline that is the `coder` — a kind
+                   with no dedicated result view, so it opens HERE and the result-window shell is
+                   never involved. Self-hiding for a run that declared no reproducing check. -->
+              <StepReproductionReport
+                v-if="step.reproduction"
+                :report="step.reproduction"
+                variant="card"
+              />
 
               <!-- what the step declared it stored through a foundational storage service, and
                    every way that record is incomplete. This panel is the OTHER half of the

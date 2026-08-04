@@ -33,7 +33,10 @@ export {
   classifyChangedPath,
   classifyChangedFiles,
   resolveMergeClassRule,
+  narrowMergeClassRule,
+  resolveRoleScopedMergeClassRule,
   type ChangeClassification,
+  type RoleScopedMergeClassRule,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
 export {
@@ -54,11 +57,19 @@ export {
   VALIDATION_DETECTION_CONTENT_FILES,
 } from './domain/validation-detectors.js'
 export { UNATTRIBUTED_CALL_PHASE, normalizeCallPhase } from './domain/llm-phase.js'
-export type { LlmKindRollup, LlmPhaseRollup } from './domain/llm-rollup.js'
+export type {
+  LlmKindRollup,
+  LlmPhaseRollup,
+  LlmRateResolver,
+  LlmTokenClassCounts,
+  LlmTokenRates,
+} from './domain/llm-rollup.js'
 export {
+  costOfTokenClasses,
   foldRollupTotals,
   foldRollupsByAgentKind,
   foldRollupsByPhase,
+  priceRollupCells,
   rollupInputTokens,
 } from './domain/llm-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
@@ -286,12 +297,14 @@ export {
   memoizeBinaryGeneratorViews,
   registryBinaryGeneratorSource,
 } from './ports/binary-generators.js'
+// `binaryFormatCoverage` is NOT re-exported from here: it moved to `@cat-factory/contracts`
+// beside the vocabulary it reads, so the SPA imports the same implementation the backend does.
+// A convenience re-export would put two import paths on one rule, which is the shape that let a
+// second hand-written copy exist in the first place.
 export {
-  type BinaryFormatCoverage,
   type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
-  binaryFormatCoverage,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,

@@ -329,20 +329,30 @@ function buildDeliveryPipelines(): Pipeline[] {
     // A bug-fix preset, front-loaded with the investigate → triage pair: `bug-investigator` reads
     // the codebase from the raw report (read-only) and emits an enriched report; `clarity-review`
     // triages it for fixability (the ONLY human gate — the iterative answer → incorporate → re-review
-    // loop); `spec-writer` folds the clarified brief into the spec; architect → coder → reviewer is
-    // the core; conflicts → ci → merger is the standard tail.
+    // loop); `spec-writer` folds the clarified brief into the spec; architect → `repro-test` → coder
+    // → reviewer is the core; conflicts → ci → merger is the standard tail.
+    //
+    // `repro-test` sits between the design and the fix, exactly where `pl_bug_triage` puts it: it
+    // writes a FAILING test onto the shared work branch that the coder then resumes. It belongs in
+    // a bugfix preset on its own merits (produce a red test before the fix), and it is also the
+    // declaration seam the reproduction proof reads — without it the coder's PR carries no evidence
+    // that the defect ever manifested, which is the one claim a bugfix PR is really making. The
+    // step never blocks: an agent that cannot reproduce the bug concedes structurally, and the
+    // concede is published on the PR with its reason rather than looking like nobody tried.
     definePipeline({
       id: 'pl_bugfix',
       name: 'Triage & fix bug',
       purpose: 'build',
-      version: 3,
+      // Bumped for the reseed offer that adopts the `repro-test` step into existing workspaces.
+      version: 4,
       description:
-        'Investigate a bug report against the codebase, triage it for fixability with you, then fix, review, and ship the PR.',
+        'Investigate a bug report against the codebase, triage it for fixability with you, write a failing reproduction test, then fix, review, and ship the PR.',
       steps: [
         'bug-investigator',
         { kind: 'clarity-review', gate: true },
         'spec-writer',
         'architect',
+        'repro-test',
         'coder',
         'reviewer',
         'conflicts',

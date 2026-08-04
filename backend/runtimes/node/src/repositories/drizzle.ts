@@ -53,6 +53,7 @@ import type {
   TokenUsageRepository,
   TrackerSettingsRepository,
   UserRepository,
+  TutorialProgressRepository,
   UserSettingsRepository,
   ValidationConfigRepository,
   WorkspaceAgentSettingsRepository,
@@ -110,6 +111,7 @@ import {
   DrizzleWorkspaceAgentSettingsRepository,
   DrizzleModelPresetRepository,
   DrizzleTrackerSettingsRepository,
+  DrizzleTutorialProgressRepository,
   DrizzleUserSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
 } from './drizzle/settings.js'
@@ -191,6 +193,7 @@ export interface CoreRepositories {
   mergeTrackRecordRepository: MergeTrackRecordRepository
   sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
+  tutorialProgressRepository: TutorialProgressRepository
   userSettingsRepository: UserSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
   packageRegistryConnectionRepository: PackageRegistryConnectionRepository
@@ -250,6 +253,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     mergeTrackRecordRepository: new DrizzleMergeTrackRecordRepository(db),
     sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
+    tutorialProgressRepository: new DrizzleTutorialProgressRepository(db),
     userSettingsRepository: new DrizzleUserSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
     packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),

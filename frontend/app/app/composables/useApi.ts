@@ -52,6 +52,7 @@ import { tasksApi } from './api/tasks'
 import { bugHuntApi } from './api/bugHunt'
 import { testSecretsApi } from './api/testSecrets'
 import { userSecretsApi } from './api/userSecrets'
+import { tutorialApi } from './api/tutorial'
 import { userSettingsApi } from './api/userSettings'
 import { workspacesApi } from './api/workspaces'
 
@@ -165,6 +166,7 @@ export function useApi() {
     ...slackApi(ctx),
     ...bootstrapApi(ctx),
     ...userSecretsApi(ctx),
+    ...tutorialApi(ctx),
     ...userSettingsApi(ctx),
   }
 }

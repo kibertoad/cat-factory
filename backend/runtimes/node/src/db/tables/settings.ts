@@ -34,6 +34,23 @@ export const userSettings = pgTable('user_settings', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Per-user in-app tutorial progress (mirror of D1 migration 0080). PK is the user id, like
+// `user_settings` above. Mirrors the SPA's browser-persisted store so a person's walkthrough
+// history follows THEM rather than a browser profile.
+//
+// The two id lists are JSON arrays rather than a join table: grow-only sets of at most a few dozen
+// opaque tour ids, always read and written whole, never joined or aggregated over. `decision` is
+// NULL when the launch prompt was never answered, which is a real state distinct from 'declined'.
+// The row's ABSENCE is what "Reset progress" restores, so the reset deletes rather than rewriting
+// defaults.
+export const tutorialProgress = pgTable('tutorial_progress', {
+  user_id: text('user_id').primaryKey(),
+  decision: text('decision'),
+  completed_tour_ids: text('completed_tour_ids').notNull().default('[]'),
+  nudged_tour_ids: text('nudged_tour_ids').notNull().default('[]'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Per-workspace, per-agent-kind generation settings (mirror of D1 migration 0071), edited from
 // the pipeline builder beside the prompt overrides. The workspace tier of the deployment's
 // per-kind output-token ceiling: no row (or a NULL `max_output_tokens`) means inherit the

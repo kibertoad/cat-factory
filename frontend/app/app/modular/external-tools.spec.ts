@@ -43,6 +43,7 @@ const GATES: NavGates = {
   boardHasOpenDecision: true,
   boardHasPendingApproval: true,
   boardHasFinishedRun: true,
+  boardHasFailedRun: true,
 }
 
 describe('resolveExternalToolUrl', () => {

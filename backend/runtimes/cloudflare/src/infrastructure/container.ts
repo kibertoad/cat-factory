@@ -31,10 +31,6 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
-  SLACK_CIPHER_INFO,
-  NOTIFICATION_WEBHOOK_CIPHER_INFO,
-  SlackNotificationChannel,
-  buildNotificationWebhookSupport,
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
@@ -113,11 +109,6 @@ import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
-import {
-  D1SlackConnectionRepository,
-  D1SlackMemberMappingRepository,
-  D1SlackSettingsRepository,
-} from './repositories/D1SlackRepositories'
 import { D1AccountInvitationRepository } from './repositories/D1AccountInvitationRepository'
 import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTokenRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
@@ -150,7 +141,7 @@ import {
   D1SandboxGradeRepository,
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
-import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepository'
+import { selectPerUserDeps } from './container-per-user-deps'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 
@@ -188,7 +179,6 @@ import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { D1NotificationWebhookRepository } from './repositories/D1NotificationWebhookRepository'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
@@ -293,6 +283,10 @@ export function selectMergeLifecycleDeps(
 ): Partial<CoreDependencies> {
   const { env, config, db, clock, idGenerator, providerRegistry, webhookChannel } = input
   const deps: Partial<CoreDependencies> = {
+    // This Worker's own externally-reachable URL — the same value the container harness reaches
+    // the LLM proxy on. The verification report builds direct links to captured artifacts' bytes
+    // from it; unset ⇒ the report lists artifact ids with no link, never a link to nowhere.
+    apiBaseUrl: env.WORKER_PUBLIC_URL?.trim() || undefined,
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
     mergeTrackRecordRepository: new D1MergeTrackRecordRepository({ db }),
@@ -301,7 +295,7 @@ export function selectMergeLifecycleDeps(
     // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
     sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-    userSettingsRepository: new D1UserSettingsRepository({ db }),
+    ...selectPerUserDeps(db),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to.
     // Always wired (no secret material) — the panels only run when the optional consensus
@@ -519,138 +513,7 @@ export {
   cloudflareContentStorage,
 } from './container-artifact-storage'
 import { cloudflareContentStorage } from './container-artifact-storage'
-
-/**
- * Construct the Slack repositories + bot-token cipher once, when the integration is
- * enabled — the single source of truth shared by both the delivery channel and the
- * management module so neither duplicates the wiring. Null when Slack is off.
- */
-function buildSlackInfra(config: AppConfig, db: D1Database) {
-  if (!config.slack.enabled || !config.slack.encryptionKey) return null
-  return {
-    connectionRepository: new D1SlackConnectionRepository({ db }),
-    settingsRepository: new D1SlackSettingsRepository({ db }),
-    memberMappingRepository: new D1SlackMemberMappingRepository({ db }),
-    cipher: new WebCryptoSecretCipher({
-      masterKeyBase64: config.slack.encryptionKey,
-      info: SLACK_CIPHER_INFO,
-    }),
-  }
-}
-
-/**
- * Build the Slack notification channel when the integration is enabled — a
- * runtime-neutral transport (fetch + decrypt + D1 reads) composed alongside the
- * in-app channel. Null when Slack is off (then nothing Slack-related is wired).
- */
-function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotificationChannel | null {
-  const infra = buildSlackInfra(config, db)
-  if (!infra) return null
-  return new SlackNotificationChannel({
-    workspaceRepository: new D1WorkspaceRepository({ db }),
-    slackConnectionRepository: infra.connectionRepository,
-    slackSettingsRepository: infra.settingsRepository,
-    slackMemberMappingRepository: infra.memberMappingRepository,
-    blockRepository: new D1BlockRepository({ db }),
-    secretCipher: infra.cipher,
-    // Best-effort delivery still surfaces failures (revoked token, missing channel
-    // invite) through the structured logger so a broken route is diagnosable.
-    onError: (error, ctx) =>
-      logger.warn('slack notification delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
-        ...ctx,
-      }),
-  })
-}
-
-/**
- * Build the outbound notification-webhook feature (management service + delivery channel) when the
- * shared encryption key is present — the signing secret must be sealable. Both halves come from
- * one builder so they can't drift onto different repositories/ciphers. Null when no key is set;
- * then the management surface 503s and no deliveries are attempted.
- */
-export function buildNotificationWebhookSupportForWorker(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-): ReturnType<typeof buildNotificationWebhookSupport> | null {
-  const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  if (!encryptionKey) return null
-  // The endpoint guard, resolved from the webhook's OWN config slice (undefined ⇒ the strict
-  // public-https default). Handed to the builder, which gives it to both the write boundary and
-  // the delivery path so they can't admit/reject different endpoints.
-  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
-  return buildNotificationWebhookSupport({
-    notificationWebhookRepository: new D1NotificationWebhookRepository({ db }),
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: encryptionKey,
-      info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
-    }),
-    clock,
-    ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
-    // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
-    // through the structured logger so a broken receiver is diagnosable.
-    onError: (error, ctx) =>
-      logger.warn('notification webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
-        ...ctx,
-      }),
-    onRunEventError: (error, ctx) =>
-      logger.warn('run lifecycle webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
-        ...ctx,
-      }),
-  })
-}
-
-/**
- * This deployment's EXTERNAL notification channels — everything that is NOT the in-app push
- * (Slack, plus a workspace's outbound notification webhook). Two consumers:
- * {@link selectMergeLifecycleDeps} composes it into the engine's own fan-out, and the
- * ServerContainer attaches it as `machineNotificationDelivery`, the seam the mothership-mode
- * `POST /internal/notifications/deliver` endpoint delivers a laptop-raised notification through
- * (its credentials never leave this deployment). In-app is excluded there on purpose: a laptop's
- * in-app frame already arrives over the real-time upstream relay.
- *
- * The webhook belongs in this set for the same reason Slack does — its signing secret is sealed
- * with THIS deployment's key, so this is the only side that can decrypt and deliver it. Keeping it
- * out would leave a mothership-mode laptop failing every delivery on a decrypt it cannot perform
- * while the mothership never attempted one. Symmetric with the Node facade.
- *
- * Called once per consumer (so the seam gets its own instance), exactly like `buildAppRegistry`,
- * which the `githubTokenDelegation` seam also re-builds — the channel is a stateless adapter over
- * D1 reads plus a cipher, so a second instance costs nothing.
- */
-export function buildExternalNotificationChannel(
-  config: AppConfig,
-  db: D1Database,
-  webhookChannel?: NotificationChannel,
-): NotificationChannel | null {
-  const channels: NotificationChannel[] = []
-  const slackChannel = buildSlackChannel(config, db)
-  if (slackChannel) channels.push(slackChannel)
-  if (webhookChannel) channels.push(webhookChannel)
-  if (channels.length === 0) return null
-  return channels.length === 1 ? channels[0]! : new CompositeNotificationChannel(channels)
-}
-
-/**
- * Wire the Slack management module (per-account connect + per-workspace routing +
- * member map). Wired only when the integration is enabled; the actual delivery is
- * the channel composed in by {@link selectMergeLifecycleDeps}. OAuth credentials
- * are optional — manual bot-token onboarding works without them.
- */
-export function selectSlackDeps(config: AppConfig, db: D1Database): Partial<CoreDependencies> {
-  const infra = buildSlackInfra(config, db)
-  if (!infra) return {}
-  return {
-    slackConnectionRepository: infra.connectionRepository,
-    slackSettingsRepository: infra.settingsRepository,
-    slackMemberMappingRepository: infra.memberMappingRepository,
-    slackSecretCipher: infra.cipher,
-  }
-}
+import { buildExternalNotificationChannel } from './container-notification-deps'
 
 /**
  * Wire account invitations + per-account email senders. Invitations are always

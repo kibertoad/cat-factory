@@ -13,6 +13,7 @@ import { BUGFIX_PIPELINE_ID, ValidationError } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { runInitiatorRole } from '../../http/runAdmission.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -108,6 +109,11 @@ export function bugHuntController(): Hono<AppEnv> {
     // deleting it would throw that away and leave them to redo the pick. They can press Run.
     const execution = await container.executionService.start(workspaceId, block.id, pipelineId, {
       initiatedBy,
+      // An adopted bug is an ATTRIBUTED start: a person on this board picked this task and
+      // pressed the button, so the run is admitted under their tier exactly as a board start is.
+      // Omitting it here made the merge preset's `dryRunRoles` a setting a sandboxed member could
+      // walk around by adopting a bug instead of starting a task.
+      initiatedByRole: runInitiatorRole(c),
       activate,
     })
     return c.json({ block, task, execution }, 201)

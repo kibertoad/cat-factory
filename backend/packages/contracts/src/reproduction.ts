@@ -20,7 +20,7 @@ import * as v from 'valibot'
 //
 // The spec travels to the container IN THE JOB BODY (containers have no DB access), so all
 // three transports work with no transport-specific wiring. See
-// docs/initiatives/bugfix-reproduction-proof.md.
+// backend/docs/adr/0033-bugfix-reproduction-proof.md.
 // ---------------------------------------------------------------------------
 
 /** The per-task tri-state that opts a run into the proof phase (an `agentConfig` value). */

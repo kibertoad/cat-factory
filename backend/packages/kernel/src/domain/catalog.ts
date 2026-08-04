@@ -1,10 +1,12 @@
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
 import type {
   BlockType,
+  ClassRulesByRole,
   MergeClassRules,
   ModelPreset,
   RequirementConcernLevel,
   StepGating,
+  WorkspaceRole,
   WorkspaceSettings,
 } from './types.js'
 
@@ -114,6 +116,15 @@ export const DEFAULT_RISK_POLICY = {
 export const DEFAULT_MERGE_CLASS_RULES: MergeClassRules = {}
 
 /**
+ * The built-in presets ship with NO role-scoped narrowing and NO sandboxed roles, for the same
+ * reason they ship no per-class rules: who a deployment trusts with what is exactly the judgement
+ * a seed cannot make on an operator's behalf, and the identity of these two empties is what keeps
+ * every existing workspace on byte-for-byte its previous merge behaviour.
+ */
+export const DEFAULT_CLASS_RULES_BY_ROLE: ClassRulesByRole = {}
+export const DEFAULT_DRY_RUN_ROLES: readonly WorkspaceRole[] = []
+
+/**
  * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
  * workspace's persisted copy can be matched against the catalog and reseeded). The
  * service stamps each with `createdAt` on first seed; {@link seedRiskPolicies} lists
@@ -144,6 +155,10 @@ export interface RiskPolicySeed {
   forkDecision: StepGating | null
   /** Per-change-class auto-merge rules; empty on the built-ins (see DEFAULT_MERGE_CLASS_RULES). */
   classRules: MergeClassRules
+  /** Per-role narrowing of `classRules`; empty on the built-ins. */
+  classRulesByRole: ClassRulesByRole
+  /** Roles whose runs are forced into dry-run mode; empty on the built-ins. */
+  dryRunRoles: WorkspaceRole[]
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: boolean
   /**
@@ -182,8 +197,10 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
     forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
     classRules: { ...DEFAULT_MERGE_CLASS_RULES },
+    classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
+    dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     isDefault: true,
-    version: 5,
+    version: 6,
   },
   {
     id: 'mp_manual_review',
@@ -209,8 +226,12 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // No per-class rules: a class rule can never override `autoMergeEnabled: false`, and
     // shipping one here would only mislead an operator reading the preset.
     classRules: { ...DEFAULT_MERGE_CLASS_RULES },
+    // Nor any role-scoped narrowing: narrowing is subtractive, and there is nothing left to
+    // subtract from a preset that already routes every PR to a human.
+    classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
+    dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     isDefault: false,
-    version: 5,
+    version: 6,
   },
 ]
 

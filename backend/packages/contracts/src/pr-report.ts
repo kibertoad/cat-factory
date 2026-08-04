@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema } from './judge.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
+import { reproductionStatusSchema } from './reproduction.js'
 import { requirementVerdictStatusSchema, testEnvironmentSchema } from './testing.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
@@ -28,7 +29,19 @@ import { vcsProviderSchema } from './routes/auth.js'
  * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
  * a bump means "re-read the schema", not "a compatibility shim exists".
  */
-export const PR_VERIFICATION_REPORT_VERSION = 4
+export const PR_VERIFICATION_REPORT_VERSION = 5
+
+/**
+ * How much of one captured command log the report carries, per command.
+ *
+ * Bounded here rather than left to the producer: the harness already trims each tail to what a
+ * REPAIR PROMPT needs, and a pull-request body has a far tighter budget than a model's context
+ * window — ten checks at the harness's own ceiling would blow {@link
+ * hostMarkdown.MAX_SECTION_CHARS} on their own and cost the reader the whole machine-readable
+ * block. The cut keeps the END of the log (where a failure is reported) and is recorded in the
+ * report's `truncations`, so a shortened log never reads as a whole one.
+ */
+export const PR_REPORT_MAX_OUTPUT_CHARS = 2_000
 
 /**
  * Whether a section has evidence to show.
@@ -155,6 +168,148 @@ export const prReportTestsSchema = v.object({
 })
 export type PrReportTests = v.InferOutput<typeof prReportTestsSchema>
 
+// ---- Captured command output ----------------------------------------------
+//
+// The two sections below are the report's only CAPTURED-OUTPUT evidence: a command ran, and here
+// is what it printed. Everything else in the report is a structured verdict somebody (a gate, a
+// judge, an agent) produced; these two are the raw thing itself, which is why they are worth the
+// body budget they cost. Both come off the step the harness wrote them onto — `step.validation`
+// and `step.reproduction` — so neither re-runs anything at compose time.
+
+/** One command's outcome in the run's pre-PR validation attempt. */
+export const prReportValidationCommandSchema = v.object({
+  /** The check's configured label (`lint`, `test`, `build`, …). */
+  label: v.string(),
+  /** The command line the harness ran in the checkout. */
+  command: v.string(),
+  /** Exit code (0 = pass); 124 on watchdog timeout, 127 on spawn failure. */
+  exitCode: v.number(),
+  passed: v.boolean(),
+  /** Set when the command was killed by the per-command watchdog rather than exiting. */
+  timedOut: v.optional(v.nullable(v.boolean())),
+  durationMs: v.optional(v.nullable(v.number())),
+  /**
+   * The END of the command's combined stdout+stderr, secret-scrubbed and bounded to {@link
+   * PR_REPORT_MAX_OUTPUT_CHARS}.
+   *
+   * Carried for a FAILING command only, and that is a stated rule rather than a silent one: a
+   * green check's log is the one thing in this report a reviewer never acts on, and ten of them
+   * would cost the body budget that makes the failing one readable. `null` on a passing row
+   * therefore means "not retained", never "the command printed nothing" — the section says so in
+   * as many words, because those two readings are exactly the kind of collapse this report exists
+   * to remove.
+   */
+  outputTail: v.optional(v.nullable(v.string())),
+})
+export type PrReportValidationCommand = v.InferOutput<typeof prReportValidationCommandSchema>
+
+/**
+ * The PRE-PR VALIDATION section: the service's own check commands, run by the executor-harness
+ * against the final checkout before the pull request was allowed to open, with their exit codes
+ * and the captured output of whatever failed.
+ *
+ * This is the report's strongest single claim, because it is the one the platform ENFORCED: only
+ * a green checkout opens a PR, so a `reported` + `passed` section says the commands in the table
+ * below actually ran and actually exited 0 on this tree. It is deliberately distinct from the
+ * `ci` section: CI is the host's verdict on the pushed branch (a different machine, later, and
+ * for a red run possibly never), while this is the platform's own captured run of the service's
+ * commands on the exact tree that was pushed.
+ *
+ * `absent` splits the causes that need different reactions, per the report's governing rule: a
+ * service that configured no checks is a deployment gap, a step that never got that far is a run
+ * outcome, and an older runner image that reports nothing is neither.
+ */
+export const prReportValidationSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says WHY the section is empty when `status` is `absent` — never a bare blank. */
+  note: v.optional(v.nullable(v.string())),
+  /** Whether every command in the recorded attempt exited 0 (⇒ the PR was allowed to open). */
+  passed: v.optional(v.nullable(v.boolean())),
+  /** The agent kind of the step that ran the checks, so a reader knows which dispatch this is. */
+  stepKind: v.optional(v.nullable(v.string())),
+  /** How many agent+check rounds ran, and the budget they ran under. */
+  attempts: v.number(),
+  maxAttempts: v.optional(v.nullable(v.number())),
+  /** Epoch ms the recorded attempt finished. */
+  at: v.optional(v.nullable(v.number())),
+  /** Per-command outcomes of the recorded attempt (capped like every list; see `truncations`). */
+  commands: v.array(prReportValidationCommandSchema),
+})
+export type PrReportValidation = v.InferOutput<typeof prReportValidationSchema>
+
+/** One tree's run of the declared reproduction command (the pre-fix tree, or the final one). */
+export const prReportReproductionPhaseSchema = v.object({
+  exitCode: v.number(),
+  passed: v.boolean(),
+  durationMs: v.optional(v.nullable(v.number())),
+  timedOut: v.optional(v.nullable(v.boolean())),
+  /**
+   * Set when this tree's SETUP command failed, so the check never ran meaningfully. Reported
+   * rather than folded into a plain failure: a tree that could not be prepared says nothing about
+   * the defect, and reading it as "red" is precisely the false `reproduced` the symmetric-worktree
+   * design exists to prevent.
+   */
+  setupFailed: v.optional(v.nullable(v.boolean())),
+  /** The END of the run's output, secret-scrubbed and bounded (see the validation twin). */
+  outputTail: v.optional(v.nullable(v.string())),
+})
+export type PrReportReproductionPhase = v.InferOutput<typeof prReportReproductionPhaseSchema>
+
+/**
+ * The BUGFIX REPRODUCTION PROOF section: evidence that the declared reproducing check was RED on
+ * the pre-fix tree and GREEN on the final one, which is the entire content of the claim "this
+ * change fixes the bug" and the last big agent ASSERTION on a bugfix PR still taken on trust.
+ *
+ * `verdict` is computed by the harness from two exit codes, never self-reported by a model — the
+ * `repro-test` kind's own `outcome` field has always been the model's claim, and this section is
+ * what checks it. Three shapes reach a reviewer:
+ *
+ *  - `reproduced` — red at base, green at final, with both captured logs below.
+ *  - `inconclusive` — anything else, stated plainly rather than dressed up. An ABSENT `final` is
+ *    normal here: a green base already settles the verdict, so the second tree is not run.
+ *  - `declared_infeasible` — the agent structurally declared reproduction impossible, with its
+ *    reason and the alternative verification it performed. Nothing ran, so there are no phases.
+ *
+ * `observation` is the harness's own one-line diagnosis of an inconclusive shape and is rendered
+ * VERBATIM. It is not interchangeable with re-deriving a cause from `base.passed`: a green base
+ * can mean the test does not capture the defect, or that a resumed run's pre-fix tree already
+ * carried this step's own interrupted work, and only the side that ran can tell those apart.
+ */
+export const prReportReproductionSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says WHY the section is empty when `status` is `absent` — never a bare blank. */
+  note: v.optional(v.nullable(v.string())),
+  /** The computed verdict. Null only when `status` is `absent`. */
+  verdict: v.optional(v.nullable(reproductionStatusSchema)),
+  /** The command run identically against both trees (empty for `declared_infeasible`). */
+  command: v.optional(v.nullable(v.string())),
+  /** The declared test files that constitute the reproduction. */
+  testPaths: v.array(v.string()),
+  /**
+   * How many declared paths were DROPPED before the proof ran (unsafe, over-long, or over the
+   * cap). Non-zero means the pre-fix tree was rebuilt from an incomplete reproduction, which can
+   * green it and read as "the test does not capture the defect" — so it is stated rather than
+   * implied.
+   */
+  omittedTestPaths: v.optional(v.nullable(v.number())),
+  /** The pre-fix tree's run. Absent for `declared_infeasible`. */
+  base: v.optional(v.nullable(prReportReproductionPhaseSchema)),
+  /** The final tree's run. Absent for `declared_infeasible`, or when the base run settled it. */
+  final: v.optional(v.nullable(prReportReproductionPhaseSchema)),
+  /** How many agent+verify rounds ran, and the budget they ran under. */
+  attempts: v.number(),
+  maxAttempts: v.optional(v.nullable(v.number())),
+  /** For `declared_infeasible`: WHY the bug could not be reproduced, verbatim from the agent. */
+  reason: v.optional(v.nullable(v.string())),
+  /** For `declared_infeasible`: what the agent verified INSTEAD, verbatim. */
+  alternativeVerification: v.optional(v.nullable(v.string())),
+  /** The producer's own one-line diagnosis of the observed shape. Rendered verbatim. */
+  observation: v.optional(v.nullable(v.string())),
+  /** Epoch ms the proof settled. */
+  at: v.optional(v.nullable(v.number())),
+})
+export type PrReportReproduction = v.InferOutput<typeof prReportReproductionSchema>
+
 /** One ephemeral environment the `deployer` step stood up (per service frame). */
 export const prReportEnvironmentSchema = v.object({
   /** The service frame the environment was provisioned for. */
@@ -248,6 +403,20 @@ export const prReportEvidenceArtifactSchema = v.object({
   artifactId: v.string(),
   /** Whether a reference design image was paired with it for visual confirmation. */
   hasReference: v.boolean(),
+  /**
+   * Direct link to the artifact's BYTES, on the deployment's own authenticated blob endpoint —
+   * the thing a reviewer (or a downstream tool holding an API key) actually wants from a row that
+   * used to carry an opaque id and nothing else.
+   *
+   * Deliberately the API URL rather than the app deep link beside it on the section: the deep link
+   * lands a human in the run's evidence panel, which is the right place to BROWSE, and is useless
+   * to anything that is not a browser with a session. Both are emitted because they answer
+   * different questions, and neither substitutes for the other.
+   *
+   * Null when the deployment configured no public backend URL, so the report never emits a link to
+   * nowhere; the `artifactId` is still there, which is what an operator greps the store for.
+   */
+  url: v.nullable(v.string()),
 })
 export type PrReportEvidenceArtifact = v.InferOutput<typeof prReportEvidenceArtifactSchema>
 
@@ -495,6 +664,10 @@ export const prVerificationReportSchema = v.object({
   generatedAt: v.number(),
   run: prReportRunSchema,
   ci: prReportCiSchema,
+  /** The platform's OWN run of the service's check commands against the pushed tree. */
+  validation: prReportValidationSchema,
+  /** Red-on-the-pre-fix-tree, green-on-the-final-tree evidence for a bugfix run. */
+  reproduction: prReportReproductionSchema,
   tests: prReportTestsSchema,
   requirements: prReportRequirementsSchema,
   environments: prReportEnvironmentsSchema,

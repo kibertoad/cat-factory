@@ -34,16 +34,26 @@ import type { TutorialRequirement, TutorialTour } from '~/utils/tutorial'
  * The catalog is in two halves, and the split is what keeps the launch prompt answerable:
  *
  *  - The DELIVERY LOOP, end to end — get a repo onto the board, put a task on it, run it, answer
- *    it when it asks, read the result and merge it — each tour requiring the state the previous
- *    one produces, so the prompt only ever offers what this board can actually demonstrate and
- *    the catalogue turns the rest into a to-do list rather than an absence.
+ *    it when it asks, read a failure when it comes, read the result and merge it — each tour
+ *    requiring the state the previous one produces, so the prompt only ever offers what this
+ *    board can actually demonstrate and the catalogue turns the rest into a to-do list rather
+ *    than an absence. The loop deliberately covers work going WRONG as well as right
+ *    (`diagnose-failure`): a first run fails often, and that was the one state on the whole arc
+ *    with no walkthrough.
  *  - The PLATFORM behind it (`offeredAtLaunch: false`) — the engine the agents run on, the
- *    pipelines that sequence them, the standards they read, the systems they talk to. Each is
- *    gated on a PERMISSION rather than on board state, so every one is startable on a brand-new
- *    board; offered at launch they would bury the two tours a first-time user can act on. They
- *    are reference material someone goes and gets from the catalogue when the question comes up,
- *    which is why each covers ONE surface and ends there rather than touring the sidebar: these
- *    surfaces open as modals, so a step after one cannot reach another sidebar entry anyway.
+ *    pipelines that sequence them, the standards they read, the systems they talk to, where
+ *    their containers and environments come from, and the two libraries that change what a
+ *    review or a design is made of. Each is gated on a PERMISSION or a deployment CAPABILITY
+ *    rather than on board state, so every one is startable on a brand-new board; offered at
+ *    launch they would bury the two tours a first-time user can act on. They are reference
+ *    material someone goes and gets from the catalogue when the question comes up, which is why
+ *    each covers ONE surface and ends there rather than touring the sidebar: these surfaces open
+ *    as modals, so a step after one cannot reach another sidebar entry anyway.
+ *
+ * The two halves also differ in what they are FOR now that the finish card hands off
+ * (`nextTourAfter`): the loop is a course, taken in order, each tour unlocked by the last one's
+ * own outcome; the platform half is a shelf. That is why the handoff prefers a launch-offer tour
+ * whatever its `order` — a deployment's own reference tour must not cut into the arc.
  */
 
 /**
@@ -97,6 +107,28 @@ export const TUTORIAL_REQUIREMENTS = {
     id: 'finished-run',
     labelKey: 'tutorial.requirements.finishedRun',
     met: (gates) => gates.boardHasFinishedRun,
+  },
+  failedRun: {
+    id: 'failed-run',
+    labelKey: 'tutorial.requirements.failedRun',
+    met: (gates) => gates.boardHasFailedRun,
+  },
+  // Two deployment-capability requirements the newer surfaces need. `infrastructure` is the
+  // gate of the sidebar entry its tour clicks (`nav-infrastructure`), which already folds in
+  // `integrations.manage`; `advancedTier` is the INTERFACE MODE, and it is a requirement in its
+  // own right for the two reasons the README's drift-guard section names: an entry marked
+  // `advanced: true` is absent from BASIC mode, which is the shipped default, and a SECTION
+  // inside a basic-mode surface can hide itself the same way. Either leaves a tour hunting for
+  // an anchor that nearly every user's screen does not render.
+  infrastructure: {
+    id: 'infrastructure',
+    labelKey: 'tutorial.requirements.infrastructure',
+    met: (gates) => gates.infrastructureAvailable,
+  },
+  advancedTier: {
+    id: 'advanced-tier',
+    labelKey: 'tutorial.requirements.advancedTier',
+    met: (gates) => gates.advancedMode,
   },
   // The platform half's requirements. Each mirrors, exactly, the `gate` of the sidebar entry the
   // tour clicks (`nav-model-providers` / `nav-integrations`, `nav-fragments`). A requirement
@@ -432,6 +464,59 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     ],
   },
   {
+    id: 'diagnose-failure',
+    order: 45,
+    icon: 'i-lucide-triangle-alert',
+    titleKey: 'tutorial.tours.diagnoseFailure.title',
+    descriptionKey: 'tutorial.tours.diagnoseFailure.description',
+    // The state a first run reaches most often, and the one the catalog had nothing for. Every
+    // other delivery-loop tour describes work going right: `review-merge` requires a run that
+    // finished SUCCESSFULLY, so a user whose runs all failed was offered a walkthrough of the
+    // happy path they cannot reach and no account of the screen they are actually looking at.
+    // That is the point at which people conclude the product does not work.
+    requires: [TUTORIAL_REQUIREMENTS.failedRun],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.diagnoseFailure.steps.intro.title',
+        bodyKey: 'tutorial.tours.diagnoseFailure.steps.intro.body',
+      },
+      {
+        // The banner, not the card: `TaskCard` swaps its progress bar for the shared failure
+        // banner on a failed run, and that banner is the whole subject of this tour.
+        id: 'banner',
+        target: 'agent-failure-banner',
+        placement: 'right',
+        titleKey: 'tutorial.tours.diagnoseFailure.steps.banner.title',
+        bodyKey: 'tutorial.tours.diagnoseFailure.steps.banner.body',
+      },
+      {
+        // NOT `target-click`, for `design-pipeline`'s reason rather than `run-task`'s: Retry is
+        // rendered but DISABLED without `runs.execute`, and a click-to-advance step whose
+        // control cannot be clicked drops its Next button and strands the tour. The copy
+        // therefore describes retrying rather than instructing it. (A retry also spends model
+        // budget, so handing the decision back is right on both counts.)
+        id: 'retry',
+        target: 'agent-failure-retry',
+        placement: 'right',
+        titleKey: 'tutorial.tours.diagnoseFailure.steps.retry.title',
+        bodyKey: 'tutorial.tours.diagnoseFailure.steps.retry.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.diagnoseFailure.steps.finish.title',
+        bodyKey: 'tutorial.tours.diagnoseFailure.steps.finish.body',
+      },
+    ],
+    // Deliberately NOT anchored on `agent-failure-history` or
+    // `agent-failure-configure-environment`, both of which the finish card mentions in prose
+    // instead. Each renders only in a narrower state than this tour's own requirement (a trail
+    // of PRIOR attempts; a failure whose kind is `environment`), so a step on either would need
+    // its own `when` and therefore its own gate, added for one step apiece — and left without
+    // one it would count as an unexpected skip and tell a user who saw exactly the right
+    // walkthrough that they missed part of it.
+  },
+  {
     id: 'review-merge',
     order: 50,
     icon: 'i-lucide-git-merge',
@@ -678,6 +763,143 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         id: 'finish',
         titleKey: 'tutorial.tours.connectSystems.steps.finish.title',
         bodyKey: 'tutorial.tours.connectSystems.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'prepare-infrastructure',
+    order: 100,
+    icon: 'i-lucide-server-cog',
+    titleKey: 'tutorial.tours.prepareInfrastructure.title',
+    descriptionKey: 'tutorial.tours.prepareInfrastructure.description',
+    // Where agent containers run, what a test environment is brought up from, and which
+    // credentials the capabilities an agent uses are allowed to resolve. None of it announces
+    // itself, and the cost of not finding it is a run that fails on provisioning with a banner
+    // pointing at a window the user has never opened.
+    offeredAtLaunch: false,
+    requires: [TUTORIAL_REQUIREMENTS.infrastructure],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.prepareInfrastructure.steps.intro.title',
+        bodyKey: 'tutorial.tours.prepareInfrastructure.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-infrastructure',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.prepareInfrastructure.steps.open.title',
+        bodyKey: 'tutorial.tours.prepareInfrastructure.steps.open.body',
+      },
+      {
+        // The tab STRIP, not any one tab's panel. Which tabs exist is itself resolved from three
+        // independent availability probes, so a step anchored on a panel inside one of them
+        // (`capability-credentials-panel`, `compose-env-setup-section`) points at a control that
+        // exists only while that tab is both offered AND selected — and the tour cannot select
+        // it, since the click that would is the user's. The strip is what the window always
+        // renders, and naming the tabs in the copy is what this tour is for.
+        id: 'tabs',
+        target: 'infrastructure-tabs',
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.prepareInfrastructure.steps.tabs.title',
+        bodyKey: 'tutorial.tours.prepareInfrastructure.steps.tabs.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.prepareInfrastructure.steps.finish.title',
+        bodyKey: 'tutorial.tours.prepareInfrastructure.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'panel-reviews',
+    order: 110,
+    icon: 'i-lucide-users',
+    titleKey: 'tutorial.tours.panelReviews.title',
+    descriptionKey: 'tutorial.tours.panelReviews.description',
+    // A review step can run as a multi-model PANEL instead of one agent, chosen per estimate
+    // tier from a workspace group library. Nobody guesses that from a pipeline: the step looks
+    // like every other review step until a group exists for it to select.
+    offeredAtLaunch: false,
+    // `advancedTier` is NOT redundant beside `settingsManage`, and the nav drift guard cannot
+    // see why: `nav-model-config` is a basic-mode entry, but the consensus SECTION inside that
+    // panel renders on `uiMode.isAdvanced || groups.hasGroups`, so on the shipped default tier a
+    // workspace that has never made a group renders nothing for the anchored step to find. The
+    // guard only pairs a tour against the visibility of a NAV entry, so a section hiding itself
+    // one level in is exactly the case that has to be declared by hand.
+    requires: [TUTORIAL_REQUIREMENTS.settingsManage, TUTORIAL_REQUIREMENTS.advancedTier],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.panelReviews.steps.intro.title',
+        bodyKey: 'tutorial.tours.panelReviews.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-model-config',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.panelReviews.steps.open.title',
+        bodyKey: 'tutorial.tours.panelReviews.steps.open.body',
+      },
+      {
+        id: 'groups',
+        target: 'consensus-group-new',
+        waitForTargetMs: 8000,
+        placement: 'top',
+        titleKey: 'tutorial.tours.panelReviews.steps.groups.title',
+        bodyKey: 'tutorial.tours.panelReviews.steps.groups.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.panelReviews.steps.finish.title',
+        bodyKey: 'tutorial.tours.panelReviews.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'share-services',
+    order: 120,
+    icon: 'i-lucide-library-big',
+    titleKey: 'tutorial.tours.shareServices.title',
+    descriptionKey: 'tutorial.tours.shareServices.description',
+    // The catalog of shared capabilities an org already runs, with the API contracts a design
+    // is expected to build ON rather than reinvent. Without it an architect agent designs every
+    // service as if the estate were empty.
+    offeredAtLaunch: false,
+    // `nav-foundational-services` is marked `advanced: true`, so the tier is part of what
+    // renders the entry this tour clicks. Declared rather than assumed: `navRequirementDrift`
+    // enumerates the whole gate matrix against that entry's own visibility rule and fails
+    // without it.
+    requires: [TUTORIAL_REQUIREMENTS.settingsManage, TUTORIAL_REQUIREMENTS.advancedTier],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.shareServices.steps.intro.title',
+        bodyKey: 'tutorial.tours.shareServices.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'nav-foundational-services',
+        advanceOn: 'target-click',
+        placement: 'right',
+        titleKey: 'tutorial.tours.shareServices.steps.open.title',
+        bodyKey: 'tutorial.tours.shareServices.steps.open.body',
+      },
+      {
+        id: 'catalog',
+        target: 'foundational-manager',
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.shareServices.steps.catalog.title',
+        bodyKey: 'tutorial.tours.shareServices.steps.catalog.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.shareServices.steps.finish.title',
+        bodyKey: 'tutorial.tours.shareServices.steps.finish.body',
       },
     ],
   },

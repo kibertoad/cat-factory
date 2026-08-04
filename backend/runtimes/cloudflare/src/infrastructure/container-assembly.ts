@@ -99,7 +99,6 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   buildAppRegistry,
-  buildExternalNotificationChannel,
   buildResolveRepoTarget,
   buildWorkerVcsIdentityRegistry,
   maybeWrapConsensus,
@@ -121,7 +120,6 @@ import {
   selectSandboxDeps,
   selectFoundationalServiceDeps,
   selectSkillLibraryDeps,
-  selectSlackDeps,
   selectTasksDeps,
   selectTraceSink,
   selectWorkRunner,
@@ -129,6 +127,7 @@ import {
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectGitHubDeps } from './github-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
+import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'
 
 /**
  * The pre-built infrastructure handles + app-owned registries `buildContainer` computes

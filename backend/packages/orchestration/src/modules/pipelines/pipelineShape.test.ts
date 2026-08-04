@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
+import { BUILTIN_GATABLE_KINDS } from '@cat-factory/contracts'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
@@ -92,6 +93,37 @@ describe('validatePipelineShape', () => {
       expect(kinds.indexOf('conflicts'), `${p.id} conflicts before ci`).toBeLessThan(
         kinds.indexOf('ci'),
       )
+    }
+  })
+
+  it('every bugfix preset writes a failing reproduction test BEFORE the fix', () => {
+    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
+    for (const id of ['pl_bugfix', 'pl_bug_triage']) {
+      const kinds = byId.get(id)!.agentKinds
+      const repro = kinds.indexOf('repro-test')
+      const coder = kinds.indexOf('coder')
+      expect(repro, `${id} must write a reproduction test`).toBeGreaterThanOrEqual(0)
+      // Order is the whole content of the step: it SEEDS the shared work branch the coder then
+      // resumes, so a red test exists before the fix does. It is also the declaration seam the
+      // reproduction proof reads — after the coder there would be no pre-fix tree left to prove
+      // anything against.
+      expect(repro, `${id} must reproduce before it fixes`).toBeLessThan(coder)
+    }
+  })
+
+  it('the reproduction step is gatable but no built-in preset gates it', () => {
+    // The step is the most expensive thing a small bugfix pays for, so an author may gate it off
+    // a task estimate. That is deliberately OPT-IN: shipping a preset that gates it would change
+    // what every existing bugfix run costs AND silently drop the evidence on whichever tasks the
+    // model happened to score low, which is a decision for whoever owns the pipeline.
+    expect(BUILTIN_GATABLE_KINDS.has('repro-test')).toBe(true)
+    for (const pipeline of seedPipelines()) {
+      const index = pipeline.agentKinds.indexOf('repro-test')
+      if (index < 0) continue
+      expect(
+        pipeline.gating?.[index] ?? null,
+        `${pipeline.id} must ship the reproduction step ungated`,
+      ).toBeNull()
     }
   })
 

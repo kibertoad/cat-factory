@@ -35,6 +35,7 @@ import {
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 import type { RunMergePolicy } from './RunMergePolicy.js'
+import { isDryRun } from './runMode.logic.js'
 import type { FinalizeMergeResult } from './MergeResolver.js'
 import type { RunDispatcher } from './RunDispatcher.js'
 
@@ -483,6 +484,11 @@ export class StepDecisionController {
    * always optional: an untagged merge settles the track record with a null tag and nothing
    * downstream breaks. The record settle runs AFTER the merge and is best-effort inside the
    * service, so no part of this feature can fail or block a merge.
+   *
+   * A DRY RUN's PR is refused here. Without this the sandbox is decorative: `MergeResolver`
+   * declining to auto-merge only to leave a `merge_review` card whose own action lands the change
+   * would let a run that was never authorised to merge do exactly that, one tap later and through
+   * the surface the mode exists to guard.
    */
   async mergePr(
     workspaceId: string,
@@ -494,9 +500,36 @@ export class StepDecisionController {
     if (block.status !== 'pr_ready') {
       throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
     }
+    await this.assertNotDryRun(workspaceId, block)
     await this.deps.finalizeMerge(workspaceId, blockId)
     await this.deps.mergePolicy.recordHumanMerge(workspaceId, blockId, reviewEffort)
     return this.deps.requireBlock(workspaceId, blockId)
+  }
+
+  /**
+   * Refuse the platform merge path for a PR a DRY RUN produced.
+   *
+   * The mode is read off the run the block points at, which is the run that opened this PR:
+   * `block.executionId` is not cleared when a run settles, and here that is exactly what we want.
+   * A block with no run recorded, or a run that has since been swept, reads as not-a-dry-run —
+   * the same disposition every pre-existing block has, and the only one that does not refuse
+   * merges the platform has always allowed on the strength of state it cannot find.
+   *
+   * The refusal is actionable rather than final: re-running the task live produces a PR that
+   * merges normally. It deliberately does NOT claim the change cannot land at all — the PR is a
+   * real PR on the host, and someone with write access there can always merge it by hand. What
+   * this mode guarantees is that the PLATFORM will not do it on a sandboxed run's behalf.
+   */
+  private async assertNotDryRun(workspaceId: string, block: Block): Promise<void> {
+    if (!block.executionId) return
+    const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
+    if (!isDryRun(instance?.mode)) return
+    throw new ConflictError(
+      'This pull request came from a dry run, so it cannot be merged from here. Start the task ' +
+        'again as a live run to produce a pull request this workspace will merge.',
+      'dry_run_not_mergeable',
+      { executionId: block.executionId },
+    )
   }
 
   /**

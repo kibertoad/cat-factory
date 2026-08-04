@@ -19,7 +19,7 @@ from lockfile evidence: `pnpm install --frozen-lockfile`, `npm ci`, `uv sync --f
 settles, so the install that would have helped the agent most is executed once it no longer
 matters. The reproduction-proof initiative hit the same wall from the other side and papered over
 it narrowly with a hand-declared `setupCommand`
-([`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) §D4).
+([`bugfix-reproduction-proof.md`](../../backend/docs/adr/0033-bugfix-reproduction-proof.md) §D4).
 
 A second premise turned out to be wrong, and it shaped how people reasoned about this: **our
 containers are not network-restricted.** The image installs from the

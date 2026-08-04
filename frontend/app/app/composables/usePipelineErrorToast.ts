@@ -113,6 +113,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.no_pr_to_merge',
     descriptionKey: 'errors.conflict.description.no_pr_to_merge',
   },
+  dry_run_not_mergeable: {
+    titleKey: 'errors.conflict.title.dry_run_not_mergeable',
+    descriptionKey: 'errors.conflict.description.dry_run_not_mergeable',
+  },
   github_not_connected: {
     titleKey: 'errors.conflict.title.github_not_connected',
     descriptionKey: 'errors.conflict.description.github_not_connected',

@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code DebugRunOverviewLlm} wire model.
  * @param byAgentKind the {@code byAgentKind} field.
  * @param byPhase the {@code byPhase} field.
+ * @param costCurrency Always present; {@code null} when the server has no value for it.
  * @param totals the {@code totals} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -19,6 +20,9 @@ public record DebugRunOverviewLlm(
     @JsonProperty("byAgentKind") List<DebugLlmAgentKindRollup> byAgentKind,
 
     @JsonProperty("byPhase") List<DebugLlmPhaseRollup> byPhase,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("costCurrency") @Nullable String costCurrency,
 
     @JsonProperty("totals") DebugLlmTotals totals
 ) {
@@ -37,6 +41,7 @@ public record DebugRunOverviewLlm(
     public static final class Builder {
         private @Nullable List<DebugLlmAgentKindRollup> byAgentKind;
         private @Nullable List<DebugLlmPhaseRollup> byPhase;
+        private @Nullable String costCurrency;
         private @Nullable DebugLlmTotals totals;
 
         /** Set {@code byAgentKind}. */
@@ -51,6 +56,12 @@ public record DebugRunOverviewLlm(
             return this;
         }
 
+        /** Set {@code costCurrency}. */
+        public Builder costCurrency(@Nullable String costCurrency) {
+            this.costCurrency = costCurrency;
+            return this;
+        }
+
         /** Set {@code totals}. */
         public Builder totals(@Nullable DebugLlmTotals totals) {
             this.totals = totals;
@@ -59,7 +70,7 @@ public record DebugRunOverviewLlm(
 
         /** Build the {@link DebugRunOverviewLlm}. */
         public DebugRunOverviewLlm build() {
-            return new DebugRunOverviewLlm(byAgentKind, byPhase, totals);
+            return new DebugRunOverviewLlm(byAgentKind, byPhase, costCurrency, totals);
         }
     }
 }

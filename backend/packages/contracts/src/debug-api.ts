@@ -372,6 +372,12 @@ export const debugRunOverviewSchema = v.object({
     totals: llmExportTotalsSchema,
     byAgentKind: v.array(llmExportInsightSchema),
     byPhase: v.array(llmPhaseInsightSchema),
+    /**
+     * ISO 4217 currency every `costEstimate` above is denominated in, or null when this
+     * deployment prices nothing (in which case those costs are null too). Carried once, here,
+     * rather than repeated on every row: it is a property of the price table, not of a row.
+     */
+    costCurrency: v.nullable(v.string()),
   }),
   signals: v.array(debugSignalSchema),
 })

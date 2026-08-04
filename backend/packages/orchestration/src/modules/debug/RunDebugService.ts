@@ -8,9 +8,11 @@ import type {
   ExecutionStatus,
   LlmCallMetricRepository,
   LlmCallOutcomeFilter,
+  LlmRollupCell,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
 } from '@cat-factory/kernel'
+import { priceRollupCells } from '@cat-factory/kernel'
 import type {
   DebugAgentContextDetail,
   DebugAgentContextEntry,
@@ -66,6 +68,21 @@ export interface RunDebugServiceDependencies {
   agentSearchQueryRepository?: AgentSearchQueryRepository
   /** The provisioning event log. Absent ⇒ the log reads return empty. */
   provisioningLogRepository?: ProvisioningLogRepository
+  /**
+   * Prices a run's rollup cells and collapses their model dimension — in practice
+   * `LlmObservabilityService.summarizeByExecution`, bound.
+   *
+   * Taken as a FUNCTION rather than a rate table of its own so this surface and the board
+   * rollup cannot report different money for one run: they run the same code over the same
+   * cells. Absent ⇒ the raw store cells are used and every cost is null, which is what a
+   * deployment with no pricing wired should read.
+   */
+  priceRollup?: (workspaceId: string, executionId: string) => Promise<LlmRollupCell[]>
+  /**
+   * ISO 4217 currency the priced costs are denominated in, or null when nothing prices them.
+   * From the same service that supplies {@link RunDebugServiceDependencies.priceRollup}.
+   */
+  costCurrency?: string | null
 }
 
 /**
@@ -144,7 +161,7 @@ export class RunDebugService {
     // Independent aggregates over four separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
     const [summaries, contextCount, searchCount, logCounts] = await Promise.all([
-      this.deps.llmCallMetricRepository?.summarizeByExecution(workspaceId, runId) ?? [],
+      this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
       // Total + failures in one aggregate pass — the overview always wants both.
@@ -175,7 +192,14 @@ export class RunDebugService {
       steps,
       diagnostics: execution.diagnostics ?? null,
       sinks,
-      llm: { totals, byAgentKind, byPhase },
+      llm: {
+        totals,
+        byAgentKind,
+        byPhase,
+        // Only stated where something priced the cells. Labelling a run whose every cost is
+        // null with a currency would announce a denomination for numbers that are not there.
+        costCurrency: this.deps.costCurrency ?? null,
+      },
       signals: deriveSignals({
         execution,
         steps,
@@ -185,6 +209,21 @@ export class RunDebugService {
         provisioningFailures: logCounts.failures,
       }),
     }
+  }
+
+  /**
+   * The run's rollup with the model dimension collapsed but nothing priced — what this surface
+   * reads when no pricing function is wired.
+   *
+   * It still goes through `priceRollupCells` rather than returning the store's cells raw, so
+   * both paths hand `foldLlmRollup` the SAME `(agentKind, phase)` grain. Returning the finer
+   * store grain here would produce two cells per kind on a mixed-model run: the folds happen to
+   * absorb that today, and any future reader that indexes the list by kind would silently see
+   * one model's slice.
+   */
+  private async unpricedRollup(workspaceId: string, runId: string): Promise<LlmRollupCell[]> {
+    const cells = await this.deps.llmCallMetricRepository?.summarizeByExecution(workspaceId, runId)
+    return cells ? priceRollupCells(cells) : []
   }
 
   /** One bounded page of the run's recorded model calls. */

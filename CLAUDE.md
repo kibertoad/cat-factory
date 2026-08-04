@@ -1014,6 +1014,15 @@ groups by so an image generator is never asked for music. **A new member must cl
 cleared.** A deliverable is described on three axes: the KIND (`modalities`, which decides which
 generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
 else (the PROMPT); a member is earned only when neither lower axis can carry the distinction.
+**A modality stops deciding at the SECOND producer of it, and no definition field may take over.**
+Two image APIs on one step are both admissible and exactly one is right, so a discriminator with an
+admission rule (`style`, `resolutionRange`, `intendedUse`) would refuse correctly-configured steps:
+those axes do not PARTITION the deliverable the way `modalities` and `mediaTypes` do, so there is no
+`covered`/`uncovered` to compute. The choice belongs to `generatorIds`, then to the step's own
+prompt (the `consumes` ruling one level up: a fact about a COMBINATION or a CHOICE is never a fact
+about one definition). The platform's whole contribution is `binaryModalityOverlaps`, which STATES
+which content types have two producers and RANKS NOTHING, to the agent in its brief and to the human
+in the picker, refusing nothing and warning at no registry.
 `image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
 scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
 the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST (both 3D members
@@ -1088,8 +1097,19 @@ fails BOTH and red-then-red is `inconclusive`. Target **`baseSha`** specifically
 `--depth 1`, so `HEAD~1` isn't in history) and apply the **declared PATHS only** onto the base worktree, or
 a whole-tree checkout drags the fix across and greens it. A failure REPAIRS, then degrades to
 `inconclusive` with the PR still opening: the opposite disposition from validation, because a red check
-means the WORK is broken while an unproven reproduction means the EVIDENCE is weak. Doc:
-[`bugfix-reproduction-proof.md`](./docs/initiatives/bugfix-reproduction-proof.md).
+means the WORK is broken while an unproven reproduction means the EVIDENCE is weak. **An absent `final`
+run is NORMAL for `inconclusive`** (a green base already settles the verdict, so the second tree is not
+run) and **the producer's own `note` is rendered VERBATIM** by every reader, never re-derived from
+`base.passed`: only the side that ran the two trees can tell a test that misses the defect from a resumed
+run whose base already carried this step's own work. The verdict reaches a human on three surfaces off the
+one `step.reproduction` (the PR report section, the result-window shell's trailing section, and the
+step-detail card) and **both SPA surfaces are required**, because the proof is recorded on whichever step
+OPENED the PR, which is the view-less `coder` in every built-in pipeline. **`repro-test` is GATABLE but
+shipped UNGATED**: it is the priciest thing a one-line bugfix pays for, but gating it by default would
+change what every existing run costs and drop the evidence wherever a model scored a task low, so it is
+the pipeline author's opt-in and a skipped step is its own `absent` cause in the report (checked FIRST,
+since gating leaves the step in `instance.steps`). Doc:
+[ADR 0033](./backend/docs/adr/0033-bugfix-reproduction-proof.md).
 
 **Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md`
 (requested **only when `opensPr`**, since an in-place fixer amends a PR whose description it doesn't own)
@@ -1154,6 +1174,29 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   with no merger raises `pipeline_complete` instead of auto-`done`.
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
+- **Who started the run is part of the merge policy.** A preset also carries `classRulesByRole` (the
+  class rules NARROWED by the initiator's workspace role) and `dryRunRoles` (roles whose runs are
+  SANDBOXED: the pipeline opens its PR, nothing merges). Three rules bind anything added here.
+  **Narrowing is subtractive** (`narrowMergeClassRule`, over `always < thresholds < never`), so a role
+  entry can never grant what the base map withholds and is reviewable on its own. **Absent is not a
+  rule**: a role silent on a class, and a run with NO pinned role (a schedule fire, a public-API start,
+  auth-disabled dev), both fall through to the base rules rather than being read as `thresholds` or
+  guessed onto a tier. And **the role and the mode are PINNED at admission**
+  (`ExecutionInstance.initiatedByRole` / `.mode`), never re-resolved: the merge settles on the durable
+  path, which has no request context to resolve a role from and must not let a preset edited mid-run
+  re-govern a run already in flight. A sandbox is refused at BOTH exits — the auto-merge AND `mergePr`,
+  since the review card the first one raises is a merge button. It is SCOPING, not a boundary: it
+  closes the PLATFORM's exits (which is a real escalation to close, because an initiator with no
+  stored PAT merges on the DEPLOYMENT credential), never a hand merge on the host. **A PIN IS ONLY PINNED IF IT
+  PERSISTS**, and that is three hops each of which drops a field SILENTLY: `executionToDetail` and
+  `rowToExecution` are an allow-list rather than a spread, and `buildResumedInstance` carries fields
+  forward by NAME (drop the mode there and `restartFromStep`, which needs no failure, re-mints a
+  sandboxed run as live). A `MergeResolver` unit test hands in an instance built in memory and passes
+  through all three, so **anything a run pins at admission and a settlement path reads owes a
+  run-level conformance case**, not just unit coverage. Starting a run is likewise a decision about
+  ATTRIBUTION with exactly two answers: read the tier through the one `runInitiatorRole(c)` accessor,
+  or be named in `runAdmission.coverage.spec.ts` as deliberately unattributed with a reason. Doc:
+  [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
 - **Merge track record**: a **best-effort side channel** persisting each decision to
   `merge_track_records`. Classification is pure backend TS over ONE VCS call, deliberately not in the
   harness (no image bump); classes rank `docs < test < dependency < config < source < schema` and a mixed
@@ -1757,6 +1800,14 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
 - **Hexagonal layering**: controllers (`@cat-factory/server`) → services (orchestration/integrations) →
   ports (kernel). Infra adapters live in each facade and implement the ports + the `gateways` seam, wired
   via constructor injection of one `dependencies` object. Opt-in integrations wire only when configured.
+- **A pure rule BOTH the backend and the SPA must agree about lives in `@cat-factory/contracts`**, never
+  restated on each side. The SPA cannot see kernel, so a rule that stays there becomes a hand-written copy
+  the moment a surface has to state the same judgement to a human, and the two then drift into describing
+  one selection two different ways with nothing comparing them (`binaryFormatCoverage` and
+  `binaryModalityOverlaps` are the worked example). What decides is who has to AGREE about the answer, not
+  which package the rule feels like it belongs to. A rule needing kernel's own types stays in kernel; so
+  does the DISPOSITION of its outcomes (which refuses a run, which only warns), being a fact about
+  admission rather than about the thing judged.
 - **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An implementer kind
   (the `brief-standards` trait) re-sends its whole system prompt on every turn of a long loop, so it folds
   a fragment's condensed `brief` instead of the full `body`; reviewer/planner kinds keep the full text. Two

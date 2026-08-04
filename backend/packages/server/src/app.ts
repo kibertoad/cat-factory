@@ -76,6 +76,7 @@ import { slackController, slackOAuthController } from './modules/slack/SlackCont
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
 import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
+import { tutorialController } from './modules/tutorial/TutorialController.js'
 import { userSettingsController } from './modules/userSettings/UserSettingsController.js'
 import { userSecretController } from './modules/providers/UserSecretController.js'
 import { openRouterCatalogController } from './modules/openrouter/OpenRouterCatalogController.js'
@@ -214,6 +215,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
   app.route('/', userSettingsController())
+  // Per-USER tutorial progress + the funnel counters. Root-mounted beside user settings on
+  // purpose: it is a fact about a person, not a board, and mounting it under `/workspaces/:ws/*`
+  // would put it behind the RBAC viewer write floor that a viewer taking a walkthrough trips.
+  app.route('/', tutorialController())
   // Per-user infra handler overrides (local mode); 503s where the service is unwired.
   app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())

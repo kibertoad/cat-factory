@@ -114,6 +114,8 @@ export interface DebugLlmAgentKindRollup {
   cacheWriteTokens: number
   calls: number
   completionTokens: number
+  /** Always present; `null` when the server has no value for it. */
+  costEstimate: number | null
   errors: number
   /** Always present; `null` when the server has no value for it. */
   maxOutputTokens: number | null
@@ -178,6 +180,8 @@ export interface DebugLlmPhaseRollup {
   carryCostShare: number | null
   carryCostTokens: number
   completionTokens: number
+  /** Always present; `null` when the server has no value for it. */
+  costEstimate: number | null
   errors: number
   overheadMs: number
   phase: string
@@ -194,6 +198,8 @@ export interface DebugLlmTotals {
   cacheWriteTokens: number
   calls: number
   completionTokens: number
+  /** Always present; `null` when the server has no value for it. */
+  costEstimate: number | null
   errors: number
   overheadMs: number
   promptTokens: number
@@ -275,6 +281,8 @@ export interface DebugRunOverviewDiagnosticsLastDispatchRepo {
 export interface DebugRunOverviewLlm {
   byAgentKind: DebugLlmAgentKindRollup[]
   byPhase: DebugLlmPhaseRollup[]
+  /** Always present; `null` when the server has no value for it. */
+  costCurrency: string | null
   totals: DebugLlmTotals
 }
 

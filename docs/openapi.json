@@ -2922,6 +2922,16 @@
                               "completionTokens": {
                                 "type": "number"
                               },
+                              "costEstimate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "errors": {
                                 "type": "number"
                               },
@@ -2990,7 +3000,8 @@
                               "overheadMs",
                               "transportOverheadRatio",
                               "errors",
-                              "warnings"
+                              "warnings",
+                              "costEstimate"
                             ],
                             "type": "object"
                           },
@@ -3034,6 +3045,16 @@
                               "completionTokens": {
                                 "type": "number"
                               },
+                              "costEstimate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "errors": {
                                 "type": "number"
                               },
@@ -3070,11 +3091,22 @@
                               "overheadMs",
                               "errors",
                               "warnings",
-                              "truncatedCalls"
+                              "truncatedCalls",
+                              "costEstimate"
                             ],
                             "type": "object"
                           },
                           "type": "array"
+                        },
+                        "costCurrency": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "totals": {
                           "properties": {
@@ -3099,6 +3131,16 @@
                             },
                             "completionTokens": {
                               "type": "number"
+                            },
+                            "costEstimate": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "errors": {
                               "type": "number"
@@ -3141,7 +3183,8 @@
                             "transportOverheadRatio",
                             "errors",
                             "warnings",
-                            "truncatedCalls"
+                            "truncatedCalls",
+                            "costEstimate"
                           ],
                           "type": "object"
                         }
@@ -3149,7 +3192,8 @@
                       "required": [
                         "totals",
                         "byAgentKind",
-                        "byPhase"
+                        "byPhase",
+                        "costCurrency"
                       ],
                       "type": "object"
                     },

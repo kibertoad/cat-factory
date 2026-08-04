@@ -227,6 +227,20 @@ function setMediaTypes(text: string) {
   patch({ mediaTypes: lastWritten })
 }
 
+/**
+ * The overlap, as `content type: id, id` per shared content type.
+ *
+ * Assembled here rather than in the read model because it needs `modalityLabel`, and it renders a
+ * RETIRED content type through the same guard every other line does: a step saved under an older
+ * vocabulary can hold one, and two integrations serving it would otherwise put a `TypeError` on
+ * the surface where the re-pick has to be made.
+ */
+const overlapSummary = computed(() =>
+  pick.value.generatorOverlaps
+    .map((overlap) => `${modalityLabel(overlap.modality)}: ${overlap.generatorIds.join(', ')}`)
+    .join('; '),
+)
+
 /** What the SELECTED integrations say they emit — the discoverable half of the free-text field. */
 const declaredFormats = computed(() => {
   const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
@@ -422,6 +436,17 @@ const declaredFormats = computed(() => {
           formats: pick.unverifiableMediaTypes.join(', '),
         })
       }}
+    </p>
+    <!-- ADVISORY, and grouped with the line above it rather than the refusals: selecting two
+         producers of one content type is the reason the selection is a list, and nothing about
+         the step is wrong. What it costs is a decision nobody wrote down, so the remedy this
+         line carries is the step's own prompt, which is the field right beside it. -->
+    <p
+      v-if="has('generator_overlap')"
+      class="text-[10px] text-slate-500"
+      data-testid="binary-output-generator-overlap"
+    >
+      {{ t('pipeline.builder.binaryOutputGeneratorOverlap', { overlaps: overlapSummary }) }}
     </p>
     <p
       v-if="unusableMediaTypes.length"

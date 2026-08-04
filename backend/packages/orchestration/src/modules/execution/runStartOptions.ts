@@ -1,4 +1,4 @@
-import type { IntakeOrigin } from '@cat-factory/kernel'
+import type { IntakeOrigin, RunMode, WorkspaceRole } from '@cat-factory/kernel'
 import type { RunOrigin } from '../pipelines/pipelineShape.js'
 
 /**
@@ -14,6 +14,21 @@ export interface RunStartOptions {
    * (recurring schedules) and auth-disabled dev.
    */
   initiatedBy?: string | null
+  /**
+   * The workspace ROLE that initiator holds, as the auth gate already resolved it for this
+   * request. Supplied by the HTTP layer, which is the only layer that has it: the engine sits
+   * below the gate and must never re-derive membership (workspace-rbac keeps resolution in exactly
+   * one place). Pinned onto the run so the durable merge path can scope its decision to the tier
+   * the run was admitted under — see {@link ExecutionInstance.initiatedByRole} for why it is
+   * pinned rather than re-read, and why absent stays absent instead of defaulting to a tier.
+   */
+  initiatedByRole?: WorkspaceRole | null
+  /**
+   * The run mode the caller ASKED for ({@link RunMode}); absent ⇒ `live`. The task's merge preset
+   * can still force a sandboxed role's run to `dry_run` regardless of what was asked, so this is
+   * an input to the decision rather than the decision itself.
+   */
+  mode?: RunMode
   /**
    * Mint the per-run personal-credential activation for an individual-usage model. Invoked
    * with the new run's id BEFORE it is persisted/dispatched, so the async steps can lease it;

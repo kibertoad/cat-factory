@@ -486,9 +486,9 @@ export async function startBootstrap(
 export async function pinWorkspace(
   page: Page,
   workspaceId: string,
-  opts: { tutorial?: 'declined' | 'unanswered' } = {},
+  opts: { tutorial?: 'accepted' | 'declined' | 'unanswered' } = {},
 ): Promise<void> {
-  await answerTutorialPrompt(page, opts.tutorial === 'unanswered' ? null : 'declined')
+  await answerTutorialPrompt(page, tutorialAnswer(opts.tutorial))
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -517,7 +517,20 @@ export async function pinWorkspace(
  * 'unanswered' })` does for `tutorial.spec.ts`, since the first-launch offer is exactly its
  * subject. Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}), so this
  * seeds the `tutorial` cookie the store picks. Must run BEFORE `page.goto`.
+ *
+ * `'declined'` is the suite-wide default because it is the quietest answer: a decline stops the
+ * launch prompt AND the contextual offer, so no spec but the tutorial one has a tutorial surface
+ * appearing over the board it drives. A spec whose subject IS one of those offers needs
+ * `'accepted'` instead, which is the returning user who wants them.
  */
+/** The saved answer a `pinWorkspace` tutorial option asks for; `null` = leave it unanswered. */
+function tutorialAnswer(
+  option: 'accepted' | 'declined' | 'unanswered' | undefined,
+): 'accepted' | 'declined' | null {
+  if (option === 'unanswered') return null
+  return option === 'accepted' ? 'accepted' : 'declined'
+}
+
 export async function answerTutorialPrompt(
   page: Page,
   decision: 'accepted' | 'declined' | null,
