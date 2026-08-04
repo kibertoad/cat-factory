@@ -9,13 +9,21 @@ import {
   ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
-import type { AppCaches, Clock, IdGenerator, WebSearchAvailability } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  Clock,
+  IdGenerator,
+  Logger,
+  WebSearchAvailability,
+} from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
   LlmObservabilityService,
   PACKAGE_REGISTRY_CIPHER_INFO,
   SearchQueryObservabilityService,
+  ToolCallObservabilityService,
   makeHarnessCallRecorder,
+  makeToolCallRecorder,
   resolvePackageRegistriesForDispatch,
 } from '@cat-factory/orchestration'
 import {
@@ -36,6 +44,7 @@ export interface NodeRunServicesInput {
   idGenerator: IdGenerator
   clock: Clock
   caches?: AppCaches
+  logger: Logger
 }
 
 /**
@@ -46,7 +55,7 @@ export interface NodeRunServicesInput {
  * test-secret dispatch resolvers, and the modeled subscription-quota provider.
  */
 export function buildNodeRunServices(input: NodeRunServicesInput) {
-  const { env, config, repos, idGenerator, clock, caches } = input
+  const { env, config, repos, idGenerator, clock, caches, logger } = input
 
   // Agent-context observability sink: records the complete, redacted context provided
   // to each container agent (composed prompts + folded-in fragments + injected files).
@@ -87,6 +96,19 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
       workspaceSettingsRepository: repos.workspaceSettingsRepository,
       ...(caches?.workspaceSettings ? { workspaceSettingsCache: caches.workspaceSettings } : {}),
     }),
+  )
+  // Persist the tool calls each poll drains as trajectory rows — what the agent DID, beside
+  // the per-call cost rows above. The settings repository is required for the same reason: a
+  // tool call's arguments are as model-authored as a prompt is, so they ride the same gate.
+  const recordToolCalls = makeToolCallRecorder(
+    new ToolCallObservabilityService({
+      agentToolCallRepository: repos.agentToolCallRepository,
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: repos.workspaceSettingsRepository,
+      logger,
+    }),
+    logger,
   )
   // A deployment-wide trusted web-search upstream, built from this facade's own `WEB_SEARCH_*`
   // env, used by the search proxy as a fallback when a run's account has no web-search config
@@ -219,6 +241,7 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     agentContextObservability,
     searchQueryObservability,
     recordHarnessCalls,
+    recordToolCalls,
     defaultWebSearchUpstream,
     resolveWebSearchAvailability,
     packageRegistrySecretCipher,

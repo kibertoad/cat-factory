@@ -70,18 +70,57 @@ export interface LlmGenerationEvent {
 /**
  * One tool invocation inside a container agent's loop, captured by the harness and
  * drained by the backend on its existing job poll, then emitted as a child span under
- * the run's trace. Metadata only (never tool args/results) so the harness buffer stays
- * tiny and bounded.
+ * the run's trace AND persisted as a trajectory row (kernel's `agent-tool-calls` port).
+ *
+ * It carries the tool's ARGUMENTS and RESULT, capped and secret-scrubbed by the harness
+ * at capture time, because a span saying only that `bash` ran for 300ms is not evidence
+ * of anything: what an operator (or an auditor reading a merged PR) needs is which
+ * command. The caps are what keeps the harness's drain buffer bounded, and the bodies are
+ * built only when the deployment's prompt recording is on, so a prompts-off deployment
+ * never pays to assemble text nothing will retain.
  */
 export interface LlmToolSpan {
   /** The tool name (`edit_file`, `run_command`, `todo`, …). */
   tool: string
+  /**
+   * The call's 0-based ordinal within its dispatch, stamped by the harness. Two calls
+   * routinely land in the same millisecond, so this is the ONLY thing that orders a
+   * trajectory; it is also what makes a persisted row's id deterministic, so a replayed
+   * poll re-records rather than duplicates.
+   *
+   * Optional because a runner pool runs whatever image its workspace pinned: an older
+   * harness streams spans with no ordinal, and the reader supplies the batch position
+   * rather than refusing the span.
+   */
+  seq?: number
   /** Epoch ms the tool call started. */
   startedAt: number
   /** Epoch ms the tool call ended. */
   endedAt: number
   /** Whether the tool call succeeded. */
   ok: boolean
+  /**
+   * The tool's arguments, serialised, scrubbed and capped by the harness. Absent when the
+   * harness withheld bodies (prompt recording off, or an image that predates capture) —
+   * which is NOT the same as a tool that took no arguments, and {@link bodies} is what
+   * tells the two apart.
+   */
+  args?: string
+  /** What the tool returned, scrubbed and capped by the harness. Absent as {@link args}. */
+  result?: string
+  /**
+   * Whether the harness captured bodies for this call at all. Absent from an older
+   * image's spans, where the reader treats it as `withheld`: that image sent no bodies,
+   * and reading its silence as "the tools took no arguments" would be a fabrication.
+   */
+  bodies?: 'stored' | 'withheld'
+  /**
+   * Characters the harness's cap dropped from {@link args} / {@link result}. Stated
+   * rather than implied, so a reader can tell a short command from the head of a long
+   * one. Absent ⇒ nothing was dropped.
+   */
+  argsDropped?: number
+  resultDropped?: number
 }
 
 /** Scope a batch of {@link LlmToolSpan tool spans} to the run that produced them. */
@@ -89,6 +128,14 @@ export interface LlmToolSpanContext {
   workspaceId: string | null
   executionId: string | null
   agentKind: string
+  /**
+   * The dispatch the batch was drained from. A run's step can dispatch more than once (a
+   * re-run, a gate's fixer rounds, a Ralph iteration) and each dispatch numbers its spans
+   * from zero, so this is what keeps two rounds' trajectories from interleaving into one
+   * sequence that never happened. Optional: a caller with no job identity (a test double)
+   * still gets its spans emitted, ordered by timestamp alone.
+   */
+  jobId?: string
 }
 
 /**

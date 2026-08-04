@@ -126,6 +126,46 @@ export const agentSearchQueries = telemetry.table(
   ],
 )
 
+// One tool invocation an agent made, in trajectory order — what the agent DID, beside the
+// per-call cost (`llm_call_metrics`) and the context it was given (`agent_context_snapshots`).
+// The metadata is always recorded; `args`/`result` ride the same LLM_RECORD_PROMPTS +
+// storeAgentContext double gate as the other body-bearing sinks, and `bodies` says which, so a
+// withheld body never reads as a tool that took no arguments. Pruned on the same retention
+// window. Mirrors the D1 agent_tool_calls table column-for-column.
+export const agentToolCalls = telemetry.table(
+  'agent_tool_calls',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    // The dispatch the call was made in. A run's step can dispatch more than once and each
+    // dispatch numbers its own calls from zero, so the trajectory orders by `(job_id, seq)`.
+    job_id: text('job_id').notNull(),
+    seq: integer('seq').notNull(),
+    tool: text('tool').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }).notNull(),
+    ended_at: bigint('ended_at', { mode: 'number' }).notNull(),
+    ok: integer('ok').notNull().default(1),
+    bodies: text('bodies').notNull().default('withheld'),
+    args: text('args').notNull().default(''),
+    result: text('result').notNull().default(''),
+    args_dropped: integer('args_dropped').notNull().default(0),
+    result_dropped: integer('result_dropped').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_agent_tool_calls_trajectory').on(
+      t.workspace_id,
+      t.execution_id,
+      t.job_id,
+      t.seq,
+    ),
+    index('idx_agent_tool_calls_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_tool_calls_created').on(t.created_at),
+  ],
+)
+
 // ---------------------------------------------------------------------------
 // Platform-operator observability projections (mirrors D1 migration 0079). Both are read by
 // the account-scoped dashboard rollups; see the D1 migration for the full rationale.

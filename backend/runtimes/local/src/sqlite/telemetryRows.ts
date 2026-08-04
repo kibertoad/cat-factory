@@ -3,11 +3,12 @@ import {
   type AgentContextFragment,
   type AgentContextSnapshot,
   type AgentSearchQuery,
+  type AgentToolCall,
   type LlmCallMetric,
 } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
 
-// The stored ROW shapes of the three run-scoped telemetry sinks, and the mappers that turn each
+// The stored ROW shapes of the four run-scoped telemetry sinks, and the mappers that turn each
 // back into its kernel entity.
 //
 // Extracted from `telemetryStore.ts` so both readers of these tables can share them without one
@@ -149,6 +150,48 @@ export interface SearchQueryRow {
   query: string
   result_count: number
   created_at: number
+}
+
+export interface ToolCallRow {
+  id: string
+  workspace_id: string
+  execution_id: string
+  agent_kind: string
+  job_id: string
+  seq: number
+  tool: string
+  started_at: number
+  ended_at: number
+  ok: number
+  bodies: string
+  args: string
+  result: string
+  args_dropped: number
+  result_dropped: number
+  created_at: number
+}
+
+export function rowToToolCall(row: ToolCallRow): AgentToolCall {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    jobId: row.job_id,
+    seq: row.seq,
+    tool: row.tool,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    ok: row.ok === 1,
+    // The stored column is free-text; narrow it back to the wire union. Anything else reads as
+    // `withheld`, the answer that claims nothing about a body we cannot account for.
+    bodies: row.bodies === 'stored' ? 'stored' : 'withheld',
+    args: row.args,
+    result: row.result,
+    argsDropped: row.args_dropped,
+    resultDropped: row.result_dropped,
+    createdAt: row.created_at,
+  }
 }
 
 export function rowToQuery(row: SearchQueryRow): AgentSearchQuery {

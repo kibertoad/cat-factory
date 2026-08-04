@@ -7,6 +7,9 @@ import type {
   AgentSearchQuery,
   AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
+  AgentToolCall,
+  AgentToolCallPageQuery,
+  AgentToolCallRepository,
   LlmCallBodyWindow,
   LlmCallMetric,
   LlmCallMetricPage,
@@ -78,11 +81,12 @@ import type { LocalTelemetryCoverage } from './sqlite/telemetryCoverage.js'
 // page loses nothing. Only the drain does this; a page a CALLER sized propagates the refusal
 // instead, because silently returning fewer rows than asked is read as the end of the run.
 
-/** The three run-scoped telemetry repositories this decorates. */
+/** The run-scoped telemetry repositories this decorates. */
 export interface ReadThroughTelemetryRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentSearchQueryRepository: AgentSearchQueryRepository
+  agentToolCallRepository: AgentToolCallRepository
 }
 
 /** What the read-through needs besides the local store it decorates. */
@@ -112,6 +116,7 @@ const DRAIN_CAPS = {
   metrics: 1000,
   snapshots: 200,
   searchQueries: 2000,
+  toolCalls: 5000,
 } as const
 
 /**
@@ -146,6 +151,7 @@ export function withTelemetryReadThrough(
     llmCallMetricRepository: metricsReadThrough(local.llmCallMetricRepository, ctx),
     agentContextSnapshotRepository: snapshotsReadThrough(local.agentContextSnapshotRepository, ctx),
     agentSearchQueryRepository: searchQueriesReadThrough(local.agentSearchQueryRepository, ctx),
+    agentToolCallRepository: toolCallsReadThrough(local.agentToolCallRepository, ctx),
   }
 }
 
@@ -165,7 +171,7 @@ interface ReadThroughContext {
   whole: (workspaceId: string, executionId: string, held: number) => boolean
 }
 
-/** A row of any of the three sinks, reduced to what the shared keyset drain needs. */
+/** A row of any keyset-ordered sink, reduced to what the shared drain needs. */
 interface KeysetRow {
   id: string
   createdAt: number
@@ -455,6 +461,41 @@ function searchQueriesReadThrough(
       const n = await local.countByExecution(ws, executionId)
       if (ctx.whole(ws, executionId, n)) return n
       return ctx.read<number>('agentSearchQueryRepository', 'countByExecution', ws, [executionId])
+    },
+  }
+}
+
+function toolCallsReadThrough(
+  local: AgentToolCallRepository,
+  ctx: ReadThroughContext,
+): AgentToolCallRepository {
+  return {
+    recordMany: (calls) => local.recordMany(calls),
+    deleteOlderThan: (epochMs) => local.deleteOlderThan(epochMs),
+
+    async listByExecution(ws, executionId, limit) {
+      const rows = await local.listByExecution(ws, executionId, limit)
+      if (ctx.whole(ws, executionId, rows.length)) return rows
+      // The trajectory read is the ONE telemetry read whose order is not the `(createdAt, id)`
+      // keyset, so it cannot be stitched from a local prefix plus a remote remainder the way the
+      // three keyset reads are: interleaving two ranges ordered by `(jobId, seq)` would need a
+      // merge the drain has no way to express. A run the local store cannot answer WHOLE is
+      // therefore read entirely from the mothership, which holds every uploaded row of it.
+      return ctx.read<AgentToolCall[]>('agentToolCallRepository', 'listPage', ws, [
+        { executionId, limit } satisfies AgentToolCallPageQuery,
+      ])
+    },
+
+    async listPage(ws, query: AgentToolCallPageQuery) {
+      const rows = await local.listPage(ws, query)
+      if (pageIsAnswerable(ctx, ws, query.executionId, rows.length, query.limit)) return rows
+      return ctx.read<AgentToolCall[]>('agentToolCallRepository', 'listPage', ws, [query])
+    },
+
+    async countByExecution(ws, executionId) {
+      const n = await local.countByExecution(ws, executionId)
+      if (ctx.whole(ws, executionId, n)) return n
+      return ctx.read<number>('agentToolCallRepository', 'countByExecution', ws, [executionId])
     },
   }
 }

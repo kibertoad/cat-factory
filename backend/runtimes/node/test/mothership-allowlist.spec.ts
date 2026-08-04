@@ -314,6 +314,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
+  // The tool-call trajectory: the same local-first bucket as the three sinks above, for the same
+  // reason — it is captured on the run's hot path (one batch per job poll) and read back locally
+  // by the node's own debug surface, so a per-batch RPC would put the mothership on the poll path.
+  agentToolCallRepository: {
+    recordMany: 'telemetry',
+    listByExecution: 'telemetry',
+    listPage: 'telemetry',
+    countByExecution: 'telemetry',
+    deleteOlderThan: 'sweeper',
+  },
   // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the
   // windowed usage write + its scoped read are provider-mediated telemetry that never
   // crosses the per-call RPC (the B3 quota endpoint reads through the provider's `report`,

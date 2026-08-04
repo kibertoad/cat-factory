@@ -14,6 +14,9 @@ import type {
   AgentSearchQuery,
   AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
+  AgentToolCall,
+  AgentToolCallPageQuery,
+  AgentToolCallRepository,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
   LlmCallBodyWindow,
@@ -57,6 +60,7 @@ import type { DrizzleDb } from '../../db/client.js'
 import {
   agentContextSnapshots,
   agentSearchQueries,
+  agentToolCalls,
   binaryArtifacts,
   llmCallMetrics,
   provisioningLog,
@@ -1091,6 +1095,134 @@ export class DrizzleAgentSearchQueryRepository implements AgentSearchQueryReposi
       .delete(agentSearchQueries)
       .where(lt(agentSearchQueries.created_at, epochMs))
       .returning({ id: agentSearchQueries.id })
+    return deleted.length
+  }
+}
+
+function rowToAgentToolCall(row: typeof agentToolCalls.$inferSelect): AgentToolCall {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    jobId: row.job_id,
+    seq: row.seq,
+    tool: row.tool,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    ok: row.ok === 1,
+    // The stored column is free-text; narrow it back to the wire union. Anything else reads as
+    // `withheld`, the answer that claims nothing about a body we cannot account for.
+    bodies: row.bodies === 'stored' ? 'stored' : 'withheld',
+    args: row.args,
+    result: row.result,
+    argsDropped: row.args_dropped,
+    resultDropped: row.result_dropped,
+    createdAt: row.created_at,
+  }
+}
+
+/** One tool call as its insert row. */
+function toolCallValues(call: AgentToolCall) {
+  return {
+    id: call.id,
+    workspace_id: call.workspaceId,
+    execution_id: call.executionId,
+    agent_kind: call.agentKind,
+    job_id: call.jobId,
+    seq: call.seq,
+    tool: call.tool,
+    started_at: call.startedAt,
+    ended_at: call.endedAt,
+    ok: call.ok ? 1 : 0,
+    bodies: call.bodies,
+    args: call.args,
+    result: call.result,
+    args_dropped: call.argsDropped,
+    result_dropped: call.resultDropped,
+    created_at: call.createdAt,
+  }
+}
+
+/** Drizzle/Postgres sink for the tool-call trajectory (mirror of D1 migration 0005). */
+export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async recordMany(calls: AgentToolCall[]): Promise<void> {
+    // First write wins, never an upsert: a re-offered call is byte-identical to the stored one
+    // (its id derives from `(jobId, seq)`), so a durable replay or a retried ingest is a no-op.
+    for (const batch of chunks(calls, INSERT_CHUNK_ROWS)) {
+      await this.db
+        .insert(agentToolCalls)
+        .values(batch.map(toolCallValues))
+        .onConflictDoNothing({ target: agentToolCalls.id })
+    }
+  }
+
+  async listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit: number,
+  ): Promise<AgentToolCall[]> {
+    // Trajectory order: oldest first, by dispatch then ordinal — `created_at` cannot carry it,
+    // since a whole poll window's calls share one stamp. The limit takes the OLDEST end, so a
+    // truncated read is a prefix of the run rather than a middle slice with no beginning.
+    const rows = await this.db
+      .select()
+      .from(agentToolCalls)
+      .where(
+        and(
+          eq(agentToolCalls.workspace_id, workspaceId),
+          eq(agentToolCalls.execution_id, executionId),
+        ),
+      )
+      .orderBy(asc(agentToolCalls.job_id), asc(agentToolCalls.seq))
+      .limit(limit)
+    return rows.map(rowToAgentToolCall)
+  }
+
+  async listPage(workspaceId: string, query: AgentToolCallPageQuery): Promise<AgentToolCall[]> {
+    const filters = [
+      eq(agentToolCalls.workspace_id, workspaceId),
+      eq(agentToolCalls.execution_id, query.executionId),
+    ]
+    if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
+    if (query.cursor) {
+      const { createdAt, id } = query.cursor
+      filters.push(
+        or(
+          lt(agentToolCalls.created_at, createdAt),
+          and(eq(agentToolCalls.created_at, createdAt), lt(agentToolCalls.id, id)),
+        )!,
+      )
+    }
+    const rows = await this.db
+      .select()
+      .from(agentToolCalls)
+      .where(and(...filters))
+      .orderBy(desc(agentToolCalls.created_at), desc(agentToolCalls.id))
+      .limit(query.limit)
+    return rows.map(rowToAgentToolCall)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const rows = await this.db
+      .select({ n: count() })
+      .from(agentToolCalls)
+      .where(
+        and(
+          eq(agentToolCalls.workspace_id, workspaceId),
+          eq(agentToolCalls.execution_id, executionId),
+        ),
+      )
+    return Number(rows[0]?.n ?? 0)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(agentToolCalls)
+      .where(lt(agentToolCalls.created_at, epochMs))
+      .returning({ id: agentToolCalls.id })
     return deleted.length
   }
 }

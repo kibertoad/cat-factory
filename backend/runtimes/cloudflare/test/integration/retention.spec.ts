@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
 import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1AgentToolCallRepository } from '../../src/infrastructure/repositories/D1AgentToolCallRepository'
 import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1AuthAttemptRepository } from '../../src/infrastructure/repositories/D1AuthAttemptRepository'
@@ -48,6 +49,7 @@ function deps() {
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    agentToolCallRepository: new D1AgentToolCallRepository({ db: telemetryDb }),
     // Subscription quota-cycle counters live in the main DB (migration 0047).
     subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
     // Machine-node roster tombstones live in the main DB (migration 0077).

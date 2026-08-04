@@ -18,6 +18,7 @@ function fakeRepos(): {
     llmCallMetrics: number | null
     agentContextSnapshots: number | null
     agentSearchQueries: number | null
+    agentToolCalls: number | null
     subscriptionQuotaCycles: number | null
     provisioningLog: number | null
     commits: number | null
@@ -32,6 +33,7 @@ function fakeRepos(): {
     llmCallMetrics: null as number | null,
     agentContextSnapshots: null as number | null,
     agentSearchQueries: null as number | null,
+    agentToolCalls: null as number | null,
     subscriptionQuotaCycles: null as number | null,
     provisioningLog: null as number | null,
     commits: null as number | null,
@@ -68,6 +70,12 @@ function fakeRepos(): {
         deleteOlderThan: async (c) => {
           cutoffs.agentSearchQueries = c
           return 6
+        },
+      },
+      agentToolCallRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.agentToolCalls = c
+          return 9
         },
       },
       // Recurring-pipeline run history prune (fixed ~1-week window). Returns 0 here;
@@ -167,6 +175,7 @@ describe('sweepRetention', () => {
       llmCallMetrics: 7,
       agentContextSnapshots: 5,
       agentSearchQueries: 6,
+      agentToolCalls: 9,
       scheduleRuns: 0,
       activations: 2,
       subscriptionQuotaCycles: 8,
@@ -191,11 +200,13 @@ describe('sweepRetention', () => {
     expect(cutoffs.llmCallMetrics).toBeNull() // disabled → never called
     expect(cutoffs.agentContextSnapshots).toBeNull() // same disabled window → never called
     expect(cutoffs.agentSearchQueries).toBeNull() // same disabled window → never called
+    expect(cutoffs.agentToolCalls).toBeNull() // same disabled window → never called
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
       agentSearchQueries: 0,
+      agentToolCalls: 0,
       scheduleRuns: 0,
       activations: 2,
       subscriptionQuotaCycles: 8,

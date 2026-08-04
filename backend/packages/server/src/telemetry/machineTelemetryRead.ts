@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshot,
   AgentContextSnapshotIndex,
   AgentSearchQuery,
+  AgentToolCall,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricSummary,
@@ -110,6 +111,22 @@ export const TELEMETRY_READ_METHODS = {
     },
     countByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
   },
+  agentToolCallRepository: {
+    /**
+     * Whole rows, bodies included: a tool call's args/result are capped at CAPTURE time (unlike
+     * a prompt body, which is stored whole and sliced at read time), so the page's byte size is
+     * `limit x cap` and computable before the request. The row cap is lower than the search
+     * queries' for that reason — those rows carry no body at all.
+     */
+    listPage: {
+      args: 'runQuery',
+      maxArgs: 1,
+      limit: 'query.limit',
+      maxLimit: 200,
+      timeoutMs: 10_000,
+    },
+    countByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
+  },
 } as const satisfies Record<string, Record<string, TelemetryReadBound>>
 
 /**
@@ -181,6 +198,9 @@ export const TELEMETRY_READ_PAGE_SIZES = {
   metrics: 100,
   snapshots: 1,
   searchQueries: 500,
+  // Two capture-capped bodies per row, so a page is sized against that ceiling rather than the
+  // unbounded body a prompt page has to reckon with.
+  toolCalls: 200,
 } as const
 
 /**
@@ -265,6 +285,8 @@ export interface TelemetryReadResults {
   'agentContextSnapshotRepository.countByExecution': number
   'agentSearchQueryRepository.listPage': AgentSearchQuery[]
   'agentSearchQueryRepository.countByExecution': number
+  'agentToolCallRepository.listPage': AgentToolCall[]
+  'agentToolCallRepository.countByExecution': number
 }
 
 /** The client half: performs one bounded telemetry read against the mothership. */

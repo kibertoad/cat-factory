@@ -36,7 +36,12 @@ import {
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
 import { buildTraceSink } from './container-trace-sinks.js'
-import { LlmObservabilityService, makeHarnessCallRecorder } from '@cat-factory/orchestration'
+import {
+  LlmObservabilityService,
+  ToolCallObservabilityService,
+  makeHarnessCallRecorder,
+  makeToolCallRecorder,
+} from '@cat-factory/orchestration'
 import {
   ensureWorkBranchViaRest,
   logger,
@@ -63,6 +68,7 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
+import { D1AgentToolCallRepository } from './repositories/D1AgentToolCallRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
@@ -393,6 +399,20 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
       logger,
     }),
   )
+  // Persist the tool calls each poll drains as trajectory rows — what the agent DID, beside
+  // the per-call cost rows above. Built here from the same telemetry DB for the same reason:
+  // a stateless writer whose capture gate needs the settings repository. Absent settings would
+  // open the body gate, and a tool call's arguments are as model-authored as a prompt is.
+  const recordToolCalls = makeToolCallRecorder(
+    new ToolCallObservabilityService({
+      agentToolCallRepository: new D1AgentToolCallRepository({ db: requireTelemetryDb(env) }),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      logger,
+    }),
+    logger,
+  )
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
   // so its adapter registry is empty today — every vendor reports modeled).
@@ -495,6 +515,7 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
     // into `llm_call_metrics` alongside the proxy-metered Pi rows.
     recordHarnessCalls,
+    recordToolCalls,
     // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
     // run's tokens into the rolling windows, for BOTH pooled and personal runs.
     recordSubscriptionQuotaUsage: (target, usage) =>

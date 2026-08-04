@@ -28,7 +28,7 @@ import type { DatabaseSync } from 'node:sqlite'
  * The DDL for the coverage table, appended to the local telemetry schema.
  *
  * No `execution_id` foreign key and no cascade: the rows this marker is about are exactly the ones
- * that no longer exist. It is deliberately not scoped per SINK — the three run-scoped sinks share
+ * that no longer exist. It is deliberately not scoped per SINK — the run-scoped sinks share
  * one retention window, so they lose the same runs together, and a marker that over-reports (this
  * run lost SOMETHING) only ever costs a round trip, where one that under-reports resurrects the
  * false-total this exists to prevent.
@@ -89,12 +89,14 @@ export type PrunableTelemetryTable =
   | 'llm_call_metrics'
   | 'agent_context_snapshots'
   | 'agent_search_queries'
+  | 'agent_tool_calls'
 
-/** The three tables, for the settled-marker sweep's "no rows anywhere" test. */
+/** Every prunable table, for the settled-marker sweep's "no rows anywhere" test. */
 const PRUNABLE_TABLES: readonly PrunableTelemetryTable[] = [
   'llm_call_metrics',
   'agent_context_snapshots',
   'agent_search_queries',
+  'agent_tool_calls',
 ]
 
 export class SqliteTelemetryCoverage implements LocalTelemetryCoverage {

@@ -10,6 +10,9 @@ import {
   type AgentSearchQuery,
   type AgentSearchQueryPageQuery,
   type AgentSearchQueryRepository,
+  type AgentToolCall,
+  type AgentToolCallPageQuery,
+  type AgentToolCallRepository,
   type LlmCallBodyWindow,
   type LlmCallMetric,
   type LlmCallMetricPage,
@@ -42,9 +45,11 @@ import {
 import {
   type MetricRow,
   type SearchQueryRow,
+  type ToolCallRow,
   type SnapshotRow,
   rowToMetric,
   rowToQuery,
+  rowToToolCall,
   rowToSnapshot,
 } from './telemetryRows.js'
 
@@ -315,6 +320,31 @@ CREATE INDEX IF NOT EXISTS idx_agent_search_queries_execution
 CREATE INDEX IF NOT EXISTS idx_agent_search_queries_created
   ON agent_search_queries (created_at);
 
+CREATE TABLE IF NOT EXISTS agent_tool_calls (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  execution_id TEXT NOT NULL,
+  agent_kind TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  tool TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  ended_at INTEGER NOT NULL,
+  ok INTEGER NOT NULL DEFAULT 1,
+  bodies TEXT NOT NULL DEFAULT 'withheld',
+  args TEXT NOT NULL DEFAULT '',
+  result TEXT NOT NULL DEFAULT '',
+  args_dropped INTEGER NOT NULL DEFAULT 0,
+  result_dropped INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_trajectory
+  ON agent_tool_calls (workspace_id, execution_id, job_id, seq);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_execution
+  ON agent_tool_calls (workspace_id, execution_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_created
+  ON agent_tool_calls (created_at);
+
 CREATE TABLE IF NOT EXISTS provisioning_log (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -357,7 +387,7 @@ CREATE INDEX IF NOT EXISTS idx_subscription_quota_cycles_window
 CREATE TABLE IF NOT EXISTS telemetry_ingest_state (
   workspace_id TEXT NOT NULL,
   execution_id TEXT NOT NULL,
-  -- The newest captured row (across the three run-scoped sinks) this run was ingested through.
+  -- The newest captured row (across the run-scoped sinks) this run was ingested through.
   -- A later row moves the run's newest-write time past this and makes it a candidate again, which
   -- is what covers a RESUMED run: the upload is idempotent by row id, so re-offering the
   -- already-ingested prefix costs bandwidth and nothing else.
@@ -965,6 +995,113 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   }
 }
 
+/** The tool-call trajectory — the local-sqlite mirror of `D1AgentToolCallRepository`. */
+class SqliteAgentToolCallRepository implements AgentToolCallRepository {
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly coverage: LocalTelemetryCoverage,
+  ) {}
+
+  async recordMany(calls: AgentToolCall[]): Promise<void> {
+    // One transaction, duplicate ids ignored so the batch append stays retryable: a call's id
+    // derives from `(jobId, seq)`, so a re-offered row is byte-identical to the stored one.
+    if (calls.length === 0) return
+    this.db.exec('BEGIN')
+    try {
+      for (const call of calls) this.insert(call)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private insert(call: AgentToolCall): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_tool_calls
+           (id, workspace_id, execution_id, agent_kind, job_id, seq, tool, started_at, ended_at,
+            ok, bodies, args, result, args_dropped, result_dropped, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
+      )
+      .run(
+        call.id,
+        call.workspaceId,
+        call.executionId,
+        call.agentKind,
+        call.jobId,
+        call.seq,
+        call.tool,
+        call.startedAt,
+        call.endedAt,
+        call.ok ? 1 : 0,
+        call.bodies,
+        call.args,
+        call.result,
+        call.argsDropped,
+        call.resultDropped,
+        call.createdAt,
+      )
+  }
+
+  async listByExecution(
+    workspaceId: string,
+    executionId: string,
+    limit: number,
+  ): Promise<AgentToolCall[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM agent_tool_calls
+         WHERE workspace_id = ? AND execution_id = ?
+         ORDER BY job_id ASC, seq ASC
+         LIMIT ?`,
+      )
+      .all(workspaceId, executionId, limit) as unknown as ToolCallRow[]
+    return rows.map(rowToToolCall)
+  }
+
+  async listPage(workspaceId: string, query: AgentToolCallPageQuery): Promise<AgentToolCall[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.jobId) {
+      clauses.push('job_id = ?')
+      binds.push(query.jobId)
+    }
+    if (query.cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM agent_tool_calls
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as ToolCallRow[]
+    return rows.map(rowToToolCall)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .get(workspaceId, executionId) as unknown as { n: number } | undefined
+    return row?.n ?? 0
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    // Mark coverage BEFORE taking the rows — see the sibling sinks: a pruned subset answered as
+    // though it were the whole run is how a trajectory silently reads as a shorter one.
+    this.coverage.markPrunedBefore('agent_tool_calls', epochMs)
+    const res = this.db.prepare('DELETE FROM agent_tool_calls WHERE created_at < ?').run(epochMs)
+    return Number(res.changes)
+  }
+}
+
 interface ProvisioningLogRow {
   id: string
   workspace_id: string
@@ -1210,6 +1347,7 @@ export interface LocalTelemetryRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentSearchQueryRepository: AgentSearchQueryRepository
+  agentToolCallRepository: AgentToolCallRepository
   provisioningLogRepository: ProvisioningLogRepository
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
 }
@@ -1232,13 +1370,14 @@ export interface LocalTelemetryStore extends LocalTelemetryRepositories {
  */
 export function createLocalTelemetryStore(path: string): LocalTelemetryStore {
   const db = openSqliteDb(path, SCHEMA)
-  // Shared by the three run-scoped sinks: each records what its own prune took, and the
+  // Shared by the run-scoped sinks: each records what its own prune took, and the
   // read-through asks the one record whether a run's local answer is still the whole of it.
   const coverage = new SqliteTelemetryCoverage(db)
   return {
     llmCallMetricRepository: new SqliteLlmCallMetricRepository(db, coverage),
     agentContextSnapshotRepository: new SqliteAgentContextSnapshotRepository(db, coverage),
     agentSearchQueryRepository: new SqliteAgentSearchQueryRepository(db, coverage),
+    agentToolCallRepository: new SqliteAgentToolCallRepository(db, coverage),
     provisioningLogRepository: new SqliteProvisioningLogRepository(db),
     subscriptionQuotaCycleRepository: new SqliteSubscriptionQuotaCycleRepository(db),
     ingestReader: new SqliteTelemetryIngestReader(db),

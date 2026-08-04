@@ -164,6 +164,14 @@ export type {
   RecordAgentSearchQueryInput,
 } from './agent-search-queries.js'
 export type {
+  AgentToolCall,
+  AgentToolCallPageQuery,
+  AgentToolCallRecorder,
+  AgentToolCallRepository,
+  RecordAgentToolCallInput,
+  ToolCallBodiesState,
+} from './agent-tool-calls.js'
+export type {
   LlmGenerationEvent,
   LlmRunSpan,
   LlmStepSpan,

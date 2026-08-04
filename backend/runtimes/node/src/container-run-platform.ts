@@ -220,6 +220,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     idGenerator,
     clock,
     caches: options.caches,
+    logger,
   })
 
   // How a registered capability's declared credentials are resolved at dispatch, composed ONCE

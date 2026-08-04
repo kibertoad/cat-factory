@@ -353,6 +353,7 @@ export function makeMothershipConformanceApp(
     llmCallMetricRepository: telemetryStore.llmCallMetricRepository,
     agentContextSnapshotRepository: telemetryStore.agentContextSnapshotRepository,
     agentSearchQueryRepository: telemetryStore.agentSearchQueryRepository,
+    agentToolCallRepository: telemetryStore.agentToolCallRepository,
     provisioningLogRepository: telemetryStore.provisioningLogRepository,
     subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
   }
