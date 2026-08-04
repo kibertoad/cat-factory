@@ -1,6 +1,3 @@
-import { agentFailureKindSchema } from '@cat-factory/contracts'
-import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/execution'
-
 // ---------------------------------------------------------------------------
 // Shared presentation for the run FAILURE TAXONOMY — the vocabulary the operator dashboard
 // renders as a breakdown and the alert settings panel offers as the subject of a per-kind
@@ -10,7 +7,18 @@ import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/executio
 //
 // The map is an exhaustive `Record<AgentFailureKind, …>`, so adding a kind to the contract
 // fails the typecheck here rather than rendering a raw code in either place.
+//
+// What is PRESENTATION lives here; what is a RULE comes from `@cat-factory/contracts` and is
+// re-exported so a component has one import. `isAgentFailureKind` in particular is not the
+// SPA's to own: the backend asks the identical question of an operator-typed kind in
+// `PLATFORM_ALERTS_FAILURE_KIND_RATES`, and two copies of "which kinds exist" is the pair that
+// drifts the moment one is retired.
 // ---------------------------------------------------------------------------
+
+import { agentFailureKindSchema, MAX_FAILURE_KIND_RULES } from '@cat-factory/contracts'
+import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/execution'
+
+export { isAgentFailureKind, MAX_FAILURE_KIND_RULES } from '@cat-factory/contracts'
 
 /** i18n key per failure kind. */
 export const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
@@ -34,41 +42,50 @@ export const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
  * Read off the picklist rather than restated, so the choices a rule can be written against are
  * the choices the backend recognises. The DISPLAYED set is deliberately not the same thing as
  * the set of values that may ARRIVE: a stored rule or a persisted run row can still name a kind
- * a later release retired, which {@link isKnownFailureKind} is for.
+ * a later release retired, which `isAgentFailureKind` is for.
  */
 export const AGENT_FAILURE_KINDS = agentFailureKindSchema.options as readonly AgentFailureKind[]
 
 /**
- * Whether a string is a failure kind this build knows about.
+ * Whether a stored per-kind rule list would be REFUSED by the contract, and why.
  *
- * Derived from the picklist, so it stays true as the vocabulary grows, and needed because a
- * retired kind is not a hypothetical: it survives in stored rules and in run rows written
- * before the release that dropped it. A reader that assumed membership would splice `undefined`
- * into the label; one that guessed a current member would rename somebody's alert rule.
- */
-export function isKnownFailureKind(kind: string): kind is AgentFailureKind {
-  return (AGENT_FAILURE_KINDS as readonly string[]).includes(kind)
-}
-
-/**
- * The 1-based positions of per-kind alert rules the backend would refuse
- * (`platformFailureKindRuleSchema`), so the editor can name them and the save path can stop.
+ * One implementation shared by the editor and the save path, because they are the same question
+ * asked twice: a fault the editor flags but the save path does not is a save that fails on the
+ * WHOLE settings blob, for a reason the sheet never showed and about a sibling setting the admin
+ * never touched.
  *
- * One implementation for both, because they are the same question asked twice: a row the editor
- * flags but the save path does not is a save that fails on the WHOLE settings blob, for a reason
- * the sheet never showed and about a sibling setting the admin never touched.
+ * The two faults are kept APART rather than folded into one list of bad rows, because they need
+ * different fixes and one of them belongs to no row in particular: "row 3 is malformed" is fixed
+ * in row 3, while "there are more rules than the contract allows" is fixed by deleting any of
+ * them. Reporting the second as a row number would point at a row that is perfectly fine.
  *
  * Deliberately mirrors the contract rather than re-deciding anything: a share in (0, 1], a whole
- * minimum count of 1 or more when one is set, and at most one rule per kind.
+ * minimum count of 1 or more when one is set, at most one rule per kind, and at most
+ * {@link MAX_FAILURE_KIND_RULES} rules.
  */
-export function invalidFailureKindRuleRows(rules: readonly PlatformFailureKindRule[]): number[] {
+export interface FailureKindRuleFaults {
+  /** 1-based positions of individual rules the contract would refuse. */
+  rows: number[]
+  /** Whether the LIST is over the contract's cap, which is no single row's fault. */
+  tooMany: boolean
+}
+
+export function failureKindRuleFaults(
+  rules: readonly PlatformFailureKindRule[],
+): FailureKindRuleFaults {
   const counts = new Map<string, number>()
   for (const rule of rules) counts.set(rule.kind, (counts.get(rule.kind) ?? 0) + 1)
-  return rules.flatMap((rule, index) => {
+  const rows = rules.flatMap((rule, index) => {
     const shareOk = rule.maxShare > 0 && rule.maxShare <= 1
     const countOk =
       rule.minCount === undefined || (Number.isInteger(rule.minCount) && rule.minCount >= 1)
     const unique = (counts.get(rule.kind) ?? 0) === 1
     return shareOk && countOk && unique ? [] : [index + 1]
   })
+  return { rows, tooMany: rules.length > MAX_FAILURE_KIND_RULES }
+}
+
+/** Whether a list is savable at all — the one question both call sites actually branch on. */
+export function hasFailureKindRuleFaults(faults: FailureKindRuleFaults): boolean {
+  return faults.rows.length > 0 || faults.tooMany
 }

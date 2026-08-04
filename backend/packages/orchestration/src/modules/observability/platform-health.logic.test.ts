@@ -299,6 +299,24 @@ describe('evaluatePlatformHealth: failure_kind_rate_high', () => {
     ).toContain('failure_kind_rate_high')
   })
 
+  it('fires AT the configured share, not only above it', () => {
+    // The share an operator types is the TRIGGER POINT, matching `failure_kind_dominant` and
+    // `failure_rate_high`. Pinned because every operator-facing string describing this rule
+    // ("reaches", "at or over") is only true of `>=`, and a later `>` would leave them lying
+    // about the one number the operator picked.
+    const exactly = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [{ kind: 'evicted', maxShare: 0.2 }],
+    })
+    expect(platformAlertFailureKinds(exactly)).toEqual(['evicted'])
+    // And a hair above the observed share stays quiet, so the boundary is where it says it is.
+    const justOver = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [{ kind: 'evicted', maxShare: 0.2001 }],
+    })
+    expect(justOver).toEqual([])
+  })
+
   it('respects the shared minimum-run sample, like every other failure condition', () => {
     const alerts = evaluatePlatformHealth(
       snapshot({
@@ -385,7 +403,7 @@ describe('platformHealthCardContent covers every reason', () => {
       'evicted',
       'timeout',
     ])
-    expect(body).toContain('evicted and timeout failures over the rate set for them')
+    expect(body).toContain('evicted and timeout failures at or over the rate set for them')
   })
 })
 

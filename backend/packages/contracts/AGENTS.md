@@ -30,6 +30,12 @@ top-level files are the domain contracts.
   (`task-types.ts`). Each surface declares only which input types it admits (a task type excludes
   `password` by construction). Lives here because the SPA's submit button and the server's create
   check must agree about every one of those rules.
+- `agent-failure-kinds.ts`: the closed run FAILURE-KIND vocabulary plus `isAgentFailureKind`,
+  the predicate for a string that may name a RETIRED member. A leaf module (valibot only) so
+  every layer that must agree about the set can import it: the operator dashboard's breakdown,
+  a platform-health alert rule naming a member as the subject of a page, and the env parser
+  that asks whether an operator typed a real kind. The failure DIAGNOSTICS record built on
+  these kinds stays in `execution.ts`, with the step shapes it composes.
 - `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding

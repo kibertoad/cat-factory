@@ -782,7 +782,7 @@ where they became countable.
   per-kind rules an operator configures, `PLATFORM_ALERTS_FAILURE_KIND_RATES=evicted=0.05:3` or
   the same list per account. The dominant condition asks whether one cause is swamping the rest,
   which is a question about the SHAPE of the distribution; a per-kind rule asks whether a NAMED
-  cause exceeded what a deployment tolerates from it, and 20% evictions never approaches
+  cause reached what a deployment tolerates from it, and 20% evictions never approaches
   dominance while being one run in five lost to the substrate. Two traps, both about identity:
   the reason code is SHARED by every rule, so the firing KINDS ride the card beside the reasons
   and are the other half of its dedup identity (evictions subsiding while timeouts take over is

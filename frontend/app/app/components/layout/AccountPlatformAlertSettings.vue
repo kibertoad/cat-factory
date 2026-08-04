@@ -7,7 +7,11 @@ import type {
   PlatformFailureKindRule,
 } from '~/types/execution'
 import AccountFailureKindRules from '~/components/layout/AccountFailureKindRules.vue'
-import { invalidFailureKindRuleRows } from '~/utils/failureKinds'
+import {
+  failureKindRuleFaults,
+  hasFailureKindRuleFaults,
+  MAX_FAILURE_KIND_RULES,
+} from '~/utils/failureKinds'
 
 // Per-account tuning for the platform-health alert sweep (admin only): the ceilings the
 // deployment's aggregate run health is checked against, and the window they are evaluated over.
@@ -177,10 +181,8 @@ function collectThresholds(): PlatformAlertThresholdOverrides {
   return out
 }
 
-/** Per-kind rows the backend would refuse, checked against the same helper the editor shows. */
-const invalidRuleRows = computed(() =>
-  failureKindRules.value ? invalidFailureKindRuleRows(failureKindRules.value) : [],
-)
+/** What the backend would refuse about the per-kind rules, from the helper the editor shows. */
+const ruleFaults = computed(() => failureKindRuleFaults(failureKindRules.value ?? []))
 
 async function save() {
   if (!loaded.value) {
@@ -196,13 +198,17 @@ async function save() {
     return
   }
   // Refused here rather than left to the write boundary: the API rejects the WHOLE config blob,
-  // so a bad rule would read to the admin as the model policy beside it failing to save.
-  if (invalidRuleRows.value.length > 0) {
+  // so a bad rule would read to the admin as the model policy beside it failing to save. The
+  // two faults describe themselves differently because they are fixed differently — a row
+  // number is useless advice for a list that is simply too long.
+  if (hasFailureKindRuleFaults(ruleFaults.value)) {
     toast.add({
       title: t('settings.platformAlerts.failureKinds.invalidTitle'),
-      description: t('settings.platformAlerts.failureKinds.invalidRows', {
-        rows: invalidRuleRows.value.join(', '),
-      }),
+      description: ruleFaults.value.tooMany
+        ? t('settings.platformAlerts.failureKinds.tooManyRules', { max: MAX_FAILURE_KIND_RULES })
+        : t('settings.platformAlerts.failureKinds.invalidRows', {
+            rows: ruleFaults.value.rows.join(', '),
+          }),
       color: 'error',
     })
     return

@@ -1,9 +1,14 @@
 import type { PlatformAlertWindow, PlatformFailureKindRule } from '@cat-factory/contracts'
+import {
+  isAgentFailureKind,
+  MAX_FAILURE_KIND_LENGTH,
+  MAX_FAILURE_KIND_RULES,
+} from '@cat-factory/contracts'
 import { DEFAULT_PLATFORM_ALERT_THRESHOLDS } from '@cat-factory/orchestration'
 import type { PlatformAlertConfig } from './types.js'
 import { parseNumericEnv } from './numeric.js'
-import { logger } from '../observability/logger.js'
 import { DOCS } from './docs.js'
+import { configWarnings } from './warnOnce.js'
 
 // Shared, runtime-neutral parser for the platform-health alerting env, so the Worker's
 // `loadConfig` and the Node/local `loadNodeConfig` derive an IDENTICAL `PlatformAlertConfig`
@@ -59,19 +64,29 @@ const FAILURE_KIND_RATES_VAR = 'PLATFORM_ALERTS_FAILURE_KIND_RATES'
  * cannot be read is not a rule, so it is never guessed at (a `share` outside (0, 1] is not
  * clamped into range here, unlike a scalar ceiling: clamping `evicted=50` to 1.0 would invent
  * "when EVERY failure is an eviction" out of somebody meaning 50%).
+ *
+ * An UNRECOGNISED kind is the one problem reported without dropping the rule, because dropping
+ * it and keeping it silently are both wrong for different halves of the same case. A kind this
+ * build does not produce is either a typo or a kind a later release retired, and nothing here
+ * can tell those apart — so the rule is kept (a retired kind is data an operator should get to
+ * decide about, exactly as in the settings editor) and the fact that it can never fire is
+ * STATED. Left silent it is the worst outcome the whole var has: a pager somebody deliberately
+ * armed, indistinguishable from a kind that simply never occurred, discovered on the night it
+ * did not go off.
  */
 export function parseFailureKindRules(raw: string | undefined): PlatformFailureKindRule[] {
   if (raw === undefined || raw.trim() === '') return []
   const rules: PlatformFailureKindRule[] = []
   const seen = new Set<string>()
-  const reject = (entry: string, why: string) => {
-    logger.warn(
-      `${FAILURE_KIND_RATES_VAR} entry "${entry}" ${why}, so this rule is ignored. ` +
+  const warn = (entry: string, what: string) => {
+    configWarnings.warnOnce(
+      `${FAILURE_KIND_RATES_VAR} entry "${entry}" ${what} ` +
         `Expected \`kind=share[:minCount]\` with share in (0, 1], e.g. \`evicted=0.05:3\`. ` +
         `See ${DOCS.envVars()}.`,
       { var: FAILURE_KIND_RATES_VAR, entry, docsUrl: DOCS.envVars() },
     )
   }
+  const reject = (entry: string, why: string) => warn(entry, `${why}, so this rule is ignored.`)
   for (const entry of raw.split(',')) {
     const text = entry.trim()
     if (text === '') continue
@@ -87,6 +102,14 @@ export function parseFailureKindRules(raw: string | undefined): PlatformFailureK
       .map((part) => part.trim())
     if (kind === '' || extra.length > 0) {
       reject(text, 'is not `kind=share[:minCount]`')
+      continue
+    }
+    // Held to the SAME bound as a settings-authored rule (`platformFailureKindRuleSchema`),
+    // though an env-derived rule never passes through that schema: one of the two paths quietly
+    // accepting what the other refuses is how the deployment default and the account override
+    // stop meaning the same thing.
+    if (kind.length > MAX_FAILURE_KIND_LENGTH) {
+      reject(text, `names a kind longer than ${MAX_FAILURE_KIND_LENGTH} characters`)
       continue
     }
     const share = Number(shareText)
@@ -110,6 +133,21 @@ export function parseFailureKindRules(raw: string | undefined): PlatformFailureK
     if (seen.has(kind)) {
       reject(text, `repeats the kind "${kind}", which an earlier entry already covers`)
       continue
+    }
+    if (rules.length >= MAX_FAILURE_KIND_RULES) {
+      reject(text, `is past the limit of ${MAX_FAILURE_KIND_RULES} per-kind rules`)
+      continue
+    }
+    // Kept, not dropped: see the note above on why a kind this build does not produce is
+    // reported rather than refused. The rule is inert until something produces that kind, and
+    // saying so is the whole point — a rule that can never fire and a kind that never occurred
+    // are otherwise the same silence.
+    if (!isAgentFailureKind(kind)) {
+      warn(
+        text,
+        `names "${kind}", which is not a failure kind this build produces, so the rule is kept ` +
+          `but can never fire. Check the spelling, or drop the rule if the kind was retired.`,
+      )
     }
     seen.add(kind)
     rules.push({ kind, maxShare: share, ...(minCount === undefined ? {} : { minCount }) })

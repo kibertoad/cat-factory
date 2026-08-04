@@ -3,7 +3,7 @@ import { computed, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
-import { FAILURE_KIND_KEYS, isKnownFailureKind } from '~/utils/failureKinds'
+import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -35,7 +35,7 @@ const WINDOWS: { value: PlatformObservabilityWindow; label: string }[] = [
 // operator points a page at and the kind this breakdown shows can never be labelled differently.
 // An out-of-enum kind (a retired one on an old row) falls back to its raw code.
 function failureLabel(kind: string): string {
-  return isKnownFailureKind(kind) ? t(FAILURE_KIND_KEYS[kind]) : kind
+  return isAgentFailureKind(kind) ? t(FAILURE_KIND_KEYS[kind]) : kind
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000

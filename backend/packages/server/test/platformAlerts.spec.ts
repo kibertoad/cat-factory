@@ -1,3 +1,4 @@
+import { MAX_FAILURE_KIND_LENGTH, MAX_FAILURE_KIND_RULES } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   parseFailureKindRules,
@@ -134,6 +135,42 @@ describe('parseFailureKindRules', () => {
     expect(parseFailureKindRules('evicted=0.1,evicted=0.9')).toEqual([
       { kind: 'evicted', maxShare: 0.1 },
     ])
+  })
+
+  it('KEEPS a rule naming an unrecognised kind, which is reported rather than dropped', () => {
+    // A typo and a retired kind are the same string here, and nothing can tell them apart, so
+    // the rule survives for a human to decide about (as in the settings editor) while the fact
+    // that it can never fire is logged. Dropping it silently and keeping it silently are both
+    // the same failure: a pager somebody armed that reads exactly like a kind that never
+    // occurred, discovered on the night it did not go off.
+    expect(parseFailureKindRules('evicetd=0.05, evicted=0.1')).toEqual([
+      { kind: 'evicetd', maxShare: 0.05 },
+      { kind: 'evicted', maxShare: 0.1 },
+    ])
+  })
+
+  it('refuses a kind longer than the contract allows, like a settings-authored rule', () => {
+    // Env-derived rules never pass through `platformFailureKindRuleSchema`, so this bound has
+    // to be restated here or the deployment default and the account override stop meaning the
+    // same thing.
+    const tooLong = 'k'.repeat(MAX_FAILURE_KIND_LENGTH + 1)
+    expect(parseFailureKindRules(`${tooLong}=0.5, evicted=0.1`)).toEqual([
+      { kind: 'evicted', maxShare: 0.1 },
+    ])
+    const atLimit = 'k'.repeat(MAX_FAILURE_KIND_LENGTH)
+    expect(parseFailureKindRules(`${atLimit}=0.5`)).toEqual([{ kind: atLimit, maxShare: 0.5 }])
+  })
+
+  it('stops at the contract cap rather than building a list a save would refuse', () => {
+    const entries = Array.from(
+      { length: MAX_FAILURE_KIND_RULES + 3 },
+      (_, i) => `kind${i}=0.5`,
+    ).join(',')
+    const rules = parseFailureKindRules(entries)
+    expect(rules).toHaveLength(MAX_FAILURE_KIND_RULES)
+    // The kept ones are the FIRST, matching how a repeated kind resolves: earlier wins, and the
+    // dropped tail is reported per entry rather than silently truncated.
+    expect(rules[0]).toEqual({ kind: 'kind0', maxShare: 0.5 })
   })
 
   it('reaches the resolved thresholds', () => {

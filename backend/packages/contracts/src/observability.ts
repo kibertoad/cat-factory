@@ -665,9 +665,24 @@ export type PlatformAlertWindow = v.InferOutput<typeof platformAlertWindowSchema
  * comparing like with like. What a human is offered when AUTHORING one is the closed vocabulary,
  * in the settings panel, which is where a typo can still be caught before it is stored.
  */
+/**
+ * The most per-kind rules one config may carry, shared by every layer that bounds the list: the
+ * schema below, the env parser that builds the deployment's, and the settings editor that warns
+ * before a save the schema would refuse. A number restated per layer is a number that drifts,
+ * and the layer that drifts low silently discards a rule an operator is counting on.
+ */
+export const MAX_FAILURE_KIND_RULES = 32
+
+/**
+ * The longest a rule's `kind` may be. Generous against the current vocabulary on purpose: it is
+ * a bound on a string an operator types, not a statement about which kinds exist (which is
+ * {@link isAgentFailureKind}, and is deliberately not enforced here — see below).
+ */
+export const MAX_FAILURE_KIND_LENGTH = 64
+
 export const platformFailureKindRuleSchema = v.object({
   /** The `agentFailureKind` this rule watches, e.g. `evicted` (matched against the taxonomy). */
-  kind: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)),
+  kind: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FAILURE_KIND_LENGTH)),
   /**
    * Share (0..1] of the window's failures this kind must reach before the rule fires. Excludes
    * 0 for the same reason {@link platformAlertThresholdOverridesSchema}'s dominant share does: a
@@ -744,7 +759,7 @@ export const platformAlertThresholdOverridesSchema = v.object({
   failureKindRules: v.optional(
     v.pipe(
       v.array(platformFailureKindRuleSchema),
-      v.maxLength(32),
+      v.maxLength(MAX_FAILURE_KIND_RULES),
       v.check(
         (rules) => new Set(rules.map((rule) => rule.kind)).size === rules.length,
         'Each failure kind may carry at most one alert rule.',

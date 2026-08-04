@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PlatformFailureKindRule } from '~/types/execution'
+import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/execution'
 import {
   AGENT_FAILURE_KINDS,
   FAILURE_KIND_KEYS,
-  invalidFailureKindRuleRows,
-  isKnownFailureKind,
+  failureKindRuleFaults,
+  isAgentFailureKind,
+  MAX_FAILURE_KIND_RULES,
 } from '~/utils/failureKinds'
 
-// The per-failure-kind alert rules of the platform-health sheet: "page when `evicted` accounts
-// for more than 5% of the window's failures". Its own component because it edits a LIST where
+// The per-failure-kind alert rules of the platform-health sheet: "page when `evicted` reaches
+// 5% of the window's failures". Its own component because it edits a LIST where
 // its parent edits scalars, and the two have different notions of what an override is.
 //
 // That difference is the whole of this file. A scalar override is per field: leave the box
@@ -46,7 +47,7 @@ function kindItems(current: string) {
     label: t(FAILURE_KIND_KEYS[kind]),
     value: kind as string,
   }))
-  if (current === '' || isKnownFailureKind(current)) return known
+  if (current === '' || isAgentFailureKind(current)) return known
   return [
     ...known,
     {
@@ -67,7 +68,7 @@ const duplicateKinds = computed(() => {
   return dupes
 })
 
-/** A share is edited in PERCENT, which is how the rule is spoken ("more than 5%"), stored 0..1. */
+/** A share is edited in PERCENT, which is how the rule is spoken ("5% or more"), stored 0..1. */
 function sharePercent(rule: PlatformFailureKindRule): number {
   return Math.round(rule.maxShare * 1000) / 10
 }
@@ -89,7 +90,7 @@ function setShare(index: number, raw: string) {
   const percent = Number(raw.trim())
   // A blank or unreadable box is left at zero rather than dropped: `maxShare` has no "unset"
   // (a rule without a ceiling is not a rule), and 0 is refused by the contract, so an incomplete
-  // row is REPORTED by `invalidRows` below instead of being quietly discarded on save.
+  // row is REPORTED by `faults` below instead of being quietly discarded on save.
   patch(index, { maxShare: Number.isFinite(percent) ? percent / 100 : 0 })
 }
 
@@ -107,11 +108,23 @@ function setMinCount(index: number, raw: string) {
   patch(index, { minCount: Number.isFinite(parsed) ? Math.round(parsed) : 1 })
 }
 
-function addRule() {
-  // Default to the first kind nothing has claimed, so adding two rows in a row does not create a
-  // duplicate the human then has to notice.
+/**
+ * The first kind nothing has claimed, or undefined once every one is spoken for.
+ *
+ * Undefined is what DISABLES the add button, rather than seeding a duplicate of the first kind
+ * and letting the duplicate warning explain it afterwards: at most one rule per kind is the
+ * contract, so a row the editor can only add in a state the contract refuses is a row it should
+ * not offer. It also puts the list's cap out of reach by construction — the vocabulary is far
+ * shorter than `MAX_FAILURE_KIND_RULES`, so unique-by-kind is the binding limit.
+ */
+const nextFreeKind = computed<AgentFailureKind | undefined>(() => {
   const taken = new Set(rules.value.map((rule) => rule.kind))
-  const kind = AGENT_FAILURE_KINDS.find((k) => !taken.has(k)) ?? AGENT_FAILURE_KINDS[0]!
+  return AGENT_FAILURE_KINDS.find((kind) => !taken.has(kind))
+})
+
+function addRule() {
+  const kind = nextFreeKind.value
+  if (kind === undefined) return
   emit('update:modelValue', [...rules.value, { kind, maxShare: 0.05 }])
 }
 
@@ -123,10 +136,10 @@ function removeRule(index: number) {
 }
 
 /**
- * Rows the backend would refuse, by 1-based position. The same helper the parent's save path
- * calls, so what the sheet flags and what the save stops on cannot disagree.
+ * What the backend would refuse about this list. The same helper the parent's save path calls,
+ * so what the sheet flags and what the save stops on cannot disagree.
  */
-const invalidRows = computed(() => invalidFailureKindRuleRows(rules.value))
+const faults = computed(() => failureKindRuleFaults(rules.value))
 </script>
 
 <template>
@@ -191,6 +204,9 @@ const invalidRows = computed(() => invalidFailureKindRuleRows(rules.value))
             :data-testid="`platform-alert-failure-share-${index}`"
             @update:model-value="setShare(index, String($event))"
           />
+          <p v-if="index === 0" class="text-[11px] text-slate-500">
+            {{ t('settings.platformAlerts.failureKinds.shareHint') }}
+          </p>
         </div>
         <div class="space-y-1">
           <label class="block text-[11px] text-slate-300">
@@ -218,19 +234,28 @@ const invalidRows = computed(() => invalidFailureKindRuleRows(rules.value))
       </div>
 
       <p
-        v-if="duplicateKinds.size > 0"
+        v-if="faults.tooMany"
+        class="text-[11px] text-amber-300"
+        data-testid="platform-alert-failure-kinds-too-many"
+      >
+        {{
+          t('settings.platformAlerts.failureKinds.tooManyRules', { max: MAX_FAILURE_KIND_RULES })
+        }}
+      </p>
+      <p
+        v-else-if="duplicateKinds.size > 0"
         class="text-[11px] text-amber-300"
         data-testid="platform-alert-failure-kinds-duplicate"
       >
         {{ t('settings.platformAlerts.failureKinds.duplicateKind') }}
       </p>
       <p
-        v-else-if="invalidRows.length > 0"
+        v-else-if="faults.rows.length > 0"
         class="text-[11px] text-amber-300"
         data-testid="platform-alert-failure-kinds-invalid"
       >
         {{
-          t('settings.platformAlerts.failureKinds.invalidRows', { rows: invalidRows.join(', ') })
+          t('settings.platformAlerts.failureKinds.invalidRows', { rows: faults.rows.join(', ') })
         }}
       </p>
 
@@ -239,11 +264,19 @@ const invalidRows = computed(() => invalidFailureKindRuleRows(rules.value))
         variant="subtle"
         size="xs"
         icon="i-lucide-plus"
+        :disabled="nextFreeKind === undefined"
         data-testid="platform-alert-failure-kinds-add"
         @click="addRule"
       >
         {{ t('settings.platformAlerts.failureKinds.addRule') }}
       </UButton>
+      <p
+        v-if="nextFreeKind === undefined"
+        class="text-[11px] text-slate-500"
+        data-testid="platform-alert-failure-kinds-all-covered"
+      >
+        {{ t('settings.platformAlerts.failureKinds.allKindsCovered') }}
+      </p>
       <p class="text-[11px] text-slate-500">
         {{ t('settings.platformAlerts.failureKinds.minCountHint') }}
       </p>

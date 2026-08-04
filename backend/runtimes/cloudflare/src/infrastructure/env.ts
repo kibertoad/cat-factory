@@ -620,7 +620,8 @@ export interface Env {
   /**
    * Per-kind alert rules: `kind=share[:minCount]`, comma-separated (e.g. `evicted=0.05:3`). The
    * dominant-kind ceiling above asks whether one cause is swamping the rest; these ask whether a
-   * NAMED cause exceeded what this deployment tolerates from it. Unset ⇒ no per-kind rules.
+   * NAMED cause reached what this deployment tolerates from it (the share is the trigger
+   * point, not a value to pass). Unset ⇒ no per-kind rules.
    */
   PLATFORM_ALERTS_FAILURE_KIND_RATES?: string
 

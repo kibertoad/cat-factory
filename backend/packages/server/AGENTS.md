@@ -85,7 +85,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `requireWorkspacePermission`; the admin-tier controller middleware) and `optionalJsonBody`
   (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
   otherwise makes the transport require a body, which breaks body-less callers of a route that
-  merely gained an optional field); `config/`; the `AppConfig`
+  merely gained an optional field); `config/` (the runtime-neutral env parsers both facades
+  share; a rejected value is REPORTED through `config/warnOnce.ts`, once per process rather
+  than once per read, because the Worker re-derives its whole config on every invocation);
+  the `AppConfig`
   contract; `runtime/gateways.ts`; the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `runtime/` also holds the **runtime-neutral periodic sweeps** each facade drives from its own

@@ -12,8 +12,8 @@
 Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
 
 `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
-80% by default), which is a question about the shape of the distribution. It could not say "more
-than 5% of failures are evictions", and no single ceiling can: 5% evictions is the container
+80% by default), which is a question about the shape of the distribution. It could not say "5% or
+more of failures are evictions", and no single ceiling can: 5% evictions is the container
 substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
 kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
 so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
@@ -27,6 +27,14 @@ half of the card's dedup identity: without them, evictions subsiding while timeo
 rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
 carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
 at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+Config warnings are now emitted once per process rather than once per read, because the Worker
+re-derives its whole config on every invocation and a standing typo would otherwise log on each.
 
 Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
 notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional

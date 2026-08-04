@@ -249,7 +249,7 @@ export function evaluatePlatformHealth(
     }
     // The operator's own per-kind rules, on top of the same taxonomy. The dominant condition
     // above asks whether ONE cause is swamping the rest, which is a question about the shape of
-    // the distribution; these ask whether a NAMED cause has exceeded what this deployment
+    // the distribution; these ask whether a NAMED cause has REACHED what this deployment
     // tolerates from it, which no single ceiling can express — 5% evictions is the substrate
     // failing and 40% `rejected` is the product working.
     alerts.push(...failureKindRuleAlerts(snapshot, thresholds, totalFailures))
@@ -392,7 +392,7 @@ const REASON_PHRASE: Record<PlatformAlertReason, string> = {
   // The kind-less wording, used only when the caller supplied no kinds. The real card names
   // them (see `platformHealthCardContent`), because "one failure kind" is precisely the detail
   // an operator needs to know which system to go and look at.
-  failure_kind_rate_high: 'a failure kind over the rate an operator set for it',
+  failure_kind_rate_high: 'a failure kind at or over the rate an operator set for it',
   sweep_degraded: 'a background maintenance sweep failing repeatedly',
 }
 
@@ -430,7 +430,7 @@ export function platformHealthCardContent(
 ): { title: string; body: string } {
   const phrases = reasons.map((r) =>
     r === 'failure_kind_rate_high' && failureKinds.length > 0
-      ? `${joinPhrases([...failureKinds])} failures over the rate set for them`
+      ? `${joinPhrases([...failureKinds])} failures at or over the rate set for them`
       : REASON_PHRASE[r],
   )
   return {
