@@ -3,7 +3,6 @@
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
-import { getConnInfo } from '@hono/node-server/conninfo'
 import { type NotificationWebhookService } from '@cat-factory/integrations'
 import {
   type GitHubInstallationRepository,
@@ -42,6 +41,7 @@ import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
+import { makeNodeClientAddressResolver } from './clientAddress.js'
 
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
@@ -477,17 +477,10 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The durable cross-replica window behind the password throttle (SEC-4). Wired
     // symmetrically on the Cloudflare facade.
     authAttemptRepository: repos.authAttemptRepository,
-    // The socket peer address, read by the password throttle when AUTH_TRUST_PROXY is off:
-    // a forwarded header is attacker-controlled unless a trusted proxy overwrites it (SEC-4).
-    resolveClientAddress: (c) => {
-      try {
-        return getConnInfo(c).remote.address
-      } catch {
-        // A request with no live socket (an in-process test `app.request`) has no peer
-        // address; `undefined` is the true answer, not an error to surface.
-        return undefined
-      }
-    },
+    // The client address the password throttle keys on (SEC-4): the socket peer, or the
+    // operator's declared `x-forwarded-for` hop. See `clientAddress.ts` for why this facade
+    // never reads `cf-connecting-ip`.
+    resolveClientAddress: makeNodeClientAddressResolver(config.auth),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

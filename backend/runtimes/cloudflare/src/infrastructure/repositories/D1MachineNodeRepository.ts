@@ -1,4 +1,9 @@
-import type { MachineNodeMint, MachineNodeRecord, MachineNodeRepository } from '@cat-factory/kernel'
+import type {
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface MachineNodeRow {
@@ -33,12 +38,15 @@ export class D1MachineNodeRepository implements MachineNodeRepository {
     this.db = db
   }
 
-  async recordMint(mint: MachineNodeMint): Promise<void> {
+  async recordMint(mint: MachineNodeMint): Promise<MachineNodeMintOutcome> {
     // The upsert refreshes only the mint-shaped columns: `user_id`, `created_at` and the
-    // revocation tombstone never change here (the controller refuses a mint against a
-    // revoked or foreign node id before calling this). `MAX` keeps `expires_at` the latest
-    // exp ever signed, so a shorter re-mint cannot make the roster forget a longer token.
-    await this.db
+    // revocation tombstone never change here. `MAX` keeps `expires_at` the latest exp ever
+    // signed, so a shorter re-mint cannot make the roster forget a longer token.
+    //
+    // The `WHERE` on the conflict branch is what makes ownership atomic rather than
+    // check-then-write: a concurrent first mint of the same node id by another user updates
+    // nothing instead of stamping its scope onto the winner's row.
+    const result = await this.db
       .prepare(
         `INSERT INTO machine_nodes
            (node_id, user_id, account_ids, created_at, last_minted_at, expires_at)
@@ -46,7 +54,9 @@ export class D1MachineNodeRepository implements MachineNodeRepository {
          ON CONFLICT(node_id) DO UPDATE SET
            account_ids = excluded.account_ids,
            last_minted_at = excluded.last_minted_at,
-           expires_at = MAX(machine_nodes.expires_at, excluded.expires_at)`,
+           expires_at = MAX(machine_nodes.expires_at, excluded.expires_at)
+         WHERE machine_nodes.user_id = excluded.user_id
+           AND machine_nodes.revoked_at IS NULL`,
       )
       .bind(
         mint.nodeId,
@@ -57,6 +67,9 @@ export class D1MachineNodeRepository implements MachineNodeRepository {
         mint.expiresAt,
       )
       .run()
+    // A guarded no-op and a successful refresh are both "no error", so the write count is
+    // the only thing that distinguishes them.
+    return (result.meta.changes ?? 0) > 0 ? 'recorded' : 'refused'
   }
 
   async get(nodeId: string): Promise<MachineNodeRecord | null> {

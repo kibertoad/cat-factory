@@ -452,7 +452,9 @@ export {
 export {
   fetchLocalRunner,
   type LocalRunnerUrlPolicy,
-  localRunnerUrlError,
+  type LocalRunnerUrlRefusal,
+  localRunnerUrlRefusal,
+  runnerRequestUrl,
 } from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,

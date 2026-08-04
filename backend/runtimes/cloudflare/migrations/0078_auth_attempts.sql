@@ -4,7 +4,7 @@
 -- cross-replica window. One row per attempt, counted per bucket key (`<ip>:<email>`) AND
 -- per client IP (the cross-email credential-stuffing aggregate), pruned aggressively by
 -- the retention sweep (rows are junk minutes after the window closes).
--- Mirrors the Node Drizzle `authAttempts` table (db/tables/identity.ts) — keep in step.
+-- Mirrors the Node Drizzle `authAttempts` table (db/tables/identity.ts); keep in step.
 CREATE TABLE auth_attempts (
   id TEXT PRIMARY KEY,
   key TEXT NOT NULL,

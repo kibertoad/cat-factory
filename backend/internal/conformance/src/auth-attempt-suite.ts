@@ -36,7 +36,7 @@ export function defineAuthAttemptSuite(name: string, makeRepo: () => AuthAttempt
     })
 
     it('counts the per-IP aggregate across every key', async () => {
-      // The credential-stuffing signature: one IP, many emails — each per-key bucket
+      // The credential-stuffing signature: one IP, many emails, where each per-key bucket
       // stays under its cap, only the aggregate sees the sweep.
       const repo = makeRepo()
       const { ip, otherIp, email } = ids()

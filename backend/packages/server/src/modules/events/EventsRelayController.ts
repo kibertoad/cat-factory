@@ -1,7 +1,10 @@
 import { Hono } from 'hono'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { RelayedRealtimeEvent } from '../../events/machineEvents.js'
-import { authorizeMachineSubscribe } from '../../events/machineSubscribe.js'
+import {
+  MACHINE_SUBSCRIBE_ERROR_CODE,
+  authorizeMachineSubscribe,
+} from '../../events/machineSubscribe.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -152,13 +155,11 @@ export function eventsRelayController(): Hono<AppEnv> {
       isRevoked: machineNodes ? (nodeId) => machineNodes.isRevoked(nodeId) : undefined,
     })
     if (!auth.ok) {
-      return c.json(
-        {
-          ok: false,
-          error: { code: auth.status === 404 ? 'not_found' : 'forbidden', message: auth.message },
-        },
-        auth.status,
-      )
+      // Each verdict status keeps its own code: a node retries an `unavailable` (the roster was
+      // unreadable, so revocation could not be checked) and reconnects for a fresh id on a
+      // `forbidden`. Collapsing them onto one code would tell it to do the wrong thing.
+      const code = MACHINE_SUBSCRIBE_ERROR_CODE[auth.status]
+      return c.json({ ok: false, error: { code, message: auth.message } }, auth.status)
     }
 
     // Checked AFTER auth so the handshake shape isn't probeable without a token.

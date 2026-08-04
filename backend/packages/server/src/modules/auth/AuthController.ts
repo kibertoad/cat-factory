@@ -37,6 +37,7 @@ import type { AppEnv } from '../../http/env.js'
 import type { UserRecord, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
   UnavailableError,
@@ -638,19 +639,16 @@ function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
         403,
       )
     }
-    // The machine-node roster (SEC-5): a REVOKED node id can never be re-minted (revocation is
-    // permanent per node id; reconnecting mints a fresh one), and a node id another user's node
-    // holds cannot be taken over (that would swap the roster's owner, letting the taker revoke
-    // it). One 403 for both, so a node id is not an existence oracle.
+    // The machine-node roster (SEC-5) must be able to record this mint, or the token must not
+    // exist: an unrecorded token is an unrevocable one. A deployment acting as a mothership
+    // (it serves `/internal/*` and thus has `repositories`) with no roster wired would mint
+    // exactly that, so refuse rather than silently skipping the roster.
     const machineNodes = container.machineNodeRepository
-    if (body.nodeId && machineNodes) {
-      const existing = await machineNodes.get(body.nodeId)
-      if (existing && (existing.revokedAt !== null || existing.userId !== session.id)) {
-        return c.json(
-          { error: { code: 'forbidden', message: 'This node id is not available' } },
-          403,
-        )
-      }
+    if (!machineNodes && container.repositories) {
+      throw new UnavailableError(
+        'Machine nodes cannot be recorded on this deployment',
+        'machine_roster_unavailable',
+      )
     }
     // The mint helper computes and signs the authoritative `exp`/`nodeId`, then hands them back
     // so the response echoes EXACTLY what was signed (no second clock read that could drift).
@@ -662,14 +660,26 @@ function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
     })
     // Fold the mint into the roster BEFORE handing out the token: the roster is what makes the
     // node revocable, so a token the roster never saw must not leave the building.
+    //
+    // The write itself enforces ownership, so a REVOKED node id can never be re-minted
+    // (revocation is permanent per node id; reconnecting mints a fresh one) and a node id
+    // another user holds cannot be taken over. Doing that here rather than in a preceding
+    // `get` closes the race where two first mints of one id both read "unknown" and the loser
+    // overwrote the winner's scope. One 403 for both causes, so a node id is not an existence
+    // oracle. The token was signed above but never leaves this function.
     if (machineNodes) {
-      await machineNodes.recordMint({
+      const outcome = await machineNodes.recordMint({
         nodeId,
         userId: session.id,
         accountIds,
         mintedAt: Date.now(),
         expiresAt: exp,
       })
+      if (outcome === 'refused') {
+        throw new ForbiddenError('This node id is not available', {
+          reason: 'machine_node_unavailable',
+        })
+      }
     }
     return c.json(
       {
@@ -699,14 +709,15 @@ function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
   // consults (`verifyMachineRequest`), so a leaked machine token stops working everywhere
   // at once instead of staying valid for its full TTL.
   buildHonoRoute(app, listMachineNodesContract, async (c) => {
+    // Authenticate BEFORE probing the capability, so an unauthenticated caller cannot learn
+    // whether this deployment records machine nodes (the ordering every other machine surface
+    // documents as load-bearing).
+    const session = await verifySession(c)
+    if (!session) throw new UnauthorizedError('A valid session is required')
     const nodes = requireCapability(
       c.get('container').machineNodeRepository,
       'Machine nodes are not recorded on this deployment',
     )
-    const session = await verifySession(c)
-    if (!session) {
-      return c.json({ error: { code: 'forbidden', message: 'A valid session is required' } }, 403)
-    }
     const rows = await nodes.listByUser(session.id)
     return c.json(
       {
@@ -724,14 +735,13 @@ function registerMachineNodeRoutes(app: Hono<AppEnv>): void {
   })
 
   buildHonoRoute(app, revokeMachineNodeContract, async (c) => {
+    // Authenticate first, for the same non-oracle reason as the list route above.
+    const session = await verifySession(c)
+    if (!session) throw new UnauthorizedError('A valid session is required')
     const nodes = requireCapability(
       c.get('container').machineNodeRepository,
       'Machine nodes are not recorded on this deployment',
     )
-    const session = await verifySession(c)
-    if (!session) {
-      return c.json({ error: { code: 'forbidden', message: 'A valid session is required' } }, 403)
-    }
     const { nodeId } = c.req.valid('param')
     const row = await nodes.get(nodeId)
     // Owner-scoped, with the auth gate's existence-non-leak policy: an unknown node and

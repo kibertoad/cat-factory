@@ -21,6 +21,9 @@ function fakeMachineNodes(): MachineNodeRepository & { rows: Map<string, Machine
     rows,
     recordMint: async (m: MachineNodeMint) => {
       const prior = rows.get(m.nodeId)
+      // Ownership and the tombstone are enforced by the WRITE in both real repos (a guarded
+      // `ON CONFLICT ... WHERE`), so the fake refuses exactly where they do.
+      if (prior && (prior.userId !== m.userId || prior.revokedAt !== null)) return 'refused'
       rows.set(m.nodeId, {
         nodeId: m.nodeId,
         userId: prior?.userId ?? m.userId,
@@ -31,6 +34,7 @@ function fakeMachineNodes(): MachineNodeRepository & { rows: Map<string, Machine
         revokedAt: prior?.revokedAt ?? null,
         revokedByUserId: prior?.revokedByUserId ?? null,
       })
+      return 'recorded'
     },
     get: async (nodeId) => rows.get(nodeId) ?? null,
     listByUser: async (userId) =>
@@ -66,15 +70,20 @@ function makeApp(
     mothership?: boolean
     accounts?: { id: string }[]
     machineNodes?: MachineNodeRepository
+    /** Wire NO roster, to assert a mothership refuses to mint an unrecordable token. */
+    noRoster?: boolean
   } = {},
 ) {
+  // A correctly-wired mothership always has a roster: a token it never recorded could never be
+  // revoked, so the mint refuses without one. Tests that want that refusal pass `noRoster`.
+  const machineNodes = opts.noRoster ? undefined : (opts.machineNodes ?? fakeMachineNodes())
   const container = {
     repositories: opts.mothership === false ? undefined : {},
     accountService: {
       listForUser: async () => opts.accounts ?? [{ id: 'acc_1' }, { id: 'acc_2' }],
     },
     config: { auth: { sessionSecret: SECRET, machineTokenTtlMs: 60_000 } },
-    ...(opts.machineNodes ? { machineNodeRepository: opts.machineNodes } : {}),
+    ...(machineNodes ? { machineNodeRepository: machineNodes } : {}),
   } as unknown as ServerContainer
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
@@ -194,6 +203,30 @@ describe('machine-node roster (SEC-5)', () => {
     expect(nodes.rows.get(theirs.nodeId)?.userId).toBe('usr_1')
   })
 
+  it('refuses to mint at all when a mothership has no roster wired', async () => {
+    // An unrecorded machine token is an unrevocable one, so "no roster" must not degrade to
+    // minting without a kill switch. 503, because it is the DEPLOYMENT that is misconfigured.
+    const res = await mint(makeApp({ noRoster: true }), await makeSession())
+    expect(res.status).toBe(503)
+    const body = (await res.json()) as { error: { code: string; details?: { reason?: string } } }
+    expect(body.error.code).toBe('unavailable')
+    expect(body.error.details?.reason).toBe('machine_roster_unavailable')
+  })
+
+  it('refuses when the ROSTER WRITE rejects, not merely when a prior read saw the row', async () => {
+    // The refusal has to come from the guarded write: a check-then-write left a window where two
+    // first mints of one node id both read "unknown" and the loser overwrote the winner's scope.
+    // A roster that only ever refuses at write time still produces the 403.
+    const nodes = fakeMachineNodes()
+    const app = makeApp({
+      machineNodes: { ...nodes, get: async () => null, recordMint: async () => 'refused' },
+    })
+    const res = await mint(app, await makeSession(), { nodeId: 'node_contended' })
+    expect(res.status).toBe(403)
+    const body = (await res.json()) as { error: { details?: { reason?: string } } }
+    expect(body.error.details?.reason).toBe('machine_node_unavailable')
+  })
+
   it('lists only the session user’s nodes', async () => {
     const nodes = fakeMachineNodes()
     const app = makeApp({ machineNodes: nodes })
@@ -239,7 +272,7 @@ describe('machine-node roster (SEC-5)', () => {
   })
 
   it('503s the roster endpoints when no roster store is wired', async () => {
-    const app = makeApp()
+    const app = makeApp({ noRoster: true })
     const res = await app.fetch(
       new Request('http://x/auth/machine-nodes', {
         headers: { authorization: `Bearer ${await makeSession()}` },

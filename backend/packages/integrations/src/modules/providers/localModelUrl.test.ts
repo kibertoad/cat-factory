@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchLocalRunner, localRunnerUrlError } from './localModelUrl.js'
+import { fetchLocalRunner, localRunnerUrlRefusal, runnerRequestUrl } from './localModelUrl.js'
+
+/** The refusal message, or null when the URL is permitted. */
+const localRunnerUrlError = (url: string, policy?: { allowPrivateLan: boolean }): string | null =>
+  localRunnerUrlRefusal(url, policy)?.message ?? null
+/** The machine-readable refusal reason, or null when the URL is permitted. */
+const reasonFor = (url: string, policy?: { allowPrivateLan: boolean }): string | null =>
+  localRunnerUrlRefusal(url, policy)?.reason ?? null
 
 const LAN = { allowPrivateLan: true }
 
-describe('localRunnerUrlError (SSRF allow-list)', () => {
+describe('localRunnerUrlRefusal (SSRF allow-list)', () => {
   it('accepts loopback runner URLs under the default (loopback-only) policy', () => {
     for (const url of [
       'http://localhost:11434/v1',
       'http://localhost:1234/v1',
-      'http://my-box.localhost:11434/v1',
       'http://127.0.0.1:8080/v1',
       'http://127.5.6.7/v1',
       'http://[::1]:8080/v1',
@@ -121,6 +127,100 @@ describe('localRunnerUrlError (SSRF allow-list)', () => {
   it('rejects an IPv4-mapped private-LAN literal under the default policy only', () => {
     expect(localRunnerUrlError('http://[::ffff:10.0.0.1]/v1')).toBeTruthy()
     expect(localRunnerUrlError('http://[::ffff:10.0.0.1]/v1', LAN)).toBeNull()
+  })
+
+  it('rejects a `*.localhost` subdomain, which is a NAME and not a loopback literal', () => {
+    // `evil.com.localhost` is not delegated publicly, but the name still goes to the
+    // deployment's resolver, and with container search domains a 2-label name is tried
+    // with those suffixes first, so a wildcard answer sends the fetch off-loopback. It is
+    // also the only allowed form with a DNS-rebinding window, and no default needs it.
+    for (const url of [
+      'http://evil.com.localhost/v1',
+      'http://my-box.localhost:11434/v1',
+      'http://attacker.localhost/v1',
+    ]) {
+      for (const policy of [undefined, LAN]) {
+        expect(localRunnerUrlError(url, policy), `${url} (lan: ${!!policy})`).toBeTruthy()
+      }
+    }
+    // Plain `localhost` stays allowed: it is what every runner default uses.
+    expect(localRunnerUrlError('http://localhost:11434/v1')).toBeNull()
+  })
+
+  it('rejects a base URL carrying a query string or a fragment', () => {
+    // The two server-side forwards append a FIXED endpoint path (`/models`,
+    // `/chat/completions`). A base URL ending in `#` swallows that suffix entirely and a
+    // `?` buries it in the query, so the stored prefix would choose the request path: an
+    // arbitrary-path GET/POST against whatever listens on loopback.
+    for (const url of [
+      'http://127.0.0.1:9200/_search?q=x#',
+      'http://127.0.0.1:2375/containers/json?all=1',
+      'http://localhost:11434/v1#anything',
+      'http://localhost:11434/v1?x=1',
+    ]) {
+      expect(reasonFor(url), url).toBe('query_or_fragment_not_allowed')
+    }
+  })
+
+  it('rejects dot segments in the base path', () => {
+    expect(reasonFor('http://127.0.0.1:2375/v1/..')).toBe('query_or_fragment_not_allowed')
+    expect(reasonFor('http://127.0.0.1:2375/v1/./x')).toBe('query_or_fragment_not_allowed')
+  })
+
+  it('reports a machine-readable reason for every refusal class', () => {
+    expect(reasonFor('not a url')).toBe('invalid_url')
+    expect(reasonFor('ftp://localhost/v1')).toBe('scheme_not_allowed')
+    expect(reasonFor('http://user:pass@localhost/v1')).toBe('credentials_not_allowed')
+    // The two host denials are kept apart: only one has "an operator can allow LAN" as
+    // its remedy, and the SPA maps each to its own copy.
+    expect(reasonFor('http://10.0.0.5:8000/v1')).toBe('host_not_loopback')
+    expect(reasonFor('http://8.8.8.8/v1', LAN)).toBe('host_not_local')
+  })
+
+  it('pins currently-denied exotic literals so a future widening cannot allow them silently', () => {
+    for (const policy of [undefined, LAN]) {
+      for (const url of [
+        'http://[::127.0.0.1]/v1', // IPv4-compatible IPv6
+        'http://[64:ff9b::7f00:1]/v1', // NAT64-embedded loopback
+        'http://[::ffff:169.254.169.254]/v1', // mapped metadata
+        'http://100.64.0.1/v1', // CGNAT (Tailscale), not RFC1918
+      ]) {
+        expect(localRunnerUrlError(url, policy), `${url} (lan: ${!!policy})`).toBeTruthy()
+      }
+    }
+  })
+})
+
+describe('runnerRequestUrl (endpoint composition)', () => {
+  it('appends the endpoint path to a plain base URL', () => {
+    expect(runnerRequestUrl('http://localhost:11434/v1', '/models')).toEqual({
+      url: 'http://localhost:11434/v1/models',
+    })
+    // A trailing slash must not double up.
+    expect(runnerRequestUrl('http://localhost:11434/v1/', '/chat/completions')).toEqual({
+      url: 'http://localhost:11434/v1/chat/completions',
+    })
+  })
+
+  it('refuses a base URL that would discard the endpoint path', () => {
+    // The structural half of the query/fragment fix: even if such a row were already
+    // stored, composition refuses it rather than issuing the attacker-shaped request.
+    const composed = runnerRequestUrl('http://127.0.0.1:9200/_search?q=x#', '/models')
+    expect(composed).toEqual({
+      refusal: {
+        reason: 'query_or_fragment_not_allowed',
+        message: expect.stringContaining('plain base URL'),
+      },
+    })
+  })
+
+  it('refuses a base URL the host policy denies', () => {
+    expect(runnerRequestUrl('http://10.0.0.5:8000/v1', '/models')).toMatchObject({
+      refusal: { reason: 'host_not_loopback' },
+    })
+    expect(runnerRequestUrl('http://10.0.0.5:8000/v1', '/models', LAN)).toEqual({
+      url: 'http://10.0.0.5:8000/v1/models',
+    })
   })
 })
 

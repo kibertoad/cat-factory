@@ -144,9 +144,16 @@ interface ProxyCallContext {
   record: (usage: LlmTokenUsage | null) => Promise<number>
 }
 
-/** A resolved OpenAI-compatible upstream (base URL + bearer key + optional leased pool key). */
+/** A resolved OpenAI-compatible upstream (the call URL + bearer key + optional leased pool key). */
 interface UpstreamTarget {
-  baseURL: string
+  /**
+   * The fully composed `/chat/completions` URL, not a base to append to. A locally-run
+   * model's base URL is USER-supplied, and appending to a string cannot state that the
+   * endpoint path is still ours (a base carrying `?`/`#` swallows the suffix), so the local
+   * branch composes it through the policy's `runnerRequestUrl` and there is no base left
+   * here for a later edit to concatenate onto.
+   */
+  upstreamUrl: string
   apiKey: string
   leasedApiKeyId: string | null
   /**
@@ -268,9 +275,33 @@ async function resolveUpstreamTarget(
         ),
       }
     }
+    // Compose under the deployment's runner-URL policy rather than concatenating: a row
+    // written before the policy narrowed, or one whose base URL would discard the endpoint
+    // path, is refused HERE instead of reaching the forward.
+    const composed = endpoints.endpointUrl(resolved.baseUrl, '/chat/completions')
+    if ('refusal' in composed) {
+      log.error('llm proxy: local runner endpoint is refused by this deployment policy', {
+        reason: composed.refusal.reason,
+      })
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: composed.refusal.message,
+        upstreamMs: 0,
+      })
+      return {
+        failure: c.json(
+          { error: { code: 'upstream_unavailable', message: composed.refusal.message } },
+          502,
+        ),
+      }
+    }
     // Most local runners ignore auth; the SDK/fetch still emit an Authorization header.
     return {
-      baseURL: resolved.baseUrl.replace(/\/+$/, ''),
+      upstreamUrl: composed.url,
       apiKey: resolved.apiKey || 'local',
       leasedApiKeyId: null,
       fetchRunner: (url, init) => endpoints.fetchRunner(url, init),
@@ -328,7 +359,9 @@ async function resolveUpstreamTarget(
       userId: session.userId,
     })
     return {
-      baseURL: upstream.baseURL,
+      // A cloud provider's base URL is deployment-trusted (a gateway constant), never user
+      // input, so plain composition is right here.
+      upstreamUrl: `${upstream.baseURL}/chat/completions`,
       apiKey: leased.secret,
       leasedApiKeyId: leased.keyId,
       fetchRunner: null,
@@ -374,7 +407,7 @@ async function relayUpstream(
   target: UpstreamTarget,
 ): Promise<Response> {
   const { payload, streaming, log, observe, record, waitUntil } = ctx
-  const { baseURL, apiKey, fetchRunner } = target
+  const { upstreamUrl, apiKey, fetchRunner } = target
   if (streaming) {
     payload.stream_options = { include_usage: true }
   }
@@ -382,7 +415,6 @@ async function relayUpstream(
   // Upstream-dispatch clock: the slice between here and the response is the model's execution;
   // the rest of the proxy's time is transport overhead.
   const dispatchAt = Date.now()
-  const upstreamUrl = `${baseURL}/chat/completions`
   const upstreamInit: RequestInit = {
     method: 'POST',
     headers: {

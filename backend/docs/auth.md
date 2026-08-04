@@ -62,9 +62,20 @@ re-minted (reconnecting mints a fresh one).
 reset attempts land in the cross-replica `auth_attempts` ledger: a per-`ip:email`
 burst cap plus a per-IP aggregate that catches one-password-many-emails
 stuffing. The old in-process window remains only as the backstop when the store
-errors. The client IP is the socket peer unless `AUTH_TRUST_PROXY=true` says a
-trusted proxy overwrites the forwarded headers (the Worker always trusts the
-edge-injected `cf-connecting-ip`).
+errors, and a trip is counted (`auth.throttle.limited`) as well as logged, since
+only a rate distinguishes one forgetful user from a stuffing sweep.
+
+Which header carries the client address is a per-FACADE decision, resolved by
+`ServerContainer.resolveClientAddress` rather than by shared throttle code. Node
+reads the socket peer, and `x-forwarded-for` only when `AUTH_TRUST_PROXY=true`
+(with `AUTH_TRUST_PROXY_HOPS` naming the chain depth, rightmost-first); it never
+reads `cf-connecting-ip`, because nginx / Caddy / ALB rewrite `x-forwarded-for`
+and forward every other header untouched, so trusting a Cloudflare-specific
+header behind a generic proxy would leave the identity client-chosen. The Worker
+reads `cf-connecting-ip` alone, which is authentic there because the edge injects
+and overwrites it. Addresses are normalised before keying: a port is stripped,
+anything not IP-shaped is refused, and IPv6 is bucketed to its /64 so a routine
+allocation is not 2^64 fresh buckets.
 
 The session token is carried as a bearer header rather than a cookie so the
 cross-origin SPA → Worker calls work without `SameSite=None` cookies or

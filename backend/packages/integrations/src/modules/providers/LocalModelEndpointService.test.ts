@@ -82,6 +82,59 @@ describe('LocalModelEndpointService host policy (SEC-3)', () => {
     expect(doFetch).not.toHaveBeenCalled()
   })
 
+  it('names the machine-readable reason on the probe refusal', async () => {
+    const result = await makeService({ fetch: vi.fn() as unknown as typeof fetch }).testConnection({
+      provider: 'ollama',
+      baseUrl: lanInput.baseUrl,
+    })
+    // A policy refusal and an unreachable runner need different fixes, so only the former
+    // carries a reason the SPA can translate.
+    expect(result.errorReason).toBe('host_not_loopback')
+  })
+
+  it('refuses a probe whose base URL would discard the /models suffix', async () => {
+    // The stored prefix must not be able to choose the request path: `…?q=x#` + `/models`
+    // would have requested `/_search?q=x` on a loopback service.
+    const doFetch = vi.fn()
+    const result = await makeService({ fetch: doFetch as typeof fetch }).testConnection({
+      provider: 'custom',
+      baseUrl: 'http://127.0.0.1:9200/_search?q=x#',
+    })
+    expect(result.reachable).toBe(false)
+    expect(result.errorReason).toBe('query_or_fragment_not_allowed')
+    expect(doFetch).not.toHaveBeenCalled()
+  })
+
+  it('composes the probe URL by appending the endpoint path', async () => {
+    const doFetch = vi.fn().mockResolvedValue(Response.json({ data: [{ id: 'qwen3' }] }))
+    const result = await makeService({ fetch: doFetch as typeof fetch }).testConnection({
+      provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1/',
+    })
+    expect(result).toMatchObject({ reachable: true, models: ['qwen3'] })
+    expect(doFetch.mock.calls[0]?.[0]).toBe('http://127.0.0.1:11434/v1/models')
+  })
+
+  it('reports a stored row the CURRENT policy denies, and withholds its models', async () => {
+    // A row written while LAN access was on must not keep reading as healthy after an
+    // operator narrows the policy: admission would price its models as free, dispatch a
+    // container, and only then die at the first forward.
+    const repo = fakeRepo()
+    const shared = {
+      localModelEndpointRepository: repo,
+      secretCipher: plainCipher,
+      clock: { now: () => 1_700_000_000_000 },
+    }
+    const permissive = new LocalModelEndpointService({ ...shared, allowPrivateLanHosts: true })
+    await permissive.upsert('usr_1', lanInput)
+    expect(await permissive.list('usr_1')).toMatchObject([{ urlBlockedReason: null }])
+    expect(await permissive.capabilitiesFor('usr_1')).toHaveLength(1)
+
+    const narrowed = new LocalModelEndpointService({ ...shared, allowPrivateLanHosts: false })
+    expect(await narrowed.list('usr_1')).toMatchObject([{ urlBlockedReason: 'host_not_loopback' }])
+    expect(await narrowed.capabilitiesFor('usr_1')).toEqual([])
+  })
+
   it('fetchRunner blocks a LAN URL by default and forwards it under the opt-in', async () => {
     const doFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }))
     await expect(

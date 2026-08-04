@@ -42,6 +42,24 @@ export const LOCAL_RUNNER_LABELS: Record<LocalRunner, string> = {
 }
 
 /**
+ * Why a runner base URL is refused by the deployment's local-runner policy. The SPA maps
+ * each member to translated copy (`localModels.urlReason.*`), so the operator-facing
+ * English the backend composes stays DETAIL rather than the description. `host_not_loopback`
+ * and `host_not_local` are the same denial under the two policies and are kept apart
+ * because only one of them has "an operator can allow LAN hosts" as its remedy.
+ */
+export const LOCAL_RUNNER_URL_REASONS = [
+  'invalid_url',
+  'scheme_not_allowed',
+  'credentials_not_allowed',
+  'query_or_fragment_not_allowed',
+  'host_not_loopback',
+  'host_not_local',
+] as const
+export const localRunnerUrlReasonSchema = v.picklist(LOCAL_RUNNER_URL_REASONS)
+export type LocalRunnerUrlReason = v.InferOutput<typeof localRunnerUrlReasonSchema>
+
+/**
  * A user's configured local runner endpoint, as returned to the SPA. The API key is
  * write-only (never returned); `hasApiKey` reports whether one is stored.
  */
@@ -53,6 +71,13 @@ export const localModelEndpointSchema = v.object({
   hasApiKey: v.boolean(),
   /** The model ids the user has enabled from this runner (surfaced in the picker). */
   models: v.array(v.string()),
+  /**
+   * Why this stored endpoint is currently unusable under the deployment's runner-URL
+   * policy, or `null` when it is fine. A row written while LAN hosts were permitted must
+   * not keep rendering as healthy after an operator narrows the policy: the models it
+   * serves are withheld from the picker, so the panel is the only place left to say why.
+   */
+  urlBlockedReason: v.nullable(localRunnerUrlReasonSchema),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -89,5 +114,11 @@ export const localModelEndpointTestResultSchema = v.object({
   models: v.array(v.string()),
   /** Human-readable failure reason when `reachable` is false. */
   error: v.optional(v.string()),
+  /**
+   * Machine-readable cause when the probe was refused by the runner-URL policy rather
+   * than attempted. Absent for a genuine reachability failure, which has no vocabulary:
+   * the two need different fixes (change the URL vs start the runner).
+   */
+  errorReason: v.optional(localRunnerUrlReasonSchema),
 })
 export type LocalModelEndpointTestResult = v.InferOutput<typeof localModelEndpointTestResultSchema>

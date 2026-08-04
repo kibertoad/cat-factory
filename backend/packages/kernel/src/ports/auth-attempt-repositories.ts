@@ -4,7 +4,7 @@
 // reset it; this store is the cross-replica coordination point. Deliberately tiny: one
 // append + two indexed range counts per password attempt (rare and PBKDF2-priced), and
 // rows are junk minutes later, so the retention sweep prunes aggressively. Do NOT extend
-// it to high-frequency routes — a general API rate limiter is a different design.
+// it to high-frequency routes: a general API rate limiter is a different design.
 
 /** One recorded password attempt. */
 export interface AuthAttemptRecord {
@@ -25,7 +25,7 @@ export interface AuthAttemptRepository {
   /** Attempts recorded for `key` at/after `sinceMs`. */
   countByKeySince(key: string, sinceMs: number): Promise<number>
   /**
-   * Attempts recorded from `ip` at/after `sinceMs`, across every key — the aggregate
+   * Attempts recorded from `ip` at/after `sinceMs`, across every key: the aggregate
    * that stops one-password-many-emails credential stuffing, which the per-email key
    * alone cannot (each email gets a fresh bucket).
    */

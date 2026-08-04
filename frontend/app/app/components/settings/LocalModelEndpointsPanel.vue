@@ -6,7 +6,12 @@
 // serves and tick which to enable. Save persists the endpoint; the enabled models then surface
 // automatically in the per-workspace model picker. One endpoint per runner type.
 import { computed, ref, watch } from 'vue'
-import { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS, type LocalRunner } from '~/types/localModels'
+import {
+  LOCAL_RUNNER_DEFAULTS,
+  LOCAL_RUNNER_LABELS,
+  type LocalRunner,
+  type LocalRunnerUrlReason,
+} from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -36,6 +41,23 @@ const RUNNERS: { value: LocalRunner; label: string }[] = (
   Object.keys(LOCAL_RUNNER_LABELS) as LocalRunner[]
 ).map((value) => ({ value, label: LOCAL_RUNNER_LABELS[value] }))
 
+// Why the deployment refuses a runner URL, in translated copy. An exhaustive Record keyed
+// off the contracts union, so adding a reason backend-side fails this typecheck instead of
+// rendering the backend's English (which stays available as the "details" line).
+const URL_REASON_KEYS = {
+  invalid_url: 'settings.localModelEndpoints.urlReason.invalid_url',
+  scheme_not_allowed: 'settings.localModelEndpoints.urlReason.scheme_not_allowed',
+  credentials_not_allowed: 'settings.localModelEndpoints.urlReason.credentials_not_allowed',
+  query_or_fragment_not_allowed:
+    'settings.localModelEndpoints.urlReason.query_or_fragment_not_allowed',
+  host_not_loopback: 'settings.localModelEndpoints.urlReason.host_not_loopback',
+  host_not_local: 'settings.localModelEndpoints.urlReason.host_not_local',
+} as const satisfies Record<LocalRunnerUrlReason, string>
+
+function urlReasonText(reason: LocalRunnerUrlReason): string {
+  return t(URL_REASON_KEYS[reason])
+}
+
 // ---- add / edit draft ------------------------------------------------------
 const provider = ref<LocalRunner>('ollama')
 const label = ref('')
@@ -45,6 +67,9 @@ const apiKey = ref('')
 const discovered = ref<string[]>([])
 const selected = ref<string[]>([])
 const testError = ref<string | null>(null)
+// The backend's own wording, kept as DETAIL beside a translated refusal rather than being
+// shown as the description (it names env vars an operator, not this user, acts on).
+const testErrorDetail = ref<string | null>(null)
 const tested = ref(false)
 const testing = ref(false)
 const busy = ref(false)
@@ -84,6 +109,7 @@ async function test() {
   if (!baseUrl.value.trim()) return
   testing.value = true
   testError.value = null
+  testErrorDetail.value = null
   try {
     const result = await store.test({
       provider: provider.value,
@@ -98,7 +124,12 @@ async function test() {
       selected.value = keep.length ? keep : [...result.models]
       testError.value = null
     } else {
-      testError.value = result.error ?? t('settings.localModelEndpoints.unreachable')
+      // A policy refusal describes itself in the user's language; the backend's English
+      // stays as the detail line. A genuine reachability failure has no reason vocabulary.
+      testError.value = result.errorReason
+        ? urlReasonText(result.errorReason)
+        : (result.error ?? t('settings.localModelEndpoints.unreachable'))
+      testErrorDetail.value = result.errorReason ? (result.error ?? null) : null
     }
   } catch (e) {
     testError.value = e instanceof Error ? e.message : String(e)
@@ -217,6 +248,12 @@ async function remove(p: LocalRunner) {
                 · {{ t('settings.localModelEndpoints.keySet') }}</template
               >
             </div>
+            <!-- A row whose URL the deployment no longer permits: its models are withheld
+                 from the picker, so this is the only place that can say why. -->
+            <div v-if="e.urlBlockedReason" class="mt-1 text-[11px] text-amber-400">
+              {{ t('settings.localModelEndpoints.blocked') }}
+              <span class="block text-amber-300/70">{{ urlReasonText(e.urlBlockedReason) }}</span>
+            </div>
           </div>
           <div class="flex items-center gap-1">
             <UButton
@@ -300,7 +337,12 @@ async function remove(p: LocalRunner) {
             >
               {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
-            <span v-if="testError" class="text-xs text-rose-400">{{ testError }}</span>
+            <span v-if="testError" class="text-xs text-rose-400">
+              {{ testError }}
+              <span v-if="testErrorDetail" class="block text-[11px] text-rose-300/70">{{
+                testErrorDetail
+              }}</span>
+            </span>
             <span v-else-if="tested && discovered.length" class="text-xs text-emerald-400">
               {{
                 t(

@@ -137,14 +137,26 @@ export interface AuthConfig {
    */
   allowedEmailDomains: string[]
   /**
-   * Whether the password throttle may take the client IP from forwarded headers
-   * (`cf-connecting-ip` / the first `x-forwarded-for` hop). OFF by default on Node: a
-   * forwarded header is attacker-controlled unless a trusted proxy in front overwrites
-   * it, and a spoofable IP hands the attacker unlimited fresh throttle buckets (SEC-4).
-   * Node deployments behind such a proxy opt in with `AUTH_TRUST_PROXY=true`; the Worker
-   * facade hardcodes it on because Cloudflare injects `cf-connecting-ip` at the edge.
+   * Whether a proxy in front of this process may be believed about the client address.
+   * OFF by default on Node: `x-forwarded-for` is attacker-supplied on a bare deployment,
+   * and a client-chosen address hands the attacker unlimited fresh throttle buckets plus
+   * the ability to pin someone else's (SEC-4). Node deployments behind a proxy opt in with
+   * `AUTH_TRUST_PROXY=true`; the Worker hardcodes it on because the Cloudflare edge injects
+   * and overwrites `cf-connecting-ip`.
+   *
+   * WHICH header is consulted is the facade's decision, not this flag's: see each facade's
+   * `resolveClientAddress`.
    */
   trustProxyHeaders: boolean
+  /**
+   * How many trusted proxies sit in front of this process, used to pick the client hop out
+   * of an `x-forwarded-for` chain (`AUTH_TRUST_PROXY_HOPS`, default 1). The rightmost entry
+   * was appended by the nearest proxy, so with a single proxy the client is last; behind a
+   * CDN plus a load balancer it is two from the end. Getting it wrong over-counts (several
+   * clients share a bucket) rather than under-counting, because a chain shorter than the
+   * declared topology is discarded in favour of the socket peer.
+   */
+  trustedProxyHops: number
 }
 
 export interface EmailConfig {

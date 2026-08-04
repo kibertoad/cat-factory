@@ -922,6 +922,15 @@
       "confirmRemove": {
         "title": "Diesen Runner entfernen?",
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
+      },
+      "blocked": "Die URL dieses Runners ist auf dieser Installation nicht erlaubt, daher sind seine Modelle in der Auswahl ausgeblendet.",
+      "urlReason": {
+        "invalid_url": "Das ist keine gültige URL.",
+        "scheme_not_allowed": "Eine Runner-URL muss mit http:// oder https:// beginnen.",
+        "credentials_not_allowed": "Eine Runner-URL darf keinen Benutzernamen und kein Passwort enthalten.",
+        "query_or_fragment_not_allowed": "Gib nur die Basis-URL ein, ohne \"?\"-Abfrage und ohne \"#\"-Fragment.",
+        "host_not_loopback": "Diese Installation erreicht nur Runner auf ihrem eigenen Rechner (localhost). Bitte einen Betreiber, Runner im lokalen Netzwerk zu erlauben.",
+        "host_not_local": "Ein Runner muss auf deinem eigenen Rechner oder in deinem lokalen Netzwerk laufen. Öffentliche Hosts sind nicht erlaubt."
       }
     },
     "modelPolicy": {

@@ -37,7 +37,9 @@ export function defineMachineNodeSuite(name: string, makeRepo: () => MachineNode
     it('records a mint and folds a re-mint without losing the longer expiry', async () => {
       const repo = makeRepo()
       const { u, a } = ids()
-      await repo.recordMint(mint({ nodeId: a, userId: u, mintedAt: 1_000, expiresAt: 10_000 }))
+      expect(
+        await repo.recordMint(mint({ nodeId: a, userId: u, mintedAt: 1_000, expiresAt: 10_000 })),
+      ).toBe('recorded')
 
       const created = await repo.get(a)
       expect(created).toMatchObject({
@@ -94,6 +96,45 @@ export function defineMachineNodeSuite(name: string, makeRepo: () => MachineNode
       expect(await repo.revoke(`missing-${a}`, 3_000, u)).toBe(false)
       // An unknown node is NOT revoked (the gate only refuses explicit tombstones).
       expect(await repo.isRevoked(`missing-${a}`)).toBe(false)
+    })
+
+    it('refuses a mint against another user’s node id, without disturbing the row', async () => {
+      // Ownership is enforced by the WRITE, not by a read the caller does first: a
+      // check-then-write left a window where two first mints of one id both saw "unknown" and
+      // the loser stamped its scope onto the winner's row, leaving a node its real owner could
+      // neither see nor revoke.
+      const repo = makeRepo()
+      const { u, a } = ids()
+      expect(await repo.recordMint(mint({ nodeId: a, userId: u, accountIds: ['acc-1'] }))).toBe(
+        'recorded',
+      )
+
+      expect(
+        await repo.recordMint(
+          mint({ nodeId: a, userId: `other-${u}`, accountIds: ['acc-evil'], mintedAt: 7_000 }),
+        ),
+      ).toBe('refused')
+      // The owner, their scope and their mint timestamps are all untouched.
+      expect(await repo.get(a)).toMatchObject({
+        userId: u,
+        accountIds: ['acc-1'],
+        lastMintedAt: 1_000,
+      })
+      expect(await repo.listByUser(`other-${u}`)).toEqual([])
+    })
+
+    it('refuses a re-mint of a REVOKED node id, keeping the tombstone', async () => {
+      // Revocation is permanent per node id: reconnecting mints a fresh one. Were a re-mint to
+      // clear or bypass the tombstone, the kill switch would last only until the leaked token's
+      // holder asked for another.
+      const repo = makeRepo()
+      const { u, a } = ids()
+      await repo.recordMint(mint({ nodeId: a, userId: u }))
+      await repo.revoke(a, 3_000, u)
+
+      expect(await repo.recordMint(mint({ nodeId: a, userId: u, mintedAt: 8_000 }))).toBe('refused')
+      expect(await repo.isRevoked(a)).toBe(true)
+      expect(await repo.get(a)).toMatchObject({ revokedAt: 3_000, lastMintedAt: 1_000 })
     })
 
     it('prunes only rows past their expiry, revoked or not', async () => {

@@ -178,7 +178,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // state, so none of it may be remotely callable: a node that could reach `revoke` (or worse,
   // `recordMint`) over the RPC could tombstone other tenants' satellites or take over a node
   // id, and `isRevoked` is the very check the gate runs BEFORE dispatch. Mothership-internal
-  // by construction — 'admin' rather than 'pending' because this is permanent, not a backlog.
+  // by construction: 'admin' rather than 'pending' because this is permanent, not a backlog.
   machineNodeRepository: {
     recordMint: 'admin',
     get: 'admin',

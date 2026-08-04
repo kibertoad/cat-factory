@@ -14,6 +14,7 @@
 export type {
   LocalRunner,
   LocalModelEndpoint,
+  LocalRunnerUrlReason,
   UpsertLocalModelEndpointInput,
   TestLocalModelEndpointInput,
   LocalModelEndpointTestResult,

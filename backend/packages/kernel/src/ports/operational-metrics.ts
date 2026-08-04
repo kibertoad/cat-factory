@@ -44,6 +44,17 @@ export type OperationalCounter =
   | 'cache.hit'
   /** An app-cache read that had to run its loader. Dimensioned by cache name. */
   | 'cache.miss'
+  /**
+   * A password-endpoint attempt was refused by the throttle (SEC-4). The log line names the
+   * bucket; only this answers whether refusals are climbing, which is the difference between
+   * one forgetful user and a credential-stuffing sweep.
+   */
+  | 'auth.throttle.limited'
+  /**
+   * The durable attempt ledger was unreachable, so the throttle fell back to its per-process
+   * window. Silent otherwise, and it degrades every replica's view of an attack at once.
+   */
+  | 'auth.throttle.store_unavailable'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns

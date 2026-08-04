@@ -270,9 +270,9 @@ describe('storage retention sweep', () => {
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,
-      // Machine-node rows expire by their own `expires_at`, not the policy — none seeded here.
+      // Machine-node rows expire by their own `expires_at`, not the policy; none seeded here.
       machineNodes: 0,
-      // Auth attempts prune on a FIXED 1-hour window, not the policy — none seeded here.
+      // Auth attempts prune on a FIXED 1-hour window, not the policy; none seeded here.
       authAttempts: 0,
       notifications: 0,
       // A clean pass names no failed table. This list is what distinguishes a prune that

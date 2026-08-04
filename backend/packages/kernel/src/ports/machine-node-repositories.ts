@@ -38,15 +38,33 @@ export interface MachineNodeMint {
   expiresAt: number
 }
 
+/** What `recordMint` did, so the caller can refuse a mint it could not legitimately record. */
+export type MachineNodeMintOutcome =
+  /** Inserted, or refreshed a row this user already owns. */
+  | 'recorded'
+  /** The node id belongs to another user, or carries a revocation tombstone. */
+  | 'refused'
+
 /**
  * Persistence for the machine-node roster. The revocation read (`isRevoked`) sits on
  * every `/internal/*` machine call, so implementations keep it a single indexed point
- * read. Callers guard ownership and revocation BEFORE `recordMint` (the upsert itself
- * never changes `userId`, `createdAt` or the revocation columns).
+ * read.
+ *
+ * Ownership is enforced by `recordMint` ITSELF, not by a read the caller does first: a
+ * check-then-write leaves a window where two mints of one node id both see "unknown" and
+ * the loser overwrites the winner's scope, leaving a row whose owner cannot see the live
+ * node and whose owner-of-record did not mint it. So the write is conflict-targeted and
+ * GUARDED, and reports which of the two happened.
  */
 export interface MachineNodeRepository {
-  /** Fold a mint into the roster: insert, or refresh `lastMintedAt`/`expiresAt`/`accountIds`. */
-  recordMint(mint: MachineNodeMint): Promise<void>
+  /**
+   * Fold a mint into the roster: insert, or refresh `lastMintedAt`/`expiresAt`/`accountIds`
+   * for a row the SAME user owns and that is not revoked. `userId` and `createdAt` are never
+   * changed, and the revocation columns are never cleared, so a losing race cannot take a
+   * node over and a revoked id can never be resurrected. Returns `'refused'` when the row
+   * exists but fails that guard, which the caller turns into a refusal to hand out the token.
+   */
+  recordMint(mint: MachineNodeMint): Promise<MachineNodeMintOutcome>
   /** The roster row for a node, or null when unknown. */
   get(nodeId: string): Promise<MachineNodeRecord | null>
   /** Every node minted for a user, newest mint first. */

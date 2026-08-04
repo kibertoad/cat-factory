@@ -357,7 +357,7 @@ export interface ServerContainer extends Core {
   authAttemptRepository?: AuthAttemptRepository
   /**
    * The transport-level client address of a request (the socket peer on Node), read by the
-   * password throttle when `auth.trustProxyHeaders` is off — a forwarded header is
+   * password throttle when `auth.trustProxyHeaders` is off, because a forwarded header is
    * attacker-controlled unless a trusted proxy overwrites it (SEC-4). Wired by the Node
    * facade; the Worker leaves it absent because Cloudflare injects `cf-connecting-ip` at the
    * edge, which that facade trusts instead.

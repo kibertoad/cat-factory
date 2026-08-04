@@ -3063,6 +3063,15 @@
       "confirmRemove": {
         "title": "¿Quitar este runner?",
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
+      },
+      "blocked": "La URL de este runner no está permitida en esta instalación, por lo que sus modelos están ocultos en el selector.",
+      "urlReason": {
+        "invalid_url": "Esa URL no es válida.",
+        "scheme_not_allowed": "La URL de un runner debe empezar por http:// o https://.",
+        "credentials_not_allowed": "La URL de un runner no puede contener usuario ni contraseña.",
+        "query_or_fragment_not_allowed": "Introduce solo la URL base, sin consulta \"?\" ni fragmento \"#\".",
+        "host_not_loopback": "Esta instalación solo alcanza runners en su propia máquina (localhost). Pide a un operador que permita runners de la red local.",
+        "host_not_local": "Un runner debe estar en tu propia máquina o en tu red local. No se permiten hosts públicos."
       }
     },
     "infrastructure": {

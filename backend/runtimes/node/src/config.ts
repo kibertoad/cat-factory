@@ -26,6 +26,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolveTrustedProxyHops,
   resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
 } from '@cat-factory/server'
@@ -485,12 +486,14 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
     // Open (un-gated) signup is a local-mode convenience; hosted defaults stay
     // invite/email-domain-gated. `applyLocalDefaults` flips it on for local mode.
     openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
-    // The password throttle reads the client IP from the socket peer unless the operator
-    // says a trusted proxy overwrites the forwarded headers (SEC-4): x-forwarded-for is
-    // attacker-controlled on a bare deployment, and a spoofable IP is unlimited fresh
-    // throttle buckets. The Worker facade hardcodes this on (Cloudflare injects
-    // cf-connecting-ip at the edge).
+    // The password throttle reads the client address from the socket peer unless the operator
+    // declares a proxy in front (SEC-4): x-forwarded-for is attacker-supplied on a bare
+    // deployment, and a client-chosen address is unlimited fresh throttle buckets. Which
+    // header is then read lives in this facade's `resolveClientAddress`, and is x-forwarded-for
+    // ALONE: a generic reverse proxy rewrites that one and forwards the rest untouched. The
+    // Worker hardcodes trust because the Cloudflare edge injects cf-connecting-ip.
     trustProxyHeaders: env.AUTH_TRUST_PROXY?.trim() === 'true',
+    trustedProxyHops: resolveTrustedProxyHops(env.AUTH_TRUST_PROXY_HOPS),
     ...(googleEnabled
       ? {
           google: {

@@ -10,7 +10,7 @@ import {
   openAiCompatibleResolver,
   openAiResolver,
 } from '@cat-factory/agents'
-import type { ApiKeyService } from '@cat-factory/integrations'
+import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import type {
   InlineLlmCallRecorder,
   LlmTraceSink,
@@ -47,20 +47,15 @@ export interface ScopedModelProviderOptions {
    * The initiating user's locally-run model endpoints (Ollama / LM Studio / …) so inline
    * LLM calls reach them like the proxied path. Keyless by design (the endpoint carries an
    * optional key), so these register into the per-scope registry directly rather than via
-   * the DB API-key pool. ONE grouped option on purpose: the transport is the deployment's
-   * policy-enforcing `LocalModelEndpointService.fetchRunner` (SSRF re-validation on every
-   * redirect hop, under the operator's loopback/LAN policy), and grouping it with the
-   * endpoint read makes it impossible to wire the endpoints while falling back to a fetch
-   * that applies the wrong policy.
+   * the DB API-key pool.
+   *
+   * Typed as the SERVICE's own methods, not as a pair of callbacks: the read and the
+   * transport must come from ONE instance, because that instance is what binds the
+   * deployment's loopback/LAN policy (SSRF re-validation on every redirect hop). A
+   * structural `{ endpointsFor, fetch }` pair still typechecked when a facade passed the
+   * global `fetch`, which is the wrong-policy wiring this option exists to prevent.
    */
-  localRunners?: {
-    /** Resolve the scope user's configured endpoints (the run initiator's). */
-    endpointsFor: (
-      userId: string,
-    ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
-    /** The policy-bound revalidating transport for every call to those endpoints. */
-    fetch: (url: string, init: RequestInit) => Promise<Response>
-  }
+  localRunners?: Pick<LocalModelEndpointService, 'listResolved' | 'fetchRunner'>
 }
 
 /**
@@ -124,17 +119,17 @@ export function createScopedModelProviderResolver(
       }
       // The initiating user's locally-run runners (keyless OpenAI-compatible endpoints).
       // Route their transport through the facade's policy-bound runner fetch so the inline
-      // path re-validates the SSRF allow-list on EVERY redirect hop — the same guard the
+      // path re-validates the SSRF allow-list on EVERY redirect hop, the same guard the
       // proxy path applies. Without it the AI-SDK default fetch would silently follow a
       // local runner's 302 to the cloud-metadata endpoint (SEC-2/SEC-3).
       const runners = opts.localRunners
       if (scope.userId && runners) {
-        for (const ep of await runners.endpointsFor(scope.userId)) {
+        for (const ep of await runners.listResolved(scope.userId)) {
           registry[ep.provider] = openAiCompatibleResolver({
             name: ep.provider,
             apiKey: ep.apiKey || 'local',
             baseURL: ep.baseUrl,
-            fetch: (url, init) => runners.fetch(String(url), init ?? {}),
+            fetch: (url, init) => runners.fetchRunner(String(url), init ?? {}),
           })
         }
       }

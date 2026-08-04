@@ -171,7 +171,7 @@ export async function sweepRetention(
     passwordResetTokens: await pass.expire('password_reset_tokens', () =>
       repos.passwordResetTokenRepository.deleteExpired(now),
     ),
-    // Machine-node roster rows past their latest signed exp — `now`, not a window.
+    // Machine-node roster rows past their latest signed exp: `now`, not a window.
     machineNodes: await pass.expire('machine_nodes', () =>
       repos.machineNodeRepository.deleteExpired(now),
     ),

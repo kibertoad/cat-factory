@@ -3204,6 +3204,15 @@
       "confirmRemove": {
         "title": "このランナーを削除しますか？",
         "body": "「{name}」が削除されます。 この操作は取り消せません。"
+      },
+      "blocked": "このランナーの URL はこのデプロイでは許可されていないため、モデルはピッカーに表示されません。",
+      "urlReason": {
+        "invalid_url": "有効な URL ではありません。",
+        "scheme_not_allowed": "ランナーの URL は http:// または https:// で始める必要があります。",
+        "credentials_not_allowed": "ランナーの URL にユーザー名やパスワードを含めることはできません。",
+        "query_or_fragment_not_allowed": "ベース URL のみを入力してください。「?」クエリと「#」フラグメントは使用できません。",
+        "host_not_loopback": "このデプロイは自身のマシン (localhost) 上のランナーにのみ接続します。ローカルネットワークのランナーを許可するには運用者に依頼してください。",
+        "host_not_local": "ランナーは自分のマシンかローカルネットワーク上にある必要があります。公開ホストは許可されていません。"
       }
     },
     "modelPolicy": {

@@ -13,7 +13,14 @@
 // every policy. Public/remote runners are not supported by design.
 // ---------------------------------------------------------------------------
 
+import type { LocalRunnerUrlReason } from '@cat-factory/contracts'
 import { decodeIpv4, isCloudMetadataHost, isPrivateV4 } from '@cat-factory/kernel'
+
+/** A refused runner URL: the machine-readable cause plus the operator-facing detail. */
+export interface LocalRunnerUrlRefusal {
+  reason: LocalRunnerUrlReason
+  message: string
+}
 
 /** The host policy a deployment applies to local-runner URLs. */
 export interface LocalRunnerUrlPolicy {
@@ -32,7 +39,7 @@ function isAllowedRunnerV4(
   allowPrivateLan: boolean,
 ): boolean {
   if (v4[0] === 127) return true // loopback 127/8
-  // `isPrivateV4` accepts 10/8, 172.16/12, 192.168/16 — plus 0.* and 169.254.* which we
+  // `isPrivateV4` accepts 10/8, 172.16/12, 192.168/16, plus 0.* and 169.254.* which we
   // exclude (0.0.0.0/8 unspecified; the metadata range is denied before we get here).
   return allowPrivateLan && v4[0] !== 0 && isPrivateV4(v4)
 }
@@ -43,11 +50,17 @@ function isAllowedRunnerHost(host: string, allowPrivateLan: boolean): boolean {
   if (h === '') return false
   // Cloud-metadata / link-local endpoints (169.254.0.0/16, metadata.google.internal,
   // fd00:ec2::254, …) are the primary SSRF target. Deny them FIRST — some (the whole
-  // 169.254/16 range) would otherwise look "private" — across every obfuscated encoding.
+  // 169.254/16 range) would otherwise look "private", across every obfuscated encoding.
   if (isCloudMetadataHost(h)) return false
 
-  if (h === 'localhost' || h.endsWith('.localhost')) return true
-  // mDNS `.local` names resolve only on the LAN — a LAN-tier grant, not a loopback one.
+  // Exactly `localhost`, never a `*.localhost` subdomain: that suffix is not delegated in
+  // the public root, but the NAME is still handed to the deployment's resolver, and in a
+  // container with search domains (`ndots`) a 2-label name like `evil.com.localhost` is tried
+  // with those suffixes first, so a wildcard answer sends the fetch off-loopback. It is also
+  // the only allowed form that is not a literal, hence the only one with a DNS-rebinding
+  // window. No default needs it (`LOCAL_RUNNER_DEFAULTS` are all `localhost`).
+  if (h === 'localhost') return true
+  // mDNS `.local` names resolve only on the LAN: a LAN-tier grant, not a loopback one.
   if (allowPrivateLan && h.endsWith('.local')) return true
 
   // IPv6 literals (URL.hostname keeps them bracketless here → they contain a colon).
@@ -73,37 +86,116 @@ function isAllowedRunnerHost(host: string, allowPrivateLan: boolean): boolean {
   return false
 }
 
+/** Whether the URL as WRITTEN carries a `.` or `..` path segment. */
+function hasDotSegment(rawUrl: string): boolean {
+  const afterScheme = rawUrl.slice(rawUrl.indexOf('://') + 3)
+  const slash = afterScheme.indexOf('/')
+  if (slash < 0) return false
+  return /(^|\/)\.\.?(\/|$)/.test(afterScheme.slice(slash))
+}
+
 /**
- * Validate a local-runner base URL under `policy`. Returns a human-readable error string
- * when the URL is malformed or points at a host the policy denies, or `null` when it's
- * acceptable. Used by the service at the write boundary, by the "Test connection" probe,
- * and per redirect hop by {@link fetchLocalRunner}.
+ * Validate a local-runner base URL under `policy`. Returns the refusal (machine-readable
+ * `reason` + operator-facing `message`) when the URL is malformed, carries a
+ * request-shaping suffix, or points at a host the policy denies; `null` when acceptable.
+ * Used by the service at the write boundary, by the "Test connection" probe, by
+ * {@link runnerRequestUrl} and per redirect hop by {@link fetchLocalRunner}.
  */
-export function localRunnerUrlError(rawUrl: string, policy?: LocalRunnerUrlPolicy): string | null {
+export function localRunnerUrlRefusal(
+  rawUrl: string,
+  policy?: LocalRunnerUrlPolicy,
+): LocalRunnerUrlRefusal | null {
   const allowPrivateLan = policy?.allowPrivateLan ?? false
   let url: URL
   try {
     url = new URL(rawUrl)
   } catch {
-    return 'Enter a valid URL, e.g. http://localhost:11434/v1.'
+    return { reason: 'invalid_url', message: 'Enter a valid URL, e.g. http://localhost:11434/v1.' }
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return 'A runner URL must use http or https.'
+    return { reason: 'scheme_not_allowed', message: 'A runner URL must use http or https.' }
   }
   // Embedded credentials (`user:pass@host`) have no legitimate use for a local runner
   // and are a classic way to smuggle an unexpected authority past a naive check.
   if (url.username || url.password) {
-    return 'A runner URL must not contain credentials.'
+    return {
+      reason: 'credentials_not_allowed',
+      message: 'A runner URL must not contain credentials.',
+    }
+  }
+  // A BASE url is an origin + a path prefix and nothing else. A query string or fragment
+  // makes the endpoint suffix we append (`/models`, `/chat/completions`) inert or inert-ish
+  // (`…/_search?q=x#` + `/models` requests `/_search?q=x`), which would turn the two
+  // fixed-path forwards into an arbitrary-path request against a loopback service. Dot
+  // segments are refused for the same reason: they let a stored prefix walk elsewhere.
+  if (url.search || url.hash) {
+    return {
+      reason: 'query_or_fragment_not_allowed',
+      message:
+        'A runner URL must be a plain base URL: no query string and no "#" fragment ' +
+        '(the platform appends the endpoint path itself).',
+    }
+  }
+  // Dot segments are checked on the RAW string, because the URL parser resolves them away
+  // before `pathname` is readable. They cannot defeat the appended suffix (it stays last),
+  // so this is honesty rather than containment: a stored prefix that silently relocates the
+  // request is not the prefix the operator typed.
+  if (hasDotSegment(rawUrl)) {
+    return {
+      reason: 'query_or_fragment_not_allowed',
+      message: 'A runner URL must not contain "." or ".." path segments.',
+    }
   }
   if (!isAllowedRunnerHost(url.hostname, allowPrivateLan)) {
     return allowPrivateLan
-      ? 'A local runner must live on your own machine or LAN (localhost, *.local, or a ' +
-          'private 10./172.16–31./192.168. address). Public or remote hosts are not allowed.'
-      : 'A local runner must live on this machine (localhost, 127.x.x.x, or [::1]). ' +
-          'Private-LAN runner hosts are disabled on this deployment; an operator can allow ' +
-          'them with LOCAL_MODELS_ALLOW_LAN=true.'
+      ? {
+          reason: 'host_not_local',
+          message:
+            'A local runner must live on your own machine or LAN (localhost, *.local, or a ' +
+            'private 10./172.16-31./192.168. address). Public or remote hosts are not allowed.',
+        }
+      : {
+          reason: 'host_not_loopback',
+          message:
+            'A local runner must live on this machine (localhost, 127.x.x.x, or [::1]). ' +
+            'Private-LAN runner hosts are disabled on this deployment; an operator can allow ' +
+            'them with LOCAL_MODELS_ALLOW_LAN=true.',
+        }
   }
   return null
+}
+
+/**
+ * Compose the URL of one runner ENDPOINT (`/models`, `/chat/completions`) from a stored
+ * base URL, validating both ends under `policy`.
+ *
+ * Every server-side forward goes through here rather than concatenating, because the
+ * safety of the two forwards rests on the endpoint path being ours, and a plain template
+ * string cannot state that: whatever the base contributes wins whenever it can shape the
+ * request (see the query/fragment refusal above). So the composed URL is re-validated and
+ * its pathname must still END with the suffix we asked for. A pre-existing row that would
+ * defeat the suffix is therefore refused HERE too, not only at the write boundary it was
+ * written before.
+ */
+export function runnerRequestUrl(
+  baseUrl: string,
+  suffix: `/${string}`,
+  policy?: LocalRunnerUrlPolicy,
+): { url: string } | { refusal: LocalRunnerUrlRefusal } {
+  const refusal = localRunnerUrlRefusal(baseUrl, policy)
+  if (refusal) return { refusal }
+  const composed = `${baseUrl.replace(/\/+$/, '')}${suffix}`
+  const composedRefusal = localRunnerUrlRefusal(composed, policy)
+  if (composedRefusal) return { refusal: composedRefusal }
+  if (!new URL(composed).pathname.endsWith(suffix)) {
+    return {
+      refusal: {
+        reason: 'query_or_fragment_not_allowed',
+        message: 'A runner URL must be a plain base URL the platform can append a path to.',
+      },
+    }
+  }
+  return { url: composed }
 }
 
 /** Max redirect hops the revalidating fetch will follow before giving up. */
@@ -113,13 +205,13 @@ const MAX_LOCAL_RUNNER_REDIRECTS = 5
  * Fetch a local-runner URL, re-validating the SSRF allow-list on EVERY redirect hop.
  *
  * The allow-list permits loopback (and, on opt-in, LAN) hosts, but a permitted runner can
- * still `302` to a denied host — most dangerously the cloud-metadata endpoint
- * (169.254.169.254) — and the platform `fetch` would follow it silently. So we drive
+ * still `302` to a denied host, most dangerously the cloud-metadata endpoint
+ * (169.254.169.254), and the platform `fetch` would follow it silently. So we drive
  * redirects by hand (`redirect: 'manual'`) and run {@link localRunnerUrlError} against
  * each `Location` before following it, mirroring the environment provider's `safeFetch`.
  * Both server-side callers (the "Test connection" probe and the run-time LLM proxy
  * forward) use this instead of a bare `fetch`, through
- * `LocalModelEndpointService.fetchRunner`, which binds the deployment's policy — so a row
+ * `LocalModelEndpointService.fetchRunner`, which binds the deployment's policy, so a row
  * persisted while LAN access was enabled is refused at fetch time after an operator
  * narrows the policy, not silently honoured. Throws when a hop fails validation or the
  * redirect chain is too long.
@@ -132,8 +224,8 @@ export async function fetchLocalRunner(
 ): Promise<Response> {
   let current = rawUrl
   for (let hop = 0; ; hop++) {
-    const err = localRunnerUrlError(current, policy)
-    if (err) throw new Error(`Blocked local-runner request: ${err}`)
+    const err = localRunnerUrlRefusal(current, policy)
+    if (err) throw new Error(`Blocked local-runner request: ${err.message}`)
     const res = await doFetch(current, { ...init, redirect: 'manual' })
     if (res.status < 300 || res.status >= 400) return res
     if (hop >= MAX_LOCAL_RUNNER_REDIRECTS) {

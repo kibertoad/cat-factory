@@ -91,7 +91,7 @@ grew one deliberate step beyond the sketch below: a bare tombstone table cannot 
 may revoke a nodeId, so the store is a machine-node ROSTER (`machine_nodes`, kernel
 `MachineNodeRepository`) recorded on every mint, which is what makes the revoke endpoint
 owner-scopable. The check lives in the shared `verifyMachineRequest` gate, applied to ALL
-eight `/internal/*` machine surfaces (not only `PersistenceController` — the GitHub token
+eight `/internal/*` machine surfaces (not only `PersistenceController`: the GitHub token
 delegation mint was the one that mattered most) plus the WS subscribe handshake. Endpoints:
 `GET /auth/machine-nodes` + `POST /auth/machine-nodes/:nodeId/revoke` (404 for unknown or
 foreign, idempotent 204). D1 `0077_machine_nodes.sql` ⇄ Drizzle `machineNodes`; pruned by

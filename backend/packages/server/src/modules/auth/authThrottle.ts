@@ -1,7 +1,9 @@
 import { RateLimitedError, describeError } from '@cat-factory/kernel'
 import type { Context } from 'hono'
+import { normalizeClientAddress } from '../../http/clientAddress.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
+import { operationalMetrics } from '../../observability/operationalMetrics.js'
 
 // The password-endpoint throttle (signup / login / forgot / reset), SEC-4. Two layers:
 //
@@ -10,13 +12,16 @@ import { logger } from '../../observability/logger.js'
 //    aggregate that stops one-password-many-emails credential stuffing (each email gets
 //    a fresh per-key bucket, so only an aggregate can see the pattern).
 //  - The in-process Map is the BACKSTOP: per isolate and reset by a deploy, but always
-//    ticked, so a facade with no store wired — or a store outage mid-attack — degrades
+//    ticked, so a facade with no store wired (or a store outage mid-attack) degrades
 //    to the old speed bump instead of failing open.
 //
-// The client IP is the socket peer unless `auth.trustProxyHeaders` says a trusted proxy
-// overwrites the forwarded headers: `x-forwarded-for` (and, off Cloudflare,
-// `cf-connecting-ip`) is attacker-supplied on a bare deployment, and a spoofable IP is
-// unlimited fresh buckets. PBKDF2's per-attempt cost remains the base defence.
+// The client address comes from the FACADE (`container.resolveClientAddress`), because which
+// header is authentic is a fact about the deployment's topology: the Cloudflare edge injects
+// and overwrites `cf-connecting-ip`, while on Node nothing but the socket peer is trustworthy
+// until an operator declares a proxy in front (`AUTH_TRUST_PROXY`). Deciding that here, in
+// shared code, is how a Cloudflare-specific header came to be trusted on generic proxies that
+// forward it untouched, which handed the attacker unlimited fresh buckets. PBKDF2's
+// per-attempt cost remains the base defence.
 
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
 /** Attempts per `<ip>:<email>` bucket per window (the 11th in a window trips). */
@@ -29,15 +34,16 @@ const MAX_ATTEMPTS = 10
  */
 const MAX_ATTEMPTS_PER_IP = 50
 
-/** Resolve the throttle's client IP under the deployment's proxy-trust policy. */
+/**
+ * The throttle's client identity: whatever the facade says the request came from, normalised
+ * (port stripped, IPv6 bucketed to its /64). `'unknown'` when the facade resolves nothing,
+ * which is a SHARED bucket on purpose: over-counting a request we cannot attribute is the
+ * safe direction, where a per-request unique value would be no limit at all.
+ */
 function clientIp<E extends AppEnv>(c: Context<E>): string {
   const container = c.get('container')
-  if (container.config.auth.trustProxyHeaders) {
-    const forwarded =
-      c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-    if (forwarded) return forwarded
-  }
-  return container.resolveClientAddress?.(c as unknown as Context<AppEnv>) ?? 'unknown'
+  const resolved = container.resolveClientAddress?.(c as unknown as Context<AppEnv>)
+  return (resolved && normalizeClientAddress(resolved)) || resolved?.trim() || 'unknown'
 }
 
 /** The per-isolate backstop window: bucket key → recent attempt timestamps. */
@@ -58,8 +64,8 @@ function memoryBucketLimited(key: string, now: number, max: number): boolean {
 }
 
 /**
- * Record a password attempt for `c`+`bucket` and report whether it is over a limit —
- * the per-key burst cap or the per-IP aggregate. Counted BEFORE any credential work, and
+ * Record a password attempt for `c`+`bucket` and report whether it is over a limit: the
+ * per-key burst cap or the per-IP aggregate. Counted BEFORE any credential work, and
  * never refunded on success (the window is short; a refund is a write for no security
  * value). `bucket` is the email for the email-addressed endpoints and a fixed literal
  * for token redeem: keying redeem by token value would hand every guess its own bucket.
@@ -71,13 +77,15 @@ export async function passwordAttemptLimited<E extends AppEnv>(
   const now = Date.now()
   const ip = clientIp(c)
   const key = `${ip}:${bucket.toLowerCase().trim()}`
-  // Always tick the backstop, even with a healthy store: it costs a Map touch and is
-  // what still binds while the store is erroring below.
-  const memoryLimited =
-    memoryBucketLimited(key, now, MAX_ATTEMPTS) ||
-    memoryBucketLimited(`ip:${ip}`, now, MAX_ATTEMPTS_PER_IP)
+  // Always tick BOTH backstop buckets, even with a healthy store: they cost a Map touch and
+  // are what still binds while the store is erroring below. Deliberately not `||`, which
+  // short-circuits: once the per-key arm limited, the aggregate stopped being counted and
+  // undercounted a credential-stuffing sweep for the rest of an outage.
+  const keyLimited = memoryBucketLimited(key, now, MAX_ATTEMPTS)
+  const ipLimited = memoryBucketLimited(`ip:${ip}`, now, MAX_ATTEMPTS_PER_IP)
+  const memoryLimited = keyLimited || ipLimited
   const store = c.get('container').authAttemptRepository
-  if (!store) return memoryLimited
+  if (!store) return limitOutcome(memoryLimited)
   try {
     // Record first, then count (the recorded attempt counts itself): an attempt that
     // fails the password check later must still have been counted.
@@ -87,16 +95,24 @@ export async function passwordAttemptLimited<E extends AppEnv>(
       store.countByKeySince(key, since),
       store.countByIpSince(ip, since),
     ])
-    return byKey > MAX_ATTEMPTS || byIp > MAX_ATTEMPTS_PER_IP || memoryLimited
+    return limitOutcome(byKey > MAX_ATTEMPTS || byIp > MAX_ATTEMPTS_PER_IP || memoryLimited)
   } catch (error) {
-    // A store outage must not fail OPEN (unlimited guessing) — the in-process window
-    // still binds — and must not fail the login path outright either: the throttle is a
-    // guard, not the feature.
+    // A store outage must not fail OPEN (unlimited guessing), so the in-process window still
+    // binds, and must not fail the login path outright either: the throttle is a guard, not
+    // the feature. Counted as well as logged: an outage that silently degrades every replica
+    // to a per-isolate window is exactly the "is this happening more than it was" question.
     logger.warn('auth throttle: durable attempt store unavailable; in-process backstop only', {
       err: describeError(error),
     })
-    return memoryLimited
+    operationalMetrics.increment('auth.throttle.store_unavailable')
+    return limitOutcome(memoryLimited)
   }
+}
+
+/** Count a trip before reporting it, so an attack is visible as a RATE and not just in logs. */
+function limitOutcome(limited: boolean): boolean {
+  if (limited) operationalMetrics.increment('auth.throttle.limited')
+  return limited
 }
 
 /**

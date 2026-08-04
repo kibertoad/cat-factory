@@ -19,6 +19,7 @@ import type {
   EmailProviderKind,
   IdentityProvider,
   MachineNodeMint,
+  MachineNodeMintOutcome,
   MachineNodeRecord,
   MachineNodeRepository,
   Membership,
@@ -508,13 +509,15 @@ function rowToMachineNode(row: typeof machineNodes.$inferSelect): MachineNodeRec
 export class DrizzleMachineNodeRepository implements MachineNodeRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async recordMint(mint: MachineNodeMint): Promise<void> {
+  async recordMint(mint: MachineNodeMint): Promise<MachineNodeMintOutcome> {
     // The upsert refreshes only the mint-shaped columns: `user_id`, `created_at` and the
-    // revocation tombstone never change here (the controller refuses a mint against a
-    // revoked or foreign node id before calling this). `GREATEST` keeps `expires_at` the
-    // latest exp ever signed, so a shorter re-mint cannot make the roster forget a longer
-    // token.
-    await this.db
+    // revocation tombstone never change here. `GREATEST` keeps `expires_at` the latest exp
+    // ever signed, so a shorter re-mint cannot make the roster forget a longer token.
+    //
+    // `setWhere` is what makes ownership atomic rather than check-then-write: a concurrent
+    // first mint of the same node id by another user updates nothing instead of stamping its
+    // scope onto the winner's row, and a revoked id can never be resurrected.
+    const result = await this.db
       .insert(machineNodes)
       .values({
         node_id: mint.nodeId,
@@ -531,7 +534,11 @@ export class DrizzleMachineNodeRepository implements MachineNodeRepository {
           last_minted_at: mint.mintedAt,
           expires_at: sql`GREATEST(${machineNodes.expires_at}, ${mint.expiresAt})`,
         },
+        setWhere: and(eq(machineNodes.user_id, mint.userId), isNull(machineNodes.revoked_at)),
       })
+    // A guarded no-op and a successful refresh are both "no error", so the write count is the
+    // only thing that distinguishes them.
+    return (result.rowCount ?? 0) > 0 ? 'recorded' : 'refused'
   }
 
   async get(nodeId: string): Promise<MachineNodeRecord | null> {

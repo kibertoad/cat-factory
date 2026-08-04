@@ -29,7 +29,7 @@ const SOURCES: Record<string, { id: string; accountId: string }> = {
 
 function makeApp(
   repositories: PersistenceRegistry | undefined,
-  opts: { revokedNodeIds?: string[] } = {},
+  opts: { revokedNodeIds?: string[]; rosterThrows?: boolean } = {},
 ) {
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
@@ -38,10 +38,13 @@ function makeApp(
       config: { auth: { sessionSecret: SECRET } },
       // The machine-node roster the shared gate consults (SEC-5); wired only when the
       // test names revoked nodes, mirroring a facade without the store.
-      ...(opts.revokedNodeIds
+      ...(opts.revokedNodeIds || opts.rosterThrows
         ? {
             machineNodeRepository: {
-              isRevoked: async (nodeId: string) => opts.revokedNodeIds!.includes(nodeId),
+              isRevoked: async (nodeId: string) => {
+                if (opts.rosterThrows) throw new Error('roster down')
+                return (opts.revokedNodeIds ?? []).includes(nodeId)
+              },
             },
           }
         : {}),
@@ -160,7 +163,7 @@ describe('persistence RPC controller: memo overrides never fake a wired reposito
 
 describe('persistence RPC controller: revoked machine nodes (SEC-5)', () => {
   it('refuses a REVOKED node with the same 403 as an invalid token', async () => {
-    // The token itself still verifies (valid signature, live exp) — the roster tombstone
+    // The token itself still verifies (valid signature, live exp); the roster tombstone
     // alone is what kills it, which is the whole point of the kill switch.
     const app = makeApp(
       { skillSourceRepository: { get: async () => null } } as unknown as PersistenceRegistry,
@@ -169,6 +172,34 @@ describe('persistence RPC controller: revoked machine nodes (SEC-5)', () => {
     const { status, body } = await call(app, 'skillSourceRepository', 'get', ['sklsrc_in'])
     expect(status).toBe(403)
     expect(body).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+  })
+
+  it('fails CLOSED when the roster read throws, rather than serving the call', async () => {
+    // An unreadable roster is not consent to serve a possibly-revoked node. The gate lets the
+    // throw propagate, which `handleError` turns into a 500 the machine client retries; the one
+    // thing it must never be is a 200.
+    const app = makeApp(
+      {
+        skillSourceRepository: { get: async () => SOURCES.sklsrc_in },
+      } as unknown as PersistenceRegistry,
+      { rosterThrows: true },
+    )
+    // Asserted on the raw response: the throw propagates past the controller's own
+    // `{ ok: false }` envelopes to the app's error handler, so the body is not JSON here. The
+    // status is the whole point (a retryable 5xx, never a served 200).
+    const res = await app.request('/internal/persistence', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await machineToken()}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        repository: 'skillSourceRepository',
+        method: 'get',
+        args: ['sklsrc_in'],
+      }),
+    })
+    expect(res.status).toBeGreaterThanOrEqual(500)
   })
 
   it('serves a live node unchanged when the roster is wired', async () => {

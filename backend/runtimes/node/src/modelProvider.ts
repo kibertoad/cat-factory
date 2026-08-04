@@ -136,13 +136,9 @@ export function createNodeModelProviderResolver(
     apiKeys,
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     extraRegistries,
-    localRunners: localModelEndpoints
-      ? {
-          endpointsFor: (userId) => localModelEndpoints.listResolved(userId),
-          // The service's transport carries the deployment's loopback/LAN policy and
-          // re-validates every redirect hop (SEC-2/SEC-3).
-          fetch: (url, init) => localModelEndpoints.fetchRunner(url, init),
-        }
-      : undefined,
+    // The service itself, so the endpoint read and the transport carrying the deployment's
+    // loopback/LAN policy (re-validated on every redirect hop, SEC-2/SEC-3) cannot come from
+    // two different places.
+    localRunners: localModelEndpoints,
   })
 }

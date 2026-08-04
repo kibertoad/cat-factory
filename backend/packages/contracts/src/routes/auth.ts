@@ -321,7 +321,7 @@ export const listMachineNodesContract = defineApiContract({
 })
 
 // Owner-scoped: only the user a node was minted for may revoke it; anyone else's nodeId is a
-// 404 (the existence-non-leak policy). Idempotent — revoking an already-revoked node is 204.
+// 404 (the existence-non-leak policy). Idempotent: revoking an already-revoked node is 204.
 export const revokeMachineNodeContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: singleStringParam('nodeId'),

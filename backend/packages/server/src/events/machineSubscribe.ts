@@ -41,7 +41,22 @@ export const MACHINE_EVENTS_SUBSCRIBE_PATTERN = /^\/internal\/events\/subscribe\
  */
 export type MachineSubscribeAuth =
   | { ok: true; payload: MachinePayload }
-  | { ok: false; status: 403 | 404 | 503; message: string }
+  | { ok: false; status: MachineSubscribeRefusalStatus; message: string }
+
+/** The statuses a refused handshake can carry. */
+export type MachineSubscribeRefusalStatus = 403 | 404 | 503
+
+/**
+ * The `{ ok: false }` code each refusal status reports to a machine client. An exhaustive
+ * `Record`, so adding a status forces a decision here rather than silently collapsing onto
+ * `forbidden`: a node RETRIES an `unavailable` (we could not read the roster) and reconnects
+ * for a fresh node id on a `forbidden`, so the two must stay distinguishable.
+ */
+export const MACHINE_SUBSCRIBE_ERROR_CODE: Record<MachineSubscribeRefusalStatus, string> = {
+  403: 'forbidden',
+  404: 'not_found',
+  503: 'unavailable',
+}
 
 /** Resolves a workspace to its owning account — the mothership's own `workspaceRepository`. */
 export type AccountOfWorkspace = (
@@ -89,10 +104,22 @@ export async function authorizeMachineSubscribe(opts: {
       })
     : null
   if (!payload) return { ok: false, status: 403, message: 'invalid machine token' }
-  // Same 403 as an invalid token: the caller holds the token, so there is no oracle to
-  // protect, and reconnecting (which mints a fresh node) is the remedy for both.
-  if (opts.isRevoked && (await opts.isRevoked(payload.nodeId))) {
-    return { ok: false, status: 403, message: 'invalid machine token' }
+  if (opts.isRevoked) {
+    // An unreadable roster is not consent to serve a possibly-revoked node, so a throwing
+    // read REFUSES rather than propagating: unlike the HTTP gate (whose throw becomes a 500
+    // through `handleError`), this runs on a WebSocket upgrade where the only caller can do
+    // nothing with a rejected promise but crash the process and leave the socket dangling.
+    // 503 rather than 403, because "we could not check" and "you are revoked" need different
+    // reactions from the node: retry the connection, versus reconnect for a fresh id.
+    let revoked: boolean
+    try {
+      revoked = await opts.isRevoked(payload.nodeId)
+    } catch {
+      return { ok: false, status: 503, message: 'machine node state is unavailable' }
+    }
+    // Same 403 as an invalid token: the caller holds the token, so there is no oracle to
+    // protect, and reconnecting (which mints a fresh node) is the remedy for both.
+    if (revoked) return { ok: false, status: 403, message: 'invalid machine token' }
   }
 
   if (!opts.accountOf) {

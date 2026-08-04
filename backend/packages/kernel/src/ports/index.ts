@@ -524,6 +524,7 @@ export type {
 } from './local-model-repositories.js'
 export type {
   MachineNodeMint,
+  MachineNodeMintOutcome,
   MachineNodeRecord,
   MachineNodeRepository,
 } from './machine-node-repositories.js'

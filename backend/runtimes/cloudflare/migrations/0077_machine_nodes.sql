@@ -5,7 +5,7 @@
 -- shared machine gate on every /internal/* call; it is never cleared, and a revoked
 -- node_id can never be re-minted. Rows past `expires_at` (the latest signed exp, which no
 -- token for the node can outlive) are pruned by the retention sweep.
--- Mirrors the Node Drizzle `machineNodes` table (db/tables/identity.ts) — keep in step.
+-- Mirrors the Node Drizzle `machineNodes` table (db/tables/identity.ts); keep in step.
 CREATE TABLE machine_nodes (
   node_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

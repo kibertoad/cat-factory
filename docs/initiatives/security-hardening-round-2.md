@@ -53,6 +53,8 @@ Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 | SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ✅ done | #1358   |
 | SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ✅ done | #1358   |
 | SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —       |
+| SEC-12 | Revocation does not sever an already-open machine WS subscription  | Low      | P2       | ⏳ todo | —       |
+| SEC-13 | PAT login + invitation peek are unthrottled auth surfaces          | Low      | P2       | ⏳ todo | —       |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
 
@@ -104,31 +106,57 @@ also records two items the round-2 review listed as todo that had already shippe
   single-tenant local mode defaults on (`applyLocalDefaults`). The policy lives on
   `LocalModelEndpointService` and binds the write boundary, the test probe, and EVERY run-time
   redirect hop through the service's `fetchRunner` transport (the LLM proxy's target and the
-  inline resolver's grouped `localRunners` option both route through it), so a row persisted
-  under a wider policy is refused loudly after the operator narrows it. The refusal message
-  names the opt-in. Documented as an operator-hardening item in `security-model.md`.
+  inline resolver both route through it, the latter now typed as the SERVICE's own methods so a
+  facade cannot supply a wrong-policy fetch). A row persisted under a wider policy is refused
+  loudly after the operator narrows it, reported on the row itself (`urlBlockedReason`) and
+  withheld from the model catalog, so the failure lands on the configuration instead of on a
+  dispatched run. Every refusal carries a machine-readable reason the SPA translates.
+  A base URL may no longer carry a query string, a fragment or dot segments, and endpoint URLs
+  are COMPOSED through `runnerRequestUrl` rather than concatenated: a base ending in `#` made
+  the fixed `/models` / `/chat/completions` suffix inert, which turned both forwards into an
+  arbitrary-path request against whatever listens on loopback. `*.localhost` is no longer
+  allowed either (a NAME, so the only allowed form with a DNS-rebinding window). Documented as
+  an operator-hardening item in `security-model.md`, with the residual loopback reach on a
+  hosted deployment named in its known-gaps list.
 - **SEC-4**: the password throttle is backed by the cross-replica `auth_attempts` ledger
   (D1 ⇄ Drizzle, kernel `AuthAttemptRepository` port), with a per-`ip:email` burst cap AND a
   per-IP aggregate that catches one-password-many-emails stuffing; the old in-process Map is
-  demoted to the store-outage backstop (never fail open, never fail the login path). The client
-  IP is the socket peer (`container.resolveClientAddress`, Node) unless `AUTH_TRUST_PROXY=true`
-  says a trusted proxy overwrites the forwarded headers; the Worker hardcodes the trust because
-  Cloudflare injects `cf-connecting-ip` at the edge. The 429 now carries
-  `details.reason: 'auth_attempts'` + `retryAfterSeconds`. Pruned hourly by both retention
-  sweeps; parity via `defineAuthAttemptSuite`. This also delivers the
-  `durable-auth-rate-limiting.md` initiative (its slice 5, config knobs for the limits, was
-  deliberately not taken: the constants hold until someone needs different ones).
+  demoted to the store-outage backstop (never fail open, never fail the login path). WHICH header
+  carries the client address is a per-facade decision behind
+  `ServerContainer.resolveClientAddress`, not a shared flag: Node reads the socket peer, and
+  `x-forwarded-for` (rightmost hop, `AUTH_TRUST_PROXY_HOPS` deep) only under
+  `AUTH_TRUST_PROXY=true`; the Worker reads `cf-connecting-ip` alone, which is authentic only
+  there. Addresses are normalised before keying (port stripped, non-IP refused, IPv6 bucketed to
+  its /64). The 429 carries `details.reason: 'auth_attempts'` + `retryAfterSeconds`, and a trip
+  or a store outage is COUNTED (`auth.throttle.limited` / `.store_unavailable`) as well as
+  logged. Rows become prunable an hour past the window: Node sweeps hourly, the Worker on its
+  daily retention cron. Parity via `defineAuthAttemptSuite`. This delivers the whole
+  durable-auth-rate-limiting initiative, now [ADR 0032](../../backend/docs/adr/0032-durable-auth-rate-limiting.md)
+  (its slice 5, config knobs for the limits, was deliberately not taken: the constants hold
+  until someone needs different ones).
 - **SEC-5**: machine tokens are revocable via the `machine_nodes` roster (D1 ⇄ Drizzle, kernel
   `MachineNodeRepository` port). Every mint is RECORDED (the roster is what makes "revoke MY
-  node" checkable — without ownership any user could kill any tenant's satellite), the shared
+  node" checkable, because without ownership any user could kill any tenant's satellite), the shared
   `verifyMachineRequest` gate consults the tombstone on all eight `/internal/*` machine
   surfaces plus the WS subscribe handshake, and the owner drives
   `GET /auth/machine-nodes` / `POST /auth/machine-nodes/:nodeId/revoke`. A revoked node id can
-  never be re-minted and a foreign node id cannot be taken over. Rows prune once past their
-  latest signed `exp`. Parity via `defineMachineNodeSuite`; the roster is classified
-  mothership-internal in the RPC drift guard (a node must never reach its own revocation
-  state). `DEFAULT_MACHINE_TOKEN_TTL_MS` stays 30 days: with a kill switch landed, shortening
-  it would only add reconnect friction.
+  never be re-minted and a foreign node id cannot be taken over, enforced by the roster WRITE
+  itself (a guarded `ON CONFLICT ... WHERE`) rather than a preceding read: check-then-write left
+  a window where two first mints of one id both saw "unknown" and the loser stamped its scope
+  onto the winner's row, leaving a node its owner could neither see nor revoke. A mothership with
+  no roster wired refuses to mint at all, since an unrecorded token is an unrevocable one. A
+  roster read that fails refuses the call rather than serving it, on the WS handshake too (503
+  there, so the node retries rather than re-minting). Rows prune once past their latest signed
+  `exp`. Parity via `defineMachineNodeSuite`; the roster is classified mothership-internal in the
+  RPC drift guard (a node must never reach its own revocation state).
+  `DEFAULT_MACHINE_TOKEN_TTL_MS` stays 30 days: with a kill switch landed, shortening it would
+  only add reconnect friction.
+
+  **Known residual**: revocation binds at every HANDSHAKE, but an already-open machine WebSocket
+  subscription is not severed, so a revoked node keeps receiving that workspace's events until
+  the socket drops. Closing it needs a revocation signal that reaches whichever replica or
+  Durable Object holds the socket, which is a cross-runtime fan-out of its own; it is deliberately
+  not half-built here (a Node-only kick would be a facade-parity gap). Tracked as SEC-12 below.
 
 ---
 
@@ -353,6 +381,41 @@ provider permits an owner/repo literally named `..` (and a single `..` can't esc
 **Fix (hardening).** Treat `.`/`..` as reserved: `if (out === '.' || out === '..') return '_'`.
 
 ---
+
+### SEC-12 (Low): revocation does not sever an already-open machine subscription
+
+**Where.** `backend/packages/server/src/events/machineSubscribe.ts` (the handshake) and the two
+realtime transports that hold the socket afterwards.
+
+**What.** The tombstone is consulted on every request-shaped `/internal/*` call and on every
+subscribe HANDSHAKE, so a revoked node cannot open anything new. A subscription it opened BEFORE
+being revoked stays in the workspace's room until the socket drops, which can outlive the token's
+own `exp`.
+
+**Why it is not fixed in the round-2 P1 PR.** Severing it needs a revocation signal that reaches
+whichever Node replica (or `WorkspaceEventsHub` Durable Object) holds that socket: a cross-runtime
+fan-out, not a local check. Building it on Node alone would be a facade-parity gap, which
+CLAUDE.md treats as a showstopper rather than a follow-up, so the honest disposition is to name
+the residual and do it properly. A cheaper interim, re-checking the tombstone on the existing
+heartbeat, has the same parity requirement.
+
+**Shape when picked up.** Either a revocation event on the existing realtime propagator (Redis
+pub/sub on Node, a DO call on Cloudflare), or a periodic re-check inside each transport's
+heartbeat/alarm. Both must land on both facades with a conformance assertion.
+
+### SEC-13 (Low): PAT login and invitation peek are unthrottled
+
+**Where.** `POST /auth/pat` and the invitation-peek route in
+`backend/packages/server/src/modules/auth/AuthController.ts`.
+
+**What.** The durable throttle covers the four password endpoints. PAT login is unauthenticated
+and triggers a server-side VCS API call per guess (so it is also an outbound-amplification
+surface); invitation peek is an unauthenticated token read.
+
+**Why not in round-2 P1.** Outside the committed scope of the rate-limiting initiative, which
+named the password endpoints. The mechanism is now in place, so this is a small follow-up: pick a
+bucket key per surface (a PAT must NOT be keyed by token value, for the same reason reset-redeem
+is not) and call `passwordAttemptLimited`.
 
 ## Notes & accepted risks (no code fix scoped)
 

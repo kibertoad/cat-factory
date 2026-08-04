@@ -3298,6 +3298,15 @@
       "confirmRemove": {
         "title": "Remove this runner?",
         "body": "\"{name}\" will be removed. This can't be undone."
+      },
+      "blocked": "This runner's URL is not allowed on this deployment, so its models are hidden from the picker.",
+      "urlReason": {
+        "invalid_url": "That is not a valid URL.",
+        "scheme_not_allowed": "A runner URL must start with http:// or https://.",
+        "credentials_not_allowed": "A runner URL must not contain a username or password.",
+        "query_or_fragment_not_allowed": "Enter the base URL only, with no \"?\" query and no \"#\" fragment.",
+        "host_not_loopback": "This deployment only reaches runners on its own machine (localhost). Ask an operator to allow local-network runners.",
+        "host_not_local": "A runner must be on your own machine or your local network. Public hosts are not allowed."
       }
     },
     "modelPolicy": {

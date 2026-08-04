@@ -3204,6 +3204,15 @@
       "confirmRemove": {
         "title": "Bu runner kaldırılsın mı?",
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
+      },
+      "blocked": "Bu çalıştırıcının URL adresi bu kurulumda izinli değil, bu nedenle modelleri seçicide gizlendi.",
+      "urlReason": {
+        "invalid_url": "Bu geçerli bir URL değil.",
+        "scheme_not_allowed": "Çalıştırıcı URL adresi http:// veya https:// ile başlamalıdır.",
+        "credentials_not_allowed": "Çalıştırıcı URL adresi kullanıcı adı veya şifre içeremez.",
+        "query_or_fragment_not_allowed": "Yalnızca temel URL adresini girin; \"?\" sorgusu ve \"#\" parçası olmadan.",
+        "host_not_loopback": "Bu kurulum yalnızca kendi makinesindeki (localhost) çalıştırıcılara erişir. Yerel ağ çalıştırıcılarına izin vermesi için bir operatöre başvurun.",
+        "host_not_local": "Çalıştırıcı kendi makinenizde veya yerel ağınızda olmalıdır. Genel ana makinelere izin verilmez."
       }
     },
     "modelPolicy": {

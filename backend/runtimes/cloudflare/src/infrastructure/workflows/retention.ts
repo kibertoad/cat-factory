@@ -20,8 +20,11 @@ import { createRetentionPass } from '@cat-factory/orchestration'
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-// Auth attempts are junk once the 15-minute throttle window closes; a 1-hour retention
-// leaves ample slack for clock skew while keeping the hot (key, at) index tiny.
+// Auth attempts are junk once the 15-minute throttle window closes; a 1-hour retention leaves
+// ample slack for clock skew. It is the AGE at which a row becomes prunable, not how often the
+// prune runs: this facade sweeps on the daily retention cron, so a row survives up to a day past
+// it. Bounding the age still matters (the rows carry `ip:email`), but nothing about the throttle
+// depends on the prune, which reads its own 15-minute window.
 const AUTH_ATTEMPT_RETENTION_MS = 60 * 60 * 1000
 
 /**
@@ -74,12 +77,15 @@ export interface RetentionDeps {
   /** Optional: password-reset tokens past their own TTL (single-use + 1h expiry). */
   passwordResetTokenRepository?: PasswordResetTokenRepository
   /**
-   * Optional: machine-node roster rows past their latest signed exp (no token for the
-   * node can outlive it, so a revocation tombstone past it protects nothing).
+   * Machine-node roster rows past their latest signed exp (no token for the node can outlive
+   * it, so a revocation tombstone past it protects nothing). REQUIRED, matching the Node
+   * facade: both are wired unconditionally, and an optional field would let a call-site
+   * regression drop the prune on one runtime while compiling fine.
    */
-  machineNodeRepository?: MachineNodeRepository
-  /** Optional: password-throttle attempts (SEC-4), junk minutes after the window closes. */
-  authAttemptRepository?: AuthAttemptRepository
+  machineNodeRepository: MachineNodeRepository
+  /** Password-throttle attempts (SEC-4), prunable an hour after the window closes. Required
+   * for the same reason as the roster above. */
+  authAttemptRepository: AuthAttemptRepository
   /** Resolved notifications past the retention window (open cards are never pruned). */
   notificationRepository: NotificationRepository
   clock: Clock
@@ -192,16 +198,14 @@ export async function sweepRetention({
           passwordResetTokenRepository.deleteExpired(now),
         )
       : 0,
-    // Machine-node roster rows past their latest signed exp — `now`, not a window.
-    machineNodes: machineNodeRepository
-      ? await pass.expire('machine_nodes', () => machineNodeRepository.deleteExpired(now))
-      : 0,
+    // Machine-node roster rows past their latest signed exp: `now`, not a window.
+    machineNodes: await pass.expire('machine_nodes', () =>
+      machineNodeRepository.deleteExpired(now),
+    ),
     // Password-throttle attempts on a fixed aggressive window (SEC-4).
-    authAttempts: authAttemptRepository
-      ? await pass.prune('auth_attempts', AUTH_ATTEMPT_RETENTION_MS, now, (c) =>
-          authAttemptRepository.deleteOlderThan(c),
-        )
-      : 0,
+    authAttempts: await pass.prune('auth_attempts', AUTH_ATTEMPT_RETENTION_MS, now, (c) =>
+      authAttemptRepository.deleteOlderThan(c),
+    ),
     // Resolved (acted/dismissed) notifications past the window; open cards untouched.
     notifications: await pass.prune('notifications', policy.notificationsMs, now, (c) =>
       notificationRepository.deleteResolvedOlderThan(c),
