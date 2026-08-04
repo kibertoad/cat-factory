@@ -7,13 +7,21 @@ import {
   resolveAccountAlertConfig,
 } from '@cat-factory/orchestration'
 import type {
+  PlatformAlert,
   PlatformAlertReason,
   PlatformAlertSettings,
+  PlatformAlertWindow,
   PlatformFailingRun,
 } from '@cat-factory/contracts'
 import type { ServerContainer } from '../http/env.js'
-import type { Logger, Notification, PlatformFailedRunRef } from '@cat-factory/kernel'
-import { describeError } from '@cat-factory/kernel'
+import type {
+  Logger,
+  Notification,
+  PlatformAlertEvent,
+  PlatformAlertSink,
+  PlatformFailedRunRef,
+} from '@cat-factory/kernel'
+import { describeError, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { sweepHealth } from '../observability/sweepHealth.js'
 
 // Runtime-neutral platform-health ALERT sweep — the push counterpart to the operator dashboard
@@ -27,6 +35,15 @@ import { sweepHealth } from '../observability/sweepHealth.js'
 // (the "state-change dedup, not every sweep" requirement), so a persistently-unhealthy
 // deployment neither re-toasts the inbox nor rewrites the row on every pass.
 //
+// Each of those two state changes is also pushed to the workspace's registered outbound endpoint
+// through the `PlatformAlertSink` port, which is what an ON-CALL system subscribes to. It is a
+// separate family rather than the `platform_health` card travelling down the notification webhook
+// (which it can, and for a human overseer should) because a card is re-delivered whenever a human
+// acts on it or dismisses it, and on the wire that is indistinguishable from the sweep dismissing
+// the card because the deployment recovered — so a pager would close its incident whenever
+// somebody tidied their inbox. The edges below are the sweep's own verdict, which is the only
+// thing that can honestly say "resolved".
+//
 // A no-op unless alerting is opted in AND both the notifications module and the platform-
 // observability read are wired (tests / no telemetry DB / mothership local nodes). Best-effort
 // per account: a failed summarize/raise for one account is logged and skipped, never aborting
@@ -38,6 +55,21 @@ import { sweepHealth } from '../observability/sweepHealth.js'
  * count of what was left out rides the payload beside the sample.
  */
 const FAILING_RUN_SAMPLE = 5
+
+/**
+ * The transition ordinal this pass's edge carries: one past the open card's, or 1 for an
+ * incident nothing has raised yet.
+ *
+ * Derived from the PRIOR CARD rather than minted or clocked, because that is what makes it
+ * agree across sweepers. `preventOverrun` stops one process stacking its own passes, but nothing
+ * elects a leader across a multi-node deployment, so two nodes can observe one transition; both
+ * read the same open card, so both compute the same ordinal and a receiver collapses their two
+ * deliveries. A clock read would differ per process and page twice for one transition.
+ */
+function nextTransition(card: Notification | undefined): number {
+  const stored = card?.payload?.platformAlertTransition
+  return typeof stored === 'number' && Number.isFinite(stored) && stored > 0 ? stored + 1 : 1
+}
 
 /** Whether an open card's stored reason set already matches the one now firing. */
 function sameReasonSet(card: Notification | undefined, reasons: PlatformAlertReason[]): boolean {
@@ -67,12 +99,17 @@ function failingRunsFor(refs: PlatformFailedRunRef[], workspaceId: string): Plat
  * (`workspaceService.list(null)` → distinct non-null account ids), the same tenant-enumeration
  * shape the platform-metrics + artifact-retention sweeps use — NOT a per-row point-read.
  *
- * Time comes from the services' injected clock (`summarize`, `raise` and `clearByType` all
- * stamp `now` themselves), so this helper takes no `now` — unlike `escalateStaleNotifications`,
- * whose cutoff is caller-supplied.
+ * `now` is caller-supplied, exactly like `escalateStaleNotifications`'s cutoff. The card side
+ * needs none (`summarize`, `raise` and `clearByType` all stamp themselves), but the outbound EDGE
+ * carries a transition time no service stamps, and neither card timestamp can stand in for it:
+ * `raise` PRESERVES `createdAt` across a re-raise so an escalation would report the moment the
+ * incident opened, and `clearByType`'s `resolvedAt` is a different clock read on a field that can
+ * be null. One value per pass, shared by every edge it produces, which is also the honest grain:
+ * an account-level verdict fanned out to its workspaces is ONE observation.
  */
 export async function sweepPlatformHealth(
   container: ServerContainer,
+  now: number,
   logger?: Logger,
 ): Promise<{ raised: number; cleared: number }> {
   const cfg = container.config.platformAlerts
@@ -124,9 +161,13 @@ export async function sweepPlatformHealth(
       // The sweeper streak is deployment-wide, not per account, so it is read once outside
       // the per-account loop and applies to every account's card: a wedged retention sweep is
       // everyone's problem, not the tenant's whose turn it happened to be.
-      const reasons = platformAlertReasons(
-        evaluatePlatformHealth(snapshot, account.thresholds, worstSweep),
-      )
+      // The verdict is kept WHOLE (reason + observed value + threshold) and the reason set
+      // derived from it, rather than the other way round. The card deliberately carries only the
+      // reasons — its payload is its dedup identity, so a fluctuating number in it would re-toast
+      // the inbox every sweep — but the outbound alert is an EDGE, stored nowhere, and the
+      // numbers that tripped are exactly what an on-call receiver routes on.
+      const alerts = evaluatePlatformHealth(snapshot, account.thresholds, worstSweep)
+      const reasons = platformAlertReasons(alerts)
       // The workspaces whose card would actually change state this pass. A healthy workspace
       // with no card, and an unhealthy one whose firing set is unchanged, are both no-ops.
       const changing = workspaceIds.filter((id) =>
@@ -141,37 +182,21 @@ export async function sweepPlatformHealth(
           ? await readFailingRuns(observability, accountId, snapshot.since, logger)
           : undefined
       for (const workspaceId of changing) {
-        if (reasons.length > 0) {
-          const { title, body } = platformHealthCardContent(reasons, account.window)
-          const failingRuns = evidence ? failingRunsFor(evidence, workspaceId) : []
-          await notifications.service.raise(workspaceId, {
-            type: 'platform_health',
-            blockId: null,
-            executionId: null,
-            title,
-            body,
-            payload: {
-              platformWindow: account.window,
-              platformAlerts: reasons,
-              // Both omitted when there is nothing to link: an empty list and an absent one
-              // would render the same, and only the absence is honest about a condition that
-              // has no failing run behind it in the first place.
-              ...(failingRuns.length > 0
-                ? {
-                    platformFailingRuns: failingRuns,
-                    // Every row of a workspace's partition carries that workspace's full
-                    // failed count, so the cap can say "5 of 23" without a second query.
-                    platformFailedTotal:
-                      evidence?.find((r) => r.workspaceId === workspaceId)?.workspaceFailedTotal ??
-                      failingRuns.length,
-                  }
-                : {}),
-            },
-          })
-          raised += 1
-        } else if (await notifications.service.clearByType(workspaceId, 'platform_health')) {
-          cleared += 1
-        }
+        const settled = await settleWorkspace(
+          { notifications: notifications.service, alertSink: container.platformAlertSink, logger },
+          {
+            workspaceId,
+            accountId,
+            window: account.window,
+            alerts,
+            reasons,
+            evidence,
+            observedAt: now,
+            openCard: openCards.get(workspaceId),
+          },
+        )
+        if (settled === 'raised') raised += 1
+        else if (settled === 'cleared') cleared += 1
       }
     } catch (err) {
       logger?.warn('platform-health: failed to evaluate account', {
@@ -182,6 +207,161 @@ export async function sweepPlatformHealth(
     }
   }
   return { raised, cleared }
+}
+
+/** What one workspace's pass did, for the sweep's counters. */
+type WorkspaceOutcome = 'raised' | 'cleared' | 'none'
+
+/** The collaborators {@link settleWorkspace} needs, bound once per pass. */
+interface SettleDeps {
+  notifications: NonNullable<ServerContainer['notifications']>['service']
+  /** The outbound on-call push. Absent ⇒ no endpoint feature is wired; the card still lands. */
+  alertSink?: PlatformAlertSink
+  logger?: Logger
+}
+
+/** The account's verdict, as it applies to one of its workspaces. */
+interface SettleInput {
+  workspaceId: string
+  accountId: string
+  window: PlatformAlertWindow
+  /** The firing conditions with their observed values; EMPTY ⇒ the account has recovered. */
+  alerts: PlatformAlert[]
+  /** The same conditions as the card's sorted reason set (its dedup identity). */
+  reasons: PlatformAlertReason[]
+  /** The account-wide failing-run sample, or undefined when there was none to read (or it failed). */
+  evidence: PlatformFailedRunRef[] | undefined
+  /**
+   * When this pass observed the transition, for the outbound edge's `occurredAt`. Deliberately
+   * NOT read off the card: `raise` reuses an open card's `createdAt`, so an escalation would
+   * carry the moment the incident opened rather than the moment it got worse.
+   */
+  observedAt: number
+  /**
+   * This workspace's already-open card, from the pass's batched read. It carries the incident's
+   * transition ordinal, which the next edge counts from.
+   */
+  openCard: Notification | undefined
+}
+
+/**
+ * Apply the account's verdict to ONE workspace: raise or clear its `platform_health` card, then
+ * push the matching edge to the workspace's registered endpoint.
+ *
+ * The order is deliberate and matches the run-lifecycle rule next door: the local write commits
+ * FIRST and the outbound call runs behind it, so a receiver's outage costs the notification and
+ * never the platform's own record of the alert.
+ *
+ * The card is also what supplies the edge's identity, which is the other half of why this is one
+ * function rather than two. The sweep's alert state IS the card row: `raise` reuses an open card's
+ * id while an incident lasts and mints a new one for the next incident, so the id is the INCIDENT
+ * half of a receiver's dedupe key, the ordinal counted on that same row is the TRANSITION half,
+ * and `clearByType` returning null is exactly "there was nothing open, so no recovery happened
+ * here".
+ */
+async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<WorkspaceOutcome> {
+  const { workspaceId, accountId, window, alerts, reasons, evidence, observedAt, openCard } = input
+  if (reasons.length > 0) {
+    const transition = nextTransition(openCard)
+    const { title, body } = platformHealthCardContent(reasons, window)
+    const failingRuns = evidence ? failingRunsFor(evidence, workspaceId) : []
+    const workspaceFailedTotal = evidence?.find(
+      (r) => r.workspaceId === workspaceId,
+    )?.workspaceFailedTotal
+    const card = await deps.notifications.raise(workspaceId, {
+      type: 'platform_health',
+      blockId: null,
+      executionId: null,
+      title,
+      body,
+      payload: {
+        platformWindow: window,
+        platformAlerts: reasons,
+        // Bookkeeping the card renders nothing of: the row is the sweep's only alert store, and
+        // the outbound edge needs a transition identity neither the (incident-long) card id nor
+        // the (recurring) reason set can give it. Writing it costs no extra inbox delivery,
+        // since a raise only happens on a reason-set change, which already re-delivers.
+        platformAlertTransition: transition,
+        // Both omitted when there is nothing to link: an empty list and an absent one
+        // would render the same, and only the absence is honest about a condition that
+        // has no failing run behind it in the first place.
+        ...(failingRuns.length > 0
+          ? {
+              platformFailingRuns: failingRuns,
+              // Every row of a workspace's partition carries that workspace's full
+              // failed count, so the cap can say "5 of 23" without a second query.
+              platformFailedTotal: workspaceFailedTotal ?? failingRuns.length,
+            }
+          : {}),
+      },
+    })
+    await announce(deps, workspaceId, {
+      event: 'platform_health.firing',
+      cardId: card.id,
+      transition,
+      accountId,
+      window,
+      // Sorted by reason, which the port documents and the delivery id depends on. Left in
+      // `evaluatePlatformHealth`'s emission order these would be deterministic but INCIDENTALLY
+      // so: reordering its checks is a refactor with no behavioural intent, and it would silently
+      // re-key every in-flight incident's deliveries. Sorting here is what makes the id a
+      // function of WHICH conditions fired rather than of the order they were tested in.
+      conditions: [...alerts]
+        .sort((a, b) => a.reason.localeCompare(b.reason))
+        .map((alert) => ({
+          reason: alert.reason,
+          value: alert.value,
+          threshold: alert.threshold,
+        })),
+      occurredAt: observedAt,
+      failingRuns,
+      // Absent evidence is NOT zero: a backlog alert has no failing runs behind it, an evidence
+      // read that failed has none it could see, and a workspace where nothing failed has none
+      // because nothing failed. Only the last of those is a number, so the other two say null.
+      failedTotal: workspaceFailedTotal ?? (failingRuns.length > 0 ? failingRuns.length : null),
+    })
+    return 'raised'
+  }
+
+  const dismissed = await deps.notifications.clearByType(workspaceId, 'platform_health')
+  if (!dismissed) return 'none'
+  await announce(deps, workspaceId, {
+    event: 'platform_health.resolved',
+    cardId: dismissed.id,
+    // An incident resolves once, so the card id alone already identifies this edge.
+    transition: 1,
+    accountId,
+    window,
+    conditions: [],
+    occurredAt: observedAt,
+    failingRuns: [],
+    failedTotal: null,
+  })
+  return 'cleared'
+}
+
+/**
+ * Push one edge to the workspace's endpoint, behind the sweep's own best-effort seam.
+ *
+ * The sink swallows a receiver's outage by contract, so this second net is about the sink itself:
+ * a facade-supplied implementation that violates that contract must not be able to abort the
+ * account's remaining workspaces, because the failure mode would be a deployment that stops
+ * watching itself the moment one tenant's pager endpoint misbehaves. Swallowed, never silent —
+ * `runBestEffort` names the drop with the cause attached.
+ */
+async function announce(
+  deps: SettleDeps,
+  workspaceId: string,
+  event: PlatformAlertEvent,
+): Promise<void> {
+  const sink = deps.alertSink
+  if (!sink) return
+  await runBestEffort(
+    deps.logger ?? noopLogger,
+    'platform-health.alertDelivery',
+    () => sink.platformHealthChanged(workspaceId, event),
+    { scope: 'platform-health', workspaceId, accountId: event.accountId, event: event.event },
+  )
 }
 
 /**

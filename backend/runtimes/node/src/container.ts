@@ -7,6 +7,7 @@ import { type NotificationWebhookService } from '@cat-factory/integrations'
 import {
   type GitHubInstallationRepository,
   type InlineLlmCallRecorder,
+  type PlatformAlertSink,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
@@ -405,6 +406,12 @@ interface NodeServerContainerBundle {
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   /** The per-workspace outbound notification-webhook config service (null with no encryption key). */
   notificationWebhooks: NotificationWebhookService | undefined
+  /**
+   * The outbound platform-health push the health sweep hands its firing/resolved edges to. From
+   * the SAME builder as the service above (undefined with no encryption key), so this facade
+   * cannot wire the management surface and leave the alerts undelivered.
+   */
+  platformAlertSink: PlatformAlertSink | undefined
   cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
   env: NodeJS.ProcessEnv
   localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
@@ -446,6 +453,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     apiKeys,
     publicApiKeys,
     notificationWebhooks,
+    platformAlertSink,
     cloudflareModelsEnabled,
     env,
     localModelEndpoints,
@@ -605,6 +613,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     publicApiKeys,
     // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
     notificationWebhooks,
+    platformAlertSink,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
     ...(bedrockModels ? { bedrockModels } : {}),
@@ -935,6 +944,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     apiKeys,
     publicApiKeys,
     notificationWebhooks: notificationWebhookSupport?.service,
+    platformAlertSink: notificationWebhookSupport?.platformAlertSink,
     cloudflareModelsEnabled,
     env,
     localModelEndpoints,

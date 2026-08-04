@@ -37,7 +37,7 @@ export function startPlatformHealthSweeper(
     health,
     failureMessage: 'platform health sweep failed',
     tick: async () => {
-      const { raised, cleared } = await sweepPlatformHealth(container, log)
+      const { raised, cleared } = await sweepPlatformHealth(container, clock.now(), log)
       if (raised > 0 || cleared > 0) log.info('platform health sweep', { raised, cleared })
     },
   })

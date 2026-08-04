@@ -274,6 +274,21 @@ export const notificationPayloadSchema = v.object({
    */
   platformFailedTotal: v.optional(v.number()),
   /**
+   * On a `platform_health` notification: which TRANSITION of this incident the card is showing,
+   * counting from 1 at the edge that opened it and incrementing every time the firing set
+   * changes while it stays open.
+   *
+   * It is bookkeeping rather than content, and the card renders none of it. It lives here
+   * because the card row is the sweep's ONLY store of alert state, and the outbound
+   * `platform_health.firing` edge needs an identity for a transition that neither of the card's
+   * other identities can give it: the card id is reused for the whole incident, and the reason
+   * set RECURS within one ({A} escalating to {A,B} and subsiding to {A} is three transitions
+   * over two distinct sets). Deriving it from the prior card rather than from a clock is what
+   * makes two sweepers racing on the same transition compute the SAME ordinal, so a receiver
+   * still collapses them, which a timestamp, differing per process, would not.
+   */
+  platformAlertTransition: v.optional(v.number()),
+  /**
    * On an `infra_unreachable` notification: the configured infrastructure areas whose live probe
    * is currently failing, sorted. Like {@link platformAlerts} this is the card's dedup identity —
    * the watcher re-raises the SAME card every pass and the service only re-delivers when the set

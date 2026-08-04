@@ -365,6 +365,10 @@ export {
   type WebhookRunLifecycleSinkDependencies,
 } from './modules/notificationWebhook/WebhookRunLifecycleSink.js'
 export {
+  WebhookPlatformAlertSink,
+  type WebhookPlatformAlertSinkDependencies,
+} from './modules/notificationWebhook/WebhookPlatformAlertSink.js'
+export {
   NotificationWebhookService,
   type NotificationWebhookServiceDependencies,
 } from './modules/notificationWebhook/NotificationWebhookService.js'
