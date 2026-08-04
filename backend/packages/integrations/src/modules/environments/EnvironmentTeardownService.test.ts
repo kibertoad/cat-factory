@@ -120,13 +120,33 @@ describe('EnvironmentTeardownService teardown-recorded hook', () => {
 
     await service.teardown('ws_1', 'env_1')
 
-    expect(seen).toEqual([{ outcome: 'success', rowsAtCall: 1 }])
-    // The confirmation row lands AFTER the hook, which is deliberate: the hook reports the
-    // teardown ATTEMPT, and its consumer re-reads the whole log anyway.
+    // BOTH rows must be down before the hook fires. Its consumer re-reads the log when notified,
+    // so firing between them publishes a report that sees the teardown and not its confirmation,
+    // and states `unconfirmed` about an environment confirmed gone a millisecond later. The hook
+    // is the only republish a settled run gets, so that wrong answer is the one that sticks.
+    expect(seen).toEqual([{ outcome: 'success', rowsAtCall: 2 }])
     expect(rows).toEqual([
       { operation: 'teardown', outcome: 'success' },
       { operation: 'teardown-verify', outcome: 'failure' },
     ])
+  })
+
+  it('fires the hook only after the CONFIRMATION row lands, not between the two', async () => {
+    // The regression guard for the ordering above, stated as the thing a reader would check: a
+    // consumer that re-reads the log the moment it is notified must be able to see the verdict.
+    const { rows, log } = fakeLog()
+    const service = makeService(probing({ state: 'gone' }), log)
+    let rowsWhenNotified: { operation: string; outcome: string }[] = []
+    service.setTeardownRecordedHook(async () => {
+      rowsWhenNotified = [...rows]
+    })
+
+    await service.teardown('ws_1', 'env_1')
+
+    expect(rowsWhenNotified).toContainEqual({
+      operation: 'teardown-verify',
+      outcome: 'success',
+    })
   })
 
   it('notifies on a FAILED attempt too, and still surfaces the provider error', async () => {

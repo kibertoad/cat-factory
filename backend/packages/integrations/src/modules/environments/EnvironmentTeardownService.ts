@@ -139,11 +139,11 @@ export class EnvironmentTeardownService {
     // If the provider was unregistered we can't call its API; just tombstone.
     if (!resolved) {
       await this.tombstone(record)
-      await this.recordTeardownAttempt(record, 'success', null)
+      await this.logAttempt(record, 'teardown', 'success', null)
       // Nothing was asked to destroy anything, so nothing can be claimed about the result. An
       // unregistered provider is a deployment-configuration fact, not a blip, so no later sweep
       // will answer differently: whatever it stood up has to be reclaimed by hand.
-      return await this.recordConfirmation(record, {
+      return await this.settle(record, {
         confirmation: 'unverifiable',
         reason:
           'The provider that stood this environment up is no longer registered, so its teardown could not be performed or checked.',
@@ -162,16 +162,39 @@ export class EnvironmentTeardownService {
       // Log the verbatim provider error before it propagates (the sweep swallows
       // it; an on-demand teardown surfaces it). The local record is NOT tombstoned
       // on a provider failure, matching the existing retry-next-pass behaviour.
-      await this.recordTeardownAttempt(
+      await this.logAttempt(
         record,
+        'teardown',
         'failure',
         error instanceof Error ? error.message : String(error),
       )
+      // A failed teardown has nothing to confirm, so this is the whole story and the
+      // notification goes out now.
+      await this.notifyTeardownRecorded(record, 'failure')
       throw error
     }
     await this.tombstone(record)
-    await this.recordTeardownAttempt(record, 'success', null)
-    return await this.recordConfirmation(record, await this.confirm(resolved.provider, request))
+    await this.logAttempt(record, 'teardown', 'success', null)
+    return await this.settle(record, await this.confirm(resolved.provider, request))
+  }
+
+  /**
+   * Land the confirmation row and only THEN notify.
+   *
+   * The ordering is the whole point, and getting it wrong is invisible: the hook's consumer is
+   * the run's PR verification report, which re-reads this log when it fires. Notifying between
+   * the two rows publishes a report composed from a log that records the teardown and not its
+   * confirmation, so every environment reads as `unconfirmed` — the exact state the confirmation
+   * exists to resolve, republished as fact and not corrected until something else happens to
+   * publish again. The same rule the teardown row itself has always followed, one row later.
+   */
+  private async settle(
+    record: EnvironmentRecord,
+    result: TeardownConfirmationResult,
+  ): Promise<TeardownConfirmationResult> {
+    await this.recordConfirmation(record, result)
+    await this.notifyTeardownRecorded(record, 'success')
+    return result
   }
 
   /**
@@ -231,47 +254,57 @@ export class EnvironmentTeardownService {
     record: EnvironmentRecord,
     result: TeardownConfirmationResult,
   ): Promise<TeardownConfirmationResult> {
-    await this.deps.provisioningLog?.record({
-      workspaceId: record.workspaceId,
-      subsystem: 'environment',
-      operation: 'teardown-verify',
-      targetId: record.id,
-      providerId: record.providerId,
-      blockId: record.blockId,
-      executionId: record.executionId,
-      outcome: result.confirmation === 'confirmed' ? 'success' : 'failure',
-      error: result.reason,
+    await this.logAttempt(
+      record,
+      'teardown-verify',
+      result.confirmation === 'confirmed' ? 'success' : 'failure',
+      result.reason,
       // The machine-readable verdict, so a reader distinguishes "still standing" from "could not
       // check" without parsing the prose above it.
-      detail: JSON.stringify({ confirmation: result.confirmation }),
-    })
+      JSON.stringify({ confirmation: result.confirmation }),
+    )
     return result
   }
 
-  /**
-   * Append the attempt to the provisioning log and then notify, in that order and in ONE place.
-   * The ordering is what makes the notification usable: its consumer reads the log back, so a
-   * hook fired before the row landed would report the state the edge exists to correct. Keeping
-   * both here is what makes the FAILURE edge structural rather than a line someone remembered to
-   * add beside the success one.
-   */
-  private async recordTeardownAttempt(
+  /** Append one row of a teardown's story to the provisioning log. Never notifies: see
+   *  {@link notifyTeardownRecorded} for why the two are separate. */
+  private async logAttempt(
     record: EnvironmentRecord,
+    operation: 'teardown' | 'teardown-verify',
     outcome: ProvisioningOutcome,
     error: string | null,
+    detail: string | null = null,
   ): Promise<void> {
     await this.deps.provisioningLog?.record({
       workspaceId: record.workspaceId,
       subsystem: 'environment',
-      operation: 'teardown',
+      operation,
       targetId: record.id,
       providerId: record.providerId,
       blockId: record.blockId,
       executionId: record.executionId,
       outcome,
       error,
-      detail: null,
+      detail,
     })
+  }
+
+  /**
+   * Notify that a teardown has been fully recorded — EVERY row of it.
+   *
+   * Split from the row write (it used to be one method) because a teardown is now TWO rows and
+   * the notification belongs after the last of them, not after the first. Its consumer re-reads
+   * the log when it fires, so firing between the rows publishes a report that sees the teardown
+   * and not its confirmation, and states `unconfirmed` about an environment that was confirmed
+   * gone a millisecond later.
+   *
+   * The FAILURE edge still fires from the one path that has nothing left to record, which is what
+   * keeps it structural rather than a line someone remembered to add beside the success one.
+   */
+  private async notifyTeardownRecorded(
+    record: EnvironmentRecord,
+    outcome: ProvisioningOutcome,
+  ): Promise<void> {
     const hook = this.teardownRecordedHook
     if (!hook) return
     await runBestEffort(this.log, 'environment.teardownRecordedHook', () => hook(record, outcome), {
