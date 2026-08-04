@@ -6,7 +6,7 @@
 
   <groupId>ai.catfactory</groupId>
   <artifactId>cat-factory-sdk</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <packaging>jar</packaging>
 
   <name>cat-factory SDK</name>

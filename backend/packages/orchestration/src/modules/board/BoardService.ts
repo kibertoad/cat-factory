@@ -827,6 +827,11 @@ export class BoardService {
     return this.publicReads.addServiceTask(workspaceId, serviceId, input)
   }
 
+  /** Public-API: refuse a service frame that cannot hold a new task, before doing work for one. */
+  assertTaskContainer(workspaceId: string, serviceId: string): Promise<Block> {
+    return this.publicReads.assertTaskContainer(workspaceId, serviceId)
+  }
+
   /** Public-API: a board task + its enclosing service frame; null when not externally visible. */
   getServiceTask(
     workspaceId: string,

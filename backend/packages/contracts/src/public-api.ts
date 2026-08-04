@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
+import { taskSourceKindSchema } from './tasks.js'
 
 // ---------------------------------------------------------------------------
 // Public-API wire contracts (the `/api/v1` surface for external systems).
@@ -227,8 +228,34 @@ export const listPublicServiceTasksQuerySchema = v.object({
 export type ListPublicServiceTasksQuery = v.InferOutput<typeof listPublicServiceTasksQuerySchema>
 
 /**
+ * The tracker ticket a task is being filed FROM: the linkage a headless intake integration
+ * has and the platform otherwise never learns.
+ *
+ * Without it the only place a caller can put ticket content is `description`, which flattens a
+ * structured issue into prose and throws the identity away, so the run cannot write its
+ * clarification questions back onto the ticket, a reply on the ticket answers nothing, and a
+ * redelivery files a second task for the same issue with no way to tell. Naming the ticket
+ * instead makes the platform import it, project it, and attach it to the new task exactly as the
+ * app's own "create task from issue" does, so the description stays the caller's own framing and
+ * the issue itself (its status, labels, assignee, description and comments, re-read live) is what
+ * reaches each agent as context.
+ *
+ * `ref` is the SAME grammar the internal import takes: a canonical key (`PROJ-123`,
+ * `acme/api#7`, `ENG-4`) or a full issue URL. One field rather than three, because the provider's
+ * own `parseRef` is what turns either into the canonical external id, and a caller holding a
+ * webhook payload has whichever of the two that payload carried.
+ */
+export const publicTaskTicketSchema = v.object({
+  /** Which tracker the ticket lives on: a source this workspace has connected and enabled. */
+  source: taskSourceKindSchema,
+  /** The ticket's canonical key OR its full issue URL. */
+  ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+})
+export type PublicTaskTicket = v.InferOutput<typeof publicTaskTicketSchema>
+
+/**
  * Create a task under a service. A deliberately MINIMAL external input mapped onto the
- * internal `AddTaskInput` — it exposes only title/description/taskType, not the rich
+ * internal `AddTaskInput`: it exposes only title/description/taskType/ticket, not the rich
  * internal knobs (risk/model presets, pinned pipeline, agent config), so the public
  * surface stays small and stable.
  */
@@ -237,6 +264,17 @@ export const createPublicTaskSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
   /** The kind of work; omitted → `feature`. `recurring` is not creatable here. */
   taskType: v.optional(createTaskTypeSchema),
+  /**
+   * The tracker ticket this task is filed from. Omitted ⇒ an unlinked task, exactly as before.
+   *
+   * Supplied, it is resolved BEFORE the task is created, so an unknown source, an unparseable
+   * ref or an issue the tracker will not serve refuses the whole request rather than leaving an
+   * unlinked task behind. A ticket already linked to another task is a `409`
+   * (`details.reason: 'ticket_already_linked'`, `details.taskId` naming it), which is what a
+   * redelivering integration reads as "already filed". The platform holds one task per ticket,
+   * so a caller needs no bookkeeping of its own to stay idempotent.
+   */
+  ticket: v.optional(publicTaskTicketSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 

@@ -166,6 +166,13 @@ export const CONFLICT_REASONS = [
   // interchangeable — a delete drops the authored description and contracts, a suppression
   // drops nothing. The SPA steers to the delete action instead.
   'foundational_service_not_inherited',
+  // A tracker ticket was named as the source of a NEW task while it is already linked to an
+  // existing one. An issue carries a single `linkedBlockId`, so proceeding would silently
+  // re-point it and strip the first task of the very context it was created with.
+  // `details.taskId` names the task that holds the link, which is also what makes the refusal
+  // useful to a headless integration: a redelivered webhook reads it as "already filed" and
+  // follows the existing task instead of filing a duplicate.
+  'ticket_already_linked',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
