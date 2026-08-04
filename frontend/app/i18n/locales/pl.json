@@ -2709,6 +2709,40 @@
         "removeFailed": "Nie udało się usunąć wpisu rejestru"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Poświadczenia funkcji",
+      "intro": "Sekrety, o które serwery narzędzi i integracje generatywne tego wdrożenia proszą po nazwie. Wartości są zapisywane tylko dla tej tablicy, szyfrowane w spoczynku i przekazywane wprost do procesu agenta: nigdy nie trafiają do promptu ani do logu. Wartości można tylko zapisywać, więc zapisaną zastępuje się, wpisując nową, i nigdy nie jest odczytywana.",
+      "credentialNoun": "poświadczenie {key}",
+      "required": "Wymagane",
+      "optional": "Opcjonalne",
+      "stored": "Zapisane",
+      "storedAt": "Ostatnio ustawione {date}",
+      "notStoredWithFallback": "Dla tej tablicy nic nie jest zapisane. To wdrożenie odczytuje klucz również z własnego środowiska, więc funkcja może nadal działać.",
+      "notStored": "Dla tej tablicy nic nie jest zapisane, a to wdrożenie nie ma awaryjnego odczytu ze środowiska, więc funkcja nie może się uwierzytelnić.",
+      "setValue": "Wartość",
+      "replaceValue": "Zastąp zapisaną wartość",
+      "save": "Zapisz",
+      "remove": "Usuń poświadczenie",
+      "noneDeclared": "Żadna z zarejestrowanych funkcji tego wdrożenia nie prosi o poświadczenia.",
+      "subject": {
+        "toolServer": "Serwer narzędzi",
+        "binaryGenerator": "Integracja generatywna"
+      },
+      "incomplete": {
+        "title": "Ta lista może być niepełna",
+        "body": "Nie udało się odczytać integracji generatywnych, więc poniżej może brakować poświadczenia, o które prosi jedna z nich. Zapisane klucze, o które nikt nie prosi, pozostają ukryte, dopóki listy nie da się odczytać ponownie."
+      },
+      "orphaned": {
+        "heading": "Zapisane, ale nieużywane",
+        "body": "Nic, co zarejestrowało to wdrożenie, nie prosi o te klucze. Właśnie to zostawia po sobie wycofana integracja albo zmiana nazwy zmiennej. Pozostaną zaszyfrowane, dopóki ich nie usuniesz."
+      },
+      "toast": {
+        "loadFailed": "Nie udało się wczytać poświadczeń funkcji",
+        "saved": "Zapisano {key}",
+        "saveFailed": "Nie udało się zapisać poświadczenia",
+        "removeFailed": "Nie udało się usunąć poświadczenia"
+      }
+    },
     "apiTokens": {
       "title": "Tokeny dostępu do API",
       "intro": "Twórz tokeny, które systemy zewnętrzne przedstawiają API cat-factory. Każdy token uwierzytelnia się jako ten obszar roboczy w punktach końcowych /api/v1. Sekret jest wyświetlany tylko raz, podczas tworzenia, i nie można go odzyskać, więc zapisz go od razu.",

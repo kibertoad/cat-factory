@@ -2709,6 +2709,40 @@
         "removeFailed": "No se pudo eliminar la entrada del registro"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Credenciales de capacidades",
+      "intro": "Los secretos que los servidores de herramientas y las integraciones generativas de esta instalación piden por nombre. Los valores se guardan solo para este tablero, cifrados en reposo, y se entregan directamente al proceso del agente: nunca llegan a un prompt ni a un registro. Los valores son de solo escritura, así que uno guardado se sustituye escribiendo otro y nunca se vuelve a leer.",
+      "credentialNoun": "credencial {key}",
+      "required": "Obligatoria",
+      "optional": "Opcional",
+      "stored": "Guardada",
+      "storedAt": "Definida por última vez el {date}",
+      "notStoredWithFallback": "No hay nada guardado para este tablero. Esta instalación también lee la clave de su propio entorno, así que la capacidad puede seguir funcionando.",
+      "notStored": "No hay nada guardado para este tablero y esta instalación no tiene respaldo en el entorno, así que la capacidad no puede autenticarse.",
+      "setValue": "Valor",
+      "replaceValue": "Sustituir el valor guardado",
+      "save": "Guardar",
+      "remove": "Quitar credencial",
+      "noneDeclared": "Ninguna de las capacidades registradas de esta instalación pide credenciales.",
+      "subject": {
+        "toolServer": "Servidor de herramientas",
+        "binaryGenerator": "Integración generativa"
+      },
+      "incomplete": {
+        "title": "Puede que esta lista esté incompleta",
+        "body": "No se pudieron leer las integraciones generativas, así que abajo puede faltar alguna credencial que una de ellas pida. Las claves guardadas que nadie pide quedan ocultas hasta que la lista se pueda leer de nuevo."
+      },
+      "orphaned": {
+        "heading": "Guardadas pero no solicitadas",
+        "body": "Nada de lo que esta instalación tiene registrado pide estas claves, que es lo que deja una integración retirada o una variable renombrada. Seguirán cifradas hasta que las quites."
+      },
+      "toast": {
+        "loadFailed": "No se pudieron cargar las credenciales de capacidades",
+        "saved": "{key} guardada",
+        "saveFailed": "No se pudo guardar la credencial",
+        "removeFailed": "No se pudo quitar la credencial"
+      }
+    },
     "apiTokens": {
       "title": "Tokens de acceso a la API",
       "intro": "Crea tokens que los sistemas externos presentan a la API de cat-factory. Cada token se autentica como este espacio de trabajo en los endpoints /api/v1. El secreto se muestra una sola vez, al crearlo, y no se puede recuperar, así que guárdalo de inmediato.",
