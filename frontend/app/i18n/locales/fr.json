@@ -189,6 +189,7 @@
       "title": "Ajouter une tâche",
       "newTaskIn": "Nouvelle tâche dans {container}",
       "typeLabel": "Type",
+      "typeOther": "Autres",
       "types": {
         "feature": "Fonctionnalité",
         "bug": "Bug",
@@ -2632,7 +2633,7 @@
         },
         "questionsOnPark": {
           "label": "Publier les questions ouvertes d'une exécution headless en pause",
-          "help": "Quand une exécution lancée via l'API se met en pause pour clarifier les exigences, publie ses questions ouvertes — chacune avec l'identifiant qu'une réponse doit nommer — sur le ticket lié. Les tâches lancées dans l'application ne sont pas concernées."
+          "help": "Quand une exécution lancée hors de l'application se met en pause pour clarifier les exigences (via l'API ou depuis un ticket du traqueur), publie ses questions ouvertes sur le ticket lié, chacune avec l'identifiant qu'une réponse doit nommer. Les tâches lancées dans l'application ne sont pas concernées."
         }
       },
       "probeFailure": {
@@ -3541,7 +3542,28 @@
         "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
       },
       "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
-      "invalidNumbers": "Ces plafonds ne sont pas des nombres"
+      "invalidNumbers": "Ces plafonds ne sont pas des nombres",
+      "failureKinds": {
+        "label": "Règles par type d'échec",
+        "description": "Alerter quand un type d'échec atteint la part d'échecs que vous lui accordez. Le plafond de cause dominante ci-dessus demande si un type submerge les autres ; ces règles demandent si un type nommé a atteint ce que ce déploiement tolère de lui.",
+        "overrideLabel": "Définir les règles par type propres à ce compte",
+        "overrideHint": "Désactivé, le compte utilise les règles configurées par le déploiement. Activé, la liste ci-dessous les remplace entièrement, et une liste vide signifie aucune règle par type.",
+        "empty": "Aucune règle. Ce compte ne déclenchera pas l'alerte par type d'échec.",
+        "kindLabel": "Type d'échec",
+        "shareLabel": "Part des échecs (%)",
+        "shareHint": "La règle se déclenche à partir de cette part.",
+        "minCountLabel": "Échecs minimum",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Combien d'échecs de ce type la fenêtre doit compter avant que la règle puisse se déclencher. Sans cela, une part faible se déclenche pour un rien : cinq exécutions avec une éviction, c'est déjà 20 %.",
+        "addRule": "Ajouter une règle",
+        "allKindsCovered": "Chaque type d'échec a déjà une règle.",
+        "removeRule": "Supprimer la règle",
+        "duplicateKind": "Chaque type d'échec ne peut porter qu'une seule règle.",
+        "tooManyRules": "Au plus {max} règles par type. Supprimez-en avant d’enregistrer.",
+        "unknownKind": "{kind} (non reconnu)",
+        "invalidTitle": "Ces règles par type ne peuvent pas être enregistrées",
+        "invalidRows": "Vérifiez les règles {rows} : la part doit être supérieure à 0 et au plus 100, un minimum doit être un entier supérieur ou égal à 1, et chaque type ne peut apparaître qu'une fois."
+      }
     }
   },
   "providers": {

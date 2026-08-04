@@ -494,6 +494,7 @@ export interface NotificationPayload {
   mergedRepos?: string[]
   onCallAssessment?: NotificationPayloadOnCallAssessment
   pipelineName?: string
+  platformAlertFailureKinds?: string[]
   platformAlertTransition?: number
   platformAlerts?: NotificationPayloadPlatformAlert[]
   platformFailedTotal?: number
@@ -555,10 +556,10 @@ export type NotificationPayloadOnCallAssessmentRecommendation = 'revert' | 'hold
 /** Every `NotificationPayloadOnCallAssessmentRecommendation` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_PAYLOAD_ON_CALL_ASSESSMENT_RECOMMENDATION_VALUES = ['revert', 'hold', 'monitor'] as const
 
-export type NotificationPayloadPlatformAlert = 'failure_rate_high' | 'duration_p99_high' | 'backlog_high' | 'throughput_stalled' | 'failure_kind_dominant' | 'sweep_degraded'
+export type NotificationPayloadPlatformAlert = 'failure_rate_high' | 'duration_p99_high' | 'backlog_high' | 'throughput_stalled' | 'failure_kind_dominant' | 'failure_kind_rate_high' | 'sweep_degraded'
 
 /** Every `NotificationPayloadPlatformAlert` value, for exhaustive handling and runtime validation. */
-export const NOTIFICATION_PAYLOAD_PLATFORM_ALERT_VALUES = ['failure_rate_high', 'duration_p99_high', 'backlog_high', 'throughput_stalled', 'failure_kind_dominant', 'sweep_degraded'] as const
+export const NOTIFICATION_PAYLOAD_PLATFORM_ALERT_VALUES = ['failure_rate_high', 'duration_p99_high', 'backlog_high', 'throughput_stalled', 'failure_kind_dominant', 'failure_kind_rate_high', 'sweep_degraded'] as const
 
 export interface NotificationPayloadPlatformFailingRun {
   /** Always present; `null` when the server has no value for it. */

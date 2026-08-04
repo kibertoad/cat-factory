@@ -106,21 +106,37 @@ interface InspectedBlock {
  * `CustomTaskType`, so the example needs no deep import — the reachable public type is slice G).
  * `taskType` is a namespaced id; `fields` are the descriptor-driven create-form inputs whose
  * values land in the task's sparse `taskTypeFields.custom` bag.
+ *
+ * Kept in step with the contract deliberately: a deployment reads THIS to learn what it may
+ * declare, so a copy missing an axis reads as an axis that does not exist. `presentation.category`
+ * groups the create-task picker, `defaultFragmentIds` seeds standing context, and `fields` spans
+ * the whole shared descriptor vocabulary except `password` (a task field value reaches prompts and
+ * telemetry, so it is the wrong home for a secret).
  */
 interface CustomTaskTypeContribution {
   taskType: string
-  presentation: { label: string; icon: string; color: string; description: string }
+  presentation: {
+    label: string
+    icon: string
+    color: string
+    description: string
+    category?: string
+  }
   fields?: {
     key: string
     label: string
-    type: 'text' | 'textarea' | 'number' | 'select'
+    type: 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'checkbox-group' | 'path'
     help?: string
     placeholder?: string
     options?: { value: string; label: string }[]
     required?: boolean
+    default?: string
+    defaultValues?: string[]
+    showWhen?: { key: string; equals?: string | boolean | number; includes?: string }
     maxLength?: number
   }[]
   defaultPipelineId?: string
+  defaultFragmentIds?: string[]
   formPanel?: string
 }
 
@@ -264,6 +280,11 @@ export const acmeSecurityModule = defineModule({
           icon: 'i-lucide-siren',
           color: '#ef4444',
           description: 'A production incident to triage and resolve.',
+          // The picker's grouping axis: the type gets its own captioned row instead of trailing the
+          // built-in `feature` / `bug` choices, which is what keeps a growing catalog of the
+          // deployment's own types findable. One category is enough to demonstrate the axis; an org
+          // shipping a dozen types declares several.
+          category: 'Incident response',
         },
         fields: [
           {

@@ -406,7 +406,7 @@
         },
         "questionsOnPark": {
           "label": "Offene Fragen bei einem pausierten Headless-Lauf posten",
-          "help": "Wenn ein über die API gestarteter Lauf zur Klärung der Anforderungen pausiert, poste seine offenen Fragen — jeweils mit der ID, die eine Antwort nennt — am verknüpften Issue. In der App gestartete Aufgaben sind nicht betroffen."
+          "help": "Wenn ein außerhalb der App gestarteter Lauf zur Klärung der Anforderungen pausiert (über die API oder aus einem Tracker-Ticket gestartet), poste seine offenen Fragen am verknüpften Issue, jeweils mit der ID, die eine Antwort nennt. In der App gestartete Aufgaben sind nicht betroffen."
         }
       },
       "probeFailure": {
@@ -1174,7 +1174,28 @@
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
       "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
-      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen"
+      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
+      "failureKinds": {
+        "label": "Regeln pro Fehlerart",
+        "description": "Alarm auslösen, wenn eine Fehlerart den Anteil an Fehlschlägen erreicht, den Sie ihr zugestehen. Die Obergrenze für die dominante Ursache oben fragt, ob eine Art alle anderen überlagert; diese Regeln fragen, ob eine benannte Art das erreicht, was diese Installation von ihr toleriert.",
+        "overrideLabel": "Eigene Regeln pro Fehlerart für dieses Konto festlegen",
+        "overrideHint": "Aus: Das Konto verwendet die Regeln der Installation. Ein: Die Liste unten ersetzt sie vollständig, und eine leere Liste bedeutet gar keine Regeln pro Fehlerart.",
+        "empty": "Keine Regeln. Dieses Konto löst den Alarm pro Fehlerart nicht aus.",
+        "kindLabel": "Fehlerart",
+        "shareLabel": "Anteil an Fehlschlägen (%)",
+        "shareHint": "Die Regel löst ab diesem Anteil aus.",
+        "minCountLabel": "Mindestanzahl Fehlschläge",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Wie viele Fehlschläge dieser Art im Zeitfenster nötig sind, bevor die Regel auslösen kann. Ohne diesen Wert ist ein niedriger Anteil überempfindlich: Fünf Läufe mit einer Verdrängung sind bereits 20 %.",
+        "addRule": "Regel hinzufügen",
+        "allKindsCovered": "Jede Fehlerart hat bereits eine Regel.",
+        "removeRule": "Regel entfernen",
+        "duplicateKind": "Jede Fehlerart darf höchstens eine Regel haben.",
+        "tooManyRules": "Höchstens {max} Regeln pro Fehlerart. Entfernen Sie einige vor dem Speichern.",
+        "unknownKind": "{kind} (unbekannt)",
+        "invalidTitle": "Diese Regeln pro Fehlerart können nicht gespeichert werden",
+        "invalidRows": "Prüfen Sie die Regeln {rows}: Der Anteil muss über 0 und höchstens 100 liegen, eine Mindestanzahl muss eine ganze Zahl ab 1 sein, und jede Art darf nur einmal vorkommen."
+      }
     }
   },
   "inspector": {
@@ -2579,6 +2600,7 @@
       "title": "Eine Aufgabe hinzufügen",
       "newTaskIn": "Neue Aufgabe in {container}",
       "typeLabel": "Typ",
+      "typeOther": "Sonstige",
       "types": {
         "feature": "Feature",
         "bug": "Bug",

@@ -86,6 +86,7 @@ export class WebhookPlatformAlertSink implements PlatformAlertSink {
           reason: condition.reason,
           value: condition.value,
           threshold: condition.threshold,
+          ...(condition.kind === undefined ? {} : { kind: condition.kind }),
         })),
         occurredAt: event.occurredAt,
         failingRuns: event.failingRuns.map((run) => ({
@@ -121,13 +122,20 @@ export class WebhookPlatformAlertSink implements PlatformAlertSink {
  * read, so it is identical for a genuine duplicate and distinct for a genuine transition.
  *
  * The REASON SET is then redundant for uniqueness and kept anyway: it is what makes the key
- * legible in a receiver's own logs. The resolved edge carries none and drops that segment.
+ * legible in a receiver's own logs. A kind-scoped condition is written `reason=kind` there, since
+ * three per-kind rules firing would otherwise repeat one code three times and name none of the
+ * kinds — which is the whole content of that segment. The resolved edge carries no conditions and
+ * drops the segment entirely.
  *
  * What the key must NOT separate is the retries of one delivery, and it cannot: those re-POST an
  * already-composed body, so every part here is fixed for the whole retry budget.
  */
 function deliveryIdFor(event: PlatformAlertEvent): string {
   const base = `${event.cardId}:${event.event}:${event.transition}`
-  const reasons = event.conditions.map((condition) => condition.reason).join(',')
+  const reasons = event.conditions
+    .map((condition) =>
+      condition.kind ? `${condition.reason}=${condition.kind}` : condition.reason,
+    )
+    .join(',')
   return reasons ? `${base}:${reasons}` : base
 }

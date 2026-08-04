@@ -279,6 +279,12 @@
                   "pipelineName": {
                     "type": "string"
                   },
+                  "platformAlertFailureKinds": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
                   "platformAlertTransition": {
                     "type": "number"
                   },
@@ -290,6 +296,7 @@
                         "backlog_high",
                         "throughput_stalled",
                         "failure_kind_dominant",
+                        "failure_kind_rate_high",
                         "sweep_degraded"
                       ],
                       "type": "string"
