@@ -1,7 +1,7 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
 **Status:** investigation complete; A0 landed, the start-path scope question settled by
-[ADR 0032](../../backend/docs/adr/0032-public-api-stability.md), A1–C2 not started · **Owner:**
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–C2 not started · **Owner:**
 core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -59,7 +59,7 @@ the SPA can get it out of.
 
 **What gates the first slice:** nothing technical: A1 is ready to pick up. The former [open
 question](#open-question-for-the-maintainer-settled) about the `POST /tasks/:taskId/start` scope
-rule is settled (tightened, with [ADR 0032](../../backend/docs/adr/0032-public-api-stability.md)).
+rule is settled (tightened, with [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)).
 When the committed scope completes, this tracker converts to a numbered ADR under
 `backend/docs/adr/` (per CLAUDE.md); if it is instead abandoned, say so here rather than deleting
 it, so the investigation is not redone.
@@ -91,7 +91,7 @@ whose only exit is cancel. That is the platform's degrade-loudly rule inverted: 
 surface reporting itself honestly, but one describing a capability it does not have.
 
 **2. `POST /api/v1/tasks/:taskId/start` gates parking pipelines on `decide` (RESOLVED with
-[ADR 0032](../../backend/docs/adr/0032-public-api-stability.md)).** It used to apply no pipeline
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)).** It used to apply no pipeline
 admission at all, so a plain `write` key (one deliberately NOT granted `decide`) could start any
 board pipeline, including one carrying an approval gate on an enabled step, and park it. It now
 applies the same `canParkOnHuman` scope rule as the jobs surface (the inline-only rule stays
@@ -302,7 +302,7 @@ Recorded so these are not re-proposed:
 
 ## Open question for the maintainer: SETTLED
 
-Settled by [ADR 0032](../../backend/docs/adr/0032-public-api-stability.md), against this tracker's
+Settled by [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), against this tracker's
 "land A1..A4 first" recommendation and for a reason the recommendation could not see when written:
 the API-stability commitment closed the tightening window. Under that commitment, taking capability
 away from a live `write` key later would itself be a breaking change needing a migration path, so

@@ -1,4 +1,4 @@
-# ADR 0032: The public API is stable; the final pre-stability polish
+# ADR 0034: The public API is stable; the final pre-stability polish
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-03

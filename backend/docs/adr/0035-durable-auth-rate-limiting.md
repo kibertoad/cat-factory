@@ -1,4 +1,4 @@
-# ADR 0032: Durable cross-replica auth rate limiting
+# ADR 0035: Durable cross-replica auth rate limiting
 
 - **Status**: accepted
 - **Date**: 2026-08-04

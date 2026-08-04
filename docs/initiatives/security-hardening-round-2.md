@@ -131,7 +131,7 @@ also records two items the round-2 review listed as todo that had already shippe
   or a store outage is COUNTED (`auth.throttle.limited` / `.store_unavailable`) as well as
   logged. Rows become prunable an hour past the window: Node sweeps hourly, the Worker on its
   daily retention cron. Parity via `defineAuthAttemptSuite`. This delivers the whole
-  durable-auth-rate-limiting initiative, now [ADR 0032](../../backend/docs/adr/0032-durable-auth-rate-limiting.md)
+  durable-auth-rate-limiting initiative, now [ADR 0035](../../backend/docs/adr/0035-durable-auth-rate-limiting.md)
   (its slice 5, config knobs for the limits, was deliberately not taken: the constants hold
   until someone needs different ones).
 - **SEC-5**: machine tokens are revocable via the `machine_nodes` roster (D1 ⇄ Drizzle, kernel

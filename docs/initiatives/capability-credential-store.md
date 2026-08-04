@@ -93,6 +93,59 @@ the declaration it satisfies is refused at boot, so accepting it lets an operato
 credential that can never be asked for) and the toolchain names (`PATH`, `npm_config_*`, `GIT_*`),
 which reconfigure the run instead of authenticating a call.
 
+### A credential has TWO names and only one of them is a boundary
+
+The LOOKUP key is what a resolver is asked for, so it can reach the deployment's environment,
+while `envName` is what the value is INJECTED as in the agent's or the MCP server's process and
+reads nothing. Every floor rule binds the lookup key. (An `http` tool server always had the
+split, `key` vs `header`; `envName` is that split for the stdio and generator cases.) Two rules
+bind the lookup key, a FLOOR plus a BOUND rather than one setting:
+
+- **The floor: a credential may NEVER be looked up by a variable the platform reads**
+  (`isReservedPlatformEnvKey`, case-insensitively, since `process.env` lookup is case-insensitive
+  on Windows). A definition names both the key it wants and the endpoint it reaches, so
+  `{ key: 'ENCRYPTION_KEY' }` was a registration that booted clean and shipped the deployment's
+  master sealing key to a third party. Refused at DECLARATION (the generative-integration schema;
+  boot validation for a tool server) and again at DISPATCH, because a mothership-mode node
+  boot-validates nothing it resolves, and refused at the CALL SITE rather than inside the env
+  resolver, so it binds a deployment's own resolver too. It needs no configuration and cannot be
+  widened; a new platform variable is covered by its prefix family, with
+  `check-reserved-env-keys.mjs` as the drift guard.
+- **Holding `envName` to that floor too would break the commonest integrations there are**, and
+  that is the whole reason the names are separate: the families cover
+  `GITHUB_PERSONAL_ACCESS_TOKEN` / `SLACK_BOT_TOKEN` / `AWS_ACCESS_KEY_ID`, which the platform
+  does not read and a vendor's own SDK does, and no deployment can rename what an SDK looks for.
+  So `envName` carries the narrower `isToolchainEnvName` rule instead (not `PATH` /
+  `NODE_OPTIONS` / `npm_config_*`, which reconfigure a process rather than authenticate a call).
+- **The bound: everything outside the platform's own configuration** is a developer's own
+  tooling, and only the deployment knows what an integration may see: `{ allowKeys }`, which a
+  deployment installing third-party agent packages (or a mothership-mode node) sets through its
+  facade's `createToolSecretResolver` factory. **On the Worker that policy registers
+  PROCESS-WIDE** (`registerToolSecretPolicy`, the `registerModelRegistry` pattern), because a
+  Worker builds a container per entry point and the one that dispatches container agents is the
+  durable driver, so an option held on the app would be accepted and never asked anything.
+
+### The chain is composed ONCE, described by what was composed, and REQUIRED
+
+Every facade composes the workspace store in FRONT of the env resolver PER KEY (a
+partially-filled workspace must not lose the keys it has not typed yet), so a tenant brings its
+own vendor account and a workspace storing nothing resolves exactly as before.
+`environmentFallback` is a TRI-STATE read off the chain the facade COMPOSED, never a default the
+surface asserts beside it: `buildToolSecretChain` is the one composition site and it returns the
+resolver and its description together, so a deployment that declared its chain store-only
+(`capabilityCredentialEnvironmentFallback: false`, the multi-tenant shape) reports `false` and
+one that supplied its own resolver reports ABSENT, because that resolver replaced the chain and
+may read Vault, the environment, or both. Guessing either way is the same mistake mirrored:
+`true` leaves a credential nothing will resolve, `false` sends an operator hunting for a value
+that already answers. **The absent line states only that the chain is undescribable HERE and
+never WHY**, because a facade that wired the store and dropped the flag lands on the same value,
+and copy blaming a custom resolver makes that wiring bug read as a deliberate configuration.
+
+**The chain itself is a REQUIRED dependency of both executor builders**, since the one default
+they could carry (the deployment environment alone) silently drops the per-workspace store, which
+is the leak the store exists to prevent: a default is only safe where the safe answer is the
+convenient one.
+
 ## Slices
 
 - [x] **1. Backend end to end.** Contracts + kernel port + `CapabilityCredentialsService` +
