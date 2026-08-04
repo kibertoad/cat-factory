@@ -45,6 +45,8 @@ import {
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   parkingRefusalMessage,
+  PUBLIC_JOB_CANCEL_PATH,
+  PUBLIC_TASK_STOP_PATH,
 } from './publicApiAdmission.js'
 import { createParkAnnouncer, isParked } from './publicApiStream.js'
 import {
@@ -344,9 +346,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     const container = c.get('container')
     const { pipelineId, input, title } = c.req.valid('json')
 
-    const pipeline = (await container.pipelineService.list(auth.workspaceId)).find(
-      (p) => p.id === pipelineId,
-    )
+    const pipeline = await container.pipelineService.get(auth.workspaceId, pipelineId)
     if (!pipeline || !pipeline.public) {
       return c.json(
         { error: { code: 'pipeline_not_public', message: 'Unknown or non-public pipeline' } },
@@ -371,7 +371,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         {
           error: {
             code: 'pipeline_requires_decide_scope',
-            message: parkingRefusalMessage(pipeline),
+            message: parkingRefusalMessage(pipeline, { cancelPath: PUBLIC_JOB_CANCEL_PATH }),
           },
         },
         403,
@@ -780,23 +780,27 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
       )
     }
     // The SAME parking rule as `POST /jobs`: a pipeline that can park the run on a human
-    // decision (an approval gate on an enabled step, a review/brainstorm kind) needs a caller
-    // able to answer it, which is what the `decide` scope asserts. This start path used to
-    // apply no pipeline admission at all, so a plain `write` key (one deliberately NOT
-    // granted `decide`) could create exactly the parked run the scope ladder says it must
-    // not oversee. Board runs stay visible in the SPA, so a human can still answer them
-    // there; the rule is about what the KEY may set in motion, not about recoverability. An
-    // unknown pipeline id skips the check and fails inside `start` as before.
-    const boardPipeline = (await container.pipelineService.list(auth.workspaceId)).find(
-      (p) => p.id === pipelineId,
-    )
+    // decision (an approval gate on an enabled step, a review/brainstorm kind, or an
+    // unbounded human-wait gate like `human-review`) needs a caller able to answer it, which
+    // is what the `decide` scope asserts. This start path used to apply no pipeline admission
+    // at all, so a plain `write` key (one deliberately NOT granted `decide`) could create
+    // exactly the parked run the scope ladder says it must not oversee. Board runs stay
+    // visible in the SPA, so a human can still answer them there; the rule is about what the
+    // KEY may set in motion, not about recoverability. An unknown pipeline id skips the check
+    // and fails inside `start` as before.
+    //
+    // Read by id through the SAME `pipelineRepository.get` that `ExecutionService.start`
+    // resolves the run's pipeline with, so what is ADMITTED and what is RUN cannot be two
+    // different rows. It also keeps a per-start read off the whole catalog, which the
+    // list-then-filter form paid for on every board start.
+    const boardPipeline = await container.pipelineService.get(auth.workspaceId, pipelineId)
     if (boardPipeline && canParkOnHuman(boardPipeline) && !scopeSatisfies(auth.scope, 'decide')) {
       return c.json(
         {
           error: {
             code: 'pipeline_requires_decide_scope',
             message: parkingRefusalMessage(boardPipeline, {
-              cancelPath: 'POST /api/v1/tasks/:taskId/stop',
+              cancelPath: PUBLIC_TASK_STOP_PATH,
             }),
           },
         },

@@ -33,12 +33,22 @@ surface discovered later belongs in this table rather than in a revised number:
 | PR deep-review selection  | `step.prReview`      | ❌ none) slice **A5**                      |
 | human-test window         | `step.humanTest`     | ❌ none (slice **A6**                      |
 | visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
+| `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)              |
 
 Which start path can reach which differs, and that difference matters when ranking:
 `POST /api/v1/jobs` is inline-only, so it reaches the review, brainstorm, approval-gate,
 judge and agent-decision rows; `POST /api/v1/tasks/:taskId/start` admits container pipelines
 (behind the same parking scope rule; see §2 below, since resolved), so it reaches **every** row,
 container-backed ones included, for a `decide`-scope key.
+
+**`human-review` was missing from this table until ADR 0032**, which is how it also came to be
+missing from `canParkOnHuman`. It is a polling GATE rather than a step-state park, so it lives on
+`step.gate` alongside the CI and conflicts gates and does not look like the other rows; what makes
+it a park is its `pollExhaustion: 'rearm'`, which says there is no deadline because a person is the
+gate. It is deliberately UNRANKED here: unlike the other ❌ rows there is nothing to build, because
+the answer is a human approving the PR on GitHub, not an API call this surface could offer. Its
+`fixer` dispatch is already reachable in the app. So the admission rule refuses it and the refusal
+says so, which is the whole of the fix.
 
 This tracker records what is missing, ranks it, and records what was considered and rejected so the
 next iteration does not re-propose it.
@@ -87,9 +97,16 @@ board pipeline, including one carrying an approval gate on an enabled step, and 
 applies the same `canParkOnHuman` scope rule as the jobs surface (the inline-only rule stays
 jobs-only on purpose: it exists to keep headless jobs off GitHub, not to constrain board work).
 The refusal names this surface's exit route, `POST /api/v1/tasks/:taskId/stop`. What the rule can
-see is the STATIC parks (gates plus the four inline kinds); a park raised dynamically mid-run (an
-agent-raised decision, a judge `park`) is not knowable at start time, which is one more reason the
-answer paths below still matter.
+see is the STATIC parks: approval gates, the four inline kinds, and the unbounded human-wait gates
+(`human-review`). A park raised dynamically mid-run (an agent-raised decision, a judge `park`) is
+not knowable at start time, which is one more reason the answer paths below still matter.
+
+The human-wait gates were the late addition, and the lesson generalises past this tracker: the rule
+had been written against the two park mechanisms anyone would think of (a flag on a step, a kind
+that blocks) and missed the third (a gate that never stops polling), which is exactly the one
+carried by `pl_full`, the preset most board tasks run. Whenever a mechanism is enumerated by hand,
+ask what the enumeration is derived FROM; `HUMAN_WAIT_GATE_KINDS` now has a drift guard deriving
+its expectation from the gate registry, and that is why a future built-in cannot repeat this.
 
 **The notification inbox is not the escape hatch.** `notificationActEffect` handles `merge_review`,
 `pipeline_complete`, `merge_tag_request`, `ci_failed`, `test_failed` and `key_drift`. None of them

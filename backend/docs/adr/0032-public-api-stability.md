@@ -43,9 +43,18 @@ same PR, replaces the compatibility posture:
   is `Jobs`, and the wire schemas renamed accordingly (`CreatePublicJob`, `PublicJobAccepted`).
 - `publicTask.executionId` is now `publicTask.runId`.
 - `POST /api/v1/tasks/:taskId/start` applies the same parking rule as `POST /api/v1/jobs`: a
-  pipeline that can park on a human (an approval gate on an enabled step, a review or brainstorm
-  kind) requires a `decide`-scope key, refused as `403 pipeline_requires_decide_scope`. The refusal
-  message names this surface's exit route (`POST /api/v1/tasks/:taskId/stop`), not the jobs cancel.
+  pipeline that can park on a human requires a `decide`-scope key, refused as
+  `403 pipeline_requires_decide_scope`. The refusal message names this surface's exit route
+  (`POST /api/v1/tasks/:taskId/stop`), not the jobs cancel.
+- **`canParkOnHuman` enumerates THREE park mechanisms**, widened here from two. An approval gate
+  flag on an enabled step, an inline review or brainstorm kind, and a polling gate whose poll
+  never times out because it is waiting on a person (`pollExhaustion: 'rearm'`, today only
+  `human-review`). The third was missed on the first pass of this change and is the reason the
+  widening had to happen here rather than later: `pl_full`, the shipped Adaptive build preset,
+  carries a risk-gated `human-review`, so the flagship board pipeline was startable by a plain
+  `write` key and could then park indefinitely on the one surface `/api/v1/runs/:runId/decisions`
+  cannot answer at all. Under the commitment adopted below, adding it afterwards would itself have
+  been a capability-narrowing break needing a migration path.
 
 **From this change on, the public API is stable.** The commitment, stated in CLAUDE.md and binding
 on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
@@ -86,12 +95,29 @@ on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
   sentence appears): `POST /initiatives` is gone, `publicTask.executionId` is gone, and a `write`
   key can no longer start a parking board pipeline. The SDKs shipped the rename as a version bump
   (`initiatives` group to `jobs`; `task.executionId` to `task.runId` in each language's casing).
-- **`canParkOnHuman` is a static enumeration and stays one.** It sees approval gates and the four
-  inline parking kinds; a park raised dynamically mid-run (an agent-raised decision, a judge
-  `park` disposition) is not statically knowable at start time and is deliberately out of the
-  admission rule. Widening the enumeration later only refuses more, which is the direction the
-  commitment permits at a scope boundary only with a migration path; prefer closing the
-  answerability gap (`docs/initiatives/public-api-additions.md` A1..A6) instead.
+- **`canParkOnHuman` is a static enumeration and stays one.** It sees approval gates, the four
+  inline parking kinds, and the unbounded human-wait gates; a park raised dynamically mid-run (an
+  agent-raised decision, a judge `park` disposition) is not statically knowable at start time and
+  is deliberately out of the admission rule. Widening the enumeration later only refuses more,
+  which is the direction the commitment permits at a scope boundary only with a migration path;
+  prefer closing the answerability gap (`docs/initiatives/public-api-additions.md` A1..A6) instead.
+  That is precisely why the `human-review` gate had to be swept in NOW rather than tracked: every
+  member the enumeration is missing on the day the door closes is a member that gets expensive to
+  add.
+- **Which gate kinds park is a shared constant with a drift guard, not a second opinion.**
+  `HUMAN_WAIT_GATE_KINDS` lives in `@cat-factory/contracts` because the two packages that must
+  agree cannot see each other: `@cat-factory/gates` owns the truth as each gate's `pollExhaustion`
+  declaration, and `@cat-factory/server`'s admission rule needs the same answer at HTTP request
+  time. Reading it live was rejected: a registered gate's declaration is only reachable by invoking
+  its factory with an engine context, and building a fake one inside a request handler to
+  interrogate a static fact is a shortcut, not a design. `human-wait-parity.test.ts` derives its
+  expectation from the gate REGISTRY, so a new built-in gate that waits on a human fails the build
+  until it is classified.
+- **A DEPLOYMENT's own unbounded-wait gate is not seen by the rule**, for the same reason, and this
+  is stated rather than silently assumed. Such a run is admitted for a `write` key and its park is
+  answered in the app. The residual gap is bounded (a deployment that registers a human-wait gate
+  also controls the keys it mints) and closing it means moving the declaration out of
+  `GateDefinition` and onto registration, which is a gate-registry change, not an API one.
 - **The decision-surface additions (A1..A6, B1..B2, C1..C2) are unaffected**: all are additive.
   Their tracker stays live; its open question about the start path is settled by this ADR.
 - **`docs/openapi.json` `info.version` policy**: minor for additions, and a major only ever

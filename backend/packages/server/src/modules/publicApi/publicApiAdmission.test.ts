@@ -1,12 +1,16 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { seedPipelines } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   canParkOnHuman,
+  HUMAN_WAIT_GATE_KINDS,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   PARKING_INLINE_KINDS,
   parkingRefusalMessage,
   parkSurfacesOf,
+  PUBLIC_JOB_CANCEL_PATH,
+  PUBLIC_TASK_STOP_PATH,
   PUBLICLY_ANSWERABLE_PARK_SURFACES,
 } from './publicApiAdmission.js'
 
@@ -17,6 +21,11 @@ import {
 //    work or a GitHub write through the jobs surface;
 //  - parking is a SCOPE question — a pipeline that can park needs a caller able to answer, which
 //    is exactly what a `decide` key asserts.
+//
+// The parking half enumerates THREE mechanisms (approval-gate flag, inline review/brainstorm kind,
+// unbounded human-wait gate). The third was missed on the first pass and is asserted against the
+// real seed catalog below, because a synthetic step chain cannot show that the gap was reachable
+// through a pipeline the product actually ships.
 //
 // These live here rather than in the cross-runtime conformance suite because the built-in public
 // pipeline is read-only: there is no way to construct a public-and-parking pipeline over HTTP, so
@@ -116,6 +125,46 @@ describe('public-API admission', () => {
     it('is false for an ordinary non-parking chain', () => {
       expect(canParkOnHuman({ agentKinds: ['initiative-breakdown'] })).toBe(false)
     })
+
+    it('sees a human-wait GATE kind, which carries no approval-gate flag of its own', () => {
+      // The third park mechanism, and the one that shipped unseen. `human-review` is a polling gate
+      // whose poll never times out (`pollExhaustion: 'rearm'`) because it is waiting on a person on
+      // the PR, so it parks the run just as surely as a review kind. It rides the step chain as an
+      // ordinary kind with `gates[i]` false, so neither of the other two checks could find it.
+      expect(canParkOnHuman({ agentKinds: ['coder', 'human-review', 'merger'] })).toBe(true)
+    })
+
+    it('ignores a human-wait gate on a disabled step', () => {
+      expect(
+        canParkOnHuman({ agentKinds: ['coder', 'human-review'], enabled: [true, false] }),
+      ).toBe(false)
+    })
+
+    it('treats the shipped Adaptive build preset as parking', () => {
+      // The regression this closes, stated against the real catalog rather than a synthetic chain:
+      // `pl_full` is the flagship board preset and carries a risk-gated `human-review`. While that
+      // kind was invisible to the rule, a plain `write` key could start it and have the run park
+      // indefinitely on the ONE surface `/api/v1/runs/:runId/decisions` cannot answer at all.
+      //
+      // Read from the seed catalog, so re-shaping the preset re-runs the question instead of
+      // leaving a hand-copied step list asserting something the product no longer does.
+      const full = seedPipelines().find((p) => p.id === 'pl_full')
+      expect(full, 'pl_full must exist in the built-in catalog').toBeTruthy()
+      expect(full!.agentKinds).toContain('human-review')
+      expect(canParkOnHuman(full!)).toBe(true)
+      expect(parkSurfacesOf(full!)).toContain('human-review')
+    })
+
+    it('leaves the unconditional build presets startable by a plain write key', () => {
+      // The other side of the same change: widening the enumeration must not sweep up the presets
+      // whose whole selling point is that they never pause. If this flips, every `write`-key
+      // integration driving ordinary board work breaks at once.
+      for (const id of ['pl_build', 'pl_simple']) {
+        const pipeline = seedPipelines().find((p) => p.id === id)
+        expect(pipeline, `${id} must exist in the built-in catalog`).toBeTruthy()
+        expect(canParkOnHuman(pipeline!), id).toBe(false)
+      }
+    })
   })
 
   describe('parkSurfacesOf', () => {
@@ -147,7 +196,10 @@ describe('public-API admission', () => {
       // operator a `decide` key answers them through /api/v1/runs/:runId/decisions. Three of them
       // are answerable only in the app, so the advice bought a wider-scoped key and a run whose
       // only exit is cancel.
-      const message = parkingRefusalMessage({ agentKinds: ['clarity-review'] })
+      const message = parkingRefusalMessage(
+        { agentKinds: ['clarity-review'] },
+        { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+      )
       expect(message).toContain('clarity-review')
       expect(message).not.toContain('/api/v1/runs/:runId/decisions')
       expect(message).toContain('POST /api/v1/jobs/:id/cancel')
@@ -156,20 +208,24 @@ describe('public-API admission', () => {
     it('names the exit route of the surface being refused, not always the jobs cancel', () => {
       // The board-task start applies the same rule, but its abandoned park is freed with `stop`,
       // not with the jobs cancel, so a refusal steering a task caller at `/jobs/:id/cancel` would
-      // name a route that 404s for the run it is about.
+      // name a route that 404s for the run it is about. `cancelPath` is required rather than
+      // defaulted precisely so a third start surface cannot inherit either of these by accident.
       const message = parkingRefusalMessage(
         { agentKinds: ['clarity-review'] },
-        { cancelPath: 'POST /api/v1/tasks/:taskId/stop' },
+        { cancelPath: PUBLIC_TASK_STOP_PATH },
       )
       expect(message).toContain('POST /api/v1/tasks/:taskId/stop')
       expect(message).not.toContain('/jobs/:id/cancel')
     })
 
     it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {
-      const message = parkingRefusalMessage({
-        agentKinds: ['requirements-review', 'initiative-breakdown'],
-        gates: [false, true],
-      })
+      const message = parkingRefusalMessage(
+        {
+          agentKinds: ['requirements-review', 'initiative-breakdown'],
+          gates: [false, true],
+        },
+        { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+      )
       expect(message).toContain(
         "Start it with a 'decide'-scope key, which can answer requirements-review through /api/v1/runs/:runId/decisions.",
       )
@@ -177,7 +233,10 @@ describe('public-API admission', () => {
     })
 
     it('mentions no cancel-only caveat when every park is answerable', () => {
-      const message = parkingRefusalMessage({ agentKinds: ['requirements-review'] })
+      const message = parkingRefusalMessage(
+        { agentKinds: ['requirements-review'] },
+        { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+      )
       expect(message).toContain('/api/v1/runs/:runId/decisions')
       expect(message).not.toContain('cancel')
     })
@@ -185,8 +244,13 @@ describe('public-API admission', () => {
     it('never claims an answer path for a surface outside the answerable set', () => {
       // The drift guard. Landing a slice of docs/initiatives/public-api-additions.md means adding
       // a member to PUBLICLY_ANSWERABLE_PARK_SURFACES; until then no message may advertise one.
-      for (const kind of PARKING_INLINE_KINDS) {
-        const message = parkingRefusalMessage({ agentKinds: [kind] })
+      // Covers the human-wait gates too, so a future slice that makes one answerable has to move it
+      // into the answerable set rather than leaving the message silently wrong.
+      for (const kind of [...PARKING_INLINE_KINDS, ...HUMAN_WAIT_GATE_KINDS]) {
+        const message = parkingRefusalMessage(
+          { agentKinds: [kind] },
+          { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+        )
         expect(message.includes('/api/v1/runs/:runId/decisions'), kind).toBe(
           PUBLICLY_ANSWERABLE_PARK_SURFACES.has(kind),
         )

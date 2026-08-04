@@ -254,28 +254,42 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope   | Behaviour                                                                                                                                        |
-| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/services`                   | `read`  | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
-| `POST /api/v1/services/:serviceId/tasks` | `write` | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`  | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
-| `GET /api/v1/tasks/:taskId`              | `read`  | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                        |
-| `PATCH /api/v1/tasks/:taskId`            | `write` | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
-| `POST /api/v1/tasks/:taskId/start`       | `write` | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
-| `POST /api/v1/tasks/:taskId/stop`        | `write` | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
-| `POST /api/v1/tasks/:taskId/retry`       | `write` | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                 |
-| `DELETE /api/v1/tasks/:taskId`           | `admin` | Delete the task **and its run history**. Destructive; `204`.                                                                                     |
+| Method / path                            | Scope    | Behaviour                                                                                                                                        |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                   |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType? }` (defaults to `feature`; `recurring` is not creatable here).             |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                        |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                         |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection. |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                    |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                 |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                     |
+
+¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
+the paragraph below for what counts as a park.
 
 Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `blocked` / `pr_ready` /
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
-Board-task `start` applies the **same parking rule** as `POST /jobs`: a pipeline that can park on
-a human (an approval gate on an enabled step, a review/brainstorm kind) needs a `decide`-scope
-key (`403 pipeline_requires_decide_scope`; the refusal names this surface's exit,
-`POST /tasks/:taskId/stop`). The inline-only rule stays jobs-only: a `decide` key may start
-container pipelines on board tasks. Parks raised dynamically mid-run (an agent-raised decision, a
-judge park) are not statically knowable, so they do not gate the start; see the
+Board-task `start` applies the **same parking rule** as `POST /jobs`, and a pipeline parks in any of
+three ways:
+
+- an **approval gate** on an enabled step;
+- an inline **review or brainstorm** kind (`requirements-review`, `clarity-review`, and the two
+  brainstorms), which sets the run `blocked` awaiting an answer;
+- an unbounded **human-wait gate** (`human-review`), a gate step whose poll never times out because
+  it is waiting for a person to review the PR.
+
+Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
+surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
+preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
+unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+
+The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
+Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
+knowable, so they do not gate the start; see the
 [additions tracker](../../docs/initiatives/public-api-additions.md) for which parks the decision
 surface can answer.
 
