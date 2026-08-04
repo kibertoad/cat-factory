@@ -20,6 +20,7 @@ import {
   composeEnvironments,
   renderEnvironments,
 } from './prReport.environments.js'
+import { findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -124,28 +125,6 @@ export interface PrReportInputs {
   environments: PrReportEnvironmentInputs
   /** Epoch ms stamped as the report's `generatedAt`. */
   now: number
-}
-
-/**
- * The step a section should report on: the LAST matching step that carries evidence, else the
- * first matching step (so a pipeline that has the step but hasn't reached it still gets the
- * "not run yet" note rather than nothing).
- *
- * Last-with-evidence, not first-match: a pipeline may legitimately carry the same kind twice —
- * a `ci` gate after the coder and another after the tester, say — and the later run is the one
- * that describes the PR head as it stands now. Reporting the first would pin the section to a
- * verdict two steps of work out of date.
- */
-function findStep(
-  instance: ExecutionInstance,
-  matches: (step: PipelineStep) => boolean,
-  hasEvidence: (step: PipelineStep) => boolean,
-): PipelineStep | undefined {
-  const matching = instance.steps.filter(matches)
-  for (let i = matching.length - 1; i >= 0; i--) {
-    if (hasEvidence(matching[i]!)) return matching[i]
-  }
-  return matching[0]
 }
 
 /** A step is "settled" once it finished — a pending step has no evidence to report yet. */

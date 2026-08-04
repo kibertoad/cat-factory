@@ -64,8 +64,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   teardown confirmed) because it is the one section composed from a source outside the
   in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
-  to the teardown service's torn-down hook, since the TTL sweep reclaims an environment long
-  after the run's last step settled. Every untrusted value it interpolates crosses kernel's
+  to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
+  the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
+  rule both halves share lives under both in `prReport.steps.ts`. Every untrusted value it
+  interpolates crosses kernel's
   shared `hostMarkdown` boundary (`shared/host-markdown.logic.ts`: auto-link triggers, table
   cells, code fences), which lives there rather than here because the tracker-issue writebacks
   in `@cat-factory/integrations` render through the SAME escapes; the composer scrubs free text

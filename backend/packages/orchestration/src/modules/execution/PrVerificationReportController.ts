@@ -11,20 +11,25 @@ import type {
   TaskRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS, describeError } from '@cat-factory/kernel'
 import { readServiceSpec } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
-import type { ProvisioningLifecycleEvent } from './prReport.environments.js'
+import type { ProvisioningLifecycleRead } from './prReport.environments.js'
 import { isTesterKind } from './ci.logic.js'
 
 /**
- * How many of the run's environment provisioning rows the lifecycle timeline reads. A run
- * stands up one environment per involved service frame and retries a failing provision, so the
- * realistic count is single digits; the bound exists so a pathological retry loop cannot make
- * the report's own read unbounded. The timeline folds first/last/counts, so a capped read can
- * only ever UNDERSTATE the failure counts, which is why the cap is set far above any real run
- * rather than being surfaced as a truncation the reader would have to reason about.
+ * How many of the run's environment provisioning rows the lifecycle timeline reads. A run stands
+ * up one environment per involved service frame and retries a failing provision, so the realistic
+ * count is single digits; the bound exists so a pathological retry loop (or a long stack recipe,
+ * which logs a row per STEP) cannot make the report's own read unbounded.
+ *
+ * A read that comes back FULL is reported as truncated rather than folded. The fold follows
+ * environment ids to decide whether everything the run stood up was reclaimed, and rows arrive
+ * newest first, so a partial history silently loses the OLDEST bring-ups: an environment whose
+ * provision row fell off the end reads as one that never existed, and therefore as one that never
+ * needed reclaiming. That is a confident wrong answer where "the history is too long to date" is
+ * an honest one.
  */
 const PROVISIONING_EVENT_LIMIT = 200
 
@@ -151,7 +156,7 @@ export class PrVerificationReportController {
           runUrl: this.deepLink(workspaceId, instance, 'observability'),
           spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
           environments: {
-            provisioningEvents: await this.provisioningEvents(workspaceId, instance),
+            provisioning: await this.provisioningEvents(workspaceId, instance),
             evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
           },
           now: this.deps.clock.now(),
@@ -167,7 +172,7 @@ export class PrVerificationReportController {
       // A PR-report write is bookkeeping. A provider outage, a revoked token, or a PR someone
       // closed underneath the run must never turn a green run red.
       this.deps.logger?.warn('Failed to publish the PR verification report', {
-        err: error,
+        err: describeError(error),
         executionId: instance.id,
         blockId: instance.blockId,
         workspaceId,
@@ -279,10 +284,11 @@ export class PrVerificationReportController {
   }
 
   /**
-   * The run's rows in the provisioning event log, which DATE the environment lifecycle. Null
-   * whenever they could not be read, which the section reports as "not evidenced" rather than
-   * as an empty history (absent is not zero: an unwired log and an environment nobody reclaimed
-   * produce the same empty list and opposite facts).
+   * The run's rows in the provisioning event log, which DATE the environment lifecycle, or the
+   * REASON there are none. Each of the three ways this comes back empty is its own answer,
+   * because each is a different thing to fix and only one of them is a statement about how the
+   * deployment is configured: an unwired log, a read that failed, and a truncated read all
+   * produce the same empty timeline (absent is not zero, and neither is unreadable).
    *
    * GATED on the run actually having a deployer step, for the same reason the `spec/` read is
    * gated on a tester report: with no deployer the section's answer is already determined, so
@@ -295,21 +301,33 @@ export class PrVerificationReportController {
   private async provisioningEvents(
     workspaceId: string,
     instance: ExecutionInstance,
-  ): Promise<ProvisioningLifecycleEvent[] | null> {
+  ): Promise<ProvisioningLifecycleRead> {
     const repo = this.deps.provisioningLogRepository
-    if (!repo) return null
-    if (!instance.steps.some((s) => s.agentKind === DEPLOYER_AGENT_KIND)) return null
+    if (!repo) return { status: 'unwired' }
+    if (!instance.steps.some((s) => s.agentKind === DEPLOYER_AGENT_KIND)) {
+      return { status: 'not_provisioned' }
+    }
     try {
-      return await repo.list(workspaceId, {
+      const events = await repo.list(workspaceId, {
         subsystem: 'environment',
         executionId: instance.id,
         limit: PROVISIONING_EVENT_LIMIT,
       })
-    } catch {
-      // Best-effort like every other read here. A transport blip reports the timeline as
-      // un-evidenced on this publish and is re-attempted on the next settlement, never a
-      // fabricated "torn down".
-      return null
+      // A full page is indistinguishable from a page that had more behind it, so it is reported
+      // as incomplete rather than folded into a verdict (see PROVISIONING_EVENT_LIMIT).
+      if (events.length >= PROVISIONING_EVENT_LIMIT) return { status: 'truncated' }
+      return { status: 'read', events }
+    } catch (error) {
+      // Best-effort like every other read here: a transport blip reports the timeline as
+      // unreadable on this publish and is re-attempted on the next one, never a fabricated
+      // "torn down". Reported rather than dropped, because a permanently broken telemetry
+      // binding would otherwise show only as a section that never dates anything.
+      this.deps.logger?.warn('Failed to read the provisioning log for the PR report', {
+        err: describeError(error),
+        executionId: instance.id,
+        workspaceId,
+      })
+      return { status: 'unreadable' }
     }
   }
 

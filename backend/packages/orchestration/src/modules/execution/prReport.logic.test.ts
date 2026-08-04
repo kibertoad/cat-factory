@@ -39,7 +39,7 @@ const INPUTS = {
   // No provisioning log wired by default: the lifecycle section then reports itself as
   // un-evidenced, which is the honest reading of "nobody looked". The lifecycle's own cases live
   // in `prReport.environments.test.ts`.
-  environments: { provisioningEvents: null, evidenceUrl: null },
+  environments: { provisioning: { status: 'unwired' as const }, evidenceUrl: null },
   now: 1_700_000_000_000,
 }
 

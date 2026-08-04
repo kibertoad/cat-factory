@@ -5,12 +5,14 @@ import type {
   PrReportEnvironmentEvidence,
   PrReportEnvironmentTimeline,
   PrReportEvidenceArtifact,
+  PrReportTimelineGap,
   PrVerificationReport,
   ProvisioningLogRecord,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { isTesterKind } from './ci.logic.js'
+import { findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's TEST ENVIRONMENT LIFECYCLE section: the three-leg proof that the
@@ -30,12 +32,19 @@ import { isTesterKind } from './ci.logic.js'
 //    names what is missing rather than leaving a reader to diff the sections. An agent's "I
 //    tested against the preview environment" is exactly the claim this section replaces.
 //
-//  - **Absent is not zero.** A deployment that retains no provisioning log and a run whose
-//    environment was never reclaimed produce the same empty timeline and opposite facts, so the
-//    unreadable case is flagged (`timeline.evidenced`) rather than rendered as "never torn
-//    down". The same rule splits a tester that ran LOCALLY from one that did not SAY where it
-//    ran: both are "not evidence about this environment", and only one of them is a decision
-//    somebody made.
+//  - **Absent is not zero, and the CAUSE of an absence is its own fact.** An unwired
+//    provisioning log, a read that failed, a read too large to be complete and a run that stood
+//    nothing up all produce the same empty timeline and four different facts, so the timeline
+//    carries a machine-readable `gap` naming which (`PrReportTimelineGap`) rather than rendering
+//    all four as "never torn down". The same rule splits a tester that ran LOCALLY from one that
+//    did not SAY where it ran: both are "not evidence about this environment", and only one of
+//    them is a decision somebody made.
+//
+//  - **The teardown leg is accounted by IDENTITY, not by tally.** Comparing a count of teardown
+//    rows against a count of ready FRAMES reads as correct until a run replaces an environment
+//    mid-flight: the superseded one's teardown then balances the books while its replacement is
+//    still standing. So the log's environment ids are followed individually, and `confirmed`
+//    means every id this run stood up was reclaimed.
 //
 // The section lives here rather than in `prReport.logic.ts` because it is the one section
 // composed from a source outside the in-memory run (the provisioning log), and because that file
@@ -46,21 +55,31 @@ import { isTesterKind } from './ci.logic.js'
  * The provisioning-log fields the lifecycle timeline reads. Deliberately a narrow structural
  * subset of {@link ProvisioningLogRecord}: this module is pure, and the caller has already
  * scoped the query to the run's `environment` rows.
+ *
+ * `targetId` is the ENVIRONMENT id the attempt acted on, and carrying it is what makes the
+ * teardown leg accountable rather than a tally (see the header). It is null on the rows that
+ * name no single environment: a provision that failed before a record existed, and a stack
+ * recipe's per-STEP rows, neither of which may be read as an environment coming up.
  */
 export type ProvisioningLifecycleEvent = Pick<
   ProvisioningLogRecord,
-  'operation' | 'outcome' | 'createdAt'
+  'operation' | 'outcome' | 'createdAt' | 'targetId'
 >
+
+/**
+ * The run's rows in the provisioning event log, or the reason there are none to fold. A
+ * DISCRIMINATED result rather than a nullable list, because the four ways a timeline comes back
+ * empty are four different facts and only one of them is a statement about how the deployment is
+ * configured (see {@link PrReportTimelineGap}).
+ */
+export type ProvisioningLifecycleRead =
+  | { status: 'read'; events: readonly ProvisioningLifecycleEvent[] }
+  | { status: PrReportTimelineGap }
 
 /** The resolved inputs the section needs beyond the run itself. */
 export interface PrReportEnvironmentInputs {
-  /**
-   * The run's ENVIRONMENT rows from the provisioning event log, or `null` when the log could
-   * not be read at all (the deployment retains none, or the read failed). The distinction is
-   * load-bearing: `[]` says the log was read and holds nothing for this run, `null` says
-   * nobody looked, and only the first of those permits any conclusion about the teardown.
-   */
-  provisioningEvents: readonly ProvisioningLifecycleEvent[] | null
+  /** The run's ENVIRONMENT rows from the provisioning event log, or why there are none. */
+  provisioning: ProvisioningLifecycleRead
   /**
    * Deep link into the run's captured evidence in the app, or null when the deployment
    * configured no public app URL (the report never emits a link to nowhere).
@@ -79,46 +98,124 @@ function scrub(value: string | null | undefined): string | null {
 /** The lifecycle states that mean an environment is no longer standing. */
 const GONE_STATUSES = new Set(['torn_down', 'expired', 'failed'])
 
+/** The human-readable rendering of each way the timeline can come back empty. */
+const TIMELINE_GAP_NOTES: Record<PrReportTimelineGap, string> = {
+  unwired:
+    'This deployment retains no provisioning event log, so the environment lifecycle could not be dated.',
+  unreadable:
+    'The provisioning event log could not be read for this run, so the environment lifecycle could not be dated. This is a transient read failure, not a statement that nothing happened.',
+  truncated:
+    'This run has more provisioning events than one report read may take, so the history is incomplete and the environment lifecycle is not dated from a partial one.',
+  not_provisioned:
+    'This run has no deployer step, so it stood no environment up and there is no lifecycle to date.',
+}
+
 /**
- * Fold the run's environment rows in the provisioning log into the dated half of the
- * lifecycle. `null` events mean the log could not be read, which is reported as such rather
- * than as an empty history (see the header).
+ * The run's environments, as the log accounts for them: which ids came up, and what the LATEST
+ * teardown attempt against each one did. Following ids individually is what keeps a run that
+ * REPLACED an environment mid-flight from balancing its own books, and latest-attempt-wins is
+ * what keeps a retried teardown from being both failed and confirmed.
  */
-function composeTimeline(
-  events: readonly ProvisioningLifecycleEvent[] | null,
-): PrReportEnvironmentTimeline {
-  if (!events) {
-    return {
-      evidenced: false,
-      note: 'This deployment retains no provisioning event log, so the environment lifecycle could not be dated.',
-      provisionedAt: null,
-      tornDownAt: null,
-      provisionFailures: 0,
-      teardownFailures: 0,
+interface LoggedEnvironments {
+  /** Environment ids the log records this run successfully standing up. */
+  provisioned: Set<string>
+  /** Every id whose latest teardown attempt SUCCEEDED, whoever stood it up. */
+  reclaimed: Set<string>
+  /**
+   * Ids THIS RUN stood up whose latest teardown attempt FAILED. Scoped to the run's own set,
+   * because a stuck environment is what the section asks a reader to go and deal with, and a
+   * neighbouring run's problem is not this PR's to report.
+   */
+  stuck: Set<string>
+}
+
+/**
+ * Index the log rows by environment identity. Rows carrying no `targetId` name no single
+ * environment (a provision that failed before a record existed, a stack recipe's per-step rows),
+ * so they inform the failure COUNT and never the identity sets: reading a recipe step's success
+ * as an environment coming up would invent an environment that then has to be reclaimed.
+ */
+function indexEnvironments(events: readonly ProvisioningLifecycleEvent[]): LoggedEnvironments {
+  const provisioned = new Set<string>()
+  const latestTeardown = new Map<string, ProvisioningLifecycleEvent>()
+  for (const event of events) {
+    if (!event.targetId) continue
+    if (event.operation === 'provision' && event.outcome === 'success') {
+      provisioned.add(event.targetId)
+    } else if (event.operation === 'teardown') {
+      const seen = latestTeardown.get(event.targetId)
+      if (!seen || event.createdAt >= seen.createdAt) latestTeardown.set(event.targetId, event)
     }
   }
+  const reclaimed = new Set<string>()
+  const stuck = new Set<string>()
+  for (const [id, event] of latestTeardown) {
+    // A teardown of an environment this run has no bring-up row for is still evidence that it is
+    // gone; a FAILED one is only this run's problem to report if this run stood it up.
+    if (event.outcome === 'success') reclaimed.add(id)
+    else if (provisioned.has(id)) stuck.add(id)
+  }
+  return { provisioned, reclaimed, stuck }
+}
+
+/**
+ * Everything the log has to say about this run: the dated timeline a reader sees, and the
+ * per-environment accounting the teardown verdict is decided on. They travel together because
+ * they are one fold over one read, and letting them be composed apart is how the two would come
+ * to disagree about the same rows.
+ */
+interface LoggedLifecycle {
+  timeline: PrReportEnvironmentTimeline
+  /** Null whenever the timeline carries a gap: there were no rows to account for. */
+  logged: LoggedEnvironments | null
+}
+
+/**
+ * Fold the run's environment rows in the provisioning log. A gap status means there is nothing
+ * to fold, which is reported as the reason it is empty rather than as an empty history (see the
+ * header).
+ */
+function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
+  if (read.status !== 'read') {
+    return {
+      logged: null,
+      timeline: {
+        gap: read.status,
+        note: TIMELINE_GAP_NOTES[read.status],
+        provisionedAt: null,
+        tornDownAt: null,
+        provisionFailures: 0,
+        teardownFailures: 0,
+      },
+    }
+  }
+  const logged = indexEnvironments(read.events)
   let provisionedAt: number | null = null
   let tornDownAt: number | null = null
   let provisionFailures = 0
-  let teardownFailures = 0
-  for (const event of events) {
+  for (const event of read.events) {
     if (event.operation === 'provision') {
       if (event.outcome === 'failure') provisionFailures++
-      else if (provisionedAt == null || event.createdAt < provisionedAt) {
+      // Only a row naming an environment dates a bring-up: a stack recipe's steps succeed
+      // several times on the way to one environment, and the first of those is not when it
+      // came up.
+      else if (event.targetId && (provisionedAt == null || event.createdAt < provisionedAt)) {
         provisionedAt = event.createdAt
       }
-    } else if (event.operation === 'teardown') {
-      if (event.outcome === 'failure') teardownFailures++
-      else if (tornDownAt == null || event.createdAt > tornDownAt) tornDownAt = event.createdAt
+    } else if (event.operation === 'teardown' && event.outcome === 'success') {
+      if (tornDownAt == null || event.createdAt > tornDownAt) tornDownAt = event.createdAt
     }
   }
-  return { evidenced: true, provisionedAt, tornDownAt, provisionFailures, teardownFailures }
-}
-
-/** How many teardown attempts the log records as having SUCCEEDED. */
-function teardownSuccesses(events: readonly ProvisioningLifecycleEvent[] | null): number {
-  if (!events) return 0
-  return events.filter((e) => e.operation === 'teardown' && e.outcome === 'success').length
+  return {
+    logged,
+    timeline: {
+      gap: null,
+      provisionedAt,
+      tornDownAt,
+      provisionFailures,
+      teardownFailures: logged.stuck.size,
+    },
+  }
 }
 
 /**
@@ -147,46 +244,34 @@ function projectionsAllGone(instance: ExecutionInstance): boolean {
  * still standing because nobody asked and one still standing because the provider refused need
  * different people to do different things.
  *
- * `confirmed` requires POSITIVE evidence from one source or the other. With a readable log and
- * no teardown row in it, the answer is `pending`: the log not mentioning a teardown IS the
- * observation that none happened, and no projection may override it.
+ * Decided by IDENTITY: `confirmed` means every environment id the log records this run standing
+ * up was reclaimed, never that a count of teardowns reached a count of ready frames. The tally
+ * form reads as correct until a run replaces an environment mid-flight, at which point the
+ * superseded one's teardown balances the books while its replacement is still running.
+ *
+ * `confirmed` requires POSITIVE evidence from one source or the other. With a readable log that
+ * records the bring-up and no teardown, the answer is `pending`: the log not mentioning a
+ * teardown IS the observation that none happened, and no projection may override it.
  */
 function teardownState(
   instance: ExecutionInstance,
   entries: readonly PrReportEnvironment[],
-  timeline: PrReportEnvironmentTimeline,
-  reclaimed: number,
+  logged: LoggedEnvironments | null,
 ): PrVerificationReport['environments']['teardown'] {
-  const ready = entries.filter((e) => e.status === 'ready').length
-  if (ready === 0) return 'not_applicable'
-  if (reclaimed >= ready) return 'confirmed'
-  if (timeline.teardownFailures > 0) return 'failed'
-  if (reclaimed > 0 || timeline.evidenced) return 'pending'
-  return projectionsAllGone(instance) ? 'confirmed' : 'pending'
-}
-
-/**
- * The step a leg should read: the LAST matching step that carries evidence, else the first
- * matching step (so a pipeline that has the step but hasn't reached it still gets the "not run
- * yet" note rather than nothing). The same rule `prReport.logic.ts` applies to every other
- * section, for the same reason: a pipeline may carry the kind twice and the later run is the
- * one that describes the PR as it stands now.
- */
-function lastWithEvidence(
-  instance: ExecutionInstance,
-  matches: (step: PipelineStep) => boolean,
-  hasEvidence: (step: PipelineStep) => boolean,
-): PipelineStep | undefined {
-  const matching = instance.steps.filter(matches)
-  for (let i = matching.length - 1; i >= 0; i--) {
-    if (hasEvidence(matching[i]!)) return matching[i]
-  }
-  return matching[0]
+  if (!entries.some((e) => e.status === 'ready')) return 'not_applicable'
+  // No log to read: fall back to the run's own step projections, the weaker signal.
+  if (!logged) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
+  if (logged.stuck.size > 0) return 'failed'
+  // A log that records no bring-up at all cannot speak to the teardown either way, so the
+  // projection is consulted rather than concluding from the log's silence.
+  if (logged.provisioned.size === 0) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
+  const outstanding = [...logged.provisioned].filter((id) => !logged.reclaimed.has(id))
+  return outstanding.length === 0 ? 'confirmed' : 'pending'
 }
 
 /** The tester step whose report the evidence leg reads. */
 function testerStep(instance: ExecutionInstance): PipelineStep | undefined {
-  return lastWithEvidence(
+  return findStep(
     instance,
     (s) => isTesterKind(s.agentKind),
     (s) => s.test?.lastReport != null,
@@ -195,7 +280,7 @@ function testerStep(instance: ExecutionInstance): PipelineStep | undefined {
 
 /** The deployer step whose per-frame outcomes the "up" leg reads. */
 function deployerStep(instance: ExecutionInstance): PipelineStep | undefined {
-  return lastWithEvidence(
+  return findStep(
     instance,
     (s) => s.agentKind === DEPLOYER_AGENT_KIND,
     (s) => Object.keys(s.deployEnvs ?? {}).length > 0,
@@ -295,8 +380,8 @@ function composeProof(
     gaps.push('No environment reached a ready state, so nothing could be exercised against one.')
     return { proof: 'incomplete', gaps }
   }
-  if (!timeline.evidenced) {
-    gaps.push(timeline.note ?? 'The environment lifecycle could not be dated.')
+  if (timeline.gap) {
+    gaps.push(timeline.note ?? TIMELINE_GAP_NOTES[timeline.gap])
   } else if (timeline.provisionedAt == null) {
     gaps.push(
       'The provisioning log holds no successful bring-up for this run, so when the environment came up is unknown.',
@@ -304,7 +389,7 @@ function composeProof(
   }
   if (timeline.provisionFailures > 0) {
     gaps.push(
-      `${timeline.provisionFailures} provision attempt${timeline.provisionFailures === 1 ? '' : 's'} failed before the environment came up.`,
+      `${timeline.provisionFailures} provisioning attempt${timeline.provisionFailures === 1 ? '' : 's'} failed for this run.`,
     )
   }
   if (evidence.status !== 'captured') {
@@ -315,7 +400,9 @@ function composeProof(
   }
   if (teardown === 'failed') {
     gaps.push(
-      `${timeline.teardownFailures} teardown attempt${timeline.teardownFailures === 1 ? '' : 's'} failed, so the environment is still standing and needs reclaiming by hand.`,
+      timeline.teardownFailures === 1
+        ? 'An environment could not be torn down, so it is still standing and needs reclaiming by hand.'
+        : `${timeline.teardownFailures} environments could not be torn down, so they are still standing and need reclaiming by hand.`,
     )
   }
   // The ORDERING check: the two ways captured evidence can be real and still not be about the
@@ -325,8 +412,16 @@ function composeProof(
   if (at != null && timeline.provisionedAt != null && at < timeline.provisionedAt) {
     gaps.push('The tester settled BEFORE the environment came up, so it cannot have used it.')
   }
-  if (at != null && timeline.tornDownAt != null && at > timeline.tornDownAt) {
-    gaps.push('The tester settled AFTER the environment was torn down, so it cannot have used it.')
+  // Only once the whole set is reclaimed does `tornDownAt` mark the end of the lifecycle. While
+  // anything is still standing it is the last teardown RECORDED, which on a run that replaced an
+  // environment mid-flight is the superseded one going away, and testing against its replacement
+  // afterwards is exactly what should have happened.
+  if (teardown === 'confirmed' && at != null && timeline.tornDownAt != null) {
+    if (at > timeline.tornDownAt) {
+      gaps.push(
+        'The tester settled AFTER the environment was torn down, so it cannot have used it.',
+      )
+    }
   }
   return { proof: gaps.length === 0 ? 'complete' : 'incomplete', gaps }
 }
@@ -341,7 +436,7 @@ export function composeEnvironments(
   inputs: PrReportEnvironmentInputs,
   cap: Capper,
 ): PrVerificationReport['environments'] {
-  const timeline = composeTimeline(inputs.provisioningEvents)
+  const { timeline, logged } = foldLifecycle(inputs.provisioning)
   const evidence = composeEvidence(instance, inputs, cap)
   const step = deployerStep(instance)
   const absent = (note: string): PrVerificationReport['environments'] => ({
@@ -355,7 +450,7 @@ export function composeEnvironments(
     gaps: [],
   })
   if (!step) {
-    return absent('No deployer step in this pipeline — no ephemeral environment was provisioned.')
+    return absent('No deployer step in this pipeline, so no ephemeral environment was provisioned.')
   }
   const entries: PrReportEnvironment[] = cap(
     Object.entries(step.deployEnvs ?? {}),
@@ -371,12 +466,7 @@ export function composeEnvironments(
       'The deployer step recorded no environment outcomes (it did not run to completion).',
     )
   }
-  const teardown = teardownState(
-    instance,
-    entries,
-    timeline,
-    teardownSuccesses(inputs.provisioningEvents),
-  )
+  const teardown = teardownState(instance, entries, logged)
   return {
     status: 'reported',
     entries,
@@ -415,14 +505,21 @@ function renderProof(envs: PrVerificationReport['environments']): string[] {
 }
 
 function renderTimeline(timeline: PrReportEnvironmentTimeline): string[] {
-  if (!timeline.evidenced) return [`**Timeline:** not evidenced. ${timeline.note}`]
+  // The note is one of this module's own constants, so it needs no host-markdown escaping.
+  if (timeline.gap) {
+    return [`**Timeline:** not evidenced. ${timeline.note ?? TIMELINE_GAP_NOTES[timeline.gap]}`]
+  }
   const parts: string[] = []
   parts.push(
     timeline.provisionedAt != null ? `up ${at(timeline.provisionedAt)}` : 'no bring-up on record',
   )
   if (timeline.tornDownAt != null) parts.push(`torn down ${at(timeline.tornDownAt)}`)
-  if (timeline.provisionFailures > 0) parts.push(`${timeline.provisionFailures} failed provisions`)
-  if (timeline.teardownFailures > 0) parts.push(`${timeline.teardownFailures} failed teardowns`)
+  if (timeline.provisionFailures > 0) {
+    parts.push(`${timeline.provisionFailures} failed provisioning attempts`)
+  }
+  if (timeline.teardownFailures > 0) {
+    parts.push(`${timeline.teardownFailures} could not be torn down`)
+  }
   return [`**Timeline:** ${parts.join(' · ')}`]
 }
 

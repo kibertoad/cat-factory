@@ -1,4 +1,5 @@
 import { useExecutionStore } from '~/stores/execution'
+import { isTesterKind } from '~/utils/catalog'
 import type { ExecutionInstance, PipelineStep } from '~/types/domain'
 
 /**
@@ -125,9 +126,9 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
       // the later one describes the PR as it stands. Falling back to the first tester step opens
       // the window on its "not run yet" state, which beats the link going nowhere.
       (instance) => {
-        const isTester = (s: PipelineStep) =>
-          s.agentKind === 'tester-api' || s.agentKind === 'tester-ui'
-        const candidates = instance.steps.map((s, i) => ({ s, i })).filter(({ s }) => isTester(s))
+        const candidates = instance.steps
+          .map((s, i) => ({ s, i }))
+          .filter(({ s }) => isTesterKind(s.agentKind))
         const reported = candidates.filter(({ s }) => s.test?.lastReport)
         return (reported.at(-1) ?? candidates[0])?.i ?? -1
       },

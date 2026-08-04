@@ -36,6 +36,14 @@ const readyProvider = {
   teardown: async () => ({ status: 'torn_down' }) as never,
 } as unknown as EnvironmentProvider
 
+/** The same provider, except that reclaiming the environment is refused by the far end. */
+const teardownRefusingProvider = {
+  ...readyProvider,
+  teardown: async () => {
+    throw new Error('provider refused: environment is locked')
+  },
+} as unknown as EnvironmentProvider
+
 /** The manifest connection a `deployer` needs to reach the injected provider at all. */
 const MANIFEST = {
   providerId: 'acme-envs',
@@ -103,7 +111,7 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           expect(live.environments.entries.some((e) => e.status === 'ready')).toBe(true)
           // The provisioning log DATED the bring-up, through the facade-wired repository the engine
           // reads for this. An unwired one would report the whole timeline as un-evidenced.
-          expect(live.environments.timeline.evidenced).toBe(true)
+          expect(live.environments.timeline.gap).toBeNull()
           expect(live.environments.timeline.provisionedAt).toBeGreaterThan(0)
           expect(live.environments.timeline.tornDownAt).toBeNull()
           expect(live.environments.teardown).toBe('pending')
@@ -138,6 +146,60 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           expect(publisher.section('task_login')).toContain(
             'environment up → evidence captured against it → teardown confirmed',
           )
+        },
+      )
+
+      // The FAILURE edge of the same out-of-band republish. A settled run has no step hook left,
+      // so an environment the provider refuses to reclaim reaches the PR only if the teardown
+      // path notifies on a failed attempt too. Without it the section reads "nobody has torn this
+      // down yet" about the one case that needs a human, which is the unreachable-leg hole this
+      // whole section exists to close, one state over.
+      it.skipIf(harness.name === 'mothership')(
+        'puts an environment the provider REFUSED to reclaim on the PR as an operator action',
+        async () => {
+          const publisher = new FakePrReportPublisher()
+          const app = harness.makeApp(
+            { pullRequest: PR },
+            {
+              prVerificationReportPublisher: publisher,
+              environmentProvider: teardownRefusingProvider,
+              appBaseUrl: APP_BASE_URL,
+            },
+          )
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest: MANIFEST },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy only',
+            agentKinds: ['deployer'],
+          })
+          await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+            pipelineId: pipeline.body.id,
+          })
+          const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+          expect(exec.status).toBe('done')
+
+          const envs = await app.call<{ id: string }[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(1)
+          const refused = await app.call(
+            'POST',
+            `/workspaces/${wsId}/environments/${envs.body[0]!.id}/teardown`,
+            {},
+          )
+          // The provider error still surfaces to whoever asked: the report is bookkeeping beside
+          // it, never in place of it.
+          expect(refused.status).toBeGreaterThanOrEqual(400)
+
+          const settled = parsePrVerificationReport(publisher.reportJson('task_login'))
+          expect(settled.environments.teardown).toBe('failed')
+          expect(settled.environments.timeline.teardownFailures).toBe(1)
+          expect(settled.environments.gaps.join(' ')).toContain('needs reclaiming by hand')
         },
       )
 

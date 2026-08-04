@@ -419,6 +419,7 @@ export type {
   // The environment-lifecycle proof: the dated up/down timeline plus the evidence captured
   // from the environment while it was live.
   PrReportEnvironmentTimeline,
+  PrReportTimelineGap,
   PrReportEnvironmentEvidence,
   PrReportEvidenceArtifact,
   // Requirement → evidence: the spec's requirements joined to the tester's verdicts.
