@@ -23,6 +23,10 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The workspace globs from pnpm-workspace.yaml. Kept as a literal list (mirroring that
 // file's `packages:`) rather than parsing YAML — the set changes rarely and a mismatch
 // here would itself be caught by a package that resolves to no dir.
+//
+// `sdk/*` rather than `sdk/typescript`: the SDK family gains members (the MCP facade did), and
+// naming one of them is how a new package slips out of the map. The Python, Go and Java clients have
+// no package.json and drop out at read time; they are documented by `sdk/README.md`.
 const WORKSPACE_GLOBS = [
   'backend/packages/*',
   'backend/runtimes/*',
@@ -32,7 +36,7 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
-  'sdk/typescript',
+  'sdk/*',
 ]
 
 function expandGlob(glob) {

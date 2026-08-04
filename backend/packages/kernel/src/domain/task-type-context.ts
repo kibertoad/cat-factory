@@ -1,7 +1,10 @@
 import {
   type CustomTaskType,
+  type DescriptorFieldValue,
+  type DescriptorFieldValues,
   type TaskTypeFieldDescriptor,
   isNamespacedId,
+  renderDescriptorFieldValue,
 } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
@@ -58,26 +61,29 @@ export interface CustomTaskTypeContext {
 
 /**
  * A collected value that says NOTHING, and so is left out rather than rendered as an empty line: a
- * string holding only whitespace (an absent key is checked by the caller, which needs the narrowing).
- * A `0` is a real answer and stays.
+ * string holding only whitespace, or an empty multi-select (an absent key is checked by the caller,
+ * which needs the narrowing). A `0` is a real answer and stays, and so is an explicit `false` on a
+ * default-ON checkbox, which renders as `No`: the opt-OUT is exactly what such a field records.
  */
-function isBlank(value: string | number): boolean {
-  return typeof value === 'string' && value.trim() === ''
+function isBlank(value: DescriptorFieldValue): boolean {
+  if (typeof value === 'string') return value.trim() === ''
+  return Array.isArray(value) && value.length === 0
 }
 
 /**
- * Render one collected value as prose: an option's caption where the descriptor declares one.
- * Trimmed, because a `textarea` value routinely arrives with a trailing newline and the section
- * renders one value per line.
+ * Render one collected value as prose through the SHARED descriptor-form renderer (option captions
+ * over raw values, a multi-select joined, a boolean as `Yes`/`No`), so a parameter reads in an
+ * agent's prompt exactly as it reads in the form that collected it.
+ *
+ * Trimmed after, because a `textarea` value routinely arrives with a trailing newline and the
+ * section renders one value per line. An undeclared bag key has no descriptor to consult, which
+ * the shared renderer takes as such: raw value, no caption lookup.
  */
 function renderValue(
-  value: string | number,
+  value: DescriptorFieldValue,
   descriptor: TaskTypeFieldDescriptor | undefined,
 ): string {
-  if (typeof value === 'number') return String(value)
-  // Matched against the descriptor's options BEFORE trimming, so a stored enum value still finds
-  // its caption; only the fallback (the value itself) is what gets trimmed.
-  return descriptor?.options?.find((option) => option.value === value)?.label ?? value.trim()
+  return renderDescriptorFieldValue(descriptor, value).trim()
 }
 
 /**
@@ -92,7 +98,7 @@ function renderValue(
  */
 export function describeCustomTaskType(
   taskType: string,
-  custom: Record<string, string | number> | undefined,
+  custom: DescriptorFieldValues | undefined,
   descriptor: CustomTaskType | undefined,
 ): CustomTaskTypeContext | undefined {
   if (!isNamespacedId(taskType)) return undefined

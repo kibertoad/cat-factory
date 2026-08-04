@@ -75,6 +75,50 @@ describe('collectDeclaredCapabilityCredentials', () => {
     expect(result.declared).toHaveLength(1)
   })
 
+  it('reaches a server ASSIGNED to a built-in kind, which is no registry entry at all', async () => {
+    // The hole this closes: `assignToolServers('coder', …)` is the documented way to give a
+    // built-in an MCP server, and the enumeration walked `registry.all()` — so the operator's
+    // checklist silently omitted the one key their `coder` runs would need, and the only symptom
+    // was the agent reporting the tool unavailable with nothing pointing at the missing value.
+    const registry = new AgentKindRegistry()
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'issue-mcp' },
+      secretKeys: [{ key: 'ISSUE_TOKEN' }],
+    })
+    registry.assignToolServers('coder', ['issues'])
+    const result = await collectDeclaredCapabilityCredentials({
+      agentKindRegistry: registry,
+      binaryGenerators: generators([]),
+    })
+    expect(result.declared).toEqual([
+      {
+        subject: 'tool-server',
+        id: 'issues',
+        label: 'Issue tracker',
+        key: 'ISSUE_TOKEN',
+        required: true,
+      },
+    ])
+  })
+
+  it('still ignores a server registered by id and attached to nothing', async () => {
+    // The reason the walk goes through KINDS in the first place: a server no kind can reach never
+    // runs, so its credential is a key an operator would fill in for no dispatch.
+    const registry = new AgentKindRegistry()
+    registry.registerToolServer({
+      id: 'orphan',
+      transport: { kind: 'stdio', command: 'x' },
+      secretKeys: [{ key: 'ORPHAN_TOKEN' }],
+    })
+    const result = await collectDeclaredCapabilityCredentials({
+      agentKindRegistry: registry,
+      binaryGenerators: generators([]),
+    })
+    expect(result.declared).toEqual([])
+  })
+
   it('marks the read INCOMPLETE when the generator source throws, never an empty list', async () => {
     // `BinaryGeneratorSource` throws rather than answering empty when it cannot reach the
     // mothership. Turning that into "no integration needs a credential" is the exact

@@ -1,4 +1,5 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 
 /**
  * Render the TOOL SERVERS (MCP) section for a dispatch — the extra tools an agent kind declared
@@ -44,8 +45,20 @@ export function toolServersSection(context: AgentRunContext): string {
       'These tool servers are NOT available on this run — do not plan around them, and say so in',
       'your report if their absence changed what you could verify:',
     )
-    for (const server of unavailable) {
+    for (const server of unavailable.slice(0, TOOL_SERVER_BUDGET.maxStatedUnavailable)) {
       lines.push(`- ${server.label} (${UNAVAILABLE_REASONS[server.reason]})`)
+    }
+    // The drop list has no budget of its own (a dispatch caps what it WIRES), so the runaway
+    // declaration `maxServers` exists to bound would otherwise arrive in the prompt one line per
+    // server. Folded into a count rather than truncated silently: the agent still learns that more
+    // was declared than it got, which is the only part of this it can act on, and the run context
+    // keeps every entry for the snapshot and the operator.
+    const folded = unavailable.length - TOOL_SERVER_BUDGET.maxStatedUnavailable
+    if (folded > 0) {
+      lines.push(
+        `- and ${folded} more declared tool ${folded === 1 ? 'server' : 'servers'}, also not ` +
+          `available on this run.`,
+      )
     }
   }
   return lines.join('\n')
@@ -62,7 +75,15 @@ const UNAVAILABLE_REASONS: Record<
   string
 > = {
   harness_unsupported: 'not supported by the agent runtime this run uses',
+  // Deliberately indistinguishable to the agent from `harness_unsupported`, and for the reason
+  // stated below: the two differ in what an OPERATOR must change (a `harnesses` list vs the choice
+  // of runtime), and nothing the agent can do depends on which it is. The distinction is carried by
+  // the log line and the boot warning.
+  transport_unsupported: 'not supported by the agent runtime this run uses',
   missing_secret: 'its credential is not configured for this deployment',
+  // A cap, not a fault, so the phrasing does not invite the agent to retry or work around it: the
+  // tool exists and this run simply did not get it.
+  over_budget: 'not wired for this run (too many tool servers were declared)',
   // Deliberately the SAME shape of statement as the line above rather than the operator's fault.
   // The agent's disposition is identical (the tool is absent and retrying will not produce it),
   // and telling it that a declaration is misconfigured invites it to work around the platform.

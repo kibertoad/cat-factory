@@ -928,6 +928,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         gateRegistry: registries.gateRegistry,
         pipelineRegistry: registries.pipelineRegistry,
         taskTypeRegistry: registries.taskTypeRegistry,
+        initiativePresetRegistry: registries.initiativePresetRegistry,
         foundationalServiceRegistry: registries.foundationalServiceRegistry,
         binaryGeneratorRegistry: registries.binaryGeneratorRegistry,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
