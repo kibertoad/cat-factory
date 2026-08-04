@@ -5716,10 +5716,6 @@
         "tooLong": "En fazla 100 karakter olmalıdır."
       }
     },
-    "intro": {
-      "canCreate": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; bu hesap için depoyu sizin yerinize de oluşturabilir.",
-      "manual": "Boş bir GitHub deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; depoyu siz oluşturursunuz (aşağıdan tek tıkla), bu yüzden depo oluşturma izni gerektirmez."
-    },
     "section": {
       "newRepo": "Yeni depo"
     },
@@ -5786,7 +5782,6 @@
       "title": "Referans mimariler",
       "add": "Ekle",
       "pickRepo": {
-        "label": "Mevcut bir GitHub deposu seçin",
         "description": "Sahip ve adını doldurmak için erişebileceğiniz bir depo seçin veya aşağıdan bunları elle girin.",
         "placeholder": "owner/name"
       },
@@ -6370,7 +6365,11 @@
     "bootstrap": {
       "connectPrompt": "Başlatmadan önce bu çalışma alanını bir depo sağlayıcısına bağlayın; bir çalıştırma bir depoya gönderim yapar.",
       "createRepoOn": "{provider}'da oluştur",
-      "createRepoTitle": "{provider} yeni depo sayfasını aç"
+      "createRepoTitle": "{provider} yeni depo sayfasını aç",
+      "introCanCreate": "Boş bir {provider} deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; bu hesap için depoyu sizin yerinize de oluşturabilir.",
+      "introManual": "Boş bir {provider} deposu oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; depoyu siz oluşturursunuz (aşağıdan tek tıkla), bu yüzden depo oluşturma izni gerektirmez.",
+      "introManualAny": "Depo sağlayıcınızda boş bir depo oluşturun, ardından bir başlatıcı ajanının bir sandbox konteynerinde, referans mimarilerinizden birini uyarlayarak veya serbest biçimli bir komut izleyerek sıfırdan doldurmasına izin verin. cat-factory ilk commit'i o depoya gönderir; depoyu kendiniz oluşturursunuz, bu yüzden depo oluşturma izni gerektirmez.",
+      "archPickRepo": "Mevcut bir {provider} deposu seçin"
     },
     "branchProtection": {
       "heading": "Varsayılan dal koruması",

@@ -72,6 +72,12 @@ const needsConnection = computed(() => github.available === true && !github.conn
 // a connection exists (the hints below the picker), so `provider` is the right question there.
 const providerLabel = computed(() => VCS_PROVIDER_LABELS[github.provider])
 
+// Which remedy the picker's hint offers: an App installation sends the user to its repo-access
+// list, a pasted token to the token's own scope. Asked of the CONNECTION rather than of the
+// manage URL below, so a host whose settings page we could not build (an Enterprise install,
+// say) never tells an App-connected user to go check their token's scope.
+const isAppConnection = computed(() => github.connection?.method === 'app')
+
 // The intro renders BEFORE a connection may exist, so it asks `surfaceProvider` instead and
 // stays neutral where the deployment offers several and none is bound: naming one would be a
 // guess, and `provider`'s own default would name GitHub on a GitLab-only deployment.
@@ -389,7 +395,7 @@ function done() {
           <UFormField
             :label="t('github.addService.repository')"
             :description="
-              manageInstallUrl
+              isAppConnection
                 ? t('vcs.addService.repositoryHintApp')
                 : t('vcs.addService.repositoryHintToken', { provider: providerLabel })
             "

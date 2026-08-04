@@ -5704,10 +5704,6 @@
         "tooLong": "Musi mieć maksymalnie 100 znaków."
       }
     },
-    "intro": {
-      "canCreate": "Utwórz puste repozytorium GitHub, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; dla tego konta może też utworzyć repozytorium za Ciebie.",
-      "manual": "Utwórz puste repozytorium GitHub, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; repozytorium tworzysz Ty (jednym kliknięciem poniżej), więc nie potrzebuje uprawnienia do tworzenia repozytoriów."
-    },
     "section": {
       "newRepo": "Nowe repozytorium"
     },
@@ -5774,7 +5770,6 @@
       "title": "Architektury referencyjne",
       "add": "Dodaj",
       "pickRepo": {
-        "label": "Wybierz istniejące repozytorium GitHub",
         "description": "Wybierz repozytorium, do którego masz dostęp, aby wypełnić jego właściciela i nazwę, albo wpisz je ręcznie poniżej.",
         "placeholder": "owner/name"
       },
@@ -6358,7 +6353,11 @@
     "bootstrap": {
       "connectPrompt": "Połącz tę przestrzeń roboczą z hostem repozytoriów przed inicjacją; uruchomienie wypycha do repozytorium.",
       "createRepoOn": "Utwórz w serwisie {provider}",
-      "createRepoTitle": "Otwórz stronę nowego repozytorium w serwisie {provider}"
+      "createRepoTitle": "Otwórz stronę nowego repozytorium w serwisie {provider}",
+      "introCanCreate": "Utwórz puste repozytorium {provider}, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; dla tego konta może też utworzyć repozytorium za Ciebie.",
+      "introManual": "Utwórz puste repozytorium {provider}, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; repozytorium tworzysz Ty (jednym kliknięciem poniżej), więc nie potrzebuje uprawnienia do tworzenia repozytoriów.",
+      "introManualAny": "Utwórz puste repozytorium u swojego dostawcy repozytoriów, a następnie pozwól agentowi inicjującemu wypełnić je w kontenerze piaskownicy, dostosowując jedną z Twoich architektur referencyjnych albo budując od zera według dowolnego promptu. cat-factory wypycha początkowy commit do tego repozytorium; repozytorium tworzysz samodzielnie, więc nie potrzebuje uprawnienia do tworzenia repozytoriów.",
+      "archPickRepo": "Wybierz istniejące repozytorium {provider}"
     },
     "branchProtection": {
       "heading": "Ochrona gałęzi domyślnej",

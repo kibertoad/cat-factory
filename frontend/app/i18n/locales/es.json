@@ -5704,10 +5704,6 @@
         "tooLong": "Debe tener 100 caracteres o menos."
       }
     },
-    "intro": {
-      "canCreate": "Crea un repositorio de GitHub vacío y deja que un agente inicializador lo poble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; en esta cuenta también puede crear el repositorio por ti.",
-      "manual": "Crea un repositorio de GitHub vacío y deja que un agente inicializador lo poble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; tú creas el repositorio (con un clic más abajo), por lo que no necesita permiso para crear repositorios."
-    },
     "section": {
       "newRepo": "Nuevo repositorio"
     },
@@ -5774,7 +5770,6 @@
       "title": "Arquitecturas de referencia",
       "add": "Añadir",
       "pickRepo": {
-        "label": "Elige un repositorio de GitHub existente",
         "description": "Elige un repositorio al que tengas acceso para rellenar su propietario y nombre, o introdúcelos manualmente abajo.",
         "placeholder": "owner/name"
       },
@@ -6358,7 +6353,11 @@
     "bootstrap": {
       "connectPrompt": "Conecta este espacio de trabajo con un host de repositorios antes de inicializar; una ejecución hace push a un repositorio.",
       "createRepoOn": "Crear en {provider}",
-      "createRepoTitle": "Abrir la página de nuevo repositorio de {provider}"
+      "createRepoTitle": "Abrir la página de nuevo repositorio de {provider}",
+      "introCanCreate": "Crea un repositorio de {provider} vacío y deja que un agente inicializador lo pueble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; en esta cuenta también puede crear el repositorio por ti.",
+      "introManual": "Crea un repositorio de {provider} vacío y deja que un agente inicializador lo pueble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; tú creas el repositorio (con un clic más abajo), por lo que no necesita permiso para crear repositorios.",
+      "introManualAny": "Crea un repositorio vacío en tu host de repositorios y deja que un agente inicializador lo pueble en un contenedor de pruebas, ya sea adaptando una de tus arquitecturas de referencia o desde cero siguiendo un prompt libre. cat-factory envía el commit inicial a ese repositorio; tú creas el repositorio por tu cuenta, por lo que no necesita permiso para crear repositorios.",
+      "archPickRepo": "Elige un repositorio de {provider} existente"
     },
     "branchProtection": {
       "heading": "Protección de la rama predeterminada",

@@ -4209,10 +4209,6 @@
         "tooLong": "Deve essere di massimo 100 caratteri."
       }
     },
-    "intro": {
-      "canCreate": "Crea un repository GitHub vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; per questo account puo anche creare il repository per te.",
-      "manual": "Crea un repository GitHub vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; sei tu a creare il repository (con un clic qui sotto), quindi non serve alcun permesso di creazione del repository."
-    },
     "section": {
       "newRepo": "Nuovo repository"
     },
@@ -4283,7 +4279,6 @@
       "title": "Architetture di riferimento",
       "add": "Aggiungi",
       "pickRepo": {
-        "label": "Scegli un repository GitHub esistente",
         "description": "Scegli un repository a cui hai accesso per compilarne owner e nome, oppure inseriscili manualmente qui sotto.",
         "placeholder": "owner/name"
       },
@@ -6370,7 +6365,11 @@
     "bootstrap": {
       "connectPrompt": "Collega questo workspace a un host di repository prima dell'avvio; un'esecuzione invia dei commit in un repository.",
       "createRepoOn": "Crea su {provider}",
-      "createRepoTitle": "Apri la pagina di nuovo repository di {provider}"
+      "createRepoTitle": "Apri la pagina di nuovo repository di {provider}",
+      "introCanCreate": "Crea un repository {provider} vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; per questo account può anche creare il repository per te.",
+      "introManual": "Crea un repository {provider} vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; sei tu a creare il repository (con un clic qui sotto), quindi non serve alcun permesso di creazione del repository.",
+      "introManualAny": "Crea un repository vuoto sul tuo host di repository, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; il repository lo crei tu, quindi non serve alcun permesso di creazione del repository.",
+      "archPickRepo": "Scegli un repository {provider} esistente"
     },
     "branchProtection": {
       "heading": "Protezione del ramo predefinito",

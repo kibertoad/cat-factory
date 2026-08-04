@@ -5704,10 +5704,6 @@
         "tooLong": "Doit comporter 100 caractères ou moins."
       }
     },
-    "intro": {
-      "canCreate": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; pour ce compte, il peut aussi créer le dépôt à votre place.",
-      "manual": "Créez un dépôt GitHub vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; vous créez le dépôt (en un clic ci-dessous), il n'a donc besoin d'aucune autorisation de création de dépôt."
-    },
     "section": {
       "newRepo": "Nouveau dépôt"
     },
@@ -5774,7 +5770,6 @@
       "title": "Architectures de référence",
       "add": "Ajouter",
       "pickRepo": {
-        "label": "Choisir un dépôt GitHub existant",
         "description": "Choisissez un dépôt auquel vous avez accès pour renseigner son propriétaire et son nom, ou saisissez-les manuellement ci-dessous.",
         "placeholder": "owner/name"
       },
@@ -6358,7 +6353,11 @@
     "bootstrap": {
       "connectPrompt": "Connectez cet espace de travail à un hébergeur de dépôts avant l'initialisation ; une exécution pousse dans un dépôt.",
       "createRepoOn": "Créer sur {provider}",
-      "createRepoTitle": "Ouvrir la page de nouveau dépôt de {provider}"
+      "createRepoTitle": "Ouvrir la page de nouveau dépôt de {provider}",
+      "introCanCreate": "Créez un dépôt {provider} vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; pour ce compte, il peut aussi créer le dépôt à votre place.",
+      "introManual": "Créez un dépôt {provider} vide, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; vous créez le dépôt (en un clic ci-dessous), il n'a donc besoin d'aucune autorisation de création de dépôt.",
+      "introManualAny": "Créez un dépôt vide chez votre hébergeur de dépôts, puis laissez un agent d'initialisation le remplir dans un conteneur bac à sable, soit en adaptant l'une de vos architectures de référence, soit à partir de zéro selon un prompt libre. cat-factory pousse le commit initial dans ce dépôt ; vous créez le dépôt vous-même, il n'a donc besoin d'aucune autorisation de création de dépôt.",
+      "archPickRepo": "Choisir un dépôt {provider} existant"
     },
     "branchProtection": {
       "heading": "Protection de la branche par défaut",

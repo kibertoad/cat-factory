@@ -4209,10 +4209,6 @@
         "tooLong": "Darf höchstens 100 Zeichen lang sein."
       }
     },
-    "intro": {
-      "canCreate": "Erstellen Sie ein leeres GitHub-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen — entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; für dieses Konto kann es das Repository auch für Sie erstellen.",
-      "manual": "Erstellen Sie ein leeres GitHub-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen — entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository (ein Klick unten), sodass keine Repo-Erstellungsberechtigung nötig ist."
-    },
     "section": {
       "newRepo": "Neues Repository"
     },
@@ -4283,7 +4279,6 @@
       "title": "Referenzarchitekturen",
       "add": "Hinzufügen",
       "pickRepo": {
-        "label": "Ein bestehendes GitHub-Repo wählen",
         "description": "Wählen Sie ein Repo, auf das Sie Zugriff haben, um Owner und Name auszufüllen, oder geben Sie sie unten manuell ein.",
         "placeholder": "owner/name"
       },
@@ -6370,7 +6365,11 @@
     "bootstrap": {
       "connectPrompt": "Verbinden Sie diesen Workspace mit einem Repository-Host, bevor Sie bootstrappen; ein Lauf pusht in ein Repository.",
       "createRepoOn": "Auf {provider} erstellen",
-      "createRepoTitle": "Seite für neue Repositorys bei {provider} öffnen"
+      "createRepoTitle": "Seite für neue Repositorys bei {provider} öffnen",
+      "introCanCreate": "Erstellen Sie ein leeres {provider}-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; für dieses Konto kann es das Repository auch für Sie erstellen.",
+      "introManual": "Erstellen Sie ein leeres {provider}-Repository und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository (ein Klick unten), sodass keine Repo-Erstellungsberechtigung nötig ist.",
+      "introManualAny": "Erstellen Sie ein leeres Repository bei Ihrem Repository-Host und lassen Sie es dann von einem Bootstrapper-Agenten in einem Sandbox-Container befüllen, entweder durch Anpassen einer Ihrer Referenzarchitekturen oder von Grund auf nach einem freien Prompt. cat-factory pusht den initialen Commit in dieses Repo; Sie erstellen das Repository selbst, sodass keine Repo-Erstellungsberechtigung nötig ist.",
+      "archPickRepo": "Ein bestehendes {provider}-Repo wählen"
     },
     "branchProtection": {
       "heading": "Schutz des Standard-Branch",

@@ -165,12 +165,18 @@ export const githubConnectionSchema = v.object({
   provider: v.optional(vcsProviderSchema),
   /**
    * HOW the workspace authenticates: a GitHub-App installation (`app`) or a pasted personal
-   * access token (`pat`). Required, and stated by whichever connect service built the record
-   * rather than inferred from {@link provider}: an App-only affordance (the installation
-   * settings page, the repo-access grant) exists for `app` alone, and a provider test would
-   * mis-serve the moment a second provider gains a PAT connect (or GitHub gains one). A
-   * client seeing no value must treat the connection as NOT an App one: hiding a link is
-   * recoverable, offering one that 404s on the user's host is not.
+   * access token (`pat`). Stated by whichever connect service built the record rather than
+   * inferred from {@link provider}: an App-only affordance (the installation settings page,
+   * the repo-access grant) exists for `app` alone, and a provider test would mis-serve the
+   * moment a second provider gains a PAT connect (or GitHub gains one).
+   *
+   * REQUIRED, unlike {@link provider}, and deliberately so: this is an internal wire shape,
+   * where a compatibility fallback is what the repo's own rules forbid. A response without it
+   * fails client-side validation outright, which is the honest outcome: a client cannot
+   * decide what to offer from a value it never received, and the alternative (an optional
+   * field defaulted at every reader) leaves the two `toConnection` mappers free to forget it.
+   * Clients still ask `method === 'app'` rather than `!== 'pat'`, so any value that is not an
+   * App installation withholds the App affordances.
    */
   method: vcsConnectMethodSchema,
   /**

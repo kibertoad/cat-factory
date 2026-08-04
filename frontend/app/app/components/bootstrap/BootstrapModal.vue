@@ -6,12 +6,7 @@
 // launch form with the managed base list.
 import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
-import {
-  appInstallationManageUrl,
-  githubNewRepoUrl,
-  VCS_PROVIDER_LABELS,
-  VCS_PROVIDER_NEW_REPO_URLS,
-} from '~/utils/vcs'
+import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -148,9 +143,8 @@ watch(
 const needsConnection = computed(() => github.available === true && !github.connected)
 
 // The host this modal is about: the connected one, or the only one the deployment could
-// connect while nothing is bound. Null where it offers several and none is connected, which
-// is what the create-repo affordance below keys off — there is no page to open for a host we
-// cannot name, and `provider`'s own default would send a GitLab deployment to github.com.
+// connect while nothing is bound. Null where it offers several and none is connected, so
+// `provider`'s own "what is connected" default can never send a GitLab deployment to github.com.
 const hostProvider = computed(() => github.surfaceProvider)
 const providerLabel = computed(() =>
   hostProvider.value ? VCS_PROVIDER_LABELS[hostProvider.value] : '',
@@ -160,20 +154,19 @@ const providerLabel = computed(() =>
 // existing repo here (cat-factory doesn't create it: a GitHub App can't create repos under a
 // personal account, and we'd rather not hold the broad Administration permission). The repo
 // must be empty or hold only a prepopulated README/.gitignore/license — the push
-// force-overwrites that boilerplate. The convenience link opens the host's new-repo page,
-// prefilled where the host's form accepts one (GitHub's does, GitLab's does not).
+// force-overwrites that boilerplate. The convenience link opens the host's own new-repo page,
+// prefilled, and is ABSENT for any host `~/utils/vcs` can't name (an unresolved provider, or a
+// GitLab whose instance nothing on the wire states); the copy and the button both key off it,
+// so what the intro promises and what renders cannot disagree.
 const repoOwner = computed(() => github.connection?.accountLogin ?? '')
-const createRepoUrl = computed(() => {
-  if (hostProvider.value === null) return undefined
-  return hostProvider.value === 'github'
-    ? githubNewRepoUrl({
-        owner: repoOwner.value,
-        name: repoName.value.trim(),
-        description: description.value.trim(),
-        private: isPrivate.value,
-      })
-    : VCS_PROVIDER_NEW_REPO_URLS[hostProvider.value]
-})
+const createRepoUrl = computed(() =>
+  newRepoUrl(hostProvider.value, {
+    owner: repoOwner.value,
+    name: repoName.value.trim(),
+    description: description.value.trim(),
+    private: isPrivate.value,
+  }),
+)
 
 const creatingRepo = ref(false)
 
@@ -430,8 +423,19 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
   <UModal v-model:open="open" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-6">
+        <!-- Three states, because each promises the user something different about the repo.
+             cat-factory creates it (privileged App tier, so a provider is always resolved);
+             the user creates it in one click on a host we can name; or the user creates it
+             themselves somewhere we cannot name, where promising a click below would be a lie
+             (the button is absent for exactly the same reason). -->
         <p class="text-sm text-slate-400">
-          {{ github.canCreateRepos ? t('bootstrap.intro.canCreate') : t('bootstrap.intro.manual') }}
+          {{
+            github.canCreateRepos
+              ? t('vcs.bootstrap.introCanCreate', { provider: providerLabel })
+              : createRepoUrl
+                ? t('vcs.bootstrap.introManual', { provider: providerLabel })
+                : t('vcs.bootstrap.introManualAny')
+          }}
         </p>
 
         <!-- not connected: a run pushes to the host, so connect before launching. Offer
@@ -686,9 +690,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
             v-if="showArchForm"
             class="space-y-3 rounded-md border border-slate-700 bg-slate-900/80 p-3"
           >
+            <!-- The options come from the connected projection, so a repo to pick means a
+                 connection exists and `providerLabel` names it rather than guessing. -->
             <UFormField
               v-if="hasRepoOptions"
-              :label="t('bootstrap.arch.pickRepo.label')"
+              :label="t('vcs.bootstrap.archPickRepo', { provider: providerLabel })"
               :description="t('bootstrap.arch.pickRepo.description')"
             >
               <USelect

@@ -276,12 +276,34 @@ provider-aware: add-service-from-repo and bootstrap. Read this before slice 4 or
   "let stale internal state be re-created" disposition, not a shim. Pinned by
   `GitHubInstallationService.connectMethod.test.ts` (all three writers) plus the connect-response
   and read assertions in both facades' specs.
+- **`method` is REQUIRED on the wire, and the absent case is not a supported state.** It is the
+  one field in `githubConnectionSchema` that is, and the contrast with `provider` beside it (which
+  is `v.optional` with a "backends predating the column" note) is worth stating once: an optional
+  `method` would be exactly the internal-compatibility fallback the repo rules forbid, and it
+  would leave both `toConnection` mappers free to forget the field. Required means a response
+  without it fails the SPA's contract validation, which is the honest outcome: no client can
+  decide what to offer from a value it never received. Readers still ask `=== 'app'`, so anything
+  that is not an App installation withholds the App affordances. Do not "harden" this by
+  defaulting an absent `method` at a call site.
 - **Copy moved to `vcs.addService.*` / `vcs.bootstrap.*`**, provider-parameterised, extending the
   namespace slice 2b opened. The repository hint is now a PAIR of keys rather than one
   parameterised string, because the two cases give different remedies: an App connection sends you
   to the grant-access page, a token connection to the token's own scope and your project
-  membership. Three add-service keys no component had referenced (`noReposAvailable`,
+  membership. Which of the two renders is asked of `connection.method`, NOT of whether the
+  manage-installation URL could be built: those coincide today, but an App install whose settings
+  page we could not name (a future Enterprise host) would otherwise be told to go check its
+  token's scope. Three add-service keys no component had referenced (`noReposAvailable`,
   `refreshList`, `showingCount`) went with them.
+- **Bootstrap's own paragraphs moved too, and the intro is THREE keys because it makes three
+  different promises.** `bootstrap.intro.canCreate` / `manual` said "Create an empty GitHub
+  repository" unconditionally, and `bootstrap.arch.pickRepo.label` said "Pick an existing GitHub
+  repo": the same bug this slice fixed one modal over, in the modal it was already editing. They
+  are now `vcs.bootstrap.introCanCreate` / `introManual` / `introManualAny` and
+  `vcs.bootstrap.archPickRepo`. The split is not decoration: cat-factory creating the repo, the
+  user creating it in one click, and the user creating it somewhere we cannot name are three
+  different instructions, and the third must not promise a button that (per the next point) is
+  absent. All three key off the SAME value the button does, so the copy and the affordance cannot
+  disagree.
 - **Copy rendered BEFORE a connection exists must not read `provider`.** It answers "what is
   connected" and so defaults to `github`, which is right for the surfaces slice 2b touched (all
   behind a connection) and wrong for an intro paragraph or a create-repo button that renders
@@ -294,16 +316,25 @@ provider-aware: add-service-from-repo and bootstrap. Read this before slice 4 or
   resolved there is no page to open. The derived provider questions moved beside the connect
   actions in `stores/github/vcsConnect.ts` (`createVcsProviderViews`), which is also what kept
   the store's setup under `max-lines-per-function`.
-- **What slice 5 still owns, and one thing it now inherits.** `stores/github.ts`'s `repoUrl` /
-  `pullUrl` / `issueUrl` and `bootstrap.intro.*` are untouched: the intro copy is merely
-  GitHub-worded (not wrong), while the URL builders need a HOST the SPA does not have, which is
-  the real remaining question. **Neither `VCS_PROVIDER_TOKEN_URLS` nor the new
-  `VCS_PROVIDER_NEW_REPO_URLS` is right for a SELF-HOSTED GitLab**: both assume `gitlab.com`,
-  which slice 2b accepted for the token link and this slice follows for the new-project link
-  rather than diverging. That makes three hardcoded hosts for slice 5 to fix together once a web
-  base URL is available. The obvious carrier is the connection (a host is a per-connection fact,
-  like `provider` and `method`), derived from `config.gitlab.apiBase` with its `/api/v4` suffix
-  stripped; a repo-projection column would make it a per-repo fact it is not.
+- **An un-nameable host WITHHOLDS its link rather than guessing at gitlab.com.** `newRepoUrl`
+  (`~/utils/vcs`) answers `undefined` for GitLab, and the bootstrap modal's manual create-repo
+  button and copy both drop out, exactly as they already did for an unresolved provider. The
+  tempting alternative (`https://gitlab.com/projects/new`, following what slice 2b accepted for
+  the token link) fails differently from a dead link and worse: it looks like it worked, so a
+  self-hosted user creates the project on a server the bootstrap run will never push to, and
+  discovers it as a failed run. gitlab.com users lose a convenience they never had working (the
+  button previously opened `github.com/new`), and slice 5 hands it back the moment a host exists.
+  The `NEW_REPO_PAGES` map is `Record<VcsProvider, string | null>` so a new provider still has to
+  state its answer rather than inheriting one.
+- **What slice 5 still owns.** `stores/github.ts`'s `repoUrl` / `pullUrl` / `issueUrl` are
+  untouched: they need a HOST the SPA does not have, which is the real remaining question.
+  **`VCS_PROVIDER_TOKEN_URLS` still assumes `gitlab.com`** and is wrong for a self-hosted
+  instance; it stays because a wrong token link is a nuisance during connect where a wrong
+  new-project link costs a run, so the two got different dispositions here. Once a web base URL
+  lands, slice 5 fixes the token link AND restores the new-repo one from the same value. The
+  obvious carrier is the connection (a host is a per-connection fact, like `provider` and
+  `method`), derived from `config.gitlab.apiBase` with its `/api/v4` suffix stripped; a
+  repo-projection column would make it a per-repo fact it is not.
 
 ## Conventions & gotchas
 

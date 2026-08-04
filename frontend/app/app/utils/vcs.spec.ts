@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   appInstallationManageUrl,
-  githubNewRepoUrl,
+  newRepoUrl,
   VCS_PROVIDER_ICONS,
   VCS_PROVIDER_LABELS,
-  VCS_PROVIDER_NEW_REPO_URLS,
   VCS_PROVIDER_TOKEN_URLS,
 } from './vcs'
 import type { GitHubConnection, VcsProvider } from '~/types/domain'
@@ -13,7 +12,7 @@ import type { GitHubConnection, VcsProvider } from '~/types/domain'
  * The one place VCS presentation switches on the provider. What is pinned here is the pair of
  * decisions a component must never make for itself: which affordances belong to a GitHub-App
  * installation (and therefore vanish on a pasted token), and which host page a manual
- * repo-creation link opens.
+ * repo-creation link may open, including the hosts it must refuse to guess at.
  */
 const connection = (over: Partial<GitHubConnection> = {}): GitHubConnection => ({
   installationId: 42,
@@ -56,29 +55,36 @@ describe('appInstallationManageUrl', () => {
   it('has no URL when there is no connection', () => {
     expect(appInstallationManageUrl(null)).toBeUndefined()
   })
-
-  // A backend predating the `method` field must read as "not an App": hiding a link is
-  // recoverable, offering one that 404s on the user's own host is not.
-  it('treats a connection with no stated method as not an App one', () => {
-    const legacy = { ...connection(), method: undefined } as unknown as GitHubConnection
-    expect(appInstallationManageUrl(legacy)).toBeUndefined()
-  })
 })
 
-describe('githubNewRepoUrl', () => {
-  it('prefills the new-repository form with everything the caller knows', () => {
-    const url = new URL(githubNewRepoUrl({ owner: 'acme', name: 'api', private: true }))
-    expect(url.origin + url.pathname).toBe(VCS_PROVIDER_NEW_REPO_URLS.github)
+describe('newRepoUrl', () => {
+  it('prefills the GitHub new-repository form with everything the caller knows', () => {
+    const url = new URL(
+      newRepoUrl('github', { owner: 'acme', name: 'api', private: true }) ?? 'about:blank',
+    )
+    expect(url.origin + url.pathname).toBe('https://github.com/new')
     expect(url.searchParams.get('owner')).toBe('acme')
     expect(url.searchParams.get('name')).toBe('api')
     expect(url.searchParams.get('visibility')).toBe('private')
   })
 
   it('omits what the caller has not filled in yet, and marks a public repo public', () => {
-    const url = new URL(githubNewRepoUrl({ name: '', private: false }))
+    const url = new URL(newRepoUrl('github', { name: '', private: false }) ?? 'about:blank')
     expect(url.searchParams.has('owner')).toBe(false)
     expect(url.searchParams.has('name')).toBe(false)
     expect(url.searchParams.get('visibility')).toBe('public')
+  })
+
+  // A deployment may be bound to any self-hosted GitLab and nothing on the wire names its web
+  // host yet, so there is no page this can honestly open. Withheld rather than guessed at:
+  // gitlab.com would look like it worked, and the user would create the project on a server
+  // the bootstrap run never pushes to.
+  it('withholds a page for GitLab, whose instance the SPA cannot name', () => {
+    expect(newRepoUrl('gitlab', { name: 'api', private: false })).toBeUndefined()
+  })
+
+  it('withholds a page when no provider is resolved', () => {
+    expect(newRepoUrl(null, { name: 'api', private: false })).toBeUndefined()
   })
 })
 
@@ -87,10 +93,9 @@ describe('provider presentation maps', () => {
 
   // Each map is an exhaustive Record, so this only guards against an entry left empty: the
   // typecheck already fails when a provider joins the union with no row.
-  it.each(providers)('has a label, icon, token URL and new-repo URL for %s', (provider) => {
+  it.each(providers)('has a label, icon and token URL for %s', (provider) => {
     expect(VCS_PROVIDER_LABELS[provider]).toBeTruthy()
     expect(VCS_PROVIDER_ICONS[provider]).toMatch(/^i-lucide-/)
     expect(VCS_PROVIDER_TOKEN_URLS[provider]).toMatch(/^https:\/\//)
-    expect(VCS_PROVIDER_NEW_REPO_URLS[provider]).toMatch(/^https:\/\//)
   })
 })

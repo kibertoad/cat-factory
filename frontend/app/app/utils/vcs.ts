@@ -31,16 +31,23 @@ export const VCS_PROVIDER_TOKEN_URLS: Record<VcsProvider, string> = {
 }
 
 /**
- * Where a user creates a repository by hand, for the flows that need one to exist before a
- * run can target it. Only reached when the deployment can't create it for the user
- * (`connection.canCreateRepos`), so it is a convenience link, never the only route.
+ * Where a user creates a repository by hand, for the flows that need one to exist before a run
+ * can target it, or `null` where the SPA cannot name the instance the workspace is connected
+ * to, in which case the affordance is WITHHELD rather than pointed somewhere plausible.
  *
- * GitHub's page accepts a prefill query string ({@link githubNewRepoUrl}); GitLab's does not,
- * so its entry is the bare form.
+ * `gitlab` is null for that reason: a deployment may be bound to any self-hosted instance and
+ * nothing on the wire carries its web host yet (the connection is the proposed carrier; see
+ * the initiative tracker's slice 5). `https://gitlab.com/projects/new` would be a guess about
+ * which server the user's projects live on, and the cost of being wrong is not a dead link: a
+ * project created on the wrong instance looks like success until the bootstrap push cannot
+ * find it. This is the same rule the callers already apply when no provider is resolved at
+ * all, so the two cases collapse into {@link newRepoUrl} returning `undefined`.
+ *
+ * A `Record` rather than a switch so a provider joining the union has to state its answer.
  */
-export const VCS_PROVIDER_NEW_REPO_URLS: Record<VcsProvider, string> = {
+const NEW_REPO_PAGES: Record<VcsProvider, string | null> = {
   github: 'https://github.com/new',
-  gitlab: 'https://gitlab.com/projects/new',
+  gitlab: null,
 }
 
 /**
@@ -49,9 +56,9 @@ export const VCS_PROVIDER_NEW_REPO_URLS: Record<VcsProvider, string> = {
  *
  * A pasted PAT has no installation and no such page: what it can reach is decided by the
  * token's scope and the user's project membership on the host, so there is nothing to link
- * to and the callers drop the affordance rather than pointing at a URL that 404s. Keyed on
- * the connection's own `method` (see the contract) rather than on `provider`, and absent
- * `method` counts as "not an App", which is the fail-safe direction.
+ * to and the callers drop the affordance rather than pointing at a URL that 404s. Keyed on the
+ * connection's own `method` (see the contract) rather than on `provider`, and asked as
+ * `=== 'app'` so anything that is not an App installation withholds the link.
  */
 export function appInstallationManageUrl(connection: GitHubConnection | null): string | undefined {
   if (!connection || connection.method !== 'app') return undefined
@@ -61,20 +68,26 @@ export function appInstallationManageUrl(connection: GitHubConnection | null): s
 }
 
 /**
- * GitHub's new-repository page, prefilled with what the bootstrap flow already knows so the
- * user creates the right repo in one click. GitHub is the only provider whose form takes a
- * prefill, so every other one gets its bare {@link VCS_PROVIDER_NEW_REPO_URLS} entry.
+ * The host's new-repository page for a manual create, or `undefined` where there is no page
+ * this deployment can honestly send the user to (see {@link NEW_REPO_PAGES}), including a
+ * null `provider`, which is what a surface rendering before anything is connected has when
+ * the deployment offers several. A caller that gets `undefined` hides the affordance.
+ *
+ * GitHub's form is the only one that takes a prefill, so what the bootstrap flow already
+ * knows is carried over and the user creates the right repo in one click. `visibility` is
+ * always stated: the caller's toggle has an answer either way, unlike the text fields.
  */
-export function githubNewRepoUrl(prefill: {
-  owner?: string
-  name?: string
-  description?: string
-  private: boolean
-}): string {
+export function newRepoUrl(
+  provider: VcsProvider | null,
+  prefill: { owner?: string; name?: string; description?: string; private: boolean },
+): string | undefined {
+  const page = provider ? NEW_REPO_PAGES[provider] : null
+  if (page === null) return undefined
+  if (provider !== 'github') return page
   const params = new URLSearchParams()
   if (prefill.owner) params.set('owner', prefill.owner)
   if (prefill.name) params.set('name', prefill.name)
   if (prefill.description) params.set('description', prefill.description)
   params.set('visibility', prefill.private ? 'private' : 'public')
-  return `${VCS_PROVIDER_NEW_REPO_URLS.github}?${params.toString()}`
+  return `${page}?${params.toString()}`
 }
