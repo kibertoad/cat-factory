@@ -47,10 +47,16 @@ const runOptions = computed(() => {
   )
 })
 
+// The run MODE, shared with the inspector's Run menu so the two surfaces offer (and force) the
+// same thing. The toggle sits beside the picker rather than inside it because the picker's rows
+// START a run on click: a modifier reachable only by opening the list would be one the user has
+// to arm and re-open the menu to use.
+const runStart = useRunStart(() => block.value?.id)
+
 /** Start the picked pipeline immediately — the Run menu chooses an ACTION, it stores no default. */
 function runPipeline(id: string) {
   const pipeline = pipelines.getPipeline(id)
-  if (pipeline && block.value) void execution.start(block.value.id, pipeline)
+  if (pipeline && block.value) void runStart.start(pipeline)
 }
 
 /**
@@ -136,6 +142,28 @@ function openApprovalFor(approvalId: string) {
         >
           {{ t('initiative.inspector.runPlanning') }}
         </UButton>
+        <!-- A sandboxed role cannot ask its way out, so the badge REPLACES the toggle rather
+             than sitting beside it as a switch that does nothing. -->
+        <UBadge
+          v-if="!isInitiative && runStart.forced.value"
+          color="warning"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-shield"
+          :title="t('focus.dryRunForcedHint')"
+          data-testid="focus-dry-run-forced"
+        >
+          {{ t('focus.dryRun') }}
+        </UBadge>
+        <USwitch
+          v-else-if="!isInitiative && runStart.canRequest.value"
+          :model-value="runStart.requested.value"
+          size="sm"
+          :label="t('focus.dryRun')"
+          :title="t('focus.dryRunHint')"
+          data-testid="focus-dry-run"
+          @update:model-value="runStart.setRequested($event)"
+        />
         <!-- The rich picker rather than a list of names: the run starts the moment a row is
              clicked, so the preview is the only chance to see which agents it will run. -->
         <PipelinePicker

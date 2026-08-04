@@ -11,6 +11,12 @@ export type {
   MergeClassRollup,
   MergeClassRule,
   MergeClassRules,
+  RuleableChangeClass,
+  // The ROLE layer of a preset: per-role narrowing of the rules above, and the roles whose
+  // runs are sandboxed (they open a pull request and merge nothing).
+  ClassRulesByRole,
+  DryRunRoles,
+  WorkspaceRole,
   MergeTrackRecord,
   ReviewEffort,
   RequirementConcernLevel,

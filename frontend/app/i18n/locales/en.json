@@ -492,6 +492,7 @@
       "start": "Start",
       "blocked": "Blocked",
       "startPipeline": "Start {name}",
+      "startPipelineDryRun": "Start {name} as a dry run: opens a pull request, merges nothing",
       "pipelineFallback": "pipeline",
       "waitingOn": "Waiting on: {deps}",
       "blockedByDependenciesTitle": "Blocked by dependencies",
@@ -516,6 +517,13 @@
       "buildSteps": "Build steps",
       "reviewAndApprove": "Review & approve",
       "clickToViewStep": "Click to view step details & output"
+    },
+    "dryRunToast": {
+      "title": "Dry run started",
+      "body": "Running \"{name}\". Your role's runs merge nothing on this task."
+    },
+    "@dryRunToast": {
+      "description": "Toast shown when a run starts that the task's merge policy has sandboxed because of the initiator's workspace role: the pipeline runs and opens a pull request, and nothing merges. {name} is the pipeline name, kept verbatim. Not a choice the reader made, so word it as a statement of what the run will do rather than as a confirmation of a setting."
     },
     "epic": {
       "label": "Epic",
@@ -1155,7 +1163,9 @@
       "chooseApproach": "Choose approach",
       "triageFollowUps": "Decide follow-ups",
       "elapsedTooltip": "Elapsed time on this step",
-      "reviewFindings": "Review findings"
+      "reviewFindings": "Review findings",
+      "dryRun": "Dry run",
+      "dryRunHint": "This run opens a pull request and merges nothing."
     },
     "structure": {
       "title": "Structure",
@@ -1584,7 +1594,10 @@
       "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}",
       "@runBlocked": {
         "description": "Count-driven plural: {count} unfinished dependencies, {names} their comma-joined titles. Languages with more than two plural forms (e.g. Polish, Ukrainian: one/few/many) need the extra pipe-separated forms."
-      }
+      },
+      "dryRun": "Dry run: merge nothing",
+      "dryRunForced": "Dry run: your role's runs never merge here",
+      "dryRunHint": "This run opens a pull request and merges nothing."
     }
   },
   "observability": {
@@ -2977,6 +2990,22 @@
           "always": "Always auto-merge",
           "never": "Always require review"
         }
+      },
+      "roleRules": {
+        "heading": "Limits per initiator role",
+        "help": "What a run may do also depends on who started it. A role can be held to stricter rules than the ones above, or to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the class limits below add nothing. Dry runs still apply: they refuse a manual merge too.",
+        "sandboxLabel": "Dry runs only",
+        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so the class rules below cannot hold them to anything stricter.",
+        "noRules": "No class limits",
+        "ruleCount": "{count} class limited | {count} classes limited",
+        "@ruleCount": {
+          "description": "Count-based tally of how many change classes this role narrows (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        },
+        "inherit": "Same as this policy",
+        "redundant": "No effect: this policy is already at least as strict.",
+        "alreadyStrictest": "Already always reviewed",
+        "baseHint": "This policy compares the scores for every class, so a role can only narrow a class to review-only."
       }
     },
     "observabilityConnection": {
@@ -4634,7 +4663,10 @@
       "manualHeading": "Manual review only",
       "manualExplainer": "This policy never merges on its own, so every pull request waits for a human review whatever it scores.",
       "ciHeading": "CI fixes",
-      "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up."
+      "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up.",
+      "roleHeading": "Who started the run",
+      "roleSandboxed": "Runs started by {roles} open a pull request and never merge.",
+      "roleNarrowed": "Runs started by {roles} follow stricter rules for some change classes."
     }
   },
   "modelPreset": {
@@ -5463,7 +5495,10 @@
     "description": "Description",
     "overallProgress": "Overall progress",
     "dependencies": "Dependencies",
-    "noDependencies": "None"
+    "noDependencies": "None",
+    "dryRun": "Dry run",
+    "dryRunHint": "Run the pipeline and open a pull request, but merge nothing.",
+    "dryRunForcedHint": "This task's risk policy holds your role to dry runs."
   },
   "environments": {
     "title": "Ephemeral environment",

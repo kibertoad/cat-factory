@@ -1,3 +1,4 @@
+import { narrowMergeClassRule } from '@cat-factory/contracts'
 import type {
   ChangeClass,
   ClassRulesByRole,
@@ -325,37 +326,6 @@ export function resolveMergeClassRule(
 ): MergeClassRule {
   if (changeClass === 'unknown') return 'thresholds'
   return rules?.[changeClass] ?? 'thresholds'
-}
-
-/**
- * How much review a rule DEMANDS — higher is stricter. The ordering is the point of the scale:
- * `always` merges with nothing consulted, `thresholds` merges only within the score ceilings, and
- * `never` merges nothing, so it is total and every pair has a strictest member.
- *
- * A plain rank rather than a `Record<MergeClassRule, number>` of opaque numbers used once: this is
- * the only place the three rules are ORDERED, and {@link narrowMergeClassRule} is the only
- * consumer, so the two are kept adjacent and a new rule fails the typecheck here first.
- */
-const MERGE_CLASS_RULE_STRICTNESS: Record<MergeClassRule, number> = {
-  always: 0,
-  thresholds: 1,
-  never: 2,
-}
-
-/**
- * Compose a base rule with a ROLE's rule, taking the STRICTER of the two.
- *
- * Narrow-only is the whole safety property of role-scoped rules, and it is enforced here rather
- * than trusted to whoever authors a preset: a role entry can subtract capability but can never add
- * it, so `{ source: 'always' }` under `viewer` on a preset whose base holds `source` at
- * `thresholds` grants a viewer nothing — it reads as a mistake and behaves as a no-op, instead of
- * quietly becoming the widest rule in the preset for its least-trusted tier.
- *
- * The consequence worth stating: a role entry is REVIEWABLE ON ITS OWN. Reading one tells you what
- * that role at most may do, with no need to hold the base map in your head at the same time.
- */
-export function narrowMergeClassRule(base: MergeClassRule, role: MergeClassRule): MergeClassRule {
-  return MERGE_CLASS_RULE_STRICTNESS[role] > MERGE_CLASS_RULE_STRICTNESS[base] ? role : base
 }
 
 /** The rule that governs a run, before and after its initiator's role narrowed it. */

@@ -20,6 +20,9 @@ const execution = useExecutionStore()
 const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
+// The drop resolves its target task at the moment of the drop, so the sandbox reading is a
+// function of that id rather than a computed over a bound block.
+const { forcedFor } = useDryRunPolicy()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
 
@@ -183,6 +186,18 @@ async function onDrop(event: DragEvent) {
         description: t('board.canvas.taskBlockedBody'),
       })
       return
+    }
+    // A dropped pipeline starts live and has nothing to ask for, but a preset that sandboxes the
+    // dropper's role means this run merges nothing. Said HERE, because the drop is the only
+    // moment this surface has: the ordinary start stays silent (it is already visible on the
+    // card it landed on), and only the sandbox, which is not, earns a toast.
+    if (forcedFor(target.id)) {
+      toast.add({
+        title: t('board.dryRunToast.title'),
+        description: t('board.dryRunToast.body', { name: pipeline.name }),
+        color: 'warning',
+        icon: 'i-lucide-shield',
+      })
     }
     execution.start(target.id, pipeline)
     ui.select(target.id)

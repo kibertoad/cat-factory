@@ -811,7 +811,7 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
   starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
   `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
-  [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
+  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
   the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
   a VCS outage can't change policy. Doc:
