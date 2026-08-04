@@ -54,6 +54,13 @@ export interface PlatformAlertCondition {
   value: number
   /** The configured threshold it crossed, in the same unit as {@link value}. */
   threshold: number
+  /**
+   * The failure kind a KIND-SCOPED condition is about (`evicted`, `timeout`, …); absent on the
+   * deployment-wide ones. It is not optional decoration on the conditions that carry it: an
+   * operator's per-kind rules all fire under ONE reason code, so this is the only thing that
+   * says which rule tripped.
+   */
+  kind?: string
 }
 
 /** One failing run behind an alert, so a receiver can link to the evidence. */

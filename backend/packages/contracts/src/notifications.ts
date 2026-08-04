@@ -256,6 +256,17 @@ export const notificationPayloadSchema = v.object({
    */
   platformAlerts: v.optional(v.array(platformAlertReasonSchema)),
   /**
+   * On a `platform_health` notification whose firing set includes `failure_kind_rate_high`: the
+   * failure kinds whose per-kind rule is firing, sorted. Absent when no per-kind rule is.
+   *
+   * The SECOND half of the card's dedup identity, and it has to be, because the reason code is
+   * shared by every per-kind rule: with the reasons alone, evictions subsiding while timeouts
+   * took over would leave the firing set looking untouched, and the card would go on naming the
+   * incident that had ended. It is a set of NAMES rather than numbers for the same reason the
+   * reasons are: a share that drifts each sweep would re-toast the inbox for a whole incident.
+   */
+  platformAlertFailureKinds: v.optional(v.array(v.string())),
+  /**
    * On a `platform_health` notification whose firing set includes a failure condition: a
    * bounded sample of the runs the alert is aggregating, in THIS workspace, so the card
    * deep-links to the evidence instead of only to the dashboard. Newest first.

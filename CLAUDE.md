@@ -258,6 +258,10 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
   parent's level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
+  OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
+  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
 
 ## Operational EVENTS are counted, not just logged
 
@@ -807,7 +811,7 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
   starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
   `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
-  [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
+  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
   the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
   a VCS outage can't change policy. Doc:

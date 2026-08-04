@@ -1,3 +1,4 @@
+import { isHeadlessIntake } from '@cat-factory/contracts'
 import type {
   Block,
   BlockRepository,
@@ -248,7 +249,7 @@ export class ReviewGateController {
    *
    * Every park in {@link evaluate} funnels through here so the echo cannot be forgotten by a
    * future branch, and so the SPA path is provably untouched: {@link shouldPostReviewQuestions}
-   * refuses anything whose `intakeOrigin` is not `public-api`.
+   * refuses anything whose `intakeOrigin` is not headless ({@link isHeadlessIntake}).
    *
    * **The park is committed FIRST, and that ordering is load-bearing.** A run that failed to
    * park is a run that answers nobody, so it must never queue behind an outbound HTTP call to
@@ -286,7 +287,7 @@ export class ReviewGateController {
     const writeback = this.deps.issueWriteback
     // `intakeOrigin` first: it is a free in-memory check and the scope boundary of the whole
     // feature, so a UI-started run pays nothing at all for the re-read below.
-    if (!writeback || !kind.questionsOnPark || instance.intakeOrigin !== 'public-api') return
+    if (!writeback || !kind.questionsOnPark || !isHeadlessIntake(instance.intakeOrigin)) return
     // Re-read the review: an auto-recommendation pass may have answered findings since `review`
     // was taken, and the echo must ask only what is still genuinely open. Deliberately
     // UNCONDITIONAL rather than flagged from the one call site that mutates today — a future
