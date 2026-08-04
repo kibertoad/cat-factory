@@ -11,7 +11,7 @@ import type {
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { taskConnections, taskSourceSettings, tasks } from '../db/schema.js'
 
@@ -355,6 +355,32 @@ export class DrizzleTaskRepository implements TaskRepository {
           eq(tasks.external_id, externalId),
         ),
       )
+  }
+
+  async claimBlockLink(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string,
+  ): Promise<boolean> {
+    // The `linked_block_id IS NULL OR = ?` predicate is the claim, and it has to be IN the
+    // statement: at READ COMMITTED a preceding SELECT takes no lock, so two concurrent filings of
+    // one ticket would both read it free. Inside the UPDATE the second writer blocks on the
+    // first's row lock and re-evaluates against the committed value, so it matches nothing.
+    // `.returning()` is what makes the outcome readable — the row count is the verdict.
+    const claimed = await this.db
+      .update(tasks)
+      .set({ linked_block_id: blockId })
+      .where(
+        and(
+          eq(tasks.workspace_id, workspaceId),
+          eq(tasks.source, source),
+          eq(tasks.external_id, externalId),
+          or(isNull(tasks.linked_block_id), eq(tasks.linked_block_id, blockId)),
+        ),
+      )
+      .returning({ externalId: tasks.external_id })
+    return claimed.length > 0
   }
 
   async unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void> {

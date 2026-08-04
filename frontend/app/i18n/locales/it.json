@@ -5124,6 +5124,7 @@
         "binary_output_service_invalid": "Impossibile risolvere il servizio per gli output binari",
         "binary_output_generator_invalid": "Impossibile risolvere il generatore per gli output binari",
         "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio",
+        "ticket_already_linked": "Questo ticket ha già un'attività",
         "dry_run_not_mergeable": "Una prova non può essere unita"
       },
       "description": {
@@ -5157,6 +5158,7 @@
         "binary_output_service_invalid": "Un passaggio che genera output binari seleziona un servizio fondamentale che il catalogo di questo workspace non riesce a risolvere: l'identificatore è sconosciuto, oppure il servizio di archiviazione scelto non ha la capacità asset-storage. Correggi la selezione del passaggio o registra il servizio, poi riavvia.",
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un'integrazione generativa che questa installazione non registra, oppure nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare. Le integrazioni generative si registrano nel codice dell'installazione, non in questo workspace: registrala o correggi la selezione del passaggio, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
+        "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "action": {

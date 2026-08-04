@@ -623,6 +623,7 @@
         "binary_output_service_invalid": "Binary output service can't be resolved",
         "binary_output_generator_invalid": "Binary output generator can't be resolved",
         "foundational_service_not_inherited": "This board registered that service",
+        "ticket_already_linked": "This issue already has a task",
         "dry_run_not_mergeable": "Dry run cannot be merged"
       },
       "description": {
@@ -659,6 +660,7 @@
         "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again.",
         "binary_output_generator_invalid": "A step that generates binary outputs selects a generative integration this deployment doesn't register, or none of the selected integrations produces a content type the step must deliver. Generative integrations are registered in the deployment's code, not in this workspace: register it or fix the step's selection, then start again.",
         "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead.",
+        "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "action": {

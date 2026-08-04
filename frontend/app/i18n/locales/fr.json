@@ -566,6 +566,7 @@
         "binary_output_service_invalid": "Service des sorties binaires introuvable",
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
         "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
+        "ticket_already_linked": "Ce ticket a déjà une tâche",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée"
       },
       "description": {
@@ -599,6 +600,7 @@
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
+        "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "action": {

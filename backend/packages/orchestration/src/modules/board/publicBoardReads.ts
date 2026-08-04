@@ -38,6 +38,28 @@ export class PublicBoardReads {
   }
 
   /**
+   * Refuse a container that cannot hold a new task: missing / not the workspace's / a headless
+   * `internal` anchor / not a frame / archived.
+   *
+   * Separate from {@link addServiceTask} so a caller doing PREPARATORY work for the create can
+   * apply the same rule first, without duplicating it or having to create the task to find out.
+   * `POST /api/v1/services/:serviceId/tasks` with a `ticket` is the case: it resolves the tracker
+   * issue before the block exists, and resolving one is an outbound call to the workspace's
+   * tracker, so a bad `serviceId` would otherwise cost a live third-party fetch and be answered
+   * by the 404 it could have had first.
+   */
+  async assertTaskContainer(workspaceId: string, serviceId: string): Promise<Block> {
+    await this.deps.requireWorkspace(workspaceId)
+    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
+    if (!frame || frame.internal) throw new NotFoundError('service', serviceId)
+    if (frame.level !== 'frame') {
+      throw new ValidationError('Tasks can only be created under a service')
+    }
+    if (frame.archived) throw new ValidationError('Cannot add a task to an archived service')
+    return frame
+  }
+
+  /**
    * Create a task under a visible SERVICE FRAME the workspace owns. Rejects a missing / non-frame
    * / internal / archived container, then delegates to the normal `addTask` (which reuses all the
    * placement + task-type validation). Headless / no initiator.
@@ -47,13 +69,7 @@ export class PublicBoardReads {
     serviceId: string,
     input: AddTaskInput,
   ): Promise<Block> {
-    await this.deps.requireWorkspace(workspaceId)
-    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
-    if (!frame || frame.internal) throw new NotFoundError('service', serviceId)
-    if (frame.level !== 'frame') {
-      throw new ValidationError('Tasks can only be created under a service')
-    }
-    if (frame.archived) throw new ValidationError('Cannot add a task to an archived service')
+    await this.assertTaskContainer(workspaceId, serviceId)
     return this.deps.addTask(workspaceId, serviceId, input, null)
   }
 

@@ -601,6 +601,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     listByWorkspace: 'pending',
     linkBlock: 'pending',
+    // The conditional form of `linkBlock`: the atomic claim that holds one-task-per-ticket when
+    // two filings of an issue race. It migrates WITH `linkBlock` rather than ahead of it, because
+    // proxying a claim on its own buys a mothership node nothing: the filing that takes it also
+    // imports the issue through `upsert`, which is `pending` one line up, so the surface only
+    // works remotely once the slice moves as a whole.
+    claimBlockLink: 'pending',
     // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
     // run path, not from the SPA; stays mothership-internal like the other task writes.
     unlinkAllFromBlock: 'pending',
