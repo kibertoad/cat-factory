@@ -579,7 +579,9 @@ folder is not wired up by existing): [`docs/releases.md`](./docs/releases.md).
 - `node scripts/check-reserved-env-keys.mjs`: requires every variable documented in
   `docs/environment-variables.md` to be RESERVED, so it cannot be named as a capability credential
   and resolved into an agent process.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all four).
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
+  `buildStepApproval`, so a second settle path cannot drop the step's approver policy.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
@@ -665,9 +667,8 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   (`@cat-factory/gates`) install themselves through the same public seam a deployment uses.
   **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
   reverts), settling the gate without re-probing. **A gate's own KNOBS are DECLARED on its
-  registration** (`register(kind, factory, { configFields })`) and read off `gateState.config`, so
-  the engine never learns a gate's parameter names and a workspace-wide preset field stops being the
-  only home for "this step gets three attempts".
+  registration** (`register(kind, factory, { configFields })`) and read off `gateState.config`, so the
+  engine never learns a gate's parameter names.
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
 - **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
@@ -683,9 +684,10 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
 
 **A human gate carries a POLICY, PINNED when the gate is raised** (`stepOptions.gateConfig`: who may
 resolve it, how many distinct people must), because the pipeline stays editable while a run is parked
-on it. It governs approve/request-changes/reject alike; an admin always passes it; a machine key or
-auth-disabled caller is refused by ANY policy. Rules live in contracts (`gate-approval.ts`), never
-restated in the SPA. Both halves: [ADR 0038](./backend/docs/adr/0038-per-step-gate-config.md).
+on it. It governs approve/request-changes/reject alike, and the rules live in contracts
+(`gate-approval.ts`), never restated in the SPA. Trap: EVERY raise site goes through
+`buildStepApproval` (guard-enforced), because a hand-rolled literal drops the policy and fails OPEN.
+[ADR 0038](./backend/docs/adr/0038-per-step-gate-config.md).
 
 **A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
 (`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier

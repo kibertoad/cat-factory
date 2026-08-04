@@ -297,23 +297,26 @@ export class StepDecisionController {
           throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
         }
 
-        // A human edit to the proposal replaces the agent's text, so the revised
-        // proposal is what downstream steps read (via priorOutputs). That only holds when the
-        // output IS the agent's work product: a step whose output is a RENDERING of an
-        // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan —
-        // see `reviewableArtifactOutput`) would take the edit into `step.output` while the
-        // committed artifact stayed the ingested one, so the correction silently reaches
-        // nothing. Refuse rather than accept-and-drop; the reviewer's route is "request
-        // changes", which re-runs the producer with the correction as feedback.
         // Fold WHO approved before anything is written, because whether this approval completes
         // the quorum decides what the call is allowed to do. Counting distinct identities is what
-        // makes a double-click idempotent rather than a second vote.
+        // makes a double-click idempotent rather than a second vote. Pure, and keyed on the
+        // actor's id, so the CAS re-applying this mutation on a winner's snapshot recomputes the
+        // same answer rather than stacking a second vote.
         const { approvals, satisfied } = foldGateApproval(
           step.approval,
           actor,
           this.deps.clock.now(),
         )
+        // A human edit to the proposal replaces the agent's text, so the revised
+        // proposal is what downstream steps read (via priorOutputs). Two things refuse it, both
+        // because the edit would reach nothing or reach too much.
         if (opts.proposal !== undefined) {
+          // The output IS the agent's work product only when it is not a RENDERING of an
+          // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan:
+          // see `reviewableArtifactOutput`). Editing a rendering would take the text into
+          // `step.output` while the committed artifact stayed the ingested one, so the
+          // correction silently reaches nothing. Refuse rather than accept-and-drop; the
+          // reviewer's route is "request changes", which re-runs the producer with it.
           if (step.outputIsRendered) {
             throw new ValidationError(
               "This step's output is a rendering of the artifact it already produced, so edits " +
